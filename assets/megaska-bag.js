@@ -10,17 +10,6 @@
       profile: null,
       dashboard: null,
     },
-    wallet: {
-      visible: false,
-      balance: 0,
-      currency: "INR",
-      pendingRefund: 0,
-      status: "hidden",
-      appliedCode: null,
-      appliedAmount: 0,
-      reservationId: null,
-      message: null,
-    },
     ui: {
       busyLineKey: null,
       busyAction: null,
@@ -52,8 +41,15 @@
   }
 
   async function fetchCart() {
-    const res = await fetch("/cart.js", { credentials: "same-origin", headers: { Accept: "application/json" } });
-    if (!res.ok) throw new Error(`Unable to load cart (${res.status})`);
+    const res = await fetch("/cart.js", {
+      credentials: "same-origin",
+      headers: { Accept: "application/json" },
+    });
+
+    if (!res.ok) {
+      throw new Error(`Unable to load cart (${res.status})`);
+    }
+
     return res.json();
   }
 
@@ -61,10 +57,15 @@
     return fetch("/cart/change.js", {
       method: "POST",
       credentials: "same-origin",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
       body: JSON.stringify({ id: lineKey, quantity }),
     }).then(async (res) => {
-      if (!res.ok) throw new Error(`Unable to update quantity (${res.status})`);
+      if (!res.ok) {
+        throw new Error(`Unable to update quantity (${res.status})`);
+      }
       return res.json();
     });
   }
@@ -72,6 +73,29 @@
   function removeLine(lineKey) {
     return changeLineQuantity(lineKey, 0);
   }
+
+  async function getSessionToken() {
+    try {
+      if (window.MegaskaAuth) {
+        if (typeof window.MegaskaAuth.getSessionToken === "function") {
+          const token = await window.MegaskaAuth.getSessionToken();
+          if (token) return String(token).trim();
+        }
+
+        if (typeof window.MegaskaAuth.getToken === "function") {
+          const token = await window.MegaskaAuth.getToken();
+          if (token) return String(token).trim();
+        }
+      }
+    } catch (_error) {}
+
+    try {
+      return String(window.localStorage.getItem("megaska_session_token") || "").trim();
+    } catch (_error) {
+      return "";
+    }
+  }
+
   async function getMegaskaSessionState() {
     try {
       if (window.MegaskaAuth && typeof window.MegaskaAuth.fetchSession === "function") {
@@ -89,6 +113,23 @@
     };
   }
 
+  async function detectCustomerSession() {
+    const token = await getSessionToken();
+
+    if (!token) {
+      state.customer.sessionActive = false;
+      state.customer.profile = null;
+      state.customer.dashboard = null;
+      return;
+    }
+
+    state.customer.sessionActive = true;
+  }
+
+  function getCheckoutRedirectUrl() {
+    return "/checkout";
+  }
+
   function openMegaskaOtpForCheckout() {
     try {
       if (window.MegaskaOtp && typeof window.MegaskaOtp.openModal === "function") {
@@ -103,12 +144,13 @@
 
   async function proceedToMegaskaCheckout() {
     const session = await getMegaskaSessionState();
+    const fallbackUrl = getCheckoutRedirectUrl();
 
     if (!session.authenticated) {
       const opened = openMegaskaOtpForCheckout();
       if (opened) return;
 
-      window.location.assign("/checkout");
+      window.location.assign(fallbackUrl);
       return;
     }
 
@@ -128,95 +170,37 @@
           { checkoutUrl: prefilledUrl }
         );
 
-        const finalUrl = handoff?.checkoutUrl || prefilledUrl || "/checkout";
+        const finalUrl = handoff?.checkoutUrl || prefilledUrl || fallbackUrl;
+
         window.location.assign(finalUrl);
         return;
       }
     } catch (_error) {}
 
-    window.location.assign("/checkout");
-  }
-  async function getSessionToken() {
-    try {
-      if (window.MegaskaAuth) {
-        if (typeof window.MegaskaAuth.getSessionToken === "function") {
-          const token = await window.MegaskaAuth.getSessionToken();
-          if (token) return String(token).trim();
-        }
-        if (typeof window.MegaskaAuth.getToken === "function") {
-          const token = await window.MegaskaAuth.getToken();
-          if (token) return String(token).trim();
-        }
-      }
-    } catch (_error) {}
-
-    try {
-      return String(window.localStorage.getItem("megaska_session_token") || "").trim();
-    } catch (_error) {
-      return "";
-    }
-  }
-
-  async function fetchDashboardSummary(token) {
-    const res = await fetch("/api/dashboard/summary", {
-      method: "GET",
-      credentials: "same-origin",
-      headers: Object.assign({ Accept: "application/json" }, token ? { Authorization: `Bearer ${token}` } : {}),
-    });
-    if (!res.ok) throw new Error(`Dashboard summary unavailable (${res.status})`);
-    return res.json();
-  }
-
-  async function detectCustomerSession() {
-    const token = await getSessionToken();
-    if (!token) {
-      state.customer.sessionActive = false;
-      state.wallet.status = "login_required";
-      state.wallet.visible = true;
-      return;
-    }
-
-    state.customer.sessionActive = true;
-    state.wallet.visible = true;
-    try {
-      const summary = await fetchDashboardSummary(token);
-      state.customer.dashboard = summary || null;
-      state.customer.profile = summary?.customer || null;
-
-      const wallet = summary?.wallet || {};
-      state.wallet.balance = Number(wallet.availableToRedeem || wallet.balance || 0);
-      state.wallet.currency = String(wallet.currency || "INR");
-      state.wallet.pendingRefund = Number(wallet.pendingRefund || 0);
-      state.wallet.status = state.wallet.balance > 0 ? "available" : "unavailable";
-      state.wallet.message = null;
-    } catch (_error) {
-      state.wallet.status = "unavailable";
-      state.wallet.message = "Wallet data is unavailable right now. You can still checkout.";
-    }
+    window.location.assign(fallbackUrl);
   }
 
   function lineVariantText(item) {
-    return item?.variant_title && item.variant_title !== "Default Title" ? item.variant_title : "";
+    return item?.variant_title && item.variant_title !== "Default Title"
+      ? item.variant_title
+      : "";
   }
 
   function getComputedTotals() {
     const subtotalMinor = Number(state.cart?.items_subtotal_price || 0);
     const cartDiscountMinor = Number(state.cart?.total_discount || 0);
-    const walletMinor = Number(state.wallet.appliedAmount || 0);
-    const estimatedTotalMinor = Math.max(subtotalMinor - cartDiscountMinor - walletMinor, 0);
+    const estimatedTotalMinor = Math.max(subtotalMinor - cartDiscountMinor, 0);
 
-    return { subtotalMinor, cartDiscountMinor, walletMinor, estimatedTotalMinor };
-  }
-
-  function getCheckoutRedirectUrl() {
-    if (state.wallet.appliedCode && state.wallet.status === "applied") {
-      return `/discount/${encodeURIComponent(state.wallet.appliedCode)}?redirect=/checkout`;
-    }
-    return "/checkout";
+    return {
+      subtotalMinor,
+      cartDiscountMinor,
+      estimatedTotalMinor,
+    };
   }
 
   function renderLoading() {
-    root.innerHTML = '<div id="megaska-bag-loading" class="megaska-bag-loading">Loading your bag...</div>';
+    root.innerHTML =
+      '<div id="megaska-bag-loading" class="megaska-bag-loading">Loading your bag...</div>';
   }
 
   function renderError(message) {
@@ -231,26 +215,48 @@
 
   function renderItemsSection() {
     const items = Array.isArray(state.cart?.items) ? state.cart.items : [];
+
     const itemsMarkup = items
       .map((item) => {
         const variant = lineVariantText(item);
         const lineBusy = state.ui.busyLineKey === item.key;
+
         return `
           <article class="megaska-bag-line" data-line-key="${escapeHtml(item.key)}">
-            <img class="megaska-bag-line__image" src="${escapeHtml(item.image || "")}" alt="${escapeHtml(item.product_title)}" loading="lazy" />
+            <img
+              class="megaska-bag-line__image"
+              src="${escapeHtml(item.image || "")}"
+              alt="${escapeHtml(item.product_title)}"
+              loading="lazy"
+            />
             <div>
               <h3 class="megaska-bag-line__title">${escapeHtml(item.product_title)}</h3>
               ${variant ? `<p class="megaska-bag-line__variant">${escapeHtml(variant)}</p>` : ""}
               <p class="megaska-bag-line__unit">Unit: ${formatMoneyFromMinor(item.price, state.cart.currency)}</p>
               <div class="megaska-bag-line__meta">
                 <div class="megaska-bag-qty">
-                  <button class="megaska-bag-btn megaska-bag-btn--tiny" type="button" data-bag-action="decrease-qty" ${lineBusy ? "disabled" : ""}>−</button>
+                  <button
+                    class="megaska-bag-btn megaska-bag-btn--tiny"
+                    type="button"
+                    data-bag-action="decrease-qty"
+                    ${lineBusy ? "disabled" : ""}
+                  >−</button>
                   <span>${Number(item.quantity || 0)}</span>
-                  <button class="megaska-bag-btn megaska-bag-btn--tiny" type="button" data-bag-action="increase-qty" ${lineBusy ? "disabled" : ""}>+</button>
+                  <button
+                    class="megaska-bag-btn megaska-bag-btn--tiny"
+                    type="button"
+                    data-bag-action="increase-qty"
+                    ${lineBusy ? "disabled" : ""}
+                  >+</button>
                 </div>
                 <strong>${formatMoneyFromMinor(item.final_line_price || item.line_price, state.cart.currency)}</strong>
               </div>
-              <button class="megaska-bag-btn megaska-bag-btn--link" type="button" data-bag-action="remove-line" ${lineBusy ? "disabled" : ""}>Remove</button>
+              <button
+                class="megaska-bag-btn megaska-bag-btn--link"
+                type="button"
+                data-bag-action="remove-line"
+                ${lineBusy ? "disabled" : ""}
+              >Remove</button>
             </div>
           </article>
         `;
@@ -272,48 +278,49 @@
   }
 
   function renderWalletSection() {
-    const wallet = state.wallet;
-    const canApply = wallet.status === "available" && wallet.balance > 0;
-    const walletSavings = wallet.appliedAmount > 0 ? formatMoneyFromMinor(wallet.appliedAmount, wallet.currency) : null;
-
-    let body = "";
-    if (!state.customer.sessionActive) {
-      body = `
-        <p class="megaska-bag-muted">Login to view and apply your Megaska wallet balance.</p>
-        <button class="megaska-bag-btn" data-bag-action="wallet-login" type="button">Login to Use Wallet</button>
-      `;
-    } else if (wallet.status === "applying") {
-      body = `<p>Applying wallet...</p>`;
-    } else {
-      body = `
-        <div class="megaska-bag-row"><span>Available balance</span><strong>${formatMoneyFromMinor(wallet.balance, wallet.currency)}</strong></div>
-        ${walletSavings ? `<p class="megaska-bag-success">Wallet applied for checkout: ${walletSavings}</p>` : ""}
-        <button class="megaska-bag-btn ${canApply ? "megaska-bag-btn--primary" : ""}" data-bag-action="apply-wallet" type="button" ${canApply ? "" : "disabled"}>
-          ${wallet.status === "applied" ? "Wallet Applied" : canApply ? "Apply Wallet" : "Wallet Unavailable"}
-        </button>
-      `;
-    }
-
     return `
       <section id="bag-wallet-section" class="megaska-bag-card">
-        <h2 style="margin:0 0 8px;">Megaska Wallet</h2>
-        ${body}
-        ${wallet.message ? `<p class="megaska-bag-error">${escapeHtml(wallet.message)}</p>` : ""}
+        <h2 style="margin:0 0 8px;">Secure Checkout</h2>
+        <p class="megaska-bag-muted">
+          Login with your verified mobile number to continue faster checkout.
+        </p>
       </section>
     `;
   }
 
   function renderSummarySection() {
     const totals = getComputedTotals();
+
     return `
       <section id="bag-summary-section" class="megaska-bag-card">
         <h2 style="margin:0 0 8px;">Order Summary</h2>
-        <div class="megaska-bag-row"><span>Subtotal</span><strong>${formatMoneyFromMinor(totals.subtotalMinor, state.cart.currency)}</strong></div>
-        ${totals.cartDiscountMinor > 0 ? `<div class="megaska-bag-row"><span>Discounts</span><strong>- ${formatMoneyFromMinor(totals.cartDiscountMinor, state.cart.currency)}</strong></div>` : ""}
-        ${totals.walletMinor > 0 ? `<div class="megaska-bag-row"><span>Wallet savings</span><strong>- ${formatMoneyFromMinor(totals.walletMinor, state.wallet.currency)}</strong></div>` : ""}
-        <div class="megaska-bag-row megaska-bag-row--total"><span>Estimated total</span><strong>${formatMoneyFromMinor(totals.estimatedTotalMinor, state.cart.currency)}</strong></div>
-        <p class="megaska-bag-note">Shipping and taxes finalize at checkout.</p>
-        <button class="megaska-bag-btn megaska-bag-btn--primary" data-bag-action="checkout" type="button" style="width:100%;margin-top:10px;">Proceed to Checkout</button>
+        <div class="megaska-bag-row">
+          <span>Subtotal</span>
+          <strong>${formatMoneyFromMinor(totals.subtotalMinor, state.cart.currency)}</strong>
+        </div>
+        ${
+          totals.cartDiscountMinor > 0
+            ? `<div class="megaska-bag-row"><span>Discounts</span><strong>- ${formatMoneyFromMinor(
+                totals.cartDiscountMinor,
+                state.cart.currency
+              )}</strong></div>`
+            : ""
+        }
+        <div class="megaska-bag-row megaska-bag-row--total">
+          <span>Estimated total</span>
+          <strong>${formatMoneyFromMinor(totals.estimatedTotalMinor, state.cart.currency)}</strong>
+        </div>
+        <p class="megaska-bag-note">
+          Free forward shipping. Taxes included. Any discount code will be applied at checkout.
+        </p>
+        <button
+          class="megaska-bag-btn megaska-bag-btn--primary"
+          data-bag-action="checkout"
+          type="button"
+          style="width:100%;margin-top:10px;"
+        >
+          Proceed to Checkout
+        </button>
       </section>
     `;
   }
@@ -333,14 +340,19 @@
 
   function renderStickyFooter() {
     const totals = getComputedTotals();
+
     return `
       <section id="bag-sticky-footer">
         <div class="megaska-bag-sticky__inner">
           <div>
             <p class="megaska-bag-muted" style="margin:0;font-size:11px;">Total</p>
-            <p class="megaska-bag-sticky__amount" style="margin:0;">${formatMoneyFromMinor(totals.estimatedTotalMinor, state.cart.currency)}</p>
+            <p class="megaska-bag-sticky__amount" style="margin:0;">
+              ${formatMoneyFromMinor(totals.estimatedTotalMinor, state.cart.currency)}
+            </p>
           </div>
-          <button class="megaska-bag-btn megaska-bag-btn--primary" data-bag-action="checkout" type="button">Checkout</button>
+          <button class="megaska-bag-btn megaska-bag-btn--primary" data-bag-action="checkout" type="button">
+            Checkout
+          </button>
         </div>
       </section>
     `;
@@ -367,92 +379,20 @@
       <section class="megaska-bag-card megaska-bag-empty">
         <h2>Your bag is empty</h2>
         <p class="megaska-bag-muted">Looks like you haven't added anything yet.</p>
-        <button class="megaska-bag-btn megaska-bag-btn--primary" data-bag-action="continue-shopping" type="button">Continue Shopping</button>
+        <button class="megaska-bag-btn megaska-bag-btn--primary" data-bag-action="continue-shopping" type="button">
+          Continue Shopping
+        </button>
       </section>
     `;
   }
 
   function render() {
     if (state.pageStatus === "loading") return renderLoading();
-    if (state.pageStatus === "error") return renderError(state.ui.errorMessage || "Please try again.");
+    if (state.pageStatus === "error") {
+      return renderError(state.ui.errorMessage || "Please try again.");
+    }
     if (state.pageStatus === "empty") return renderEmptyState();
     return renderBagLayout();
-  }
-
-  async function applyWallet() {
-    if (!state.customer.sessionActive) {
-      state.wallet.status = "login_required";
-      state.wallet.message = "Please login to apply wallet.";
-      render();
-      return;
-    }
-
-    const token = await getSessionToken();
-    if (!token) {
-      state.wallet.status = "login_required";
-      state.wallet.message = "Your session expired. Please login again.";
-      render();
-      return;
-    }
-
-    const subtotalMinor = Number(state.cart?.items_subtotal_price || 0);
-    const eligibleMinor = Math.min(subtotalMinor, Number(state.wallet.balance || 0));
-    if (eligibleMinor <= 0) {
-      state.wallet.status = "unavailable";
-      state.wallet.message = "No wallet amount available for this order.";
-      render();
-      return;
-    }
-
-    state.wallet.status = "applying";
-    state.wallet.message = null;
-    render();
-
-    try {
-      const response = await fetch("/api/wallet/apply", {
-        method: "POST",
-        credentials: "same-origin",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          walletAmount: Number((eligibleMinor / 100).toFixed(2)),
-          cartToken: String(state.cart?.token || "").trim() || undefined,
-          sourceFlow: "CHECKOUT",
-        }),
-      });
-      const data = await response.json().catch(() => ({}));
-
-      if (!response.ok || !data?.ok || !data?.code) {
-        throw new Error(data?.error || `Wallet apply failed (${response.status})`);
-      }
-
-      state.wallet.appliedCode = String(data.code || "").trim();
-      state.wallet.appliedAmount = Number(data.amountMinor || 0);
-      state.wallet.reservationId = String(data.reservationId || "").trim() || null;
-      state.wallet.status = "applied";
-      state.wallet.message = "Wallet is applied for checkout. Final debit happens after order confirmation.";
-      render();
-    } catch (error) {
-      state.wallet.status = "error";
-      state.wallet.message = error instanceof Error ? error.message : "Could not apply wallet.";
-      render();
-    }
-  }
-
-  function triggerWalletLoginFlow() {
-    // TODO(Megaska OTP): Wire exact storefront login modal trigger once bag page hook is finalized.
-    if (window.MegaskaAuth && typeof window.MegaskaAuth.openOtpModal === "function") {
-      window.MegaskaAuth.openOtpModal({ returnTo: "/pages/bag" });
-      return;
-    }
-    if (window.MegaskaAuth && typeof window.MegaskaAuth.openAuthModal === "function") {
-      window.MegaskaAuth.openAuthModal({ returnTo: "/pages/bag" });
-      return;
-    }
-    window.location.assign(`/account/login?return_url=${encodeURIComponent("/pages/bag")}`);
   }
 
   async function reloadCartView() {
@@ -463,18 +403,22 @@
 
   async function handleLineMutation(lineKey, nextQty, action) {
     if (!lineKey || state.ui.busyLineKey) return;
+
     state.ui.busyLineKey = lineKey;
     state.ui.busyAction = action;
     render();
+
     try {
       if (action === "remove") {
         await removeLine(lineKey);
       } else {
         await changeLineQuantity(lineKey, nextQty);
       }
+
       await reloadCartView();
     } catch (error) {
-      state.wallet.message = error instanceof Error ? error.message : "Unable to update bag item.";
+      state.ui.errorMessage =
+        error instanceof Error ? error.message : "Unable to update bag item.";
     } finally {
       state.ui.busyLineKey = null;
       state.ui.busyAction = null;
@@ -501,35 +445,36 @@
         render();
       } catch (error) {
         state.pageStatus = "error";
-        state.ui.errorMessage = error instanceof Error ? error.message : "Unable to refresh bag.";
+        state.ui.errorMessage =
+          error instanceof Error ? error.message : "Unable to refresh bag.";
         render();
       }
       return;
     }
 
     if (action === "checkout") {
-      window.location.assign(getCheckoutRedirectUrl());
+      await proceedToMegaskaCheckout();
       return;
     }
 
-    if (action === "wallet-login") {
-      triggerWalletLoginFlow();
-      return;
-    }
+    const lineNode =
+      trigger && trigger.closest ? trigger.closest("[data-line-key]") : null;
+    const lineKey = lineNode
+      ? String(lineNode.getAttribute("data-line-key") || "").trim()
+      : "";
+    const item = (state.cart?.items || []).find(
+      (entry) => String(entry.key) === lineKey
+    );
 
-    if (action === "apply-wallet") {
-      await applyWallet();
-      return;
-    }
-
-    const lineNode = trigger && trigger.closest ? trigger.closest("[data-line-key]") : null;
-    const lineKey = lineNode ? String(lineNode.getAttribute("data-line-key") || "").trim() : "";
-    const item = (state.cart?.items || []).find((entry) => String(entry.key) === lineKey);
     if (!item) return;
 
     if (action === "decrease-qty") {
       const nextQty = Math.max(Number(item.quantity || 0) - 1, 0);
-      await handleLineMutation(lineKey, nextQty, nextQty <= 0 ? "remove" : "decrease");
+      await handleLineMutation(
+        lineKey,
+        nextQty,
+        nextQty <= 0 ? "remove" : "decrease"
+      );
       return;
     }
 
@@ -544,10 +489,16 @@
   }
 
   root.addEventListener("click", function (event) {
-    const target = event.target instanceof Element ? event.target.closest("[data-bag-action]") : null;
+    const target =
+      event.target instanceof Element
+        ? event.target.closest("[data-bag-action]")
+        : null;
+
     if (!target) return;
+
     const action = String(target.getAttribute("data-bag-action") || "").trim();
     if (!action) return;
+
     event.preventDefault();
     handleAction(action, target);
   });
@@ -562,7 +513,8 @@
       render();
     } catch (error) {
       state.pageStatus = "error";
-      state.ui.errorMessage = error instanceof Error ? error.message : "Unable to load bag.";
+      state.ui.errorMessage =
+        error instanceof Error ? error.message : "Unable to load bag.";
       render();
     }
   }
