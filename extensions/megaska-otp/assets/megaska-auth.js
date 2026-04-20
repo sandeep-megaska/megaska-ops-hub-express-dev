@@ -933,7 +933,7 @@ Object.entries(params).forEach(([key, value]) => {
 
   async function initDashboardPage() {
     const pathname = String(window?.location?.pathname || "");
-    if (!pathname.includes("/pages/megaska-account")) return;
+    if (!pathname.includes("/pages/megaska-dashboard")) return;
 
     const mountTarget =
       [
