@@ -1009,7 +1009,7 @@ Object.entries(params).forEach(([key, value]) => {
   async function init() {
     bindLogoutButtons();
     await bootstrapAuth();
-    await initDashboardPage();
+   // await initDashboardPage();
   }
 
   window.MegaskaAuth = {
