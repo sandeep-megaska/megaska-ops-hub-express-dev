@@ -2375,7 +2375,49 @@ function consumePendingAccountRedirect() {
 
     window.location.assign(finalTargetUrl);
   }
-}
+	}
+
+  function bindGlobalClickInterceptor() {
+    if (globalClickBound) return;
+    globalClickBound = true;
+
+    document.addEventListener(
+      "click",
+      async (event) => {
+        const logoutTrigger = findClosestMatchingElement(event, LOGOUT_TRIGGER_SELECTORS);
+        if (logoutTrigger) {
+          await handleLogoutClick(event);
+          return;
+        }
+
+        const accountTrigger = findClosestMatchingElement(event, ACCOUNT_TRIGGER_SELECTORS);
+        if (accountTrigger) {
+          await handleAccountTriggerClick(event, accountTrigger);
+          return;
+        }
+
+        const checkoutTrigger = inferCheckoutTriggerFromEvent(event);
+        if (checkoutTrigger && isCheckoutTarget(checkoutTrigger)) {
+          await handleCheckoutTriggerClick(event, checkoutTrigger);
+          return;
+        }
+
+        if (!isAccountMenuOpen()) return;
+        const clickedInsideMenu =
+          accountMenuContainer && typeof accountMenuContainer.contains === "function"
+            ? accountMenuContainer.contains(event.target)
+            : false;
+        const clickedTrigger =
+          accountMenuTrigger && typeof accountMenuTrigger.contains === "function"
+            ? accountMenuTrigger.contains(event.target)
+            : false;
+        if (!clickedInsideMenu && !clickedTrigger) {
+          closeAccountMenu();
+        }
+      },
+      true
+    );
+  }
 
   function bindCheckoutSubmitInterceptor() {
   if (checkoutSubmitBound) return;
