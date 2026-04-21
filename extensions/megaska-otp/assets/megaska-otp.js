@@ -2224,9 +2224,9 @@ function consumePendingAccountRedirect() {
 
  async function handleAccountTriggerClick(event, triggerEl) {
   hardBlockEvent(event);
-
+	await window.MegaskaAuth.refreshAuthState();
   const gateState = await getMegaskaCheckoutGateState();
-  const authenticated = Boolean(gateState?.authenticated || hasKnownMegaskaSession());
+  const authenticated = Boolean(gateState?.authenticated);
   const accountDestination = resolveAccountDestinationUrl(triggerEl);
 
   if (!authenticated) {
