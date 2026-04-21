@@ -5,25 +5,25 @@ const quickCards = [
     title: "GST Operations",
     value: "Sync + dispatch",
     meta: "Manage invoices, sync flow and GST workflows",
-    href: "/app/admin/gst",
+    href: "/admin/gst",
   },
   {
     title: "Exchanges",
     value: "Workflow Queue",
     meta: "Track exchange requests and pending actions",
-    href: "/app/admin/exchanges",
+    href: "/admin/exchanges",
   },
   {
     title: "Cancellations",
     value: "Request Control",
     meta: "Review cancellation flow and current statuses",
-    href: "/app/admin/cancellations",
+    href: "/admin/cancellations",
   },
   {
     title: "Issues",
     value: "Support Cases",
     meta: "Customer-reported issues and resolution status",
-    href: "/app/admin/issues",
+    href: "/admin/issues",
   },
 ];
 
@@ -39,10 +39,10 @@ export default function DashboardPage() {
         </p>
 
         <div className="mk-hero-actions">
-          <Link href="/app/admin/gst" className="mk-btn mk-btn-primary">
+          <Link href="/admin/gst" className="mk-btn mk-btn-primary">
             Open GST
           </Link>
-          <Link href="/app/admin/exchanges" className="mk-btn">
+          <Link href="/admin/exchanges" className="mk-btn">
             Open Exchanges
           </Link>
         </div>
