@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { syncOrdersByDateRange } from "../../../../../services/gst/order-sync";
+import { getShopDomainFromRequest } from "../../../../../services/shopify/shop-resolver";
 
 export const runtime = "nodejs";
 
@@ -21,6 +22,7 @@ export async function POST(req: NextRequest) {
     financialStatus: Array.isArray(body.financialStatus) ? body.financialStatus.map(String) : undefined,
     fulfillmentStatus: Array.isArray(body.fulfillmentStatus) ? body.fulfillmentStatus.map(String) : undefined,
     forceResync: Boolean(body.forceResync),
+    shopDomain: getShopDomainFromRequest(req) || (body.shopDomain ? String(body.shopDomain) : undefined),
   });
 
   if (!result.ok || !result.data) {

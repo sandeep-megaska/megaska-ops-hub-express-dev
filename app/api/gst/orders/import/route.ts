@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { importOrderByShopifyId } from "../../../../../services/gst/order-import";
+import { getShopDomainFromRequest } from "../../../../../services/shopify/shop-resolver";
 
 export const runtime = "nodejs";
 
@@ -20,7 +21,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "order payload is required" }, { status: 400 });
   }
 
-  const result = await importOrderByShopifyId(shopifyOrderId, orderPayload);
+  const shopDomain = getShopDomainFromRequest(req) || (body.shopDomain ? String(body.shopDomain) : undefined);
+  const result = await importOrderByShopifyId(shopifyOrderId, orderPayload, { shopDomain });
   if (!result.ok || !result.data) {
     return NextResponse.json({ ok: false, error: result.error || "Failed to import order" }, { status: 400 });
   }

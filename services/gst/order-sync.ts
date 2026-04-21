@@ -2,6 +2,7 @@ import { gstDb } from "./db";
 import type { GstServiceResult } from "./types";
 import { importOrderByShopifyId } from "./order-import";
 import { getShopifyOrdersForGstSync, getSingleShopifyOrderForGstSync } from "../shopify/admin";
+import { resolveShopConfig } from "../shopify/shop-resolver";
 
 interface SyncFilters {
   from: string | Date;
@@ -9,6 +10,7 @@ interface SyncFilters {
   financialStatus?: string[];
   fulfillmentStatus?: string[];
   forceResync?: boolean;
+  shopDomain?: string;
 }
 
 interface ShopifyOrderLine {
@@ -134,6 +136,8 @@ export async function syncOrdersByDateRange(input: SyncFilters): Promise<GstServ
   try {
     const from = parseDate(input.from, "from");
     const to = parseDate(input.to, "to");
+    const resolvedShop = await resolveShopConfig(input.shopDomain);
+    const resolvedShopId = resolvedShop.id ? String(resolvedShop.id).trim() : null;
 
     if (from > to) {
       return { ok: false, error: "from must be less than or equal to to" };
@@ -165,14 +169,17 @@ export async function syncOrdersByDateRange(input: SyncFilters): Promise<GstServ
         continue;
       }
 
-      const existing = await syncDb.gstOrderImport.findUnique({ where: { shopifyOrderId }, select: { id: true } });
+      const existing = await syncDb.gstOrderImport.findUnique({
+        where: { shopId_shopifyOrderId: { shopId: resolvedShopId, shopifyOrderId } },
+        select: { id: true },
+      });
       if (existing && !input.forceResync) {
         summary.alreadySynced += 1;
         summary.perOrder.push({ orderName, shopifyOrderId, status: "ALREADY_SYNCED" });
         continue;
       }
 
-      const result = await importOrderByShopifyId(shopifyOrderId, normalizeOrderPayload(order));
+      const result = await importOrderByShopifyId(shopifyOrderId, normalizeOrderPayload(order), { shopId: resolvedShopId });
       if (!result.ok || !result.data) {
         summary.failed += 1;
         summary.perOrder.push({ orderName, shopifyOrderId, status: "FAILED", error: result.error || "Import failed" });
@@ -206,13 +213,16 @@ export async function syncOrdersByDateRange(input: SyncFilters): Promise<GstServ
   }
 }
 
-export async function syncSingleOrder(input: { orderName?: string; orderNumber?: string; forceResync?: boolean }) {
+export async function syncSingleOrder(input: { orderName?: string; orderNumber?: string; forceResync?: boolean; shopDomain?: string }) {
   const key = String(input.orderName || input.orderNumber || "").trim();
   if (!key) {
     return { ok: false, error: "orderName or orderNumber is required" } as const;
   }
 
   try {
+    const resolvedShop = await resolveShopConfig(input.shopDomain);
+    const resolvedShopId = resolvedShop.id ? String(resolvedShop.id).trim() : null;
+
     const order = await getSingleShopifyOrderForGstSync(key);
     if (!order) {
       return { ok: false, error: "Order not found in Shopify" } as const;
@@ -222,7 +232,10 @@ export async function syncSingleOrder(input: { orderName?: string; orderNumber?:
       return { ok: false, error: "Shopify order id missing for selected order" } as const;
     }
 
-    const existing = await syncDb.gstOrderImport.findUnique({ where: { shopifyOrderId }, select: { id: true } });
+    const existing = await syncDb.gstOrderImport.findUnique({
+      where: { shopId_shopifyOrderId: { shopId: resolvedShopId, shopifyOrderId } },
+      select: { id: true },
+    });
     if (existing && !input.forceResync) {
       return {
         ok: true,
@@ -238,7 +251,7 @@ export async function syncSingleOrder(input: { orderName?: string; orderNumber?:
       } as const;
     }
 
-    const imported = await importOrderByShopifyId(shopifyOrderId, normalizeOrderPayload(order));
+    const imported = await importOrderByShopifyId(shopifyOrderId, normalizeOrderPayload(order), { shopId: resolvedShopId });
     if (!imported.ok || !imported.data) {
       return { ok: false, error: imported.error || "Failed to import single order" } as const;
     }

@@ -2,6 +2,7 @@ import { gstDb } from "./db";
 import { resolveLineTaxMapping } from "./product-tax-map";
 import { getActiveGstSettings } from "./settings";
 import type { GstServiceResult } from "./types";
+import { resolveShopConfig } from "../shopify/shop-resolver";
 
 export interface GstOrderImportRecord {
   id: string;
@@ -229,6 +230,7 @@ function toOrderImportRecord(
 export async function importOrderByShopifyId(
   orderId: string,
   orderPayload?: Record<string, unknown> | null,
+  context?: { shopDomain?: string | null; shopId?: string | null },
 ): Promise<GstServiceResult<GstOrderImportRecord>> {
   const shopifyOrderId = normalizeString(orderId);
   if (!shopifyOrderId) {
@@ -241,8 +243,9 @@ export async function importOrderByShopifyId(
   }
 
   try {
+    const resolvedShopId = normalizeString(context?.shopId) || normalizeString((await resolveShopConfig(context?.shopDomain)).id) || null;
     const existing = await orderDb.gstOrderImport.findUnique({
-      where: { shopifyOrderId },
+      where: { shopId_shopifyOrderId: { shopId: resolvedShopId, shopifyOrderId } },
       include: { lines: true },
     });
 
@@ -267,7 +270,7 @@ export async function importOrderByShopifyId(
       };
     }
 
-    const activeSettings = await getActiveGstSettings();
+    const activeSettings = await getActiveGstSettings({ shopId: resolvedShopId });
     if (!activeSettings.ok || !activeSettings.data) {
       return { ok: false, error: activeSettings.error || "No active GST settings configured" };
     }
@@ -295,6 +298,7 @@ export async function importOrderByShopifyId(
     const created = await orderDb.$transaction(async (tx) => {
       const orderImport = await tx.gstOrderImport.create({
         data: {
+          shopId: resolvedShopId,
           gstSettingsId: activeSettings.data?.id,
           shopifyOrderId,
           shopifyOrderName: normalizedOrder.shopifyOrderName,

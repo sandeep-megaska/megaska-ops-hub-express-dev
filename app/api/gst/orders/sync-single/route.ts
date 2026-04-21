@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { syncSingleOrder } from "../../../../../services/gst/order-sync";
+import { getShopDomainFromRequest } from "../../../../../services/shopify/shop-resolver";
 
 export const runtime = "nodejs";
 
@@ -13,6 +14,7 @@ export async function POST(req: NextRequest) {
     orderName: body.orderName ? String(body.orderName) : undefined,
     orderNumber: body.orderNumber ? String(body.orderNumber) : undefined,
     forceResync: Boolean(body.forceResync),
+    shopDomain: getShopDomainFromRequest(req) || (body.shopDomain ? String(body.shopDomain) : undefined),
   });
 
   if (!result.ok) {

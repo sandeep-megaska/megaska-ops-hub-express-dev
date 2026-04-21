@@ -7,6 +7,7 @@ import { GSTIN_REGEX, PAN_REGEX, PREFIX_REGEX, isValidStateCode } from "./valida
 
 export interface GstSettingsSnapshot {
   id: string;
+  shopId?: string | null;
   legalName: string;
   tradeName: string | null;
   gstin: string;
@@ -47,6 +48,7 @@ function toSnapshot(settings: GstSettingsSnapshot | null | undefined): GstSettin
 
   return {
     id: settings.id,
+    shopId: settings.shopId ?? null,
     legalName: settings.legalName,
     tradeName: settings.tradeName,
     gstin: settings.gstin,
@@ -167,9 +169,16 @@ export async function getGstSettingsById(id: string): Promise<GstServiceResult<G
   }
 }
 
-export async function getActiveGstSettings(): Promise<GstServiceResult<GstSettingsSnapshot>> {
+export async function getActiveGstSettings(input?: { shopId?: string | null }): Promise<GstServiceResult<GstSettingsSnapshot>> {
   try {
-    const settings = await gstDb.gstSettings.findFirst({ where: { isActive: true }, orderBy: { updatedAt: "desc" } });
+    const shopId = normalize(input?.shopId);
+    const settings = await gstDb.gstSettings.findFirst({
+      where: {
+        isActive: true,
+        ...(shopId ? { shopId } : {}),
+      },
+      orderBy: { updatedAt: "desc" },
+    });
     if (!settings) {
       return { ok: false, error: "No active GST settings configured" };
     }
