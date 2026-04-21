@@ -10,8 +10,6 @@ export default function RootLayout({
     <html lang="en">
       <body>
         <div className="mk-shell">
-          
-          {/* Sidebar */}
           <aside className="mk-sidebar">
             <div className="mk-brand">
               <div className="mk-brand-badge">M</div>
@@ -22,11 +20,21 @@ export default function RootLayout({
             </div>
 
             <nav className="mk-nav">
-              <Link href="/app" className="mk-nav-link">Dashboard</Link>
-              <Link href="/app/admin/gst" className="mk-nav-link">GST</Link>
-              <Link href="/app/admin/exchanges" className="mk-nav-link">Exchanges</Link>
-              <Link href="/app/admin/cancellations" className="mk-nav-link">Cancellations</Link>
-              <Link href="/app/admin/issues" className="mk-nav-link">Issues</Link>
+              <Link href="/" className="mk-nav-link">
+                Dashboard
+              </Link>
+              <Link href="/admin/gst" className="mk-nav-link">
+                GST
+              </Link>
+              <Link href="/admin/exchanges" className="mk-nav-link">
+                Exchanges
+              </Link>
+              <Link href="/admin/cancellations" className="mk-nav-link">
+                Cancellations
+              </Link>
+              <Link href="/admin/issues" className="mk-nav-link">
+                Issues
+              </Link>
             </nav>
 
             <div className="mk-sidebar-footer">
@@ -37,11 +45,7 @@ export default function RootLayout({
             </div>
           </aside>
 
-          {/* Main Content */}
-          <main className="mk-main">
-            {children}
-          </main>
-
+          <main className="mk-main">{children}</main>
         </div>
       </body>
     </html>
