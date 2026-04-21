@@ -1,3 +1,4 @@
+import { normalizeShopDomain, resolveShopConfig } from "./shop-resolver";
 const SHOPIFY_API_VERSION = "2026-01";
 
 type StorefrontGraphqlEnvelope<T> = {
@@ -39,14 +40,6 @@ export type CartAttributeUpdateResult = {
   apiErrors: Array<{ message?: string }>;
 };
 
-function getShopDomain() {
-  return (process.env.SHOPIFY_STORE_DOMAIN || "").trim();
-}
-
-function getStorefrontAccessToken() {
-  return (process.env.SHOPIFY_STOREFRONT_ACCESS_TOKEN || "").trim();
-}
-
 function normalizeCartId(raw: string | null | undefined) {
   return String(raw || "").trim();
 }
@@ -63,15 +56,21 @@ function buildCartIdFromToken(tokenRaw: string) {
 }
 
 function isConfigured() {
-  return Boolean(getShopDomain() && getStorefrontAccessToken());
+  return Boolean(String(process.env.SHOPIFY_STORE_DOMAIN || "").trim() && String(process.env.SHOPIFY_STOREFRONT_ACCESS_TOKEN || "").trim());
 }
+
+type StorefrontRequestOptions = {
+  shopDomain?: string | null;
+};
 
 async function storefrontGraphql<T>(
   query: string,
-  variables?: Record<string, unknown>
+  variables?: Record<string, unknown>,
+  options?: StorefrontRequestOptions
 ): Promise<StorefrontGraphqlEnvelope<T>> {
-  const shopDomain = getShopDomain();
-  const token = getStorefrontAccessToken();
+  const shopConfig = await resolveShopConfig(normalizeShopDomain(options?.shopDomain));
+  const shopDomain = shopConfig.shopDomain;
+  const token = shopConfig.storefrontAccessToken || String(process.env.SHOPIFY_STOREFRONT_ACCESS_TOKEN || "").trim();
 
   if (!shopDomain || !token) {
     return {
@@ -114,6 +113,7 @@ export async function updateCartBuyerIdentity(input: {
   cartId?: string | null;
   cartToken?: string | null;
   buyerIdentity: CartBuyerIdentityInput;
+  shopDomain?: string | null;
 }): Promise<CartBuyerIdentityUpdateResult> {
   const resolvedCartId = resolveCartId({
     cartId: input.cartId,
@@ -186,7 +186,7 @@ export async function updateCartBuyerIdentity(input: {
         ],
       },
     }
-  );
+  , { shopDomain: input.shopDomain });
 
   return {
     ok: Boolean(
@@ -211,6 +211,7 @@ export async function updateCartAttributes(input: {
   cartId?: string | null;
   cartToken?: string | null;
   attributes: Array<{ key: string; value: string }>;
+  shopDomain?: string | null;
 }): Promise<CartAttributeUpdateResult> {
   const resolvedCartId = resolveCartId({
     cartId: input.cartId,
@@ -268,7 +269,7 @@ export async function updateCartAttributes(input: {
       cartId: resolvedCartId,
       attributes,
     }
-  );
+  , { shopDomain: input.shopDomain });
 
   return {
     ok: Boolean(

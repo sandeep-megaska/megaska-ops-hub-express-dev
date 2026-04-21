@@ -37,6 +37,25 @@ model CustomerProfile {
 
 }
 
+model Shop {
+  id                    String   @id @default(uuid())
+  shopDomain            String   @unique
+  accessToken           String?
+  storefrontAccessToken String?
+  scopes                String?
+  isActive              Boolean  @default(true)
+  installedAt           DateTime?
+  uninstalledAt         DateTime?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  orderActionRequests   OrderActionRequest[]
+  walletReservations    WalletReservation[]
+  gstSettings           GstSettings[]
+  gstProductTaxMaps     GstProductTaxMap[]
+  gstOrderImports       GstOrderImport[]
+}
+
 model AuthSession {
   id                  String   @id @default(uuid())
   customerProfileId   String
@@ -133,6 +152,7 @@ enum ShipmentStatus {
 
 model OrderActionRequest {
   id                    String                @id @default(uuid())
+  shopId                String?
   requestType           RequestType           @default(EXCHANGE)
   customerProfileId     String
   shopifyCustomerId     String?
@@ -153,6 +173,7 @@ model OrderActionRequest {
   eligibilityReason     String?
 
   customerProfile       CustomerProfile       @relation(fields: [customerProfileId], references: [id])
+  shop                  Shop?                 @relation(fields: [shopId], references: [id], onDelete: SetNull)
   items                 OrderActionItem[]
   payments              RequestPayment[]
   shipments             ShipmentTracking[]
@@ -160,6 +181,7 @@ model OrderActionRequest {
   @@index([customerProfileId])
   @@index([status])
   @@index([orderNumber])
+  @@index([shopId])
 }
 
 model OrderActionItem {
@@ -310,6 +332,7 @@ enum WalletReservationSourceFlow {
 
 model WalletReservation {
   id                String                      @id @default(uuid())
+  shopId            String?
   walletAccountId   String
   customerProfileId String
   reservedAmount    Int
@@ -330,11 +353,13 @@ model WalletReservation {
 
   walletAccount     WalletAccount               @relation(fields: [walletAccountId], references: [id], onDelete: Cascade)
   customer          CustomerProfile             @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+  shop              Shop?                       @relation(fields: [shopId], references: [id], onDelete: SetNull)
 
   @@index([customerProfileId, status, expiresAt])
   @@index([walletAccountId, status, expiresAt])
   @@index([discountCode])
   @@index([shopifyOrderId])
+  @@index([shopId, status, expiresAt])
 }
 
 
@@ -370,6 +395,7 @@ enum GstSupplyType {
 
 model GstSettings {
   id                    String   @id @default(uuid())
+  shopId                String?
   legalName             String
   tradeName             String?
   gstin                 String   @unique
@@ -393,7 +419,9 @@ model GstSettings {
   orderImports          GstOrderImport[]
   invoiceTemplates      GstInvoiceTemplate[]
   reportRuns            GstReportRun[]
+  shop                  Shop?    @relation(fields: [shopId], references: [id], onDelete: SetNull)
 
+  @@index([shopId])
 }
 
 model GstCounter {
@@ -688,6 +716,7 @@ model GstHsnSlabMap {
 
 model GstProductTaxMap {
   id               String      @id @default(uuid())
+  shopId            String?
   shopifyProductId String
   shopifyVariantId String?
   hsnId            String
@@ -703,17 +732,20 @@ model GstProductTaxMap {
 
   hsn              GstHsnCode  @relation(fields: [hsnId], references: [id], onDelete: Restrict)
   slab             GstTaxSlab  @relation(fields: [slabId], references: [id], onDelete: Restrict)
+  shop             Shop?       @relation(fields: [shopId], references: [id], onDelete: SetNull)
 
+  @@index([shopId])
   @@index([shopifyProductId])
   @@index([shopifyVariantId])
   @@index([status])
-  @@unique([shopifyProductId, shopifyVariantId])
+  @@unique([shopId, shopifyProductId, shopifyVariantId])
 }
 
 model GstOrderImport {
   id               String               @id @default(uuid())
+  shopId            String?
   gstSettingsId    String
-  shopifyOrderId   String               @unique
+  shopifyOrderId   String
   shopifyOrderName String
   orderCreatedAt   DateTime
   orderCurrency    String
@@ -731,12 +763,15 @@ model GstOrderImport {
   updatedAt        DateTime             @updatedAt
 
   gstSettings      GstSettings          @relation(fields: [gstSettingsId], references: [id], onDelete: Cascade)
+  shop             Shop?                @relation(fields: [shopId], references: [id], onDelete: SetNull)
   lines            GstOrderImportLine[]
 
+  @@index([shopId])
   @@index([gstSettingsId])
   @@index([shopifyOrderName])
   @@index([importStatus, eligibilityStatus])
   @@index([orderCreatedAt])
+  @@unique([shopId, shopifyOrderId])
 }
 
 model GstOrderImportLine {

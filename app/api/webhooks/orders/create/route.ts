@@ -10,6 +10,7 @@ import {
   updateShopifyOrderEmail,
   updateOrderPhone,
 } from "../../../../../services/shopify/admin";
+import { normalizeShopDomain } from "../../../../../services/shopify/shop-resolver";
 
 type ShopifyOrderWebhookPayload = {
   id?: number | string;
@@ -124,7 +125,10 @@ function resolveCheckoutContactEmail(payload: ShopifyOrderWebhookPayload) {
   return String(payload.email || payload.contact_email || payload.customer?.email || "").trim();
 }
 
-async function backfillMissingOrderEmailFromCustomerProfile(order: ShopifyOrderWebhookPayload) {
+async function backfillMissingOrderEmailFromCustomerProfile(
+  order: ShopifyOrderWebhookPayload,
+  shopDomain: string
+) {
   const orderId = String(order.admin_graphql_api_id || order.id || "").trim();
   const existingEmail = resolveCheckoutContactEmail(order);
 
@@ -183,7 +187,9 @@ async function backfillMissingOrderEmailFromCustomerProfile(order: ShopifyOrderW
     email: profileEmail,
   });
 
-  const result = await updateShopifyOrderEmail(orderGid, profileEmail);
+  const result = await updateShopifyOrderEmail(orderGid, profileEmail, {
+    shopDomain,
+  });
   const updateError = result.userErrors[0]?.message;
 
   if (updateError) {
@@ -220,7 +226,7 @@ export async function POST(req: NextRequest) {
   }
 
   const topic = String(req.headers.get("x-shopify-topic") || "").trim();
-  const shopDomain = String(req.headers.get("x-shopify-shop-domain") || "").trim();
+  const shopDomain = normalizeShopDomain(req.headers.get("x-shopify-shop-domain"));
 
   let payload: ShopifyOrderWebhookPayload;
   try {
@@ -265,7 +271,7 @@ export async function POST(req: NextRequest) {
   });
 
   try {
-    await backfillMissingOrderEmailFromCustomerProfile(payload);
+    await backfillMissingOrderEmailFromCustomerProfile(payload, shopDomain);
   } catch (error) {
     console.error("[Megaska Order Email Backfill] failure", {
       orderId: orderId || null,
@@ -345,6 +351,8 @@ export async function POST(req: NextRequest) {
         const correctionResult = await updateOrderPhone({
           orderId,
           phone: normalizedVerifiedPhone,
+        }, {
+          shopDomain,
         });
 
         const updateError = correctionResult.userErrors[0]?.message;
@@ -387,6 +395,8 @@ export async function POST(req: NextRequest) {
       phoneCorrected,
       correctionAttempted,
       correctionError,
+    }, {
+      shopDomain,
     });
 
     console.log("[Megaska Order Identity] metafields and tags written", {

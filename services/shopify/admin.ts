@@ -1,3 +1,5 @@
+import { normalizeShopDomain, resolveShopConfig } from "./shop-resolver";
+
 const SHOPIFY_API_VERSION = "2026-01";
 
 type ShopifyCustomerNode = {
@@ -87,14 +89,6 @@ export type ShopifyCustomerDashboardData = {
   recentOrders: ShopifyRecentOrder[];
 };
 
-function getShopDomain() {
-  return (process.env.SHOPIFY_STORE_DOMAIN || "")
-    .trim()
-    .replace(/^https?:\/\//, "")
-    .replace(/\/$/, "");
-}
-
-
 function splitName(fullNameRaw: string | null | undefined) {
   const normalized = String(fullNameRaw || "").replace(/\s+/g, " ").trim();
   if (!normalized) {
@@ -173,11 +167,10 @@ function getEnvTrimmed(name: string) {
 }
 
 function hasRuntimeCredentialConfig() {
-  return Boolean(getShopDomain() && getEnvTrimmed("SHOPIFY_API_KEY") && getEnvTrimmed("SHOPIFY_API_SECRET"));
+  return Boolean(getEnvTrimmed("SHOPIFY_API_KEY") && getEnvTrimmed("SHOPIFY_API_SECRET"));
 }
 
-async function getRuntimeAdminAccessToken(): Promise<RuntimeAdminTokenResult> {
-  const shopDomain = getShopDomain();
+async function getRuntimeAdminAccessToken(shopDomain: string): Promise<RuntimeAdminTokenResult> {
   const apiKey = getEnvTrimmed("SHOPIFY_API_KEY");
   const apiSecret = getEnvTrimmed("SHOPIFY_API_SECRET");
 
@@ -256,15 +249,26 @@ async function getRuntimeAdminAccessToken(): Promise<RuntimeAdminTokenResult> {
   return { accessToken, expiresAt };
 }
 
-async function adminGraphql<T>(query: string, variables?: Record<string, unknown>): Promise<T> {
-  const shopDomain = getShopDomain();
-  const staticFallbackToken = getEnvTrimmed("SHOPIFY_ADMIN_ACCESS_TOKEN");
+type AdminRequestOptions = {
+  shopDomain?: string | null;
+};
+
+async function adminGraphql<T>(
+  query: string,
+  variables?: Record<string, unknown>,
+  options?: AdminRequestOptions
+): Promise<T> {
+  const preferredShopDomain = normalizeShopDomain(options?.shopDomain);
+  const shopConfig = await resolveShopConfig(preferredShopDomain);
+  const shopDomain = shopConfig.shopDomain;
+  const staticFallbackToken = shopConfig.accessToken || getEnvTrimmed("SHOPIFY_ADMIN_ACCESS_TOKEN");
   const runtimeConfigured = hasRuntimeCredentialConfig();
+  const defaultShopDomain = normalizeShopDomain(getEnvTrimmed("SHOPIFY_STORE_DOMAIN"));
 
   let token = "";
   let tokenSource: "runtime_client_credentials" | "env_fallback" = "runtime_client_credentials";
-  if (runtimeConfigured) {
-    const runtimeToken = await getRuntimeAdminAccessToken();
+  if (runtimeConfigured && (!preferredShopDomain || preferredShopDomain === defaultShopDomain)) {
+    const runtimeToken = await getRuntimeAdminAccessToken(shopDomain);
     token = runtimeToken.accessToken;
   } else {
     token = staticFallbackToken;
@@ -327,7 +331,7 @@ async function adminGraphql<T>(query: string, variables?: Record<string, unknown
 }
 
 export function isShopifyAdminConfigured() {
-  return Boolean(getShopDomain() && (hasRuntimeCredentialConfig() || getEnvTrimmed("SHOPIFY_ADMIN_ACCESS_TOKEN")));
+  return Boolean(getEnvTrimmed("SHOPIFY_STORE_DOMAIN") && (hasRuntimeCredentialConfig() || getEnvTrimmed("SHOPIFY_ADMIN_ACCESS_TOKEN")));
 }
 
 
@@ -443,7 +447,7 @@ async function createCustomer(input: ShopifyCustomerSyncInput) {
   return data.customerCreate.customer;
 }
 
-async function setOrderTags(input: { orderId: string; tags: string[] }) {
+async function setOrderTags(input: { orderId: string; tags: string[] }, options?: AdminRequestOptions) {
   const tags = Array.from(new Set((input.tags || []).map((tag) => String(tag || "").trim()).filter(Boolean)));
 
   if (!tags.length) {
@@ -481,13 +485,17 @@ async function setOrderTags(input: { orderId: string; tags: string[] }) {
     {
       id: resolveOrderGid(input.orderId),
       tags,
-    }
+    },
+    options
   );
 
   return data.tagsAdd;
 }
 
-export async function updateOrderPhone(input: { orderId: string; phone: string }) {
+export async function updateOrderPhone(
+  input: { orderId: string; phone: string },
+  options?: AdminRequestOptions
+) {
   const data = await adminGraphql<{
     orderUpdate: {
       order?: { id: string; phone?: string | null } | null;
@@ -513,13 +521,18 @@ export async function updateOrderPhone(input: { orderId: string; phone: string }
         id: resolveOrderGid(input.orderId),
         phone: String(input.phone || "").trim(),
       },
-    }
+    },
+    options
   );
 
   return data.orderUpdate;
 }
 
-export async function updateShopifyOrderEmail(orderGid: string, email: string) {
+export async function updateShopifyOrderEmail(
+  orderGid: string,
+  email: string,
+  options?: AdminRequestOptions
+) {
   const normalizedEmail = normalizeEmail(email);
   if (!normalizedEmail) {
     throw new Error("Missing order email");
@@ -550,7 +563,8 @@ export async function updateShopifyOrderEmail(orderGid: string, email: string) {
         id: resolveOrderGid(orderGid),
         email: normalizedEmail,
       },
-    }
+    },
+    options
   );
 
   return data.orderUpdate;
@@ -869,7 +883,10 @@ export async function getSingleShopifyOrderForGstSync(orderNameOrNumber: string)
   return node ? normalizeGstSyncOrder(node) : null;
 }
 
-export async function setOrderMegaskaIdentityMetafields(input: OrderMegaskaIdentityInput) {
+export async function setOrderMegaskaIdentityMetafields(
+  input: OrderMegaskaIdentityInput,
+  options?: AdminRequestOptions
+) {
   const ownerId = resolveOrderGid(input.orderId);
 
   const entries = [
@@ -930,7 +947,8 @@ export async function setOrderMegaskaIdentityMetafields(input: OrderMegaskaIdent
         }
       }
     `,
-    { metafields }
+    { metafields },
+    options
   );
 
   const tagsToAdd: string[] = [];
@@ -947,7 +965,7 @@ export async function setOrderMegaskaIdentityMetafields(input: OrderMegaskaIdent
   const tagsResult = await setOrderTags({
     orderId: input.orderId,
     tags: tagsToAdd,
-  });
+  }, options);
 
   return {
     metafields: data.metafieldsSet.metafields,
