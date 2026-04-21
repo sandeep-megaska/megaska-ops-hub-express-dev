@@ -1,114 +1,100 @@
-import Link from "next/link";
-import { prisma } from "../../../services/db/prisma";
-import { getIssueRefundMode } from "../../../services/exchange/issue";
-
-type Props = {
-  searchParams: Promise<{
-    status?: string;
-    orderNumber?: string;
-    customerPhone?: string;
-    customerName?: string;
-    reason?: string;
-    startDate?: string;
-    endDate?: string;
-  }>;
-};
-
-const STATUS_OPTIONS = ["OPEN", "AWAITING_PAYMENT", "PICKUP_PENDING", "PAYMENT_RECEIVED", "APPROVED", "REJECTED", "CLOSED"];
-
-function getPaymentGatewayFromSnapshot(snapshot: unknown) {
-  if (!snapshot || typeof snapshot !== "object") return null;
-  const value = (snapshot as { paymentGatewayName?: unknown }).paymentGatewayName;
-  return typeof value === "string" ? value : null;
-}
-
-export default async function AdminIssuesPage({ searchParams }: Props) {
-  const filters = await searchParams;
-
-  const requests = await prisma.orderActionRequest.findMany({
-    where: {
-      requestType: "ISSUE",
-      ...(filters.status ? { status: filters.status as never } : {}),
-      ...(filters.orderNumber
-        ? { orderNumber: { contains: filters.orderNumber.trim(), mode: "insensitive" } }
-        : {}),
-      ...(filters.customerPhone
-        ? { customerPhoneSnapshot: { contains: filters.customerPhone.trim(), mode: "insensitive" } }
-        : {}),
-      ...(filters.customerName
-        ? { customerNameSnapshot: { contains: filters.customerName.trim(), mode: "insensitive" } }
-        : {}),
-      ...(filters.reason ? { reason: { contains: filters.reason.trim(), mode: "insensitive" } } : {}),
-      ...((filters.startDate || filters.endDate)
-        ? {
-            requestedAt: {
-              ...(filters.startDate ? { gte: new Date(`${filters.startDate}T00:00:00.000Z`) } : {}),
-              ...(filters.endDate ? { lte: new Date(`${filters.endDate}T23:59:59.999Z`) } : {}),
-            },
-          }
-        : {}),
+export default function IssuesPage() {
+  const issues = [
+    {
+      ticket: "ISS-301",
+      order: "#MK2102",
+      issue: "Damaged item received",
+      status: "Open",
+      badge: "danger",
     },
-    include: {
-      items: { take: 1 },
+    {
+      ticket: "ISS-302",
+      order: "#MK2103",
+      issue: "Wrong size delivered",
+      status: "Investigating",
+      badge: "warning",
     },
-    orderBy: { requestedAt: "desc" },
-    take: 300,
-  });
+    {
+      ticket: "ISS-303",
+      order: "#MK2104",
+      issue: "Missing item in package",
+      status: "Resolved",
+      badge: "success",
+    },
+  ];
 
   return (
-    <main style={{ padding: 24, display: "grid", gap: 12 }}>
-      <h1>Issue / Return Exception Requests</h1>
-      <form style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(120px, 1fr))", gap: 8 }}>
-        <select name="status" defaultValue={filters.status || ""}>
-          <option value="">All Statuses</option>
-          {STATUS_OPTIONS.map((status) => (
-            <option key={status} value={status}>
-              {status}
-            </option>
-          ))}
-        </select>
-        <input name="orderNumber" defaultValue={filters.orderNumber || ""} placeholder="Order number" />
-        <input name="customerPhone" defaultValue={filters.customerPhone || ""} placeholder="Phone" />
-        <input name="customerName" defaultValue={filters.customerName || ""} placeholder="Customer name" />
-        <input name="reason" defaultValue={filters.reason || ""} placeholder="Issue reason" />
-        <input type="date" name="startDate" defaultValue={filters.startDate || ""} />
-        <input type="date" name="endDate" defaultValue={filters.endDate || ""} />
-        <button type="submit">Apply Filters</button>
-      </form>
-      <table style={{ width: "100%", borderCollapse: "collapse" }}>
-        <thead>
-          <tr>
-            {["Request", "Date", "Order", "Customer", "Phone", "Type", "Reason", "Status", "Refund Mode", "Action"].map((head) => (
-              <th key={head} style={{ borderBottom: "1px solid #ccc", textAlign: "left", padding: 8 }}>
-                {head}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {requests.map((item) => {
-            const paymentGatewayName = getPaymentGatewayFromSnapshot(item.items[0]?.eligibilitySnapshot);
-            const refundMode = getIssueRefundMode(paymentGatewayName);
+    <div className="mk-page">
+      <div className="mk-page-header">
+        <div>
+          <h1 className="mk-page-title">Issues</h1>
+          <p className="mk-page-subtitle">
+            Track customer-reported issues, resolutions, and support operations.
+          </p>
+        </div>
 
-            return (
-              <tr key={item.id}>
-                <td style={{ padding: 8 }}>{item.id.slice(0, 8)}</td>
-                <td style={{ padding: 8 }}>{item.requestedAt.toISOString().slice(0, 10)}</td>
-                <td style={{ padding: 8 }}>{item.orderNumber}</td>
-                <td style={{ padding: 8 }}>{item.customerNameSnapshot || "-"}</td>
-                <td style={{ padding: 8 }}>{item.customerPhoneSnapshot || "-"}</td>
-                <td style={{ padding: 8 }}>{item.requestType}</td>
-                <td style={{ padding: 8 }}>{item.reason || "-"}</td>
-                <td style={{ padding: 8 }}>{item.status}</td>
-                <td style={{ padding: 8 }}>{refundMode}</td>
-                <td style={{ padding: 8 }}>
-                  <Link href={`/admin/issues/${item.id}`}>Open</Link>
-                </td>
+        <div className="mk-header-actions">
+          <button className="mk-btn">Refresh</button>
+          <button className="mk-btn mk-btn-primary">Create Case</button>
+        </div>
+      </div>
+
+      <section className="mk-grid-4">
+        <div className="mk-card mk-stat-card">
+          <p className="mk-stat-label">Open Issues</p>
+          <p className="mk-stat-value">14</p>
+          <p className="mk-stat-meta">Require active support review</p>
+        </div>
+        <div className="mk-card mk-stat-card">
+          <p className="mk-stat-label">Investigating</p>
+          <p className="mk-stat-value">8</p>
+          <p className="mk-stat-meta">Pending ops verification</p>
+        </div>
+        <div className="mk-card mk-stat-card">
+          <p className="mk-stat-label">Resolved Today</p>
+          <p className="mk-stat-value">5</p>
+          <p className="mk-stat-meta">Closed after resolution</p>
+        </div>
+        <div className="mk-card mk-stat-card">
+          <p className="mk-stat-label">High Priority</p>
+          <p className="mk-stat-value">3</p>
+          <p className="mk-stat-meta">Needs immediate action</p>
+        </div>
+      </section>
+
+      <section className="mk-card">
+        <h2 className="mk-section-title">Issue Queue</h2>
+        <p className="mk-section-subtitle">
+          All active issue tickets in current operational scope.
+        </p>
+
+        <div className="mk-table-wrap">
+          <table className="mk-table">
+            <thead>
+              <tr>
+                <th>Ticket</th>
+                <th>Order</th>
+                <th>Issue</th>
+                <th>Status</th>
               </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </main>
+            </thead>
+            <tbody>
+              {issues.map((issue) => (
+                <tr key={issue.ticket}>
+                  <td>{issue.ticket}</td>
+                  <td>{issue.order}</td>
+                  <td>{issue.issue}</td>
+                  <td>
+                    <span className={`mk-badge mk-badge-${issue.badge}`}>
+                      {issue.status}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
   );
 }
