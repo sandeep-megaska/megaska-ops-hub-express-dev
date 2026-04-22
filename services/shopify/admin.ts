@@ -88,7 +88,82 @@ export type ShopifyCustomerDashboardData = {
   totalOrderCount: number;
   recentOrders: ShopifyRecentOrder[];
 };
+export async function getShopifyCustomersForSync(input?: {
+  shopDomain?: string | null;
+  first?: number;
+  after?: string | null;
+}) {
+  const data = await adminGraphql<{
+    customers: {
+      pageInfo: {
+        hasNextPage: boolean;
+        endCursor: string | null;
+      };
+      nodes: Array<{
+        id: string;
+        displayName?: string | null;
+        firstName?: string | null;
+        lastName?: string | null;
+        defaultEmailAddress?: {
+          emailAddress?: string | null;
+        } | null;
+        defaultPhoneNumber?: {
+          phoneNumber?: string | null;
+        } | null;
+        defaultAddress?: {
+          address1?: string | null;
+          address2?: string | null;
+          city?: string | null;
+          province?: string | null;
+          zip?: string | null;
+          country?: string | null;
+          phone?: string | null;
+        } | null;
+      }>;
+    };
+  }>(
+    `
+      query CustomersSync($first: Int!, $after: String) {
+        customers(first: $first, after: $after, sortKey: UPDATED_AT) {
+          pageInfo {
+            hasNextPage
+            endCursor
+          }
+          nodes {
+            id
+            displayName
+            firstName
+            lastName
+            defaultEmailAddress {
+              emailAddress
+            }
+            defaultPhoneNumber {
+              phoneNumber
+            }
+            defaultAddress {
+              address1
+              address2
+              city
+              province
+              zip
+              country
+              phone
+            }
+          }
+        }
+      }
+    `,
+    {
+      first: input?.first ?? 100,
+      after: input?.after ?? null,
+    },
+    {
+      shopDomain: input?.shopDomain ?? null,
+    }
+  );
 
+  return data.customers;
+}
 function splitName(fullNameRaw: string | null | undefined) {
   const normalized = String(fullNameRaw || "").replace(/\s+/g, " ").trim();
   if (!normalized) {
