@@ -5,6 +5,7 @@ type StorefrontGraphqlEnvelope<T> = {
   data?: T;
   errors?: Array<{ message?: string }>;
 };
+
 function absolutizeCheckoutUrl(
   rawUrl: string | null | undefined,
   shopDomain: string
@@ -13,11 +14,8 @@ function absolutizeCheckoutUrl(
   if (!value) return undefined;
 
   try {
-    // Already absolute → keep as-is
-    const parsed = new URL(value);
-    return parsed.toString();
+    return new URL(value).toString();
   } catch {
-    // Relative → attach shop domain
     if (value.startsWith("/")) {
       return `https://${shopDomain}${value}`;
     }
@@ -146,6 +144,10 @@ export async function updateCartBuyerIdentity(input: {
     };
   }
 
+  const normalizedRequestedShopDomain = normalizeShopDomain(input.shopDomain);
+  const resolvedShopConfig = await resolveShopConfig(normalizedRequestedShopDomain);
+  const shopDomain = resolvedShopConfig.shopDomain;
+
   const response = await storefrontGraphql<{
     cartBuyerIdentityUpdate?: {
       cart?: {
@@ -203,8 +205,9 @@ export async function updateCartBuyerIdentity(input: {
           },
         ],
       },
-    }
-  , { shopDomain: input.shopDomain });
+    },
+    { shopDomain: normalizedRequestedShopDomain }
+  );
 
   return {
     ok: Boolean(
@@ -214,9 +217,9 @@ export async function updateCartBuyerIdentity(input: {
     ),
     cartId: response.data?.cartBuyerIdentityUpdate?.cart?.id || resolvedCartId,
     checkoutUrl: absolutizeCheckoutUrl(
-  response.data?.cartBuyerIdentityUpdate?.cart?.checkoutUrl,
-  shopDomain
-),
+      response.data?.cartBuyerIdentityUpdate?.cart?.checkoutUrl,
+      shopDomain
+    ),
     buyerIdentity: {
       email: response.data?.cartBuyerIdentityUpdate?.cart?.buyerIdentity?.email || null,
       phone: response.data?.cartBuyerIdentityUpdate?.cart?.buyerIdentity?.phone || null,
@@ -227,7 +230,6 @@ export async function updateCartBuyerIdentity(input: {
     apiErrors: response.errors || [],
   };
 }
-
 export async function updateCartAttributes(input: {
   cartId?: string | null;
   cartToken?: string | null;
@@ -263,6 +265,10 @@ export async function updateCartAttributes(input: {
     };
   }
 
+  const normalizedRequestedShopDomain = normalizeShopDomain(input.shopDomain);
+  const resolvedShopConfig = await resolveShopConfig(normalizedRequestedShopDomain);
+  const shopDomain = resolvedShopConfig.shopDomain;
+
   const response = await storefrontGraphql<{
     cartAttributesUpdate?: {
       cart?: {
@@ -289,8 +295,9 @@ export async function updateCartAttributes(input: {
     {
       cartId: resolvedCartId,
       attributes,
-    }
-  , { shopDomain: input.shopDomain });
+    },
+    { shopDomain: normalizedRequestedShopDomain }
+  );
 
   return {
     ok: Boolean(
@@ -300,14 +307,13 @@ export async function updateCartAttributes(input: {
     ),
     cartId: response.data?.cartAttributesUpdate?.cart?.id || resolvedCartId,
     checkoutUrl: absolutizeCheckoutUrl(
-  response.data?.cartAttributesUpdate?.cart?.checkoutUrl,
-  shopDomain
-),
+      response.data?.cartAttributesUpdate?.cart?.checkoutUrl,
+      shopDomain
+    ),
     userErrors: response.data?.cartAttributesUpdate?.userErrors || [],
     apiErrors: response.errors || [],
   };
 }
-
 
 export type CartPricingSnapshot = {
   ok: boolean;
@@ -330,6 +336,9 @@ export async function getCartPricingSnapshot(cartId: string): Promise<CartPricin
       error: "Missing cart id",
     };
   }
+
+  const resolvedShopConfig = await resolveShopConfig();
+  const shopDomain = resolvedShopConfig.shopDomain;
 
   const response = await storefrontGraphql<{
     cart?: {
@@ -375,7 +384,11 @@ export async function getCartPricingSnapshot(cartId: string): Promise<CartPricin
 
   const subtotal = Number.parseFloat(String(cart.cost?.subtotalAmount?.amount || "0"));
   const total = Number.parseFloat(String(cart.cost?.totalAmount?.amount || "0"));
-  const currencyCode = String(cart.cost?.subtotalAmount?.currencyCode || cart.cost?.totalAmount?.currencyCode || "INR");
+  const currencyCode = String(
+    cart.cost?.subtotalAmount?.currencyCode ||
+      cart.cost?.totalAmount?.currencyCode ||
+      "INR"
+  );
 
   return {
     ok: true,
@@ -386,7 +399,6 @@ export async function getCartPricingSnapshot(cartId: string): Promise<CartPricin
     totalAmount: Math.max(0, Math.round(total * 100)),
   };
 }
-
 export async function attachCartDiscountCodes(input: {
   cartId?: string | null;
   cartToken?: string | null;
