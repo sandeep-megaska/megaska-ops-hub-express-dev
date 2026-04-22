@@ -60,7 +60,86 @@ export type OrderMegaskaIdentityInput = {
   correctionAttempted?: boolean;
   correctionError?: string | null;
 };
+export async function findShopifyCustomerForSync(input: {
+  shopDomain?: string | null;
+  phone?: string | null;
+  email?: string | null;
+}) {
+  const normalizedEmail = String(input.email || "").trim().toLowerCase();
+  const normalizedPhone = normalizeIndianPhoneToE164(input.phone);
 
+  const searchTerms: string[] = [];
+  if (normalizedEmail) searchTerms.push(`email:${normalizedEmail}`);
+  if (normalizedPhone) searchTerms.push(`phone:${normalizedPhone}`);
+
+  if (!searchTerms.length) {
+    throw new Error("Missing phone or email for customer sync");
+  }
+
+  const queryString = searchTerms.join(" OR ");
+
+  const data = await adminGraphql<{
+    customers: {
+      nodes: Array<{
+        id: string;
+        displayName?: string | null;
+        firstName?: string | null;
+        lastName?: string | null;
+        defaultEmailAddress?: {
+          emailAddress?: string | null;
+        } | null;
+        defaultPhoneNumber?: {
+          phoneNumber?: string | null;
+        } | null;
+        defaultAddress?: {
+          address1?: string | null;
+          address2?: string | null;
+          city?: string | null;
+          province?: string | null;
+          zip?: string | null;
+          country?: string | null;
+          phone?: string | null;
+        } | null;
+      }>;
+    };
+  }>(
+    `
+      query FindCustomerForSync($query: String!) {
+        customers(first: 10, query: $query) {
+          nodes {
+            id
+            displayName
+            firstName
+            lastName
+            defaultEmailAddress {
+              emailAddress
+            }
+            defaultPhoneNumber {
+              phoneNumber
+            }
+            defaultAddress {
+              address1
+              address2
+              city
+              province
+              zip
+              country
+              phone
+            }
+          }
+        }
+      }
+    `,
+    {
+      query: queryString,
+    },
+    {
+      shopDomain: input.shopDomain ?? null,
+    }
+  );
+
+  return data.customers.nodes || [];
+}
 export type ShopifyRecentOrder = {
   id: string;
   shopifyOrderId: string;
