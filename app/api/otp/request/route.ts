@@ -8,6 +8,10 @@ import {
   sendOtpWithMsg91,
   sendOtpWithTwilio,
 } from "../../../../services/auth/otp";
+import {
+  ShopResolutionError,
+  requireShopFromRequest,
+} from "../../../../services/shopify/shop";
 
 function generateOtp() {
   return Math.floor(1000 + Math.random() * 9000).toString();
@@ -17,11 +21,16 @@ export async function OPTIONS(req: NextRequest) {
   return handleOptions(req);
 }
 
-async function createMockChallenge(phoneE164: string, expiresAt: Date) {
+async function createMockChallenge(
+  shopId: string,
+  phoneE164: string,
+  expiresAt: Date
+) {
   const otp = generateOtp();
 
   const challenge = await prisma.oTPChallenge.create({
     data: {
+      shopId,
       phoneE164,
       provider: "mock",
       status: "pending",
@@ -36,12 +45,14 @@ async function createMockChallenge(phoneE164: string, expiresAt: Date) {
 
   console.info("[OTP REQUEST SEND SUCCESS]", {
     challengeId: challenge.id,
+    shopId,
     phoneE164,
     provider: "mock",
   });
 
   console.log("[OTP REQUEST CREATED MOCK OTP]", {
     challengeId: challenge.id,
+    shopId,
     phoneE164,
     provider: "mock",
     otp,
@@ -57,12 +68,18 @@ async function createMockChallenge(phoneE164: string, expiresAt: Date) {
   });
 }
 
-async function createProviderChallenge(phoneE164: string, provider: Exclude<OtpProvider, "mock">, expiresAt: Date) {
+async function createProviderChallenge(
+  shopId: string,
+  phoneE164: string,
+  provider: Exclude<OtpProvider, "mock">,
+  expiresAt: Date
+) {
   if (provider === "twilio") {
     const twilioVerification = await sendOtpWithTwilio(phoneE164);
 
     const challenge = await prisma.oTPChallenge.create({
       data: {
+        shopId,
         phoneE164,
         provider,
         providerSid: twilioVerification.sid,
@@ -78,6 +95,7 @@ async function createProviderChallenge(phoneE164: string, provider: Exclude<OtpP
 
     console.info("[OTP REQUEST SEND SUCCESS]", {
       challengeId: challenge.id,
+      shopId,
       phoneE164,
       provider,
       providerStatus: twilioVerification.status,
@@ -96,6 +114,7 @@ async function createProviderChallenge(phoneE164: string, provider: Exclude<OtpP
 
   const challenge = await prisma.oTPChallenge.create({
     data: {
+      shopId,
       phoneE164,
       provider,
       providerSid: null,
@@ -111,6 +130,7 @@ async function createProviderChallenge(phoneE164: string, provider: Exclude<OtpP
 
   console.info("[OTP REQUEST SEND SUCCESS]", {
     challengeId: challenge.id,
+    shopId,
     phoneE164,
     provider,
     providerStatus: msg91Verification.status,
@@ -127,6 +147,8 @@ async function createProviderChallenge(phoneE164: string, provider: Exclude<OtpP
 
 export async function POST(req: NextRequest) {
   try {
+    const shop = await requireShopFromRequest(req);
+
     const body = await req.json();
     const phoneRaw = String(body?.phone ?? "").trim();
 
@@ -150,6 +172,8 @@ export async function POST(req: NextRequest) {
     const providerOrder = getOtpProviderFallbackOrder();
 
     console.info("[OTP REQUEST PROVIDER ORDER]", {
+      shopId: shop.id,
+      shopDomain: shop.shopDomain,
       phoneE164,
       providerOrder,
     });
@@ -158,6 +182,8 @@ export async function POST(req: NextRequest) {
 
     for (const provider of providerOrder) {
       console.info("[OTP REQUEST ATTEMPT]", {
+        shopId: shop.id,
+        shopDomain: shop.shopDomain,
         provider,
         phoneE164,
       });
@@ -165,17 +191,26 @@ export async function POST(req: NextRequest) {
       try {
         const response =
           provider === "mock"
-            ? await createMockChallenge(phoneE164, expiresAt)
-            : await createProviderChallenge(phoneE164, provider, expiresAt);
+            ? await createMockChallenge(shop.id, phoneE164, expiresAt)
+            : await createProviderChallenge(
+                shop.id,
+                phoneE164,
+                provider,
+                expiresAt
+              );
 
         return withCors(req, response);
       } catch (providerError) {
         const message =
-          providerError instanceof Error ? providerError.message : "Provider send failed";
+          providerError instanceof Error
+            ? providerError.message
+            : "Provider send failed";
 
         failures.push({ provider, message });
 
         console.warn("[OTP REQUEST SEND FAILURE]", {
+          shopId: shop.id,
+          shopDomain: shop.shopDomain,
           provider,
           phoneE164,
           message,
@@ -184,6 +219,8 @@ export async function POST(req: NextRequest) {
     }
 
     console.error("[OTP REQUEST ALL PROVIDERS FAILED]", {
+      shopId: shop.id,
+      shopDomain: shop.shopDomain,
       phoneE164,
       failures,
     });
@@ -200,13 +237,16 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     console.error("[OTP REQUEST ERROR]", error);
 
+    const status =
+      error instanceof ShopResolutionError ? error.status : 500;
+
     return withCors(
       req,
       NextResponse.json(
         {
           error: error instanceof Error ? error.message : "Internal error",
         },
-        { status: 500 }
+        { status }
       )
     );
   }
