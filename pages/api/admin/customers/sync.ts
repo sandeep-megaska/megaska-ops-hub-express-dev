@@ -1,10 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { prisma } from "@/lib/prisma";
-import { syncCustomersForShop } from "@/lib/customer-sync";
-
-// Adjust these imports to match the real exports in your repo
-import { getShopifyAdminForRequest } from "@/services/shopify/admin";
-import { resolveShopFromRequest } from "@/services/shopify/shop-resolver";
+import { prisma } from "../../../../lib/prisma";
+import { syncCustomersForShop } from "../../../../lib/customer-sync";
+import { getShopifyAdminForRequest } from "../../../../services/shopify/admin";
+import { resolveShopFromRequest } from "../../../../services/shopify/shop-resolver";
 
 export default async function handler(
   req: NextApiRequest,
