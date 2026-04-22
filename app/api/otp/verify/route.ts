@@ -222,12 +222,14 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    let customerProfile = await prisma.customerProfile.findUnique({
-      where: {
-        phoneE164,
-      },
-    });
-
+    let customerProfile = await prisma.customerProfile.findFirst({
+  where: {
+    phoneE164,
+  },
+  orderBy: {
+    createdAt: "desc",
+  },
+});
     if (!customerProfile) {
       customerProfile = await prisma.customerProfile.create({
         data: {
