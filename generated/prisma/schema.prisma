@@ -9,7 +9,8 @@ datasource db {
 
 model CustomerProfile {
   id                 String    @id @default(uuid())
-  phoneE164          String    @unique
+  shopId             String?
+  phoneE164          String?
   fullName           String?
   firstName          String?
   lastName           String?
@@ -26,9 +27,41 @@ model CustomerProfile {
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
+  shop Shop? @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
   sessions            AuthSession[]
   otpChallenges       OTPChallenge[]
   orderActionRequests OrderActionRequest[]
+  walletAccounts      WalletAccount[]
+  walletTransactions  WalletTransaction[]
+  walletReservations  WalletReservation[]
+  gstDocuments        GstDocument[]
+  gstParties          GstParty[]
+
+  @@unique([shopId, shopifyCustomerId])
+  @@index([shopId])
+  @@index([shopId, phoneE164])
+  @@index([shopId, email])
+}
+
+model Shop {
+  id                    String    @id @default(uuid())
+  shopDomain            String    @unique
+  accessToken           String?
+  storefrontAccessToken String?
+  scopes                String?
+  isActive              Boolean   @default(true)
+  installedAt           DateTime?
+  uninstalledAt         DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  customers           CustomerProfile[]
+  orderActionRequests OrderActionRequest[]
+  walletReservations  WalletReservation[]
+  gstSettings         GstSettings[]
+  gstProductTaxMaps   GstProductTaxMap[]
+  gstOrderImports     GstOrderImport[]
 }
 
 model AuthSession {
@@ -127,6 +160,7 @@ enum ShipmentStatus {
 
 model OrderActionRequest {
   id                    String                @id @default(uuid())
+  shopId                String?
   requestType           RequestType           @default(EXCHANGE)
   customerProfileId     String
   shopifyCustomerId     String?
@@ -147,6 +181,7 @@ model OrderActionRequest {
   eligibilityReason     String?
 
   customerProfile CustomerProfile    @relation(fields: [customerProfileId], references: [id])
+  shop            Shop?              @relation(fields: [shopId], references: [id], onDelete: SetNull)
   items           OrderActionItem[]
   payments        RequestPayment[]
   shipments       ShipmentTracking[]
@@ -154,6 +189,7 @@ model OrderActionRequest {
   @@index([customerProfileId])
   @@index([status])
   @@index([orderNumber])
+  @@index([shopId])
 }
 
 model OrderActionItem {
@@ -208,6 +244,10 @@ model ShipmentTracking {
   awb         String?
   trackingUrl String?
   status      ShipmentStatus    @default(NOT_STARTED)
+  pickupAt    DateTime?
+  shippedAt   DateTime?
+  deliveredAt DateTime?
+  remarks     String?
   createdAt   DateTime          @default(now())
   updatedAt   DateTime          @updatedAt
 
@@ -217,6 +257,73 @@ model ShipmentTracking {
   @@index([requestId])
 }
 
+enum WalletDirection {
+  CREDIT
+  DEBIT
+}
+
+enum WalletTransactionType {
+  COD_REFUND_CREDIT
+  MANUAL_CREDIT
+  MANUAL_DEBIT
+  ADJUSTMENT
+  GOODWILL_CREDIT
+  CHECKOUT_REDEMPTION
+}
+
+enum WalletSourceType {
+  ISSUE_REQUEST
+  ADMIN_MANUAL
+  WALLET_RESERVATION
+}
+
+enum WalletActorType {
+  SYSTEM
+  ADMIN
+}
+
+model WalletAccount {
+  id                String   @id @default(uuid())
+  customerProfileId String
+  currency          String   @default("INR")
+  currentBalance    Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  customer     CustomerProfile     @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+  transactions WalletTransaction[]
+  reservations WalletReservation[]
+
+  @@unique([customerProfileId, currency])
+  @@index([customerProfileId])
+}
+
+model WalletTransaction {
+  id                String                @id @default(uuid())
+  walletAccountId   String
+  customerProfileId String
+  direction         WalletDirection
+  transactionType   WalletTransactionType
+  amount            Int
+  currency          String                @default("INR")
+  sourceType        WalletSourceType
+  sourceId          String?
+  sourceReference   String?
+  orderNumber       String?
+  reason            String?
+  adminNote         String?
+  createdByType     WalletActorType
+  createdById       String?
+  createdAt         DateTime              @default(now())
+
+  walletAccount WalletAccount   @relation(fields: [walletAccountId], references: [id], onDelete: Cascade)
+  customer      CustomerProfile @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+
+  @@unique([sourceType, sourceId, transactionType])
+  @@index([customerProfileId, createdAt])
+  @@index([walletAccountId, createdAt])
+  @@index([sourceType, sourceId])
+}
 
 enum WalletReservationStatus {
   ACTIVE
@@ -232,6 +339,7 @@ enum WalletReservationSourceFlow {
 
 model WalletReservation {
   id                String                      @id @default(uuid())
+  shopId            String?
   walletAccountId   String
   customerProfileId String
   reservedAmount    Int
@@ -250,11 +358,497 @@ model WalletReservation {
   createdAt         DateTime                    @default(now())
   updatedAt         DateTime                    @updatedAt
 
-  walletAccount     WalletAccount               @relation(fields: [walletAccountId], references: [id], onDelete: Cascade)
-  customer          CustomerProfile             @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+  walletAccount WalletAccount   @relation(fields: [walletAccountId], references: [id], onDelete: Cascade)
+  customer      CustomerProfile @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+  shop          Shop?           @relation(fields: [shopId], references: [id], onDelete: SetNull)
 
   @@index([customerProfileId, status, expiresAt])
   @@index([walletAccountId, status, expiresAt])
   @@index([discountCode])
   @@index([shopifyOrderId])
+  @@index([shopId, status, expiresAt])
+}
+
+enum GstDocumentType {
+  TAX_INVOICE
+  CREDIT_NOTE
+  DEBIT_NOTE
+}
+
+enum GstDocumentStatus {
+  DRAFT
+  ISSUED
+  CANCELLED
+  VOID
+  FAILED
+}
+
+enum GstNumberingStrategy {
+  FINANCIAL_YEAR_SEQUENCE
+  CALENDAR_YEAR_SEQUENCE
+  MONTHLY_SEQUENCE
+  MANUAL
+}
+
+enum GstSupplyType {
+  B2B
+  B2C
+  EXPORT
+  SEZ_WITH_PAYMENT
+  SEZ_WITHOUT_PAYMENT
+  DEEMED_EXPORT
+}
+
+model GstSettings {
+  id                    String               @id @default(uuid())
+  shopId                String?
+  legalName             String
+  tradeName             String?
+  gstin                 String               @unique
+  pan                   String?
+  stateCode             String
+  invoicePrefix         String
+  creditNotePrefix      String
+  debitNotePrefix       String
+  invoiceNumberStrategy GstNumberingStrategy
+  defaultCurrency       String               @default("INR")
+  einvoiceEnabled       Boolean              @default(false)
+  isActive              Boolean              @default(true)
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+
+  documents          GstDocument[]
+  counters           GstCounter[]
+  exports            GstExport[]
+  reconciliationRuns GstReconciliationRun[]
+  auditLogs          GstAuditLog[]
+  orderImports       GstOrderImport[]
+  invoiceTemplates   GstInvoiceTemplate[]
+  reportRuns         GstReportRun[]
+  shop               Shop?                  @relation(fields: [shopId], references: [id], onDelete: SetNull)
+
+  @@index([shopId])
+}
+
+model GstCounter {
+  id            String          @id @default(uuid())
+  gstSettingsId String
+  documentType  GstDocumentType
+  financialYear String
+  lastNumber    Int             @default(0)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  gstSettings GstSettings @relation(fields: [gstSettingsId], references: [id], onDelete: Cascade)
+
+  @@unique([gstSettingsId, documentType, financialYear])
+  @@index([gstSettingsId, documentType])
+}
+
+model GstDocument {
+  id             String            @id @default(uuid())
+  documentType   GstDocumentType
+  status         GstDocumentStatus
+  documentNumber String            @unique
+  documentDate   DateTime
+  gstSettingsId  String
+  gstSettings    GstSettings       @relation(fields: [gstSettingsId], references: [id])
+
+  shopifyOrderId     String?
+  shopifyOrderName   String?
+  sourceOrderId      String?
+  sourceOrderNumber  String?
+  sourceReference    String?
+  customerProfileId  String?
+  customer           CustomerProfile? @relation(fields: [customerProfileId], references: [id], onDelete: SetNull)
+  originalDocumentId String?
+  originalDocument   GstDocument?     @relation("GstDocToOriginal", fields: [originalDocumentId], references: [id])
+  derivedNotes       GstDocument[]    @relation("GstDocToOriginal")
+
+  supplyType             GstSupplyType
+  placeOfSupplyStateCode String
+  isInterstate           Boolean
+  currency               String        @default("INR")
+
+  taxableAmount Decimal @db.Decimal(14, 2)
+  cgstAmount    Decimal @db.Decimal(14, 2)
+  sgstAmount    Decimal @db.Decimal(14, 2)
+  igstAmount    Decimal @db.Decimal(14, 2)
+  cessAmount    Decimal @db.Decimal(14, 2)
+  totalAmount   Decimal @db.Decimal(14, 2)
+
+  pdfFileUrl   String?
+  jsonSnapshot Json
+  metadata     Json?
+  issuedAt     DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  lines       GstDocumentLine[]
+  exportItems GstExportItem[]
+  auditLogs   GstAuditLog[]
+  legacyLinks GstLegacyDocument[]
+
+  @@index([gstSettingsId])
+  @@index([customerProfileId])
+  @@index([sourceOrderId])
+  @@index([sourceOrderNumber])
+  @@index([originalDocumentId])
+  @@index([status, documentDate])
+}
+
+model GstDocumentLine {
+  id            String   @id @default(uuid())
+  gstDocumentId String
+  lineNumber    Int
+  description   String
+  hsnOrSac      String?
+  quantity      Decimal  @db.Decimal(14, 3)
+  unit          String?
+  unitPrice     Decimal  @db.Decimal(14, 2)
+  discount      Decimal  @default(0) @db.Decimal(14, 2)
+  taxableAmount Decimal  @db.Decimal(14, 2)
+  taxRate       Decimal  @db.Decimal(5, 2)
+  cgstAmount    Decimal  @db.Decimal(14, 2)
+  sgstAmount    Decimal  @db.Decimal(14, 2)
+  igstAmount    Decimal  @db.Decimal(14, 2)
+  cessAmount    Decimal  @db.Decimal(14, 2)
+  lineTotal     Decimal  @db.Decimal(14, 2)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  document GstDocument @relation(fields: [gstDocumentId], references: [id], onDelete: Cascade)
+
+  @@unique([gstDocumentId, lineNumber])
+  @@index([gstDocumentId])
+}
+
+model GstParty {
+  id                String   @id @default(uuid())
+  gstin             String?  @unique
+  legalName         String
+  tradeName         String?
+  customerProfileId String?
+  email             String?
+  phone             String?
+  stateCode         String?
+  countryCode       String   @default("IN")
+  metadata          Json?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  customer        CustomerProfile?    @relation(fields: [customerProfileId], references: [id], onDelete: SetNull)
+  auditLogs       GstAuditLog[]
+  legacyDocuments GstLegacyDocument[]
+
+  @@index([customerProfileId])
+  @@index([legalName])
+}
+
+model GstExport {
+  id              String    @id @default(uuid())
+  gstSettingsId   String
+  exportType      String
+  periodStart     DateTime
+  periodEnd       DateTime
+  status          String
+  storageUrl      String?
+  checksum        String?
+  filters         Json?
+  generatedByType String?
+  generatedById   String?
+  generatedAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  gstSettings GstSettings     @relation(fields: [gstSettingsId], references: [id], onDelete: Cascade)
+  items       GstExportItem[]
+  auditLogs   GstAuditLog[]
+
+  @@unique([gstSettingsId, exportType, periodStart, periodEnd])
+  @@index([gstSettingsId, periodStart, periodEnd])
+  @@index([status, createdAt])
+}
+
+model GstExportItem {
+  id             String           @id @default(uuid())
+  gstExportId    String
+  gstDocumentId  String?
+  rowNumber      Int
+  documentType   GstDocumentType?
+  documentNumber String?
+  documentDate   DateTime?
+  status         String
+  payload        Json
+  errorCode      String?
+  errorMessage   String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  gstExport   GstExport    @relation(fields: [gstExportId], references: [id], onDelete: Cascade)
+  gstDocument GstDocument? @relation(fields: [gstDocumentId], references: [id], onDelete: SetNull)
+
+  @@unique([gstExportId, rowNumber])
+  @@index([gstDocumentId])
+  @@index([status])
+  @@index([documentType, documentDate])
+}
+
+model GstReconciliationRun {
+  id                   String    @id @default(uuid())
+  gstSettingsId        String
+  periodStart          DateTime
+  periodEnd            DateTime
+  sourceSystem         String
+  status               String
+  matchedCount         Int       @default(0)
+  mismatchedCount      Int       @default(0)
+  missingInBooksCount  Int       @default(0)
+  missingInPortalCount Int       @default(0)
+  summary              Json?
+  startedAt            DateTime  @default(now())
+  completedAt          DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  gstSettings GstSettings   @relation(fields: [gstSettingsId], references: [id], onDelete: Cascade)
+  auditLogs   GstAuditLog[]
+
+  @@index([gstSettingsId, periodStart, periodEnd])
+  @@index([status, startedAt])
+}
+
+model GstAuditLog {
+  id                  String   @id @default(uuid())
+  gstSettingsId       String?
+  gstDocumentId       String?
+  gstPartyId          String?
+  gstExportId         String?
+  reconciliationRunId String?
+  action              String
+  actorType           String
+  actorId             String?
+  previousState       Json?
+  nextState           Json?
+  metadata            Json?
+  createdAt           DateTime @default(now())
+
+  gstSettings       GstSettings?          @relation(fields: [gstSettingsId], references: [id], onDelete: SetNull)
+  gstDocument       GstDocument?          @relation(fields: [gstDocumentId], references: [id], onDelete: SetNull)
+  gstParty          GstParty?             @relation(fields: [gstPartyId], references: [id], onDelete: SetNull)
+  gstExport         GstExport?            @relation(fields: [gstExportId], references: [id], onDelete: SetNull)
+  reconciliationRun GstReconciliationRun? @relation(fields: [reconciliationRunId], references: [id], onDelete: SetNull)
+
+  @@index([gstDocumentId, createdAt])
+  @@index([gstPartyId, createdAt])
+  @@index([gstExportId, createdAt])
+  @@index([reconciliationRunId, createdAt])
+  @@index([action, createdAt])
+}
+
+model GstLegacyDocument {
+  id                   String             @id @default(uuid())
+  sourceSystem         String
+  legacyDocumentId     String
+  legacyDocumentNumber String?
+  documentType         GstDocumentType?
+  documentStatus       GstDocumentStatus?
+  gstDocumentId        String?
+  gstPartyId           String?
+  payload              Json?
+  importedAt           DateTime           @default(now())
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  gstDocument GstDocument? @relation(fields: [gstDocumentId], references: [id], onDelete: SetNull)
+  gstParty    GstParty?    @relation(fields: [gstPartyId], references: [id], onDelete: SetNull)
+
+  @@unique([sourceSystem, legacyDocumentId])
+  @@index([legacyDocumentNumber])
+  @@index([gstDocumentId])
+  @@index([gstPartyId])
+}
+
+model GstHsnCode {
+  id            String    @id @default(uuid())
+  hsnCode       String    @unique
+  description   String
+  isService     Boolean   @default(false)
+  isActive      Boolean
+  effectiveFrom DateTime? @db.Date
+  effectiveTo   DateTime? @db.Date
+  metadata      Json?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  slabMaps    GstHsnSlabMap[]
+  productMaps GstProductTaxMap[]
+}
+
+model GstTaxSlab {
+  id            String    @id @default(uuid())
+  slabCode      String    @unique
+  taxRate       Decimal   @db.Decimal(5, 2)
+  cessRate      Decimal   @default(0) @db.Decimal(5, 2)
+  isActive      Boolean
+  effectiveFrom DateTime? @db.Date
+  effectiveTo   DateTime? @db.Date
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  hsnMaps     GstHsnSlabMap[]
+  productMaps GstProductTaxMap[]
+}
+
+model GstHsnSlabMap {
+  id            String    @id @default(uuid())
+  hsnId         String
+  slabId        String
+  effectiveFrom DateTime? @db.Date
+  effectiveTo   DateTime? @db.Date
+  priority      Int       @default(0)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  hsn  GstHsnCode @relation(fields: [hsnId], references: [id], onDelete: Cascade)
+  slab GstTaxSlab @relation(fields: [slabId], references: [id], onDelete: Cascade)
+
+  @@unique([hsnId, slabId, effectiveFrom, effectiveTo])
+  @@index([hsnId])
+  @@index([slabId])
+  @@index([effectiveFrom, effectiveTo])
+}
+
+model GstProductTaxMap {
+  id               String    @id @default(uuid())
+  shopId           String?
+  shopifyProductId String
+  shopifyVariantId String?
+  hsnId            String
+  slabId           String
+  source           String
+  status           String
+  effectiveFrom    DateTime? @db.Date
+  effectiveTo      DateTime? @db.Date
+  lastValidatedAt  DateTime?
+  metadata         Json?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  hsn  GstHsnCode @relation(fields: [hsnId], references: [id], onDelete: Restrict)
+  slab GstTaxSlab @relation(fields: [slabId], references: [id], onDelete: Restrict)
+  shop Shop?      @relation(fields: [shopId], references: [id], onDelete: SetNull)
+
+  @@unique([shopId, shopifyProductId, shopifyVariantId])
+  @@index([shopId])
+  @@index([shopifyProductId])
+  @@index([shopifyVariantId])
+  @@index([status])
+}
+
+model GstOrderImport {
+  id                String    @id @default(uuid())
+  shopId            String?
+  gstSettingsId     String
+  shopifyOrderId    String
+  shopifyOrderName  String
+  orderCreatedAt    DateTime
+  orderCurrency     String
+  orderSubtotal     Decimal   @db.Decimal(14, 2)
+  orderTaxTotal     Decimal   @db.Decimal(14, 2)
+  orderGrandTotal   Decimal   @db.Decimal(14, 2)
+  shippingStateCode String?
+  billingStateCode  String?
+  importStatus      String
+  eligibilityStatus String
+  readinessErrors   Json      @default("[]")
+  snapshot          Json
+  lastSyncedAt      DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  gstSettings GstSettings          @relation(fields: [gstSettingsId], references: [id], onDelete: Cascade)
+  shop        Shop?                @relation(fields: [shopId], references: [id], onDelete: SetNull)
+  lines       GstOrderImportLine[]
+
+  @@unique([shopId, shopifyOrderId])
+  @@index([shopId])
+  @@index([gstSettingsId])
+  @@index([shopifyOrderName])
+  @@index([importStatus, eligibilityStatus])
+  @@index([orderCreatedAt])
+}
+
+model GstOrderImportLine {
+  id                String   @id @default(uuid())
+  gstOrderImportId  String
+  lineNumber        Int
+  shopifyLineItemId String?
+  shopifyProductId  String?
+  shopifyVariantId  String?
+  title             String
+  sku               String?
+  quantity          Decimal  @db.Decimal(14, 3)
+  unitPrice         Decimal  @db.Decimal(14, 2)
+  discount          Decimal  @default(0) @db.Decimal(14, 2)
+  taxableAmount     Decimal  @db.Decimal(14, 2)
+  mappedHsnCode     String?
+  mappedTaxRate     Decimal? @db.Decimal(5, 2)
+  mappedCessRate    Decimal? @db.Decimal(5, 2)
+  mappingStatus     String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  orderImport GstOrderImport @relation(fields: [gstOrderImportId], references: [id], onDelete: Cascade)
+
+  @@unique([gstOrderImportId, lineNumber])
+  @@index([gstOrderImportId])
+  @@index([shopifyProductId])
+  @@index([shopifyVariantId])
+  @@index([mappingStatus])
+}
+
+model GstInvoiceTemplate {
+  id              String   @id @default(uuid())
+  gstSettingsId   String
+  templateName    String
+  isActive        Boolean
+  isDefault       Boolean
+  headerText      String?
+  footerText      String?
+  declarationText String?
+  notesText       String?
+  logoFileUrl     String?
+  themeConfig     Json?
+  version         Int
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  gstSettings GstSettings @relation(fields: [gstSettingsId], references: [id], onDelete: Cascade)
+
+  @@index([gstSettingsId, isActive])
+  @@index([gstSettingsId, isDefault])
+}
+
+model GstReportRun {
+  id            String    @id @default(uuid())
+  gstSettingsId String
+  reportType    String
+  periodStart   DateTime
+  periodEnd     DateTime
+  format        String
+  status        String
+  filters       Json?
+  fileUrl       String?
+  checksum      String?
+  rowCount      Int
+  generatedAt   DateTime?
+  errorMessage  String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  gstSettings GstSettings @relation(fields: [gstSettingsId], references: [id], onDelete: Cascade)
+
+  @@index([gstSettingsId, reportType, periodStart, periodEnd])
+  @@index([status, createdAt])
 }

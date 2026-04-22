@@ -122,6 +122,7 @@ exports.Prisma.TransactionIsolationLevel = makeStrictEnum({
 
 exports.Prisma.CustomerProfileScalarFieldEnum = {
   id: 'id',
+  shopId: 'shopId',
   phoneE164: 'phoneE164',
   fullName: 'fullName',
   firstName: 'firstName',
@@ -136,6 +137,19 @@ exports.Prisma.CustomerProfileScalarFieldEnum = {
   shopifyCustomerId: 'shopifyCustomerId',
   phoneVerifiedAt: 'phoneVerifiedAt',
   profileCompletedAt: 'profileCompletedAt',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.ShopScalarFieldEnum = {
+  id: 'id',
+  shopDomain: 'shopDomain',
+  accessToken: 'accessToken',
+  storefrontAccessToken: 'storefrontAccessToken',
+  scopes: 'scopes',
+  isActive: 'isActive',
+  installedAt: 'installedAt',
+  uninstalledAt: 'uninstalledAt',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 };
@@ -179,6 +193,7 @@ exports.Prisma.AuditEventScalarFieldEnum = {
 
 exports.Prisma.OrderActionRequestScalarFieldEnum = {
   id: 'id',
+  shopId: 'shopId',
   requestType: 'requestType',
   customerProfileId: 'customerProfileId',
   shopifyCustomerId: 'shopifyCustomerId',
@@ -241,6 +256,370 @@ exports.Prisma.ShipmentTrackingScalarFieldEnum = {
   awb: 'awb',
   trackingUrl: 'trackingUrl',
   status: 'status',
+  pickupAt: 'pickupAt',
+  shippedAt: 'shippedAt',
+  deliveredAt: 'deliveredAt',
+  remarks: 'remarks',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.WalletAccountScalarFieldEnum = {
+  id: 'id',
+  customerProfileId: 'customerProfileId',
+  currency: 'currency',
+  currentBalance: 'currentBalance',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.WalletTransactionScalarFieldEnum = {
+  id: 'id',
+  walletAccountId: 'walletAccountId',
+  customerProfileId: 'customerProfileId',
+  direction: 'direction',
+  transactionType: 'transactionType',
+  amount: 'amount',
+  currency: 'currency',
+  sourceType: 'sourceType',
+  sourceId: 'sourceId',
+  sourceReference: 'sourceReference',
+  orderNumber: 'orderNumber',
+  reason: 'reason',
+  adminNote: 'adminNote',
+  createdByType: 'createdByType',
+  createdById: 'createdById',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.WalletReservationScalarFieldEnum = {
+  id: 'id',
+  shopId: 'shopId',
+  walletAccountId: 'walletAccountId',
+  customerProfileId: 'customerProfileId',
+  reservedAmount: 'reservedAmount',
+  currency: 'currency',
+  status: 'status',
+  discountCode: 'discountCode',
+  shopifyDiscountId: 'shopifyDiscountId',
+  sourceFlow: 'sourceFlow',
+  cartReference: 'cartReference',
+  checkoutReference: 'checkoutReference',
+  sessionReference: 'sessionReference',
+  orderNumber: 'orderNumber',
+  shopifyOrderId: 'shopifyOrderId',
+  releaseReason: 'releaseReason',
+  expiresAt: 'expiresAt',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.GstSettingsScalarFieldEnum = {
+  id: 'id',
+  shopId: 'shopId',
+  legalName: 'legalName',
+  tradeName: 'tradeName',
+  gstin: 'gstin',
+  pan: 'pan',
+  stateCode: 'stateCode',
+  invoicePrefix: 'invoicePrefix',
+  creditNotePrefix: 'creditNotePrefix',
+  debitNotePrefix: 'debitNotePrefix',
+  invoiceNumberStrategy: 'invoiceNumberStrategy',
+  defaultCurrency: 'defaultCurrency',
+  einvoiceEnabled: 'einvoiceEnabled',
+  isActive: 'isActive',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.GstCounterScalarFieldEnum = {
+  id: 'id',
+  gstSettingsId: 'gstSettingsId',
+  documentType: 'documentType',
+  financialYear: 'financialYear',
+  lastNumber: 'lastNumber',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.GstDocumentScalarFieldEnum = {
+  id: 'id',
+  documentType: 'documentType',
+  status: 'status',
+  documentNumber: 'documentNumber',
+  documentDate: 'documentDate',
+  gstSettingsId: 'gstSettingsId',
+  shopifyOrderId: 'shopifyOrderId',
+  shopifyOrderName: 'shopifyOrderName',
+  sourceOrderId: 'sourceOrderId',
+  sourceOrderNumber: 'sourceOrderNumber',
+  sourceReference: 'sourceReference',
+  customerProfileId: 'customerProfileId',
+  originalDocumentId: 'originalDocumentId',
+  supplyType: 'supplyType',
+  placeOfSupplyStateCode: 'placeOfSupplyStateCode',
+  isInterstate: 'isInterstate',
+  currency: 'currency',
+  taxableAmount: 'taxableAmount',
+  cgstAmount: 'cgstAmount',
+  sgstAmount: 'sgstAmount',
+  igstAmount: 'igstAmount',
+  cessAmount: 'cessAmount',
+  totalAmount: 'totalAmount',
+  pdfFileUrl: 'pdfFileUrl',
+  jsonSnapshot: 'jsonSnapshot',
+  metadata: 'metadata',
+  issuedAt: 'issuedAt',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.GstDocumentLineScalarFieldEnum = {
+  id: 'id',
+  gstDocumentId: 'gstDocumentId',
+  lineNumber: 'lineNumber',
+  description: 'description',
+  hsnOrSac: 'hsnOrSac',
+  quantity: 'quantity',
+  unit: 'unit',
+  unitPrice: 'unitPrice',
+  discount: 'discount',
+  taxableAmount: 'taxableAmount',
+  taxRate: 'taxRate',
+  cgstAmount: 'cgstAmount',
+  sgstAmount: 'sgstAmount',
+  igstAmount: 'igstAmount',
+  cessAmount: 'cessAmount',
+  lineTotal: 'lineTotal',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.GstPartyScalarFieldEnum = {
+  id: 'id',
+  gstin: 'gstin',
+  legalName: 'legalName',
+  tradeName: 'tradeName',
+  customerProfileId: 'customerProfileId',
+  email: 'email',
+  phone: 'phone',
+  stateCode: 'stateCode',
+  countryCode: 'countryCode',
+  metadata: 'metadata',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.GstExportScalarFieldEnum = {
+  id: 'id',
+  gstSettingsId: 'gstSettingsId',
+  exportType: 'exportType',
+  periodStart: 'periodStart',
+  periodEnd: 'periodEnd',
+  status: 'status',
+  storageUrl: 'storageUrl',
+  checksum: 'checksum',
+  filters: 'filters',
+  generatedByType: 'generatedByType',
+  generatedById: 'generatedById',
+  generatedAt: 'generatedAt',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.GstExportItemScalarFieldEnum = {
+  id: 'id',
+  gstExportId: 'gstExportId',
+  gstDocumentId: 'gstDocumentId',
+  rowNumber: 'rowNumber',
+  documentType: 'documentType',
+  documentNumber: 'documentNumber',
+  documentDate: 'documentDate',
+  status: 'status',
+  payload: 'payload',
+  errorCode: 'errorCode',
+  errorMessage: 'errorMessage',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.GstReconciliationRunScalarFieldEnum = {
+  id: 'id',
+  gstSettingsId: 'gstSettingsId',
+  periodStart: 'periodStart',
+  periodEnd: 'periodEnd',
+  sourceSystem: 'sourceSystem',
+  status: 'status',
+  matchedCount: 'matchedCount',
+  mismatchedCount: 'mismatchedCount',
+  missingInBooksCount: 'missingInBooksCount',
+  missingInPortalCount: 'missingInPortalCount',
+  summary: 'summary',
+  startedAt: 'startedAt',
+  completedAt: 'completedAt',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.GstAuditLogScalarFieldEnum = {
+  id: 'id',
+  gstSettingsId: 'gstSettingsId',
+  gstDocumentId: 'gstDocumentId',
+  gstPartyId: 'gstPartyId',
+  gstExportId: 'gstExportId',
+  reconciliationRunId: 'reconciliationRunId',
+  action: 'action',
+  actorType: 'actorType',
+  actorId: 'actorId',
+  previousState: 'previousState',
+  nextState: 'nextState',
+  metadata: 'metadata',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.GstLegacyDocumentScalarFieldEnum = {
+  id: 'id',
+  sourceSystem: 'sourceSystem',
+  legacyDocumentId: 'legacyDocumentId',
+  legacyDocumentNumber: 'legacyDocumentNumber',
+  documentType: 'documentType',
+  documentStatus: 'documentStatus',
+  gstDocumentId: 'gstDocumentId',
+  gstPartyId: 'gstPartyId',
+  payload: 'payload',
+  importedAt: 'importedAt',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.GstHsnCodeScalarFieldEnum = {
+  id: 'id',
+  hsnCode: 'hsnCode',
+  description: 'description',
+  isService: 'isService',
+  isActive: 'isActive',
+  effectiveFrom: 'effectiveFrom',
+  effectiveTo: 'effectiveTo',
+  metadata: 'metadata',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.GstTaxSlabScalarFieldEnum = {
+  id: 'id',
+  slabCode: 'slabCode',
+  taxRate: 'taxRate',
+  cessRate: 'cessRate',
+  isActive: 'isActive',
+  effectiveFrom: 'effectiveFrom',
+  effectiveTo: 'effectiveTo',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.GstHsnSlabMapScalarFieldEnum = {
+  id: 'id',
+  hsnId: 'hsnId',
+  slabId: 'slabId',
+  effectiveFrom: 'effectiveFrom',
+  effectiveTo: 'effectiveTo',
+  priority: 'priority',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.GstProductTaxMapScalarFieldEnum = {
+  id: 'id',
+  shopId: 'shopId',
+  shopifyProductId: 'shopifyProductId',
+  shopifyVariantId: 'shopifyVariantId',
+  hsnId: 'hsnId',
+  slabId: 'slabId',
+  source: 'source',
+  status: 'status',
+  effectiveFrom: 'effectiveFrom',
+  effectiveTo: 'effectiveTo',
+  lastValidatedAt: 'lastValidatedAt',
+  metadata: 'metadata',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.GstOrderImportScalarFieldEnum = {
+  id: 'id',
+  shopId: 'shopId',
+  gstSettingsId: 'gstSettingsId',
+  shopifyOrderId: 'shopifyOrderId',
+  shopifyOrderName: 'shopifyOrderName',
+  orderCreatedAt: 'orderCreatedAt',
+  orderCurrency: 'orderCurrency',
+  orderSubtotal: 'orderSubtotal',
+  orderTaxTotal: 'orderTaxTotal',
+  orderGrandTotal: 'orderGrandTotal',
+  shippingStateCode: 'shippingStateCode',
+  billingStateCode: 'billingStateCode',
+  importStatus: 'importStatus',
+  eligibilityStatus: 'eligibilityStatus',
+  readinessErrors: 'readinessErrors',
+  snapshot: 'snapshot',
+  lastSyncedAt: 'lastSyncedAt',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.GstOrderImportLineScalarFieldEnum = {
+  id: 'id',
+  gstOrderImportId: 'gstOrderImportId',
+  lineNumber: 'lineNumber',
+  shopifyLineItemId: 'shopifyLineItemId',
+  shopifyProductId: 'shopifyProductId',
+  shopifyVariantId: 'shopifyVariantId',
+  title: 'title',
+  sku: 'sku',
+  quantity: 'quantity',
+  unitPrice: 'unitPrice',
+  discount: 'discount',
+  taxableAmount: 'taxableAmount',
+  mappedHsnCode: 'mappedHsnCode',
+  mappedTaxRate: 'mappedTaxRate',
+  mappedCessRate: 'mappedCessRate',
+  mappingStatus: 'mappingStatus',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.GstInvoiceTemplateScalarFieldEnum = {
+  id: 'id',
+  gstSettingsId: 'gstSettingsId',
+  templateName: 'templateName',
+  isActive: 'isActive',
+  isDefault: 'isDefault',
+  headerText: 'headerText',
+  footerText: 'footerText',
+  declarationText: 'declarationText',
+  notesText: 'notesText',
+  logoFileUrl: 'logoFileUrl',
+  themeConfig: 'themeConfig',
+  version: 'version',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.GstReportRunScalarFieldEnum = {
+  id: 'id',
+  gstSettingsId: 'gstSettingsId',
+  reportType: 'reportType',
+  periodStart: 'periodStart',
+  periodEnd: 'periodEnd',
+  format: 'format',
+  status: 'status',
+  filters: 'filters',
+  fileUrl: 'fileUrl',
+  checksum: 'checksum',
+  rowCount: 'rowCount',
+  generatedAt: 'generatedAt',
+  errorMessage: 'errorMessage',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 };
@@ -252,6 +631,10 @@ exports.Prisma.SortOrder = {
 
 exports.Prisma.NullableJsonNullValueInput = {
   DbNull: Prisma.DbNull,
+  JsonNull: Prisma.JsonNull
+};
+
+exports.Prisma.JsonNullValueInput = {
   JsonNull: Prisma.JsonNull
 };
 
@@ -323,15 +706,104 @@ exports.ShipmentStatus = exports.$Enums.ShipmentStatus = {
   FAILED: 'FAILED'
 };
 
+exports.WalletDirection = exports.$Enums.WalletDirection = {
+  CREDIT: 'CREDIT',
+  DEBIT: 'DEBIT'
+};
+
+exports.WalletTransactionType = exports.$Enums.WalletTransactionType = {
+  COD_REFUND_CREDIT: 'COD_REFUND_CREDIT',
+  MANUAL_CREDIT: 'MANUAL_CREDIT',
+  MANUAL_DEBIT: 'MANUAL_DEBIT',
+  ADJUSTMENT: 'ADJUSTMENT',
+  GOODWILL_CREDIT: 'GOODWILL_CREDIT',
+  CHECKOUT_REDEMPTION: 'CHECKOUT_REDEMPTION'
+};
+
+exports.WalletSourceType = exports.$Enums.WalletSourceType = {
+  ISSUE_REQUEST: 'ISSUE_REQUEST',
+  ADMIN_MANUAL: 'ADMIN_MANUAL',
+  WALLET_RESERVATION: 'WALLET_RESERVATION'
+};
+
+exports.WalletActorType = exports.$Enums.WalletActorType = {
+  SYSTEM: 'SYSTEM',
+  ADMIN: 'ADMIN'
+};
+
+exports.WalletReservationStatus = exports.$Enums.WalletReservationStatus = {
+  ACTIVE: 'ACTIVE',
+  CONSUMED: 'CONSUMED',
+  RELEASED: 'RELEASED',
+  EXPIRED: 'EXPIRED'
+};
+
+exports.WalletReservationSourceFlow = exports.$Enums.WalletReservationSourceFlow = {
+  CHECKOUT: 'CHECKOUT',
+  BUY_NOW: 'BUY_NOW'
+};
+
+exports.GstNumberingStrategy = exports.$Enums.GstNumberingStrategy = {
+  FINANCIAL_YEAR_SEQUENCE: 'FINANCIAL_YEAR_SEQUENCE',
+  CALENDAR_YEAR_SEQUENCE: 'CALENDAR_YEAR_SEQUENCE',
+  MONTHLY_SEQUENCE: 'MONTHLY_SEQUENCE',
+  MANUAL: 'MANUAL'
+};
+
+exports.GstDocumentType = exports.$Enums.GstDocumentType = {
+  TAX_INVOICE: 'TAX_INVOICE',
+  CREDIT_NOTE: 'CREDIT_NOTE',
+  DEBIT_NOTE: 'DEBIT_NOTE'
+};
+
+exports.GstDocumentStatus = exports.$Enums.GstDocumentStatus = {
+  DRAFT: 'DRAFT',
+  ISSUED: 'ISSUED',
+  CANCELLED: 'CANCELLED',
+  VOID: 'VOID',
+  FAILED: 'FAILED'
+};
+
+exports.GstSupplyType = exports.$Enums.GstSupplyType = {
+  B2B: 'B2B',
+  B2C: 'B2C',
+  EXPORT: 'EXPORT',
+  SEZ_WITH_PAYMENT: 'SEZ_WITH_PAYMENT',
+  SEZ_WITHOUT_PAYMENT: 'SEZ_WITHOUT_PAYMENT',
+  DEEMED_EXPORT: 'DEEMED_EXPORT'
+};
+
 exports.Prisma.ModelName = {
   CustomerProfile: 'CustomerProfile',
+  Shop: 'Shop',
   AuthSession: 'AuthSession',
   OTPChallenge: 'OTPChallenge',
   AuditEvent: 'AuditEvent',
   OrderActionRequest: 'OrderActionRequest',
   OrderActionItem: 'OrderActionItem',
   RequestPayment: 'RequestPayment',
-  ShipmentTracking: 'ShipmentTracking'
+  ShipmentTracking: 'ShipmentTracking',
+  WalletAccount: 'WalletAccount',
+  WalletTransaction: 'WalletTransaction',
+  WalletReservation: 'WalletReservation',
+  GstSettings: 'GstSettings',
+  GstCounter: 'GstCounter',
+  GstDocument: 'GstDocument',
+  GstDocumentLine: 'GstDocumentLine',
+  GstParty: 'GstParty',
+  GstExport: 'GstExport',
+  GstExportItem: 'GstExportItem',
+  GstReconciliationRun: 'GstReconciliationRun',
+  GstAuditLog: 'GstAuditLog',
+  GstLegacyDocument: 'GstLegacyDocument',
+  GstHsnCode: 'GstHsnCode',
+  GstTaxSlab: 'GstTaxSlab',
+  GstHsnSlabMap: 'GstHsnSlabMap',
+  GstProductTaxMap: 'GstProductTaxMap',
+  GstOrderImport: 'GstOrderImport',
+  GstOrderImportLine: 'GstOrderImportLine',
+  GstInvoiceTemplate: 'GstInvoiceTemplate',
+  GstReportRun: 'GstReportRun'
 };
 
 /**
