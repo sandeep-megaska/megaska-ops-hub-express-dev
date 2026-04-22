@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "../../../../services/db/prisma";
 import { hashSessionToken } from "../../../../services/auth/session";
 import { withCors, handleOptions } from "../../_lib/cors";
+import {
+  ShopResolutionError,
+  requireShopFromRequest,
+} from "../../../../services/shopify/shop";
 
 export async function OPTIONS(req: NextRequest) {
   return handleOptions(req);
@@ -9,6 +13,8 @@ export async function OPTIONS(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
   try {
+    const shop = await requireShopFromRequest(req);
+
     const authHeader = req.headers.get("authorization");
     const bearerToken = authHeader?.startsWith("Bearer ")
       ? authHeader.slice(7).trim()
@@ -37,6 +43,9 @@ export async function GET(req: NextRequest) {
         revokedAt: null,
         expiresAt: {
           gt: now,
+        },
+        customer: {
+          shopId: shop.id,
         },
       },
       include: {
@@ -107,6 +116,9 @@ export async function GET(req: NextRequest) {
   } catch (error) {
     console.error("[AUTH SESSION ERROR]", error);
 
+    const status =
+      error instanceof ShopResolutionError ? error.status : 500;
+
     return withCors(
       req,
       NextResponse.json(
@@ -114,7 +126,7 @@ export async function GET(req: NextRequest) {
           authenticated: false,
           error: error instanceof Error ? error.message : "Internal error",
         },
-        { status: 500 }
+        { status }
       )
     );
   }
