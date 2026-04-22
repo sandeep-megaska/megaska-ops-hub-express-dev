@@ -55,13 +55,13 @@ model Shop {
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 
+  customers             CustomerProfile[]
   orderActionRequests   OrderActionRequest[]
   walletReservations    WalletReservation[]
   gstSettings           GstSettings[]
   gstProductTaxMaps     GstProductTaxMap[]
   gstOrderImports       GstOrderImport[]
 }
-
 model AuthSession {
   id                  String   @id @default(uuid())
   customerProfileId   String
