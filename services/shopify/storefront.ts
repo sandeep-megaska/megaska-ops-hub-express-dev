@@ -213,7 +213,10 @@ export async function updateCartBuyerIdentity(input: {
         !(response.errors?.length || 0)
     ),
     cartId: response.data?.cartBuyerIdentityUpdate?.cart?.id || resolvedCartId,
-    checkoutUrl: response.data?.cartBuyerIdentityUpdate?.cart?.checkoutUrl || undefined,
+    checkoutUrl: absolutizeCheckoutUrl(
+  response.data?.cartBuyerIdentityUpdate?.cart?.checkoutUrl,
+  shopDomain
+),
     buyerIdentity: {
       email: response.data?.cartBuyerIdentityUpdate?.cart?.buyerIdentity?.email || null,
       phone: response.data?.cartBuyerIdentityUpdate?.cart?.buyerIdentity?.phone || null,
@@ -296,7 +299,10 @@ export async function updateCartAttributes(input: {
         !(response.errors?.length || 0)
     ),
     cartId: response.data?.cartAttributesUpdate?.cart?.id || resolvedCartId,
-    checkoutUrl: response.data?.cartAttributesUpdate?.cart?.checkoutUrl || undefined,
+    checkoutUrl: absolutizeCheckoutUrl(
+  response.data?.cartAttributesUpdate?.cart?.checkoutUrl,
+  shopDomain
+),
     userErrors: response.data?.cartAttributesUpdate?.userErrors || [],
     apiErrors: response.errors || [],
   };
@@ -374,7 +380,7 @@ export async function getCartPricingSnapshot(cartId: string): Promise<CartPricin
   return {
     ok: true,
     cartId: cart.id,
-    checkoutUrl: cart.checkoutUrl || undefined,
+    checkoutUrl: absolutizeCheckoutUrl(cart.checkoutUrl, shopDomain),
     currencyCode,
     subtotalAmount: Math.max(0, Math.round(subtotal * 100)),
     totalAmount: Math.max(0, Math.round(total * 100)),
