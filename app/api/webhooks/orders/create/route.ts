@@ -157,14 +157,17 @@ async function backfillMissingOrderEmailFromCustomerProfile(
     return;
   }
 
-  const customerProfile = await prisma.customerProfile.findUnique({
-    where: {
-      phoneE164: normalizedPhone,
-    },
-    select: {
-      email: true,
-    },
-  });
+ const customerProfile = await prisma.customerProfile.findFirst({
+  where: {
+    phoneE164: normalizedPhone,
+  },
+  orderBy: {
+    createdAt: "desc",
+  },
+  select: {
+    // keep your existing select block exactly as-is
+  },
+});
 
   const profileEmail = String(customerProfile?.email || "").trim().toLowerCase();
   if (!profileEmail) {
