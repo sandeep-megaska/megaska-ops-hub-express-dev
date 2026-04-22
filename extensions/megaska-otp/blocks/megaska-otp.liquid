@@ -1,4 +1,14 @@
-<div class="megaska-account-state" hidden {{ block.shopify_attributes }}></div>
+<div
+  class="megaska-account-state"
+  hidden
+  data-shop-domain="{{ shop.permanent_domain }}"
+  {{ block.shopify_attributes }}
+></div>
+
+<script>
+  window.MEGASKA_SHOP_DOMAIN = {{ shop.permanent_domain | json }};
+</script>
+
 <script src="https://megaska-ops-hub-exs1.vercel.app/megaska-exchange-hook.js" defer></script>
 
 {% schema %}
