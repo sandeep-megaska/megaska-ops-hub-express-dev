@@ -25,6 +25,55 @@
     "[title*='account' i]",
   ];
 
+  function normalizeShopDomain(input) {
+    return String(input || "")
+      .trim()
+      .replace(/^https?:\/\//, "")
+      .replace(/\/$/, "")
+      .toLowerCase();
+  }
+
+  function getCurrentShopDomain() {
+    const fromWindowMegaska = normalizeShopDomain(
+      typeof window !== "undefined" ? window.MEGASKA_SHOP_DOMAIN : ""
+    );
+    if (fromWindowMegaska) return fromWindowMegaska;
+
+    const fromWindowShopify = normalizeShopDomain(
+      typeof window !== "undefined" ? window?.Shopify?.shop : ""
+    );
+    if (fromWindowShopify) return fromWindowShopify;
+
+    const fromHtml = normalizeShopDomain(
+      document?.documentElement?.getAttribute?.("data-shop-domain")
+    );
+    if (fromHtml) return fromHtml;
+
+    const fromBody = normalizeShopDomain(
+      document?.body?.getAttribute?.("data-shop-domain")
+    );
+    if (fromBody) return fromBody;
+
+    const canonicalHref =
+      document?.querySelector?.("link[rel='canonical']")?.getAttribute?.("href") || "";
+    if (canonicalHref) {
+      try {
+        const url = new URL(canonicalHref, window.location.origin);
+        const fromCanonical = normalizeShopDomain(url.hostname);
+        if (fromCanonical) return fromCanonical;
+      } catch (_error) {}
+    }
+
+    const locationHost = normalizeShopDomain(
+      typeof window !== "undefined" ? window.location.hostname : ""
+    );
+    if (locationHost && locationHost.includes(".myshopify.com")) {
+      return locationHost;
+    }
+
+    return "";
+  }
+
   function getSessionToken() {
     return localStorage.getItem(SESSION_KEY) || "";
   }
@@ -40,6 +89,8 @@
 
   function buildHeaders(extraHeaders) {
     const token = getSessionToken();
+    const shopDomain = getCurrentShopDomain();
+
     const headers = Object.assign(
       {
         "Content-Type": "application/json",
@@ -51,7 +102,24 @@
       headers.Authorization = `Bearer ${token}`;
     }
 
+    if (shopDomain) {
+      headers["x-shopify-shop-domain"] = shopDomain;
+    }
+
     return headers;
+  }
+
+  function buildApiUrl(path) {
+    const shopDomain = getCurrentShopDomain();
+    const normalizedPath = String(path || "").startsWith("/") ? path : `/${path}`;
+    const url = new URL(`${API_BASE}${normalizedPath}`);
+
+    // Send shop in query also as a safe fallback for proxies/CDN/header-stripping edge cases.
+    if (shopDomain) {
+      url.searchParams.set("shop", shopDomain);
+    }
+
+    return url.toString();
   }
 
   async function apiFetch(path, options) {
@@ -65,7 +133,7 @@
 
     opts.headers = buildHeaders(opts.headers);
 
-    const response = await fetch(`${API_BASE}${path}`, opts);
+    const response = await fetch(buildApiUrl(path), opts);
 
     let data = null;
     try {
@@ -216,71 +284,73 @@
     };
   }
 
- function buildCheckoutPrefillParams(customer) {
-  const source = customer || {};
-  const fullName = source.fullName || source.firstName || "";
-  const nameParts = splitName(fullName);
-  const firstName = String(source.firstName || nameParts.firstName || "").trim();
-  const lastName = String(source.lastName || nameParts.lastName || "").trim();
-  const email = String(source.email || "").trim();
-  const phone = String(source.phoneE164 || source.phone || "").trim();
-  const addressLine1 = String(source.addressLine1 || "").trim();
-  const addressLine2 = String(source.addressLine2 || "").trim();
-  const city = String(source.city || "").trim();
-  const stateProvince = String(source.stateProvince || "").trim();
-  const postalCode = String(source.postalCode || "").trim();
-  const countryRegion = String(source.countryRegion || "").trim();
-  const params = {};
+  function buildCheckoutPrefillParams(customer) {
+    const source = customer || {};
+    const fullName = source.fullName || source.firstName || "";
+    const nameParts = splitName(fullName);
+    const firstName = String(source.firstName || nameParts.firstName || "").trim();
+    const lastName = String(source.lastName || nameParts.lastName || "").trim();
+    const email = String(source.email || "").trim();
+    const phone = String(source.phoneE164 || source.phone || "").trim();
+    const addressLine1 = String(source.addressLine1 || "").trim();
+    const addressLine2 = String(source.addressLine2 || "").trim();
+    const city = String(source.city || "").trim();
+    const stateProvince = String(source.stateProvince || "").trim();
+    const postalCode = String(source.postalCode || "").trim();
+    const countryRegion = String(source.countryRegion || "").trim();
+    const params = {};
 
-  if (email) {
-    params["checkout[email]"] = email;
+    if (email) {
+      params["checkout[email]"] = email;
+    }
+
+    if (phone) {
+      params["checkout[shipping_address][phone]"] = phone;
+      params["checkout[phone]"] = phone;
+      params["checkout[contact][phone]"] = phone;
+    }
+
+    if (firstName) {
+      params["checkout[shipping_address][first_name]"] = firstName;
+    }
+    if (lastName) {
+      params["checkout[shipping_address][last_name]"] = lastName;
+    }
+    if (addressLine1) {
+      params["checkout[shipping_address][address1]"] = addressLine1;
+    }
+    if (addressLine2) {
+      params["checkout[shipping_address][address2]"] = addressLine2;
+    }
+    if (city) {
+      params["checkout[shipping_address][city]"] = city;
+    }
+    if (stateProvince) {
+      params["checkout[shipping_address][province]"] = stateProvince;
+    }
+    if (postalCode) {
+      params["checkout[shipping_address][zip]"] = postalCode;
+    }
+    if (countryRegion) {
+      params["checkout[shipping_address][country]"] = countryRegion;
+    }
+
+    return params;
   }
 
-  if (phone) {
-    params["checkout[shipping_address][phone]"] = phone;
-    params["checkout[phone]"] = phone;
-    params["checkout[contact][phone]"] = phone;
-  }
-
-  if (firstName) {
-    params["checkout[shipping_address][first_name]"] = firstName;
-  }
-  if (lastName) {
-    params["checkout[shipping_address][last_name]"] = lastName;
-  }
-  if (addressLine1) {
-    params["checkout[shipping_address][address1]"] = addressLine1;
-  }
-  if (addressLine2) {
-    params["checkout[shipping_address][address2]"] = addressLine2;
-  }
-  if (city) {
-    params["checkout[shipping_address][city]"] = city;
-  }
-  if (stateProvince) {
-    params["checkout[shipping_address][province]"] = stateProvince;
-  }
-  if (postalCode) {
-    params["checkout[shipping_address][zip]"] = postalCode;
-  }
-  if (countryRegion) {
-    params["checkout[shipping_address][country]"] = countryRegion;
-  }
-
-  return params;
-}
   function applyCheckoutPrefillToUrl(rawUrl, customer) {
     if (!rawUrl) return rawUrl;
     const params = buildCheckoutPrefillParams(customer);
     if (!Object.keys(params).length) return rawUrl;
 
-   const url = new URL(rawUrl, window.location.origin);
+    const url = new URL(rawUrl, window.location.origin);
 
-Object.entries(params).forEach(([key, value]) => {
-  if (value && !url.searchParams.get(key)) {
-    url.searchParams.set(key, value);
-  }
-});
+    Object.entries(params).forEach(([key, value]) => {
+      if (value && !url.searchParams.get(key)) {
+        url.searchParams.set(key, value);
+      }
+    });
+
     return `${url.pathname}${url.search}${url.hash}`;
   }
 
@@ -289,9 +359,6 @@ Object.entries(params).forEach(([key, value]) => {
     const params = buildCheckoutPrefillParams(customer);
     const entries = Object.entries(params);
     if (!entries.length) return false;
-
-    // Remove legacy hidden contact phone inputs if they exist.
-    
 
     entries.forEach(([name, value]) => {
       let input = form.querySelector(`input[type="hidden"][name="${name}"]`);
@@ -438,7 +505,7 @@ Object.entries(params).forEach(([key, value]) => {
       console.error("[Megaska Verified Phone] active cart annotation failed", error);
     }
 
-    const response = await fetch(`${API_BASE}/checkout/prefill`, {
+    const response = await fetch(buildApiUrl("/checkout/prefill"), {
       method: "POST",
       headers: buildHeaders(),
       body: JSON.stringify(payload),
@@ -822,14 +889,14 @@ Object.entries(params).forEach(([key, value]) => {
             const sign = direction === "DEBIT" ? "-" : "+";
             const reason = txn?.reason || txn?.transactionType || "Wallet transaction";
             const orderRef = txn?.orderNumber ? ` • Order ${escHtml(txn.orderNumber)}` : "";
-            return `<li class=\"megaska-dashboard-list-item\">
+            return `<li class="megaska-dashboard-list-item">
               <div>
                 <strong>${escHtml(reason)}</strong>
-                <div class=\"megaska-dashboard-subtle\">${escHtml(formatDate(txn?.createdAt) || "")}${orderRef}</div>
+                <div class="megaska-dashboard-subtle">${escHtml(formatDate(txn?.createdAt) || "")}${orderRef}</div>
               </div>
-              <div class=\"megaska-dashboard-order-right\">
+              <div class="megaska-dashboard-order-right">
                 <strong>${sign} ${formatMinorCurrency(txn?.amount, txn?.currency || currency)}</strong>
-                <div class=\"megaska-dashboard-subtle\">${escHtml(direction)}</div>
+                <div class="megaska-dashboard-subtle">${escHtml(direction)}</div>
               </div>
             </li>`;
           })
@@ -1009,11 +1076,12 @@ Object.entries(params).forEach(([key, value]) => {
   async function init() {
     bindLogoutButtons();
     await bootstrapAuth();
-   // await initDashboardPage();
+    // await initDashboardPage();
   }
 
   window.MegaskaAuth = {
     API_BASE,
+    getCurrentShopDomain,
     getSessionToken,
     setSessionToken,
     clearSessionToken,
