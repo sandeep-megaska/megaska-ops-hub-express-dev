@@ -419,7 +419,7 @@ async function adminGraphql<T>(
   const runtimeConfigured = hasRuntimeCredentialConfig();
   const defaultShopDomain = normalizeShopDomain(getEnvTrimmed("SHOPIFY_STORE_DOMAIN"));
 
-  let token = "";
+ /* let token = "";
   let tokenSource: "runtime_client_credentials" | "env_fallback" = "runtime_client_credentials";
   if (runtimeConfigured && (!preferredShopDomain || preferredShopDomain === defaultShopDomain)) {
     const runtimeToken = await getRuntimeAdminAccessToken(shopDomain);
@@ -427,7 +427,21 @@ async function adminGraphql<T>(
   } else {
     token = staticFallbackToken;
     tokenSource = "env_fallback";
-  }
+  }*/
+  let token = "";
+let tokenSource: "shop_stored_token" | "runtime_client_credentials" | "env_fallback" = "env_fallback";
+
+if (shopConfig.accessToken) {
+  token = shopConfig.accessToken;
+  tokenSource = "shop_stored_token";
+} else if (runtimeConfigured && (!preferredShopDomain || preferredShopDomain === defaultShopDomain)) {
+  const runtimeToken = await getRuntimeAdminAccessToken(shopDomain);
+  token = runtimeToken.accessToken;
+  tokenSource = "runtime_client_credentials";
+} else {
+  token = staticFallbackToken;
+  tokenSource = "env_fallback";
+}
 
   if (!shopDomain || !token) {
     throw new Error("Shopify admin sync is not configured (missing store domain or admin access token)");
