@@ -187,7 +187,14 @@ export async function POST(req: NextRequest) {
   country,
   resolvedCartId,
 });
-
+console.log("[Megaska Checkout Prefill] email debug", {
+  shopId: shop.id,
+  shopDomain: shop.shopDomain,
+  customerProfileId: session.customer.id,
+  emailRaw: session.customer.email,
+  emailTrimmed: String(session.customer.email || "").trim(),
+  phone: session.customer.phoneE164,
+});
     const updateResult = await updateCartBuyerIdentity({
       cartId: resolvedCartId,
       buyerIdentity: {
@@ -225,6 +232,12 @@ export async function POST(req: NextRequest) {
         sessionReference: session.id,
       });
     }
+    console.log("[Megaska Buyer Identity] email result", {
+  sentEmail: email,
+  returnedEmail: updateResult.buyerIdentity?.email || null,
+  userErrors: updateResult.userErrors,
+  apiErrors: updateResult.apiErrors,
+});
 
     const walletAttributes = walletReservation
       ? [
