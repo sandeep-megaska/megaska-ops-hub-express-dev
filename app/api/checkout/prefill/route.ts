@@ -5,6 +5,10 @@ import { prisma } from "../../../../services/db/prisma";
 import { parseAmountToMinorUnits } from "../../../../services/wallet";
 import { createWalletReservation } from "../../../../services/wallet-reservation";
 import {
+  ShopResolutionError,
+  requireShopFromRequest,
+} from "../../../../services/shopify/shop";
+import {
   isShopifyStorefrontConfigured,
   resolveCartId,
   updateCartAttributes,
@@ -17,6 +21,8 @@ export async function OPTIONS(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const shop = await requireShopFromRequest(req);
+
     const authHeader = req.headers.get("authorization");
     const bearerToken = authHeader?.startsWith("Bearer ")
       ? authHeader.slice(7).trim()
@@ -36,6 +42,9 @@ export async function POST(req: NextRequest) {
         sessionTokenHash,
         revokedAt: null,
         expiresAt: { gt: now },
+        customer: {
+          shopId: shop.id,
+        },
       },
       include: {
         customer: true,
@@ -89,6 +98,7 @@ export async function POST(req: NextRequest) {
       discountNodeId: string;
       expiresAt: Date;
     } | null = null;
+
     const cartSource = String(body?.cartId || "").trim()
       ? "body.cartId"
       : String(body?.cartToken || "").trim()
@@ -96,6 +106,8 @@ export async function POST(req: NextRequest) {
         : "none";
 
     console.log("[Megaska Checkout Prefill] resolved active cart", {
+      shopId: shop.id,
+      shopDomain: shop.shopDomain,
       cartId: resolvedCartId || null,
       cartSource,
       cartIdProvided: Boolean(String(body?.cartId || "").trim()),
@@ -130,6 +142,7 @@ export async function POST(req: NextRequest) {
 
     if (!phone) {
       console.warn("[Megaska Checkout Gate] blocked - missing verified phone on session", {
+        shopId: shop.id,
         customerProfileId: customerProfileId || null,
         cartId: resolvedCartId,
       });
@@ -161,6 +174,8 @@ export async function POST(req: NextRequest) {
     }
 
     console.log("[Megaska Buyer Identity] update started", {
+      shopId: shop.id,
+      shopDomain: shop.shopDomain,
       cartId: resolvedCartId,
       email: email || null,
       phone: phone || null,
@@ -189,6 +204,8 @@ export async function POST(req: NextRequest) {
       { key: "megaska_customer_profile_id", value: customerProfileId },
       { key: "megaska_shopify_customer_id", value: shopifyCustomerId },
       { key: "megaska_auth_verified_at", value: phoneVerifiedAt },
+      { key: "megaska_shop_id", value: shop.id },
+      { key: "megaska_shop_domain", value: shop.shopDomain },
     ].filter((entry) => entry.value);
 
     if (requestedWalletAmount > 0) {
@@ -217,6 +234,7 @@ export async function POST(req: NextRequest) {
     });
 
     console.log("[Megaska Buyer Identity] update completed", {
+      shopId: shop.id,
       targetCartId: resolvedCartId,
       resultCartId: updateResult.cartId || null,
       resultBuyerIdentity: updateResult.buyerIdentity || null,
@@ -225,7 +243,9 @@ export async function POST(req: NextRequest) {
       apiErrors: updateResult.apiErrors.map((err) => err.message || "unknown"),
       checkoutUrlReturned: Boolean(updateResult.checkoutUrl),
     });
+
     console.log("[Megaska Verified Phone] cart verification metadata applied", {
+      shopId: shop.id,
       cartId: attributeResult.cartId || resolvedCartId,
       ok: attributeResult.ok,
       keysWritten: [...verificationAttributes, ...walletAttributes].map((item) => item.key),
@@ -266,6 +286,10 @@ export async function POST(req: NextRequest) {
     );
   } catch (error) {
     console.error("[Megaska Checkout Prefill] failed", error);
+
+    const status =
+      error instanceof ShopResolutionError ? error.status : 500;
+
     return withCors(
       req,
       NextResponse.json(
@@ -273,7 +297,7 @@ export async function POST(req: NextRequest) {
           ok: false,
           error: error instanceof Error ? error.message : "Internal error",
         },
-        { status: 500 }
+        { status }
       )
     );
   }
