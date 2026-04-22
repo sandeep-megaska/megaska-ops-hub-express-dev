@@ -8,6 +8,10 @@ import {
   getShopifyCustomerDashboardData,
   isShopifyAdminConfigured,
 } from "../../../../services/shopify/admin";
+import {
+  ShopResolutionError,
+  requireShopFromRequest,
+} from "../../../../services/shopify/shop";
 import { isCancellationStatusBlocking } from "../../../../services/exchange/cancellation";
 import { ACTIVE_EXCHANGE_STATUSES } from "../../../../services/exchange/lifecycle";
 import { getOrCreateWalletAccount, listWalletTransactions } from "../../../../services/wallet";
@@ -15,21 +19,28 @@ import { getOrCreateWalletAccount, listWalletTransactions } from "../../../../se
 export const runtime = "nodejs";
 
 export async function OPTIONS(req: NextRequest) {
-  return withCors(req, handleOptions(req));
+  return handleOptions(req);
 }
 
 function getSessionToken(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
-  const bearerToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
+  const bearerToken = authHeader?.startsWith("Bearer ")
+    ? authHeader.slice(7).trim()
+    : "";
   const queryToken = req.nextUrl.searchParams.get("token")?.trim() ?? "";
   return bearerToken || queryToken;
 }
 
 export async function GET(req: NextRequest) {
   try {
+    const shop = await requireShopFromRequest(req);
+
     const sessionToken = getSessionToken(req);
     if (!sessionToken) {
-     return withCors(req, NextResponse.json({ error: "Session token required" }, { status: 401 }));
+      return withCors(
+        req,
+        NextResponse.json({ error: "Session token required" }, { status: 401 })
+      );
     }
 
     const now = new Date();
@@ -38,6 +49,9 @@ export async function GET(req: NextRequest) {
         sessionTokenHash: hashSessionToken(sessionToken),
         revokedAt: null,
         expiresAt: { gt: now },
+        customer: {
+          shopId: shop.id,
+        },
       },
       include: {
         customer: true,
@@ -48,7 +62,10 @@ export async function GET(req: NextRequest) {
     });
 
     if (!session) {
-      return withCors(req, NextResponse.json({ error: "Invalid or expired session" }, { status: 401 }));
+      return withCors(
+        req,
+        NextResponse.json({ error: "Invalid or expired session" }, { status: 401 })
+      );
     }
 
     await prisma.authSession.update({
@@ -62,6 +79,8 @@ export async function GET(req: NextRequest) {
     let shopifyDashboard = null;
 
     console.log("[DASHBOARD SUMMARY] start", {
+      shopId: shop.id,
+      shopDomain: shop.shopDomain,
       customerId: customer.id,
       phoneE164: customer.phoneE164,
       email: customer.email,
@@ -85,6 +104,8 @@ export async function GET(req: NextRequest) {
 
         if (!resolvedShopifyCustomerId) {
           console.log("[DASHBOARD SUMMARY] resolving Shopify customer identity", {
+            shopId: shop.id,
+            shopDomain: shop.shopDomain,
             email: customer.email || null,
             phoneE164: customer.phoneE164 || null,
           });
@@ -120,6 +141,7 @@ export async function GET(req: NextRequest) {
             });
 
             console.log("[DASHBOARD SUMMARY] saved resolved Shopify customer id", {
+              shopId: shop.id,
               customerId: customer.id,
               resolvedShopifyCustomerId,
             });
@@ -130,12 +152,14 @@ export async function GET(req: NextRequest) {
           shopifyDashboard = await getShopifyCustomerDashboardData(resolvedShopifyCustomerId);
           const dashboard = shopifyDashboard;
           console.log("[DASHBOARD SUMMARY] dashboard data used", {
+            shopId: shop.id,
             resolvedShopifyCustomerId,
             totalOrderCount: dashboard?.totalOrderCount ?? null,
             recentOrdersCount: dashboard?.recentOrders?.length ?? null,
             hasDefaultAddress: Boolean(dashboard?.defaultAddress),
           });
           console.log("[DASHBOARD SUMMARY] dashboard result", {
+            shopId: shop.id,
             resolvedShopifyCustomerId,
             foundEmail: shopifyDashboard?.email || null,
             totalOrderCount: shopifyDashboard?.totalOrderCount || 0,
@@ -145,7 +169,9 @@ export async function GET(req: NextRequest) {
             hasDefaultAddress: Boolean(shopifyDashboard?.defaultAddress),
           });
         } else {
-          console.log("[DASHBOARD SUMMARY] no Shopify customer resolved");
+          console.log("[DASHBOARD SUMMARY] no Shopify customer resolved", {
+            shopId: shop.id,
+          });
         }
       } catch (error) {
         console.error("[DASHBOARD SUMMARY] Shopify customer fetch failed", error);
@@ -241,7 +267,10 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const openRequests = cancellationRequests.filter((request) => isCancellationStatusBlocking(request.status)).length;
+    const openRequests = cancellationRequests.filter((request) =>
+      isCancellationStatusBlocking(request.status)
+    ).length;
+
     const walletAccount = await getOrCreateWalletAccount(customer.id, "INR");
     const walletTransactions = await listWalletTransactions(customer.id, "INR", 15);
 
@@ -317,6 +346,7 @@ export async function GET(req: NextRequest) {
     };
 
     console.log("[DASHBOARD SUMMARY] final response shape", {
+      shopId: shop.id,
       totalOrders: stats.totalOrders,
       ordersLength: Array.isArray(orders) ? orders.length : null,
       firstOrderId: Array.isArray(orders) && orders[0] ? orders[0].id : null,
@@ -326,13 +356,16 @@ export async function GET(req: NextRequest) {
   } catch (error) {
     console.error("[DASHBOARD SUMMARY ERROR]", error);
 
+    const status =
+      error instanceof ShopResolutionError ? error.status : 500;
+
     return withCors(
       req,
       NextResponse.json(
         {
           error: error instanceof Error ? error.message : "Internal error",
         },
-        { status: 500 }
+        { status }
       )
     );
   }
