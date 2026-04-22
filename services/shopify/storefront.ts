@@ -230,6 +230,14 @@ export async function updateCartBuyerIdentity(input: {
     apiErrors: response.errors || [],
   };
 }
+
+console.log("[Megaska Buyer Identity] returned", {
+  ok: updateResult.ok,
+  checkoutUrl: updateResult.checkoutUrl,
+  buyerIdentity: updateResult.buyerIdentity,
+  userErrors: updateResult.userErrors,
+  apiErrors: updateResult.apiErrors,
+});
 export async function updateCartAttributes(input: {
   cartId?: string | null;
   cartToken?: string | null;
