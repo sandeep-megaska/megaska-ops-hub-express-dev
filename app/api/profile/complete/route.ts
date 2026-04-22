@@ -6,6 +6,10 @@ import {
   findOrCreateShopifyCustomer,
   isShopifyAdminConfigured,
 } from "../../../../services/shopify/admin";
+import {
+  ShopResolutionError,
+  requireShopFromRequest,
+} from "../../../../services/shopify/shop";
 
 function normalizeEmail(emailRaw: string) {
   return emailRaw.trim().toLowerCase();
@@ -25,6 +29,8 @@ export async function OPTIONS(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const shop = await requireShopFromRequest(req);
+
     const body = await req.json().catch(() => ({}));
     const firstName = normalizeText(String(body?.firstName ?? ""));
     const lastName = normalizeText(String(body?.lastName ?? ""));
@@ -35,19 +41,27 @@ export async function POST(req: NextRequest) {
     const city = normalizeText(String(body?.city ?? ""));
     const stateProvince = normalizeText(String(body?.stateProvince ?? ""));
     const postalCode = normalizeText(String(body?.postalCode ?? ""));
-    const countryRegion = normalizeText(String(body?.countryRegion ?? "India"));
+    const countryRegion = normalizeText(
+      String(body?.countryRegion ?? "India")
+    );
 
     if (!firstName) {
       return withCors(
         req,
-        NextResponse.json({ success: false, error: "First name is required" }, { status: 400 })
+        NextResponse.json(
+          { success: false, error: "First name is required" },
+          { status: 400 }
+        )
       );
     }
 
     if (!lastName) {
       return withCors(
         req,
-        NextResponse.json({ success: false, error: "Last name is required" }, { status: 400 })
+        NextResponse.json(
+          { success: false, error: "Last name is required" },
+          { status: 400 }
+        )
       );
     }
 
@@ -55,7 +69,10 @@ export async function POST(req: NextRequest) {
     if (!email || !emailPattern.test(email)) {
       return withCors(
         req,
-        NextResponse.json({ success: false, error: "Valid email is required" }, { status: 400 })
+        NextResponse.json(
+          { success: false, error: "Valid email is required" },
+          { status: 400 }
+        )
       );
     }
 
@@ -97,6 +114,9 @@ export async function POST(req: NextRequest) {
         revokedAt: null,
         expiresAt: {
           gt: now,
+        },
+        customer: {
+          shopId: shop.id,
         },
       },
       include: {
@@ -152,12 +172,16 @@ export async function POST(req: NextRequest) {
 
     if (updatedCustomer.shopifyCustomerId) {
       console.log("[SHOPIFY SYNC] skipped because already linked", {
+        shopId: shop.id,
+        shopDomain: shop.shopDomain,
         customerProfileId: updatedCustomer.id,
         shopifyCustomerId: updatedCustomer.shopifyCustomerId,
       });
       shopifySync = { ok: true, status: "skipped-already-linked" };
     } else if (!isShopifyAdminConfigured()) {
       console.warn("[SHOPIFY SYNC] skipped because Shopify admin config is missing", {
+        shopId: shop.id,
+        shopDomain: shop.shopDomain,
         customerProfileId: updatedCustomer.id,
       });
       shopifySync = { ok: false, status: "skipped-not-configured" };
@@ -176,6 +200,8 @@ export async function POST(req: NextRequest) {
 
         if (syncResult.source === "existing") {
           console.log("[SHOPIFY SYNC] existing Shopify customer linked", {
+            shopId: shop.id,
+            shopDomain: shop.shopDomain,
             customerProfileId: updatedCustomer.id,
             shopifyCustomerId: syncResult.shopifyCustomerId,
             matchedBy: syncResult.matchedBy,
@@ -187,6 +213,8 @@ export async function POST(req: NextRequest) {
           };
         } else {
           console.log("[SHOPIFY SYNC] new Shopify customer created", {
+            shopId: shop.id,
+            shopDomain: shop.shopDomain,
             customerProfileId: updatedCustomer.id,
             shopifyCustomerId: syncResult.shopifyCustomerId,
           });
@@ -196,6 +224,8 @@ export async function POST(req: NextRequest) {
         const message =
           syncError instanceof Error ? syncError.message : "Shopify sync failed";
         console.error("[SHOPIFY SYNC] failed", {
+          shopId: shop.id,
+          shopDomain: shop.shopDomain,
           customerProfileId: updatedCustomer.id,
           message,
         });
@@ -254,6 +284,9 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     console.error("[PROFILE COMPLETE ERROR]", error);
 
+    const status =
+      error instanceof ShopResolutionError ? error.status : 500;
+
     return withCors(
       req,
       NextResponse.json(
@@ -261,7 +294,7 @@ export async function POST(req: NextRequest) {
           success: false,
           error: error instanceof Error ? error.message : "Internal error",
         },
-        { status: 500 }
+        { status }
       )
     );
   }
