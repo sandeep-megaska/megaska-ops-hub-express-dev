@@ -91,7 +91,7 @@ model AuthSession {
 
   customerProfileId String?
   customer          CustomerProfile? @relation(fields: [customerProfileId], references: [id])
-  shop              Shop              @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  shop              Shop             @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
   @@index([shopId])
   @@index([shopId, phoneE164])
