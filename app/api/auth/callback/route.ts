@@ -74,29 +74,46 @@ export async function GET(request: NextRequest) {
   }
 
   const tokenData = await tokenRes.json();
-  const accessToken = String(tokenData.access_token || "");
+  const accessToken = String(tokenData.access_token || "").trim();
+  const scopes =
+    String(tokenData.scope || tokenData.scopes || "").trim() || null;
 
   if (!accessToken) {
     return NextResponse.json({ error: "No access token returned" }, { status: 500 });
   }
 
+  console.log("[SHOPIFY OAUTH CALLBACK] token exchange success", {
+    shop,
+    hasAccessToken: Boolean(accessToken),
+    scopes,
+  });
+
   await prisma.shop.upsert({
     where: { shopDomain: shop },
     update: {
       accessToken,
+      scopes,
       isActive: true,
       installedAt: new Date(),
       uninstalledAt: null,
+      updatedAt: new Date(),
     },
     create: {
       shopDomain: shop,
       accessToken,
+      scopes,
       isActive: true,
       installedAt: new Date(),
+      uninstalledAt: null,
     },
   });
 
+  console.log("[SHOPIFY OAUTH CALLBACK] shop persisted", {
+    shop,
+    scopes,
+  });
+
   return NextResponse.redirect(
-  `${SHOPIFY_APP_URL}/?shop=${encodeURIComponent(shop)}`
-);
+    `${SHOPIFY_APP_URL}/?shop=${encodeURIComponent(shop)}`
+  );
 }
