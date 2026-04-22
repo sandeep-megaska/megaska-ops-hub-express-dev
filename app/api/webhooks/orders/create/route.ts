@@ -165,7 +165,7 @@ async function backfillMissingOrderEmailFromCustomerProfile(
     createdAt: "desc",
   },
   select: {
-    // keep your existing select block exactly as-is
+    email: true,
   },
 });
 
