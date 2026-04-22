@@ -9,7 +9,8 @@ datasource db {
 
 model CustomerProfile {
   id                  String   @id @default(uuid())
-  phoneE164           String   @unique
+  shopId              String
+  phoneE164           String?
   fullName            String?
   firstName           String?
   lastName            String?
@@ -26,17 +27,22 @@ model CustomerProfile {
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
+  shop                Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
   sessions            AuthSession[]
   otpChallenges       OTPChallenge[]
   orderActionRequests OrderActionRequest[]
   walletAccounts      WalletAccount[]
   walletTransactions  WalletTransaction[]
   walletReservations  WalletReservation[]
-  gstDocuments       GstDocument[]
-  gstParties         GstParty[]
+  gstDocuments        GstDocument[]
+  gstParties          GstParty[]
 
+  @@unique([shopId, shopifyCustomerId])
+  @@index([shopId])
+  @@index([shopId, phoneE164])
+  @@index([shopId, email])
 }
-
 model Shop {
   id                    String   @id @default(uuid())
   shopDomain            String   @unique
