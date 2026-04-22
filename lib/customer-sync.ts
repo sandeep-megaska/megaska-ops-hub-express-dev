@@ -6,8 +6,6 @@ import {
 } from "./customer-normalize";
 import { getShopifyCustomersForSync } from "../services/shopify/admin";
 
-
-
 type SyncArgs = {
   shopId: string;
   shopDomain: string;
@@ -66,16 +64,51 @@ export async function syncCustomersForShop({
         countryRegion: customer.defaultAddress?.country || null,
       };
 
-      await prisma.customerProfile.upsert({
+      let existing = await prisma.customerProfile.findUnique({
         where: {
           shopId_shopifyCustomerId: {
             shopId,
             shopifyCustomerId,
           },
         },
-        create: payload,
-        update: payload,
       });
+
+      if (!existing && phone) {
+        existing = await prisma.customerProfile.findFirst({
+          where: {
+            shopId,
+            phoneE164: phone,
+          },
+          orderBy: {
+            createdAt: "desc",
+          },
+        });
+      }
+
+      if (!existing && email) {
+        existing = await prisma.customerProfile.findFirst({
+          where: {
+            shopId,
+            email,
+          },
+          orderBy: {
+            createdAt: "desc",
+          },
+        });
+      }
+
+      if (existing) {
+        await prisma.customerProfile.update({
+          where: {
+            id: existing.id,
+          },
+          data: payload,
+        });
+      } else {
+        await prisma.customerProfile.create({
+          data: payload,
+        });
+      }
 
       upserted += 1;
     }
