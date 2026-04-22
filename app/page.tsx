@@ -1,4 +1,5 @@
 import Link from "next/link";
+import CustomerSyncCard from "./CustomerSyncCard";
 
 const quickCards = [
   {
@@ -70,6 +71,8 @@ export default function DashboardPage() {
           <p className="mk-stat-meta">Core ops hub accessible and ready</p>
         </div>
       </section>
+
+      <CustomerSyncCard />
 
       <section className="mk-card">
         <h2 className="mk-section-title">Operations Dashboard</h2>
