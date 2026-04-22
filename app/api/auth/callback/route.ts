@@ -16,14 +16,16 @@ function validateHmac(params: URLSearchParams, secret: string) {
     .filter(([key]) => key !== "hmac" && key !== "signature")
     .sort(([a], [b]) => a.localeCompare(b));
 
-  const message = entries
-    .map(([key, value]) => `${key}=${value}`)
-    .join("&");
+  const message = entries.map(([key, value]) => `${key}=${value}`).join("&");
 
   const generated = crypto
     .createHmac("sha256", secret)
     .update(message)
     .digest("hex");
+
+  if (generated.length !== hmac.length) {
+    return false;
+  }
 
   return crypto.timingSafeEqual(
     Buffer.from(generated, "utf8"),
