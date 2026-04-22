@@ -1,38 +1,72 @@
-import type { Request, Response } from "express";
-import { PrismaClient } from "@prisma/client";
-import { syncCustomersForShop } from "../../../lib/customer-sync";
+import type { NextApiRequest, NextApiResponse } from "next";
+import { prisma } from "@/lib/prisma";
+import { syncCustomersForShop } from "@/lib/customer-sync";
 
-// Replace this with your actual Shopify admin authentication helper.
-import { authenticateAdminRequest } from "../../../lib/shopify-auth";
+// Adjust these imports to match the real exports in your repo
+import { getShopifyAdminForRequest } from "@/services/shopify/admin";
+import { resolveShopFromRequest } from "@/services/shopify/shop-resolver";
 
-const prisma = new PrismaClient();
-
-export default async function handler(req: Request, res: Response) {
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse
+) {
   if (req.method !== "POST") {
-    return res.status(405).json({ success: false, error: "Method not allowed" });
+    return res.status(405).json({
+      success: false,
+      error: "Method not allowed",
+    });
   }
 
   try {
     /**
-     * Must return:
-     * - shop domain (e.g. bigonbuy-fashions.myshopify.com)
-     * - authenticated admin GraphQL client for THIS shop only
+     * 1) Resolve current shop from the embedded admin request
+     *    This must identify the current Shopify store safely.
      */
-    const { shopDomain, admin } = await authenticateAdminRequest(req, res);
+    const resolvedShop = await resolveShopFromRequest(req);
 
-    if (!shopDomain || !admin) {
-      return res.status(401).json({ success: false, error: "Unauthorized" });
+    if (!resolvedShop?.shopDomain) {
+      return res.status(401).json({
+        success: false,
+        error: "Unable to resolve current shop",
+      });
     }
 
+    /**
+     * 2) Get authenticated Shopify Admin client for THIS shop
+     */
+    const admin = await getShopifyAdminForRequest(req, resolvedShop.shopDomain);
+
+    if (!admin) {
+      return res.status(401).json({
+        success: false,
+        error: "Unable to create Shopify admin client",
+      });
+    }
+
+    /**
+     * 3) Resolve local Shop row
+     */
     const shop = await prisma.shop.findUnique({
-      where: { shopDomain },
-      select: { id: true, shopDomain: true, isActive: true },
+      where: {
+        shopDomain: resolvedShop.shopDomain,
+      },
+      select: {
+        id: true,
+        shopDomain: true,
+        isActive: true,
+      },
     });
 
     if (!shop || !shop.isActive) {
-      return res.status(404).json({ success: false, error: "Shop not found or inactive" });
+      return res.status(404).json({
+        success: false,
+        error: "Shop not found or inactive",
+      });
     }
 
+    /**
+     * 4) Run per-shop sync
+     */
     const result = await syncCustomersForShop({
       shopId: shop.id,
       admin,
@@ -46,6 +80,7 @@ export default async function handler(req: Request, res: Response) {
     });
   } catch (error: any) {
     console.error("Customer sync failed:", error);
+
     return res.status(500).json({
       success: false,
       error: error?.message || "Customer sync failed",
