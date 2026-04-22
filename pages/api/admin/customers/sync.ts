@@ -6,7 +6,7 @@ import { syncCustomersForShop } from "../../../../lib/customer-sync";
 
 // shopify services
 import { getShopifyAdminForRequest } from "../../../../services/shopify/admin";
-import { resolveShopFromRequest } from "../../../../services/shopify/shop-resolver";
+import { resolveShopConfig } from "../../../../services/shopify/shop-resolver";
 
 export default async function handler(
   req: NextApiRequest,
@@ -24,7 +24,7 @@ export default async function handler(
      * 1) Resolve current shop from the embedded admin request
      *    This must identify the current Shopify store safely.
      */
-    const resolvedShop = await resolveShopFromRequest(req);
+    const resolvedShop = await resolveShopConfig(req);
 
     if (!resolvedShop?.shopDomain) {
       return res.status(401).json({
