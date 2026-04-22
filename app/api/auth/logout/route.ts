@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "../../../../services/db/prisma";
 import { hashSessionToken } from "../../../../services/auth/session";
 import { withCors, handleOptions } from "../../_lib/cors";
+import {
+  ShopResolutionError,
+  requireShopFromRequest,
+} from "../../../../services/shopify/shop";
 
 export async function OPTIONS(req: NextRequest) {
   return handleOptions(req);
@@ -9,6 +13,8 @@ export async function OPTIONS(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const shop = await requireShopFromRequest(req);
+
     const body = await req.json().catch(() => ({}));
     const bodyToken = String(body?.token ?? "").trim();
 
@@ -35,6 +41,9 @@ export async function POST(req: NextRequest) {
       where: {
         sessionTokenHash,
         revokedAt: null,
+        customer: {
+          shopId: shop.id,
+        },
       },
       orderBy: {
         createdAt: "desc",
@@ -70,6 +79,9 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     console.error("[AUTH LOGOUT ERROR]", error);
 
+    const status =
+      error instanceof ShopResolutionError ? error.status : 500;
+
     return withCors(
       req,
       NextResponse.json(
@@ -77,7 +89,7 @@ export async function POST(req: NextRequest) {
           success: false,
           error: error instanceof Error ? error.message : "Internal error",
         },
-        { status: 500 }
+        { status }
       )
     );
   }
