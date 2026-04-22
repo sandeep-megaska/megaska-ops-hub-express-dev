@@ -1,4 +1,9 @@
 {{ 'megaska-otp.css' | asset_url | stylesheet_tag }}
+
+<script>
+  window.MEGASKA_SHOP_DOMAIN = {{ shop.permanent_domain | json }};
+</script>
+
 <script src="{{ 'megaska-auth.js' | asset_url }}" defer></script>
 <script src="{{ 'megaska-otp.js' | asset_url }}" defer></script>
 <script src="https://megaska-ops-hub-exs1.vercel.app/megaska-exchange-hook.js" defer></script>
