@@ -10,6 +10,10 @@ import {
   verifyOtpWithMsg91,
   verifyOtpWithTwilio,
 } from "../../../../services/auth/otp";
+import {
+  ShopResolutionError,
+  requireShopFromRequest,
+} from "../../../../services/shopify/shop";
 
 export async function OPTIONS(req: NextRequest) {
   return handleOptions(req);
@@ -17,6 +21,8 @@ export async function OPTIONS(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const shop = await requireShopFromRequest(req);
+
     const body = await req.json();
     const phoneRaw = String(body?.phone ?? "").trim();
     const otpRaw = String(body?.otp ?? "").trim();
@@ -46,6 +52,7 @@ export async function POST(req: NextRequest) {
 
     const challenge = await prisma.oTPChallenge.findFirst({
       where: {
+        shopId: shop.id,
         phoneE164,
         status: "pending",
       },
@@ -80,6 +87,8 @@ export async function POST(req: NextRequest) {
 
     console.info("[OTP VERIFY PROVIDER SELECTED]", {
       challengeId: challenge.id,
+      shopId: shop.id,
+      shopDomain: shop.shopDomain,
       provider,
       phoneE164,
     });
@@ -90,6 +99,8 @@ export async function POST(req: NextRequest) {
 
         console.info("[OTP VERIFY TWILIO RESULT]", {
           challengeId: challenge.id,
+          shopId: shop.id,
+          shopDomain: shop.shopDomain,
           phoneE164,
           provider,
           status: check.status,
@@ -110,12 +121,17 @@ export async function POST(req: NextRequest) {
 
           return withCors(
             req,
-            NextResponse.json({ error: "Invalid or expired OTP" }, { status: 400 })
+            NextResponse.json(
+              { error: "Invalid or expired OTP" },
+              { status: 400 }
+            )
           );
         }
       } catch (twilioError) {
         console.error("[OTP VERIFY TWILIO FAILURE]", {
           challengeId: challenge.id,
+          shopId: shop.id,
+          shopDomain: shop.shopDomain,
           phoneE164,
           provider,
           message:
@@ -138,6 +154,8 @@ export async function POST(req: NextRequest) {
 
         console.info("[OTP VERIFY MSG91 RESULT]", {
           challengeId: challenge.id,
+          shopId: shop.id,
+          shopDomain: shop.shopDomain,
           phoneE164,
           provider,
           status: check.status,
@@ -160,12 +178,17 @@ export async function POST(req: NextRequest) {
 
           return withCors(
             req,
-            NextResponse.json({ error: "Invalid or expired OTP" }, { status: 400 })
+            NextResponse.json(
+              { error: "Invalid or expired OTP" },
+              { status: 400 }
+            )
           );
         }
       } catch (msg91Error) {
         console.error("[OTP VERIFY MSG91 FAILURE]", {
           challengeId: challenge.id,
+          shopId: shop.id,
+          shopDomain: shop.shopDomain,
           phoneE164,
           provider,
           message:
@@ -206,6 +229,8 @@ export async function POST(req: NextRequest) {
 
       console.log("[OTP VERIFY MOCK RESULT]", {
         challengeId: challenge.id,
+        shopId: shop.id,
+        shopDomain: shop.shopDomain,
         phoneE164,
         provider: "mock",
         status: "approved",
@@ -214,25 +239,20 @@ export async function POST(req: NextRequest) {
 
     const now = new Date();
 
-    const verifiedChallenge = await prisma.oTPChallenge.update({
-      where: { id: challenge.id },
-      data: {
-        status: "verified",
-        verifiedAt: now,
+    let customerProfile = await prisma.customerProfile.findFirst({
+      where: {
+        shopId: shop.id,
+        phoneE164,
+      },
+      orderBy: {
+        createdAt: "desc",
       },
     });
 
-    let customerProfile = await prisma.customerProfile.findFirst({
-  where: {
-    phoneE164,
-  },
-  orderBy: {
-    createdAt: "desc",
-  },
-});
     if (!customerProfile) {
       customerProfile = await prisma.customerProfile.create({
         data: {
+          shopId: shop.id,
           phoneE164,
           phoneVerifiedAt: now,
         },
@@ -247,6 +267,15 @@ export async function POST(req: NextRequest) {
         },
       });
     }
+
+    const verifiedChallenge = await prisma.oTPChallenge.update({
+      where: { id: challenge.id },
+      data: {
+        status: "verified",
+        verifiedAt: now,
+        customerProfileId: customerProfile.id,
+      },
+    });
 
     const sessionToken = generateSessionToken();
     const sessionTokenHash = hashSessionToken(sessionToken);
@@ -303,13 +332,16 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     console.error("[OTP VERIFY ERROR]", error);
 
+    const status =
+      error instanceof ShopResolutionError ? error.status : 500;
+
     return withCors(
       req,
       NextResponse.json(
         {
           error: error instanceof Error ? error.message : "Internal error",
         },
-        { status: 500 }
+        { status }
       )
     );
   }
