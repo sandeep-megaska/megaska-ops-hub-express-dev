@@ -5,7 +5,25 @@ type StorefrontGraphqlEnvelope<T> = {
   data?: T;
   errors?: Array<{ message?: string }>;
 };
+function absolutizeCheckoutUrl(
+  rawUrl: string | null | undefined,
+  shopDomain: string
+) {
+  const value = String(rawUrl || "").trim();
+  if (!value) return undefined;
 
+  try {
+    // Already absolute → keep as-is
+    const parsed = new URL(value);
+    return parsed.toString();
+  } catch {
+    // Relative → attach shop domain
+    if (value.startsWith("/")) {
+      return `https://${shopDomain}${value}`;
+    }
+    return value;
+  }
+}
 export type CartBuyerIdentityInput = {
   email?: string | null;
   phone?: string | null;
