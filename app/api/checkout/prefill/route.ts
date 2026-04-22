@@ -195,6 +195,7 @@ export async function POST(req: NextRequest) {
         zip,
         country,
       },
+      shopDomain: shop.shopDomain,
     });
 
     const verificationAttributes = [
@@ -230,7 +231,7 @@ export async function POST(req: NextRequest) {
 
     const attributeResult = await updateCartAttributes({
       cartId: resolvedCartId,
-      attributes: [...verificationAttributes, ...walletAttributes],
+      attributes: [...verificationAttributes, ...walletAttributes],shopDomain: shop.shopDomain,
     });
 
     console.log("[Megaska Buyer Identity] update completed", {
