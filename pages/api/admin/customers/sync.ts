@@ -1,12 +1,10 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-
-// lib
-import { prisma } from "../../../../lib/prisma";
+import { prisma } from "../../../../lib/db/prisma";
 import { syncCustomersForShop } from "../../../../lib/customer-sync";
-
-// shopify services
-import { getShopifyAdminForRequest } from "../../../../services/shopify/admin";
-import { resolveShopConfig } from "../../../../services/shopify/shop-resolver";
+import {
+  getShopDomainFromRequest,
+  resolveShopConfig,
+} from "../../../../services/shopify/shop-resolver";
 
 export default async function handler(
   req: NextApiRequest,
@@ -20,37 +18,34 @@ export default async function handler(
   }
 
   try {
-    /**
-     * 1) Resolve current shop from the embedded admin request
-     *    This must identify the current Shopify store safely.
-     */
-    const resolvedShop = await resolveShopConfig(req);
+    const host = req.headers.host || "localhost";
+    const protocol = host.includes("localhost") ? "http" : "https";
+    const url = `${protocol}://${host}${req.url || ""}`;
 
-    if (!resolvedShop?.shopDomain) {
+    const requestLike = {
+      url,
+      headers: {
+        get(name: string) {
+          const value = req.headers[name.toLowerCase()];
+          if (Array.isArray(value)) return value[0] || null;
+          return value ?? null;
+        },
+      },
+    };
+
+    const requestedShopDomain = getShopDomainFromRequest(requestLike as any);
+    const shopConfig = await resolveShopConfig(requestedShopDomain);
+
+    if (!shopConfig?.shopDomain) {
       return res.status(401).json({
         success: false,
         error: "Unable to resolve current shop",
       });
     }
 
-    /**
-     * 2) Get authenticated Shopify Admin client for THIS shop
-     */
-    const admin = await getShopifyAdminForRequest(req, resolvedShop.shopDomain);
-
-    if (!admin) {
-      return res.status(401).json({
-        success: false,
-        error: "Unable to create Shopify admin client",
-      });
-    }
-
-    /**
-     * 3) Resolve local Shop row
-     */
     const shop = await prisma.shop.findUnique({
       where: {
-        shopDomain: resolvedShop.shopDomain,
+        shopDomain: shopConfig.shopDomain,
       },
       select: {
         id: true,
@@ -66,12 +61,9 @@ export default async function handler(
       });
     }
 
-    /**
-     * 4) Run per-shop sync
-     */
     const result = await syncCustomersForShop({
       shopId: shop.id,
-      admin,
+      shopDomain: shop.shopDomain,
       defaultCountry: "IN",
     });
 
