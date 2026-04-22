@@ -94,5 +94,7 @@ export async function GET(request: NextRequest) {
     },
   });
 
-  return NextResponse.redirect(`${SHOPIFY_APP_URL}/?shop=${encodeURIComponent(shop)}`);
+  return NextResponse.redirect(
+  `${SHOPIFY_APP_URL}/?shop=${encodeURIComponent(shop)}`
+);
 }
