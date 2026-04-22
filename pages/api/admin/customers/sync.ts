@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { prisma } from "../../../../lib/db/prisma";
+import { prisma } from "../../../../services/db/prisma";
 import { syncCustomersForShop } from "../../../../lib/customer-sync";
 import {
   getShopDomainFromRequest,
