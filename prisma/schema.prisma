@@ -75,23 +75,28 @@ model AuthSession {
   customer            CustomerProfile @relation(fields: [customerProfileId], references: [id])
 }
 
-  model OTPChallenge {
-    id              String   @id @default(uuid())
-    phoneE164       String
-  provider        String   // twilio, msg91, mock
-    providerSid     String?
-    status          String   // pending, verified, failed, expired
-    attemptsCount   Int      @default(0)
-    requestedAt     DateTime @default(now())
-    verifiedAt      DateTime?
-    expiresAt       DateTime
-    metadata        Json?
-    createdAt       DateTime @default(now())
+ model OTPChallenge {
+  id                String   @id @default(uuid())
+  shopId            String
+  phoneE164         String
+  provider          String   // twilio, msg91, mock
+  providerSid       String?
+  status            String   // pending, verified, failed, expired
+  attemptsCount     Int      @default(0)
+  requestedAt       DateTime @default(now())
+  verifiedAt        DateTime?
+  expiresAt         DateTime
+  metadata          Json?
+  createdAt         DateTime @default(now())
 
-    customerProfileId String?
-    customer          CustomerProfile? @relation(fields: [customerProfileId], references: [id])
-  }
+  customerProfileId String?
+  customer          CustomerProfile? @relation(fields: [customerProfileId], references: [id])
+  shop              Shop              @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
+  @@index([shopId])
+  @@index([shopId, phoneE164])
+  @@index([shopId, phoneE164, status, createdAt])
+}
 model AuditEvent {
   id            String   @id @default(uuid())
   actorType     String   // customer, system, admin
