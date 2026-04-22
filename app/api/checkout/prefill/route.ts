@@ -173,13 +173,20 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    console.log("[Megaska Buyer Identity] update started", {
-      shopId: shop.id,
-      shopDomain: shop.shopDomain,
-      cartId: resolvedCartId,
-      email: email || null,
-      phone: phone || null,
-    });
+    console.log("[Megaska Checkout Prefill] mutation context", {
+  shopId: shop.id,
+  shopDomain: shop.shopDomain,
+  sessionCustomerShopId: session.customer.shopId,
+  email,
+  phone,
+  firstName,
+  lastName,
+  city,
+  province,
+  zip,
+  country,
+  resolvedCartId,
+});
 
     const updateResult = await updateCartBuyerIdentity({
       cartId: resolvedCartId,
