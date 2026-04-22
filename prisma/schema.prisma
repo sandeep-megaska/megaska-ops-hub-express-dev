@@ -847,3 +847,28 @@ model GstReportRun {
   @@index([gstSettingsId, reportType, periodStart, periodEnd])
   @@index([status, createdAt])
 }
+model CustomerProfile {
+  id                    String   @id @default(cuid())
+  shopId                String
+  shopifyCustomerId     String
+  phone                 String?
+  email                 String?
+  firstName             String?
+  lastName              String?
+  displayName           String?
+  acceptsEmailMarketing Boolean? @default(false)
+  acceptsSmsMarketing   Boolean? @default(false)
+  ordersCount           Int?      @default(0)
+  amountSpent           Decimal?  @db.Decimal(12, 2)
+  defaultAddressJson    Json?
+  rawJson               Json?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@unique([shopId, shopifyCustomerId])
+  @@index([shopId])
+  @@index([shopId, phone])
+  @@index([shopId, email])
+}
