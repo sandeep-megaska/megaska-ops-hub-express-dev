@@ -1,4 +1,4 @@
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "../services/db/prisma";
 import {
   normalizeEmail,
   normalizePhone,
@@ -6,7 +6,7 @@ import {
 } from "./customer-normalize";
 import { getShopifyCustomersForSync } from "../services/shopify/admin";
 
-const prisma = new PrismaClient();
+
 
 type SyncArgs = {
   shopId: string;
