@@ -1,6 +1,5 @@
 import { PrismaClient } from "@prisma/client";
-import { normalizeEmail, normalizePhone, normalizeShopifyCustomerId } from "./customer-normalize";
-
+import { normalizeEmail, normalizePhone, normalizeShopifyCustomerId } from "@/lib/customer-normalize";
 const prisma = new PrismaClient();
 
 type AdminGraphQLClient = {
