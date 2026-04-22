@@ -68,10 +68,9 @@ export default async function handler(
     });
 
     return res.status(200).json({
-      success: true,
-      shopDomain: shop.shopDomain,
-      ...result,
-    });
+  shopDomain: shop.shopDomain,
+  ...result,
+});
   } catch (error: any) {
     console.error("Customer sync failed:", error);
 
