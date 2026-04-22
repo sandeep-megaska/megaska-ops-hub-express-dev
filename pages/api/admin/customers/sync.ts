@@ -1,6 +1,10 @@
 import type { NextApiRequest, NextApiResponse } from "next";
+
+// lib
 import { prisma } from "../../../../lib/prisma";
 import { syncCustomersForShop } from "../../../../lib/customer-sync";
+
+// shopify services
 import { getShopifyAdminForRequest } from "../../../../services/shopify/admin";
 import { resolveShopFromRequest } from "../../../../services/shopify/shop-resolver";
 
