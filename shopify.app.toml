@@ -27,7 +27,7 @@ use_legacy_install_flow = false
 direct_api_mode = "online"
 
 [auth]
-redirect_urls = ["https://megaska-ops-hub-exs1.vercel.app/auth/callback"]
+redirect_urls = ["https://megaska-ops-hub-exs1.vercel.app/api/auth/callback"]
 
 [product.metafields.app.demo_info]
 type = "single_line_text_field"
