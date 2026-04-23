@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withCors, handleOptions } from "../../../../_lib/cors";
 import { prisma } from "../../../../../../services/db/prisma";
-import {
-  getAuthenticatedExchangeCustomer,
-  ShopResolutionError,
-} from "../../../../../../services/exchange/auth";
+import { ShopResolutionError } from "../../../../../../services/shopify/shop";
+import { getAuthenticatedExchangeCustomer } from "../../../../../../services/exchange/auth";
 import { createReversePickupPaymentLink } from "../../../../../../services/exchange/razorpay";
 import {
   REVERSE_PICKUP_CURRENCY,
@@ -22,7 +20,10 @@ export async function POST(
   try {
     const auth = await getAuthenticatedExchangeCustomer(req);
     if (!auth) {
-      return withCors(req, NextResponse.json({ error: "Unauthorized" }, { status: 401 }));
+      return withCors(
+        req,
+        NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      );
     }
 
     const { shop, session } = auth;
@@ -48,7 +49,10 @@ export async function POST(
     });
 
     if (!requestRow) {
-      return withCors(req, NextResponse.json({ error: "Request not found" }, { status: 404 }));
+      return withCors(
+        req,
+        NextResponse.json({ error: "Request not found" }, { status: 404 })
+      );
     }
 
     const paymentLink = await createReversePickupPaymentLink({
