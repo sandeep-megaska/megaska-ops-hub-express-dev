@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withCors, handleOptions } from "../../_lib/cors";
 import { prisma } from "../../../../services/db/prisma";
-import {
-  getAuthenticatedExchangeCustomer,
-  ShopResolutionError,
-} from "../../../../services/exchange/auth";
+import { ShopResolutionError } from "../../../../services/shopify/shop";
+import { getAuthenticatedExchangeCustomer } from "../../../../services/exchange/auth";
 import { evaluateExchangeEligibility } from "../../../../services/exchange/eligibility";
 import { sendExchangeRequestCreatedEmail } from "../../../../services/notifications/exchange";
 import { ACTIVE_EXCHANGE_STATUSES } from "../../../../services/exchange/lifecycle";
@@ -19,7 +17,10 @@ export async function POST(req: NextRequest) {
   try {
     const auth = await getAuthenticatedExchangeCustomer(req);
     if (!auth) {
-      return withCors(req, NextResponse.json({ error: "Unauthorized" }, { status: 401 }));
+      return withCors(
+        req,
+        NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      );
     }
 
     const { shop, session } = auth;
@@ -44,7 +45,10 @@ export async function POST(req: NextRequest) {
     const sku = String(body?.sku || "").trim() || null;
 
     if (!orderNumber || !productTitle || !requestedSize) {
-      return withCors(req, NextResponse.json({ error: "Missing required fields" }, { status: 400 }));
+      return withCors(
+        req,
+        NextResponse.json({ error: "Missing required fields" }, { status: 400 })
+      );
     }
 
     const eligibility = evaluateExchangeEligibility({
@@ -58,7 +62,10 @@ export async function POST(req: NextRequest) {
     });
 
     if (eligibility.blocked) {
-      return withCors(req, NextResponse.json({ error: eligibility.reason }, { status: 400 }));
+      return withCors(
+        req,
+        NextResponse.json({ error: eligibility.reason }, { status: 400 })
+      );
     }
 
     const existingActiveRequest = await prisma.orderActionRequest.findFirst({
@@ -73,7 +80,10 @@ export async function POST(req: NextRequest) {
             ...(shopifyLineItemId
               ? { shopifyLineItemId }
               : {
-                  productTitle: { equals: productTitle, mode: "insensitive" as const },
+                  productTitle: {
+                    equals: productTitle,
+                    mode: "insensitive" as const,
+                  },
                   ...(variantTitle
                     ? {
                         variantTitle: {
@@ -99,7 +109,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const initialStatus = eligibility.decision === "ELIGIBLE" ? "AWAITING_PAYMENT" : "OPEN";
+    const initialStatus =
+      eligibility.decision === "ELIGIBLE" ? "AWAITING_PAYMENT" : "OPEN";
 
     const created = await prisma.orderActionRequest.create({
       data: {
@@ -119,7 +130,9 @@ export async function POST(req: NextRequest) {
         customerPhoneSnapshot: customer.phoneE164,
         customerEmailSnapshot: customer.email,
         orderAmountSnapshot: amountSnapshot,
-        deliveryDateSnapshot: effectiveDeliveredAt ? new Date(effectiveDeliveredAt) : null,
+        deliveryDateSnapshot: effectiveDeliveredAt
+          ? new Date(effectiveDeliveredAt)
+          : null,
         eligibilityDecision: eligibility.decision,
         eligibilityReason: eligibility.reason,
         items: {
@@ -132,7 +145,9 @@ export async function POST(req: NextRequest) {
             requestedSize,
             quantity: Number.isFinite(quantity) && quantity > 0 ? quantity : 1,
             isClearance: eligibility.reason.toLowerCase().includes("clearance"),
-            isExcludedCategory: eligibility.reason.toLowerCase().includes("category"),
+            isExcludedCategory: eligibility.reason
+              .toLowerCase()
+              .includes("category"),
             eligibilitySnapshot: eligibility,
           },
         },
@@ -191,7 +206,10 @@ export async function GET(req: NextRequest) {
   try {
     const auth = await getAuthenticatedExchangeCustomer(req);
     if (!auth) {
-      return withCors(req, NextResponse.json({ error: "Unauthorized" }, { status: 401 }));
+      return withCors(
+        req,
+        NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      );
     }
 
     const { shop, session } = auth;
