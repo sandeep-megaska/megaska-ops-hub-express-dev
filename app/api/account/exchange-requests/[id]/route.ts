@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withCors, handleOptions } from "../../../_lib/cors";
-import {
-  getAuthenticatedExchangeCustomer,
-  ShopResolutionError,
-} from "../../../../../services/exchange/auth";
 import { prisma } from "../../../../../services/db/prisma";
+import { ShopResolutionError } from "../../../../../services/shopify/shop";
+import { getAuthenticatedExchangeCustomer } from "../../../../../services/exchange/auth";
 
 export async function OPTIONS(req: NextRequest) {
   return handleOptions(req);
@@ -17,7 +15,10 @@ export async function GET(
   try {
     const auth = await getAuthenticatedExchangeCustomer(req);
     if (!auth) {
-      return withCors(req, NextResponse.json({ error: "Unauthorized" }, { status: 401 }));
+      return withCors(
+        req,
+        NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      );
     }
 
     const { shop, session } = auth;
@@ -38,7 +39,10 @@ export async function GET(
     });
 
     if (!item) {
-      return withCors(req, NextResponse.json({ error: "Not found" }, { status: 404 }));
+      return withCors(
+        req,
+        NextResponse.json({ error: "Not found" }, { status: 404 })
+      );
     }
 
     return withCors(req, NextResponse.json({ request: item }));
