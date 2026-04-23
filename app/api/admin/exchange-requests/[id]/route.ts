@@ -65,7 +65,10 @@ export async function PATCH(
     const adminNote = String(body?.adminNote || "").trim();
 
     if (!adminNote) {
-      return NextResponse.json({ error: "adminNote is required" }, { status: 400 });
+      return NextResponse.json(
+        { error: "adminNote is required" },
+        { status: 400 }
+      );
     }
 
     const existing = await prisma.orderActionRequest.findFirst({
@@ -86,7 +89,10 @@ export async function PATCH(
       data: { adminNote },
     });
 
-    return NextResponse.json({ request: updated, message: "Admin note updated" });
+    return NextResponse.json({
+      request: updated,
+      message: "Admin note updated",
+    });
   } catch (error) {
     const status = error instanceof ShopResolutionError ? error.status : 500;
     return NextResponse.json(
