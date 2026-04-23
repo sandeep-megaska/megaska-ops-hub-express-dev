@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "../../../../../../services/db/prisma";
+import {
+  requireShopFromRequest,
+  ShopResolutionError,
+} from "../../../../../../services/shopify/shop";
 import { allowedStatusTransitions } from "../../../../../../services/exchange/lifecycle";
 import { sendExchangeStatusChangedEmail } from "../../../../../../services/notifications/exchange";
 
@@ -11,23 +15,34 @@ function isAdmin(req: NextRequest) {
   return Boolean(expected && key === expected);
 }
 
-export async function PATCH(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+export async function PATCH(
+  req: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
   try {
     if (!isAdmin(req)) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const shop = await requireShopFromRequest(req);
     const { id } = await context.params;
     const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
     const nextStatus = String(body?.nextStatus || "").trim();
     const adminNote = String(body?.adminNote || "").trim() || null;
 
     if (!nextStatus) {
-      return NextResponse.json({ error: "nextStatus is required" }, { status: 400 });
+      return NextResponse.json(
+        { error: "nextStatus is required" },
+        { status: 400 }
+      );
     }
 
     const existing = await prisma.orderActionRequest.findFirst({
-      where: { id, requestType: "EXCHANGE" },
+      where: {
+        id,
+        shopId: shop.id,
+        requestType: "EXCHANGE",
+      },
       include: { items: { take: 1 } },
     });
 
@@ -37,15 +52,32 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
 
     const allowed = allowedStatusTransitions[existing.status] || [];
     if (!allowed.includes(nextStatus) && nextStatus !== existing.status) {
-      return NextResponse.json({ error: "Invalid status transition" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Invalid status transition" },
+        { status: 400 }
+      );
     }
 
-    if (nextStatus === "REPLACEMENT_SHIPPED" && !["ITEM_RECEIVED", "REPLACEMENT_PROCESSING"].includes(existing.status)) {
-      return NextResponse.json({ error: "Cannot ship replacement before item is received." }, { status: 400 });
+    if (
+      nextStatus === "REPLACEMENT_SHIPPED" &&
+      !["ITEM_RECEIVED", "REPLACEMENT_PROCESSING"].includes(existing.status)
+    ) {
+      return NextResponse.json(
+        { error: "Cannot ship replacement before item is received." },
+        { status: 400 }
+      );
     }
 
-    if (nextStatus === "PICKUP_COMPLETED" && !["PICKUP_PENDING", "PICKUP_SCHEDULED"].includes(existing.status)) {
-      return NextResponse.json({ error: "Cannot complete pickup before pickup is pending/scheduled." }, { status: 400 });
+    if (
+      nextStatus === "PICKUP_COMPLETED" &&
+      !["PICKUP_PENDING", "PICKUP_SCHEDULED"].includes(existing.status)
+    ) {
+      return NextResponse.json(
+        {
+          error: "Cannot complete pickup before pickup is pending/scheduled.",
+        },
+        { status: 400 }
+      );
     }
 
     const updated = await prisma.orderActionRequest.update({
@@ -72,6 +104,10 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
 
     return NextResponse.json({ request: updated });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Failed" }, { status: 500 });
+    const status = error instanceof ShopResolutionError ? error.status : 500;
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Failed" },
+      { status }
+    );
   }
 }
