@@ -2,15 +2,9 @@ import { NextRequest } from "next/server";
 import { prisma } from "../db/prisma";
 import { hashSessionToken } from "../auth/session";
 import {
-  ShopResolutionError,
   requireShopFromRequest,
   type ShopRow,
 } from "../shopify/shop";
-
-export type AuthenticatedExchangeCustomer = {
-  shop: ShopRow;
-  session: Awaited<ReturnType<typeof getAuthenticatedExchangeCustomer>>;
-};
 
 function getSessionToken(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
@@ -43,11 +37,30 @@ export async function getAuthenticatedCustomer(req: NextRequest) {
   });
 }
 
+export type AuthenticatedExchangeContext = {
+  shop: ShopRow;
+  session: {
+    id: string;
+    customer: {
+      id: string;
+      shopId: string | null;
+      shopifyCustomerId: string | null;
+      firstName: string | null;
+      lastName: string | null;
+      fullName: string | null;
+      phoneE164: string | null;
+      email: string | null;
+    };
+  };
+};
+
 /**
  * Strict helper for shop-sensitive customer flows.
  * Requires request shop context and binds session to customer.shopId.
  */
-export async function getAuthenticatedExchangeCustomer(req: NextRequest) {
+export async function getAuthenticatedExchangeCustomer(
+  req: NextRequest
+): Promise<AuthenticatedExchangeContext | null> {
   const shop = await requireShopFromRequest(req);
   const sessionToken = getSessionToken(req);
 
@@ -85,8 +98,18 @@ export async function getAuthenticatedExchangeCustomer(req: NextRequest) {
 
   return {
     shop,
-    session,
+    session: {
+      id: session.id,
+      customer: {
+        id: session.customer.id,
+        shopId: session.customer.shopId,
+        shopifyCustomerId: session.customer.shopifyCustomerId,
+        firstName: session.customer.firstName,
+        lastName: session.customer.lastName,
+        fullName: session.customer.fullName,
+        phoneE164: session.customer.phoneE164,
+        email: session.customer.email,
+      },
+    },
   };
 }
-
-export { ShopResolutionError };
