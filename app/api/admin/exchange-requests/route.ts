@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "../../../../services/db/prisma";
+import {
+  requireShopFromRequest,
+  ShopResolutionError,
+} from "../../../../services/shopify/shop";
 
 function isAdmin(req: NextRequest) {
   const key = req.headers.get("x-admin-key") || "";
@@ -29,6 +33,8 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const shop = await requireShopFromRequest(req);
+
     const status = req.nextUrl.searchParams.get("status")?.trim();
     const orderNumber = req.nextUrl.searchParams.get("orderNumber")?.trim();
     const customerPhone = req.nextUrl.searchParams.get("customerPhone")?.trim();
@@ -38,14 +44,29 @@ export async function GET(req: NextRequest) {
 
     const data = await prisma.orderActionRequest.findMany({
       where: {
+        shopId: shop.id,
         requestType: "EXCHANGE",
         ...(status ? { status: status as never } : {}),
-        ...(orderNumber ? { orderNumber: { contains: orderNumber, mode: "insensitive" } } : {}),
-        ...(customerPhone
-          ? { customerPhoneSnapshot: { contains: customerPhone, mode: "insensitive" } }
+        ...(orderNumber
+          ? { orderNumber: { contains: orderNumber, mode: "insensitive" } }
           : {}),
-        ...(customerName ? { customerNameSnapshot: { contains: customerName, mode: "insensitive" } } : {}),
-        ...((startDate || endDate)
+        ...(customerPhone
+          ? {
+              customerPhoneSnapshot: {
+                contains: customerPhone,
+                mode: "insensitive",
+              },
+            }
+          : {}),
+        ...(customerName
+          ? {
+              customerNameSnapshot: {
+                contains: customerName,
+                mode: "insensitive",
+              },
+            }
+          : {}),
+        ...(startDate || endDate
           ? {
               requestedAt: {
                 ...(startDate ? { gte: startDate } : {}),
@@ -65,6 +86,10 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ requests: data });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Failed" }, { status: 500 });
+    const status = error instanceof ShopResolutionError ? error.status : 500;
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Failed" },
+      { status }
+    );
   }
 }
