@@ -32,8 +32,6 @@ type ShopifyLineItemNode = {
   variantTitle?: string | null;
   sku?: string | null;
   quantity?: number | null;
-  fulfillableQuantity?: number | null;
-  refundableQuantity?: number | null;
   originalUnitPriceSet?: ShopifyMoneySet | null;
   discountedTotalSet?: ShopifyMoneySet | null;
   discountedUnitPriceAfterAllDiscountsSet?: ShopifyMoneySet | null;
@@ -211,7 +209,13 @@ async function getRuntimeAdminAccessToken(shopDomain: string) {
   });
 
   const rawText = await response.text().catch(() => "");
-  const payload = rawText ? JSON.parse(rawText) as { access_token?: string; expires_in?: number | string } : null;
+  let payload: { access_token?: string; expires_in?: number | string } | null = null;
+  try {
+    payload = rawText ? (JSON.parse(rawText) as { access_token?: string; expires_in?: number | string }) : null;
+  } catch {
+    payload = null;
+  }
+
   if (!response.ok || !payload?.access_token) {
     throw new Error(`Failed to obtain Shopify Admin access token (${response.status})`);
   }
@@ -231,14 +235,20 @@ async function dashboardGraphql<T>(
   const shopConfig = await resolveShopConfig(preferredShopDomain);
   const shopDomain = shopConfig.shopDomain;
   const defaultShopDomain = normalizeShopDomain(getEnvTrimmed("SHOPIFY_STORE_DOMAIN"));
-  const staticFallbackToken = shopConfig.accessToken || getEnvTrimmed("SHOPIFY_ADMIN_ACCESS_TOKEN");
+  const runtimeConfigured = hasRuntimeCredentialConfig();
 
-  let token = staticFallbackToken;
-  let tokenSource: "shop_stored_token" | "runtime_client_credentials" | "env_fallback" = shopConfig.accessToken ? "shop_stored_token" : "env_fallback";
+  let token = "";
+  let tokenSource: "shop_stored_token" | "runtime_client_credentials" | "env_fallback" = "env_fallback";
 
-  if (!token && hasRuntimeCredentialConfig() && (!preferredShopDomain || preferredShopDomain === defaultShopDomain)) {
+  if (shopConfig.accessToken) {
+    token = shopConfig.accessToken;
+    tokenSource = "shop_stored_token";
+  } else if (runtimeConfigured && (!preferredShopDomain || preferredShopDomain === defaultShopDomain)) {
     token = await getRuntimeAdminAccessToken(shopDomain);
     tokenSource = "runtime_client_credentials";
+  } else {
+    token = getEnvTrimmed("SHOPIFY_ADMIN_ACCESS_TOKEN");
+    tokenSource = "env_fallback";
   }
 
   if (!shopDomain || !token) {
@@ -261,7 +271,13 @@ async function dashboardGraphql<T>(
   });
 
   const rawText = await response.text().catch(() => "");
-  const payload = rawText ? JSON.parse(rawText) as { data?: T; errors?: Array<{ message?: string }> } : null;
+  let payload: { data?: T; errors?: Array<{ message?: string }> } | null = null;
+  try {
+    payload = rawText ? (JSON.parse(rawText) as { data?: T; errors?: Array<{ message?: string }> }) : null;
+  } catch {
+    payload = null;
+  }
+
   if (!response.ok) {
     throw new Error(`Shopify dashboard request failed (${response.status}) ${rawText}`.trim());
   }
@@ -307,8 +323,8 @@ function mapOrder(order: ShopifyOrderNode): MegaskaDashboardOrder {
       variantTitle,
       sku: line.variant?.sku || line.sku || null,
       quantity: Number(line.quantity || 0),
-      fulfillableQuantity: typeof line.fulfillableQuantity === "number" ? line.fulfillableQuantity : null,
-      refundableQuantity: typeof line.refundableQuantity === "number" ? line.refundableQuantity : null,
+      fulfillableQuantity: null,
+      refundableQuantity: null,
       currentSize: getOptionValue(line, ["size", "Size"]),
       image,
       unitPrice: unitMoney?.amount || null,
@@ -427,8 +443,6 @@ const ORDER_FRAGMENT = `
       variantTitle
       sku
       quantity
-      fulfillableQuantity
-      refundableQuantity
       originalUnitPriceSet { shopMoney { amount currencyCode } }
       discountedTotalSet { shopMoney { amount currencyCode } }
       discountedUnitPriceAfterAllDiscountsSet { shopMoney { amount currencyCode } }
