@@ -416,22 +416,27 @@ async function adminGraphql<T>(
   const preferredShopDomain = normalizeShopDomain(options?.shopDomain);
   const shopConfig = await resolveShopConfig(preferredShopDomain);
   const shopDomain = shopConfig.shopDomain;
-  const staticFallbackToken = shopConfig.accessToken || getEnvTrimmed("SHOPIFY_ADMIN_ACCESS_TOKEN");
-  const runtimeConfigured = hasRuntimeCredentialConfig();
-  const defaultShopDomain = normalizeShopDomain(getEnvTrimmed("SHOPIFY_STORE_DOMAIN"));
+  const staticFallbackToken =
+  shopConfig.accessToken || getEnvTrimmed("SHOPIFY_ADMIN_ACCESS_TOKEN");
+const runtimeConfigured = hasRuntimeCredentialConfig();
 
- /* let token = "";
-  let tokenSource: "runtime_client_credentials" | "env_fallback" = "runtime_client_credentials";
-  if (runtimeConfigured) {
-  token = await getRuntimeAdminAccessToken(shopDomain);
+let token = "";
+let tokenSource:
+  | "shop_stored_token"
+  | "runtime_client_credentials"
+  | "env_fallback" = "env_fallback";
+
+if (runtimeConfigured) {
+  const runtimeToken = await getRuntimeAdminAccessToken(shopDomain);
+  token = runtimeToken.accessToken;
   tokenSource = "runtime_client_credentials";
 } else if (shopConfig.accessToken) {
   token = shopConfig.accessToken;
   tokenSource = "shop_stored_token";
 } else {
-  token = getEnvTrimmed("SHOPIFY_ADMIN_ACCESS_TOKEN");
+  token = staticFallbackToken;
   tokenSource = "env_fallback";
-}
+} 
   let token = "";
 let tokenSource: "shop_stored_token" | "runtime_client_credentials" | "env_fallback" = "env_fallback";
 
