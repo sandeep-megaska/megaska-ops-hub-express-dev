@@ -75,66 +75,9 @@ export async function GET(req: NextRequest) {
 
     const customer = session.customer;
 
-   let resolvedShopifyCustomerId = String(customer.shopifyCustomerId || "").trim();
+  let resolvedShopifyCustomerId = String(customer.shopifyCustomerId || "").trim();
 
-if (isShopifyAdminConfigured()) {
-  let emailMatchId = "";
-  let phoneMatchId = "";
-
-  // 1. Try EMAIL FIRST (more reliable)
-  if (customer.email) {
-    emailMatchId =
-      (await findShopifyCustomerIdByIdentity({
-        shopDomain: shop.shopDomain,
-        email: customer.email,
-      })) || "";
-  }
-
-  // 2. Try PHONE as fallback
-  if (!emailMatchId && customer.phoneE164) {
-    phoneMatchId =
-      (await findShopifyCustomerIdByIdentity({
-        shopDomain: shop.shopDomain,
-        phoneE164: customer.phoneE164,
-      })) || "";
-  }
-
-  const bestMatch = emailMatchId || phoneMatchId;
-
-  // 3. Override if better match found
-  if (bestMatch && bestMatch !== resolvedShopifyCustomerId) {
-    resolvedShopifyCustomerId = bestMatch;
-
-    await prisma.customerProfile.update({
-      where: { id: customer.id },
-      data: { shopifyCustomerId: bestMatch },
-    });
-  }
-}
-      if (customer.phoneE164) {
-        resolvedShopifyCustomerId =
-          (await findShopifyCustomerIdByIdentity({
-            shopDomain: shop.shopDomain,
-            phoneE164: customer.phoneE164,
-          })) || "";
-      }
-
-      if (!resolvedShopifyCustomerId && customer.email) {
-        resolvedShopifyCustomerId =
-          (await findShopifyCustomerIdByIdentity({
-            shopDomain: shop.shopDomain,
-            email: customer.email,
-          })) || "";
-      }
-
-      if (resolvedShopifyCustomerId) {
-        await prisma.customerProfile.update({
-          where: { id: customer.id },
-          data: { shopifyCustomerId: resolvedShopifyCustomerId },
-        });
-      }
-    }
-
+if (isShopifyAdminConfigured() && !resolvedShopifyCustomerId) {
     let shopifyDashboard = null;
 
 if (isShopifyAdminConfigured()) {
