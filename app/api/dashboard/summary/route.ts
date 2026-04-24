@@ -91,7 +91,9 @@ export async function GET(req: NextRequest) {
     if (isShopifyAdminConfigured()) {
       try {
         try {
-          const authProbe = await debugShopifyAdminAuth();
+          const authProbe = await debugShopifyAdminAuth({
+  shopDomain: shop.shopDomain,
+});
           console.log("[SHOPIFY AUTH PROBE] success", {
             shopName: authProbe?.shop?.name || null,
             myshopifyDomain: authProbe?.shop?.myshopifyDomain || null,
@@ -112,9 +114,10 @@ export async function GET(req: NextRequest) {
 
           if (customer.email) {
             resolvedShopifyCustomerId =
-              (await findShopifyCustomerIdByIdentity({
-                email: customer.email,
-              })) || "";
+              await findShopifyCustomerIdByIdentity({
+  shopDomain: shop.shopDomain,
+  email: customer.email,
+}))|| "";
 
             console.log("[DASHBOARD SUMMARY] email lookup result", {
               email: customer.email,
@@ -125,6 +128,7 @@ export async function GET(req: NextRequest) {
           if (!resolvedShopifyCustomerId && customer.phoneE164) {
             resolvedShopifyCustomerId =
               (await findShopifyCustomerIdByIdentity({
+                 shopDomain: shop.shopDomain,
                 phoneE164: customer.phoneE164,
               })) || "";
 
@@ -149,7 +153,10 @@ export async function GET(req: NextRequest) {
         }
 
         if (resolvedShopifyCustomerId) {
-          shopifyDashboard = await getShopifyCustomerDashboardData(resolvedShopifyCustomerId);
+         shopifyDashboard = await getShopifyCustomerDashboardData({
+  shopDomain: shop.shopDomain,
+  customerId: resolvedShopifyCustomerId,
+});
           const dashboard = shopifyDashboard;
           console.log("[DASHBOARD SUMMARY] dashboard data used", {
             shopId: shop.id,
