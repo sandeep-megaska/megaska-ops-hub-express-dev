@@ -112,12 +112,13 @@ export async function GET(req: NextRequest) {
             phoneE164: customer.phoneE164 || null,
           });
 
-          if (customer.email) {
-            resolvedShopifyCustomerId =
-              await findShopifyCustomerIdByIdentity({
-  shopDomain: shop.shopDomain,
-  email: customer.email,
-}))|| "";
+        if (customer.email) {
+  resolvedShopifyCustomerId =
+    (await findShopifyCustomerIdByIdentity({
+      shopDomain: shop.shopDomain,
+      email: customer.email,
+    })) || "";
+}
 
             console.log("[DASHBOARD SUMMARY] email lookup result", {
               email: customer.email,
