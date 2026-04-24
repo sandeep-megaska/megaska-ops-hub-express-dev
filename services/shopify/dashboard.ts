@@ -240,7 +240,7 @@ async function dashboardGraphql<T>(
   let token = "";
   let tokenSource: "shop_stored_token" | "runtime_client_credentials" | "env_fallback" = "env_fallback";
 
- if (runtimeConfigured && (!preferredShopDomain || preferredShopDomain === defaultShopDomain)) {
+if (runtimeConfigured) {
   token = await getRuntimeAdminAccessToken(shopDomain);
   tokenSource = "runtime_client_credentials";
 } else if (shopConfig.accessToken) {
