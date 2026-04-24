@@ -417,42 +417,31 @@ async function adminGraphql<T>(
   const shopConfig = await resolveShopConfig(preferredShopDomain);
   const shopDomain = shopConfig.shopDomain;
   const staticFallbackToken =
-  shopConfig.accessToken || getEnvTrimmed("SHOPIFY_ADMIN_ACCESS_TOKEN");
-const runtimeConfigured = hasRuntimeCredentialConfig();
+    shopConfig.accessToken || getEnvTrimmed("SHOPIFY_ADMIN_ACCESS_TOKEN");
+  const runtimeConfigured = hasRuntimeCredentialConfig();
 
-let token = "";
-let tokenSource:
-  | "shop_stored_token"
-  | "runtime_client_credentials"
-  | "env_fallback" = "env_fallback";
+  let token = "";
+  let tokenSource:
+    | "shop_stored_token"
+    | "runtime_client_credentials"
+    | "env_fallback" = "env_fallback";
 
-if (runtimeConfigured) {
-  const runtimeToken = await getRuntimeAdminAccessToken(shopDomain);
-  token = runtimeToken.accessToken;
-  tokenSource = "runtime_client_credentials";
-} else if (shopConfig.accessToken) {
-  token = shopConfig.accessToken;
-  tokenSource = "shop_stored_token";
-} else {
-  token = staticFallbackToken;
-  tokenSource = "env_fallback";
-} 
- let tokenSource: "shop_stored_token" | "runtime_client_credentials" | "env_fallback" = "env_fallback";
-
-if (runtimeConfigured && (!preferredShopDomain || preferredShopDomain === defaultShopDomain)) {
-  const runtimeToken = await getRuntimeAdminAccessToken(shopDomain);
-  token = runtimeToken.accessToken;
-  tokenSource = "runtime_client_credentials";
-} else if (shopConfig.accessToken) {
-  token = shopConfig.accessToken;
-  tokenSource = "shop_stored_token";
-} else {
-  token = staticFallbackToken;
-  tokenSource = "env_fallback";
-}
+  if (runtimeConfigured) {
+    const runtimeToken = await getRuntimeAdminAccessToken(shopDomain);
+    token = runtimeToken.accessToken;
+    tokenSource = "runtime_client_credentials";
+  } else if (shopConfig.accessToken) {
+    token = shopConfig.accessToken;
+    tokenSource = "shop_stored_token";
+  } else {
+    token = staticFallbackToken;
+    tokenSource = "env_fallback";
+  }
 
   if (!shopDomain || !token) {
-    throw new Error("Shopify admin sync is not configured (missing store domain or admin access token)");
+    throw new Error(
+      "Shopify admin sync is not configured (missing store domain or admin access token)"
+    );
   }
 
   console.log("[SHOPIFY AUTH SERVER] calling admin graphql", {
@@ -464,16 +453,20 @@ if (runtimeConfigured && (!preferredShopDomain || preferredShopDomain === defaul
     queryKind: query.includes("mutation") ? "mutation" : "query",
   });
 
-  const response = await fetch(`https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Shopify-Access-Token": token,
-    },
-    body: JSON.stringify({ query, variables: variables || {} }),
-  });
+  const response = await fetch(
+    `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Shopify-Access-Token": token,
+      },
+      body: JSON.stringify({ query, variables: variables || {} }),
+    }
+  );
 
   const rawText = await response.text().catch(() => "");
+
   let payload: {
     data?: T;
     errors?: Array<{ message?: string }>;
@@ -491,11 +484,17 @@ if (runtimeConfigured && (!preferredShopDomain || preferredShopDomain === defaul
   }
 
   if (!response.ok) {
-    throw new Error(`Shopify admin request failed (${response.status}) ${rawText || ""}`.trim());
+    throw new Error(
+      `Shopify admin request failed (${response.status}) ${rawText || ""}`.trim()
+    );
   }
 
   if (payload?.errors?.length) {
-    const message = payload.errors.map((error) => error.message).filter(Boolean).join(", ");
+    const message = payload.errors
+      .map((error) => error.message)
+      .filter(Boolean)
+      .join(", ");
+
     throw new Error(message || "Shopify admin GraphQL error");
   }
 
@@ -505,7 +504,6 @@ if (runtimeConfigured && (!preferredShopDomain || preferredShopDomain === defaul
 
   return payload.data;
 }
-
 export function isShopifyAdminConfigured() {
   return Boolean(getEnvTrimmed("SHOPIFY_STORE_DOMAIN") && (hasRuntimeCredentialConfig() || getEnvTrimmed("SHOPIFY_ADMIN_ACCESS_TOKEN")));
 }
