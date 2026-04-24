@@ -89,102 +89,97 @@ export async function GET(req: NextRequest) {
     });
 
     if (isShopifyAdminConfigured()) {
-      try {
-        try {
-          const authProbe = await debugShopifyAdminAuth({
-  shopDomain: shop.shopDomain,
-});
-          console.log("[SHOPIFY AUTH PROBE] success", {
-            shopName: authProbe?.shop?.name || null,
-            myshopifyDomain: authProbe?.shop?.myshopifyDomain || null,
-          });
-        } catch (error) {
-          console.error("[SHOPIFY AUTH PROBE] failed", {
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
+  try {
+    try {
+      const authProbe = await debugShopifyAdminAuth({
+        shopDomain: shop.shopDomain,
+      });
 
-        if (!resolvedShopifyCustomerId) {
-          console.log("[DASHBOARD SUMMARY] resolving Shopify customer identity", {
-            shopId: shop.id,
+      console.log("[SHOPIFY AUTH PROBE] success", {
+        shopName: authProbe?.shop?.name || null,
+        myshopifyDomain: authProbe?.shop?.myshopifyDomain || null,
+      });
+    } catch (error) {
+      console.error("[SHOPIFY AUTH PROBE] failed", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    if (!resolvedShopifyCustomerId) {
+      console.log("[DASHBOARD SUMMARY] resolving Shopify customer identity", {
+        shopId: shop.id,
+        shopDomain: shop.shopDomain,
+        email: customer.email || null,
+        phoneE164: customer.phoneE164 || null,
+      });
+
+      if (customer.phoneE164) {
+        resolvedShopifyCustomerId =
+          (await findShopifyCustomerIdByIdentity({
             shopDomain: shop.shopDomain,
-            email: customer.email || null,
-            phoneE164: customer.phoneE164 || null,
-          });
+            phoneE164: customer.phoneE164,
+          })) || "";
 
-        if (customer.email) {
-  resolvedShopifyCustomerId =
-    (await findShopifyCustomerIdByIdentity({
-      shopDomain: shop.shopDomain,
-      email: customer.email,
-    })) || "";
-}
+        console.log("[DASHBOARD SUMMARY] phone lookup result", {
+          phoneE164: customer.phoneE164,
+          resolvedShopifyCustomerId: resolvedShopifyCustomerId || null,
+        });
+      }
 
-            console.log("[DASHBOARD SUMMARY] email lookup result", {
-              email: customer.email,
-              resolvedShopifyCustomerId: resolvedShopifyCustomerId || null,
-            });
-          }
+      if (!resolvedShopifyCustomerId && customer.email) {
+        resolvedShopifyCustomerId =
+          (await findShopifyCustomerIdByIdentity({
+            shopDomain: shop.shopDomain,
+            email: customer.email,
+          })) || "";
 
-          if (!resolvedShopifyCustomerId && customer.phoneE164) {
-            resolvedShopifyCustomerId =
-              (await findShopifyCustomerIdByIdentity({
-                 shopDomain: shop.shopDomain,
-                phoneE164: customer.phoneE164,
-              })) || "";
+        console.log("[DASHBOARD SUMMARY] email lookup result", {
+          email: customer.email,
+          resolvedShopifyCustomerId: resolvedShopifyCustomerId || null,
+        });
+      }
 
-            console.log("[DASHBOARD SUMMARY] phone lookup result", {
-              phoneE164: customer.phoneE164,
-              resolvedShopifyCustomerId: resolvedShopifyCustomerId || null,
-            });
-          }
+      if (resolvedShopifyCustomerId) {
+        await prisma.customerProfile.update({
+          where: { id: customer.id },
+          data: { shopifyCustomerId: resolvedShopifyCustomerId },
+        });
 
-          if (resolvedShopifyCustomerId) {
-            await prisma.customerProfile.update({
-              where: { id: customer.id },
-              data: { shopifyCustomerId: resolvedShopifyCustomerId },
-            });
-
-            console.log("[DASHBOARD SUMMARY] saved resolved Shopify customer id", {
-              shopId: shop.id,
-              customerId: customer.id,
-              resolvedShopifyCustomerId,
-            });
-          }
-        }
-
-        if (resolvedShopifyCustomerId) {
-         shopifyDashboard = await getShopifyCustomerDashboardData({
-  shopDomain: shop.shopDomain,
-  customerId: resolvedShopifyCustomerId,
-});
-          const dashboard = shopifyDashboard;
-          console.log("[DASHBOARD SUMMARY] dashboard data used", {
-            shopId: shop.id,
-            resolvedShopifyCustomerId,
-            totalOrderCount: dashboard?.totalOrderCount ?? null,
-            recentOrdersCount: dashboard?.recentOrders?.length ?? null,
-            hasDefaultAddress: Boolean(dashboard?.defaultAddress),
-          });
-          console.log("[DASHBOARD SUMMARY] dashboard result", {
-            shopId: shop.id,
-            resolvedShopifyCustomerId,
-            foundEmail: shopifyDashboard?.email || null,
-            totalOrderCount: shopifyDashboard?.totalOrderCount || 0,
-            recentOrdersCount: Array.isArray(shopifyDashboard?.recentOrders)
-              ? shopifyDashboard.recentOrders.length
-              : 0,
-            hasDefaultAddress: Boolean(shopifyDashboard?.defaultAddress),
-          });
-        } else {
-          console.log("[DASHBOARD SUMMARY] no Shopify customer resolved", {
-            shopId: shop.id,
-          });
-        }
-      } catch (error) {
-        console.error("[DASHBOARD SUMMARY] Shopify customer fetch failed", error);
+        console.log("[DASHBOARD SUMMARY] saved resolved Shopify customer id", {
+          shopId: shop.id,
+          customerId: customer.id,
+          resolvedShopifyCustomerId,
+        });
       }
     }
+
+    if (resolvedShopifyCustomerId) {
+      shopifyDashboard = await getShopifyCustomerDashboardData({
+        shopDomain: shop.shopDomain,
+        customerId: resolvedShopifyCustomerId,
+      });
+
+      console.log("[DASHBOARD SUMMARY] dashboard result", {
+        shopId: shop.id,
+        shopDomain: shop.shopDomain,
+        resolvedShopifyCustomerId,
+        foundEmail: shopifyDashboard?.email || null,
+        totalOrderCount: shopifyDashboard?.totalOrderCount || 0,
+        recentOrdersCount: Array.isArray(shopifyDashboard?.recentOrders)
+          ? shopifyDashboard.recentOrders.length
+          : 0,
+        hasDefaultAddress: Boolean(shopifyDashboard?.defaultAddress),
+      });
+    } else {
+      console.log("[DASHBOARD SUMMARY] no Shopify customer resolved", {
+        shopId: shop.id,
+        shopDomain: shop.shopDomain,
+      });
+    }
+  } catch (error) {
+    console.error("[DASHBOARD SUMMARY] Shopify customer fetch failed", error);
+  }
+}
 
     const savedAddressCount = shopifyDashboard?.defaultAddress
       ? 1
