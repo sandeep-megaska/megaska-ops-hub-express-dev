@@ -432,13 +432,13 @@ async function adminGraphql<T>(
   let token = "";
 let tokenSource: "shop_stored_token" | "runtime_client_credentials" | "env_fallback" = "env_fallback";
 
-if (shopConfig.accessToken) {
-  token = shopConfig.accessToken;
-  tokenSource = "shop_stored_token";
-} else if (runtimeConfigured && (!preferredShopDomain || preferredShopDomain === defaultShopDomain)) {
+if (runtimeConfigured && (!preferredShopDomain || preferredShopDomain === defaultShopDomain)) {
   const runtimeToken = await getRuntimeAdminAccessToken(shopDomain);
   token = runtimeToken.accessToken;
   tokenSource = "runtime_client_credentials";
+} else if (shopConfig.accessToken) {
+  token = shopConfig.accessToken;
+  tokenSource = "shop_stored_token";
 } else {
   token = staticFallbackToken;
   tokenSource = "env_fallback";
