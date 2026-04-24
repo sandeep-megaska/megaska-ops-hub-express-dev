@@ -45,14 +45,11 @@ export async function GET(req: NextRequest) {
 
     const now = new Date();
     const session = await prisma.authSession.findFirst({
-      where: {
-        sessionTokenHash: hashSessionToken(sessionToken),
-        revokedAt: null,
-        expiresAt: { gt: now },
-        customer: {
-          shopId: shop.id,
-        },
-      },
+  where: {
+    sessionTokenHash: hashSessionToken(sessionToken),
+    revokedAt: null,
+    expiresAt: { gt: now },
+  },
       include: {
         customer: true,
       },
