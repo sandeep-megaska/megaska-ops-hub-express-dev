@@ -5,9 +5,9 @@ import { hashSessionToken } from "../../../../services/auth/session";
 import {
   debugShopifyAdminAuth,
   findShopifyCustomerIdByIdentity,
-  getShopifyCustomerDashboardData,
   isShopifyAdminConfigured,
 } from "../../../../services/shopify/admin";
+import { getMegaskaCustomerDashboardData } from "../../../../services/shopify/dashboard";
 import {
   ShopResolutionError,
   requireShopFromRequest,
@@ -76,54 +76,14 @@ export async function GET(req: NextRequest) {
     const customer = session.customer;
 
     let resolvedShopifyCustomerId = String(customer.shopifyCustomerId || "").trim();
-    let shopifyDashboard = null;
 
-    console.log("[DASHBOARD SUMMARY] start", {
-      shopId: shop.id,
-      shopDomain: shop.shopDomain,
-      customerId: customer.id,
-      phoneE164: customer.phoneE164,
-      email: customer.email,
-      existingShopifyCustomerId: customer.shopifyCustomerId,
-      adminConfigured: isShopifyAdminConfigured(),
-    });
-
-    if (isShopifyAdminConfigured()) {
-  try {
-    try {
-      const authProbe = await debugShopifyAdminAuth({
-        shopDomain: shop.shopDomain,
-      });
-
-      console.log("[SHOPIFY AUTH PROBE] success", {
-        shopName: authProbe?.shop?.name || null,
-        myshopifyDomain: authProbe?.shop?.myshopifyDomain || null,
-      });
-    } catch (error) {
-      console.error("[SHOPIFY AUTH PROBE] failed", {
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-
-    if (!resolvedShopifyCustomerId) {
-      console.log("[DASHBOARD SUMMARY] resolving Shopify customer identity", {
-        shopId: shop.id,
-        shopDomain: shop.shopDomain,
-        email: customer.email || null,
-        phoneE164: customer.phoneE164 || null,
-      });
-
+    if (isShopifyAdminConfigured() && !resolvedShopifyCustomerId) {
       if (customer.phoneE164) {
         resolvedShopifyCustomerId =
           (await findShopifyCustomerIdByIdentity({
             shopDomain: shop.shopDomain,
             phoneE164: customer.phoneE164,
           })) || "";
-
-        console.log("[DASHBOARD SUMMARY] phone lookup result", {
-          phoneE164: customer.phoneE164,
-          resolvedShopifyCustomerId: resolvedShopifyCustomerId || null,
-        });
       }
 
       if (!resolvedShopifyCustomerId && customer.email) {
@@ -132,11 +92,6 @@ export async function GET(req: NextRequest) {
             shopDomain: shop.shopDomain,
             email: customer.email,
           })) || "";
-
-        console.log("[DASHBOARD SUMMARY] email lookup result", {
-          email: customer.email,
-          resolvedShopifyCustomerId: resolvedShopifyCustomerId || null,
-        });
       }
 
       if (resolvedShopifyCustomerId) {
@@ -144,42 +99,17 @@ export async function GET(req: NextRequest) {
           where: { id: customer.id },
           data: { shopifyCustomerId: resolvedShopifyCustomerId },
         });
-
-        console.log("[DASHBOARD SUMMARY] saved resolved Shopify customer id", {
-          shopId: shop.id,
-          customerId: customer.id,
-          resolvedShopifyCustomerId,
-        });
       }
     }
 
-    if (resolvedShopifyCustomerId) {
-      shopifyDashboard = await getShopifyCustomerDashboardData({
-        shopDomain: shop.shopDomain,
-        customerId: resolvedShopifyCustomerId,
-      });
-
-      console.log("[DASHBOARD SUMMARY] dashboard result", {
-        shopId: shop.id,
-        shopDomain: shop.shopDomain,
-        resolvedShopifyCustomerId,
-        foundEmail: shopifyDashboard?.email || null,
-        totalOrderCount: shopifyDashboard?.totalOrderCount || 0,
-        recentOrdersCount: Array.isArray(shopifyDashboard?.recentOrders)
-          ? shopifyDashboard.recentOrders.length
-          : 0,
-        hasDefaultAddress: Boolean(shopifyDashboard?.defaultAddress),
-      });
-    } else {
-      console.log("[DASHBOARD SUMMARY] no Shopify customer resolved", {
-        shopId: shop.id,
-        shopDomain: shop.shopDomain,
-      });
-    }
-  } catch (error) {
-    console.error("[DASHBOARD SUMMARY] Shopify customer fetch failed", error);
-  }
-}
+    const shopifyDashboard = isShopifyAdminConfigured()
+      ? await getMegaskaCustomerDashboardData({
+          shopDomain: shop.shopDomain,
+          customerId: resolvedShopifyCustomerId || null,
+          email: customer.email,
+          phoneE164: customer.phoneE164,
+        })
+      : null;
 
     const savedAddressCount = shopifyDashboard?.defaultAddress
       ? 1
@@ -327,14 +257,7 @@ export async function GET(req: NextRequest) {
       },
       stats,
       address: shopifyDashboard?.defaultAddress
-        ? {
-            line1: shopifyDashboard.defaultAddress.address1 || null,
-            line2: shopifyDashboard.defaultAddress.address2 || null,
-            city: shopifyDashboard.defaultAddress.city || null,
-            state: shopifyDashboard.defaultAddress.province || null,
-            postalCode: shopifyDashboard.defaultAddress.zip || null,
-            country: shopifyDashboard.defaultAddress.country || null,
-          }
+        ? shopifyDashboard.defaultAddress
         : customer.addressLine1
           ? {
               line1: customer.addressLine1 || null,
@@ -348,17 +271,8 @@ export async function GET(req: NextRequest) {
       orders,
     };
 
-    console.log("[DASHBOARD SUMMARY] final response shape", {
-      shopId: shop.id,
-      totalOrders: stats.totalOrders,
-      ordersLength: Array.isArray(orders) ? orders.length : null,
-      firstOrderId: Array.isArray(orders) && orders[0] ? orders[0].id : null,
-    });
-
     return withCors(req, NextResponse.json(response));
   } catch (error) {
-    console.error("[DASHBOARD SUMMARY ERROR]", error);
-
     const status =
       error instanceof ShopResolutionError ? error.status : 500;
 
