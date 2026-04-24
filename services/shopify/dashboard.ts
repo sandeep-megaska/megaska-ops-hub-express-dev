@@ -240,16 +240,16 @@ async function dashboardGraphql<T>(
   let token = "";
   let tokenSource: "shop_stored_token" | "runtime_client_credentials" | "env_fallback" = "env_fallback";
 
-  if (shopConfig.accessToken) {
-    token = shopConfig.accessToken;
-    tokenSource = "shop_stored_token";
-  } else if (runtimeConfigured && (!preferredShopDomain || preferredShopDomain === defaultShopDomain)) {
-    token = await getRuntimeAdminAccessToken(shopDomain);
-    tokenSource = "runtime_client_credentials";
-  } else {
-    token = getEnvTrimmed("SHOPIFY_ADMIN_ACCESS_TOKEN");
-    tokenSource = "env_fallback";
-  }
+ if (runtimeConfigured && (!preferredShopDomain || preferredShopDomain === defaultShopDomain)) {
+  token = await getRuntimeAdminAccessToken(shopDomain);
+  tokenSource = "runtime_client_credentials";
+} else if (shopConfig.accessToken) {
+  token = shopConfig.accessToken;
+  tokenSource = "shop_stored_token";
+} else {
+  token = getEnvTrimmed("SHOPIFY_ADMIN_ACCESS_TOKEN");
+  tokenSource = "env_fallback";
+}
 
   if (!shopDomain || !token) {
     throw new Error("Shopify dashboard sync is not configured for this shop");
