@@ -77,8 +77,39 @@ export async function GET(req: NextRequest) {
 
   let resolvedShopifyCustomerId = String(customer.shopifyCustomerId || "").trim();
 
-if (isShopifyAdminConfigured() && !resolvedShopifyCustomerId) {
-    let shopifyDashboard = null;
+if (isShopifyAdminConfigured()) {
+  let emailMatchId = "";
+  let phoneMatchId = "";
+
+  if (customer.email) {
+    emailMatchId =
+      (await findShopifyCustomerIdByIdentity({
+        shopDomain: shop.shopDomain,
+        email: customer.email,
+      })) || "";
+  }
+
+  if (!emailMatchId && customer.phoneE164) {
+    phoneMatchId =
+      (await findShopifyCustomerIdByIdentity({
+        shopDomain: shop.shopDomain,
+        phoneE164: customer.phoneE164,
+      })) || "";
+  }
+
+  const bestMatch = emailMatchId || phoneMatchId;
+
+  if (bestMatch && bestMatch !== resolvedShopifyCustomerId) {
+    resolvedShopifyCustomerId = bestMatch;
+
+    await prisma.customerProfile.update({
+      where: { id: customer.id },
+      data: { shopifyCustomerId: bestMatch },
+    });
+  }
+}
+
+let shopifyDashboard = null;    let shopifyDashboard = null;
 
 if (isShopifyAdminConfigured()) {
   try {
