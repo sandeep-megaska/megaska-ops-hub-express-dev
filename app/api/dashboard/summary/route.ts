@@ -109,7 +109,7 @@ if (isShopifyAdminConfigured()) {
   }
 }
 
-let shopifyDashboard = null;    let shopifyDashboard = null;
+let shopifyDashboard = null;    
 
 if (isShopifyAdminConfigured()) {
   try {
