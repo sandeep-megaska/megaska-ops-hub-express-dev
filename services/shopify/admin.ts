@@ -38,6 +38,7 @@ type ShopifyCustomerSyncResult = {
 };
 
 type ShopifyCustomerLookupInput = {
+  shopDomain?: string | null;
   email?: string | null;
   phoneE164?: string | null;
 };
@@ -503,7 +504,7 @@ export function isShopifyAdminConfigured() {
 }
 
 
-export async function debugShopifyAdminAuth() {
+export async function debugShopifyAdminAuth(options?: AdminRequestOptions) {
   return adminGraphql<{
     shop: {
       name: string;
@@ -517,10 +518,15 @@ export async function debugShopifyAdminAuth() {
           myshopifyDomain
         }
       }
-    `
+    `,
+    {},
+    options
   );
 }
-async function findCustomerByQuery(query: string): Promise<ShopifyCustomerNode | null> {
+async function findCustomerByQuery(
+  query: string,
+  options?: AdminRequestOptions
+): Promise<ShopifyCustomerNode | null> {
   const data = await adminGraphql<{
     customers: {
       edges: Array<{ node: ShopifyCustomerNode }>;
@@ -539,7 +545,8 @@ async function findCustomerByQuery(query: string): Promise<ShopifyCustomerNode |
         }
       }
     `,
-    { query }
+    { query },
+    options
   );
 
   return data.customers.edges[0]?.node || null;
@@ -550,16 +557,19 @@ export async function findShopifyCustomerIdByIdentity(
 ): Promise<string | null> {
   const email = normalizeEmail(input.email);
   const phone = normalizeIndianPhoneToE164(input.phoneE164);
+  const options: AdminRequestOptions = {
+    shopDomain: input.shopDomain ?? null,
+  };
 
-  if (email) {
-    const customer = await findCustomerByQuery(`email:${email}`);
+  if (phone) {
+    const customer = await findCustomerByQuery(`phone:${phone}`, options);
     if (customer?.id) {
       return parseCustomerId(customer.id);
     }
   }
 
-  if (phone) {
-    const customer = await findCustomerByQuery(`phone:${phone}`);
+  if (email) {
+    const customer = await findCustomerByQuery(`email:${email}`, options);
     if (customer?.id) {
       return parseCustomerId(customer.id);
     }
@@ -567,7 +577,6 @@ export async function findShopifyCustomerIdByIdentity(
 
   return null;
 }
-
 async function createCustomer(input: ShopifyCustomerSyncInput) {
   const { firstName, lastName } = splitName(input.fullName);
   const email = normalizeEmail(input.email);
@@ -738,15 +747,22 @@ export async function updateShopifyOrderEmail(
   return data.orderUpdate;
 }
 
-export async function getShopifyCustomerDashboardData(
-  customerId: string
-): Promise<ShopifyCustomerDashboardData | null> {
+export async function getShopifyCustomerDashboardData(input: {
+  customerId: string;
+  shopDomain?: string | null;
+}): Promise<ShopifyCustomerDashboardData | null> {
+  const customerId = String(input.customerId || "").trim();
   const customerGid = resolveCustomerGid(customerId);
   if (!customerGid) return null;
+
+  const options: AdminRequestOptions = {
+    shopDomain: input.shopDomain ?? null,
+  };
 
   console.log("[SHOPIFY DASHBOARD] fetch customer dashboard", {
     inputCustomerId: customerId,
     customerGid,
+    shopDomain: input.shopDomain || null,
   });
 
   const data = await adminGraphql<{
@@ -755,7 +771,7 @@ export async function getShopifyCustomerDashboardData(
       phone?: string | null;
       numberOfOrders?: string | number | null;
       defaultAddress?: ShopifyMailingAddress | null;
-      orders: {
+      orders?: {
         nodes: Array<{
           id: string;
           name?: string | null;
@@ -766,8 +782,33 @@ export async function getShopifyCustomerDashboardData(
           currentTotalPriceSet?: {
             shopMoney?: ShopifyMoney | null;
           } | null;
+          lineItems?: {
+            nodes?: Array<{
+              id: string;
+              title?: string | null;
+              variantTitle?: string | null;
+              sku?: string | null;
+              quantity?: number | null;
+              image?: {
+                url?: string | null;
+              } | null;
+              product?: {
+                title?: string | null;
+                featuredImage?: {
+                  url?: string | null;
+                } | null;
+              } | null;
+              variant?: {
+                title?: string | null;
+                sku?: string | null;
+                image?: {
+                  url?: string | null;
+                } | null;
+              } | null;
+            }>;
+          } | null;
         }>;
-      };
+      } | null;
     } | null;
   }>(
     `
@@ -801,15 +842,43 @@ export async function getShopifyCustomerDashboardData(
                   currencyCode
                 }
               }
+              lineItems(first: 5) {
+                nodes {
+                  id
+                  title
+                  variantTitle
+                  sku
+                  quantity
+                  image {
+                    url
+                  }
+                  product {
+                    title
+                    featuredImage {
+                      url
+                    }
+                  }
+                  variant {
+                    title
+                    sku
+                    image {
+                      url
+                    }
+                  }
+                }
+              }
             }
           }
         }
       }
     `,
-    { id: customerGid }
+    { id: customerGid },
+    options
   );
+
   console.log("[SHOPIFY DASHBOARD] raw customer result", {
     customerGid,
+    shopDomain: input.shopDomain || null,
     foundCustomer: Boolean(data.customer),
     email: data.customer?.email || null,
     phone: data.customer?.phone || null,
@@ -827,6 +896,23 @@ export async function getShopifyCustomerDashboardData(
       : Number.parseInt(String(totalOrderCountRaw || "0"), 10) || 0;
 
   const mappedRecentOrders = (customer.orders?.nodes || []).map((order) => {
+    const firstLine = order.lineItems?.nodes?.[0] || null;
+    const productTitle =
+      firstLine?.product?.title ||
+      firstLine?.title ||
+      order.name ||
+      "Order";
+    const variantTitle =
+      firstLine?.variant?.title ||
+      firstLine?.variantTitle ||
+      null;
+    const sku = firstLine?.variant?.sku || firstLine?.sku || null;
+    const image =
+      firstLine?.variant?.image?.url ||
+      firstLine?.image?.url ||
+      firstLine?.product?.featuredImage?.url ||
+      null;
+
     return {
       id: order.id,
       shopifyOrderId: order.id,
@@ -838,17 +924,22 @@ export async function getShopifyCustomerDashboardData(
       fulfillmentStatus: order.displayFulfillmentStatus || null,
       deliveredAt: order.processedAt || null,
       statusPageUrl: order.statusPageUrl || null,
-      displayTitle: String(order.name || "Order").trim() || "Order",
-      displayImage: null,
-      itemsCount: null,
-      firstLineItemId: null,
-      firstLineItemTitle: null,
-      firstLineItemVariantTitle: null,
-      firstLineItemSku: null,
+      displayTitle: String(productTitle || "Order").trim() || "Order",
+      displayImage: image,
+      itemsCount: order.lineItems?.nodes?.length || null,
+      firstLineItemId: firstLine?.id || null,
+      firstLineItemTitle: productTitle || null,
+      firstLineItemVariantTitle: variantTitle,
+      firstLineItemSku: sku,
     };
   });
 
-  console.log("[DEBUG ORDERS RAW]", JSON.stringify(mappedRecentOrders, null, 2));
+  console.log("[DEBUG ORDERS RAW]", {
+    customerGid,
+    totalOrderCount,
+    mappedRecentOrdersCount: mappedRecentOrders.length,
+    firstOrder: mappedRecentOrders[0] || null,
+  });
 
   return {
     email: customer.email || null,
@@ -858,7 +949,6 @@ export async function getShopifyCustomerDashboardData(
     recentOrders: mappedRecentOrders,
   };
 }
-
 export async function findOrCreateShopifyCustomer(
   input: ShopifyCustomerSyncInput
 ): Promise<ShopifyCustomerSyncResult> {
