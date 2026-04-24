@@ -102,14 +102,24 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const shopifyDashboard = isShopifyAdminConfigured()
-      ? await getMegaskaCustomerDashboardData({
-          shopDomain: shop.shopDomain,
-          customerId: resolvedShopifyCustomerId || null,
-          email: customer.email,
-          phoneE164: customer.phoneE164,
-        })
-      : null;
+    let shopifyDashboard = null;
+
+if (isShopifyAdminConfigured()) {
+  try {
+    shopifyDashboard = await getMegaskaCustomerDashboardData({
+      shopDomain: shop.shopDomain,
+      customerId: resolvedShopifyCustomerId || null,
+      email: customer.email,
+      phoneE164: customer.phoneE164,
+    });
+  } catch (error) {
+    console.error("[DASHBOARD SUMMARY] Shopify dashboard fetch failed", {
+      shopId: shop.id,
+      shopDomain: shop.shopDomain,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
 
     const savedAddressCount = shopifyDashboard?.defaultAddress
       ? 1
