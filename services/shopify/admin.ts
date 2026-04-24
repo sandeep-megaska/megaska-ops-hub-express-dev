@@ -437,8 +437,7 @@ if (runtimeConfigured) {
   token = staticFallbackToken;
   tokenSource = "env_fallback";
 } 
-  let token = "";
-let tokenSource: "shop_stored_token" | "runtime_client_credentials" | "env_fallback" = "env_fallback";
+ let tokenSource: "shop_stored_token" | "runtime_client_credentials" | "env_fallback" = "env_fallback";
 
 if (runtimeConfigured && (!preferredShopDomain || preferredShopDomain === defaultShopDomain)) {
   const runtimeToken = await getRuntimeAdminAccessToken(shopDomain);
