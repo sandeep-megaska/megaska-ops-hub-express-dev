@@ -1,5 +1,6 @@
 import { allowedStatusTransitions } from "../../../../services/exchange/lifecycle";
 import { prisma } from "../../../../services/db/prisma";
+import { getShopByDomain, normalizeShopDomain } from "../../../../services/shopify/shop";
 import ExchangeLifecycleControls from "./ExchangeLifecycleControls";
 
 export const dynamic = "force-dynamic";
@@ -11,22 +12,54 @@ function getStockReviewNote(snapshot: unknown) {
   return value || null;
 }
 
-function getOptionalDateValue(record: unknown, key: string) {
-  if (!record || typeof record !== "object") return null;
-  const value = (record as Record<string, unknown>)[key];
-  return value instanceof Date ? value.toISOString() : null;
+function formatDate(value: Date | null | undefined) {
+  if (!value) return "—";
+  return value.toISOString();
 }
 
-function getOptionalStringValue(record: unknown, key: string) {
-  if (!record || typeof record !== "object") return null;
-  const value = (record as Record<string, unknown>)[key];
-  return typeof value === "string" && value.trim() ? value : null;
+function statusBadgeClass(status: string) {
+  if (["REJECTED"].includes(status)) return "bg-red-100 text-red-700 border-red-200";
+  if (["CLOSED"].includes(status)) return "bg-emerald-100 text-emerald-700 border-emerald-200";
+  if (["APPROVED", "PAYMENT_RECEIVED", "REPLACEMENT_SHIPPED"].includes(status)) {
+    return "bg-indigo-100 text-indigo-700 border-indigo-200";
+  }
+  return "bg-amber-100 text-amber-700 border-amber-200";
 }
 
-export default async function AdminExchangeDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function AdminExchangeDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ shop?: string }>;
+}) {
   const { id } = await params;
+  const parsedSearch = await searchParams;
+  const shopDomain = normalizeShopDomain(parsedSearch?.shop);
+
+  if (!shopDomain) {
+    return (
+      <main className="p-8">
+        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-red-700">
+          Missing shop context. Open this page from the exchanges list so the <code>shop</code> query param is present.
+        </div>
+      </main>
+    );
+  }
+
+  const shop = await getShopByDomain(shopDomain);
+  if (!shop) {
+    return (
+      <main className="p-8">
+        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-red-700">
+          Shop not found for domain: {shopDomain}
+        </div>
+      </main>
+    );
+  }
+
   const request = await prisma.orderActionRequest.findFirst({
-    where: { id, requestType: "EXCHANGE" },
+    where: { id, requestType: "EXCHANGE", shopId: shop.id },
     include: {
       items: true,
       payments: { orderBy: { createdAt: "desc" } },
@@ -35,89 +68,106 @@ export default async function AdminExchangeDetailPage({ params }: { params: Prom
   });
 
   if (!request) {
-    return <main style={{ padding: 24 }}>Exchange request not found.</main>;
+    return <main className="p-8">Exchange request not found.</main>;
   }
 
-  const reverseShipment = request.shipments.find((shipment) => shipment.direction === "REVERSE_PICKUP");
-  const forwardShipment = request.shipments.find((shipment) => shipment.direction === "FORWARD_REPLACEMENT");
+  const reverseShipment = request.shipments.find((shipment) => shipment.direction === "REVERSE_PICKUP") || null;
+  const forwardShipment = request.shipments.find((shipment) => shipment.direction === "FORWARD_REPLACEMENT") || null;
   const nextTransitions = allowedStatusTransitions[request.status] || [];
 
   return (
-    <main style={{ padding: 24, display: "grid", gap: 16 }}>
-      <h1>Exchange Request {request.id}</h1>
+    <main className="grid gap-6 p-8">
+      <section className="rounded-xl border bg-white p-6 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-semibold text-slate-900">Exchange Request #{request.id}</h1>
+            <p className="mt-1 text-sm text-slate-500">Order {request.orderNumber || "—"}</p>
+          </div>
+          <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${statusBadgeClass(request.status)}`}>
+            {request.status}
+          </span>
+        </div>
 
-      <section>
-        <h3>Request Summary</h3>
-        <p>Status: {request.status}</p>
-        <p>Allowed Next Statuses: {nextTransitions.length ? nextTransitions.join(", ") : "None (terminal)"}</p>
-        <p>Requested At: {request.requestedAt.toISOString()}</p>
-        <p>Last Updated: {request.updatedAt.toISOString()}</p>
-        <p>Request Type: {request.requestType}</p>
-        <p>Reason: {request.reason || "-"}</p>
-        <p>Customer Note: {request.customerNote || "-"}</p>
-        <p>Admin Note: {request.adminNote || "-"}</p>
+        <div className="mt-5 grid gap-4 text-sm md:grid-cols-2 xl:grid-cols-3">
+          <div>
+            <p className="text-slate-500">Customer</p>
+            <p className="font-medium text-slate-900">{request.customerNameSnapshot || "—"}</p>
+          </div>
+          <div>
+            <p className="text-slate-500">Phone</p>
+            <p className="font-medium text-slate-900">{request.customerPhoneSnapshot || "—"}</p>
+          </div>
+          <div>
+            <p className="text-slate-500">Email</p>
+            <p className="font-medium text-slate-900">{request.customerEmailSnapshot || "—"}</p>
+          </div>
+          <div>
+            <p className="text-slate-500">Requested Date</p>
+            <p className="font-medium text-slate-900">{formatDate(request.requestedAt)}</p>
+          </div>
+          <div>
+            <p className="text-slate-500">Last Updated</p>
+            <p className="font-medium text-slate-900">{formatDate(request.updatedAt)}</p>
+          </div>
+          <div>
+            <p className="text-slate-500">Shop</p>
+            <p className="font-medium text-slate-900">{shop.shopDomain}</p>
+          </div>
+        </div>
       </section>
 
-      <section>
-        <h3>Customer Summary</h3>
-        <p>Name: {request.customerNameSnapshot || "-"}</p>
-        <p>Phone: {request.customerPhoneSnapshot || "-"}</p>
-        <p>Email: {request.customerEmailSnapshot || "-"}</p>
-      </section>
-
-      <section>
-        <h3>Order / Item Summary</h3>
-        <p>Order Number: {request.orderNumber}</p>
-        <p>Order Amount: {request.orderAmountSnapshot || "-"}</p>
-        <p>Delivery Date: {request.deliveryDateSnapshot?.toISOString() || "-"}</p>
-        {request.items.map((item) => (
-          <article key={item.id} style={{ border: "1px solid #ddd", padding: 12, marginTop: 8 }}>
-            <p>Product: {item.productTitle}</p>
-            <p>Variant: {item.variantTitle || "-"}</p>
-            <p>Current Size: {item.currentSize || "-"}</p>
-            <p>Requested Size: {item.requestedSize}</p>
-            <p>Quantity: {item.quantity}</p>
-            <p>Stock Review Note: {getStockReviewNote(item.eligibilitySnapshot) || "-"}</p>
-          </article>
-        ))}
-      </section>
-
-      <section>
-        <h3>Payments</h3>
-        {request.payments.length === 0 ? <p>No payment records.</p> : null}
-        {request.payments.map((payment) => (
-          <article key={payment.id} style={{ border: "1px solid #ddd", padding: 12, marginTop: 8 }}>
-            <p>Purpose: {payment.purpose}</p>
-            <p>Status: {payment.status}</p>
-            <p>Amount: {payment.amount} {payment.currency}</p>
-            <p>Link: {payment.paymentLinkUrl || "-"}</p>
-          </article>
-        ))}
-      </section>
-
-      <section>
-        <h3>Reverse Shipment</h3>
-        <p>Shipment Status: {reverseShipment?.status || "NOT_STARTED"}</p>
-        <p>Carrier: {reverseShipment?.carrier || "-"}</p>
-        <p>AWB: {reverseShipment?.awb || "-"}</p>
-        <p>Tracking URL: {reverseShipment?.trackingUrl || "-"}</p>
-        <p>Pickup Date: {getOptionalDateValue(reverseShipment, "pickupAt") || "-"}</p>
-        <p>Delivered Date: {getOptionalDateValue(reverseShipment, "deliveredAt") || "-"}</p>
-        <p>Remarks: {getOptionalStringValue(reverseShipment, "remarks") || "-"}</p>
-      </section>
-
-      <section>
-        <h3>Replacement Shipment</h3>
-        <p>Shipment Status: {forwardShipment?.status || "NOT_STARTED"}</p>
-        <p>Carrier: {forwardShipment?.carrier || "-"}</p>
-        <p>AWB: {forwardShipment?.awb || "-"}</p>
-        <p>Tracking URL: {forwardShipment?.trackingUrl || "-"}</p>
-        <p>Shipped Date: {getOptionalDateValue(forwardShipment, "shippedAt") || "-"}</p>
-        <p>Delivered Date: {getOptionalDateValue(forwardShipment, "deliveredAt") || "-"}</p>
-        <p>Remarks: {getOptionalStringValue(forwardShipment, "remarks") || "-"}</p>
-      </section>
-
-      <ExchangeLifecycleControls requestId={request.id} currentStatus={request.status} allowedTransitions={nextTransitions} currentAdminNote={request.adminNote || ""} />
+      <ExchangeLifecycleControls
+        requestId={request.id}
+        currentStatus={request.status}
+        allowedTransitions={nextTransitions}
+        currentAdminNote={request.adminNote || ""}
+        reason={request.reason || ""}
+        customerNote={request.customerNote || ""}
+        items={request.items.map((item) => ({
+          id: item.id,
+          productTitle: item.productTitle,
+          variantTitle: item.variantTitle,
+          currentSize: item.currentSize,
+          requestedSize: item.requestedSize,
+          quantity: item.quantity,
+          stockReviewNote: getStockReviewNote(item.eligibilitySnapshot),
+        }))}
+        payments={request.payments.map((payment) => ({
+          id: payment.id,
+          purpose: payment.purpose,
+          status: payment.status,
+          amount: payment.amount,
+          currency: payment.currency,
+          paymentLinkUrl: payment.paymentLinkUrl,
+          createdAtIso: payment.createdAt.toISOString(),
+        }))}
+        reverseShipment={
+          reverseShipment
+            ? {
+                status: reverseShipment.status,
+                carrier: reverseShipment.carrier,
+                awb: reverseShipment.awb,
+                trackingUrl: reverseShipment.trackingUrl,
+                pickupAtIso: reverseShipment.pickupAt?.toISOString() || null,
+                deliveredAtIso: reverseShipment.deliveredAt?.toISOString() || null,
+                remarks: reverseShipment.remarks,
+              }
+            : null
+        }
+        forwardShipment={
+          forwardShipment
+            ? {
+                status: forwardShipment.status,
+                carrier: forwardShipment.carrier,
+                awb: forwardShipment.awb,
+                trackingUrl: forwardShipment.trackingUrl,
+                shippedAtIso: forwardShipment.shippedAt?.toISOString() || null,
+                deliveredAtIso: forwardShipment.deliveredAt?.toISOString() || null,
+                remarks: forwardShipment.remarks,
+              }
+            : null
+        }
+      />
     </main>
   );
 }

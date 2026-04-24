@@ -2,22 +2,60 @@
 
 import { useMemo, useState } from "react";
 
-const SHIPMENT_DIRECTIONS = ["REVERSE_PICKUP", "FORWARD_REPLACEMENT"];
-const SHIPMENT_STATUSES = [
-  "NOT_STARTED",
-  "PENDING",
-  "SCHEDULED",
-  "IN_TRANSIT",
-  "DELIVERED",
-  "FAILED",
-];
+type RequestItem = {
+  id: string;
+  productTitle: string | null;
+  variantTitle: string | null;
+  currentSize: string | null;
+  requestedSize: string | null;
+  quantity: number;
+  stockReviewNote: string | null;
+};
+
+type RequestPayment = {
+  id: string;
+  purpose: string;
+  status: string;
+  amount: number;
+  currency: string;
+  paymentLinkUrl: string | null;
+  createdAtIso: string;
+};
+
+type ReverseShipmentSnapshot = {
+  status: string;
+  carrier: string | null;
+  awb: string | null;
+  trackingUrl: string | null;
+  pickupAtIso: string | null;
+  deliveredAtIso: string | null;
+  remarks: string | null;
+};
+
+type ForwardShipmentSnapshot = {
+  status: string;
+  carrier: string | null;
+  awb: string | null;
+  trackingUrl: string | null;
+  shippedAtIso: string | null;
+  deliveredAtIso: string | null;
+  remarks: string | null;
+};
 
 type Props = {
   requestId: string;
   currentStatus: string;
   allowedTransitions: string[];
   currentAdminNote: string;
+  reason: string;
+  customerNote: string;
+  items: RequestItem[];
+  payments: RequestPayment[];
+  reverseShipment: ReverseShipmentSnapshot | null;
+  forwardShipment: ForwardShipmentSnapshot | null;
 };
+
+const SHIPMENT_STATUSES = ["NOT_STARTED", "PENDING", "SCHEDULED", "IN_TRANSIT", "DELIVERED", "FAILED"];
 
 function normalizeShopDomain(input: string | null | undefined) {
   return String(input || "")
@@ -27,30 +65,66 @@ function normalizeShopDomain(input: string | null | undefined) {
     .toLowerCase();
 }
 
+function toDateTimeLocal(iso: string | null | undefined) {
+  if (!iso) return "";
+  const parsed = new Date(iso);
+  if (Number.isNaN(parsed.getTime())) return "";
+  const y = parsed.getFullYear();
+  const m = String(parsed.getMonth() + 1).padStart(2, "0");
+  const d = String(parsed.getDate()).padStart(2, "0");
+  const hh = String(parsed.getHours()).padStart(2, "0");
+  const mm = String(parsed.getMinutes()).padStart(2, "0");
+  return `${y}-${m}-${d}T${hh}:${mm}`;
+}
+
+function formatDate(value: string | null | undefined) {
+  if (!value) return "—";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "—";
+  return parsed.toLocaleString();
+}
+
 function getShopDomainFromBrowser() {
   if (typeof window === "undefined") return "";
 
-  const fromQuery = normalizeShopDomain(
-    new URLSearchParams(window.location.search).get("shop")
-  );
+  const fromQuery = normalizeShopDomain(new URLSearchParams(window.location.search).get("shop"));
   if (fromQuery) return fromQuery;
 
-  const fromGlobal = normalizeShopDomain(
-    (window as Window & { Shopify?: { shop?: string } }).Shopify?.shop
-  );
+  const fromGlobal = normalizeShopDomain((window as Window & { Shopify?: { shop?: string } }).Shopify?.shop);
   if (fromGlobal) return fromGlobal;
 
-  const fromHtml = normalizeShopDomain(
-    document.documentElement.getAttribute("data-shop-domain")
-  );
+  const fromHtml = normalizeShopDomain(document.documentElement.getAttribute("data-shop-domain"));
   if (fromHtml) return fromHtml;
 
-  const fromBody = normalizeShopDomain(
-    document.body.getAttribute("data-shop-domain")
-  );
+  const fromBody = normalizeShopDomain(document.body.getAttribute("data-shop-domain"));
   if (fromBody) return fromBody;
 
-  return "";
+  return normalizeShopDomain(localStorage.getItem("megaska_shop_domain"));
+}
+
+function getStepState(currentStatus: string) {
+  const paymentPaid = ["PAYMENT_RECEIVED", "APPROVED", "PICKUP_PENDING", "PICKUP_SCHEDULED", "PICKUP_COMPLETED", "ITEM_RECEIVED", "REPLACEMENT_PROCESSING", "REPLACEMENT_SHIPPED", "CLOSED"].includes(currentStatus);
+  const approved = ["APPROVED", "PICKUP_PENDING", "PICKUP_SCHEDULED", "PICKUP_COMPLETED", "ITEM_RECEIVED", "REPLACEMENT_PROCESSING", "REPLACEMENT_SHIPPED", "CLOSED"].includes(currentStatus);
+  const rejected = currentStatus === "REJECTED";
+  const reversePickup = ["PICKUP_PENDING", "PICKUP_SCHEDULED", "PICKUP_COMPLETED", "ITEM_RECEIVED", "REPLACEMENT_PROCESSING", "REPLACEMENT_SHIPPED", "CLOSED"].includes(currentStatus);
+  const selfShip = !reversePickup && !rejected && currentStatus !== "OPEN";
+  const itemReceived = ["ITEM_RECEIVED", "REPLACEMENT_PROCESSING", "REPLACEMENT_SHIPPED", "CLOSED"].includes(currentStatus);
+  const replacementShipped = ["REPLACEMENT_SHIPPED", "CLOSED"].includes(currentStatus);
+  const completed = currentStatus === "CLOSED";
+
+  return [
+    { label: "Requested", done: true, muted: false },
+    { label: approved ? "Approved" : rejected ? "Rejected" : "Approved / Rejected", done: approved || rejected, muted: false },
+    { label: paymentPaid ? "Paid" : "Payment Pending", done: paymentPaid, muted: rejected },
+    { label: reversePickup ? "Reverse Pickup" : selfShip ? "Self Ship" : "Reverse Pickup / Self Ship", done: reversePickup || selfShip, muted: rejected },
+    { label: "Item Received", done: itemReceived, muted: rejected },
+    { label: "Replacement Shipped", done: replacementShipped, muted: rejected },
+    { label: "Completed", done: completed, muted: rejected },
+  ];
+}
+
+function cardTitleClass() {
+  return "text-base font-semibold text-slate-900";
 }
 
 export default function ExchangeLifecycleControls({
@@ -58,25 +132,53 @@ export default function ExchangeLifecycleControls({
   currentStatus,
   allowedTransitions,
   currentAdminNote,
+  reason,
+  customerNote,
+  items,
+  payments,
+  reverseShipment,
+  forwardShipment,
 }: Props) {
   const [adminKey, setAdminKey] = useState("");
-  const [nextStatus, setNextStatus] = useState(
-    allowedTransitions[0] || currentStatus
-  );
+  const [nextStatus, setNextStatus] = useState(allowedTransitions[0] || currentStatus);
   const [adminNote, setAdminNote] = useState(currentAdminNote);
-  const [shipmentDirection, setShipmentDirection] =
-    useState("REVERSE_PICKUP");
-  const [shipmentStatus, setShipmentStatus] = useState("PENDING");
-  const [carrier, setCarrier] = useState("");
-  const [awb, setAwb] = useState("");
-  const [trackingUrl, setTrackingUrl] = useState("");
-  const [pickupAt, setPickupAt] = useState("");
-  const [shippedAt, setShippedAt] = useState("");
-  const [deliveredAt, setDeliveredAt] = useState("");
-  const [remarks, setRemarks] = useState("");
-  const [message, setMessage] = useState("");
+  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
+  const [reversePickupCharge, setReversePickupCharge] = useState("120");
+  const [returnMethod, setReturnMethod] = useState<"REVERSE_PICKUP" | "SELF_SHIP">("REVERSE_PICKUP");
+
+  const [reverseShipmentStatus, setReverseShipmentStatus] = useState(reverseShipment?.status || "PENDING");
+  const [reverseCarrier, setReverseCarrier] = useState(reverseShipment?.carrier || "");
+  const [reverseAwb, setReverseAwb] = useState(reverseShipment?.awb || "");
+  const [reverseTrackingUrl, setReverseTrackingUrl] = useState(reverseShipment?.trackingUrl || "");
+  const [reversePickupAt, setReversePickupAt] = useState(toDateTimeLocal(reverseShipment?.pickupAtIso));
+  const [reverseDeliveredAt, setReverseDeliveredAt] = useState(toDateTimeLocal(reverseShipment?.deliveredAtIso));
+  const [reverseRemarks, setReverseRemarks] = useState(reverseShipment?.remarks || "");
+
+  const [forwardShipmentStatus, setForwardShipmentStatus] = useState(forwardShipment?.status || "PENDING");
+  const [forwardCarrier, setForwardCarrier] = useState(forwardShipment?.carrier || "");
+  const [forwardAwb, setForwardAwb] = useState(forwardShipment?.awb || "");
+  const [forwardTrackingUrl, setForwardTrackingUrl] = useState(forwardShipment?.trackingUrl || "");
+  const [forwardShippedAt, setForwardShippedAt] = useState(toDateTimeLocal(forwardShipment?.shippedAtIso));
+  const [forwardDeliveredAt, setForwardDeliveredAt] = useState(toDateTimeLocal(forwardShipment?.deliveredAtIso));
+  const [forwardRemarks, setForwardRemarks] = useState(forwardShipment?.remarks || "");
+
+  const [statusLoading, setStatusLoading] = useState(false);
+  const [noteLoading, setNoteLoading] = useState(false);
+  const [reverseShipmentLoading, setReverseShipmentLoading] = useState(false);
+  const [forwardShipmentLoading, setForwardShipmentLoading] = useState(false);
+  const [paymentLinkLoading, setPaymentLinkLoading] = useState(false);
+
+  const stepState = useMemo(() => getStepState(currentStatus), [currentStatus]);
   const shopDomain = useMemo(() => getShopDomainFromBrowser(), []);
+
+  function setError(text: string) {
+    setMessage({ type: "error", text });
+  }
+
+  function setSuccess(text: string) {
+    setMessage({ type: "success", text });
+  }
 
   function getHeaders() {
     const headers: Record<string, string> = {
@@ -91,14 +193,14 @@ export default function ExchangeLifecycleControls({
     return headers;
   }
 
-  function ensureRequestContext() {
-    if (!adminKey) {
-      setMessage("Admin key is required");
+  function ensureAdminContext() {
+    if (!adminKey.trim()) {
+      setError("Admin key is required.");
       return false;
     }
 
     if (!shopDomain) {
-      setMessage("Shop domain is missing in this admin session");
+      setError("Shop domain is missing in this admin session.");
       return false;
     }
 
@@ -106,272 +208,331 @@ export default function ExchangeLifecycleControls({
   }
 
   async function updateStatus() {
-    if (!ensureRequestContext()) {
-      return;
-    }
+    if (!ensureAdminContext()) return;
+    setStatusLoading(true);
+    setMessage(null);
 
-    const response = await fetch(
-      `/api/admin/exchange-requests/${requestId}/status`,
-      {
+    try {
+      const response = await fetch(`/api/admin/exchange-requests/${requestId}/status`, {
         method: "PATCH",
         headers: getHeaders(),
         body: JSON.stringify({ nextStatus, adminNote }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data?.error || "Failed to update status");
       }
-    );
 
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      setMessage(data?.error || "Failed to update status");
-      return;
+      setSuccess(`Status updated to ${data?.request?.status || nextStatus}. Refresh to view latest values.`);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Failed to update status");
+    } finally {
+      setStatusLoading(false);
     }
-
-    setMessage(
-      `Status updated to ${
-        data?.request?.status || nextStatus
-      }. Refresh to view latest values.`
-    );
   }
 
   async function saveNote() {
-    if (!ensureRequestContext()) {
-      return;
+    if (!ensureAdminContext()) return;
+    setNoteLoading(true);
+    setMessage(null);
+
+    try {
+      const response = await fetch(`/api/admin/exchange-requests/${requestId}`, {
+        method: "PATCH",
+        headers: getHeaders(),
+        body: JSON.stringify({ adminNote }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data?.error || "Failed to save admin note");
+      }
+
+      setSuccess(data?.message || "Admin note saved. Refresh to view latest values.");
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Failed to save admin note");
+    } finally {
+      setNoteLoading(false);
     }
-
-    const response = await fetch(`/api/admin/exchange-requests/${requestId}`, {
-      method: "PATCH",
-      headers: getHeaders(),
-      body: JSON.stringify({ adminNote }),
-    });
-
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      setMessage(data?.error || "Failed to save admin note");
-      return;
-    }
-
-    setMessage(data?.message || "Admin note saved. Refresh to view latest values.");
   }
 
-  async function updateShipment() {
-    if (!ensureRequestContext()) {
-      return;
-    }
+  async function saveReverseShipment() {
+    if (!ensureAdminContext()) return;
+    setReverseShipmentLoading(true);
+    setMessage(null);
 
-    const response = await fetch(
-      `/api/admin/exchange-requests/${requestId}/shipment`,
-      {
+    try {
+      const response = await fetch(`/api/admin/exchange-requests/${requestId}/shipment`, {
         method: "PATCH",
         headers: getHeaders(),
         body: JSON.stringify({
-          direction: shipmentDirection,
-          status: shipmentStatus,
-          carrier,
-          awb,
-          trackingUrl,
-          pickupAt: pickupAt || null,
-          shippedAt: shippedAt || null,
-          deliveredAt: deliveredAt || null,
-          remarks,
+          direction: "REVERSE_PICKUP",
+          status: reverseShipmentStatus,
+          carrier: reverseCarrier,
+          awb: reverseAwb,
+          trackingUrl: reverseTrackingUrl,
+          pickupAt: reversePickupAt || null,
+          deliveredAt: reverseDeliveredAt || null,
+          remarks: reverseRemarks,
         }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data?.error || "Failed to update reverse shipment");
       }
-    );
 
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      setMessage(data?.error || "Failed to update shipment");
-      return;
+      setSuccess(`Reverse pickup shipment updated (${data?.shipment?.status || reverseShipmentStatus}).`);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Failed to update reverse shipment");
+    } finally {
+      setReverseShipmentLoading(false);
     }
+  }
 
-    setMessage(
-      `Shipment updated for ${
-        data?.shipment?.direction || shipmentDirection
-      }. Refresh to view latest values.`
-    );
+  async function saveForwardShipment() {
+    if (!ensureAdminContext()) return;
+    setForwardShipmentLoading(true);
+    setMessage(null);
+
+    try {
+      const response = await fetch(`/api/admin/exchange-requests/${requestId}/shipment`, {
+        method: "PATCH",
+        headers: getHeaders(),
+        body: JSON.stringify({
+          direction: "FORWARD_REPLACEMENT",
+          status: forwardShipmentStatus,
+          carrier: forwardCarrier,
+          awb: forwardAwb,
+          trackingUrl: forwardTrackingUrl,
+          shippedAt: forwardShippedAt || null,
+          deliveredAt: forwardDeliveredAt || null,
+          remarks: forwardRemarks,
+        }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data?.error || "Failed to update replacement shipment");
+      }
+
+      setSuccess(`Replacement shipment updated (${data?.shipment?.status || forwardShipmentStatus}).`);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Failed to update replacement shipment");
+    } finally {
+      setForwardShipmentLoading(false);
+    }
+  }
+
+  async function generatePaymentLink() {
+    if (!ensureAdminContext()) return;
+    setPaymentLinkLoading(true);
+    setMessage(null);
+
+    try {
+      const response = await fetch(`/api/account/exchange-requests/${requestId}/payment-link`, {
+        method: "POST",
+        headers: getHeaders(),
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data?.error || "Payment link API is not available for admin context yet");
+      }
+
+      setSuccess(`Payment link generated. Link: ${data?.payment?.paymentLinkUrl || "Refresh to view"}`);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Failed to generate payment link");
+    } finally {
+      setPaymentLinkLoading(false);
+    }
   }
 
   return (
-    <section style={{ border: "1px solid #ddd", borderRadius: 8, padding: 12 }}>
-      <h3>Lifecycle Action Controls</h3>
+    <div className="grid gap-6">
+      <section className="rounded-xl border bg-white p-6 shadow-sm">
+        <h2 className={cardTitleClass()}>Workflow progress</h2>
+        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {stepState.map((step) => (
+            <div
+              key={step.label}
+              className={`rounded-lg border px-3 py-2 text-sm ${step.done ? "border-emerald-200 bg-emerald-50 text-emerald-700" : step.muted ? "border-slate-200 bg-slate-50 text-slate-400" : "border-amber-200 bg-amber-50 text-amber-700"}`}
+            >
+              {step.label}
+            </div>
+          ))}
+        </div>
+      </section>
 
-      <div style={{ display: "grid", gap: 8, maxWidth: 500 }}>
-        <label>
-          Admin Key
-          <input
-            value={adminKey}
-            onChange={(event) => setAdminKey(event.target.value)}
-            style={{ display: "block", width: "100%" }}
-          />
-        </label>
+      <section className="rounded-xl border bg-white p-6 shadow-sm">
+        <h2 className={cardTitleClass()}>Request details</h2>
+        <div className="mt-4 grid gap-4">
+          {items.map((item) => (
+            <article key={item.id} className="rounded-lg border border-slate-200 p-4 text-sm">
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <div><p className="text-slate-500">Product</p><p className="font-medium">{item.productTitle || "—"}</p></div>
+                <div><p className="text-slate-500">Variant</p><p className="font-medium">{item.variantTitle || "—"}</p></div>
+                <div><p className="text-slate-500">Current size</p><p className="font-medium">{item.currentSize || "—"}</p></div>
+                <div><p className="text-slate-500">Requested size</p><p className="font-medium">{item.requestedSize || "—"}</p></div>
+                <div><p className="text-slate-500">Quantity</p><p className="font-medium">{item.quantity}</p></div>
+                <div className="md:col-span-2"><p className="text-slate-500">Customer reason</p><p className="font-medium">{reason || "—"}</p></div>
+                <div className="md:col-span-2"><p className="text-slate-500">Customer note</p><p className="font-medium">{customerNote || "—"}</p></div>
+                <div className="md:col-span-2"><p className="text-slate-500">Stock review note</p><p className="font-medium">{item.stockReviewNote || "—"}</p></div>
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
 
-        <label>
-          Shop Domain
-          <input
-            value={shopDomain}
-            disabled
-            style={{ display: "block", width: "100%", background: "#f7f7f7" }}
-          />
-        </label>
-      </div>
+      <section className="rounded-xl border bg-white p-6 shadow-sm">
+        <h2 className={cardTitleClass()}>Ops review</h2>
+        <div className="mt-4 grid gap-4 lg:grid-cols-2">
+          <label className="text-sm">
+            <span className="mb-1 block text-slate-600">Admin key</span>
+            <input type="password" value={adminKey} onChange={(event) => setAdminKey(event.target.value)} className="w-full rounded-lg border px-3 py-2" placeholder="ADMIN_OPS_KEY" />
+          </label>
+          <label className="text-sm">
+            <span className="mb-1 block text-slate-600">Shop domain</span>
+            <input value={shopDomain} disabled className="w-full rounded-lg border bg-slate-50 px-3 py-2 text-slate-500" />
+          </label>
+        </div>
 
-      <div style={{ display: "grid", gap: 8, maxWidth: 500, marginTop: 8 }}>
-        <label>
-          Current Status
-          <input
-            value={currentStatus}
-            disabled
-            style={{ display: "block", width: "100%" }}
-          />
-        </label>
+        <div className="mt-4 grid gap-4 lg:grid-cols-2">
+          <label className="text-sm">
+            <span className="mb-1 block text-slate-600">Admin note</span>
+            <textarea value={adminNote} onChange={(event) => setAdminNote(event.target.value)} className="min-h-24 w-full rounded-lg border px-3 py-2" placeholder="Ops review notes" />
+          </label>
+          <div className="grid gap-4">
+            <label className="text-sm">
+              <span className="mb-1 block text-slate-600">Current status</span>
+              <input value={currentStatus} disabled className="w-full rounded-lg border bg-slate-50 px-3 py-2 text-slate-500" />
+            </label>
+            <label className="text-sm">
+              <span className="mb-1 block text-slate-600">Available next status</span>
+              <select value={nextStatus} onChange={(event) => setNextStatus(event.target.value)} className="w-full rounded-lg border px-3 py-2">
+                {(allowedTransitions.length ? allowedTransitions : [currentStatus]).map((status) => (
+                  <option key={status} value={status}>{status}</option>
+                ))}
+              </select>
+            </label>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={saveNote} disabled={noteLoading} className="rounded-lg border px-4 py-2 text-sm font-medium hover:bg-slate-50 disabled:opacity-60">
+                {noteLoading ? "Saving note..." : "Save admin note"}
+              </button>
+              <button type="button" onClick={updateStatus} disabled={!allowedTransitions.length || statusLoading} className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60">
+                {statusLoading ? "Applying..." : "Apply status"}
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
 
-        <label>
-          Next Status
-          <select
-            value={nextStatus}
-            onChange={(event) => setNextStatus(event.target.value)}
-            style={{ display: "block", width: "100%" }}
-          >
-            {(allowedTransitions.length ? allowedTransitions : [currentStatus]).map(
-              (status) => (
-                <option key={status} value={status}>
-                  {status}
-                </option>
-              )
+      <section className="rounded-xl border bg-white p-6 shadow-sm">
+        <h2 className={cardTitleClass()}>Return method</h2>
+        <div className="mt-4 grid gap-4 lg:grid-cols-2">
+          <label className="text-sm">
+            <span className="mb-1 block text-slate-600">Return mode</span>
+            <select value={returnMethod} onChange={(event) => setReturnMethod(event.target.value as "REVERSE_PICKUP" | "SELF_SHIP")} className="w-full rounded-lg border px-3 py-2">
+              <option value="REVERSE_PICKUP">Reverse pickup</option>
+              <option value="SELF_SHIP">Self ship</option>
+            </select>
+          </label>
+          <label className="text-sm">
+            <span className="mb-1 block text-slate-600">Reverse pickup charge (₹)</span>
+            <input type="number" min="0" step="1" value={reversePickupCharge} onChange={(event) => setReversePickupCharge(event.target.value)} className="w-full rounded-lg border px-3 py-2" />
+          </label>
+        </div>
+        <p className="mt-2 text-xs text-slate-500">Configured charge is used for payment-link generation if backend supports dynamic amount. Current saved amount: ₹{reversePickupCharge || "120"}.</p>
+
+        <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <label className="text-sm"><span className="mb-1 block text-slate-600">Shipment status</span><select value={reverseShipmentStatus} onChange={(event) => setReverseShipmentStatus(event.target.value)} className="w-full rounded-lg border px-3 py-2">{SHIPMENT_STATUSES.map((status) => (<option key={status} value={status}>{status}</option>))}</select></label>
+          <label className="text-sm"><span className="mb-1 block text-slate-600">Carrier</span><input value={reverseCarrier} onChange={(event) => setReverseCarrier(event.target.value)} className="w-full rounded-lg border px-3 py-2" /></label>
+          <label className="text-sm"><span className="mb-1 block text-slate-600">AWB</span><input value={reverseAwb} onChange={(event) => setReverseAwb(event.target.value)} className="w-full rounded-lg border px-3 py-2" /></label>
+          <label className="text-sm"><span className="mb-1 block text-slate-600">Tracking URL</span><input value={reverseTrackingUrl} onChange={(event) => setReverseTrackingUrl(event.target.value)} className="w-full rounded-lg border px-3 py-2" /></label>
+          <label className="text-sm"><span className="mb-1 block text-slate-600">Pickup date</span><input type="datetime-local" value={reversePickupAt} onChange={(event) => setReversePickupAt(event.target.value)} className="w-full rounded-lg border px-3 py-2" /></label>
+          <label className="text-sm"><span className="mb-1 block text-slate-600">Delivered/received date</span><input type="datetime-local" value={reverseDeliveredAt} onChange={(event) => setReverseDeliveredAt(event.target.value)} className="w-full rounded-lg border px-3 py-2" /></label>
+          <label className="text-sm md:col-span-2 xl:col-span-3"><span className="mb-1 block text-slate-600">Remarks</span><textarea value={reverseRemarks} onChange={(event) => setReverseRemarks(event.target.value)} className="min-h-20 w-full rounded-lg border px-3 py-2" /></label>
+        </div>
+        <button type="button" onClick={saveReverseShipment} disabled={reverseShipmentLoading} className="mt-4 rounded-lg border px-4 py-2 text-sm font-medium hover:bg-slate-50 disabled:opacity-60">
+          {reverseShipmentLoading ? "Saving reverse shipment..." : "Save reverse shipment"}
+        </button>
+      </section>
+
+      <section className="rounded-xl border bg-white p-6 shadow-sm">
+        <h2 className={cardTitleClass()}>Payment + GST</h2>
+        <div className="mt-4 rounded-lg border border-slate-200">
+          <div className="border-b bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700">Payment records</div>
+          <div className="p-4 text-sm">
+            {payments.length === 0 ? (
+              <p className="text-slate-500">No payment records found.</p>
+            ) : (
+              <div className="space-y-3">
+                {payments.map((payment) => (
+                  <div key={payment.id} className="rounded-lg border p-3">
+                    <p><span className="text-slate-500">Purpose:</span> {payment.purpose}</p>
+                    <p><span className="text-slate-500">Status:</span> {payment.status}</p>
+                    <p><span className="text-slate-500">Amount:</span> {payment.amount} {payment.currency}</p>
+                    <p><span className="text-slate-500">Created:</span> {formatDate(payment.createdAtIso)}</p>
+                    <p className="break-all"><span className="text-slate-500">Link:</span> {payment.paymentLinkUrl || "—"}</p>
+                  </div>
+                ))}
+              </div>
             )}
-          </select>
-        </label>
+          </div>
+        </div>
 
-        <button
-          type="button"
-          onClick={updateStatus}
-          disabled={!allowedTransitions.length}
-        >
-          Apply Status
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <button type="button" onClick={generatePaymentLink} disabled={paymentLinkLoading} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-60">
+            {paymentLinkLoading ? "Generating payment link..." : "Generate payment link"}
+          </button>
+          <p className="text-xs text-slate-500">Uses existing exchange payment-link API endpoint if admin context is supported by backend.</p>
+        </div>
+
+        <div className="mt-5 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4">
+          <h3 className="text-sm font-semibold text-slate-900">GST invoice (reserved)</h3>
+          <div className="mt-2 grid gap-2 text-sm text-slate-600">
+            <p>Invoice status: Coming next</p>
+            <p>Invoice number: —</p>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button type="button" disabled className="cursor-not-allowed rounded-lg border px-3 py-2 text-xs text-slate-500">Generate GST invoice (Coming next)</button>
+            <button type="button" disabled className="cursor-not-allowed rounded-lg border px-3 py-2 text-xs text-slate-500">Send invoice email via Resend (Coming next)</button>
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-xl border bg-white p-6 shadow-sm">
+        <h2 className={cardTitleClass()}>Replacement shipment</h2>
+        <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <label className="text-sm"><span className="mb-1 block text-slate-600">Shipment status</span><select value={forwardShipmentStatus} onChange={(event) => setForwardShipmentStatus(event.target.value)} className="w-full rounded-lg border px-3 py-2">{SHIPMENT_STATUSES.map((status) => (<option key={status} value={status}>{status}</option>))}</select></label>
+          <label className="text-sm"><span className="mb-1 block text-slate-600">Carrier</span><input value={forwardCarrier} onChange={(event) => setForwardCarrier(event.target.value)} className="w-full rounded-lg border px-3 py-2" /></label>
+          <label className="text-sm"><span className="mb-1 block text-slate-600">AWB</span><input value={forwardAwb} onChange={(event) => setForwardAwb(event.target.value)} className="w-full rounded-lg border px-3 py-2" /></label>
+          <label className="text-sm"><span className="mb-1 block text-slate-600">Tracking URL</span><input value={forwardTrackingUrl} onChange={(event) => setForwardTrackingUrl(event.target.value)} className="w-full rounded-lg border px-3 py-2" /></label>
+          <label className="text-sm"><span className="mb-1 block text-slate-600">Shipped date</span><input type="datetime-local" value={forwardShippedAt} onChange={(event) => setForwardShippedAt(event.target.value)} className="w-full rounded-lg border px-3 py-2" /></label>
+          <label className="text-sm"><span className="mb-1 block text-slate-600">Delivered date</span><input type="datetime-local" value={forwardDeliveredAt} onChange={(event) => setForwardDeliveredAt(event.target.value)} className="w-full rounded-lg border px-3 py-2" /></label>
+          <label className="text-sm md:col-span-2 xl:col-span-3"><span className="mb-1 block text-slate-600">Remarks</span><textarea value={forwardRemarks} onChange={(event) => setForwardRemarks(event.target.value)} className="min-h-20 w-full rounded-lg border px-3 py-2" /></label>
+        </div>
+        <button type="button" onClick={saveForwardShipment} disabled={forwardShipmentLoading} className="mt-4 rounded-lg border px-4 py-2 text-sm font-medium hover:bg-slate-50 disabled:opacity-60">
+          {forwardShipmentLoading ? "Saving replacement shipment..." : "Save replacement shipment"}
         </button>
-      </div>
+      </section>
 
-      <hr style={{ margin: "16px 0" }} />
+      <section className="rounded-xl border bg-white p-6 shadow-sm">
+        <h2 className={cardTitleClass()}>Completion</h2>
+        <p className="mt-2 text-sm text-slate-600">
+          Completion actions are controlled strictly by backend lifecycle transitions.
+        </p>
+        <div className="mt-3 rounded-lg border bg-slate-50 p-3 text-sm text-slate-700">
+          Allowed transitions from <span className="font-semibold">{currentStatus}</span>: {allowedTransitions.length ? allowedTransitions.join(", ") : "None (terminal)"}
+        </div>
+      </section>
 
-      <h4>Internal Admin Note</h4>
-      <div style={{ display: "grid", gap: 8, maxWidth: 500 }}>
-        <label>
-          Admin Note
-          <textarea
-            value={adminNote}
-            onChange={(event) => setAdminNote(event.target.value)}
-            style={{ display: "block", width: "100%" }}
-          />
-        </label>
-        <button type="button" onClick={saveNote}>
-          Save Note
-        </button>
-      </div>
-
-      <hr style={{ margin: "16px 0" }} />
-
-      <h4>Update Shipment</h4>
-      <div style={{ display: "grid", gap: 8, maxWidth: 500 }}>
-        <label>
-          Direction
-          <select
-            value={shipmentDirection}
-            onChange={(event) => setShipmentDirection(event.target.value)}
-            style={{ display: "block", width: "100%" }}
-          >
-            {SHIPMENT_DIRECTIONS.map((direction) => (
-              <option key={direction} value={direction}>
-                {direction}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label>
-          Shipment Status
-          <select
-            value={shipmentStatus}
-            onChange={(event) => setShipmentStatus(event.target.value)}
-            style={{ display: "block", width: "100%" }}
-          >
-            {SHIPMENT_STATUSES.map((status) => (
-              <option key={status} value={status}>
-                {status}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label>
-          Carrier
-          <input
-            value={carrier}
-            onChange={(event) => setCarrier(event.target.value)}
-            style={{ display: "block", width: "100%" }}
-          />
-        </label>
-
-        <label>
-          Tracking Number / AWB
-          <input
-            value={awb}
-            onChange={(event) => setAwb(event.target.value)}
-            style={{ display: "block", width: "100%" }}
-          />
-        </label>
-
-        <label>
-          Tracking URL
-          <input
-            value={trackingUrl}
-            onChange={(event) => setTrackingUrl(event.target.value)}
-            style={{ display: "block", width: "100%" }}
-          />
-        </label>
-
-        <label>
-          Pickup Date
-          <input
-            type="datetime-local"
-            value={pickupAt}
-            onChange={(event) => setPickupAt(event.target.value)}
-            style={{ display: "block", width: "100%" }}
-          />
-        </label>
-
-        <label>
-          Shipped Date
-          <input
-            type="datetime-local"
-            value={shippedAt}
-            onChange={(event) => setShippedAt(event.target.value)}
-            style={{ display: "block", width: "100%" }}
-          />
-        </label>
-
-        <label>
-          Delivered Date
-          <input
-            type="datetime-local"
-            value={deliveredAt}
-            onChange={(event) => setDeliveredAt(event.target.value)}
-            style={{ display: "block", width: "100%" }}
-          />
-        </label>
-
-        <label>
-          Shipment Remarks
-          <textarea
-            value={remarks}
-            onChange={(event) => setRemarks(event.target.value)}
-            style={{ display: "block", width: "100%" }}
-          />
-        </label>
-
-        <button type="button" onClick={updateShipment}>
-          Save Shipment
-        </button>
-      </div>
-
-      {message ? <p style={{ marginTop: 12 }}>{message}</p> : null}
-    </section>
+      {message ? (
+        <div className={`rounded-xl border p-4 text-sm ${message.type === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-red-200 bg-red-50 text-red-700"}`}>
+          {message.text}
+        </div>
+      ) : null}
+    </div>
   );
 }
