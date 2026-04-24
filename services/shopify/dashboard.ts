@@ -254,7 +254,16 @@ async function dashboardGraphql<T>(
   if (!shopDomain || !token) {
     throw new Error("Shopify dashboard sync is not configured for this shop");
   }
-
+console.log("[DASHBOARD SHOP SCOPE DEBUG]", {
+  preferredShopDomain,
+  resolvedShopDomain: shopDomain,
+  resolvedShopId: shopConfig.id,
+  hasStoredAccessToken: Boolean(shopConfig.accessToken),
+  hasRuntimeConfig: runtimeConfigured,
+  defaultShopDomain,
+  tokenSource,
+  tokenPrefix: String(token || "").slice(0, 10),
+});
   console.log("[SHOPIFY DASHBOARD V2] admin graphql", {
     shopDomain,
     tokenSource,
