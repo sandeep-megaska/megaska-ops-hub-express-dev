@@ -201,42 +201,43 @@ if (token) {
   }
 
   async function fetchSession() {
-  const token = getSessionToken();
+    const token = getSessionToken();
 
-  if (!token) {
-    return {
-      authenticated: false,
-      customer: null,
-    };
-  }
-
-  try {
-    const data = await apiFetch("/auth/session", {
-      method: "GET",
-    });
-
-    if (!data?.authenticated) {
+    if (!token) {
       return {
         authenticated: false,
         customer: null,
       };
     }
 
-    return {
-      authenticated: true,
-      customer: extractCustomer(data),
-      raw: data,
-    };
-  } catch (error) {
-    console.warn("[Megaska Auth] Session check failed, keeping token", error);
+    try {
+      const data = await apiFetch("/auth/session", {
+        method: "GET",
+      });
 
-    return {
-      authenticated: false,
-      customer: null,
-      error,
-    };
+      if (!data?.authenticated) {
+        clearSessionToken();
+        return {
+          authenticated: false,
+          customer: null,
+        };
+      }
+
+      return {
+        authenticated: true,
+        customer: extractCustomer(data),
+        raw: data,
+      };
+    } catch (error) {
+      console.warn("[Megaska Auth] Session check failed, clearing token", error);
+      clearSessionToken();
+      return {
+        authenticated: false,
+        customer: null,
+      };
+    }
   }
-}
+
   async function fetchDashboardSummary() {
     return apiFetch("/dashboard/summary", {
       method: "GET",
