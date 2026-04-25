@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
       return withCors(req, NextResponse.json({ error: "An exchange request already exists for this order." }, { status: 400 }));
     }
 
-    const initialStatus = eligibility.decision === "ELIGIBLE" ? "AWAITING_PAYMENT" : "OPEN";
+    const initialStatus = "OPEN";
 
     const created = await prisma.orderActionRequest.create({
       data: {
@@ -131,6 +131,7 @@ export async function POST(req: NextRequest) {
         itemTitle: created.items[0]?.productTitle || productTitle,
         currentSize: created.items[0]?.currentSize || currentSize,
         requestedSize: created.items[0]?.requestedSize || requestedSize,
+        customerNote: created.customerNote,
         status: created.status,
       });
     } catch (error) {

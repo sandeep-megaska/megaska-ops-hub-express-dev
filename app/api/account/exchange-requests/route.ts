@@ -109,8 +109,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const initialStatus =
-      eligibility.decision === "ELIGIBLE" ? "AWAITING_PAYMENT" : "OPEN";
+    const initialStatus = "OPEN";
 
     const created = await prisma.orderActionRequest.create({
       data: {
@@ -168,6 +167,7 @@ export async function POST(req: NextRequest) {
         itemTitle: created.items[0]?.productTitle || productTitle,
         currentSize: created.items[0]?.currentSize || currentSize,
         requestedSize: created.items[0]?.requestedSize || requestedSize,
+        customerNote: created.customerNote,
         status: created.status,
       });
     } catch (error) {
@@ -233,7 +233,23 @@ export async function GET(req: NextRequest) {
       orderBy: { requestedAt: "desc" },
     });
 
-    return withCors(req, NextResponse.json({ requests }));
+    const hydratedRequests = requests.map((request) => {
+      const latestPayment = request.payments[0] || null;
+      const canPayReversePickup =
+        request.status === "AWAITING_PAYMENT" &&
+        latestPayment?.purpose === "REVERSE_PICKUP_FEE" &&
+        latestPayment.status !== "PAID";
+
+      return {
+        ...request,
+        canPayReversePickup,
+        paymentActionEndpoint: canPayReversePickup
+          ? `/api/account/exchange-requests/${request.id}/payment-link`
+          : null,
+      };
+    });
+
+    return withCors(req, NextResponse.json({ requests: hydratedRequests }));
   } catch (error) {
     const status = error instanceof ShopResolutionError ? error.status : 500;
 

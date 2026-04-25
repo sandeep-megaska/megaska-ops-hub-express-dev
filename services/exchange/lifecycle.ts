@@ -15,7 +15,7 @@ export const ACTIVE_EXCHANGE_STATUSES = [
 
 export const EXCHANGE_STATUS_DESCRIPTIONS: Record<string, string> = {
   OPEN: "Request received",
-  AWAITING_PAYMENT: "Under review",
+  AWAITING_PAYMENT: "Approved and awaiting reverse pickup fee payment",
   PAYMENT_RECEIVED: "Approved for exchange",
   APPROVED: "Approved for exchange",
   REJECTED: "Exchange request rejected",
@@ -40,3 +40,10 @@ export const allowedStatusTransitions: Record<string, string[]> = {
   REPLACEMENT_PROCESSING: ["REPLACEMENT_SHIPPED"],
   REPLACEMENT_SHIPPED: ["CLOSED"],
 };
+
+
+export function canTransitionExchangeStatus(currentStatus: string, nextStatus: string) {
+  if (currentStatus === nextStatus) return true;
+  const allowed = allowedStatusTransitions[currentStatus] || [];
+  return allowed.includes(nextStatus);
+}

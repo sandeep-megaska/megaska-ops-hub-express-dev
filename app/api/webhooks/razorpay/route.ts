@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "../../../../services/db/prisma";
 import { verifyRazorpayWebhookSignature } from "../../../../services/exchange/razorpay";
+import { canTransitionExchangeStatus } from "../../../../services/exchange/lifecycle";
+import { sendExchangePaymentReceivedOpsEmail } from "../../../../services/notifications/exchange";
 
 function mapPaymentStatus(event: string) {
   if (event === "payment_link.paid") return "PAID";
@@ -28,6 +30,7 @@ export async function POST(req: NextRequest) {
   const paymentId = String(paymentPayload?.entity?.["id"] || "").trim() || null;
 
   if (!paymentLinkId) {
+    console.info("[RAZORPAY WEBHOOK] Ignoring event without payment link id", { event });
     return NextResponse.json({ ok: true, ignored: true });
   }
 
@@ -35,14 +38,15 @@ export async function POST(req: NextRequest) {
 
   const payment = await prisma.requestPayment.findFirst({
     where: { paymentLinkId },
-    include: { request: true },
+    include: { request: { include: { items: { take: 1 } } } },
   });
 
   if (!payment) {
+    console.info("[RAZORPAY WEBHOOK] No matching RequestPayment", { event, paymentLinkId });
     return NextResponse.json({ ok: true, ignored: true });
   }
 
-  await prisma.requestPayment.update({
+  const updatedPayment = await prisma.requestPayment.update({
     where: { id: payment.id },
     data: {
       status: status as never,
@@ -52,12 +56,19 @@ export async function POST(req: NextRequest) {
   });
 
   if (status === "PAID") {
-    await prisma.orderActionRequest.update({
-      where: { id: payment.requestId },
-      data: {
-        status: "PAYMENT_RECEIVED",
-      },
-    });
+    const canSetPaymentReceived = canTransitionExchangeStatus(
+      payment.request.status,
+      "PAYMENT_RECEIVED"
+    );
+
+    if (canSetPaymentReceived && payment.request.status !== "PAYMENT_RECEIVED") {
+      await prisma.orderActionRequest.update({
+        where: { id: payment.requestId },
+        data: {
+          status: "PAYMENT_RECEIVED",
+        },
+      });
+    }
 
     await prisma.shipmentTracking.upsert({
       where: {
@@ -75,6 +86,21 @@ export async function POST(req: NextRequest) {
         status: "PENDING",
       },
     });
+
+    void sendExchangePaymentReceivedOpsEmail({
+      requestId: payment.request.id,
+      orderNumber: payment.request.orderNumber,
+      status: "PAYMENT_RECEIVED",
+      customerName: payment.request.customerNameSnapshot,
+      customerPhone: payment.request.customerPhoneSnapshot,
+      customerEmail: payment.request.customerEmailSnapshot,
+      currentSize: payment.request.items[0]?.currentSize,
+      requestedSize: payment.request.items[0]?.requestedSize,
+      paymentAmountPaise: updatedPayment.amount,
+      paymentCurrency: updatedPayment.currency,
+    });
+  } else if (event !== "payment_link.expired" && event !== "payment_link.cancelled" && event !== "payment.failed") {
+    console.info("[RAZORPAY WEBHOOK] Unhandled event", { event, paymentLinkId });
   }
 
   return NextResponse.json({ ok: true });

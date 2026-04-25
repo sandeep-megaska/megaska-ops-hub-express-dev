@@ -44,6 +44,7 @@ type ForwardShipmentSnapshot = {
 
 type Props = {
   requestId: string;
+  shopDomain: string;
   currentStatus: string;
   allowedTransitions: string[];
   currentAdminNote: string;
@@ -53,17 +54,11 @@ type Props = {
   payments: RequestPayment[];
   reverseShipment: ReverseShipmentSnapshot | null;
   forwardShipment: ForwardShipmentSnapshot | null;
+  delhiveryCapability: { configured: boolean; reason: string };
 };
 
 const SHIPMENT_STATUSES = ["NOT_STARTED", "PENDING", "SCHEDULED", "IN_TRANSIT", "DELIVERED", "FAILED"];
 
-function normalizeShopDomain(input: string | null | undefined) {
-  return String(input || "")
-    .trim()
-    .replace(/^https?:\/\//, "")
-    .replace(/\/$/, "")
-    .toLowerCase();
-}
 
 function toDateTimeLocal(iso: string | null | undefined) {
   if (!iso) return "";
@@ -82,24 +77,6 @@ function formatDate(value: string | null | undefined) {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return "—";
   return parsed.toLocaleString();
-}
-
-function getShopDomainFromBrowser() {
-  if (typeof window === "undefined") return "";
-
-  const fromQuery = normalizeShopDomain(new URLSearchParams(window.location.search).get("shop"));
-  if (fromQuery) return fromQuery;
-
-  const fromGlobal = normalizeShopDomain((window as Window & { Shopify?: { shop?: string } }).Shopify?.shop);
-  if (fromGlobal) return fromGlobal;
-
-  const fromHtml = normalizeShopDomain(document.documentElement.getAttribute("data-shop-domain"));
-  if (fromHtml) return fromHtml;
-
-  const fromBody = normalizeShopDomain(document.body.getAttribute("data-shop-domain"));
-  if (fromBody) return fromBody;
-
-  return normalizeShopDomain(localStorage.getItem("megaska_shop_domain"));
 }
 
 function getStepState(currentStatus: string) {
@@ -129,6 +106,7 @@ function cardTitleClass() {
 
 export default function ExchangeLifecycleControls({
   requestId,
+  shopDomain,
   currentStatus,
   allowedTransitions,
   currentAdminNote,
@@ -138,6 +116,7 @@ export default function ExchangeLifecycleControls({
   payments,
   reverseShipment,
   forwardShipment,
+  delhiveryCapability,
 }: Props) {
   const [adminKey, setAdminKey] = useState("");
   const [nextStatus, setNextStatus] = useState(allowedTransitions[0] || currentStatus);
@@ -167,10 +146,16 @@ export default function ExchangeLifecycleControls({
   const [noteLoading, setNoteLoading] = useState(false);
   const [reverseShipmentLoading, setReverseShipmentLoading] = useState(false);
   const [forwardShipmentLoading, setForwardShipmentLoading] = useState(false);
-  const [paymentLinkLoading, setPaymentLinkLoading] = useState(false);
 
   const stepState = useMemo(() => getStepState(currentStatus), [currentStatus]);
-  const shopDomain = useMemo(() => getShopDomainFromBrowser(), []);
+  const latestPayment = payments[0] || null;
+  const awaitingPayment = currentStatus === "AWAITING_PAYMENT";
+  const paymentCompleted = latestPayment?.status === "PAID" || currentStatus === "PAYMENT_RECEIVED";
+  const reversePickupRequired = awaitingPayment || currentStatus === "PAYMENT_RECEIVED" || currentStatus === "PICKUP_PENDING" || currentStatus === "PICKUP_SCHEDULED" || currentStatus === "PICKUP_COMPLETED";
+  const canCreateReverseShipment = !reversePickupRequired || paymentCompleted;
+  const canCreateForwardShipment = ["ITEM_RECEIVED", "REPLACEMENT_PROCESSING", "REPLACEMENT_SHIPPED", "CLOSED"].includes(currentStatus);
+  const canApprove = currentStatus === "OPEN" || currentStatus === "AWAITING_PAYMENT";
+
 
   function setError(text: string) {
     setMessage({ type: "error", text });
@@ -216,7 +201,13 @@ export default function ExchangeLifecycleControls({
       const response = await fetch(`/api/admin/exchange-requests/${requestId}/status`, {
         method: "PATCH",
         headers: getHeaders(),
-        body: JSON.stringify({ nextStatus, adminNote }),
+        body: JSON.stringify({
+          nextStatus,
+          adminNote,
+          approvalMode: nextStatus === "APPROVED" || nextStatus === "AWAITING_PAYMENT" ? "APPROVE" : undefined,
+          returnMethod,
+          pickupChargeInr: Number(reversePickupCharge || "120"),
+        }),
       });
 
       const data = await response.json().catch(() => ({}));
@@ -325,29 +316,7 @@ export default function ExchangeLifecycleControls({
     }
   }
 
-  async function generatePaymentLink() {
-    if (!ensureAdminContext()) return;
-    setPaymentLinkLoading(true);
-    setMessage(null);
 
-    try {
-      const response = await fetch(`/api/account/exchange-requests/${requestId}/payment-link`, {
-        method: "POST",
-        headers: getHeaders(),
-      });
-
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(data?.error || "Payment link API is not available for admin context yet");
-      }
-
-      setSuccess(`Payment link generated. Link: ${data?.payment?.paymentLinkUrl || "Refresh to view"}`);
-    } catch (error) {
-      setError(error instanceof Error ? error.message : "Failed to generate payment link");
-    } finally {
-      setPaymentLinkLoading(false);
-    }
-  }
 
   return (
     <div className="grid gap-6">
@@ -420,7 +389,7 @@ export default function ExchangeLifecycleControls({
               <button type="button" onClick={saveNote} disabled={noteLoading} className="rounded-lg border px-4 py-2 text-sm font-medium hover:bg-slate-50 disabled:opacity-60">
                 {noteLoading ? "Saving note..." : "Save admin note"}
               </button>
-              <button type="button" onClick={updateStatus} disabled={!allowedTransitions.length || statusLoading} className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60">
+              <button type="button" onClick={updateStatus} disabled={!allowedTransitions.length || statusLoading || (!canApprove && (nextStatus === "APPROVED" || nextStatus === "AWAITING_PAYMENT"))} className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60">
                 {statusLoading ? "Applying..." : "Apply status"}
               </button>
             </div>
@@ -454,9 +423,12 @@ export default function ExchangeLifecycleControls({
           <label className="text-sm"><span className="mb-1 block text-slate-600">Delivered/received date</span><input type="datetime-local" value={reverseDeliveredAt} onChange={(event) => setReverseDeliveredAt(event.target.value)} className="w-full rounded-lg border px-3 py-2" /></label>
           <label className="text-sm md:col-span-2 xl:col-span-3"><span className="mb-1 block text-slate-600">Remarks</span><textarea value={reverseRemarks} onChange={(event) => setReverseRemarks(event.target.value)} className="min-h-20 w-full rounded-lg border px-3 py-2" /></label>
         </div>
-        <button type="button" onClick={saveReverseShipment} disabled={reverseShipmentLoading} className="mt-4 rounded-lg border px-4 py-2 text-sm font-medium hover:bg-slate-50 disabled:opacity-60">
+        <button type="button" onClick={saveReverseShipment} disabled={reverseShipmentLoading || !canCreateReverseShipment} className="mt-4 rounded-lg border px-4 py-2 text-sm font-medium hover:bg-slate-50 disabled:opacity-60">
           {reverseShipmentLoading ? "Saving reverse shipment..." : "Save reverse shipment"}
         </button>
+        {!canCreateReverseShipment ? (
+          <p className="mt-2 text-xs text-amber-700">Reverse pickup actions are locked until reverse pickup payment is completed.</p>
+        ) : null}
       </section>
 
       <section className="rounded-xl border bg-white p-6 shadow-sm">
@@ -482,11 +454,8 @@ export default function ExchangeLifecycleControls({
           </div>
         </div>
 
-        <div className="mt-4 flex flex-wrap items-center gap-2">
-          <button type="button" onClick={generatePaymentLink} disabled={paymentLinkLoading} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-60">
-            {paymentLinkLoading ? "Generating payment link..." : "Generate payment link"}
-          </button>
-          <p className="text-xs text-slate-500">Uses existing exchange payment-link API endpoint if admin context is supported by backend.</p>
+        <div className="mt-4 rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-xs text-indigo-700">
+          Admin cannot collect payment directly. After approval with reverse pickup, customer dashboard should call <code>/api/account/exchange-requests/{'{'}id{'}'}/payment-link</code> using Bearer <code>megaska_session_token</code>.
         </div>
 
         <div className="mt-5 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4">
@@ -513,10 +482,28 @@ export default function ExchangeLifecycleControls({
           <label className="text-sm"><span className="mb-1 block text-slate-600">Delivered date</span><input type="datetime-local" value={forwardDeliveredAt} onChange={(event) => setForwardDeliveredAt(event.target.value)} className="w-full rounded-lg border px-3 py-2" /></label>
           <label className="text-sm md:col-span-2 xl:col-span-3"><span className="mb-1 block text-slate-600">Remarks</span><textarea value={forwardRemarks} onChange={(event) => setForwardRemarks(event.target.value)} className="min-h-20 w-full rounded-lg border px-3 py-2" /></label>
         </div>
-        <button type="button" onClick={saveForwardShipment} disabled={forwardShipmentLoading} className="mt-4 rounded-lg border px-4 py-2 text-sm font-medium hover:bg-slate-50 disabled:opacity-60">
+        <button type="button" onClick={saveForwardShipment} disabled={forwardShipmentLoading || !canCreateForwardShipment} className="mt-4 rounded-lg border px-4 py-2 text-sm font-medium hover:bg-slate-50 disabled:opacity-60">
           {forwardShipmentLoading ? "Saving replacement shipment..." : "Save replacement shipment"}
         </button>
+        {!canCreateForwardShipment ? (
+          <p className="mt-2 text-xs text-amber-700">Replacement shipment actions unlock only after returned item is received.</p>
+        ) : null}
       </section>
+
+      <section className="rounded-xl border bg-white p-6 shadow-sm">
+        <h2 className={cardTitleClass()}>Delhivery automation</h2>
+        <p className="mt-2 text-sm text-slate-600">
+          {delhiveryCapability.configured
+            ? "Delhivery credentials detected. API wiring can be connected in next pass."
+            : delhiveryCapability.reason}
+        </p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button type="button" disabled className="cursor-not-allowed rounded-lg border px-3 py-2 text-xs text-slate-500">Create reverse pickup (Coming next)</button>
+          <button type="button" disabled className="cursor-not-allowed rounded-lg border px-3 py-2 text-xs text-slate-500">Generate manifest/slip (Coming next)</button>
+          <button type="button" disabled className="cursor-not-allowed rounded-lg border px-3 py-2 text-xs text-slate-500">Create replacement shipment (Coming next)</button>
+        </div>
+      </section>
+
 
       <section className="rounded-xl border bg-white p-6 shadow-sm">
         <h2 className={cardTitleClass()}>Completion</h2>

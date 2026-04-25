@@ -45,7 +45,24 @@ export async function GET(
       );
     }
 
-    return withCors(req, NextResponse.json({ request: item }));
+    const latestPayment = item.payments[0] || null;
+    const canPayReversePickup =
+      item.status === "AWAITING_PAYMENT" &&
+      latestPayment?.purpose === "REVERSE_PICKUP_FEE" &&
+      latestPayment.status !== "PAID";
+
+    return withCors(
+      req,
+      NextResponse.json({
+        request: {
+          ...item,
+          canPayReversePickup,
+          paymentActionEndpoint: canPayReversePickup
+            ? `/api/account/exchange-requests/${item.id}/payment-link`
+            : null,
+        },
+      })
+    );
   } catch (error) {
     const status = error instanceof ShopResolutionError ? error.status : 500;
 

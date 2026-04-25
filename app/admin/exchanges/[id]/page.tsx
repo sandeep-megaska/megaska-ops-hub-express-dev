@@ -2,6 +2,7 @@ import { allowedStatusTransitions } from "../../../../services/exchange/lifecycl
 import { prisma } from "../../../../services/db/prisma";
 import { getShopByDomain, normalizeShopDomain } from "../../../../services/shopify/shop";
 import ExchangeLifecycleControls from "./ExchangeLifecycleControls";
+import { getDelhiveryCapabilityState } from "../../../../services/logistics/delhivery";
 
 export const dynamic = "force-dynamic";
 
@@ -72,6 +73,7 @@ export default async function AdminExchangeDetailPage({
   }
 
   const reverseShipment = request.shipments.find((shipment) => shipment.direction === "REVERSE_PICKUP") || null;
+  const delhiveryCapability = getDelhiveryCapabilityState();
   const forwardShipment = request.shipments.find((shipment) => shipment.direction === "FORWARD_REPLACEMENT") || null;
   const nextTransitions = allowedStatusTransitions[request.status] || [];
 
@@ -154,6 +156,8 @@ export default async function AdminExchangeDetailPage({
               }
             : null
         }
+        delhiveryCapability={delhiveryCapability}
+        shopDomain={shop.shopDomain}
         forwardShipment={
           forwardShipment
             ? {

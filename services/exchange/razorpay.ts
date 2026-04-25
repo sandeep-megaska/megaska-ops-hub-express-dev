@@ -6,6 +6,8 @@ type CreatePaymentLinkInput = {
   customerName?: string | null;
   customerPhone?: string | null;
   customerEmail?: string | null;
+  amount?: number;
+  currency?: string;
 };
 
 function getCreds() {
@@ -28,8 +30,8 @@ export async function createReversePickupPaymentLink(input: CreatePaymentLinkInp
 
   const auth = Buffer.from(`${keyId}:${keySecret}`).toString("base64");
   const payload = {
-    amount: REVERSE_PICKUP_FEE_PAISE,
-    currency: REVERSE_PICKUP_CURRENCY,
+    amount: input.amount || REVERSE_PICKUP_FEE_PAISE,
+    currency: input.currency || REVERSE_PICKUP_CURRENCY,
     accept_partial: false,
     description: `Megaska exchange reverse pickup fee for ${input.requestId}`,
     reference_id: input.requestId,

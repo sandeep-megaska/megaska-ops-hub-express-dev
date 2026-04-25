@@ -1,5 +1,10 @@
-import { sendAdminAlert } from "./resend";
 import { EXCHANGE_STATUS_DESCRIPTIONS } from "../exchange/lifecycle";
+import { sendCustomerEmail, sendOpsAlert } from "./email";
+import {
+  buildExchangePaymentReceivedOpsTemplate,
+  buildExchangePaymentRequiredCustomerTemplate,
+  buildExchangeRequestedOpsTemplate,
+} from "./templates";
 
 type ExchangeNotifyPayload = {
   requestId: string;
@@ -11,13 +16,20 @@ type ExchangeNotifyPayload = {
   itemTitle?: string | null;
   currentSize?: string | null;
   requestedSize?: string | null;
+  customerNote?: string | null;
   adminNote?: string | null;
+  paymentAmountPaise?: number | null;
+  paymentCurrency?: string | null;
+  paymentLinkUrl?: string | null;
 };
 
 function buildBody(payload: ExchangeNotifyPayload) {
   const appBaseUrl = String(process.env.APP_BASE_URL || "").trim().replace(/\/$/, "");
-  const adminUrl = appBaseUrl ? `${appBaseUrl}/admin/exchanges/${encodeURIComponent(payload.requestId)}` : "-";
-  const statusDescription = EXCHANGE_STATUS_DESCRIPTIONS[payload.status] || payload.status;
+  const adminUrl = appBaseUrl
+    ? `${appBaseUrl}/admin/exchanges/${encodeURIComponent(payload.requestId)}`
+    : "-";
+  const statusDescription =
+    EXCHANGE_STATUS_DESCRIPTIONS[payload.status] || payload.status;
 
   return [
     `Request ID: ${payload.requestId}`,
@@ -29,13 +41,18 @@ function buildBody(payload: ExchangeNotifyPayload) {
     `Product Title: ${payload.itemTitle || "-"}`,
     `Current Size: ${payload.currentSize || "-"}`,
     `Requested Size: ${payload.requestedSize || "-"}`,
+    `Customer Note: ${payload.customerNote || "-"}`,
     `Admin Note: ${payload.adminNote || "-"}`,
     `Admin URL: ${adminUrl}`,
   ].join("\n");
 }
 
-export async function sendExchangeTeamAlert(eventName: string, subject: string, payload: ExchangeNotifyPayload) {
-  const result = await sendAdminAlert(subject, buildBody(payload));
+export async function sendExchangeTeamAlert(
+  eventName: string,
+  subject: string,
+  payload: ExchangeNotifyPayload
+) {
+  const result = await sendOpsAlert(subject, buildBody(payload));
 
   if (result.skipped) return;
 
@@ -55,7 +72,8 @@ export async function sendExchangeTeamAlert(eventName: string, subject: string, 
 }
 
 export async function sendExchangeRequestCreatedEmail(payload: ExchangeNotifyPayload) {
-  await sendExchangeTeamAlert("REQUEST_CREATED", `New exchange request: #${payload.orderNumber}`, payload);
+  const template = buildExchangeRequestedOpsTemplate(payload);
+  await sendOpsAlert(template.subject, template.text);
 }
 
 export async function sendExchangeStatusChangedEmail(payload: ExchangeNotifyPayload) {
@@ -66,7 +84,10 @@ export async function sendExchangeStatusChangedEmail(payload: ExchangeNotifyPayl
       event: "REVERSE_PICKUP_COMPLETED",
       subject: `Reverse pickup completed: #${payload.orderNumber}`,
     },
-    REPLACEMENT_SHIPPED: { event: "REPLACEMENT_SHIPPED", subject: `Replacement shipped: #${payload.orderNumber}` },
+    REPLACEMENT_SHIPPED: {
+      event: "REPLACEMENT_SHIPPED",
+      subject: `Replacement shipped: #${payload.orderNumber}`,
+    },
     CLOSED: { event: "CLOSED", subject: `Exchange closed: #${payload.orderNumber}` },
   };
 
@@ -74,4 +95,28 @@ export async function sendExchangeStatusChangedEmail(payload: ExchangeNotifyPayl
   if (!config) return;
 
   await sendExchangeTeamAlert(config.event, config.subject, payload);
+}
+
+export async function sendExchangeApprovedPaymentRequiredEmail(
+  payload: ExchangeNotifyPayload
+) {
+  const template = buildExchangePaymentRequiredCustomerTemplate(payload);
+  const result = await sendCustomerEmail(
+    payload.customerEmail,
+    template.subject,
+    template.text
+  );
+
+  if (!result.success && !result.skipped) {
+    console.error("[EXCHANGE NOTIFY] Customer payment-required email failed", {
+      requestId: payload.requestId,
+    });
+  }
+}
+
+export async function sendExchangePaymentReceivedOpsEmail(
+  payload: ExchangeNotifyPayload
+) {
+  const template = buildExchangePaymentReceivedOpsTemplate(payload);
+  await sendOpsAlert(template.subject, template.text);
 }

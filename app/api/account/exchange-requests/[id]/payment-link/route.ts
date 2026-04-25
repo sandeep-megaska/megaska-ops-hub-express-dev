@@ -13,6 +13,17 @@ export async function OPTIONS(req: NextRequest) {
   return handleOptions(req);
 }
 
+function hasActivePaymentLink(payment: {
+  status: string;
+  paymentLinkUrl: string | null;
+  expiresAt: Date | null;
+}) {
+  if (payment.status !== "PENDING") return false;
+  if (!payment.paymentLinkUrl) return false;
+  if (!payment.expiresAt) return true;
+  return payment.expiresAt.getTime() > Date.now();
+}
+
 export async function POST(
   req: NextRequest,
   context: { params: Promise<{ id: string }> }
@@ -37,10 +48,10 @@ export async function POST(
         requestType: "EXCHANGE",
       },
       include: {
+        items: { take: 1 },
         payments: {
           where: {
             purpose: "REVERSE_PICKUP_FEE",
-            status: { in: ["PENDING", "NOT_CREATED"] },
           },
           orderBy: { createdAt: "desc" },
           take: 1,
@@ -55,19 +66,44 @@ export async function POST(
       );
     }
 
+    if (requestRow.status !== "AWAITING_PAYMENT") {
+      return withCors(
+        req,
+        NextResponse.json(
+          { error: "Payment link is available only after ops approval/payment-required state." },
+          { status: 400 }
+        )
+      );
+    }
+
+    const existingPayment = requestRow.payments[0];
+    if (existingPayment?.status === "PAID") {
+      return withCors(
+        req,
+        NextResponse.json({ error: "Payment is already completed." }, { status: 400 })
+      );
+    }
+
+    if (existingPayment && hasActivePaymentLink(existingPayment)) {
+      return withCors(req, NextResponse.json({ payment: existingPayment, reused: true }));
+    }
+
+    const amount = existingPayment?.amount || REVERSE_PICKUP_FEE_PAISE;
     const paymentLink = await createReversePickupPaymentLink({
       requestId: requestRow.id,
       customerName: requestRow.customerNameSnapshot,
       customerPhone: requestRow.customerPhoneSnapshot,
       customerEmail: requestRow.customerEmailSnapshot,
+      amount,
+      currency: existingPayment?.currency || REVERSE_PICKUP_CURRENCY,
     });
 
-    const payment = requestRow.payments[0]
+    const payment = existingPayment
       ? await prisma.requestPayment.update({
-          where: { id: requestRow.payments[0].id },
+          where: { id: existingPayment.id },
           data: {
-            amount: REVERSE_PICKUP_FEE_PAISE,
-            currency: REVERSE_PICKUP_CURRENCY,
+            amount,
+            currency: existingPayment.currency || REVERSE_PICKUP_CURRENCY,
             status: "PENDING",
             paymentLinkId: paymentLink.id,
             paymentLinkUrl: paymentLink.shortUrl,
@@ -80,7 +116,7 @@ export async function POST(
             requestId: requestRow.id,
             purpose: "REVERSE_PICKUP_FEE",
             provider: "RAZORPAY",
-            amount: REVERSE_PICKUP_FEE_PAISE,
+            amount,
             currency: REVERSE_PICKUP_CURRENCY,
             status: "PENDING",
             paymentLinkId: paymentLink.id,
@@ -90,14 +126,7 @@ export async function POST(
           },
         });
 
-    if (requestRow.status === "OPEN") {
-      await prisma.orderActionRequest.update({
-        where: { id: requestRow.id },
-        data: { status: "AWAITING_PAYMENT" },
-      });
-    }
-
-    return withCors(req, NextResponse.json({ payment }));
+    return withCors(req, NextResponse.json({ payment, reused: false }));
   } catch (error) {
     const status = error instanceof ShopResolutionError ? error.status : 500;
 
