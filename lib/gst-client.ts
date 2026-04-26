@@ -18,13 +18,21 @@ function resolveApiBase(): string {
   if (typeof window === 'undefined') return ''
 
   const { hostname, origin } = window.location
-  if (hostname === SHOPIFY_ADMIN_HOST || isLocalhost(hostname)) return ''
+  if (hostname === SHOPIFY_ADMIN_HOST) return '__GST_APP_ORIGIN_REQUIRED__'
+  if (isLocalhost(hostname)) return ''
 
   return origin
 }
 
 async function request<T>(url: string, init?: RequestInit): Promise<ApiResult<T>> {
   const apiBase = resolveApiBase()
+  if (apiBase === '__GST_APP_ORIGIN_REQUIRED__') {
+    return {
+      ok: false,
+      status: 500,
+      error: 'GST runtime config error: NEXT_PUBLIC_APP_URL is required for embedded admin.shopify.com context.',
+    }
+  }
   const resolvedUrl = `${apiBase}${url}`
 
   if (process.env.NODE_ENV !== 'production') {
@@ -120,7 +128,7 @@ export const listUnmappedProducts = (query: { search?: string } = {}) => {
   return request<{ ok: boolean; data: Array<Record<string, unknown>> }>(`/api/gst/products/unmapped${suffix}`)
 }
 export const importSkuMappingsCsv = (payload: { csvText: string }) =>
-  request<{ ok: boolean; imported: number; skipped: number; errors: string[]; recompute?: Record<string, unknown> }>(
+  request<{ ok: boolean; imported?: number; applied?: number; skipped?: number; errors: string[]; recompute?: Record<string, unknown> }>(
     '/api/gst/products/sku-mappings/import',
     { method: 'POST', body: JSON.stringify(payload) },
   )

@@ -34,5 +34,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: errorMessage || "Failed to import sku mappings" }, { status: 400 });
   }
 
-  return NextResponse.json({ ok: true, ...result.data }, { status: 200 });
+  return NextResponse.json({ ok: true, ...result.data, applied: result.data.imported }, { status: 200 });
 }

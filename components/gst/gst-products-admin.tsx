@@ -20,10 +20,10 @@ import { GstResponseViewer } from './gst-response-viewer'
 
 type Row = Record<string, unknown>
 
-const tabs = ['HSN Master', 'Tax Slabs', 'SKU Tax Mapping', 'Bulk Assignment', 'Missing SKU Mappings'] as const
+const tabs = ['SKU Tax Mapping', 'Bulk Mapping', 'Missing SKU Mappings', 'HSN/Tax Slabs'] as const
 
 export function GstProductsAdmin() {
-  const [activeTab, setActiveTab] = useState<(typeof tabs)[number]>('HSN Master')
+  const [activeTab, setActiveTab] = useState<(typeof tabs)[number]>('SKU Tax Mapping')
   const [hsnRows, setHsnRows] = useState<Row[]>([])
   const [slabRows, setSlabRows] = useState<Row[]>([])
   const [skuMappingRows, setSkuMappingRows] = useState<Row[]>([])
@@ -38,7 +38,7 @@ export function GstProductsAdmin() {
 
   const [hsnForm, setHsnForm] = useState({ hsnCode: '', description: '' })
   const [slabForm, setSlabForm] = useState({ slabCode: '', taxRate: '18', cessRate: '0' })
-  const [mappingForm, setMappingForm] = useState({ sku: '', styleCode: '', hsnCode: '', taxRate: '18', cessRate: '0' })
+  const [mappingForm, setMappingForm] = useState({ sku: '', hsnCode: '', taxRate: '18', cessRate: '0' })
   const [hsnSlabForm, setHsnSlabForm] = useState({ hsnId: '', slabId: '' })
 
   async function refreshAll() {
@@ -162,7 +162,11 @@ export function GstProductsAdmin() {
       setError(res.error)
       return
     }
-    setResult(res.data)
+    const payload = (res.data as { applied?: number; imported?: number; errors?: string[] }) || {}
+    setResult({
+      applied: Number(payload.applied ?? payload.imported ?? 0),
+      errors: Array.isArray(payload.errors) ? payload.errors : [],
+    })
     await refreshAll()
   }
 
@@ -217,7 +221,6 @@ export function GstProductsAdmin() {
     e.preventDefault()
     const res = await upsertSkuTaxMapping({
       sku: mappingForm.sku,
-      styleCode: mappingForm.styleCode || null,
       hsnCode: mappingForm.hsnCode,
       taxRate: Number(mappingForm.taxRate),
       cessRate: Number(mappingForm.cessRate),
@@ -227,7 +230,7 @@ export function GstProductsAdmin() {
     if (!res.ok) setError(res.error)
     else {
       setResult(res.data)
-      setMappingForm({ sku: '', styleCode: '', hsnCode: '', taxRate: '18', cessRate: '0' })
+      setMappingForm({ sku: '', hsnCode: '', taxRate: '18', cessRate: '0' })
       await refreshAll()
     }
   }
@@ -266,7 +269,7 @@ export function GstProductsAdmin() {
           </div>
         </div>
 
-        {activeTab === 'HSN Master' && (
+        {activeTab === 'HSN/Tax Slabs' && (
           <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm space-y-3">
             <h2 className="text-base font-semibold text-gray-900">HSN Master</h2>
             <form onSubmit={onSaveHsn} className="grid gap-3 md:grid-cols-3">
@@ -278,7 +281,7 @@ export function GstProductsAdmin() {
           </div>
         )}
 
-        {activeTab === 'Tax Slabs' && (
+        {activeTab === 'HSN/Tax Slabs' && (
           <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm space-y-3">
             <h2 className="text-base font-semibold text-gray-900">Tax Slabs</h2>
             <form onSubmit={onSaveSlab} className="grid gap-3 md:grid-cols-4">
@@ -305,7 +308,7 @@ export function GstProductsAdmin() {
             <h2 className="text-base font-semibold text-gray-900">SKU Tax Mapping (Source of Truth)</h2>
             <form onSubmit={onSaveMapping} className="grid gap-3 md:grid-cols-5">
               <input className="rounded-xl border border-gray-300 px-3 py-2.5 text-sm" placeholder="SKU" value={mappingForm.sku} onChange={(e) => setMappingForm((p) => ({ ...p, sku: e.target.value }))} />
-              <input className="rounded-xl border border-gray-300 px-3 py-2.5 text-sm" placeholder="Style Code (optional)" value={mappingForm.styleCode} onChange={(e) => setMappingForm((p) => ({ ...p, styleCode: e.target.value }))} />
+              <input className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-500" value={`Style: ${mappingForm.sku ? mappingForm.sku.split(/[-_\/\s]+/).filter(Boolean)[0]?.toUpperCase() || '' : ''}`} readOnly />
               <input className="rounded-xl border border-gray-300 px-3 py-2.5 text-sm" placeholder="HSN Code" value={mappingForm.hsnCode} onChange={(e) => setMappingForm((p) => ({ ...p, hsnCode: e.target.value }))} />
               <input type="number" className="rounded-xl border border-gray-300 px-3 py-2.5 text-sm" placeholder="Tax Rate" value={mappingForm.taxRate} onChange={(e) => setMappingForm((p) => ({ ...p, taxRate: e.target.value }))} />
               <input type="number" className="rounded-xl border border-gray-300 px-3 py-2.5 text-sm" placeholder="Cess Rate" value={mappingForm.cessRate} onChange={(e) => setMappingForm((p) => ({ ...p, cessRate: e.target.value }))} />
@@ -338,9 +341,9 @@ export function GstProductsAdmin() {
           </div>
         )}
 
-        {activeTab === 'Bulk Assignment' && (
+        {activeTab === 'Bulk Mapping' && (
           <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm space-y-3">
-            <h2 className="text-base font-semibold text-gray-900">Bulk Assignment (Upsert SKU Tax Mapping)</h2>
+            <h2 className="text-base font-semibold text-gray-900">Bulk Mapping (Upsert SKU Tax Mapping)</h2>
             <p className="text-sm text-gray-500">Paste CSV lines in format: <span className="font-mono">sku,hsnCode,taxRate,cessRate</span>. Optional 5th-column format with <span className="font-mono">styleCode</span> is also supported. Apply upserts directly into <span className="font-mono">GstSkuTaxMap</span>.</p>
             <textarea className="h-40 w-full rounded-xl border border-gray-300 px-3 py-2.5 font-mono text-xs" value={bulkText} onChange={(e) => setBulkText(e.target.value)} />
             <div className="flex gap-2"><button className="rounded-xl border border-gray-300 px-4 py-2.5 text-sm" onClick={() => void onPreviewBulk()}>Preview</button><button className="rounded-xl bg-gray-900 px-4 py-2.5 text-sm text-white" onClick={() => void onApplyBulk()}>Apply</button></div>
