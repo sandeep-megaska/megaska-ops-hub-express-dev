@@ -39,26 +39,7 @@ function toUpperOrEmpty(value: unknown): string {
   return norm(value).toUpperCase();
 }
 
-async function resolveTaxForHsn(hsnId: string, taxRate?: number): Promise<{ taxRate: number; cessRate: number } | null> {
-  if (typeof taxRate === "number" && Number.isFinite(taxRate)) {
-    const rateMatch = await productBulkDb.gstHsnSlabMap.findFirst({
-      where: {
-        hsnId,
-        slab: { taxRate },
-      },
-      orderBy: [{ priority: "desc" }, { updatedAt: "desc" }],
-      select: { slab: { select: { taxRate: true, cessRate: true } } },
-    });
-
-    const slab = rateMatch?.slab as { taxRate?: unknown; cessRate?: unknown } | undefined;
-    if (slab) {
-      return {
-        taxRate: Number(slab.taxRate),
-        cessRate: Number(slab.cessRate ?? 0),
-      };
-    }
-  }
-
+async function resolveTaxForHsn(hsnId: string): Promise<{ taxRate: number; cessRate: number } | null> {
   const map = await productBulkDb.gstHsnSlabMap.findFirst({
     where: { hsnId },
     orderBy: [{ priority: "desc" }, { updatedAt: "desc" }],
@@ -76,6 +57,17 @@ async function resolveTaxForHsn(hsnId: string, taxRate?: number): Promise<{ taxR
   };
 }
 
+function toOptionalNumber(value: unknown): number | undefined {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : undefined;
+  }
+  if (value == null) return undefined;
+  const raw = String(value).trim();
+  if (!raw) return undefined;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
 export async function previewBulkProductTaxMappings(
   rows: ProductTaxBulkRow[],
   shopId?: string | null,
@@ -85,8 +77,8 @@ export async function previewBulkProductTaxMappings(
     sku: toUpperOrEmpty(row.sku),
     styleCode: toUpperOrEmpty(row.styleCode) || deriveStyleCodeFromSku(row.sku),
     hsnCode: norm(row.hsnCode),
-    taxRate: typeof row.taxRate === "number" ? row.taxRate : Number(row.taxRate),
-    cessRate: typeof row.cessRate === "number" ? row.cessRate : Number(row.cessRate),
+    taxRate: toOptionalNumber(row.taxRate),
+    cessRate: toOptionalNumber(row.cessRate),
     source: norm(row.source) || "PASTE",
   }));
 
@@ -117,9 +109,9 @@ export async function previewBulkProductTaxMappings(
       continue;
     }
 
-    const resolvedTax = await resolveTaxForHsn(String(hsn.id), Number.isFinite(row.taxRate) ? row.taxRate : undefined);
-    const finalTaxRate = Number.isFinite(row.taxRate) ? row.taxRate : resolvedTax?.taxRate;
-    const finalCessRate = Number.isFinite(row.cessRate) ? row.cessRate : resolvedTax?.cessRate;
+    const resolvedTax = await resolveTaxForHsn(String(hsn.id));
+    const finalTaxRate = row.taxRate ?? resolvedTax?.taxRate;
+    const finalCessRate = row.cessRate ?? resolvedTax?.cessRate;
 
     if (!Number.isFinite(finalTaxRate) || !Number.isFinite(finalCessRate)) {
       invalidRows.push({ rowIndex: row.index, sku: row.sku, hsnCode: row.hsnCode, error: "No slab configured for HSN" });
@@ -170,8 +162,10 @@ export async function applyBulkProductTaxMappings(
 
   const data = preview.data;
   const matched = Array.isArray(data.matched) ? data.matched : [];
+  const invalidRows = Array.isArray(data.invalidRows) ? data.invalidRows : [];
+  const duplicates = Array.isArray(data.duplicates) ? data.duplicates : [];
   let applied = 0;
-  const failed: Array<Record<string, unknown>> = [];
+  const errors: string[] = [];
 
   for (const row of matched) {
     try {
@@ -209,11 +203,22 @@ export async function applyBulkProductTaxMappings(
 
       applied += 1;
     } catch (error) {
-      failed.push({
-        rowIndex: row.rowIndex,
-        sku: row.sku,
-        error: error instanceof Error ? error.message : "Upsert failed",
-      });
+      errors.push(`Row ${String(row.rowIndex)} (${String(row.sku || "")}): ${error instanceof Error ? error.message : "Upsert failed"}`);
+    }
+  }
+
+  for (const row of invalidRows) {
+    const rowIndex = Number(row.rowIndex);
+    const rowRef = Number.isFinite(rowIndex) ? rowIndex + 1 : row.rowIndex;
+    errors.push(`Row ${String(rowRef)} (${String(row.sku || "")}): ${String(row.error || "Validation failed")}`);
+  }
+
+  for (const duplicate of duplicates) {
+    const sku = String(duplicate.sku || "");
+    const indexes = Array.isArray(duplicate.rowIndexes) ? duplicate.rowIndexes : [];
+    const rowRefs = indexes.map((index) => Number(index) + 1).filter((value) => Number.isFinite(value));
+    if (rowRefs.length > 1) {
+      errors.push(`Duplicate SKU ${sku} in rows: ${rowRefs.join(", ")}`);
     }
   }
 
@@ -225,9 +230,8 @@ export async function applyBulkProductTaxMappings(
   return {
     ok: true,
     data: {
-      applied,
-      failedCount: failed.length,
-      failed,
+      appliedCount: applied,
+      errors,
       recompute: recompute.data,
       preview: data,
     },
