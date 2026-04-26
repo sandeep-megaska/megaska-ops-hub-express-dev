@@ -21,32 +21,34 @@ function resolveGstSyncShopDomain(
   req: NextRequest,
   body: Record<string, unknown>
 ): string | undefined {
-  const fromBody = normalizeShopDomain(
-    body.shopDomain ||
-      body.shop ||
-      body.shopifyShopDomain ||
-      body.myshopifyDomain
-  );
+  const bodyShopValue =
+    typeof body.shopDomain === "string"
+      ? body.shopDomain
+      : typeof body.shop === "string"
+        ? body.shop
+        : typeof body.shopifyShopDomain === "string"
+          ? body.shopifyShopDomain
+          : typeof body.myshopifyDomain === "string"
+            ? body.myshopifyDomain
+            : undefined;
 
+  const fromBody = normalizeShopDomain(bodyShopValue);
   const fromRequest = getShopDomainFromRequest(req);
   const fromReferer = getShopDomainFromReferer(req);
+  const fromEnv = normalizeShopDomain(process.env.SHOPIFY_STORE_DOMAIN);
 
-  const resolved =
-    fromBody ||
-    fromRequest ||
-    fromReferer ||
-    normalizeShopDomain(process.env.SHOPIFY_STORE_DOMAIN);
+  const resolved = fromBody || fromRequest || fromReferer || fromEnv;
 
   console.log("[GST SHOP SCOPE]", {
     bodyShopDomain: fromBody || null,
     requestShopDomain: fromRequest || null,
     refererShopDomain: fromReferer || null,
+    envShopDomain: fromEnv || null,
     resolvedShopDomain: resolved || null,
   });
 
   return resolved || undefined;
 }
-
 export async function POST(req: NextRequest) {
   const body = (await req.json().catch(() => null)) as Record<
     string,
