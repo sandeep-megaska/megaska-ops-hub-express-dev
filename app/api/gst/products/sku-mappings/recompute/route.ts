@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { recomputeImportedOrderMappings } from "../../../../../../services/gst/order-import";
-import { getShopDomainFromRequest, resolveShopConfig } from "../../../../../../services/shopify/shop-resolver";
+import { recomputeImportedOrderMappings } from "../../../../../services/gst/order-import";
+import { getShopDomainFromRequest, resolveShopConfig } from "../../../../../services/shopify/shop-resolver";
 
 export const runtime = "nodejs";
 
