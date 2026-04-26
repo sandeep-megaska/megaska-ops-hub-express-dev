@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { importSkuMappingsAndRecompute } from "../../../../../services/gst/sku-tax-map";
-import { getShopDomainFromRequest, resolveShopConfig } from "../../../../../services/shopify/shop-resolver";
+import { importSkuMappingsAndRecompute } from "../../../../../../services/gst/sku-tax-map";
+import { getShopDomainFromRequest, resolveShopConfig } from "../../../../../../services/shopify/shop-resolver";
 
 export const runtime = "nodejs";
 
