@@ -419,6 +419,7 @@ model GstSettings {
   debitNotePrefix       String
   invoiceNumberStrategy GstNumberingStrategy
   defaultCurrency       String   @default("INR")
+  priceIncludesTax      Boolean  @default(true)
   einvoiceEnabled       Boolean  @default(false)
   isActive              Boolean  @default(true)
   createdAt             DateTime @default(now())

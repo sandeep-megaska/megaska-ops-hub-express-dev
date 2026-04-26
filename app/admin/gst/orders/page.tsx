@@ -3,7 +3,7 @@ import { GstShell } from '../../../../components/gst/gst-shell'
 
 export default function GstOrdersPage() {
   return (
-    <GstShell title="GST Orders" subtitle="Dispatch workflow: sync by date, review readiness, generate invoices, and print batches.">
+    <GstShell title="GST Orders" subtitle="Show recent Shopify orders, filter by date range, generate GST invoices, and print documents.">
       <GstOrdersAdmin />
     </GstShell>
   )

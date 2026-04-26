@@ -36,6 +36,7 @@ export async function POST(req: NextRequest) {
       ? body.invoiceNumberStrategy
       : GST_DEFAULT_NUMBERING_STRATEGY,
     defaultCurrency: body.defaultCurrency ? String(body.defaultCurrency) : "INR",
+    priceIncludesTax: body.priceIncludesTax === false ? false : true,
     einvoiceEnabled: Boolean(body.einvoiceEnabled),
     isActive: body.isActive === false ? false : true,
   });

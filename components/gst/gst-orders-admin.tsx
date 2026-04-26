@@ -75,20 +75,6 @@ export function GstOrdersAdmin() {
   }, [])
 
   const selectedIds = useMemo(() => Object.entries(selected).filter(([, v]) => v).map(([id]) => id), [selected])
-  const selectedRows = useMemo(
-    () => rows.filter((row) => selectedIds.includes(String(row.id || ''))),
-    [rows, selectedIds],
-  )
-  const hasNotReadySelection = useMemo(
-    () =>
-      selectedRows.some((row) => {
-        const importStatus = String(row.importStatus || '')
-        const readinessErrors = Array.isArray(row.readinessErrors) ? row.readinessErrors : []
-        return importStatus !== 'INVOICE_READY' || readinessErrors.length > 0
-      }),
-    [selectedRows],
-  )
-
   const syncSummary = (result as { data?: { fetched?: number; imported?: number; alreadySynced?: number; notReady?: number; failed?: number } })?.data || {}
 
   async function onSyncOrders(e: FormEvent<HTMLFormElement>) {
@@ -142,11 +128,6 @@ export function GstOrdersAdmin() {
       setError('Select at least one order to generate invoices')
       return
     }
-    if (hasNotReadySelection) {
-      setError('One or more selected orders are not READY. Resolve readiness errors before generating invoices.')
-      return
-    }
-
     setLoading(true)
     setError(undefined)
     const res = await generateBatchInvoices({ orderImportIds: selectedIds })
@@ -241,21 +222,21 @@ export function GstOrdersAdmin() {
           <div className="mb-3 flex flex-wrap gap-2 items-center justify-between">
             <h2 className="text-base font-semibold text-gray-900">Synced GST Orders</h2>
             <div className="flex flex-wrap gap-2">
-              <button type="button" disabled={selectedIds.length === 0 || hasNotReadySelection} className="rounded-xl bg-gray-900 px-4 py-2 text-sm text-white disabled:cursor-not-allowed disabled:opacity-40" onClick={() => void onGenerateBatch()}>Generate Invoice</button>
+              <button type="button" disabled={selectedIds.length === 0} className="rounded-xl bg-gray-900 px-4 py-2 text-sm text-white disabled:cursor-not-allowed disabled:opacity-40" onClick={() => void onGenerateBatch()}>Generate Invoice</button>
               <button type="button" className="rounded-xl border border-gray-300 px-4 py-2 text-sm" onClick={() => void onPreparePrint()}>Print / PDF</button>
               <button type="button" className="rounded-xl border border-gray-300 px-4 py-2 text-sm" onClick={() => { setResult(undefined); setError(undefined) }}>Clear Responses</button>
             </div>
           </div>
           <p className="mb-3 text-xs text-gray-600">Showing imported Shopify GST orders</p>
-          {hasNotReadySelection ? <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">Generate Invoices is disabled because one or more selected orders are not READY.</p> : null}
+          <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">Readiness issues are warnings only and do not block GST invoice generation.</p>
           <div className="overflow-x-auto rounded-xl border border-gray-200">
             <table className="min-w-full text-sm">
               <thead className="bg-gray-50 text-left text-gray-600"><tr><th className="px-3 py-2">Select</th><th className="px-3 py-2">Order</th><th className="px-3 py-2">Order Date</th><th className="px-3 py-2">Customer</th><th className="px-3 py-2">Items/SKUs</th><th className="px-3 py-2">Mapping %</th><th className="px-3 py-2">Eligibility</th><th className="px-3 py-2">Readiness errors</th><th className="px-3 py-2">Unmapped SKUs</th><th className="px-3 py-2">Invoice status</th><th className="px-3 py-2">Action</th></tr></thead>
               <tbody>
                 {rows.map((row) => {
                   const id = String(row.id || '')
-                  const readinessErrors = Array.isArray(row.readinessErrors) ? row.readinessErrors.map((entry) => String(entry)) : []
                   const unmappedSkus = Array.isArray(row.unmappedSkus) ? row.unmappedSkus.map((entry) => String(entry)) : []
+                  const warnings = Array.isArray(row.warnings) ? row.warnings.map((entry) => String(entry)) : []
                   const mappingActionUrl = String(row.mappingActionUrl || '/admin/gst/products')
                   return (
                     <tr key={id} className="border-t border-gray-100 align-top">
@@ -273,9 +254,9 @@ export function GstOrdersAdmin() {
                         <div className="text-xs text-gray-500">{String(row.eligibilityStatus || '')}</div>
                       </td>
                       <td className="px-3 py-2">
-                        {readinessErrors.length > 0 ? (
+                        {warnings.length > 0 ? (
                           <ul className="list-disc pl-4 text-xs text-amber-700 space-y-1">
-                            {readinessErrors.map((reason) => <li key={`${id}-${reason}`}>{reason}</li>)}
+                            {warnings.map((reason) => <li key={`${id}-${reason}`}>{reason}</li>)}
                           </ul>
                         ) : (
                           <span className="text-xs text-gray-500">None</span>
@@ -294,7 +275,11 @@ export function GstOrdersAdmin() {
                         )}
                       </td>
                       <td className="px-3 py-2">{String(row.invoiceStatus || '')}</td>
-                      <td className="px-3 py-2"><button className="rounded-lg border border-gray-300 px-3 py-1.5" onClick={() => void onViewDetails(id)}>Details</button></td>
+                      <td className="px-3 py-2 space-x-2 whitespace-nowrap">
+                        <button className="rounded-lg border border-gray-300 px-3 py-1.5" onClick={() => void onViewDetails(id)}>Details</button>
+                        <button className="rounded-lg border border-gray-300 px-3 py-1.5" onClick={() => void onGenerateSingle(id)}>Generate</button>
+                        <button className="rounded-lg border border-gray-300 px-3 py-1.5" onClick={() => void onPrintSingle(id)}>Print</button>
+                      </td>
                     </tr>
                   )
                 })}
@@ -325,3 +310,22 @@ export function GstOrdersAdmin() {
     </div>
   )
 }
+  async function onGenerateSingle(id: string) {
+    setSelected({ [id]: true })
+    setLoading(true)
+    const res = await generateBatchInvoices({ orderImportIds: [id] })
+    if (!res.ok) setError(res.error)
+    else {
+      setResult(res.data)
+      await runOrdersList()
+    }
+    setLoading(false)
+  }
+
+  async function onPrintSingle(id: string) {
+    setLoading(true)
+    const res = await preparePrintBatch({ orderImportIds: [id] })
+    if (!res.ok) setError(res.error)
+    else setResult(res.data)
+    setLoading(false)
+  }

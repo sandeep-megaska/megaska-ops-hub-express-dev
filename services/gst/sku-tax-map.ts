@@ -107,6 +107,56 @@ export async function listSkuTaxMappings(input: { shopId?: string | null; search
   return { ok: true, data: rows };
 }
 
+export async function resolveSkuTaxMap(input: {
+  shopId?: string | null;
+  sku?: string | null;
+}): Promise<GstServiceResult<{ hsnCode: string; taxRate: number; cessRate: number; source: "SKU" | "STYLE" } | null>> {
+  const sku = norm(input.sku);
+  if (!sku) {
+    return { ok: true, data: null };
+  }
+
+  const shopId = input.shopId || null;
+  const exactSku = await skuMapDb.gstSkuTaxMap.findFirst({
+    where: { shopId, sku, status: "ACTIVE" },
+    orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+  });
+  if (exactSku) {
+    return {
+      ok: true,
+      data: {
+        hsnCode: norm(exactSku.hsnCode),
+        taxRate: Number(exactSku.taxRate) || 0,
+        cessRate: Number(exactSku.cessRate) || 0,
+        source: "SKU",
+      },
+    };
+  }
+
+  const styleCode = deriveStyleCodeFromSku(sku);
+  if (!styleCode) {
+    return { ok: true, data: null };
+  }
+
+  const style = await skuMapDb.gstSkuTaxMap.findFirst({
+    where: { shopId, styleCode, status: "ACTIVE" },
+    orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+  });
+  if (!style) {
+    return { ok: true, data: null };
+  }
+
+  return {
+    ok: true,
+    data: {
+      hsnCode: norm(style.hsnCode),
+      taxRate: Number(style.taxRate) || 0,
+      cessRate: Number(style.cessRate) || 0,
+      source: "STYLE",
+    },
+  };
+}
+
 export async function upsertSkuTaxMapping(input: {
   shopId?: string | null;
   sku?: string | null;

@@ -18,6 +18,7 @@ export interface GstSettingsSnapshot {
   debitNotePrefix: string;
   invoiceNumberStrategy: GstNumberingStrategy;
   defaultCurrency: string;
+  priceIncludesTax: boolean;
   einvoiceEnabled: boolean;
   isActive: boolean;
 }
@@ -33,6 +34,7 @@ export interface GstSettingsWriteInput {
   debitNotePrefix: string;
   invoiceNumberStrategy?: GstSettingsSnapshot["invoiceNumberStrategy"];
   defaultCurrency?: string;
+  priceIncludesTax?: boolean;
   einvoiceEnabled?: boolean;
   isActive?: boolean;
 }
@@ -59,6 +61,7 @@ function toSnapshot(settings: GstSettingsSnapshot | null | undefined): GstSettin
     debitNotePrefix: settings.debitNotePrefix,
     invoiceNumberStrategy: settings.invoiceNumberStrategy,
     defaultCurrency: settings.defaultCurrency,
+    priceIncludesTax: Boolean(settings.priceIncludesTax),
     einvoiceEnabled: settings.einvoiceEnabled,
     isActive: settings.isActive,
   };
@@ -123,6 +126,7 @@ export function validateGstIdentityConfig(
         debitNotePrefix,
         invoiceNumberStrategy: input.invoiceNumberStrategy ?? GST_DEFAULT_NUMBERING_STRATEGY,
         defaultCurrency: normalize(input.defaultCurrency || "INR").toUpperCase(),
+        priceIncludesTax: input.priceIncludesTax !== false,
         einvoiceEnabled: Boolean(input.einvoiceEnabled),
         isActive: input.isActive ?? true,
       },
@@ -262,6 +266,7 @@ export async function upsertGstSettings(input: GstSettingsWriteInput): Promise<G
           debitNotePrefix: String(normalized.debitNotePrefix),
           invoiceNumberStrategy: normalized.invoiceNumberStrategy,
           defaultCurrency: String(normalized.defaultCurrency || "INR"),
+          priceIncludesTax: normalized.priceIncludesTax !== false,
           einvoiceEnabled: Boolean(normalized.einvoiceEnabled),
           isActive: normalized.isActive ?? true,
         },
@@ -275,6 +280,7 @@ export async function upsertGstSettings(input: GstSettingsWriteInput): Promise<G
           debitNotePrefix: String(normalized.debitNotePrefix),
           invoiceNumberStrategy: normalized.invoiceNumberStrategy,
           defaultCurrency: String(normalized.defaultCurrency || "INR"),
+          priceIncludesTax: normalized.priceIncludesTax !== false,
           einvoiceEnabled: Boolean(normalized.einvoiceEnabled),
           isActive: normalized.isActive ?? true,
         },

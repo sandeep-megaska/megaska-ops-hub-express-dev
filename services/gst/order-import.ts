@@ -217,6 +217,10 @@ function collectUnmappedSkus(lines: LineForReadiness[]): string[] {
   );
 }
 
+function collectMissingMappingMessages(lines: LineForReadiness[]): string[] {
+  return collectUnmappedSkus(lines).map((sku) => `Missing GST mapping for SKU ${sku}`);
+}
+
 function parseSnapshot(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
 }
@@ -297,7 +301,7 @@ export async function importOrderByShopifyId(
         data: toOrderImportRecord(updated, {
           mappingCompleteness,
           unmappedSkus,
-          warnings: unmappedSkus.length > 0 ? ["Missing GST mapping for one or more SKU(s)"] : [],
+          warnings: collectMissingMappingMessages(existingLines),
         }),
       };
     }
@@ -379,7 +383,7 @@ export async function importOrderByShopifyId(
       data: toOrderImportRecord(created, {
         mappingCompleteness,
         unmappedSkus: collectUnmappedSkus(mappedLines),
-        warnings: readiness.readinessErrors.length > 0 ? ["Order imported but requires GST readiness review"] : [],
+        warnings: collectMissingMappingMessages(mappedLines),
       }),
     };
   } catch (error) {
@@ -447,7 +451,7 @@ export async function listImportedOrders(filters: GstOrderImportFilters): Promis
       return toOrderImportRecord(row, {
         mappingCompleteness: calculateMappingCompleteness(lines),
         unmappedSkus,
-        warnings: unmappedSkus.length > 0 ? ["Missing GST mapping for one or more SKU(s)"] : [],
+        warnings: collectMissingMappingMessages(lines),
         customerName,
         itemSummary,
         itemCount: lines.length,

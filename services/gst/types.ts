@@ -22,6 +22,7 @@ export interface GstDocumentLineInput {
   quantity: number;
   unitPrice: number;
   taxRate: number;
+  cessRate?: number;
   hsnOrSac?: string;
   unit?: string;
   discount?: number;

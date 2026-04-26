@@ -1,7 +1,8 @@
 import { gstDb } from "./db";
-import type { GstServiceResult } from "./types";
+import type { GstDocumentLineInput, GstServiceResult } from "./types";
 import { buildInvoiceDraft } from "./invoice";
 import { markOrderInvoiced } from "./order-import";
+import { resolveSkuTaxMap } from "./sku-tax-map";
 
 interface DispatchFilters {
   from?: string | Date;
@@ -138,7 +139,7 @@ export async function generateInvoiceBatch(input: BatchGenerateInput) {
     return { ok: false, error: "orderImportIds[] is required" } as const;
   }
 
-  const summary = { generated: 0, skippedAlreadyInvoiced: 0, notReady: 0, failed: 0, results: [] as Array<Record<string, unknown>> };
+  const summary = { generated: 0, skippedAlreadyInvoiced: 0, warningOnly: 0, failed: 0, results: [] as Array<Record<string, unknown>> };
 
   for (const id of ids) {
     const order = await dispatchDb.gstOrderImport.findUnique({
@@ -153,11 +154,7 @@ export async function generateInvoiceBatch(input: BatchGenerateInput) {
     }
 
     const readinessErrors = Array.isArray(order.readinessErrors) ? order.readinessErrors : [];
-    if (readinessErrors.length > 0) {
-      summary.notReady += 1;
-      summary.results.push({ id, status: "NOT_READY", readinessErrors });
-      continue;
-    }
+    if (readinessErrors.length > 0) summary.warningOnly += 1;
 
     const existing = await dispatchDb.gstDocument.findFirst({
       where: {
@@ -175,17 +172,36 @@ export async function generateInvoiceBatch(input: BatchGenerateInput) {
     }
 
     const snapshot = parseJson(order.snapshot);
-    const lines = (Array.isArray(order.lines) ? order.lines : []).map((line) => {
+    const invoiceLines: GstDocumentLineInput[] = [];
+    const lineErrors: string[] = [];
+    for (const line of Array.isArray(order.lines) ? order.lines : []) {
       const row = line as Record<string, unknown>;
-      return {
-        description: String(row.title || row.sku || "Item"),
+      const sku = String(row.sku || "").trim();
+      const mapping = await resolveSkuTaxMap({ shopId: String(order.shopId || "") || null, sku });
+      if (!mapping.ok) {
+        lineErrors.push(mapping.error || `Missing GST mapping for SKU ${sku || `LINE-${String(row.lineNumber || "")}`}`);
+        continue;
+      }
+      if (!mapping.data) {
+        lineErrors.push(`Missing GST mapping for SKU ${sku || `LINE-${String(row.lineNumber || "")}`}`);
+        continue;
+      }
+      invoiceLines.push({
+        description: String(row.title || sku || "Item"),
         quantity: parseNum(row.quantity),
         unitPrice: parseNum(row.unitPrice),
-        taxRate: parseNum(row.mappedTaxRate),
-        hsnOrSac: row.mappedHsnCode ? String(row.mappedHsnCode) : undefined,
+        taxRate: Number(mapping.data.taxRate || 0),
+        cessRate: Number(mapping.data.cessRate || 0),
+        hsnOrSac: mapping.data.hsnCode || undefined,
         discount: parseNum(row.discount),
-      };
-    });
+      });
+    }
+
+    if (lineErrors.length > 0) {
+      summary.failed += 1;
+      summary.results.push({ id, status: "FAILED", error: "Line mapping missing", lineErrors });
+      continue;
+    }
 
     const invoice = await buildInvoiceDraft({
       gstSettingsId: String(order.gstSettingsId || ""),
@@ -203,19 +219,19 @@ export async function generateInvoiceBatch(input: BatchGenerateInput) {
         stateCode: (order.shippingStateCode || order.billingStateCode) ? String(order.shippingStateCode || order.billingStateCode) : null,
       },
       currency: String(order.orderCurrency || "INR"),
-      lines,
+      lines: invoiceLines,
       metadata: { dispatchBatch: true, templateId: input.templateId || null, gstOrderImportId: String(order.id) },
     });
 
     if (!invoice.ok || !invoice.data) {
       summary.failed += 1;
-      summary.results.push({ id, status: "FAILED", error: invoice.error || "Invoice generation failed" });
+      summary.results.push({ id, status: "FAILED", error: invoice.error || "Invoice generation failed", readinessErrors });
       continue;
     }
 
     await markOrderInvoiced({ gstOrderImportId: id, gstDocumentId: invoice.data.id });
     summary.generated += 1;
-    summary.results.push({ id, status: "GENERATED", documentId: invoice.data.id, documentNumber: invoice.data.documentNumber });
+    summary.results.push({ id, status: "GENERATED", documentId: invoice.data.id, documentNumber: invoice.data.documentNumber, readinessWarnings: readinessErrors });
   }
 
   return { ok: true, data: summary } as const;

@@ -99,12 +99,28 @@ export function splitTaxAmount(taxableAmount: number, taxRate: number, isInterst
   };
 }
 
-export function computeLineTax(line: GstDocumentLineInput, isInterstate: boolean, lineNumber: number): GstTaxLineComputation {
+export function computeLineTax(
+  line: GstDocumentLineInput,
+  isInterstate: boolean,
+  lineNumber: number,
+  options?: { priceIncludesTax?: boolean; cessRate?: number },
+): GstTaxLineComputation {
   const safe = sanitizeLine(line);
   const gross = round2(safe.quantity * safe.unitPrice);
   const discount = round2(Math.min(gross, Math.max(0, safe.discount || 0)));
-  const taxableAmount = round2(Math.max(0, gross - discount));
-  const split = splitTaxAmount(taxableAmount, safe.taxRate, isInterstate);
+  const lineTotal = round2(Math.max(0, gross - discount));
+  const cessRate = Number(options?.cessRate || 0);
+  const priceIncludesTax = options?.priceIncludesTax !== false;
+  const taxableAmount = priceIncludesTax
+    ? round2(lineTotal / (1 + safe.taxRate / 100))
+    : round2(lineTotal);
+  const taxAmount = priceIncludesTax
+    ? round2(lineTotal - taxableAmount)
+    : round2((taxableAmount * safe.taxRate) / 100);
+  const split = isInterstate
+    ? { cgstAmount: 0, sgstAmount: 0, igstAmount: taxAmount }
+    : { cgstAmount: round2(taxAmount / 2), sgstAmount: round2(taxAmount / 2), igstAmount: 0 };
+  const cessAmount = round2((taxableAmount * cessRate) / 100);
 
   return {
     lineNumber,
@@ -117,8 +133,8 @@ export function computeLineTax(line: GstDocumentLineInput, isInterstate: boolean
     cgstAmount: split.cgstAmount,
     sgstAmount: split.sgstAmount,
     igstAmount: split.igstAmount,
-    cessAmount: 0,
-    lineTotal: round2(taxableAmount + split.cgstAmount + split.sgstAmount + split.igstAmount),
+    cessAmount,
+    lineTotal: round2(taxableAmount + split.cgstAmount + split.sgstAmount + split.igstAmount + cessAmount),
     hsnOrSac: safe.hsnOrSac,
     unit: safe.unit,
   };
@@ -148,12 +164,18 @@ export function aggregateTaxTotals(lines: GstTaxLineComputation[]): GstTaxBreakd
 export function computeTotals(
   lines: GstDocumentLineInput[],
   isInterstate = false,
+  options?: { priceIncludesTax?: boolean; cessRates?: number[] },
 ): GstServiceResult<{ lines: GstTaxLineComputation[]; totals: GstTaxBreakdown }> {
   if (!Array.isArray(lines) || lines.length === 0) {
     return { ok: false, error: "At least one GST line is required" };
   }
 
-  const computedLines = lines.map((line, index) => computeLineTax(line, isInterstate, index + 1));
+  const computedLines = lines.map((line, index) =>
+    computeLineTax(line, isInterstate, index + 1, {
+      priceIncludesTax: options?.priceIncludesTax,
+      cessRate: options?.cessRates?.[index] || 0,
+    }),
+  );
   const totals = aggregateTaxTotals(computedLines);
 
   if (totals.taxableAmount < 0 || totals.totalAmount < 0) {

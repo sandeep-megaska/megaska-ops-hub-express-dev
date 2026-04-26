@@ -118,7 +118,10 @@ export async function buildInvoiceDraft(
 
     const classificationData = classification.data;
 
-    const taxResult = computeTotals(input.lines, classificationData.isInterstate);
+    const taxResult = computeTotals(input.lines, classificationData.isInterstate, {
+      priceIncludesTax: settings.priceIncludesTax !== false,
+      cessRates: input.lines.map((line) => Number(line.cessRate || 0)),
+    });
 
     if (!taxResult.ok || !taxResult.data) {
       return {

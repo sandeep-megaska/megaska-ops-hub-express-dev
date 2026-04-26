@@ -1,0 +1,2 @@
+ALTER TABLE "GstSettings"
+ADD COLUMN "priceIncludesTax" BOOLEAN NOT NULL DEFAULT true;

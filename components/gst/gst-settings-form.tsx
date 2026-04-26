@@ -16,6 +16,7 @@ type SettingsFormState = {
   debitNotePrefix: string
   invoiceNumberStrategy: string
   defaultCurrency: string
+  priceIncludesTax: boolean
   einvoiceEnabled: boolean
   isActive: boolean
 }
@@ -31,6 +32,7 @@ const initialState: SettingsFormState = {
   debitNotePrefix: 'DN',
   invoiceNumberStrategy: GST_DEFAULT_NUMBERING_STRATEGY,
   defaultCurrency: 'INR',
+  priceIncludesTax: true,
   einvoiceEnabled: false,
   isActive: true,
 }
@@ -213,6 +215,15 @@ export function GstSettingsForm() {
           subtitle="Enable production behavior intentionally and keep settings state explicit."
         >
           <div className="flex flex-wrap gap-6">
+            <label className="inline-flex items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-medium text-gray-700">
+              <input
+                type="checkbox"
+                checked={form.priceIncludesTax}
+                onChange={(e) => setForm((p) => ({ ...p, priceIncludesTax: e.target.checked }))}
+              />
+              Selling prices include tax
+            </label>
+
             <label className="inline-flex items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-medium text-gray-700">
               <input
                 type="checkbox"

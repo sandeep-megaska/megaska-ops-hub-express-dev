@@ -13,6 +13,7 @@ export interface GstSettingsRecord {
   debitNotePrefix: string;
   invoiceNumberStrategy: GstNumberingStrategy;
   defaultCurrency: string;
+  priceIncludesTax: boolean;
   einvoiceEnabled: boolean;
   isActive: boolean;
   updatedAt?: Date;
