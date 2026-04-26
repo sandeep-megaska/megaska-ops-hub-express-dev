@@ -1,7 +1,7 @@
 import { gstDb } from "./db";
 import type { GstServiceResult } from "./types";
 import { importOrderByShopifyId } from "./order-import";
-import { getShopifyOrdersForGstSync, getSingleShopifyOrderForGstSync } from "../shopify/admin";
+import { getShopifyOrdersForGstSync, getSingleShopifyOrderForGstSync } from "./shopify-runtime-admin";
 import { resolveShopConfig } from "../shopify/shop-resolver";
 
 interface SyncFilters {
@@ -148,6 +148,7 @@ export async function syncOrdersByDateRange(input: SyncFilters): Promise<GstServ
       to,
       financialStatus: input.financialStatus,
       fulfillmentStatus: input.fulfillmentStatus,
+      shopDomain: resolvedShop.shopDomain,
     });
 
     const summary: GstOrderSyncSummary = {
@@ -223,7 +224,10 @@ export async function syncSingleOrder(input: { orderName?: string; orderNumber?:
     const resolvedShop = await resolveShopConfig(input.shopDomain);
     const resolvedShopId = resolvedShop.id ? String(resolvedShop.id).trim() : null;
 
-    const order = await getSingleShopifyOrderForGstSync(key);
+    const order = await getSingleShopifyOrderForGstSync({
+      orderNameOrNumber: key,
+      shopDomain: resolvedShop.shopDomain,
+    });
     if (!order) {
       return { ok: false, error: "Order not found in Shopify" } as const;
     }
