@@ -171,14 +171,54 @@ export async function getGstSettingsById(id: string): Promise<GstServiceResult<G
 
 export async function getActiveGstSettings(input?: { shopId?: string | null }): Promise<GstServiceResult<GstSettingsSnapshot>> {
   try {
-    const shopId = normalize(input?.shopId);
-    const settings = await gstDb.gstSettings.findFirst({
-      where: {
-        isActive: true,
-        ...(shopId ? { shopId } : {}),
-      },
-      orderBy: { updatedAt: "desc" },
+    const requestedShopId = normalize(input?.shopId) || null;
+    let settings: GstSettingsSnapshot | null = null;
+    let fallbackUsed = false;
+
+    if (requestedShopId) {
+      settings = await gstDb.gstSettings.findFirst({
+        where: {
+          isActive: true,
+          shopId: requestedShopId,
+        },
+        orderBy: { updatedAt: "desc" },
+      });
+
+      if (!settings) {
+        settings = await gstDb.gstSettings.findFirst({
+          where: {
+            isActive: true,
+            shopId: null,
+          },
+          orderBy: { updatedAt: "desc" },
+        });
+        fallbackUsed = Boolean(settings);
+      }
+    } else {
+      settings = await gstDb.gstSettings.findFirst({
+        where: {
+          isActive: true,
+          shopId: null,
+        },
+        orderBy: { updatedAt: "desc" },
+      });
+
+      if (!settings) {
+        settings = await gstDb.gstSettings.findFirst({
+          where: { isActive: true },
+          orderBy: { updatedAt: "desc" },
+        });
+        fallbackUsed = Boolean(settings);
+      }
+    }
+
+    console.info("[GST SETTINGS RESOLVE]", {
+      requestedShopId,
+      resolvedSettingsId: settings?.id ?? null,
+      resolvedSettingsShopId: settings?.shopId ?? null,
+      fallbackUsed,
     });
+
     if (!settings) {
       return { ok: false, error: "No active GST settings configured" };
     }
