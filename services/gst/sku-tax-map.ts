@@ -218,7 +218,7 @@ export async function importSkuMappingsCsv(
           styleCode,
           ...payload,
         },
-      },
+      });
     }
 
     imported += 1;
