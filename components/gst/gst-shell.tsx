@@ -7,7 +7,6 @@ import { usePathname } from 'next/navigation'
 const nav = [
   { href: '/admin/gst', label: 'Overview' },
   { href: '/admin/gst/settings', label: 'Settings' },
-  { href: '/admin/gst/invoice-preview', label: 'Invoice' },
   { href: '/admin/gst/note-preview', label: 'Notes' },
   { href: '/admin/gst/documents', label: 'Documents' },
   { href: '/admin/gst/products', label: 'Products' },
