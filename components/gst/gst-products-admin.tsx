@@ -78,26 +78,66 @@ export function GstProductsAdmin() {
     unmapped: unmappedRows.length,
   }), [hsnRows.length, slabRows.length, mappingRows.length, unmappedRows.length])
 
+  function parseBulkLine(line: string) {
+    if (line.includes('\t')) {
+      const [sku, hsnCode] = line.split('\t').map((value) => value.trim())
+      return { sku, hsnCode }
+    }
+    if (line.includes(',')) {
+      const values = line.split(',').map((value) => value.trim())
+      if (values.length >= 5) {
+        return { sku: values[0], hsnCode: values[2] }
+      }
+      return { sku: values[0], hsnCode: values[1] || '' }
+    }
+    if (line.includes(';')) {
+      const values = line.split(';').map((value) => value.trim())
+      if (values.length >= 5) {
+        return { sku: values[0], hsnCode: values[2] }
+      }
+      return { sku: values[0], hsnCode: values[1] || '' }
+    }
+    const values = line.split(/\s{2,}|\s+/).map((value) => value.trim()).filter(Boolean)
+    if (values.length >= 5) {
+      return { sku: values[0], hsnCode: values[2] }
+    }
+    return { sku: values[0] || '', hsnCode: values[1] || '' }
+  }
+
   function parseBulkRows() {
-    return bulkText
+    const errors: string[] = []
+    const rows = bulkText
       .split('\n')
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .map((line) => {
-        const [sku, hsnCode] = line.split(',').map((v) => v.trim())
+      .map((line, index) => ({ line: line.trim(), rowNum: index + 1 }))
+      .filter(({ line }) => Boolean(line))
+      .map(({ line, rowNum }) => {
+        const { sku, hsnCode } = parseBulkLine(line)
+        if (!sku || !hsnCode) {
+          errors.push(`Row ${rowNum}: missing required SKU or HSN code`)
+        }
         return { sku, hsnCode }
       })
+
+    return { rows, errors }
   }
 
   async function onPreviewBulk() {
-    const rows = parseBulkRows()
+    const { rows, errors } = parseBulkRows()
+    if (errors.length > 0) {
+      setError(errors.join('\n'))
+      return
+    }
     const res = await bulkPreviewProductMappings({ rows })
     if (!res.ok) setError(res.error)
     else setResult(res.data)
   }
 
   async function onApplyBulk() {
-    const rows = parseBulkRows()
+    const { rows, errors } = parseBulkRows()
+    if (errors.length > 0) {
+      setError(errors.join('\n'))
+      return
+    }
     const res = await bulkApplyProductMappings({ rows })
     if (!res.ok) {
       setError(res.error)
