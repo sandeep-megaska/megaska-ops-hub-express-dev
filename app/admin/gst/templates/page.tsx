@@ -3,7 +3,7 @@ import { GstShell } from '../../../../components/gst/gst-shell'
 
 export default function GstTemplatesPage() {
   return (
-    <GstShell title="GST Templates" subtitle="Manage invoice templates, defaults, and previews.">
+    <GstShell title="GST Templates" subtitle="Customize invoice, credit note, and debit note template payloads.">
       <GstTemplatesAdmin />
     </GstShell>
   )

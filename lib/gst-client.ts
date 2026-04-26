@@ -124,6 +124,17 @@ export const importSkuMappingsCsv = (payload: { csvText: string }) =>
     '/api/gst/products/sku-mappings/import',
     { method: 'POST', body: JSON.stringify(payload) },
   )
+export const listSkuTaxMappings = (query: { search?: string } = {}) => {
+  const search = new URLSearchParams()
+  if (query.search) search.set('search', query.search)
+  const suffix = search.toString() ? `?${search.toString()}` : ''
+  return request<{ ok: boolean; data: Array<Record<string, unknown>> }>(`/api/gst/products/sku-mappings${suffix}`)
+}
+export const upsertSkuTaxMapping = (payload: Record<string, unknown>) =>
+  request<{ ok: boolean; data: Record<string, unknown> }>('/api/gst/products/sku-mappings', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
 export const recomputeSkuMappingReadiness = () =>
   request<{ ok: boolean; data: Record<string, unknown> }>('/api/gst/products/sku-mappings/recompute', { method: 'POST' })
 

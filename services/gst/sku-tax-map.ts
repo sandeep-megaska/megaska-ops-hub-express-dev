@@ -8,6 +8,7 @@ type SkuMapDbClient = {
     create: (args: unknown) => Promise<Record<string, unknown>>;
     update: (args: unknown) => Promise<Record<string, unknown>>;
     findFirst: (args: unknown) => Promise<Record<string, unknown> | null>;
+    findMany: (args: unknown) => Promise<Array<Record<string, unknown>>>;
   };
   gstOrderImportLine: {
     findMany: (args: unknown) => Promise<Array<Record<string, unknown>>>;
@@ -79,6 +80,84 @@ function parseCsv(text: string): Array<Record<string, string>> {
   }
 
   return rows;
+}
+
+export async function listSkuTaxMappings(input: { shopId?: string | null; search?: string }): Promise<GstServiceResult<Array<Record<string, unknown>>>> {
+  const search = norm(input.search);
+  const rows = await skuMapDb.gstSkuTaxMap.findMany({
+    where: {
+      shopId: input.shopId || null,
+      ...(search
+        ? {
+            OR: [
+              { sku: { contains: search, mode: "insensitive" } },
+              { styleCode: { contains: search, mode: "insensitive" } },
+              { hsnCode: { contains: search, mode: "insensitive" } },
+            ],
+          }
+        : {}),
+    },
+    orderBy: [{ updatedAt: "desc" }],
+    take: 1000,
+  });
+
+  return { ok: true, data: rows };
+}
+
+export async function upsertSkuTaxMapping(input: {
+  shopId?: string | null;
+  sku?: string | null;
+  styleCode?: string | null;
+  hsnCode: string;
+  taxRate: number;
+  cessRate?: number;
+  source?: string;
+}): Promise<GstServiceResult<Record<string, unknown>>> {
+  const sku = norm(input.sku) || null;
+  const styleCode = norm(input.styleCode).toUpperCase() || deriveStyleCodeFromSku(sku);
+  const hsnCode = norm(input.hsnCode);
+  const taxRate = Number(input.taxRate);
+  const cessRate = input.cessRate === undefined ? 0 : Number(input.cessRate);
+
+  if (!sku && !styleCode) return { ok: false, error: "sku or styleCode is required" };
+  if (!hsnCode) return { ok: false, error: "hsnCode is required" };
+  if (!Number.isFinite(taxRate)) return { ok: false, error: "taxRate must be numeric" };
+  if (!Number.isFinite(cessRate)) return { ok: false, error: "cessRate must be numeric" };
+
+  const existing = await skuMapDb.gstSkuTaxMap.findFirst({
+    where: sku ? { shopId: input.shopId || null, sku } : { shopId: input.shopId || null, styleCode },
+    select: { id: true },
+    orderBy: [{ updatedAt: "desc" }],
+  });
+
+  const payload = {
+    hsnCode,
+    taxRate,
+    cessRate,
+    status: "ACTIVE",
+    source: norm(input.source) || "MANUAL_UI",
+  };
+
+  const record = existing?.id
+    ? await skuMapDb.gstSkuTaxMap.update({
+        where: { id: String(existing.id) },
+        data: payload,
+      })
+    : await skuMapDb.gstSkuTaxMap.create({
+        data: {
+          shopId: input.shopId || null,
+          sku,
+          styleCode,
+          ...payload,
+        },
+      });
+
+  const recompute = await recomputeImportedOrderMappings({ shopId: input.shopId || null });
+  if (!recompute.ok) {
+    return { ok: false, error: recompute.error || "Failed to recompute order readiness" };
+  }
+
+  return { ok: true, data: { ...record, recompute: recompute.data } };
 }
 
 export async function exportUnmappedSkuMappingsCsv(shopId?: string | null): Promise<GstServiceResult<string>> {

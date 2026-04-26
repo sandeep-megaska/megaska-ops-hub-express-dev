@@ -3,7 +3,7 @@ import { GstShell } from '../../../../components/gst/gst-shell'
 
 export default function GstExportPage() {
   return (
-    <GstShell title="Exports" subtitle="Generate exports and inspect historical export batches.">
+    <GstShell title="GST Reports" subtitle="Monthly B2C / Credit Note / Debit Note exports.">
       <GstExportRunner />
     </GstShell>
   )

@@ -13,7 +13,7 @@ const nav = [
   { href: '/admin/gst/products', label: 'Products' },
   { href: '/admin/gst/orders', label: 'Orders' },
   { href: '/admin/gst/templates', label: 'Templates' },
-  { href: '/admin/gst/exports', label: 'Exports' },
+  { href: '/admin/gst/exports', label: 'Reports' },
   { href: '/admin/gst/reconcile', label: 'Reconcile' },
 ]
 

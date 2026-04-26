@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { createExport, listExports } from '../../lib/gst-client'
+import { createReportRun, listReportRuns } from '../../lib/gst-client'
 import { GstResponseViewer } from './gst-response-viewer'
 
 function StatCard({
@@ -23,23 +23,39 @@ function StatCard({
 }
 
 export function GstExportRunner() {
-  const [exportType, setExportType] = useState<'invoice_register' | 'notes_register'>(
-    'invoice_register'
-  )
-  const [periodStart, setPeriodStart] = useState(`${new Date().getUTCFullYear()}-04-01`)
-  const [periodEnd, setPeriodEnd] = useState(new Date().toISOString().slice(0, 10))
+  const [reportType, setReportType] = useState<'b2c_sales' | 'credit_notes' | 'debit_notes'>('b2c_sales')
+  const [month, setMonth] = useState(new Date().toISOString().slice(0, 7))
   const [result, setResult] = useState<unknown>()
   const [error, setError] = useState<string>()
   const [loading, setLoading] = useState(false)
 
+  function monthToPeriod(value: string) {
+    const [year, monthValue] = value.split('-').map((part) => Number(part))
+    const start = new Date(Date.UTC(year, monthValue - 1, 1))
+    const end = new Date(Date.UTC(year, monthValue, 0))
+    return {
+      periodStart: start.toISOString().slice(0, 10),
+      periodEnd: end.toISOString().slice(0, 10),
+    }
+  }
+
+  const { periodStart, periodEnd } = monthToPeriod(month)
+
+  function toBackendReportType(value: 'b2c_sales' | 'credit_notes' | 'debit_notes') {
+    if (value === 'credit_notes') return 'credit_note_register'
+    if (value === 'debit_notes') return 'debit_note_register'
+    return 'b2c_sales_register'
+  }
+
   async function runExport() {
     setLoading(true)
     setError(undefined)
-    const res = await createExport({
-      exportType,
+    const res = await createReportRun({
+      reportType: toBackendReportType(reportType),
       periodStart: `${periodStart}T00:00:00.000Z`,
       periodEnd: `${periodEnd}T23:59:59.999Z`,
-      filters: {},
+      format: 'CSV',
+      filters: { scope: 'gst_monthly' },
     })
     if (res.ok) setResult(res.data)
     else setError(res.error)
@@ -49,7 +65,9 @@ export function GstExportRunner() {
   async function runList() {
     setLoading(true)
     setError(undefined)
-    const res = await listExports()
+    const res = await listReportRuns({
+      reportType: toBackendReportType(reportType),
+    })
     if (res.ok) setResult(res.data)
     else setError(res.error)
     setLoading(false)
@@ -70,11 +88,7 @@ export function GstExportRunner() {
           </p>
 
           <div className="mt-5 grid gap-4 md:grid-cols-3">
-            <StatCard
-              label="Export Mode"
-              value={exportType === 'invoice_register' ? 'Invoice Register' : 'Notes Register'}
-              hint="Switch target register before generating."
-            />
+            <StatCard label="Report Type" value={reportType.replace('_', ' ').toUpperCase()} hint="B2C / CN / DN monthly exports." />
             <StatCard label="Period Start" value={periodStart} />
             <StatCard label="Period End" value={periodEnd} />
           </div>
@@ -83,36 +97,35 @@ export function GstExportRunner() {
         <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
           <div className="grid gap-4 md:grid-cols-3">
             <label className="block">
-              <div className="mb-1.5 text-sm font-medium text-gray-700">Export Type</div>
+              <div className="mb-1.5 text-sm font-medium text-gray-700">Report Type</div>
               <select
                 className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 outline-none transition focus:border-gray-500 focus:ring-2 focus:ring-gray-200"
-                value={exportType}
-                onChange={(e) =>
-                  setExportType(e.target.value as 'invoice_register' | 'notes_register')
-                }
+                value={reportType}
+                onChange={(e) => setReportType(e.target.value as 'b2c_sales' | 'credit_notes' | 'debit_notes')}
               >
-                <option value="invoice_register">Invoice Register</option>
-                <option value="notes_register">Notes Register</option>
+                <option value="b2c_sales">B2C Sales Export</option>
+                <option value="credit_notes">Credit Note Export</option>
+                <option value="debit_notes">Debit Note Export</option>
               </select>
             </label>
 
             <label className="block">
-              <div className="mb-1.5 text-sm font-medium text-gray-700">Period Start</div>
+              <div className="mb-1.5 text-sm font-medium text-gray-700">Monthly Period</div>
               <input
-                type="date"
+                type="month"
                 className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 outline-none transition focus:border-gray-500 focus:ring-2 focus:ring-gray-200"
-                value={periodStart}
-                onChange={(e) => setPeriodStart(e.target.value)}
+                value={month}
+                onChange={(e) => setMonth(e.target.value)}
               />
             </label>
 
             <label className="block">
-              <div className="mb-1.5 text-sm font-medium text-gray-700">Period End</div>
+              <div className="mb-1.5 text-sm font-medium text-gray-700">Period End (computed)</div>
               <input
-                type="date"
+                type="text"
                 className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 outline-none transition focus:border-gray-500 focus:ring-2 focus:ring-gray-200"
                 value={periodEnd}
-                onChange={(e) => setPeriodEnd(e.target.value)}
+                readOnly
               />
             </label>
           </div>

@@ -239,10 +239,10 @@ export function GstOrdersAdmin() {
 
         <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
           <div className="mb-3 flex flex-wrap gap-2 items-center justify-between">
-            <h2 className="text-base font-semibold text-gray-900">Orders / Dispatch</h2>
+            <h2 className="text-base font-semibold text-gray-900">Synced GST Orders</h2>
             <div className="flex flex-wrap gap-2">
-              <button type="button" disabled={selectedIds.length === 0 || hasNotReadySelection} className="rounded-xl bg-gray-900 px-4 py-2 text-sm text-white disabled:cursor-not-allowed disabled:opacity-40" onClick={() => void onGenerateBatch()}>Generate Invoices</button>
-              <button type="button" className="rounded-xl border border-gray-300 px-4 py-2 text-sm" onClick={() => void onPreparePrint()}>Prepare Print Batch</button>
+              <button type="button" disabled={selectedIds.length === 0 || hasNotReadySelection} className="rounded-xl bg-gray-900 px-4 py-2 text-sm text-white disabled:cursor-not-allowed disabled:opacity-40" onClick={() => void onGenerateBatch()}>Generate Invoice</button>
+              <button type="button" className="rounded-xl border border-gray-300 px-4 py-2 text-sm" onClick={() => void onPreparePrint()}>Print / PDF</button>
               <button type="button" className="rounded-xl border border-gray-300 px-4 py-2 text-sm" onClick={() => { setResult(undefined); setError(undefined) }}>Clear Responses</button>
             </div>
           </div>

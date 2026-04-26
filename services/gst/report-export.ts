@@ -50,8 +50,10 @@ function toIsoDate(value: Date | string): Date {
 }
 
 function normalizeTypeFilter(reportType: string): string[] | undefined {
-  if (reportType === "invoice_register") return ["TAX_INVOICE"];
+  if (reportType === "invoice_register" || reportType === "b2c_sales_register") return ["TAX_INVOICE"];
   if (reportType === "notes_register") return ["CREDIT_NOTE", "DEBIT_NOTE"];
+  if (reportType === "credit_note_register") return ["CREDIT_NOTE"];
+  if (reportType === "debit_note_register") return ["DEBIT_NOTE"];
   return undefined;
 }
 
