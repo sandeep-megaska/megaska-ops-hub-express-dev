@@ -5,9 +5,34 @@ export type ApiResult<T> = {
   error?: string
 }
 
+const APP_URL = (process.env.NEXT_PUBLIC_APP_URL || '').trim().replace(/\/$/, '')
+const SHOPIFY_ADMIN_HOST = 'admin.shopify.com'
+
+function isLocalhost(hostname: string): boolean {
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '0.0.0.0' || hostname === '[::1]'
+}
+
+function resolveApiBase(): string {
+  if (APP_URL) return APP_URL
+
+  if (typeof window === 'undefined') return ''
+
+  const { hostname, origin } = window.location
+  if (hostname === SHOPIFY_ADMIN_HOST || isLocalhost(hostname)) return ''
+
+  return origin
+}
+
 async function request<T>(url: string, init?: RequestInit): Promise<ApiResult<T>> {
+  const apiBase = resolveApiBase()
+  const resolvedUrl = `${apiBase}${url}`
+
+  if (process.env.NODE_ENV !== 'production') {
+    console.debug('[GST CLIENT] api request', { url, resolvedUrl })
+  }
+
   try {
-    const res = await fetch(url, {
+    const res = await fetch(resolvedUrl, {
       ...init,
       headers: {
         'Content-Type': 'application/json',
