@@ -30,7 +30,8 @@ export async function POST(req: NextRequest) {
 
   const result = await importSkuMappingsAndRecompute(csvText, shop.id);
   if (!result.ok || !result.data) {
-    return NextResponse.json({ ok: false, error: result.error || "Failed to import sku mappings" }, { status: 400 });
+    const errorMessage = "error" in result ? result.error : undefined;
+    return NextResponse.json({ ok: false, error: errorMessage || "Failed to import sku mappings" }, { status: 400 });
   }
 
   return NextResponse.json({ ok: true, ...result.data }, { status: 200 });
