@@ -79,29 +79,30 @@ export function GstProductsAdmin() {
   }), [hsnRows.length, slabRows.length, mappingRows.length, unmappedRows.length])
 
   function parseBulkLine(line: string) {
+    const buildFromValues = (values: string[]) => {
+      if (values.length >= 5) {
+        return {
+          sku: values[0] || '',
+          styleCode: values[1] || '',
+          hsnCode: values[2] || '',
+          taxRate: values[3] || '',
+          cessRate: values[4] || '',
+        }
+      }
+      return { sku: values[0] || '', styleCode: '', hsnCode: values[1] || '', taxRate: '', cessRate: '' }
+    }
+
     if (line.includes('\t')) {
-      const [sku, hsnCode] = line.split('\t').map((value) => value.trim())
-      return { sku, hsnCode }
+      return buildFromValues(line.split('\t').map((value) => value.trim()))
     }
     if (line.includes(',')) {
-      const values = line.split(',').map((value) => value.trim())
-      if (values.length >= 5) {
-        return { sku: values[0], hsnCode: values[2] }
-      }
-      return { sku: values[0], hsnCode: values[1] || '' }
+      return buildFromValues(line.split(',').map((value) => value.trim()))
     }
     if (line.includes(';')) {
-      const values = line.split(';').map((value) => value.trim())
-      if (values.length >= 5) {
-        return { sku: values[0], hsnCode: values[2] }
-      }
-      return { sku: values[0], hsnCode: values[1] || '' }
+      return buildFromValues(line.split(';').map((value) => value.trim()))
     }
     const values = line.split(/\s{2,}|\s+/).map((value) => value.trim()).filter(Boolean)
-    if (values.length >= 5) {
-      return { sku: values[0], hsnCode: values[2] }
-    }
-    return { sku: values[0] || '', hsnCode: values[1] || '' }
+    return buildFromValues(values)
   }
 
   function parseBulkRows() {
@@ -111,11 +112,23 @@ export function GstProductsAdmin() {
       .map((line, index) => ({ line: line.trim(), rowNum: index + 1 }))
       .filter(({ line }) => Boolean(line))
       .map(({ line, rowNum }) => {
-        const { sku, hsnCode } = parseBulkLine(line)
+        const { sku, styleCode, hsnCode, taxRate, cessRate } = parseBulkLine(line)
         if (!sku || !hsnCode) {
           errors.push(`Row ${rowNum}: missing required SKU or HSN code`)
         }
-        return { sku, hsnCode }
+        if (taxRate !== '' && Number.isNaN(Number(taxRate))) {
+          errors.push(`Row ${rowNum}: tax rate must be numeric`)
+        }
+        if (cessRate !== '' && Number.isNaN(Number(cessRate))) {
+          errors.push(`Row ${rowNum}: cess rate must be numeric`)
+        }
+        return {
+          sku,
+          styleCode,
+          hsnCode,
+          taxRate: taxRate === '' ? undefined : Number(taxRate),
+          cessRate: cessRate === '' ? undefined : Number(cessRate),
+        }
       })
 
     return { rows, errors }
@@ -322,7 +335,7 @@ export function GstProductsAdmin() {
         {activeTab === 'Bulk Assignment' && (
           <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm space-y-3">
             <h2 className="text-base font-semibold text-gray-900">Bulk Assignment (SKU + HSN)</h2>
-            <p className="text-sm text-gray-500">Paste CSV lines in format: <span className="font-mono">SKU,HSN_CODE</span></p>
+            <p className="text-sm text-gray-500">Paste CSV lines in format: <span className="font-mono">SKU,HSN_CODE</span> or <span className="font-mono">SKU,STYLE,HSN_CODE,TAX_RATE,CESS_RATE</span></p>
             <textarea className="h-40 w-full rounded-xl border border-gray-300 px-3 py-2.5 font-mono text-xs" value={bulkText} onChange={(e) => setBulkText(e.target.value)} />
             <div className="flex gap-2"><button className="rounded-xl border border-gray-300 px-4 py-2.5 text-sm" onClick={() => void onPreviewBulk()}>Preview</button><button className="rounded-xl bg-gray-900 px-4 py-2.5 text-sm text-white" onClick={() => void onApplyBulk()}>Apply</button></div>
           </div>

@@ -6,16 +6,14 @@ import { generateInvoiceBatch } from './dispatch-batch.ts'
 import { previewBulkProductTaxMappings } from './product-tax-bulk.ts'
 import { gstDb } from './db.ts'
 
-const originalFindMany = gstDb.gstOrderImportLine.findMany
 const originalHsnFindUnique = gstDb.gstHsnCode.findUnique
 const originalHsnSlabFindFirst = gstDb.gstHsnSlabMap.findFirst
-const originalMapFindFirst = gstDb.gstProductTaxMap.findFirst
+const originalSkuMapFindFirst = gstDb.gstSkuTaxMap.findFirst
 
 test.afterEach(() => {
-  gstDb.gstOrderImportLine.findMany = originalFindMany
   gstDb.gstHsnCode.findUnique = originalHsnFindUnique
   gstDb.gstHsnSlabMap.findFirst = originalHsnSlabFindFirst
-  gstDb.gstProductTaxMap.findFirst = originalMapFindFirst
+  gstDb.gstSkuTaxMap.findFirst = originalSkuMapFindFirst
 })
 
 test('order sync validates date range', async () => {
@@ -34,15 +32,7 @@ test('invoice batch validates orderImportIds', async () => {
   assert.equal(result.error, 'orderImportIds[] is required')
 })
 
-test('bulk preview returns duplicates and unknown sku rows', async () => {
-  gstDb.gstOrderImportLine.findMany = async ({ where }) => {
-    const sku = String((where as { sku?: string }).sku || '')
-    if (sku === 'KNOWN-1') {
-      return [{ shopifyProductId: '100', shopifyVariantId: '200', title: 'Known Product', sku: 'KNOWN-1', updatedAt: new Date() }]
-    }
-    return []
-  }
-
+test('bulk preview returns duplicates and keeps unknown sku rows valid', async () => {
   gstDb.gstHsnCode.findUnique = async ({ where }) => {
     if ((where as { hsnCode?: string }).hsnCode === '6109') {
       return { id: 'hsn-1', hsnCode: '6109' }
@@ -50,8 +40,8 @@ test('bulk preview returns duplicates and unknown sku rows', async () => {
     return null
   }
 
-  gstDb.gstHsnSlabMap.findFirst = async () => ({ slabId: 'slab-1' })
-  gstDb.gstProductTaxMap.findFirst = async () => null
+  gstDb.gstHsnSlabMap.findFirst = async () => ({ slab: { taxRate: 12, cessRate: 1 } })
+  gstDb.gstSkuTaxMap.findFirst = async () => null
 
   const result = await previewBulkProductTaxMappings([
     { sku: 'KNOWN-1', hsnCode: '6109' },
@@ -61,6 +51,6 @@ test('bulk preview returns duplicates and unknown sku rows', async () => {
 
   assert.equal(result.ok, true)
   assert.equal(result.data?.duplicateCount, 1)
-  assert.equal(result.data?.unmatchedCount, 1)
-  assert.equal(result.data?.matchedCount, 2)
+  assert.equal(result.data?.unmatchedCount, 0)
+  assert.equal(result.data?.matchedCount, 3)
 })

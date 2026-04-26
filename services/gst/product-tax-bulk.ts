@@ -1,27 +1,31 @@
 import { gstDb } from "./db";
-import { upsertProductTaxMapping } from "./product-tax-map";
+import { recomputeImportedOrderMappings } from "./order-import";
+import { deriveStyleCodeFromSku } from "./product-tax-map";
 import type { GstServiceResult } from "./types";
 
 export interface ProductTaxBulkRow {
   sku: string;
+  styleCode?: string;
   hsnCode: string;
-  slabId?: string;
   taxRate?: number;
+  cessRate?: number;
   source?: string;
 }
 
 type ProductBulkDbClient = {
-  gstOrderImportLine: {
-    findMany: (args: unknown) => Promise<Array<Record<string, unknown>>>;
-  };
   gstHsnCode: {
     findUnique: (args: unknown) => Promise<Record<string, unknown> | null>;
   };
   gstHsnSlabMap: {
     findFirst: (args: unknown) => Promise<Record<string, unknown> | null>;
   };
-  gstProductTaxMap: {
+  gstSkuTaxMap: {
     findFirst: (args: unknown) => Promise<Record<string, unknown> | null>;
+    create: (args: unknown) => Promise<Record<string, unknown>>;
+    update: (args: unknown) => Promise<Record<string, unknown>>;
+  };
+  gstOrderImportLine: {
+    findMany: (args: unknown) => Promise<Array<Record<string, unknown>>>;
   };
 };
 
@@ -31,17 +35,11 @@ function norm(value: unknown): string {
   return String(value || "").trim();
 }
 
-async function resolveSku(sku: string) {
-  const row = await productBulkDb.gstOrderImportLine.findMany({
-    where: { sku },
-    select: { shopifyProductId: true, shopifyVariantId: true, title: true, sku: true, updatedAt: true },
-    orderBy: { updatedAt: "desc" },
-    take: 1,
-  });
-  return row[0] || null;
+function toUpperOrEmpty(value: unknown): string {
+  return norm(value).toUpperCase();
 }
 
-async function resolveSlabId(hsnId: string, taxRate?: number): Promise<string | null> {
+async function resolveTaxForHsn(hsnId: string, taxRate?: number): Promise<{ taxRate: number; cessRate: number } | null> {
   if (typeof taxRate === "number" && Number.isFinite(taxRate)) {
     const rateMatch = await productBulkDb.gstHsnSlabMap.findFirst({
       where: {
@@ -49,34 +47,52 @@ async function resolveSlabId(hsnId: string, taxRate?: number): Promise<string | 
         slab: { taxRate },
       },
       orderBy: [{ priority: "desc" }, { updatedAt: "desc" }],
-      select: { slabId: true },
+      select: { slab: { select: { taxRate: true, cessRate: true } } },
     });
-    if (rateMatch?.slabId) {
-      return String(rateMatch.slabId);
+
+    const slab = rateMatch?.slab as { taxRate?: unknown; cessRate?: unknown } | undefined;
+    if (slab) {
+      return {
+        taxRate: Number(slab.taxRate),
+        cessRate: Number(slab.cessRate ?? 0),
+      };
     }
   }
 
   const map = await productBulkDb.gstHsnSlabMap.findFirst({
     where: { hsnId },
     orderBy: [{ priority: "desc" }, { updatedAt: "desc" }],
-    select: { slabId: true },
+    select: { slab: { select: { taxRate: true, cessRate: true } } },
   });
-  return map?.slabId ? String(map.slabId) : null;
+
+  const slab = map?.slab as { taxRate?: unknown; cessRate?: unknown } | undefined;
+  if (!slab) {
+    return null;
+  }
+
+  return {
+    taxRate: Number(slab.taxRate),
+    cessRate: Number(slab.cessRate ?? 0),
+  };
 }
 
-export async function previewBulkProductTaxMappings(rows: ProductTaxBulkRow[]): Promise<GstServiceResult<Record<string, unknown>>> {
+export async function previewBulkProductTaxMappings(
+  rows: ProductTaxBulkRow[],
+  shopId?: string | null,
+): Promise<GstServiceResult<Record<string, unknown>>> {
   const normalized = (rows || []).map((row, index) => ({
     index,
-    sku: norm(row.sku),
+    sku: toUpperOrEmpty(row.sku),
+    styleCode: toUpperOrEmpty(row.styleCode) || deriveStyleCodeFromSku(row.sku),
     hsnCode: norm(row.hsnCode),
-    slabId: norm(row.slabId),
     taxRate: typeof row.taxRate === "number" ? row.taxRate : Number(row.taxRate),
-    source: norm(row.source) || "bulk_sku",
+    cessRate: typeof row.cessRate === "number" ? row.cessRate : Number(row.cessRate),
+    source: norm(row.source) || "PASTE",
   }));
-  const seen = new Map<string, number[]>();
 
+  const seen = new Map<string, number[]>();
   normalized.forEach((row) => {
-    const key = row.sku.toUpperCase();
+    const key = row.sku;
     if (!key) return;
     seen.set(key, [...(seen.get(key) || []), row.index]);
   });
@@ -95,41 +111,34 @@ export async function previewBulkProductTaxMappings(rows: ProductTaxBulkRow[]): 
       continue;
     }
 
-    const skuResolved = await resolveSku(row.sku);
-    if (!skuResolved || !skuResolved.shopifyProductId) {
-      unmatched.push({ rowIndex: row.index, sku: row.sku, hsnCode: row.hsnCode, error: "Unknown SKU" });
-      continue;
-    }
-
     const hsn = await productBulkDb.gstHsnCode.findUnique({ where: { hsnCode: row.hsnCode }, select: { id: true, hsnCode: true } });
     if (!hsn) {
       invalidRows.push({ rowIndex: row.index, sku: row.sku, hsnCode: row.hsnCode, error: "HSN code not found" });
       continue;
     }
 
-    const slabId = row.slabId || (await resolveSlabId(String(hsn.id), Number.isFinite(row.taxRate) ? row.taxRate : undefined)) || "";
-    if (!slabId) {
+    const resolvedTax = await resolveTaxForHsn(String(hsn.id), Number.isFinite(row.taxRate) ? row.taxRate : undefined);
+    const finalTaxRate = Number.isFinite(row.taxRate) ? row.taxRate : resolvedTax?.taxRate;
+    const finalCessRate = Number.isFinite(row.cessRate) ? row.cessRate : resolvedTax?.cessRate;
+
+    if (!Number.isFinite(finalTaxRate) || !Number.isFinite(finalCessRate)) {
       invalidRows.push({ rowIndex: row.index, sku: row.sku, hsnCode: row.hsnCode, error: "No slab configured for HSN" });
       continue;
     }
 
-    const existing = await productBulkDb.gstProductTaxMap.findFirst({
-      where: {
-        shopifyProductId: String(skuResolved.shopifyProductId),
-        shopifyVariantId: skuResolved.shopifyVariantId ? String(skuResolved.shopifyVariantId) : null,
-      },
-      select: { id: true, hsnId: true, slabId: true, status: true },
+    const existing = await productBulkDb.gstSkuTaxMap.findFirst({
+      where: { shopId: shopId || null, sku: row.sku },
+      select: { id: true, hsnCode: true, taxRate: true, cessRate: true, status: true },
+      orderBy: [{ updatedAt: "desc" }],
     });
 
     matched.push({
       rowIndex: row.index,
       sku: row.sku,
+      styleCode: row.styleCode,
       hsnCode: row.hsnCode,
-      hsnId: String(hsn.id),
-      slabId,
-      shopifyProductId: String(skuResolved.shopifyProductId),
-      shopifyVariantId: skuResolved.shopifyVariantId ? String(skuResolved.shopifyVariantId) : null,
-      title: skuResolved.title ? String(skuResolved.title) : null,
+      taxRate: finalTaxRate,
+      cessRate: finalCessRate,
       existingMappingId: existing?.id ? String(existing.id) : null,
       source: row.source,
     });
@@ -150,8 +159,11 @@ export async function previewBulkProductTaxMappings(rows: ProductTaxBulkRow[]): 
   };
 }
 
-export async function applyBulkProductTaxMappings(rows: ProductTaxBulkRow[]): Promise<GstServiceResult<Record<string, unknown>>> {
-  const preview = await previewBulkProductTaxMappings(rows);
+export async function applyBulkProductTaxMappings(
+  rows: ProductTaxBulkRow[],
+  shopId?: string | null,
+): Promise<GstServiceResult<Record<string, unknown>>> {
+  const preview = await previewBulkProductTaxMappings(rows, shopId);
   if (!preview.ok || !preview.data) {
     return { ok: false, error: preview.error || "Preview failed" };
   }
@@ -162,22 +174,52 @@ export async function applyBulkProductTaxMappings(rows: ProductTaxBulkRow[]): Pr
   const failed: Array<Record<string, unknown>> = [];
 
   for (const row of matched) {
-    const result = await upsertProductTaxMapping({
-      shopifyProductId: String(row.shopifyProductId || ""),
-      shopifyVariantId: row.shopifyVariantId ? String(row.shopifyVariantId) : null,
-      hsnId: String(row.hsnId || ""),
-      slabId: String(row.slabId || ""),
-      source: String(row.source || "bulk_sku"),
-      status: "ACTIVE",
-      metadata: { sku: String(row.sku || ""), bulk: true },
-    });
+    try {
+      const existing = await productBulkDb.gstSkuTaxMap.findFirst({
+        where: { shopId: shopId || null, sku: String(row.sku || "") },
+        select: { id: true },
+        orderBy: [{ updatedAt: "desc" }],
+      });
 
-    if (!result.ok) {
-      failed.push({ rowIndex: row.rowIndex, sku: row.sku, error: result.error || "Upsert failed" });
-      continue;
+      const payload = {
+        hsnCode: String(row.hsnCode || ""),
+        taxRate: Number(row.taxRate),
+        cessRate: Number(row.cessRate),
+        status: "ACTIVE",
+        source: "PASTE",
+      };
+
+      const styleCode = toUpperOrEmpty(row.styleCode) || deriveStyleCodeFromSku(String(row.sku || ""));
+
+      if (existing?.id) {
+        await productBulkDb.gstSkuTaxMap.update({
+          where: { id: String(existing.id) },
+          data: { ...payload, styleCode },
+        });
+      } else {
+        await productBulkDb.gstSkuTaxMap.create({
+          data: {
+            shopId: shopId || null,
+            sku: String(row.sku || ""),
+            styleCode,
+            ...payload,
+          },
+        });
+      }
+
+      applied += 1;
+    } catch (error) {
+      failed.push({
+        rowIndex: row.rowIndex,
+        sku: row.sku,
+        error: error instanceof Error ? error.message : "Upsert failed",
+      });
     }
+  }
 
-    applied += 1;
+  const recompute = await recomputeImportedOrderMappings({ shopId: shopId || null });
+  if (!recompute.ok) {
+    return { ok: false, error: recompute.error || "Failed to recompute imported order mappings" };
   }
 
   return {
@@ -186,6 +228,7 @@ export async function applyBulkProductTaxMappings(rows: ProductTaxBulkRow[]): Pr
       applied,
       failedCount: failed.length,
       failed,
+      recompute: recompute.data,
       preview: data,
     },
   };
@@ -231,12 +274,12 @@ export async function exportUnmappedSkusCsv(): Promise<GstServiceResult<string>>
   const lines = ["SKU,product_title,variant_title,order_count,last_ordered_date,current_mapping_status"];
 
   for (const value of usage.values()) {
-    const mapping = await productBulkDb.gstProductTaxMap.findFirst({
+    const mapping = await productBulkDb.gstSkuTaxMap.findFirst({
       where: {
-        shopifyProductId: value.productId,
-        shopifyVariantId: value.variantId || null,
+        sku: value.sku,
       },
       select: { id: true },
+      orderBy: [{ updatedAt: "desc" }],
     });
 
     if (mapping) continue;
