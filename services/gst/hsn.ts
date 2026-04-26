@@ -51,6 +51,21 @@ export interface AssignSlabToHsnInput {
   priority?: number;
 }
 
+export interface GstHsnSlabMapRecord {
+  id: string;
+  hsnId: string;
+  slabId: string;
+  effectiveFrom: Date | null;
+  effectiveTo: Date | null;
+  priority: number;
+  createdAt: Date;
+  updatedAt: Date;
+  hsnCode?: string;
+  slabCode?: string;
+  taxRate?: number;
+  cessRate?: number;
+}
+
 type HsnDbClient = {
   gstHsnCode: {
     findMany: (args: unknown) => Promise<Array<Record<string, unknown>>>;
@@ -66,7 +81,7 @@ type HsnDbClient = {
   };
   gstHsnSlabMap: {
     findFirst: (args: unknown) => Promise<{ id: string } | (Record<string, unknown> & { slab: Record<string, unknown> }) | null>;
-    update: (args: unknown) => Promise<{ id: string }>;
+    findMany: (args: unknown) => Promise<Array<Record<string, unknown>>>;
     create: (args: unknown) => Promise<{ id: string }>;
   };
 };
@@ -127,6 +142,54 @@ function toTaxSlabRecord(row: {
     effectiveFrom: row.effectiveFrom,
     effectiveTo: row.effectiveTo,
   };
+}
+
+
+function toNumber(value: unknown): number | undefined {
+  if (typeof value === "number") return value;
+  if (value && typeof value === "object" && "toNumber" in value && typeof (value as { toNumber: unknown }).toNumber === "function") {
+    return ((value as { toNumber: () => number }).toNumber());
+  }
+
+  const casted = Number(value);
+  return Number.isFinite(casted) ? casted : undefined;
+}
+
+function toHsnSlabMapRecord(row: Record<string, unknown>): GstHsnSlabMapRecord {
+  const hsn = row.hsn && typeof row.hsn === "object" ? (row.hsn as Record<string, unknown>) : null;
+  const slab = row.slab && typeof row.slab === "object" ? (row.slab as Record<string, unknown>) : null;
+
+  return {
+    id: String(row.id || ""),
+    hsnId: String(row.hsnId || ""),
+    slabId: String(row.slabId || ""),
+    effectiveFrom: row.effectiveFrom instanceof Date ? row.effectiveFrom : null,
+    effectiveTo: row.effectiveTo instanceof Date ? row.effectiveTo : null,
+    priority: Number(row.priority || 0),
+    createdAt: row.createdAt instanceof Date ? row.createdAt : new Date(0),
+    updatedAt: row.updatedAt instanceof Date ? row.updatedAt : new Date(0),
+    hsnCode: hsn?.hsnCode ? String(hsn.hsnCode) : undefined,
+    slabCode: slab?.slabCode ? String(slab.slabCode) : undefined,
+    taxRate: toNumber(slab?.taxRate),
+    cessRate: toNumber(slab?.cessRate),
+  };
+}
+
+export async function listHsnSlabMaps(): Promise<GstServiceResult<GstHsnSlabMapRecord[]>> {
+  try {
+    const rows = await hsnDb.gstHsnSlabMap.findMany({
+      include: {
+        hsn: { select: { hsnCode: true } },
+        slab: { select: { slabCode: true, taxRate: true, cessRate: true } },
+      },
+      orderBy: [{ updatedAt: "desc" }],
+    });
+
+    return { ok: true, data: rows.map((row) => toHsnSlabMapRecord(row)) };
+  } catch (error) {
+    console.error("[GST HSN] listHsnSlabMaps failed", { error: error instanceof Error ? error.message : String(error) });
+    return { ok: false, error: "Failed to list GST HSN slab maps" };
+  }
 }
 
 export async function listHsnCodes(): Promise<GstServiceResult<GstHsnCodeRecord[]>> {
@@ -272,39 +335,34 @@ export async function deleteTaxSlab(id: string): Promise<GstServiceResult<{ id: 
 }
 
 export async function assignSlabToHsn(input: AssignSlabToHsnInput): Promise<GstServiceResult<{ id: string }>> {
+  const hsnId = String(input.hsnId || "").trim();
+  const slabId = String(input.slabId || "").trim();
+  if (!hsnId || !slabId) {
+    return { ok: false, error: "hsnId and slabId are required" };
+  }
+
   try {
     const effectiveFrom = toDate(input.effectiveFrom);
     const effectiveTo = toDate(input.effectiveTo);
 
-    const existing = await hsnDb.gstHsnSlabMap.findFirst({
-      where: {
-        hsnId: String(input.hsnId),
-        slabId: String(input.slabId),
+    const row = await hsnDb.gstHsnSlabMap.create({
+      data: {
+        hsnId,
+        slabId,
         effectiveFrom,
         effectiveTo,
+        priority: Number(input.priority ?? 0),
       },
       select: { id: true },
     });
 
-    const row = existing
-      ? await hsnDb.gstHsnSlabMap.update({
-          where: { id: existing.id },
-          data: { priority: Number(input.priority ?? 0), effectiveFrom, effectiveTo },
-          select: { id: true },
-        })
-      : await hsnDb.gstHsnSlabMap.create({
-          data: {
-            hsnId: String(input.hsnId),
-            slabId: String(input.slabId),
-            effectiveFrom,
-            effectiveTo,
-            priority: Number(input.priority ?? 0),
-          },
-          select: { id: true },
-        });
-
     return { ok: true, data: { id: row.id } };
   } catch (error) {
+    const code = typeof error === "object" && error !== null && "code" in error ? String((error as { code: unknown }).code) : "";
+    if (code === "P2002") {
+      return { ok: false, error: "HSN slab assignment already exists for the selected effective dates" };
+    }
+
     console.error("[GST HSN] assignSlabToHsn failed", {
       error: error instanceof Error ? error.message : String(error),
       hsnId: input.hsnId,

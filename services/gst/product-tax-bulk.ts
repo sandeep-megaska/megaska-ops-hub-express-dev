@@ -6,6 +6,7 @@ export interface ProductTaxBulkRow {
   sku: string;
   hsnCode: string;
   slabId?: string;
+  taxRate?: number;
   source?: string;
 }
 
@@ -40,7 +41,21 @@ async function resolveSku(sku: string) {
   return row[0] || null;
 }
 
-async function resolveSlabId(hsnId: string): Promise<string | null> {
+async function resolveSlabId(hsnId: string, taxRate?: number): Promise<string | null> {
+  if (typeof taxRate === "number" && Number.isFinite(taxRate)) {
+    const rateMatch = await productBulkDb.gstHsnSlabMap.findFirst({
+      where: {
+        hsnId,
+        slab: { taxRate },
+      },
+      orderBy: [{ priority: "desc" }, { updatedAt: "desc" }],
+      select: { slabId: true },
+    });
+    if (rateMatch?.slabId) {
+      return String(rateMatch.slabId);
+    }
+  }
+
   const map = await productBulkDb.gstHsnSlabMap.findFirst({
     where: { hsnId },
     orderBy: [{ priority: "desc" }, { updatedAt: "desc" }],
@@ -50,7 +65,14 @@ async function resolveSlabId(hsnId: string): Promise<string | null> {
 }
 
 export async function previewBulkProductTaxMappings(rows: ProductTaxBulkRow[]): Promise<GstServiceResult<Record<string, unknown>>> {
-  const normalized = (rows || []).map((row, index) => ({ index, sku: norm(row.sku), hsnCode: norm(row.hsnCode), slabId: norm(row.slabId), source: norm(row.source) || "bulk_sku" }));
+  const normalized = (rows || []).map((row, index) => ({
+    index,
+    sku: norm(row.sku),
+    hsnCode: norm(row.hsnCode),
+    slabId: norm(row.slabId),
+    taxRate: typeof row.taxRate === "number" ? row.taxRate : Number(row.taxRate),
+    source: norm(row.source) || "bulk_sku",
+  }));
   const seen = new Map<string, number[]>();
 
   normalized.forEach((row) => {
@@ -85,7 +107,7 @@ export async function previewBulkProductTaxMappings(rows: ProductTaxBulkRow[]): 
       continue;
     }
 
-    const slabId = row.slabId || (await resolveSlabId(String(hsn.id))) || "";
+    const slabId = row.slabId || (await resolveSlabId(String(hsn.id), Number.isFinite(row.taxRate) ? row.taxRate : undefined)) || "";
     if (!slabId) {
       invalidRows.push({ rowIndex: row.index, sku: row.sku, hsnCode: row.hsnCode, error: "No slab configured for HSN" });
       continue;

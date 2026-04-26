@@ -100,7 +100,8 @@ export const listTaxSlabs = () => request<{ ok: boolean; data: Array<Record<stri
 export const upsertTaxSlab = (payload: Record<string, unknown>) => request<{ ok: boolean; data: Record<string, unknown> }>('/api/gst/tax-slabs', { method: 'POST', body: JSON.stringify(payload) })
 export const deleteTaxSlab = (id: string) => request<{ ok: boolean; data: Record<string, unknown> }>(`/api/gst/tax-slabs?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
 
-export const assignSlabToHsn = (payload: Record<string, unknown>) => request<{ ok: boolean; data: Record<string, unknown> }>('/api/gst/hsn', { method: 'POST', body: JSON.stringify(payload) })
+export const listHsnSlabMaps = () => request<{ ok: boolean; data: Array<Record<string, unknown>> }>('/api/gst/hsn-slab-maps')
+export const assignSlabToHsn = (payload: Record<string, unknown>) => request<{ ok: boolean; data: Record<string, unknown> }>('/api/gst/hsn-slab-maps', { method: 'POST', body: JSON.stringify(payload) })
 
 export const listProductTaxMappings = (query: { status?: string; shopifyProductId?: string; shopifyVariantId?: string; search?: string } = {}) => {
   const search = new URLSearchParams()

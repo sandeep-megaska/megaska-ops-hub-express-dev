@@ -10,7 +10,7 @@ export async function POST(req: NextRequest) {
   }
 
   const result = await previewBulkProductTaxMappings(
-    Array.isArray(body.rows) ? body.rows.map((row) => row as { sku: string; hsnCode: string; slabId?: string }) : []
+    Array.isArray(body.rows) ? body.rows.map((row) => row as { sku: string; hsnCode: string; slabId?: string; taxRate?: number }) : []
   );
 
   if (!result.ok) {

@@ -2,11 +2,13 @@
 
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import {
+  assignSlabToHsn,
   bulkApplyProductMappings,
   bulkPreviewProductMappings,
   deleteHsnCode,
   deleteTaxSlab,
   listHsnCodes,
+  listHsnSlabMaps,
   listProductTaxMappings,
   listTaxSlabs,
   listUnmappedProducts,
@@ -27,6 +29,7 @@ export function GstProductsAdmin() {
   const [hsnRows, setHsnRows] = useState<Row[]>([])
   const [slabRows, setSlabRows] = useState<Row[]>([])
   const [mappingRows, setMappingRows] = useState<Row[]>([])
+  const [hsnSlabRows, setHsnSlabRows] = useState<Row[]>([])
   const [unmappedRows, setUnmappedRows] = useState<Row[]>([])
   const [bulkText, setBulkText] = useState('')
   const [bulkCsvText, setBulkCsvText] = useState('')
@@ -38,23 +41,27 @@ export function GstProductsAdmin() {
   const [hsnForm, setHsnForm] = useState({ hsnCode: '', description: '' })
   const [slabForm, setSlabForm] = useState({ slabCode: '', taxRate: '18', cessRate: '0' })
   const [mappingForm, setMappingForm] = useState({ sku: '', shopifyProductId: '', shopifyVariantId: '', hsnId: '', slabId: '' })
+  const [hsnSlabForm, setHsnSlabForm] = useState({ hsnId: '', slabId: '' })
 
   async function refreshAll() {
     setLoading(true)
-    const [hsnRes, slabRes, mappingsRes, unmappedRes] = await Promise.all([
+    const [hsnRes, slabRes, hsnSlabRes, mappingsRes, unmappedRes] = await Promise.all([
       listHsnCodes(),
       listTaxSlabs(),
+      listHsnSlabMaps(),
       listProductTaxMappings(),
       listUnmappedProducts(),
     ])
 
     if (!hsnRes.ok) setError(hsnRes.error)
     if (!slabRes.ok) setError(slabRes.error)
+    if (!hsnSlabRes.ok) setError(hsnSlabRes.error)
     if (!mappingsRes.ok) setError(mappingsRes.error)
     if (!unmappedRes.ok) setError(unmappedRes.error)
 
     setHsnRows((hsnRes.data as { data?: Row[] })?.data || [])
     setSlabRows((slabRes.data as { data?: Row[] })?.data || [])
+    setHsnSlabRows((hsnSlabRes.data as { data?: Row[] })?.data || [])
     setMappingRows((mappingsRes.data as { data?: Row[] })?.data || [])
     setUnmappedRows((unmappedRes.data as { data?: Row[] })?.data || [])
     setLoading(false)
@@ -166,6 +173,20 @@ export function GstProductsAdmin() {
     }
   }
 
+  async function onAssignHsnSlab(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    const res = await assignSlabToHsn({
+      hsnId: hsnSlabForm.hsnId,
+      slabId: hsnSlabForm.slabId,
+    })
+    if (!res.ok) setError(res.error)
+    else {
+      setResult(res.data)
+      setHsnSlabForm({ hsnId: '', slabId: '' })
+      await refreshAll()
+    }
+  }
+
   return (
     <div className="grid gap-6 xl:grid-cols-[1.3fr_0.7fr]">
       <div className="space-y-5">
@@ -208,6 +229,15 @@ export function GstProductsAdmin() {
               <button className="rounded-xl bg-gray-900 px-4 py-2.5 text-sm text-white">Save Slab</button>
             </form>
             <div className="overflow-x-auto rounded-xl border border-gray-200"><table className="min-w-full text-sm"><thead className="bg-gray-50 text-left text-gray-600"><tr><th className="px-3 py-2">Code</th><th className="px-3 py-2">Tax</th><th className="px-3 py-2">Cess</th><th className="px-3 py-2">Action</th></tr></thead><tbody>{slabRows.map((row) => <tr key={String(row.id)} className="border-t border-gray-100"><td className="px-3 py-2 font-medium">{String(row.slabCode || '')}</td><td className="px-3 py-2">{String(row.taxRate || '')}</td><td className="px-3 py-2">{String(row.cessRate || '')}</td><td className="px-3 py-2"><button className="rounded-lg border border-red-200 px-2.5 py-1 text-red-700" onClick={() => void deleteTaxSlab(String(row.id))}>Delete</button></td></tr>)}</tbody></table></div>
+            <div className="rounded-xl border border-gray-200 p-4 space-y-3">
+              <h3 className="text-sm font-semibold text-gray-900">Assign Tax Slab to HSN</h3>
+              <form onSubmit={onAssignHsnSlab} className="grid gap-3 md:grid-cols-3">
+                <select className="rounded-xl border border-gray-300 px-3 py-2.5 text-sm" value={hsnSlabForm.hsnId} onChange={(e) => setHsnSlabForm((p) => ({ ...p, hsnId: e.target.value }))}><option value="">HSN code</option>{hsnRows.map((h) => <option key={String(h.id)} value={String(h.id)}>{String(h.hsnCode)}</option>)}</select>
+                <select className="rounded-xl border border-gray-300 px-3 py-2.5 text-sm" value={hsnSlabForm.slabId} onChange={(e) => setHsnSlabForm((p) => ({ ...p, slabId: e.target.value }))}><option value="">Tax slab</option>{slabRows.map((s) => <option key={String(s.id)} value={String(s.id)}>{String(s.slabCode)} ({String(s.taxRate || '')}%)</option>)}</select>
+                <button className="rounded-xl bg-gray-900 px-4 py-2.5 text-sm text-white w-fit">Assign</button>
+              </form>
+              <div className="overflow-x-auto rounded-xl border border-gray-200"><table className="min-w-full text-sm"><thead className="bg-gray-50 text-left text-gray-600"><tr><th className="px-3 py-2">HSN</th><th className="px-3 py-2">Slab</th><th className="px-3 py-2">Tax</th><th className="px-3 py-2">Priority</th></tr></thead><tbody>{hsnSlabRows.map((row) => <tr key={String(row.id)} className="border-t border-gray-100"><td className="px-3 py-2">{String(row.hsnCode || row.hsnId || '')}</td><td className="px-3 py-2">{String(row.slabCode || row.slabId || '')}</td><td className="px-3 py-2">{String(row.taxRate || '')}</td><td className="px-3 py-2">{String(row.priority || 0)}</td></tr>)}</tbody></table></div>
+            </div>
           </div>
         )}
 
