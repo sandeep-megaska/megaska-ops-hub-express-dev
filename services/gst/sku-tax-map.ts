@@ -13,6 +13,9 @@ type SkuMapDbClient = {
   gstOrderImportLine: {
     findMany: (args: unknown) => Promise<Array<Record<string, unknown>>>;
   };
+  gstHsnSlabMap: {
+    findFirst: (args: unknown) => Promise<Record<string, unknown> | null>;
+  };
 };
 
 const skuMapDb = gstDb as unknown as SkuMapDbClient;
@@ -246,7 +249,7 @@ export async function importSkuMappingsCsv(
     const sku = norm(rawRow.sku) || null;
     const styleCode = norm(rawRow.styleCode).toUpperCase() || deriveStyleCodeFromSku(sku);
     const hsnCode = norm(rawRow.hsnCode);
-    const taxRate = Number(rawRow.taxRate);
+    const parsedTaxRate = rawRow.taxRate === undefined || rawRow.taxRate === "" ? null : Number(rawRow.taxRate);
     const cessRate = rawRow.cessRate === undefined || rawRow.cessRate === "" ? 0 : Number(rawRow.cessRate);
 
     if (!sku && !styleCode) {
@@ -259,7 +262,7 @@ export async function importSkuMappingsCsv(
       errors.push(`Row ${rowNum}: hsnCode is required`);
       continue;
     }
-    if (!Number.isFinite(taxRate)) {
+    if (parsedTaxRate !== null && !Number.isFinite(parsedTaxRate)) {
       skipped += 1;
       errors.push(`Row ${rowNum}: taxRate must be numeric`);
       continue;
@@ -268,6 +271,28 @@ export async function importSkuMappingsCsv(
       skipped += 1;
       errors.push(`Row ${rowNum}: cessRate must be numeric`);
       continue;
+    }
+    let taxRate = parsedTaxRate;
+    if (taxRate === null) {
+      const defaultSlab = await skuMapDb.gstHsnSlabMap.findFirst({
+        where: { hsn: { hsnCode } },
+        orderBy: [{ priority: "desc" }, { updatedAt: "desc" }],
+        select: {
+          slab: {
+            select: {
+              taxRate: true,
+            },
+          },
+        },
+      });
+
+      const resolvedTaxRate = Number((defaultSlab as { slab?: { taxRate?: unknown } } | null)?.slab?.taxRate);
+      if (!Number.isFinite(resolvedTaxRate)) {
+        skipped += 1;
+        errors.push(`Row ${rowNum}: taxRate is required when no default slab can be resolved for hsnCode ${hsnCode}`);
+        continue;
+      }
+      taxRate = resolvedTaxRate;
     }
 
     const existing = await skuMapDb.gstSkuTaxMap.findFirst({

@@ -8,28 +8,25 @@ import {
   deleteTaxSlab,
   listHsnCodes,
   listHsnSlabMaps,
-  listProductTaxMappings,
   listTaxSlabs,
   listUnmappedProducts,
   importSkuMappingsCsv,
   recomputeSkuMappingReadiness,
   upsertSkuTaxMapping,
   upsertHsnCode,
-  upsertProductTaxMapping,
   upsertTaxSlab,
 } from '../../lib/gst-client'
 import { GstResponseViewer } from './gst-response-viewer'
 
 type Row = Record<string, unknown>
 
-const tabs = ['HSN Master', 'Tax Slabs', 'SKU Tax Mapping', 'Unmapped SKUs', 'Bulk Assignment', 'Advanced Product Fallback'] as const
+const tabs = ['HSN Master', 'Tax Slabs', 'SKU Tax Mapping', 'Bulk Assignment', 'Missing SKU Mappings'] as const
 
 export function GstProductsAdmin() {
   const [activeTab, setActiveTab] = useState<(typeof tabs)[number]>('HSN Master')
   const [hsnRows, setHsnRows] = useState<Row[]>([])
   const [slabRows, setSlabRows] = useState<Row[]>([])
   const [skuMappingRows, setSkuMappingRows] = useState<Row[]>([])
-  const [mappingRows, setMappingRows] = useState<Row[]>([])
   const [hsnSlabRows, setHsnSlabRows] = useState<Row[]>([])
   const [unmappedRows, setUnmappedRows] = useState<Row[]>([])
   const [bulkText, setBulkText] = useState('')
@@ -42,17 +39,15 @@ export function GstProductsAdmin() {
   const [hsnForm, setHsnForm] = useState({ hsnCode: '', description: '' })
   const [slabForm, setSlabForm] = useState({ slabCode: '', taxRate: '18', cessRate: '0' })
   const [mappingForm, setMappingForm] = useState({ sku: '', styleCode: '', hsnCode: '', taxRate: '18', cessRate: '0' })
-  const [productFallbackForm, setProductFallbackForm] = useState({ sku: '', shopifyProductId: '', shopifyVariantId: '', hsnId: '', slabId: '' })
   const [hsnSlabForm, setHsnSlabForm] = useState({ hsnId: '', slabId: '' })
 
   async function refreshAll() {
     setLoading(true)
-    const [hsnRes, slabRes, hsnSlabRes, skuMappingsRes, mappingsRes, unmappedRes] = await Promise.all([
+    const [hsnRes, slabRes, hsnSlabRes, skuMappingsRes, unmappedRes] = await Promise.all([
       listHsnCodes(),
       listTaxSlabs(),
       listHsnSlabMaps(),
       listSkuTaxMappings(),
-      listProductTaxMappings(),
       listUnmappedProducts(),
     ])
 
@@ -60,14 +55,12 @@ export function GstProductsAdmin() {
     if (!slabRes.ok) setError(slabRes.error)
     if (!hsnSlabRes.ok) setError(hsnSlabRes.error)
     if (!skuMappingsRes.ok) setError(skuMappingsRes.error)
-    if (!mappingsRes.ok) setError(mappingsRes.error)
     if (!unmappedRes.ok) setError(unmappedRes.error)
 
     setHsnRows((hsnRes.data as { data?: Row[] })?.data || [])
     setSlabRows((slabRes.data as { data?: Row[] })?.data || [])
     setHsnSlabRows((hsnSlabRes.data as { data?: Row[] })?.data || [])
     setSkuMappingRows((skuMappingsRes.data as { data?: Row[] })?.data || [])
-    setMappingRows((mappingsRes.data as { data?: Row[] })?.data || [])
     setUnmappedRows((unmappedRes.data as { data?: Row[] })?.data || [])
     setLoading(false)
   }
@@ -94,7 +87,7 @@ export function GstProductsAdmin() {
           cessRate: values[4] || '',
         }
       }
-      return { sku: values[0] || '', styleCode: '', hsnCode: values[1] || '', taxRate: '', cessRate: '' }
+      return { sku: values[0] || '', styleCode: '', hsnCode: values[1] || '', taxRate: values[2] || '', cessRate: values[3] || '' }
     }
 
     if (line.includes('\t')) {
@@ -161,8 +154,8 @@ export function GstProductsAdmin() {
       return
     }
     const csvText = [
-      'sku,styleCode,hsnCode,taxRate,cessRate',
-      ...rows.map((row) => [row.sku, row.styleCode || '', row.hsnCode, row.taxRate ?? '', row.cessRate ?? 0].join(',')),
+      'sku,hsnCode,taxRate,cessRate',
+      ...rows.map((row) => [row.sku, row.hsnCode, row.taxRate ?? '', row.cessRate ?? 0].join(',')),
     ].join('\n')
     const res = await importSkuMappingsCsv({ csvText })
     if (!res.ok) {
@@ -235,25 +228,6 @@ export function GstProductsAdmin() {
     else {
       setResult(res.data)
       setMappingForm({ sku: '', styleCode: '', hsnCode: '', taxRate: '18', cessRate: '0' })
-      await refreshAll()
-    }
-  }
-
-  async function onSaveProductFallback(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    const res = await upsertProductTaxMapping({
-      shopifyProductId: productFallbackForm.shopifyProductId,
-      shopifyVariantId: productFallbackForm.shopifyVariantId || null,
-      hsnId: productFallbackForm.hsnId,
-      slabId: productFallbackForm.slabId,
-      source: 'advanced_product_fallback',
-      status: 'ACTIVE',
-      metadata: { sku: productFallbackForm.sku },
-    })
-
-    if (!res.ok) setError(res.error)
-    else {
-      setResult(res.data)
       await refreshAll()
     }
   }
@@ -341,7 +315,7 @@ export function GstProductsAdmin() {
           </div>
         )}
 
-        {activeTab === 'Unmapped SKUs' && (
+        {activeTab === 'Missing SKU Mappings' && (
           <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm space-y-3">
             <div className="space-y-3 rounded-xl border border-gray-200 bg-gray-50 p-4">
               <h2 className="text-base font-semibold text-gray-900">Bulk SKU HSN Mapping</h2>
@@ -359,32 +333,17 @@ export function GstProductsAdmin() {
                 </div>
               )}
             </div>
-            <div className="flex items-center justify-between"><h2 className="text-base font-semibold text-gray-900">Unmapped SKUs</h2><a className="rounded-xl border border-gray-300 px-3 py-2 text-sm" href="/api/gst/products/unmapped/export">Legacy Export CSV</a></div>
-            <div className="overflow-x-auto rounded-xl border border-gray-200"><table className="min-w-full text-sm"><thead className="bg-gray-50 text-left text-gray-600"><tr><th className="px-3 py-2">SKU</th><th className="px-3 py-2">Product Title</th><th className="px-3 py-2">Product ID</th><th className="px-3 py-2">Variant ID</th></tr></thead><tbody>{unmappedRows.map((row, idx) => <tr key={`${String(row.sku || '')}-${idx}`} className="border-t border-gray-100"><td className="px-3 py-2 font-medium">{String(row.sku || '')}</td><td className="px-3 py-2">{String(row.title || '')}</td><td className="px-3 py-2">{String(row.shopifyProductId || '')}</td><td className="px-3 py-2">{String(row.shopifyVariantId || '')}</td></tr>)}</tbody></table></div>
+            <div className="flex items-center justify-between"><h2 className="text-base font-semibold text-gray-900">Missing SKU Mappings</h2><a className="rounded-xl border border-gray-300 px-3 py-2 text-sm" href="/api/gst/products/unmapped/export">Legacy Export CSV</a></div>
+            <div className="overflow-x-auto rounded-xl border border-gray-200"><table className="min-w-full text-sm"><thead className="bg-gray-50 text-left text-gray-600"><tr><th className="px-3 py-2">SKU</th><th className="px-3 py-2">Product Title</th><th className="px-3 py-2">Style Code</th></tr></thead><tbody>{unmappedRows.map((row, idx) => <tr key={`${String(row.sku || '')}-${idx}`} className="border-t border-gray-100"><td className="px-3 py-2 font-medium">{String(row.sku || '')}</td><td className="px-3 py-2">{String(row.title || '')}</td><td className="px-3 py-2">{String(row.styleCode || '')}</td></tr>)}</tbody></table></div>
           </div>
         )}
 
         {activeTab === 'Bulk Assignment' && (
           <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm space-y-3">
             <h2 className="text-base font-semibold text-gray-900">Bulk Assignment (Upsert SKU Tax Mapping)</h2>
-            <p className="text-sm text-gray-500">Paste CSV lines in format: <span className="font-mono">sku,styleCode,hsnCode,taxRate,cessRate</span>. Apply upserts directly into <span className="font-mono">GstSkuTaxMap</span>.</p>
+            <p className="text-sm text-gray-500">Paste CSV lines in format: <span className="font-mono">sku,hsnCode,taxRate,cessRate</span>. Optional 5th-column format with <span className="font-mono">styleCode</span> is also supported. Apply upserts directly into <span className="font-mono">GstSkuTaxMap</span>.</p>
             <textarea className="h-40 w-full rounded-xl border border-gray-300 px-3 py-2.5 font-mono text-xs" value={bulkText} onChange={(e) => setBulkText(e.target.value)} />
             <div className="flex gap-2"><button className="rounded-xl border border-gray-300 px-4 py-2.5 text-sm" onClick={() => void onPreviewBulk()}>Preview</button><button className="rounded-xl bg-gray-900 px-4 py-2.5 text-sm text-white" onClick={() => void onApplyBulk()}>Apply</button></div>
-          </div>
-        )}
-
-        {activeTab === 'Advanced Product Fallback' && (
-          <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm space-y-3">
-            <h2 className="text-base font-semibold text-gray-900">Advanced Product/Variant Mapping (Fallback Only)</h2>
-            <form onSubmit={onSaveProductFallback} className="grid gap-3 md:grid-cols-5">
-              <input className="rounded-xl border border-gray-300 px-3 py-2.5 text-sm" placeholder="SKU (metadata only)" value={productFallbackForm.sku} onChange={(e) => setProductFallbackForm((p) => ({ ...p, sku: e.target.value }))} />
-              <input className="rounded-xl border border-gray-300 px-3 py-2.5 text-sm" placeholder="Product ID" value={productFallbackForm.shopifyProductId} onChange={(e) => setProductFallbackForm((p) => ({ ...p, shopifyProductId: e.target.value }))} />
-              <input className="rounded-xl border border-gray-300 px-3 py-2.5 text-sm" placeholder="Variant ID" value={productFallbackForm.shopifyVariantId} onChange={(e) => setProductFallbackForm((p) => ({ ...p, shopifyVariantId: e.target.value }))} />
-              <select className="rounded-xl border border-gray-300 px-3 py-2.5 text-sm" value={productFallbackForm.hsnId} onChange={(e) => setProductFallbackForm((p) => ({ ...p, hsnId: e.target.value }))}><option value="">HSN</option>{hsnRows.map((h) => <option key={String(h.id)} value={String(h.id)}>{String(h.hsnCode)}</option>)}</select>
-              <select className="rounded-xl border border-gray-300 px-3 py-2.5 text-sm" value={productFallbackForm.slabId} onChange={(e) => setProductFallbackForm((p) => ({ ...p, slabId: e.target.value }))}><option value="">Slab</option>{slabRows.map((s) => <option key={String(s.id)} value={String(s.id)}>{String(s.slabCode)}</option>)}</select>
-              <button className="rounded-xl bg-gray-900 px-4 py-2.5 text-sm text-white w-fit">Save Fallback Mapping</button>
-            </form>
-            <div className="overflow-x-auto rounded-xl border border-gray-200"><table className="min-w-full text-sm"><thead className="bg-gray-50 text-left text-gray-600"><tr><th className="px-3 py-2">SKU</th><th className="px-3 py-2">Product</th><th className="px-3 py-2">Variant</th><th className="px-3 py-2">HSN</th><th className="px-3 py-2">Slab</th></tr></thead><tbody>{mappingRows.map((row) => <tr key={String(row.id)} className="border-t border-gray-100"><td className="px-3 py-2">{String((row.metadata as { sku?: string })?.sku || '-')}</td><td className="px-3 py-2">{String(row.shopifyProductId || '')}</td><td className="px-3 py-2">{String(row.shopifyVariantId || '')}</td><td className="px-3 py-2">{String(row.hsnId || '')}</td><td className="px-3 py-2">{String(row.slabId || '')}</td></tr>)}</tbody></table></div>
           </div>
         )}
       </div>
