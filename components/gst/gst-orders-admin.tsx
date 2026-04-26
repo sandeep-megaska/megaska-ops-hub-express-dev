@@ -6,7 +6,6 @@ import {
   getImportedOrderById,
   importOrder,
   listImportedOrders,
-  listDispatchReadyOrders,
   preparePrintBatch,
   syncOrders,
   syncSingleOrder,
@@ -46,37 +45,26 @@ export function GstOrdersAdmin() {
       setError(importedRes.error)
       return
     }
-
-    const dispatchRes = await listDispatchReadyOrders({
-      from: syncForm.from || undefined,
-      to: syncForm.to || undefined,
-    })
-
     const importedRows = ((importedRes.data as { data?: Row[] })?.data || []) as Row[]
-    const dispatchRows = dispatchRes.ok ? (((dispatchRes.data as { data?: Row[] })?.data || []) as Row[]) : []
-    const dispatchById = new Map(dispatchRows.map((row) => [String(row.id || ''), row]))
-    if (!dispatchRes.ok) {
-      setError(dispatchRes.error)
-    }
-
     setRows(
       importedRows.map((row) => {
-        const id = String(row.id || '')
-        const dispatchRow = dispatchById.get(id) || {}
+        const snapshot = (row.snapshot && typeof row.snapshot === 'object' ? row.snapshot : {}) as Record<string, unknown>
         const readinessErrors = Array.isArray(row.readinessErrors) ? row.readinessErrors : []
+        const importStatus = String(row.importStatus || '')
+        const eligibilityStatus = String(row.eligibilityStatus || '')
+        const itemSummary = String(row.itemSummary || '').trim()
         return {
-          ...dispatchRow,
           ...row,
-          id,
-          orderName: String(row.shopifyOrderName || dispatchRow.orderName || row.orderName || ''),
-          orderDate: row.orderCreatedAt || dispatchRow.orderDate || null,
-          customerSummary: dispatchRow.customerSummary || '-',
-          skuCount: row.skuCount || dispatchRow.skuCount || 0,
-          itemCount: row.itemCount || dispatchRow.itemCount || 0,
+          id: String(row.id || ''),
+          orderName: String(row.shopifyOrderName || ''),
+          orderDate: row.orderCreatedAt || null,
+          customerSummary: String(row.customerName || snapshot.customerName || '-') || '-',
+          itemsSummary: itemSummary || '-',
+          skuCount: Number(row.skuCount || 0),
+          itemCount: Number(row.itemCount || 0),
           readinessErrors,
-          readiness: dispatchRow.readiness || (readinessErrors.length > 0 ? 'NOT_READY' : 'READY'),
-          invoiceStatus: dispatchRow.invoiceStatus || (String(row.importStatus || '') === 'INVOICED' ? 'INVOICED' : 'NOT_INVOICED'),
-          invoiceDocumentId: row.invoiceDocumentId || dispatchRow.invoiceDocumentId || null,
+          readiness: `${importStatus}${eligibilityStatus ? ` / ${eligibilityStatus}` : ''}`,
+          invoiceStatus: importStatus === 'INVOICED' ? 'INVOICED' : 'NOT_GENERATED',
         }
       }),
     )
@@ -94,9 +82,9 @@ export function GstOrdersAdmin() {
   const hasNotReadySelection = useMemo(
     () =>
       selectedRows.some((row) => {
-        const readiness = String(row.readiness || '')
+        const importStatus = String(row.importStatus || '')
         const readinessErrors = Array.isArray(row.readinessErrors) ? row.readinessErrors : []
-        return readiness !== 'READY' || readinessErrors.length > 0
+        return importStatus !== 'INVOICE_READY' || readinessErrors.length > 0
       }),
     [selectedRows],
   )
@@ -258,6 +246,7 @@ export function GstOrdersAdmin() {
               <button type="button" className="rounded-xl border border-gray-300 px-4 py-2 text-sm" onClick={() => { setResult(undefined); setError(undefined) }}>Clear Responses</button>
             </div>
           </div>
+          <p className="mb-3 text-xs text-gray-600">Showing imported Shopify GST orders</p>
           {hasNotReadySelection ? <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">Generate Invoices is disabled because one or more selected orders are not READY.</p> : null}
           <div className="overflow-x-auto rounded-xl border border-gray-200">
             <table className="min-w-full text-sm">
@@ -274,7 +263,10 @@ export function GstOrdersAdmin() {
                       <td className="px-3 py-2 font-medium">{String(row.orderName || '')}</td>
                       <td className="px-3 py-2">{String(row.orderDate || '').slice(0, 10)}</td>
                       <td className="px-3 py-2">{String(row.customerSummary || '-')}</td>
-                      <td className="px-3 py-2">{String(row.skuCount || 0)} / {String(row.itemCount || 0)}</td>
+                      <td className="px-3 py-2">
+                        <div>{String(row.itemsSummary || '-')}</div>
+                        <div className="text-xs text-gray-500">{String(row.skuCount || 0)} SKU / {String(row.itemCount || 0)} item</div>
+                      </td>
                       <td className="px-3 py-2 font-medium">{String(row.mappingCompleteness || 0)}%</td>
                       <td className="px-3 py-2">
                         <div className="font-medium">{String(row.readiness || '')}</div>

@@ -17,6 +17,10 @@ export interface GstOrderImportRecord {
   warnings: string[];
   orderCreatedAt: Date;
   lastSyncedAt: Date | null;
+  customerName?: string | null;
+  itemSummary?: string | null;
+  itemCount?: number;
+  skuCount?: number;
 }
 
 export interface GstOrderImportFilters {
@@ -207,9 +211,27 @@ function collectUnmappedSkus(lines: Array<{ mappingStatus: string; sku?: string 
   );
 }
 
+function parseSnapshot(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+}
+
+function extractCustomerName(snapshot: unknown): string | null {
+  const parsed = parseSnapshot(snapshot);
+  const customerName = normalizeString(parsed.customerName);
+  return customerName || null;
+}
+
 function toOrderImportRecord(
   row: Record<string, unknown>,
-  options: { mappingCompleteness: number; unmappedSkus?: string[]; warnings?: string[] },
+  options: {
+    mappingCompleteness: number;
+    unmappedSkus?: string[];
+    warnings?: string[];
+    customerName?: string | null;
+    itemSummary?: string | null;
+    itemCount?: number;
+    skuCount?: number;
+  },
 ): GstOrderImportRecord {
   return {
     id: String(row.id),
@@ -224,6 +246,10 @@ function toOrderImportRecord(
     warnings: options.warnings || [],
     orderCreatedAt: parseDate(row.orderCreatedAt),
     lastSyncedAt: row.lastSyncedAt ? parseDate(row.lastSyncedAt, new Date(0)) : null,
+    customerName: options.customerName || null,
+    itemSummary: options.itemSummary || null,
+    itemCount: options.itemCount || 0,
+    skuCount: options.skuCount || 0,
   };
 }
 
@@ -391,6 +417,8 @@ export async function listImportedOrders(filters: GstOrderImportFilters): Promis
         lines: {
           select: {
             mappingStatus: true,
+            sku: true,
+            title: true,
           },
         },
       },
@@ -401,12 +429,23 @@ export async function listImportedOrders(filters: GstOrderImportFilters): Promis
       const lines = ((row.lines as Array<Record<string, unknown>> | undefined) || []).map((line) => ({
         mappingStatus: String(line.mappingStatus || "UNMAPPED"),
         sku: line.sku == null ? null : String(line.sku),
+        title: normalizeString(line.title) || null,
       }));
       const unmappedSkus = collectUnmappedSkus(lines);
+      const customerName = extractCustomerName(row.snapshot);
+      const skuSet = new Set(lines.map((line) => String(line.sku || "").trim()).filter(Boolean));
+      const lineLabels = Array.from(
+        new Set(lines.map((line) => String(line.sku || line.title || "").trim()).filter(Boolean)),
+      );
+      const itemSummary = lineLabels.length > 0 ? lineLabels.slice(0, 3).join(", ") : null;
       return toOrderImportRecord(row, {
         mappingCompleteness: calculateMappingCompleteness(lines),
         unmappedSkus,
         warnings: unmappedSkus.length > 0 ? ["Missing GST mapping for one or more SKU(s)"] : [],
+        customerName,
+        itemSummary,
+        itemCount: lines.length,
+        skuCount: skuSet.size,
       });
     });
 
