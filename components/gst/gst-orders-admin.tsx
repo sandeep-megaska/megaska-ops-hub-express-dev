@@ -186,6 +186,26 @@ export function GstOrdersAdmin() {
     setLoading(false)
   }
 
+  async function onGenerateSingle(id: string) {
+    setSelected({ [id]: true })
+    setLoading(true)
+    const res = await generateBatchInvoices({ orderImportIds: [id] })
+    if (!res.ok) setError(res.error)
+    else {
+      setResult(res.data)
+      await runOrdersList()
+    }
+    setLoading(false)
+  }
+
+  async function onPrintSingle(id: string) {
+    setLoading(true)
+    const res = await preparePrintBatch({ orderImportIds: [id] })
+    if (!res.ok) setError(res.error)
+    else setResult(res.data)
+    setLoading(false)
+  }
+
   return (
     <div className="grid gap-6 xl:grid-cols-[1.25fr_0.75fr]">
       <div className="space-y-5">
@@ -310,22 +330,3 @@ export function GstOrdersAdmin() {
     </div>
   )
 }
-  async function onGenerateSingle(id: string) {
-    setSelected({ [id]: true })
-    setLoading(true)
-    const res = await generateBatchInvoices({ orderImportIds: [id] })
-    if (!res.ok) setError(res.error)
-    else {
-      setResult(res.data)
-      await runOrdersList()
-    }
-    setLoading(false)
-  }
-
-  async function onPrintSingle(id: string) {
-    setLoading(true)
-    const res = await preparePrintBatch({ orderImportIds: [id] })
-    if (!res.ok) setError(res.error)
-    else setResult(res.data)
-    setLoading(false)
-  }
