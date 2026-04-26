@@ -10,6 +10,8 @@ import {
   listProductTaxMappings,
   listTaxSlabs,
   listUnmappedProducts,
+  importSkuMappingsCsv,
+  recomputeSkuMappingReadiness,
   upsertHsnCode,
   upsertProductTaxMapping,
   upsertTaxSlab,
@@ -27,6 +29,8 @@ export function GstProductsAdmin() {
   const [mappingRows, setMappingRows] = useState<Row[]>([])
   const [unmappedRows, setUnmappedRows] = useState<Row[]>([])
   const [bulkText, setBulkText] = useState('')
+  const [bulkCsvText, setBulkCsvText] = useState('')
+  const [importSummary, setImportSummary] = useState<{ imported: number; skipped: number; errors: string[] } | null>(null)
   const [result, setResult] = useState<unknown>()
   const [error, setError] = useState<string>()
   const [loading, setLoading] = useState(false)
@@ -94,6 +98,31 @@ export function GstProductsAdmin() {
     }
     setResult(res.data)
     await refreshAll()
+  }
+
+  async function onImportSkuMappingsCsv() {
+    const res = await importSkuMappingsCsv({ csvText: bulkCsvText })
+    if (!res.ok) {
+      setError(res.error)
+      return
+    }
+    const payload = (res.data as { imported?: number; skipped?: number; errors?: string[] }) || {}
+    setImportSummary({
+      imported: Number(payload.imported || 0),
+      skipped: Number(payload.skipped || 0),
+      errors: Array.isArray(payload.errors) ? payload.errors : [],
+    })
+    setResult(res.data)
+    await refreshAll()
+  }
+
+  async function onRecomputeReadiness() {
+    const res = await recomputeSkuMappingReadiness()
+    if (!res.ok) setError(res.error)
+    else {
+      setResult(res.data)
+      await refreshAll()
+    }
   }
 
   async function onSaveHsn(e: FormEvent<HTMLFormElement>) {
@@ -199,7 +228,23 @@ export function GstProductsAdmin() {
 
         {activeTab === 'Unmapped SKUs' && (
           <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm space-y-3">
-            <div className="flex items-center justify-between"><h2 className="text-base font-semibold text-gray-900">Unmapped SKUs</h2><a className="rounded-xl border border-gray-300 px-3 py-2 text-sm" href="/api/gst/products/unmapped/export">Export CSV</a></div>
+            <div className="space-y-3 rounded-xl border border-gray-200 bg-gray-50 p-4">
+              <h2 className="text-base font-semibold text-gray-900">Bulk SKU HSN Mapping</h2>
+              <div className="flex flex-wrap gap-2">
+                <a className="rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm" href="/api/gst/products/unmapped-skus/export">Export Unmapped SKUs CSV</a>
+                <button className="rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm" onClick={() => void onRecomputeReadiness()}>Recompute Readiness</button>
+              </div>
+              <textarea className="h-32 w-full rounded-xl border border-gray-300 px-3 py-2.5 font-mono text-xs" placeholder="sku,styleCode,hsnCode,taxRate,cessRate" value={bulkCsvText} onChange={(e) => setBulkCsvText(e.target.value)} />
+              <button className="rounded-xl bg-gray-900 px-4 py-2.5 text-sm text-white" onClick={() => void onImportSkuMappingsCsv()}>Upload Completed Mapping CSV</button>
+              {importSummary && (
+                <div className="rounded-xl border border-gray-200 bg-white p-3 text-sm">
+                  <div><span className="font-medium">Imported:</span> {importSummary.imported}</div>
+                  <div><span className="font-medium">Skipped:</span> {importSummary.skipped}</div>
+                  <div><span className="font-medium">Errors:</span> {importSummary.errors.length}</div>
+                </div>
+              )}
+            </div>
+            <div className="flex items-center justify-between"><h2 className="text-base font-semibold text-gray-900">Unmapped SKUs</h2><a className="rounded-xl border border-gray-300 px-3 py-2 text-sm" href="/api/gst/products/unmapped/export">Legacy Export CSV</a></div>
             <div className="overflow-x-auto rounded-xl border border-gray-200"><table className="min-w-full text-sm"><thead className="bg-gray-50 text-left text-gray-600"><tr><th className="px-3 py-2">SKU</th><th className="px-3 py-2">Product Title</th><th className="px-3 py-2">Product ID</th><th className="px-3 py-2">Variant ID</th></tr></thead><tbody>{unmappedRows.map((row, idx) => <tr key={`${String(row.sku || '')}-${idx}`} className="border-t border-gray-100"><td className="px-3 py-2 font-medium">{String(row.sku || '')}</td><td className="px-3 py-2">{String(row.title || '')}</td><td className="px-3 py-2">{String(row.shopifyProductId || '')}</td><td className="px-3 py-2">{String(row.shopifyVariantId || '')}</td></tr>)}</tbody></table></div>
           </div>
         )}

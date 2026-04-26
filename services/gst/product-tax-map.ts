@@ -15,6 +15,15 @@ export interface GstProductTaxMapRecord {
   metadata: Record<string, unknown> | null;
 }
 
+export interface GstResolvedTaxMapping {
+  hsnCode: string;
+  taxRate: number;
+  cessRate: number;
+  sourceType: "PRODUCT_VARIANT" | "PRODUCT" | "SKU" | "STYLE";
+  productMapId: string | null;
+  skuMapId: string | null;
+}
+
 export interface ProductTaxMappingFilters {
   status?: string;
   shopifyProductId?: string;
@@ -36,8 +45,10 @@ export interface UpsertProductTaxMappingInput {
 }
 
 export interface ResolveLineTaxMappingInput {
-  shopifyProductId: string;
+  shopId?: string | null;
+  shopifyProductId?: string | null;
   shopifyVariantId?: string | null;
+  sku?: string | null;
 }
 
 type ProductTaxDbClient = {
@@ -45,6 +56,9 @@ type ProductTaxDbClient = {
     findMany: (args: unknown) => Promise<Array<Record<string, unknown>>>;
     update: (args: unknown) => Promise<Record<string, unknown>>;
     upsert: (args: unknown) => Promise<Record<string, unknown>>;
+    findFirst: (args: unknown) => Promise<Record<string, unknown> | null>;
+  };
+  gstSkuTaxMap: {
     findFirst: (args: unknown) => Promise<Record<string, unknown> | null>;
   };
   gstOrderImportLine: {
@@ -61,6 +75,20 @@ function toDate(value?: Date | string | null): Date | null {
 
   const parsed = value instanceof Date ? value : new Date(String(value));
   return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function normalize(value: unknown): string {
+  return String(value || "").trim();
+}
+
+export function deriveStyleCodeFromSku(sku: string | null | undefined): string | null {
+  const normalizedSku = normalize(sku);
+  if (!normalizedSku) {
+    return null;
+  }
+
+  const segments = normalizedSku.split(/[-_\/\s]+/).filter(Boolean);
+  return segments.length > 0 ? segments[0].toUpperCase() : normalizedSku.toUpperCase();
 }
 
 function toRecord(row: {
@@ -239,13 +267,14 @@ export async function listUnmappedProducts(filters: ProductTaxMappingFilters): P
         continue;
       }
       const variantId = line.shopifyVariantId ? String(line.shopifyVariantId) : null;
-      const key = `${productId}:${variantId || "_product"}`;
+      const sku = normalize(line.sku) || null;
+      const key = `${productId}:${variantId || "_product"}:${sku || "_sku"}`;
       if (seen.has(key)) {
         continue;
       }
       seen.add(key);
 
-      const resolved = await resolveLineTaxMapping({ shopifyProductId: productId, shopifyVariantId: variantId });
+      const resolved = await resolveLineTaxMapping({ shopifyProductId: productId, shopifyVariantId: variantId, sku });
       if (!resolved.ok) {
         return { ok: false, error: resolved.error || "Failed to resolve tax mapping" };
       }
@@ -264,6 +293,7 @@ export async function listUnmappedProducts(filters: ProductTaxMappingFilters): P
         shopifyVariantId: variantId,
         title: line.title ?? null,
         sku: line.sku ?? null,
+        styleCode: deriveStyleCodeFromSku(sku),
       });
     }
 
@@ -276,11 +306,45 @@ export async function listUnmappedProducts(filters: ProductTaxMappingFilters): P
   }
 }
 
-export async function resolveLineTaxMapping(input: ResolveLineTaxMappingInput): Promise<GstServiceResult<GstProductTaxMapRecord | null>> {
-  const shopifyProductId = String(input.shopifyProductId || "").trim();
-  const shopifyVariantId = input.shopifyVariantId ? String(input.shopifyVariantId).trim() : null;
-  if (!shopifyProductId) {
-    return { ok: false, error: "shopifyProductId is required" };
+function toRate(value: unknown): number {
+  if (typeof value === "number") {
+    return value;
+  }
+  if (value && typeof value === "object" && "toNumber" in (value as Record<string, unknown>)) {
+    const fn = (value as { toNumber: () => number }).toNumber;
+    return Number(fn());
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function mapResolvedResponse(
+  sourceType: GstResolvedTaxMapping["sourceType"],
+  productMapId: string | null,
+  skuMapId: string | null,
+  hsnCode: unknown,
+  taxRate: unknown,
+  cessRate: unknown,
+): GstResolvedTaxMapping {
+  return {
+    sourceType,
+    productMapId,
+    skuMapId,
+    hsnCode: normalize(hsnCode),
+    taxRate: toRate(taxRate),
+    cessRate: toRate(cessRate),
+  };
+}
+
+export async function resolveLineTaxMapping(input: ResolveLineTaxMappingInput): Promise<GstServiceResult<GstResolvedTaxMapping | null>> {
+  const shopId = normalize(input.shopId) || null;
+  const shopifyProductId = normalize(input.shopifyProductId) || null;
+  const shopifyVariantId = normalize(input.shopifyVariantId) || null;
+  const sku = normalize(input.sku) || null;
+  const styleCode = deriveStyleCodeFromSku(sku);
+
+  if (!shopifyProductId && !sku && !styleCode) {
+    return { ok: false, error: "At least one identifier is required to resolve tax mapping" };
   }
 
   const now = new Date();
@@ -290,40 +354,107 @@ export async function resolveLineTaxMapping(input: ResolveLineTaxMappingInput): 
   };
 
   try {
-    if (shopifyVariantId) {
+    if (shopifyProductId && shopifyVariantId) {
       const variantMapping = await productTaxDb.gstProductTaxMap.findFirst({
         where: {
           shopifyProductId,
           shopifyVariantId,
           ...activeWindowFilter,
         },
+        include: {
+          hsn: { select: { hsnCode: true } },
+          slab: { select: { taxRate: true, cessRate: true } },
+        },
         orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
       });
 
       if (variantMapping && isActiveStatus(String(variantMapping.status || ""))) {
-        return { ok: true, data: toRecord(variantMapping as never) };
+        return {
+          ok: true,
+          data: mapResolvedResponse(
+            "PRODUCT_VARIANT",
+            normalize(variantMapping.id) || null,
+            null,
+            (variantMapping.hsn as { hsnCode?: string } | undefined)?.hsnCode,
+            (variantMapping.slab as { taxRate?: unknown } | undefined)?.taxRate,
+            (variantMapping.slab as { cessRate?: unknown } | undefined)?.cessRate,
+          ),
+        };
       }
     }
 
-    const productMapping = await productTaxDb.gstProductTaxMap.findFirst({
-      where: {
-        shopifyProductId,
-        shopifyVariantId: null,
-        ...activeWindowFilter,
-      },
-      orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
-    });
+    if (shopifyProductId) {
+      const productMapping = await productTaxDb.gstProductTaxMap.findFirst({
+        where: {
+          shopifyProductId,
+          shopifyVariantId: null,
+          ...activeWindowFilter,
+        },
+        include: {
+          hsn: { select: { hsnCode: true } },
+          slab: { select: { taxRate: true, cessRate: true } },
+        },
+        orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+      });
 
-    if (productMapping && isActiveStatus(String(productMapping.status || ""))) {
-      return { ok: true, data: toRecord(productMapping as never) };
+      if (productMapping && isActiveStatus(String(productMapping.status || ""))) {
+        return {
+          ok: true,
+          data: mapResolvedResponse(
+            "PRODUCT",
+            normalize(productMapping.id) || null,
+            null,
+            (productMapping.hsn as { hsnCode?: string } | undefined)?.hsnCode,
+            (productMapping.slab as { taxRate?: unknown } | undefined)?.taxRate,
+            (productMapping.slab as { cessRate?: unknown } | undefined)?.cessRate,
+          ),
+        };
+      }
+    }
+
+    if (sku) {
+      const skuMap = await productTaxDb.gstSkuTaxMap.findFirst({
+        where: {
+          shopId,
+          sku,
+          status: "ACTIVE",
+        },
+        orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+      });
+      if (skuMap) {
+        return {
+          ok: true,
+          data: mapResolvedResponse("SKU", null, normalize(skuMap.id) || null, skuMap.hsnCode, skuMap.taxRate, skuMap.cessRate),
+        };
+      }
+    }
+
+    if (styleCode) {
+      const styleMap = await productTaxDb.gstSkuTaxMap.findFirst({
+        where: {
+          shopId,
+          styleCode,
+          status: "ACTIVE",
+        },
+        orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+      });
+      if (styleMap) {
+        return {
+          ok: true,
+          data: mapResolvedResponse("STYLE", null, normalize(styleMap.id) || null, styleMap.hsnCode, styleMap.taxRate, styleMap.cessRate),
+        };
+      }
     }
 
     return { ok: true, data: null };
   } catch (error) {
     console.error("[GST PRODUCT TAX MAP] resolveLineTaxMapping failed", {
       error: error instanceof Error ? error.message : String(error),
+      shopId,
       shopifyProductId,
       shopifyVariantId,
+      sku,
+      styleCode,
     });
     return { ok: false, error: "Failed to resolve line tax mapping" };
   }

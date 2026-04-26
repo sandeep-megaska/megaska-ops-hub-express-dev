@@ -118,6 +118,13 @@ export const listUnmappedProducts = (query: { search?: string } = {}) => {
   const suffix = search.toString() ? `?${search.toString()}` : ''
   return request<{ ok: boolean; data: Array<Record<string, unknown>> }>(`/api/gst/products/unmapped${suffix}`)
 }
+export const importSkuMappingsCsv = (payload: { csvText: string }) =>
+  request<{ ok: boolean; imported: number; skipped: number; errors: string[]; recompute?: Record<string, unknown> }>(
+    '/api/gst/products/sku-mappings/import',
+    { method: 'POST', body: JSON.stringify(payload) },
+  )
+export const recomputeSkuMappingReadiness = () =>
+  request<{ ok: boolean; data: Record<string, unknown> }>('/api/gst/products/sku-mappings/recompute', { method: 'POST' })
 
 export const listImportedOrders = (query: { gstSettingsId?: string; importStatus?: string; eligibilityStatus?: string; from?: string; to?: string } = {}) => {
   const search = new URLSearchParams()

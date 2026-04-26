@@ -59,6 +59,11 @@ interface ParsedOrderLine {
   mappingStatus: "MAPPED" | "UNMAPPED";
 }
 
+interface LineForReadiness {
+  mappingStatus: string;
+  sku?: string | null;
+}
+
 type OrderImportDbClient = {
   gstOrderImport: {
     findUnique: (args: unknown) => Promise<Record<string, unknown> | null>;
@@ -70,6 +75,7 @@ type OrderImportDbClient = {
     createMany: (args: unknown) => Promise<{ count: number }>;
     findMany: (args: unknown) => Promise<Array<Record<string, unknown>>>;
     deleteMany: (args: unknown) => Promise<{ count: number }>;
+    update: (args: unknown) => Promise<Record<string, unknown>>;
   };
   $transaction: <T>(fn: (tx: OrderImportDbClient) => Promise<T>) => Promise<T>;
 };
@@ -104,7 +110,7 @@ function extractOrderPayload(raw: unknown): Record<string, unknown> | null {
   return raw as Record<string, unknown>;
 }
 
-async function mapLine(line: Record<string, unknown>, index: number): Promise<ParsedOrderLine> {
+async function mapLine(line: Record<string, unknown>, index: number, shopId?: string | null): Promise<ParsedOrderLine> {
   const quantity = parseNumber(line.quantity);
   const unitPrice = parseNumber(line.unitPrice ?? line.price);
   const discount = parseNumber(line.discount ?? 0);
@@ -118,12 +124,12 @@ async function mapLine(line: Record<string, unknown>, index: number): Promise<Pa
   let mappedCessRate: number | null = null;
   let mappingStatus: "MAPPED" | "UNMAPPED" = "UNMAPPED";
 
-  if (shopifyProductId) {
-    const mapping = await resolveLineTaxMapping({ shopifyProductId, shopifyVariantId });
+  if (shopifyProductId || normalizeString(line.sku)) {
+    const mapping = await resolveLineTaxMapping({ shopId, shopifyProductId, shopifyVariantId, sku: normalizeString(line.sku) || null });
     if (mapping.ok && mapping.data) {
-      mappedHsnCode = normalizeString(mapping.data.hsnId) || null;
-      mappedTaxRate = null;
-      mappedCessRate = null;
+      mappedHsnCode = normalizeString(mapping.data.hsnCode) || null;
+      mappedTaxRate = Number.isFinite(mapping.data.taxRate) ? mapping.data.taxRate : null;
+      mappedCessRate = Number.isFinite(mapping.data.cessRate) ? mapping.data.cessRate : null;
       mappingStatus = "MAPPED";
     }
   }
@@ -200,7 +206,7 @@ function listStrings(value: unknown): string[] {
   return value.map((entry) => String(entry || "").trim()).filter(Boolean);
 }
 
-function collectUnmappedSkus(lines: Array<{ mappingStatus: string; sku?: string | null }>): string[] {
+function collectUnmappedSkus(lines: LineForReadiness[]): string[] {
   return Array.from(
     new Set(
       lines
@@ -304,7 +310,7 @@ export async function importOrderByShopifyId(
     const rawLines = Array.isArray(payload.lines) ? (payload.lines as Record<string, unknown>[]) : [];
     const mappedLines: ParsedOrderLine[] = [];
     for (const [index, line] of rawLines.entries()) {
-      mappedLines.push(await mapLine(line, index));
+      mappedLines.push(await mapLine(line, index, resolvedShopId));
     }
 
     const normalizedOrder = {
@@ -502,6 +508,106 @@ export async function getImportedOrderDetail(id: string): Promise<GstServiceResu
       orderImportId,
     });
     return { ok: false, error: "Failed to load imported order detail" };
+  }
+}
+
+export async function recomputeImportedOrderMappings(options?: {
+  shopId?: string | null;
+}): Promise<GstServiceResult<{ ordersUpdated: number; linesUpdated: number }>> {
+  try {
+    const where: Record<string, unknown> = {};
+    if (options?.shopId) {
+      where.shopId = normalizeString(options.shopId);
+    }
+
+    const orders = await orderDb.gstOrderImport.findMany({
+      where,
+      include: {
+        lines: {
+          orderBy: { lineNumber: "asc" },
+        },
+      },
+    });
+
+    let linesUpdated = 0;
+    let ordersUpdated = 0;
+
+    for (const order of orders) {
+      const orderLines = ((order.lines as Array<Record<string, unknown>> | undefined) || []).map((line) => ({
+        id: String(line.id),
+        shopifyProductId: normalizeString(line.shopifyProductId) || null,
+        shopifyVariantId: normalizeString(line.shopifyVariantId) || null,
+        sku: normalizeString(line.sku) || null,
+      }));
+
+      const recalculated: Array<LineForReadiness> = [];
+
+      for (const line of orderLines) {
+        const mapping = await resolveLineTaxMapping({
+          shopId: normalizeString(order.shopId) || null,
+          shopifyProductId: line.shopifyProductId,
+          shopifyVariantId: line.shopifyVariantId,
+          sku: line.sku,
+        });
+
+        const mapped = mapping.ok && mapping.data;
+        await orderDb.gstOrderImportLine.update({
+          where: { id: line.id },
+          data: {
+            mappedHsnCode: mapped ? normalizeString(mapping.data?.hsnCode) : null,
+            mappedTaxRate: mapped ? mapping.data?.taxRate || 0 : null,
+            mappedCessRate: mapped ? mapping.data?.cessRate || 0 : null,
+            mappingStatus: mapped ? "MAPPED" : "UNMAPPED",
+          },
+        });
+        linesUpdated += 1;
+        recalculated.push({ mappingStatus: mapped ? "MAPPED" : "UNMAPPED", sku: line.sku });
+      }
+
+      const readiness = buildReadiness(
+        {
+          orderSubtotal: parseNumber(order.orderSubtotal),
+          orderTaxTotal: parseNumber(order.orderTaxTotal),
+          orderGrandTotal: parseNumber(order.orderGrandTotal),
+          billingStateCode: normalizeString(order.billingStateCode) || null,
+          shippingStateCode: normalizeString(order.shippingStateCode) || null,
+        },
+        recalculated.map((line, index) => ({
+          lineNumber: index + 1,
+          shopifyLineItemId: null,
+          shopifyProductId: null,
+          shopifyVariantId: null,
+          title: "",
+          sku: line.sku || null,
+          quantity: 0,
+          unitPrice: 0,
+          discount: 0,
+          taxableAmount: 0,
+          mappedHsnCode: null,
+          mappedTaxRate: null,
+          mappedCessRate: null,
+          mappingStatus: line.mappingStatus === "MAPPED" ? "MAPPED" : "UNMAPPED",
+        })),
+      );
+
+      await orderDb.gstOrderImport.update({
+        where: { id: String(order.id) },
+        data: {
+          importStatus: readiness.importStatus,
+          eligibilityStatus: readiness.eligibilityStatus,
+          readinessErrors: readiness.readinessErrors,
+          lastSyncedAt: new Date(),
+        },
+      });
+      ordersUpdated += 1;
+    }
+
+    return { ok: true, data: { ordersUpdated, linesUpdated } };
+  } catch (error) {
+    console.error("[GST ORDER IMPORT] recomputeImportedOrderMappings failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return { ok: false, error: "Failed to recompute imported order mappings" };
   }
 }
 

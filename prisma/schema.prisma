@@ -61,6 +61,7 @@ model Shop {
   walletReservations    WalletReservation[]
   gstSettings           GstSettings[]
   gstProductTaxMaps     GstProductTaxMap[]
+  gstSkuTaxMaps         GstSkuTaxMap[]
   gstOrderImports       GstOrderImport[]
 }
 model AuthSession {
@@ -751,6 +752,27 @@ model GstProductTaxMap {
   @@index([shopifyVariantId])
   @@index([status])
   @@unique([shopId, shopifyProductId, shopifyVariantId])
+}
+
+model GstSkuTaxMap {
+  id         String   @id @default(uuid())
+  shopId     String?
+  sku        String?
+  styleCode  String?
+  hsnCode    String
+  taxRate    Decimal  @db.Decimal(5, 2)
+  cessRate   Decimal  @default(0) @db.Decimal(5, 2)
+  source     String   @default("BULK_CSV")
+  status     String   @default("ACTIVE")
+  metadata   Json?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  shop       Shop?    @relation(fields: [shopId], references: [id], onDelete: SetNull)
+
+  @@index([shopId, sku])
+  @@index([shopId, styleCode])
+  @@index([status])
 }
 
 model GstOrderImport {
