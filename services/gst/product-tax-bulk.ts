@@ -216,7 +216,9 @@ export async function applyBulkProductTaxMappings(
   for (const duplicate of duplicates) {
     const sku = String(duplicate.sku || "");
     const indexes = Array.isArray(duplicate.rowIndexes) ? duplicate.rowIndexes : [];
-    const rowRefs = indexes.map((index) => Number(index) + 1).filter((value) => Number.isFinite(value));
+    const rowRefs = indexes
+      .map((index: unknown): number => Number(index) + 1)
+      .filter((value: number) => Number.isFinite(value));
     if (rowRefs.length > 1) {
       errors.push(`Duplicate SKU ${sku} in rows: ${rowRefs.join(", ")}`);
     }
