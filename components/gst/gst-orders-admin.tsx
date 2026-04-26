@@ -5,6 +5,7 @@ import {
   generateBatchInvoices,
   getImportedOrderById,
   importOrder,
+  listImportedOrders,
   listDispatchReadyOrders,
   preparePrintBatch,
   syncOrders,
@@ -35,23 +36,70 @@ export function GstOrdersAdmin() {
   const [error, setError] = useState<string>()
   const [loading, setLoading] = useState(false)
 
-  async function runDispatchList() {
-    const res = await listDispatchReadyOrders({
+  async function runOrdersList() {
+    setError(undefined)
+    const importedRes = await listImportedOrders({
       from: syncForm.from || undefined,
       to: syncForm.to || undefined,
     })
-    if (!res.ok) {
-      setError(res.error)
+    if (!importedRes.ok) {
+      setError(importedRes.error)
       return
     }
-    setRows((res.data as { data?: Row[] })?.data || [])
+
+    const dispatchRes = await listDispatchReadyOrders({
+      from: syncForm.from || undefined,
+      to: syncForm.to || undefined,
+    })
+
+    const importedRows = ((importedRes.data as { data?: Row[] })?.data || []) as Row[]
+    const dispatchRows = dispatchRes.ok ? (((dispatchRes.data as { data?: Row[] })?.data || []) as Row[]) : []
+    const dispatchById = new Map(dispatchRows.map((row) => [String(row.id || ''), row]))
+    if (!dispatchRes.ok) {
+      setError(dispatchRes.error)
+    }
+
+    setRows(
+      importedRows.map((row) => {
+        const id = String(row.id || '')
+        const dispatchRow = dispatchById.get(id) || {}
+        const readinessErrors = Array.isArray(row.readinessErrors) ? row.readinessErrors : []
+        return {
+          ...dispatchRow,
+          ...row,
+          id,
+          orderName: String(row.shopifyOrderName || dispatchRow.orderName || row.orderName || ''),
+          orderDate: row.orderCreatedAt || dispatchRow.orderDate || null,
+          customerSummary: dispatchRow.customerSummary || '-',
+          skuCount: row.skuCount || dispatchRow.skuCount || 0,
+          itemCount: row.itemCount || dispatchRow.itemCount || 0,
+          readinessErrors,
+          readiness: dispatchRow.readiness || (readinessErrors.length > 0 ? 'NOT_READY' : 'READY'),
+          invoiceStatus: dispatchRow.invoiceStatus || (String(row.importStatus || '') === 'INVOICED' ? 'INVOICED' : 'NOT_INVOICED'),
+          invoiceDocumentId: row.invoiceDocumentId || dispatchRow.invoiceDocumentId || null,
+        }
+      }),
+    )
   }
 
   useEffect(() => {
-    void runDispatchList()
+    void runOrdersList()
   }, [])
 
   const selectedIds = useMemo(() => Object.entries(selected).filter(([, v]) => v).map(([id]) => id), [selected])
+  const selectedRows = useMemo(
+    () => rows.filter((row) => selectedIds.includes(String(row.id || ''))),
+    [rows, selectedIds],
+  )
+  const hasNotReadySelection = useMemo(
+    () =>
+      selectedRows.some((row) => {
+        const readiness = String(row.readiness || '')
+        const readinessErrors = Array.isArray(row.readinessErrors) ? row.readinessErrors : []
+        return readiness !== 'READY' || readinessErrors.length > 0
+      }),
+    [selectedRows],
+  )
 
   const syncSummary = (result as { data?: { fetched?: number; imported?: number; alreadySynced?: number; notReady?: number; failed?: number } })?.data || {}
 
@@ -77,7 +125,7 @@ export function GstOrdersAdmin() {
       setError(res.error)
     } else {
       setResult(res.data)
-      await runDispatchList()
+      await runOrdersList()
     }
 
     setLoading(false)
@@ -96,7 +144,7 @@ export function GstOrdersAdmin() {
       setError(res.error)
     } else {
       setResult(res.data)
-      await runDispatchList()
+      await runOrdersList()
     }
     setLoading(false)
   }
@@ -104,6 +152,10 @@ export function GstOrdersAdmin() {
   async function onGenerateBatch() {
     if (selectedIds.length === 0) {
       setError('Select at least one order to generate invoices')
+      return
+    }
+    if (hasNotReadySelection) {
+      setError('One or more selected orders are not READY. Resolve readiness errors before generating invoices.')
       return
     }
 
@@ -114,7 +166,7 @@ export function GstOrdersAdmin() {
       setError(res.error)
     } else {
       setResult(res.data)
-      await runDispatchList()
+      await runOrdersList()
     }
     setLoading(false)
   }
@@ -152,7 +204,7 @@ export function GstOrdersAdmin() {
       setError(res.error)
     } else {
       setResult(res.data)
-      await runDispatchList()
+      await runOrdersList()
     }
     setLoading(false)
   }
@@ -179,7 +231,7 @@ export function GstOrdersAdmin() {
           <div className="flex flex-wrap items-center gap-3">
             <label className="inline-flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" checked={syncForm.forceResync} onChange={(e) => setSyncForm((p) => ({ ...p, forceResync: e.target.checked }))} /> Force resync</label>
             <button type="submit" className="rounded-xl bg-gray-900 px-4 py-2.5 text-sm font-medium text-white">{loading ? 'Syncing...' : 'Sync Orders'}</button>
-            <button type="button" className="rounded-xl border border-gray-300 px-4 py-2.5 text-sm" onClick={() => void runDispatchList()}>Refresh Table</button>
+            <button type="button" className="rounded-xl border border-gray-300 px-4 py-2.5 text-sm" onClick={() => void runOrdersList()}>Refresh Table</button>
           </div>
           <div className="grid gap-3 md:grid-cols-5">
             {[
@@ -201,14 +253,15 @@ export function GstOrdersAdmin() {
           <div className="mb-3 flex flex-wrap gap-2 items-center justify-between">
             <h2 className="text-base font-semibold text-gray-900">Orders / Dispatch</h2>
             <div className="flex flex-wrap gap-2">
-              <button type="button" className="rounded-xl bg-gray-900 px-4 py-2 text-sm text-white" onClick={() => void onGenerateBatch()}>Generate Invoices</button>
+              <button type="button" disabled={selectedIds.length === 0 || hasNotReadySelection} className="rounded-xl bg-gray-900 px-4 py-2 text-sm text-white disabled:cursor-not-allowed disabled:opacity-40" onClick={() => void onGenerateBatch()}>Generate Invoices</button>
               <button type="button" className="rounded-xl border border-gray-300 px-4 py-2 text-sm" onClick={() => void onPreparePrint()}>Prepare Print Batch</button>
               <button type="button" className="rounded-xl border border-gray-300 px-4 py-2 text-sm" onClick={() => { setResult(undefined); setError(undefined) }}>Clear Responses</button>
             </div>
           </div>
+          {hasNotReadySelection ? <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">Generate Invoices is disabled because one or more selected orders are not READY.</p> : null}
           <div className="overflow-x-auto rounded-xl border border-gray-200">
             <table className="min-w-full text-sm">
-              <thead className="bg-gray-50 text-left text-gray-600"><tr><th className="px-3 py-2">Select</th><th className="px-3 py-2">Order</th><th className="px-3 py-2">Order Date</th><th className="px-3 py-2">Customer</th><th className="px-3 py-2">SKU/Items</th><th className="px-3 py-2">Mapping</th><th className="px-3 py-2">Readiness</th><th className="px-3 py-2">Review Reasons</th><th className="px-3 py-2">Unmapped SKUs</th><th className="px-3 py-2">Invoice</th><th className="px-3 py-2">Action</th></tr></thead>
+              <thead className="bg-gray-50 text-left text-gray-600"><tr><th className="px-3 py-2">Select</th><th className="px-3 py-2">Order</th><th className="px-3 py-2">Order Date</th><th className="px-3 py-2">Customer</th><th className="px-3 py-2">Items/SKUs</th><th className="px-3 py-2">Mapping %</th><th className="px-3 py-2">Eligibility</th><th className="px-3 py-2">Readiness errors</th><th className="px-3 py-2">Unmapped SKUs</th><th className="px-3 py-2">Invoice status</th><th className="px-3 py-2">Action</th></tr></thead>
               <tbody>
                 {rows.map((row) => {
                   const id = String(row.id || '')
