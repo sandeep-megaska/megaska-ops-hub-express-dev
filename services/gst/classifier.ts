@@ -1,11 +1,14 @@
 import { GST_DEFAULT_SUPPLY_TYPE } from "./constants";
+import { resolveGstStateCode } from "./state-codes";
 import type { GstServiceResult, GstSupplyType } from "./types";
 
 export interface GstClassificationInput {
   sellerStateCode?: string | null;
   buyerGstin?: string | null;
+  buyerStateCode?: string | null;
   shippingStateCode?: string | null;
   billingStateCode?: string | null;
+  placeOfSupplyStateCode?: string | null;
   explicitSupplyType?: GstSupplyType;
 }
 
@@ -17,8 +20,7 @@ export interface GstClassificationResult {
 }
 
 export function normalizeStateCode(value: string | null | undefined): string | null {
-  const cleaned = String(value ?? "").trim();
-  return cleaned || null;
+  return resolveGstStateCode(value);
 }
 
 export function determineSupplyType(input: GstClassificationInput): GstSupplyType {
@@ -30,7 +32,12 @@ export function determineSupplyType(input: GstClassificationInput): GstSupplyTyp
 }
 
 export function determinePlaceOfSupply(input: GstClassificationInput): string | null {
-  return normalizeStateCode(input.shippingStateCode) || normalizeStateCode(input.billingStateCode);
+  return (
+    normalizeStateCode(input.shippingStateCode) ||
+    normalizeStateCode(input.billingStateCode) ||
+    normalizeStateCode(input.buyerStateCode) ||
+    normalizeStateCode(input.placeOfSupplyStateCode)
+  );
 }
 
 export function classifySupply(
@@ -43,7 +50,7 @@ export function classifySupply(
     return { ok: false, error: "sellerStateCode is required for GST classification" };
   }
   if (!placeOfSupplyStateCode) {
-    return { ok: false, error: "At least one of shippingStateCode or billingStateCode is required" };
+    return { ok: false, error: "Missing shipping/billing state for GST place of supply" };
   }
 
   const supplyType = determineSupplyType(input);

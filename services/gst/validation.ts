@@ -1,19 +1,16 @@
 import type { GstDocumentLineInput, GstInvoiceDraftInput, GstServiceResult } from "./types";
+import { isKnownGstStateCode, resolveGstStateCode } from "./state-codes";
 
 export const GSTIN_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[A-Z0-9]{3}$/;
 export const PAN_REGEX = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
 export const PREFIX_REGEX = /^[A-Z0-9/_-]{1,12}$/;
-
-const GST_STATE_CODES = new Set([
-  "01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "29", "30", "31", "32", "33", "34", "35", "36", "37", "38", "97", "99",
-]);
 
 function normalize(value: string | null | undefined): string {
   return String(value ?? "").trim();
 }
 
 export function isValidStateCode(value: string | null | undefined): boolean {
-  return GST_STATE_CODES.has(normalize(value));
+  return isKnownGstStateCode(normalize(value));
 }
 
 export function validateLineItems(lines: GstDocumentLineInput[]): GstServiceResult<true> {
@@ -68,19 +65,19 @@ export function validateDocumentDraftPayload(
     return { ok: false, error: lineValidation.error || "Invalid GST line items" };
   }
 
-  const billingStateCode = normalize(payload.billingStateCode);
-  const shippingStateCode = normalize(payload.shippingStateCode);
-  const placeOfSupplyStateCode = normalize(payload.placeOfSupplyStateCode);
+  const billingStateCode = resolveGstStateCode(payload.billingStateCode);
+  const shippingStateCode = resolveGstStateCode(payload.shippingStateCode);
+  const placeOfSupplyStateCode = resolveGstStateCode(payload.placeOfSupplyStateCode);
 
-  if (placeOfSupplyStateCode && !isValidStateCode(placeOfSupplyStateCode)) {
+  if (normalize(payload.placeOfSupplyStateCode) && !placeOfSupplyStateCode) {
     return { ok: false, error: "placeOfSupplyStateCode must be a valid GST state code" };
   }
 
-  if (billingStateCode && !isValidStateCode(billingStateCode)) {
+  if (normalize(payload.billingStateCode) && !billingStateCode) {
     return { ok: false, error: "billingStateCode must be a valid GST state code" };
   }
 
-  if (shippingStateCode && !isValidStateCode(shippingStateCode)) {
+  if (normalize(payload.shippingStateCode) && !shippingStateCode) {
     return { ok: false, error: "shippingStateCode must be a valid GST state code" };
   }
 
@@ -89,8 +86,8 @@ export function validateDocumentDraftPayload(
     return { ok: false, error: "buyer.gstin must be a valid GSTIN" };
   }
 
-  const buyerStateCode = normalize(payload.buyer?.stateCode);
-  if (buyerStateCode && !isValidStateCode(buyerStateCode)) {
+  const buyerStateCode = resolveGstStateCode(payload.buyer?.stateCode);
+  if (normalize(payload.buyer?.stateCode) && !buyerStateCode) {
     return { ok: false, error: "buyer.stateCode must be a valid GST state code" };
   }
 

@@ -1004,8 +1004,8 @@ type GstSyncOrderNode = {
   totalTaxSet?: { shopMoney?: { amount?: string | null } | null } | null;
   totalPriceSet?: { shopMoney?: { amount?: string | null } | null } | null;
   customer?: { firstName?: string | null; lastName?: string | null } | null;
-  shippingAddress?: { provinceCode?: string | null } | null;
-  billingAddress?: { provinceCode?: string | null } | null;
+  shippingAddress?: { provinceCode?: string | null; province?: string | null } | null;
+  billingAddress?: { provinceCode?: string | null; province?: string | null } | null;
   lineItems?: {
     nodes?: Array<{
       id: string;
@@ -1037,8 +1037,8 @@ function normalizeGstSyncOrder(node: GstSyncOrderNode) {
     subtotalPrice: Number(node.subtotalPriceSet?.shopMoney?.amount || 0),
     totalTax: Number(node.totalTaxSet?.shopMoney?.amount || 0),
     totalPrice: Number(node.totalPriceSet?.shopMoney?.amount || 0),
-    shippingStateCode: node.shippingAddress?.provinceCode || null,
-    billingStateCode: node.billingAddress?.provinceCode || null,
+    shippingStateCode: node.shippingAddress?.provinceCode || node.shippingAddress?.province || null,
+    billingStateCode: node.billingAddress?.provinceCode || node.billingAddress?.province || null,
     customerName: [node.customer?.firstName, node.customer?.lastName].filter(Boolean).join(" ").trim() || null,
     lines: (node.lineItems?.nodes || []).map((line) => ({
       id: extractShopifyEntityId(line.id),
@@ -1081,8 +1081,8 @@ export async function getShopifyOrdersForGstSync(input: {
             totalTaxSet { shopMoney { amount } }
             totalPriceSet { shopMoney { amount } }
             customer { firstName lastName }
-            shippingAddress { provinceCode }
-            billingAddress { provinceCode }
+            shippingAddress { provinceCode province }
+            billingAddress { provinceCode province }
             lineItems(first: 100) {
               nodes {
                 id
@@ -1122,8 +1122,8 @@ export async function getSingleShopifyOrderForGstSync(orderNameOrNumber: string)
             totalTaxSet { shopMoney { amount } }
             totalPriceSet { shopMoney { amount } }
             customer { firstName lastName }
-            shippingAddress { provinceCode }
-            billingAddress { provinceCode }
+            shippingAddress { provinceCode province }
+            billingAddress { provinceCode province }
             lineItems(first: 100) {
               nodes {
                 id

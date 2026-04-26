@@ -1,6 +1,7 @@
 import { gstDb } from "./db";
 import { resolveLineTaxMapping } from "./product-tax-map";
 import { getActiveGstSettings } from "./settings";
+import { resolveGstStateCode } from "./state-codes";
 import type { GstServiceResult } from "./types";
 import { resolveShopConfig } from "../shopify/shop-resolver";
 
@@ -177,7 +178,7 @@ function buildReadiness(
   }
 
   if (!order.shippingStateCode && !order.billingStateCode) {
-    readinessErrors.push("At least one of shippingStateCode or billingStateCode is required");
+    readinessErrors.push("Missing shipping/billing state for GST place of supply");
   }
 
   if (lines.some((line) => line.mappingStatus !== "MAPPED")) {
@@ -324,8 +325,8 @@ export async function importOrderByShopifyId(
       orderSubtotal: roundCurrency(parseNumber(payload.orderSubtotal ?? payload.subtotal ?? payload.subtotalPrice)),
       orderTaxTotal: roundCurrency(parseNumber(payload.orderTaxTotal ?? payload.taxTotal ?? payload.totalTax)),
       orderGrandTotal: roundCurrency(parseNumber(payload.orderGrandTotal ?? payload.grandTotal ?? payload.totalPrice)),
-      shippingStateCode: normalizeString(payload.shippingStateCode || payload.shippingState) || null,
-      billingStateCode: normalizeString(payload.billingStateCode || payload.billingState) || null,
+      shippingStateCode: resolveGstStateCode(normalizeString(payload.shippingStateCode || payload.shippingState)) || null,
+      billingStateCode: resolveGstStateCode(normalizeString(payload.billingStateCode || payload.billingState)) || null,
     };
 
     const readiness = buildReadiness(normalizedOrder, mappedLines);

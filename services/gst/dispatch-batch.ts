@@ -1,4 +1,5 @@
 import { gstDb } from "./db";
+import { resolveGstStateCode } from "./state-codes";
 import type { GstDocumentLineInput, GstServiceResult } from "./types";
 import { buildInvoiceDraft } from "./invoice";
 import { markOrderInvoiced } from "./order-import";
@@ -49,6 +50,21 @@ function parseNum(value: unknown): number {
 
 function parseJson(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+}
+
+function extractCustomerDefaultStateCode(snapshot: Record<string, unknown>): string | null {
+  const customer = snapshot.customer && typeof snapshot.customer === "object" ? (snapshot.customer as Record<string, unknown>) : {};
+  const defaultAddress = customer.defaultAddress && typeof customer.defaultAddress === "object"
+    ? (customer.defaultAddress as Record<string, unknown>)
+    : {};
+  return (
+    resolveGstStateCode(defaultAddress.provinceCode as string | null | undefined) ||
+    resolveGstStateCode(defaultAddress.province as string | null | undefined) ||
+    resolveGstStateCode(snapshot.customerDefaultStateCode as string | null | undefined) ||
+    resolveGstStateCode(snapshot.customerDefaultState as string | null | undefined) ||
+    resolveGstStateCode(snapshot.stateProvince as string | null | undefined) ||
+    null
+  );
 }
 
 export async function listDispatchReadyOrders(filters: DispatchFilters): Promise<GstServiceResult<Array<Record<string, unknown>>>> {
@@ -172,6 +188,7 @@ export async function generateInvoiceBatch(input: BatchGenerateInput) {
     }
 
     const snapshot = parseJson(order.snapshot);
+    const customerDefaultStateCode = extractCustomerDefaultStateCode(snapshot);
     const invoiceLines: GstDocumentLineInput[] = [];
     const lineErrors: string[] = [];
     for (const line of Array.isArray(order.lines) ? order.lines : []) {
@@ -216,7 +233,9 @@ export async function generateInvoiceBatch(input: BatchGenerateInput) {
       buyer: {
         legalName: String(snapshot.customerName || "Customer"),
         gstin: null,
-        stateCode: (order.shippingStateCode || order.billingStateCode) ? String(order.shippingStateCode || order.billingStateCode) : null,
+        stateCode: (order.shippingStateCode || order.billingStateCode || customerDefaultStateCode)
+          ? String(order.shippingStateCode || order.billingStateCode || customerDefaultStateCode)
+          : null,
       },
       currency: String(order.orderCurrency || "INR"),
       lines: invoiceLines,
@@ -255,7 +274,7 @@ export async function prepareInvoicePrintBatch(input: PrintBatchInput): Promise<
     }
 
     if (!resolvedDocumentIds.length) {
-      return { ok: false, error: "No invoice documents found for print batch" };
+      return { ok: false, error: "No GST invoice generated because place of supply is missing." };
     }
 
     const documents = await dispatchDb.gstDocument.findMany({

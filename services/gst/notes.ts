@@ -61,6 +61,8 @@ export async function buildNoteDraft(input: GstNoteDraftInput): Promise<GstServi
       sellerStateCode: settings.stateCode,
       billingStateCode: payloadData.normalizedBillingStateCode,
       shippingStateCode: payloadData.normalizedShippingStateCode,
+      buyerStateCode: payloadData.normalizedBuyerStateCode,
+      placeOfSupplyStateCode: payloadData.normalizedPlaceOfSupplyStateCode,
       buyerGstin: payloadData.normalizedBuyerGstin,
       explicitSupplyType: input.supplyType,
     });

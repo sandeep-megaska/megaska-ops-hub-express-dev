@@ -20,8 +20,8 @@ type GstSyncOrderNode = {
   subtotalPriceSet?: ShopifyMoneySet | null;
   totalTaxSet?: ShopifyMoneySet | null;
   totalPriceSet?: ShopifyMoneySet | null;
-  shippingAddress?: { provinceCode?: string | null } | null;
-  billingAddress?: { provinceCode?: string | null } | null;
+  shippingAddress?: { provinceCode?: string | null; province?: string | null } | null;
+  billingAddress?: { provinceCode?: string | null; province?: string | null } | null;
   lineItems?: {
     nodes?: Array<{
       id: string;
@@ -160,8 +160,8 @@ function normalizeGstSyncOrder(node: GstSyncOrderNode) {
     subtotalPrice: Number(node.subtotalPriceSet?.shopMoney?.amount || 0),
     totalTax: Number(node.totalTaxSet?.shopMoney?.amount || 0),
     totalPrice: Number(node.totalPriceSet?.shopMoney?.amount || 0),
-    shippingStateCode: node.shippingAddress?.provinceCode || null,
-    billingStateCode: node.billingAddress?.provinceCode || null,
+    shippingStateCode: node.shippingAddress?.provinceCode || node.shippingAddress?.province || null,
+    billingStateCode: node.billingAddress?.provinceCode || node.billingAddress?.province || null,
     lines: (node.lineItems?.nodes || []).map((line) => ({
       id: extractShopifyEntityId(line.id),
       productId: extractShopifyEntityId(line.product?.id || ""),
@@ -203,8 +203,8 @@ export async function getShopifyOrdersForGstSync(input: {
             subtotalPriceSet { shopMoney { amount currencyCode } }
             totalTaxSet { shopMoney { amount } }
             totalPriceSet { shopMoney { amount } }
-            shippingAddress { provinceCode }
-            billingAddress { provinceCode }
+            shippingAddress { provinceCode province }
+            billingAddress { provinceCode province }
             lineItems(first: 100) {
               nodes {
                 id
@@ -245,8 +245,8 @@ export async function getSingleShopifyOrderForGstSync(input: { orderNameOrNumber
             subtotalPriceSet { shopMoney { amount currencyCode } }
             totalTaxSet { shopMoney { amount } }
             totalPriceSet { shopMoney { amount } }
-            shippingAddress { provinceCode }
-            billingAddress { provinceCode }
+            shippingAddress { provinceCode province }
+            billingAddress { provinceCode province }
             lineItems(first: 100) {
               nodes {
                 id

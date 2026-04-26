@@ -11,8 +11,8 @@ interface ShopifyLineLike {
 interface ShopifyOrderLike {
   id?: string | number
   name?: string
-  billing_address?: { province_code?: string }
-  shipping_address?: { province_code?: string }
+  billing_address?: { province_code?: string; province?: string }
+  shipping_address?: { province_code?: string; province?: string }
   customer?: { first_name?: string; last_name?: string }
   line_items?: ShopifyLineLike[]
 }
@@ -24,8 +24,8 @@ export function mapShopifyOrderToInvoiceDraft(order: ShopifyOrderLike): GstInvoi
     shopifyOrderName: order.name ? String(order.name) : undefined,
     sourceOrderId: order.id ? String(order.id) : undefined,
     sourceOrderNumber: order.name ? String(order.name) : undefined,
-    billingStateCode: order.billing_address?.province_code || undefined,
-    shippingStateCode: order.shipping_address?.province_code || undefined,
+    billingStateCode: order.billing_address?.province_code || order.billing_address?.province || undefined,
+    shippingStateCode: order.shipping_address?.province_code || order.shipping_address?.province || undefined,
     buyer: {
       legalName: [order.customer?.first_name, order.customer?.last_name].filter(Boolean).join(' ') || 'Shopify Customer',
     },
