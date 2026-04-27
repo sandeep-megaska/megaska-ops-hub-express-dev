@@ -165,7 +165,131 @@ function normalizeDate(value: Date | string | undefined): Date {
 function normalizeText(value: unknown): string {
   return String(value ?? "").trim();
 }
+function pickFirstText(...values: unknown[]): string | null {
+  for (const value of values) {
+    const text = String(value ?? "").trim();
+    if (text) return text;
+  }
+  return null;
+}
 
+function joinName(first?: unknown, last?: unknown): string | null {
+  return pickFirstText([first, last].map((v) => String(v ?? "").trim()).filter(Boolean).join(" "));
+}
+
+function normalizeAddress(raw: unknown) {
+  const address = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+
+  const name =
+    pickFirstText(
+      address.name,
+      address.fullName,
+      joinName(address.firstName, address.lastName)
+    ) || null;
+
+  return {
+    name,
+    address1: pickFirstText(address.address1, address.line1, address.addressLine1),
+    address2: pickFirstText(address.address2, address.line2, address.addressLine2),
+    city: pickFirstText(address.city),
+    state: pickFirstText(address.province, address.state, address.stateProvince),
+    stateCode: pickFirstText(address.provinceCode, address.stateCode),
+    pincode: pickFirstText(address.zip, address.postalCode, address.pincode),
+    country: pickFirstText(address.country, address.countryCode) || "India",
+    phone: pickFirstText(address.phone),
+  };
+}
+
+function extractCustomerDetailsForInvoice(input: GstInvoiceDraftInput) {
+  const metadata = input.metadata && typeof input.metadata === "object"
+    ? (input.metadata as Record<string, unknown>)
+    : {};
+
+  const orderSnapshot =
+    (metadata.orderSnapshot && typeof metadata.orderSnapshot === "object"
+      ? (metadata.orderSnapshot as Record<string, unknown>)
+      : null) ||
+    (metadata.order && typeof metadata.order === "object"
+      ? (metadata.order as Record<string, unknown>)
+      : null) ||
+    metadata;
+
+  const customer =
+    orderSnapshot.customer && typeof orderSnapshot.customer === "object"
+      ? (orderSnapshot.customer as Record<string, unknown>)
+      : {};
+
+  const shippingAddress = normalizeAddress(
+    orderSnapshot.shippingAddress ||
+    orderSnapshot.shipping_address ||
+    metadata.shippingAddress
+  );
+
+  const billingAddress = normalizeAddress(
+    orderSnapshot.billingAddress ||
+    orderSnapshot.billing_address ||
+    metadata.billingAddress
+  );
+
+  const customerName =
+    pickFirstText(
+      input.buyer?.legalName,
+      shippingAddress.name,
+      billingAddress.name,
+      customer.displayName,
+      customer.name,
+      joinName(customer.firstName, customer.lastName),
+      orderSnapshot.customerName,
+      orderSnapshot.name,
+      orderSnapshot.email,
+      orderSnapshot.contactEmail
+    ) || "Customer";
+
+  const email =
+    pickFirstText(
+      input.buyer?.email,
+      customer.email,
+      orderSnapshot.email,
+      orderSnapshot.contactEmail,
+      metadata.email
+    ) || null;
+
+  const phone =
+    pickFirstText(
+      input.buyer?.phone,
+      shippingAddress.phone,
+      billingAddress.phone,
+      customer.phone,
+      orderSnapshot.phone,
+      metadata.phone
+    ) || null;
+
+  const resolvedShipping = {
+    ...shippingAddress,
+    name: shippingAddress.name || customerName,
+    phone: shippingAddress.phone || phone,
+  };
+
+  const resolvedBilling = {
+    ...billingAddress,
+    name: billingAddress.name || customerName,
+    phone: billingAddress.phone || phone,
+  };
+
+  return {
+    buyer: {
+      legalName: customerName,
+      gstin: input.buyer?.gstin || null,
+      stateCode: input.buyer?.stateCode || resolvedBilling.stateCode || resolvedShipping.stateCode || null,
+      email,
+      phone,
+      billingAddress: resolvedBilling,
+      shippingAddress: resolvedShipping,
+    },
+    billingAddress: resolvedBilling,
+    shippingAddress: resolvedShipping,
+  };
+}
 function generateUuid(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();
