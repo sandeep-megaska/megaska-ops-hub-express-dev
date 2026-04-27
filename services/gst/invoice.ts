@@ -91,6 +91,16 @@ async function ensureBuyerParty(input: GstInvoiceDraftInput) {
   });
 }
 
+function isMissingGstPartyLegalNameColumnError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error || "");
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("prisma.gstparty.upsert()") &&
+    normalized.includes("column `legalname`") &&
+    normalized.includes("does not exist")
+  );
+}
+
 export async function buildInvoiceDraft(
   input: GstInvoiceDraftInput
 ): Promise<GstServiceResult<GstInvoiceDraftResult>> {
@@ -169,14 +179,24 @@ export async function buildInvoiceDraft(
 
     const numberingData = numberingResult.data;
 
-    const buyerParty = await ensureBuyerParty({
-      ...input,
-      buyer: {
-        ...input.buyer,
-        gstin: payloadData.normalizedBuyerGstin,
-        stateCode: payloadData.normalizedBuyerStateCode,
-      },
-    });
+    let buyerParty: unknown = null;
+    const invoiceWarnings = [...classificationData.warnings];
+    try {
+      buyerParty = await ensureBuyerParty({
+        ...input,
+        buyer: {
+          ...input.buyer,
+          gstin: payloadData.normalizedBuyerGstin,
+          stateCode: payloadData.normalizedBuyerStateCode,
+        },
+      });
+    } catch (error) {
+      if (isMissingGstPartyLegalNameColumnError(error)) {
+        invoiceWarnings.push("Buyer GST party profile was not persisted due to GstParty schema mismatch");
+      } else {
+        throw error;
+      }
+    }
 
     const snapshot = {
       settings,
@@ -270,7 +290,7 @@ export async function buildInvoiceDraft(
         status: GST_DEFAULT_DOCUMENT_STATUS,
         placeOfSupplyStateCode: classificationData.placeOfSupplyStateCode,
         isInterstate: classificationData.isInterstate,
-        warnings: classificationData.warnings,
+        warnings: invoiceWarnings,
       },
     };
   } catch (error) {

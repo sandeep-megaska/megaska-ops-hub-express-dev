@@ -190,7 +190,7 @@ function buildReadiness(
     readinessErrors.push("Order amount sanity check failed: subtotal + tax does not match grand total");
   }
 
-  const hasCritical = readinessErrors.some((error) => error.includes("no line items") || error.includes("amount sanity"));
+  const hasCritical = readinessErrors.some((error) => error.includes("no line items"));
   const hasReviewOnly = readinessErrors.length > 0 && !hasCritical;
 
   const eligibilityStatus = hasCritical ? "NOT_ELIGIBLE" : hasReviewOnly ? "REVIEW_REQUIRED" : "ELIGIBLE";
