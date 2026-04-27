@@ -40,6 +40,10 @@ function normalizeDate(value: Date | string | undefined): Date {
   return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
 }
 
+function normalizeText(value: unknown): string {
+  return String(value ?? "").trim();
+}
+
 async function ensureBuyerParty(input: GstInvoiceDraftInput) {
   const normalizedBuyer = {
     ...(input.buyer || {}),
@@ -68,9 +72,10 @@ export async function buildInvoiceDraft(
 
     const payloadData = payloadValidation.data;
 
+    const requestedShopId = normalizeText(input.shopId) || null;
     const settingsResult = input.gstSettingsId
       ? await getGstSettingsById(input.gstSettingsId)
-      : await getActiveGstSettings();
+      : await getActiveGstSettings({ shopId: requestedShopId });
 
     if (!settingsResult.ok || !settingsResult.data) {
       return {
@@ -79,7 +84,13 @@ export async function buildInvoiceDraft(
       };
     }
 
-    const settings = settingsResult.data;
+    let settings = settingsResult.data;
+    if (requestedShopId && settings.shopId !== requestedShopId) {
+      const scopedSettings = await getActiveGstSettings({ shopId: requestedShopId });
+      if (scopedSettings.ok && scopedSettings.data) {
+        settings = scopedSettings.data;
+      }
+    }
     const documentDate = normalizeDate(input.documentDate);
 
     const classification = classifySupply({

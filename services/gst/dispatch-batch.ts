@@ -7,6 +7,7 @@ import { resolveSkuTaxMap } from "./sku-tax-map";
 import { getTemplateById } from "./template";
 
 interface DispatchFilters {
+  shopId?: string | null;
   from?: string | Date;
   to?: string | Date;
   invoiceStatus?: string;
@@ -15,6 +16,7 @@ interface DispatchFilters {
 }
 
 interface BatchGenerateInput {
+  shopId?: string | null;
   orderImportIds: string[];
   templateId?: string;
   regenerate?: boolean;
@@ -75,6 +77,9 @@ function extractCustomerDefaultStateCode(snapshot: Record<string, unknown>): str
 export async function listDispatchReadyOrders(filters: DispatchFilters): Promise<GstServiceResult<Array<Record<string, unknown>>>> {
   try {
     const where: Record<string, unknown> = {};
+    if (filters.shopId) {
+      where.shopId = String(filters.shopId);
+    }
     if (filters.from || filters.to) {
       where.orderCreatedAt = {
         ...(filters.from ? { gte: new Date(String(filters.from)) } : {}),
@@ -119,24 +124,35 @@ export async function listDispatchReadyOrders(filters: DispatchFilters): Promise
             .filter(Boolean),
         ),
       );
-      const lineItems = lines.map((line) => {
+      const lineItems: Array<Record<string, unknown>> = [];
+      for (const line of lines) {
         const quantity = parseNum(line.quantity);
         const unitPrice = parseNum(line.unitPrice);
         const discount = parseNum(line.discount);
         const grossAmount = round2(Math.max(0, quantity * unitPrice - discount));
-        return {
+        const sku = String(line.sku || "").trim();
+        const resolvedMap = sku
+          ? await resolveSkuTaxMap({ shopId: String(row.shopId || "") || null, sku })
+          : { ok: true, data: null };
+        const resolvedTaxRate = resolvedMap.ok && resolvedMap.data ? parseNum(resolvedMap.data.taxRate) : null;
+        lineItems.push({
           lineNumber: parseNum(line.lineNumber),
           title: String(line.title || ""),
-          sku: String(line.sku || ""),
+          sku,
           quantity,
           unitPrice: round2(unitPrice),
           grossAmount,
           mappingStatus: String(line.mappingStatus || "UNMAPPED"),
-          hsnCode: line.mappedHsnCode ? String(line.mappedHsnCode) : null,
-          taxRate: line.mappedTaxRate == null ? null : parseNum(line.mappedTaxRate),
+          hsnCode:
+            resolvedMap.ok && resolvedMap.data?.hsnCode
+              ? String(resolvedMap.data.hsnCode)
+              : line.mappedHsnCode
+                ? String(line.mappedHsnCode)
+                : null,
+          taxRate: resolvedTaxRate ?? (line.mappedTaxRate == null ? null : parseNum(line.mappedTaxRate)),
           taxableAmount: round2(parseNum(line.taxableAmount)),
-        };
-      });
+        });
+      }
 
       const invoice = await dispatchDb.gstDocument.findFirst({
         where: {
@@ -214,6 +230,11 @@ export async function generateInvoiceBatch(input: BatchGenerateInput) {
       summary.results.push({ id, status: "FAILED", error: "Order import not found" });
       continue;
     }
+    if (input.shopId && String(order.shopId || "") !== String(input.shopId)) {
+      summary.failed += 1;
+      summary.results.push({ id, status: "FAILED", error: "Order does not belong to current shop context" });
+      continue;
+    }
 
     const readinessErrors = Array.isArray(order.readinessErrors) ? order.readinessErrors : [];
     if (readinessErrors.length > 0) summary.warningOnly += 1;
@@ -275,6 +296,7 @@ export async function generateInvoiceBatch(input: BatchGenerateInput) {
     }
 
     const invoice = await buildInvoiceDraft({
+      shopId: String(order.shopId || "") || null,
       gstSettingsId: String(order.gstSettingsId || ""),
       sourceOrderId: String(order.id),
       sourceOrderNumber: String(order.shopifyOrderName || order.shopifyOrderId || ""),

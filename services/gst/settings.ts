@@ -24,6 +24,7 @@ export interface GstSettingsSnapshot {
 }
 
 export interface GstSettingsWriteInput {
+  shopId?: string | null;
   legalName: string;
   tradeName?: string | null;
   gstin: string;
@@ -134,9 +135,13 @@ export function validateGstIdentityConfig(
   };
 }
 
-async function detectActiveSettingsConflicts(gstin: string): Promise<GstServiceResult<true>> {
+async function detectActiveSettingsConflicts(gstin: string, shopId?: string | null): Promise<GstServiceResult<true>> {
+  const normalizedShopId = normalize(shopId) || null;
   const activeSettings = await gstDb.gstSettings.findMany({
-    where: { isActive: true },
+    where: {
+      isActive: true,
+      ...(normalizedShopId ? { shopId: normalizedShopId } : { shopId: null }),
+    },
     select: { id: true, gstin: true },
   });
 
@@ -241,21 +246,58 @@ export async function upsertGstSettings(input: GstSettingsWriteInput): Promise<G
   }
 
   const normalized = validation.data.normalized;
+  const shopId = normalize(input.shopId) || null;
 
   try {
-    const conflictCheck = await detectActiveSettingsConflicts(String(normalized.gstin));
-    if (!conflictCheck.ok) {
-      return { ok: false, error: conflictCheck.error || "Active GST settings conflict detected" };
-    }
-
     const created = await gstDb.$transaction(async (tx) => {
+      const existingForShop = shopId
+        ? await tx.gstSettings.findFirst({
+            where: { shopId },
+            orderBy: { updatedAt: "desc" },
+            select: { id: true },
+          })
+        : null;
+
+      const conflictCheck = await detectActiveSettingsConflicts(String(normalized.gstin), shopId);
+      if (!conflictCheck.ok) {
+        return Promise.reject(new Error(conflictCheck.error || "Active GST settings conflict detected"));
+      }
+
       if (normalized.isActive) {
-        await tx.gstSettings.updateMany({ where: { isActive: true }, data: { isActive: false } });
+        await tx.gstSettings.updateMany({
+          where: {
+            isActive: true,
+            ...(shopId ? { shopId } : {}),
+          },
+          data: { isActive: false },
+        });
+      }
+
+      if (existingForShop?.id) {
+        return tx.gstSettings.update({
+          where: { id: String(existingForShop.id) },
+          data: {
+            legalName: String(normalized.legalName),
+            tradeName: normalized.tradeName ?? null,
+            gstin: String(normalized.gstin),
+            pan: normalized.pan ?? null,
+            stateCode: String(normalized.stateCode),
+            invoicePrefix: String(normalized.invoicePrefix),
+            creditNotePrefix: String(normalized.creditNotePrefix),
+            debitNotePrefix: String(normalized.debitNotePrefix),
+            invoiceNumberStrategy: normalized.invoiceNumberStrategy,
+            defaultCurrency: String(normalized.defaultCurrency || "INR"),
+            priceIncludesTax: normalized.priceIncludesTax !== false,
+            einvoiceEnabled: Boolean(normalized.einvoiceEnabled),
+            isActive: normalized.isActive ?? true,
+          },
+        });
       }
 
       return tx.gstSettings.upsert({
         where: { gstin: String(normalized.gstin) },
         create: {
+          shopId,
           legalName: String(normalized.legalName),
           tradeName: normalized.tradeName ?? null,
           gstin: String(normalized.gstin),
@@ -271,6 +313,7 @@ export async function upsertGstSettings(input: GstSettingsWriteInput): Promise<G
           isActive: normalized.isActive ?? true,
         },
         update: {
+          shopId,
           legalName: String(normalized.legalName),
           tradeName: normalized.tradeName ?? null,
           pan: normalized.pan ?? null,

@@ -64,6 +64,7 @@ export interface GstPartyInput {
 }
 
 export interface GstInvoiceDraftInput {
+  shopId?: string | null;
   gstSettingsId?: string;
   sourceOrderId?: string;
   sourceOrderNumber?: string;

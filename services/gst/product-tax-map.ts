@@ -354,6 +354,40 @@ export async function resolveLineTaxMapping(input: ResolveLineTaxMappingInput): 
   };
 
   try {
+    if (sku) {
+      const skuMap = await productTaxDb.gstSkuTaxMap.findFirst({
+        where: {
+          shopId,
+          sku,
+          status: "ACTIVE",
+        },
+        orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+      });
+      if (skuMap) {
+        return {
+          ok: true,
+          data: mapResolvedResponse("SKU", null, normalize(skuMap.id) || null, skuMap.hsnCode, skuMap.taxRate, skuMap.cessRate),
+        };
+      }
+    }
+
+    if (styleCode) {
+      const styleMap = await productTaxDb.gstSkuTaxMap.findFirst({
+        where: {
+          shopId,
+          styleCode,
+          status: "ACTIVE",
+        },
+        orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+      });
+      if (styleMap) {
+        return {
+          ok: true,
+          data: mapResolvedResponse("STYLE", null, normalize(styleMap.id) || null, styleMap.hsnCode, styleMap.taxRate, styleMap.cessRate),
+        };
+      }
+    }
+
     if (shopifyProductId && shopifyVariantId) {
       const variantMapping = await productTaxDb.gstProductTaxMap.findFirst({
         where: {
@@ -408,40 +442,6 @@ export async function resolveLineTaxMapping(input: ResolveLineTaxMappingInput): 
             (productMapping.slab as { taxRate?: unknown } | undefined)?.taxRate,
             (productMapping.slab as { cessRate?: unknown } | undefined)?.cessRate,
           ),
-        };
-      }
-    }
-
-    if (sku) {
-      const skuMap = await productTaxDb.gstSkuTaxMap.findFirst({
-        where: {
-          shopId,
-          sku,
-          status: "ACTIVE",
-        },
-        orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
-      });
-      if (skuMap) {
-        return {
-          ok: true,
-          data: mapResolvedResponse("SKU", null, normalize(skuMap.id) || null, skuMap.hsnCode, skuMap.taxRate, skuMap.cessRate),
-        };
-      }
-    }
-
-    if (styleCode) {
-      const styleMap = await productTaxDb.gstSkuTaxMap.findFirst({
-        where: {
-          shopId,
-          styleCode,
-          status: "ACTIVE",
-        },
-        orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
-      });
-      if (styleMap) {
-        return {
-          ok: true,
-          data: mapResolvedResponse("STYLE", null, normalize(styleMap.id) || null, styleMap.hsnCode, styleMap.taxRate, styleMap.cessRate),
         };
       }
     }

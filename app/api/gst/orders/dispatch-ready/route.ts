@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { listDispatchReadyOrders } from "../../../../../services/gst/dispatch-batch";
+import { getShopDomainFromRequest, resolveShopConfig } from "../../../../../services/shopify/shop-resolver";
 
 export const runtime = "nodejs";
 
 export async function GET(req: NextRequest) {
+  const shopDomain = getShopDomainFromRequest(req);
+  const shop = await resolveShopConfig(shopDomain);
   const query = req.nextUrl.searchParams;
   const result = await listDispatchReadyOrders({
+    shopId: shop.id,
     from: query.get("from") || undefined,
     to: query.get("to") || undefined,
     invoiceStatus: query.get("invoiceStatus") || undefined,
