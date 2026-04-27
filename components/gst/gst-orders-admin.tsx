@@ -1,10 +1,9 @@
 'use client'
 
-import { Fragment, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import {
   generateBatchInvoices,
   listDispatchReadyOrders,
-  preparePrintBatch,
   syncOrders,
 } from '../../lib/gst-client'
 import { GstResponseViewer } from './gst-response-viewer'
@@ -119,63 +118,35 @@ export function GstOrdersAdmin() {
     setLoading(false)
   }
 
-  async function onPrintOrDownload(id: string, mode: 'print' | 'download') {
+  const printFrameRef = useRef<HTMLIFrameElement | null>(null)
+  const [printHtml, setPrintHtml] = useState<string | null>(null)
+
+  async function onPrintInvoice(invoiceDocumentId: string) {
     setLoading(true)
     setError(undefined)
 
-    const res = await preparePrintBatch({ orderImportIds: [id] })
-    if (!res.ok) {
-      setError(res.error)
+    const response = await fetch(`/api/gst/invoices/${encodeURIComponent(invoiceDocumentId)}/pdf?format=html`, {
+      credentials: 'include',
+      cache: 'no-store',
+    })
+    const html = await response.text().catch(() => '')
+    if (!response.ok || !html) {
+      setError('Unable to render invoice preview')
       setLoading(false)
       return
     }
 
-    const manifest = (res.data as { manifest?: Array<{ pdfUrl?: string }> })?.manifest || []
-    const pdfUrl = manifest[0]?.pdfUrl
-    if (!pdfUrl) {
-      setError('No PDF generated yet for this order. Generate invoice first.')
-      setLoading(false)
-      return
-    }
-
-    const payload = await fetch(pdfUrl, { credentials: 'include' }).then((response) => response.json()) as {
-      ok?: boolean
-      pdf?: { html?: string }
-      error?: string
-    }
-
-    if (!payload.ok || !payload.pdf?.html) {
-      setError(payload.error || 'Unable to render invoice preview')
-      setLoading(false)
-      return
-    }
-
-    if (mode === 'print') {
-      const popup = window.open('', '_blank', 'noopener,noreferrer')
-      if (!popup) {
-        setError('Unable to open print preview window')
-        setLoading(false)
-        return
-      }
-      popup.document.open()
-      popup.document.write(payload.pdf.html)
-      popup.document.close()
-      popup.focus()
-      popup.print()
-    } else {
-      const blob = new Blob([payload.pdf.html], { type: 'text/html;charset=utf-8' })
-      const blobUrl = URL.createObjectURL(blob)
-      const anchor = document.createElement('a')
-      anchor.href = blobUrl
-      anchor.download = `gst-invoice-${id}.html`
-      document.body.appendChild(anchor)
-      anchor.click()
-      document.body.removeChild(anchor)
-      URL.revokeObjectURL(blobUrl)
-    }
-
-    setResult(res.data)
+    setPrintHtml(html)
     setLoading(false)
+  }
+
+  function onDownloadPdf(invoiceDocumentId: string) {
+    const link = document.createElement('a')
+    link.href = `/api/gst/invoices/${encodeURIComponent(invoiceDocumentId)}/pdf`
+    link.download = `gst-invoice-${invoiceDocumentId}.pdf`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
   }
 
   async function onGenerateReport(reportType: 'b2c_sales_register' | 'credit_note_register' | 'debit_note_register') {
@@ -273,8 +244,8 @@ export function GstOrdersAdmin() {
                         <button className="rounded-lg border border-gray-300 px-3 py-1.5" onClick={() => void onGenerate(id)}>Generate Invoice</button>
                         {row.invoiceDocumentId ? (
                           <>
-                            <button className="rounded-lg border border-gray-300 px-3 py-1.5" onClick={() => void onPrintOrDownload(id, 'print')}>Print Invoice</button>
-                            <button className="rounded-lg border border-gray-300 px-3 py-1.5" onClick={() => void onPrintOrDownload(id, 'download')}>Download PDF</button>
+                            <button className="rounded-lg border border-gray-300 px-3 py-1.5" onClick={() => void onPrintInvoice(row.invoiceDocumentId!)}>Print Invoice</button>
+                            <button className="rounded-lg border border-gray-300 px-3 py-1.5" onClick={() => onDownloadPdf(row.invoiceDocumentId!)}>Download PDF</button>
                           </>
                         ) : null}
                       </td>
@@ -322,6 +293,28 @@ export function GstOrdersAdmin() {
           {!hasOrders ? <p className="mt-3 text-sm text-gray-500">No synced orders found for this date range.</p> : null}
         </div>
       </div>
+
+      {printHtml ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="flex h-[90vh] w-full max-w-6xl flex-col rounded-xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
+              <h3 className="text-sm font-semibold text-gray-900">Invoice Preview</h3>
+              <div className="space-x-2">
+                <button
+                  className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+                  onClick={() => printFrameRef.current?.contentWindow?.print()}
+                >
+                  Print
+                </button>
+                <button className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm" onClick={() => setPrintHtml(null)}>
+                  Close
+                </button>
+              </div>
+            </div>
+            <iframe ref={printFrameRef} title="GST Invoice" className="h-full w-full" srcDoc={printHtml} />
+          </div>
+        </div>
+      ) : null}
 
       <GstResponseViewer title="Orders API Response" data={result} error={error} />
     </div>
