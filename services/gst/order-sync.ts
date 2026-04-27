@@ -2,7 +2,7 @@ import { gstDb } from "./db";
 import type { GstServiceResult } from "./types";
 import { importOrderByShopifyId } from "./order-import";
 import { getShopifyOrdersForGstSync, getSingleShopifyOrderForGstSync } from "./shopify-runtime-admin";
-import { resolveShopConfig } from "../shopify/shop-resolver";
+import { resolveShopConfig } from "../shopify/shop";
 
 interface SyncFilters {
   from: string | Date;

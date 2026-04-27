@@ -92,23 +92,29 @@ export async function buildInvoiceDraft(
     const payloadData = payloadValidation.data;
 
     const requestedShopId = normalizeText(input.shopId) || null;
-    const settingsResult = input.gstSettingsId
-      ? await getGstSettingsById(input.gstSettingsId)
-      : await getActiveGstSettings({ shopId: requestedShopId });
 
-    if (!settingsResult.ok || !settingsResult.data) {
+    const scopedSettingsResult = requestedShopId
+      ? await getActiveGstSettings({ shopId: requestedShopId })
+      : { ok: false, data: null, error: "missing shopId" };
+    const globalSettingsResult = await getActiveGstSettings({ shopId: null });
+    const byIdSettingsResult = input.gstSettingsId ? await getGstSettingsById(input.gstSettingsId) : null;
+
+    const settings =
+      (scopedSettingsResult.ok && scopedSettingsResult.data)
+        ? scopedSettingsResult.data
+        : (globalSettingsResult.ok && globalSettingsResult.data)
+          ? globalSettingsResult.data
+          : (byIdSettingsResult?.ok && byIdSettingsResult.data)
+            ? byIdSettingsResult.data
+            : null;
+
+    if (!settings) {
       return {
         ok: false,
-        error: toInvoiceDraftError(settingsResult.error || "Unable to resolve GST settings"),
+        error: toInvoiceDraftError(
+          scopedSettingsResult.error || globalSettingsResult.error || byIdSettingsResult?.error || "Unable to resolve GST settings",
+        ),
       };
-    }
-
-    let settings = settingsResult.data;
-    if (requestedShopId && settings.shopId !== requestedShopId) {
-      const scopedSettings = await getActiveGstSettings({ shopId: requestedShopId });
-      if (scopedSettings.ok && scopedSettings.data) {
-        settings = scopedSettings.data;
-      }
     }
     const documentDate = normalizeDate(input.documentDate);
 

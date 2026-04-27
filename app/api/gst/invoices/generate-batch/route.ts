@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateInvoiceBatch } from "../../../../../services/gst/dispatch-batch";
-import { getShopDomainFromRequest, resolveShopConfig } from "../../../../../services/shopify/shop-resolver";
+import { getShopDomainFromRequest, resolveShopConfig } from "../../../../../services/shopify/shop";
 
 export const runtime = "nodejs";
 

@@ -7,11 +7,11 @@ import { writeGstAuditLog } from "../../../../services/gst/audit";
 import type { GstSettingsWriteInput } from "../../../../services/gst/settings";
 import { validateGstIdentityConfig } from "../../../../services/gst/settings";
 import { prisma } from "../../../../services/db/prisma";
-import { getShopByDomain, getShopDomainFromRequest } from "../../../../services/shopify/shop-resolver";
+import { getShopDomainFromRequest, resolveShopConfig } from "../../../../services/shopify/shop";
 
 export const runtime = "nodejs";
 
-const DEBUG_VERSION = "GST_SETTINGS_SHOP_SCOPE_V1";
+const DEBUG_VERSION = "GST_SHOP_RESOLVER_FIX_V1";
 
 function resolveString(value: unknown, fallback: string): string {
   return typeof value === "string" ? value : fallback;
@@ -24,10 +24,23 @@ function resolveNullableString(value: unknown, fallback: string | null): string 
   return typeof value === "string" ? value : fallback;
 }
 
+async function resolveShopContext(req: NextRequest) {
+  const requestedShopDomain = getShopDomainFromRequest(req);
+  const usedGlobalFallback = !requestedShopDomain;
+  const resolvedShop = requestedShopDomain
+    ? await resolveShopConfig(requestedShopDomain)
+    : await resolveShopConfig();
+
+  return {
+    requestedShopDomain,
+    resolvedShop,
+    usedGlobalFallback,
+  };
+}
+
 export async function GET(req: NextRequest) {
-  const shopDomain = getShopDomainFromRequest(req);
-  const shop = shopDomain ? await getShopByDomain(shopDomain) : null;
-  const resolvedShopId = shop?.id ?? null;
+  const { requestedShopDomain, resolvedShop, usedGlobalFallback } = await resolveShopContext(req);
+  const resolvedShopId = resolvedShop.id ?? null;
 
   let settings =
     resolvedShopId
@@ -43,7 +56,7 @@ export async function GET(req: NextRequest) {
       where: { isActive: true, shopId: null },
       orderBy: { updatedAt: "desc" },
     });
-    usedFallbackGlobal = Boolean(settings) && Boolean(resolvedShopId);
+    usedFallbackGlobal = Boolean(settings);
   }
 
   if (!settings) {
@@ -55,16 +68,15 @@ export async function GET(req: NextRequest) {
     data: { settings },
     settings,
     __debugVersion: DEBUG_VERSION,
-    __resolvedShopDomain: shopDomain || null,
+    __resolvedShopDomain: resolvedShop.shopDomain || requestedShopDomain || null,
     __resolvedShopId: resolvedShopId,
-    __usedFallbackGlobal: usedFallbackGlobal,
+    __usedGlobalFallback: usedGlobalFallback || usedFallbackGlobal,
   });
 }
 
 async function saveSettings(req: NextRequest) {
-  const shopDomain = getShopDomainFromRequest(req);
-  const shop = shopDomain ? await getShopByDomain(shopDomain) : null;
-  const resolvedShopId = shop?.id ?? null;
+  const { requestedShopDomain, resolvedShop, usedGlobalFallback } = await resolveShopContext(req);
+  const resolvedShopId = resolvedShop.id ?? null;
 
   if (!resolvedShopId) {
     return NextResponse.json(
@@ -72,9 +84,9 @@ async function saveSettings(req: NextRequest) {
         ok: false,
         error: "Unable to resolve current shopId for GST settings save.",
         __debugVersion: DEBUG_VERSION,
-        __resolvedShopDomain: shopDomain || null,
+        __resolvedShopDomain: resolvedShop.shopDomain || requestedShopDomain || null,
         __resolvedShopId: null,
-        __usedFallbackGlobal: false,
+        __usedGlobalFallback: usedGlobalFallback,
       },
       { status: 400 },
     );
@@ -142,6 +154,7 @@ async function saveSettings(req: NextRequest) {
       return tx.gstSettings.update({
         where: { id: existingShopSettings.id },
         data: {
+          shopId: resolvedShopId,
           legalName: String(normalized.legalName),
           tradeName: normalized.tradeName ?? null,
           gstin: String(normalized.gstin),
@@ -195,9 +208,9 @@ async function saveSettings(req: NextRequest) {
       data: { settings },
       settings,
       __debugVersion: DEBUG_VERSION,
-      __resolvedShopDomain: shopDomain || null,
+      __resolvedShopDomain: resolvedShop.shopDomain || requestedShopDomain || null,
       __resolvedShopId: resolvedShopId,
-      __usedFallbackGlobal: Boolean(fallbackGlobalSettings && !existingShopSettings),
+      __usedGlobalFallback: usedGlobalFallback || Boolean(fallbackGlobalSettings && !existingShopSettings),
     },
     { status: existingShopSettings ? 200 : 201 },
   );

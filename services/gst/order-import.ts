@@ -3,7 +3,7 @@ import { resolveLineTaxMapping } from "./product-tax-map";
 import { getActiveGstSettings } from "./settings";
 import { resolveGstStateCode } from "./state-codes";
 import type { GstServiceResult } from "./types";
-import { resolveShopConfig } from "../shopify/shop-resolver";
+import { resolveShopConfig } from "../shopify/shop";
 
 export interface GstOrderImportRecord {
   id: string;

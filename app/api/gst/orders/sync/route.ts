@@ -3,7 +3,7 @@ import { syncOrdersByDateRange } from "../../../../../services/gst/order-sync";
 import {
   getShopDomainFromRequest,
   normalizeShopDomain,
-} from "../../../../../services/shopify/shop-resolver";
+} from "../../../../../services/shopify/shop";
 
 export const runtime = "nodejs";
 

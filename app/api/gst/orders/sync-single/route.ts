@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { syncSingleOrder } from "../../../../../services/gst/order-sync";
-import { getShopDomainFromRequest } from "../../../../../services/shopify/shop-resolver";
+import { getShopDomainFromRequest } from "../../../../../services/shopify/shop";
 
 export const runtime = "nodejs";
 

@@ -1,4 +1,4 @@
-import { normalizeShopDomain, resolveShopConfig } from "../shopify/shop-resolver";
+import { normalizeShopDomain, resolveShopConfig } from "../shopify/shop";
 
 const SHOPIFY_API_VERSION = "2026-01";
 
