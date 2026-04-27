@@ -4,6 +4,7 @@ import {
   isGstNumberingStrategy,
 } from "../../../../services/gst/constants";
 import { writeGstAuditLog } from "../../../../services/gst/audit";
+import type { GstSettingsWriteInput } from "../../../../services/gst/settings";
 import { validateGstIdentityConfig } from "../../../../services/gst/settings";
 import { prisma } from "../../../../services/db/prisma";
 import { getShopByDomain, getShopDomainFromRequest } from "../../../../services/shopify/shop-resolver";
@@ -11,6 +12,17 @@ import { getShopByDomain, getShopDomainFromRequest } from "../../../../services/
 export const runtime = "nodejs";
 
 const DEBUG_VERSION = "GST_SETTINGS_SHOP_SCOPE_V1";
+
+function resolveString(value: unknown, fallback: string): string {
+  return typeof value === "string" ? value : fallback;
+}
+
+function resolveNullableString(value: unknown, fallback: string | null): string | null {
+  if (value === null) {
+    return null;
+  }
+  return typeof value === "string" ? value : fallback;
+}
 
 export async function GET(req: NextRequest) {
   const shopDomain = getShopDomainFromRequest(req);
@@ -86,19 +98,19 @@ async function saveSettings(req: NextRequest) {
 
   const baseValues = existingShopSettings ?? fallbackGlobalSettings;
 
-  const candidateInput = {
-    legalName: body.legalName ?? baseValues?.legalName ?? "",
-    tradeName: body.tradeName ?? baseValues?.tradeName ?? null,
-    gstin: body.gstin ?? baseValues?.gstin ?? "",
-    pan: body.pan ?? baseValues?.pan ?? null,
-    stateCode: body.stateCode ?? baseValues?.stateCode ?? "",
-    invoicePrefix: body.invoicePrefix ?? baseValues?.invoicePrefix ?? "",
-    creditNotePrefix: body.creditNotePrefix ?? baseValues?.creditNotePrefix ?? "",
-    debitNotePrefix: body.debitNotePrefix ?? baseValues?.debitNotePrefix ?? "",
+  const candidateInput: Partial<GstSettingsWriteInput> = {
+    legalName: resolveString(body.legalName, baseValues?.legalName ?? ""),
+    tradeName: resolveNullableString(body.tradeName, baseValues?.tradeName ?? null),
+    gstin: resolveString(body.gstin, baseValues?.gstin ?? ""),
+    pan: resolveNullableString(body.pan, baseValues?.pan ?? null),
+    stateCode: resolveString(body.stateCode, baseValues?.stateCode ?? ""),
+    invoicePrefix: resolveString(body.invoicePrefix, baseValues?.invoicePrefix ?? ""),
+    creditNotePrefix: resolveString(body.creditNotePrefix, baseValues?.creditNotePrefix ?? ""),
+    debitNotePrefix: resolveString(body.debitNotePrefix, baseValues?.debitNotePrefix ?? ""),
     invoiceNumberStrategy: isGstNumberingStrategy(body.invoiceNumberStrategy)
       ? body.invoiceNumberStrategy
       : baseValues?.invoiceNumberStrategy ?? GST_DEFAULT_NUMBERING_STRATEGY,
-    defaultCurrency: body.defaultCurrency ?? baseValues?.defaultCurrency ?? "INR",
+    defaultCurrency: resolveString(body.defaultCurrency, baseValues?.defaultCurrency ?? "INR"),
     priceIncludesTax:
       typeof body.priceIncludesTax === "boolean"
         ? body.priceIncludesTax
