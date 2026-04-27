@@ -308,6 +308,46 @@ export async function generateInvoiceBatch(input: BatchGenerateInput) {
       continue;
     }
 
+    const buyer = {
+      legalName:
+        String(snapshot.shippingAddress && typeof snapshot.shippingAddress === "object" ? (snapshot.shippingAddress as Record<string, unknown>).name || "" : "") ||
+        String(snapshot.billingAddress && typeof snapshot.billingAddress === "object" ? (snapshot.billingAddress as Record<string, unknown>).name || "" : "") ||
+        String(snapshot.customerName || "") ||
+        "Customer",
+      email:
+        (snapshot.email ? String(snapshot.email) : null) ||
+        (snapshot.contactEmail ? String(snapshot.contactEmail) : null) ||
+        (snapshot.customer && typeof snapshot.customer === "object" && (snapshot.customer as Record<string, unknown>).email
+          ? String((snapshot.customer as Record<string, unknown>).email)
+          : null),
+      phone:
+        (snapshot.shippingAddress && typeof snapshot.shippingAddress === "object" && (snapshot.shippingAddress as Record<string, unknown>).phone
+          ? String((snapshot.shippingAddress as Record<string, unknown>).phone)
+          : null) ||
+        (snapshot.billingAddress && typeof snapshot.billingAddress === "object" && (snapshot.billingAddress as Record<string, unknown>).phone
+          ? String((snapshot.billingAddress as Record<string, unknown>).phone)
+          : null) ||
+        (snapshot.phone ? String(snapshot.phone) : null),
+      stateCode: order.shippingStateCode || order.billingStateCode || customerDefaultStateCode ? String(order.shippingStateCode || order.billingStateCode || customerDefaultStateCode) : null,
+      gstin: null,
+    };
+    const metadata = {
+      dispatchBatch: true,
+      templateId: input.templateId || null,
+      gstOrderImportId: String(order.id),
+      orderCreatedAt: asDate(order.orderCreatedAt)?.toISOString() || null,
+      orderSnapshot: snapshot,
+      orderImportId: String(order.id),
+    };
+
+    console.info("[GST INVOICE INPUT BUYER DEBUG]", {
+      buyer,
+      hasOrderSnapshot: Boolean(metadata.orderSnapshot),
+      shippingAddress: metadata.orderSnapshot?.shippingAddress,
+      billingAddress: metadata.orderSnapshot?.billingAddress,
+      customerName: metadata.orderSnapshot?.customerName,
+    });
+
     const invoice = await buildInvoiceDraft({
       shopId: String(order.shopId || "") || null,
       gstSettingsId: String(order.gstSettingsId || ""),
@@ -319,21 +359,10 @@ export async function generateInvoiceBatch(input: BatchGenerateInput) {
       documentDate: asDate(order.orderCreatedAt)?.toISOString() || new Date().toISOString(),
       billingStateCode: order.billingStateCode ? String(order.billingStateCode) : null,
       shippingStateCode: order.shippingStateCode ? String(order.shippingStateCode) : null,
-      buyer: {
-        legalName: String(snapshot.customerName || "Customer"),
-        gstin: null,
-        stateCode: (order.shippingStateCode || order.billingStateCode || customerDefaultStateCode)
-          ? String(order.shippingStateCode || order.billingStateCode || customerDefaultStateCode)
-          : null,
-      },
+      buyer,
       currency: String(order.orderCurrency || "INR"),
       lines: invoiceLines,
-      metadata: {
-        dispatchBatch: true,
-        templateId: input.templateId || null,
-        gstOrderImportId: String(order.id),
-        orderCreatedAt: asDate(order.orderCreatedAt)?.toISOString() || null,
-      },
+      metadata,
     });
 
     if (!invoice.ok || !invoice.data) {
