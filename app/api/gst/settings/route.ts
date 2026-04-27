@@ -128,6 +128,7 @@ async function saveSettings(req: NextRequest) {
   }
 
   const normalized = validation.data.normalized;
+  const invoiceNumberStrategy = normalized.invoiceNumberStrategy ?? GST_DEFAULT_NUMBERING_STRATEGY;
 
   const settings = await prisma.$transaction(async (tx) => {
     if (normalized.isActive) {
@@ -149,7 +150,7 @@ async function saveSettings(req: NextRequest) {
           invoicePrefix: String(normalized.invoicePrefix),
           creditNotePrefix: String(normalized.creditNotePrefix),
           debitNotePrefix: String(normalized.debitNotePrefix),
-          invoiceNumberStrategy: normalized.invoiceNumberStrategy,
+          invoiceNumberStrategy,
           defaultCurrency: String(normalized.defaultCurrency || "INR"),
           priceIncludesTax: normalized.priceIncludesTax !== false,
           einvoiceEnabled: Boolean(normalized.einvoiceEnabled),
@@ -169,7 +170,7 @@ async function saveSettings(req: NextRequest) {
         invoicePrefix: String(normalized.invoicePrefix),
         creditNotePrefix: String(normalized.creditNotePrefix),
         debitNotePrefix: String(normalized.debitNotePrefix),
-        invoiceNumberStrategy: normalized.invoiceNumberStrategy,
+        invoiceNumberStrategy,
         defaultCurrency: String(normalized.defaultCurrency || "INR"),
         priceIncludesTax: normalized.priceIncludesTax !== false,
         einvoiceEnabled: Boolean(normalized.einvoiceEnabled),
