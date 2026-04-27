@@ -14,10 +14,10 @@ export async function GET() {
   }
 
   const settings = result.data;
-  return NextResponse.json({ ok: true, settings });
+  return NextResponse.json({ ok: true, data: { settings }, settings });
 }
 
-export async function POST(req: NextRequest) {
+async function saveSettings(req: NextRequest) {
   const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
   if (!body) {
     return NextResponse.json({ ok: false, error: "Invalid JSON payload" }, { status: 400 });
@@ -46,5 +46,13 @@ export async function POST(req: NextRequest) {
   }
 
   const settings = result.data;
-  return NextResponse.json({ ok: true, settings }, { status: 201 });
+  return NextResponse.json({ ok: true, data: { settings }, settings }, { status: 201 });
+}
+
+export async function POST(req: NextRequest) {
+  return saveSettings(req);
+}
+
+export async function PUT(req: NextRequest) {
+  return saveSettings(req);
 }

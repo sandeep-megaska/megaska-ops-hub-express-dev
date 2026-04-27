@@ -41,64 +41,17 @@ function normalizeDate(value: Date | string | undefined): Date {
 }
 
 async function ensureBuyerParty(input: GstInvoiceDraftInput) {
-  const legalName = String(input.buyer?.legalName || "").trim();
-  const gstin = String(input.buyer?.gstin || "")
-    .trim()
-    .toUpperCase();
-  const stateCode = String(input.buyer?.stateCode || "").trim() || null;
-
-  if (!legalName && !gstin) {
-    return null;
-  }
-
-  if (gstin) {
-    return gstDb.gstParty.upsert({
-      where: { gstin },
-      update: {
-        legalName: legalName || "Unregistered Buyer",
-        email: input.buyer?.email || null,
-        phone: input.buyer?.phone || null,
-        stateCode,
-      },
-      create: {
-        gstin,
-        legalName: legalName || "Unregistered Buyer",
-        stateCode,
-        email: input.buyer?.email || null,
-        phone: input.buyer?.phone || null,
-      },
-    });
-  }
-
-  return gstDb.gstParty.upsert({
-    where: {
-      id: `ungst-${legalName.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
-    },
-    update: {
-      legalName: legalName || "Unregistered Buyer",
-      stateCode,
-      email: input.buyer?.email || null,
-      phone: input.buyer?.phone || null,
-    },
-    create: {
-      id: `ungst-${legalName.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
-      legalName: legalName || "Unregistered Buyer",
-      stateCode,
-      email: input.buyer?.email || null,
-      phone: input.buyer?.phone || null,
-      gstin: null,
-    },
-  });
-}
-
-function isMissingGstPartyLegalNameColumnError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error || "");
-  const normalized = message.toLowerCase();
-  return (
-    normalized.includes("prisma.gstparty.upsert()") &&
-    normalized.includes("column `legalname`") &&
-    normalized.includes("does not exist")
-  );
+  const normalizedBuyer = {
+    ...(input.buyer || {}),
+    legalName: String(input.buyer?.legalName || "").trim() || null,
+    gstin: String(input.buyer?.gstin || "")
+      .trim()
+      .toUpperCase() || null,
+    stateCode: String(input.buyer?.stateCode || "").trim() || null,
+    email: input.buyer?.email || null,
+    phone: input.buyer?.phone || null,
+  };
+  return normalizedBuyer;
 }
 
 export async function buildInvoiceDraft(
@@ -179,24 +132,15 @@ export async function buildInvoiceDraft(
 
     const numberingData = numberingResult.data;
 
-    let buyerParty: unknown = null;
     const invoiceWarnings = [...classificationData.warnings];
-    try {
-      buyerParty = await ensureBuyerParty({
-        ...input,
-        buyer: {
-          ...input.buyer,
-          gstin: payloadData.normalizedBuyerGstin,
-          stateCode: payloadData.normalizedBuyerStateCode,
-        },
-      });
-    } catch (error) {
-      if (isMissingGstPartyLegalNameColumnError(error)) {
-        invoiceWarnings.push("Buyer GST party profile was not persisted due to GstParty schema mismatch");
-      } else {
-        throw error;
-      }
-    }
+    const buyerParty = await ensureBuyerParty({
+      ...input,
+      buyer: {
+        ...input.buyer,
+        gstin: payloadData.normalizedBuyerGstin,
+        stateCode: payloadData.normalizedBuyerStateCode,
+      },
+    });
 
     const snapshot = {
       settings,
