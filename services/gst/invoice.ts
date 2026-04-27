@@ -44,6 +44,31 @@ type GstDocumentColumnInfo = {
   column_default: string | null;
 };
 
+type GstDocumentLineInsertRow = {
+  [key: string]: string | number | boolean | Date | Prisma.Decimal | null;
+};
+
+const GST_DOCUMENT_LINE_PRISMA_COLUMNS = new Set([
+  "id",
+  "gstDocumentId",
+  "lineNumber",
+  "description",
+  "hsnOrSac",
+  "quantity",
+  "unit",
+  "unitPrice",
+  "discount",
+  "taxableAmount",
+  "taxRate",
+  "cgstAmount",
+  "sgstAmount",
+  "igstAmount",
+  "cessAmount",
+  "lineTotal",
+  "createdAt",
+  "updatedAt",
+]);
+
 function isValidDateValue(value: unknown): boolean {
   if (!(value instanceof Date)) return false;
   return !Number.isNaN(value.getTime());
@@ -145,6 +170,81 @@ function generateUuid(): string {
     const value = char === "x" ? random : (random & 0x3) | 0x8;
     return value.toString(16);
   });
+}
+
+function toNullableTrimmedString(value: unknown): string | null {
+  const normalized = String(value ?? "").trim();
+  return normalized.length > 0 ? normalized : null;
+}
+
+function pickLineSku(taxLine: Record<string, unknown>, sourceLine: Record<string, unknown>): string | null {
+  return toNullableTrimmedString(
+    taxLine.sku
+    ?? taxLine.productSku
+    ?? taxLine.variantSku
+    ?? sourceLine.sku
+    ?? sourceLine.productSku
+    ?? sourceLine.variantSku
+  );
+}
+
+function buildGstDocumentLineInsertRows(args: {
+  documentId: string;
+  taxLines: Array<Record<string, unknown>>;
+  sourceLines: Array<Record<string, unknown>>;
+  dbColumns: GstDocumentColumnInfo[];
+}): { rows: GstDocumentLineInsertRow[]; missingRequiredColumns: string[] } {
+  const { documentId, taxLines, sourceLines, dbColumns } = args;
+  const now = new Date();
+  const columnNames = new Set(dbColumns.map((col) => col.column_name));
+
+  const rows = taxLines.map((rawLine, index) => {
+    const line = rawLine as Record<string, unknown>;
+    const sourceLine = (sourceLines[index] || {}) as Record<string, unknown>;
+    const lineSku = pickLineSku(line, sourceLine);
+
+    const row: GstDocumentLineInsertRow = {
+      id: generateUuid(),
+      gstDocumentId: documentId,
+      lineNumber: Number(line.lineNumber),
+      description: String(line.description ?? ""),
+      hsnOrSac: toNullableTrimmedString(line.hsnOrSac),
+      quantity: new Prisma.Decimal(Number(line.quantity ?? 0)),
+      unit: toNullableTrimmedString(line.unit),
+      unitPrice: new Prisma.Decimal(Number(line.unitPrice ?? 0)),
+      discount: new Prisma.Decimal(Number(line.discount ?? 0)),
+      taxableAmount: new Prisma.Decimal(Number(line.taxableAmount ?? 0)),
+      taxRate: new Prisma.Decimal(Number(line.taxRate ?? 0)),
+      cgstAmount: new Prisma.Decimal(Number(line.cgstAmount ?? 0)),
+      sgstAmount: new Prisma.Decimal(Number(line.sgstAmount ?? 0)),
+      igstAmount: new Prisma.Decimal(Number(line.igstAmount ?? 0)),
+      cessAmount: new Prisma.Decimal(Number(line.cessAmount ?? 0)),
+      lineTotal: new Prisma.Decimal(Number(line.lineTotal ?? 0)),
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    if (columnNames.has("documentId")) row.documentId = documentId;
+    if (columnNames.has("itemName")) row.itemName = row.description;
+    if (columnNames.has("productName")) row.productName = row.description;
+    if (columnNames.has("title")) row.title = row.description;
+    if (columnNames.has("sku")) row.sku = lineSku;
+    if (columnNames.has("hsnCode")) row.hsnCode = row.hsnOrSac;
+    if (columnNames.has("totalAmount")) row.totalAmount = row.lineTotal;
+    if (columnNames.has("grossAmount")) row.grossAmount = row.lineTotal;
+
+    return row;
+  });
+
+  const requiredDbColumns = dbColumns
+    .filter((col) => col.is_nullable === "NO" && col.column_default === null)
+    .map((col) => col.column_name);
+
+  const missingRequiredColumns = requiredDbColumns.filter((columnName) =>
+    rows.some((row) => row[columnName] === undefined || row[columnName] === null)
+  );
+
+  return { rows, missingRequiredColumns };
 }
 
 async function ensureBuyerParty(input: GstInvoiceDraftInput) {
@@ -485,25 +585,73 @@ export async function buildInvoiceDraft(
         throw new Error("Failed to persist GstDocument");
       }
 
-      await tx.gstDocumentLine.createMany({
-        data: taxData.lines.map((line) => ({
-          gstDocumentId: resolvedDocument.id,
-          lineNumber: line.lineNumber,
-          description: line.description,
-          hsnOrSac: line.hsnOrSac || null,
-          quantity: new Prisma.Decimal(line.quantity),
-          unit: line.unit || null,
-          unitPrice: new Prisma.Decimal(line.unitPrice),
-          discount: new Prisma.Decimal(line.discount),
-          taxableAmount: new Prisma.Decimal(line.taxableAmount),
-          taxRate: new Prisma.Decimal(line.taxRate),
-          cgstAmount: new Prisma.Decimal(line.cgstAmount),
-          sgstAmount: new Prisma.Decimal(line.sgstAmount),
-          igstAmount: new Prisma.Decimal(line.igstAmount),
-          cessAmount: new Prisma.Decimal(line.cessAmount),
-          lineTotal: new Prisma.Decimal(line.lineTotal),
-        })),
+      const lineColumns = await txWithRaw.$queryRaw<GstDocumentColumnInfo[]>(Prisma.sql`
+        SELECT column_name, is_nullable, data_type, column_default
+        FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'GstDocumentLine'
+        ORDER BY ordinal_position
+      `);
+
+      const { rows: lineRows, missingRequiredColumns } = buildGstDocumentLineInsertRows({
+        documentId: resolvedDocument.id,
+        taxLines: taxData.lines as unknown as Array<Record<string, unknown>>,
+        sourceLines: input.lines as unknown as Array<Record<string, unknown>>,
+        dbColumns: lineColumns,
       });
+
+      console.info("[GST DEBUG][INVOICE][DB_SCHEMA][GstDocumentLine]", {
+        columns: lineColumns,
+      });
+
+      if (missingRequiredColumns.length > 0) {
+        throw new Error(
+          `GstDocumentLine createPayload missing required DB column(s): ${missingRequiredColumns.join(", ")}`
+        );
+      }
+
+      const requiresLegacyLineInsert = lineColumns.some(
+        (column) => !GST_DOCUMENT_LINE_PRISMA_COLUMNS.has(column.column_name)
+      );
+
+      if (requiresLegacyLineInsert) {
+        const dbColumnSet = new Set(lineColumns.map((column) => column.column_name));
+
+        for (const row of lineRows) {
+          const insertColumns = Object.keys(row).filter((columnName) => dbColumnSet.has(columnName));
+          const insertValues = insertColumns.map((columnName) => row[columnName]);
+
+          await txWithRaw.$queryRaw(Prisma.sql`
+            INSERT INTO "GstDocumentLine" (
+              ${Prisma.join(insertColumns.map((columnName) => Prisma.raw(`"${columnName}"`)), ", ")}
+            ) VALUES (
+              ${Prisma.join(insertValues)}
+            )
+          `);
+        }
+      } else {
+        await tx.gstDocumentLine.createMany({
+          data: lineRows.map((row) => ({
+            id: row.id,
+            gstDocumentId: row.gstDocumentId,
+            lineNumber: row.lineNumber,
+            description: row.description,
+            hsnOrSac: row.hsnOrSac,
+            quantity: row.quantity,
+            unit: row.unit,
+            unitPrice: row.unitPrice,
+            discount: row.discount,
+            taxableAmount: row.taxableAmount,
+            taxRate: row.taxRate,
+            cgstAmount: row.cgstAmount,
+            sgstAmount: row.sgstAmount,
+            igstAmount: row.igstAmount,
+            cessAmount: row.cessAmount,
+            lineTotal: row.lineTotal,
+            createdAt: row.createdAt,
+            updatedAt: row.updatedAt,
+          })),
+        });
+      }
 
       return resolvedDocument;
     });
