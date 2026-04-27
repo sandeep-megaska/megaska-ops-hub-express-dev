@@ -34,6 +34,20 @@ type OrderRow = {
 const dateToday = new Date().toISOString().slice(0, 10)
 const dateThirtyDaysAgo = new Date(Date.now() - 29 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
 
+function extractGeneratedDocumentId(data: unknown, orderImportId: string): string | null {
+  const payload = data && typeof data === 'object' ? (data as Record<string, unknown>) : {}
+  const results = Array.isArray(payload.results) ? payload.results : []
+  const match = results.find((item) => {
+    const row = item && typeof item === 'object' ? (item as Record<string, unknown>) : {}
+    return String(row.id || '') === orderImportId && row.documentId
+  })
+
+  if (!match || typeof match !== 'object') return null
+
+  const documentId = (match as Record<string, unknown>).documentId
+  return documentId ? String(documentId) : null
+}
+
 export function GstOrdersAdmin() {
   const [from, setFrom] = useState(dateThirtyDaysAgo)
   const [to, setTo] = useState(dateToday)
@@ -110,11 +124,21 @@ export function GstOrdersAdmin() {
     const res = await generateBatchInvoices({ orderImportIds: [id] })
     if (!res.ok) {
       setError(res.error)
-    } else {
-      setResult(res.data)
-      await loadOrders()
+      setLoading(false)
+      return
     }
 
+    setResult(res.data)
+    await loadOrders()
+
+    const documentId = extractGeneratedDocumentId(res.data, id)
+    if (!documentId) {
+      setError('Invoice was generated, but no PDF document id was returned')
+      setLoading(false)
+      return
+    }
+
+    onDownloadPdf(documentId)
     setLoading(false)
   }
 
@@ -241,7 +265,7 @@ export function GstOrdersAdmin() {
                       <td className="px-3 py-2 text-xs text-amber-700">{unmappedSkus.length > 0 ? unmappedSkus.join(', ') : 'None'}</td>
                       <td className="px-3 py-2">{row.invoiceStatus}</td>
                       <td className="space-x-2 whitespace-nowrap px-3 py-2">
-                        <button className="rounded-lg border border-gray-300 px-3 py-1.5" onClick={() => void onGenerate(id)}>Generate Invoice</button>
+                        <button className="rounded-lg border border-gray-300 px-3 py-1.5" onClick={() => void onGenerate(id)} disabled={loading}>{loading ? 'Generating...' : 'Generate Invoice'}</button>
                         {row.invoiceDocumentId ? (
                           <>
                             <button className="rounded-lg border border-gray-300 px-3 py-1.5" onClick={() => void onPrintInvoice(row.invoiceDocumentId!)}>Print Invoice</button>
