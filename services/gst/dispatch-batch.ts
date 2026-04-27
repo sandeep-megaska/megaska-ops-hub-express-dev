@@ -39,6 +39,7 @@ type DispatchDbClient = {
 };
 
 const dispatchDb = gstDb as unknown as DispatchDbClient;
+const STALE_SUBTOTAL_WARNING = "Order amount sanity check failed: subtotal + tax does not match grand total";
 
 function asDate(value: unknown): Date | null {
   if (!value) return null;
@@ -57,6 +58,14 @@ function round2(value: number): number {
 
 function parseJson(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+}
+
+function normalizeReadinessWarnings(readinessErrors: unknown, priceIncludesTax: boolean): string[] {
+  const warnings = Array.isArray(readinessErrors) ? readinessErrors.map((warning) => String(warning || "").trim()).filter(Boolean) : [];
+  if (!priceIncludesTax) {
+    return warnings;
+  }
+  return warnings.filter((warning) => warning !== STALE_SUBTOTAL_WARNING);
 }
 
 function extractCustomerDefaultStateCode(snapshot: Record<string, unknown>): string | null {
@@ -222,7 +231,10 @@ export async function generateInvoiceBatch(input: BatchGenerateInput) {
   for (const id of ids) {
     const order = await dispatchDb.gstOrderImport.findUnique({
       where: { id },
-      include: { lines: { orderBy: { lineNumber: "asc" } } },
+      include: {
+        lines: { orderBy: { lineNumber: "asc" } },
+        gstSettings: { select: { priceIncludesTax: true } },
+      },
     });
 
     if (!order) {
@@ -236,7 +248,8 @@ export async function generateInvoiceBatch(input: BatchGenerateInput) {
       continue;
     }
 
-    const readinessErrors = Array.isArray(order.readinessErrors) ? order.readinessErrors : [];
+    const priceIncludesTax = ((order.gstSettings as { priceIncludesTax?: unknown } | null)?.priceIncludesTax ?? true) !== false;
+    const readinessErrors = normalizeReadinessWarnings(order.readinessErrors, priceIncludesTax);
     if (readinessErrors.length > 0) summary.warningOnly += 1;
 
     const existing = await dispatchDb.gstDocument.findFirst({
