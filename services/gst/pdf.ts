@@ -1,5 +1,6 @@
 import { getGstInvoiceById } from "./invoice";
 import { getGstNoteById } from "./notes";
+import { getGstStatePrimaryNameByCode, resolveGstStateCode } from "./state-codes";
 import type { GstServiceResult } from "./types";
 
 export interface GstPdfRenderPayload {
@@ -32,6 +33,33 @@ function asText(value: unknown, fallback = ""): string {
   return text || fallback;
 }
 
+function formatStateDisplay(value: unknown, fallback = ""): string {
+  const code = resolveGstStateCode(String(value ?? "").trim());
+  if (!code) return fallback;
+  const name = getGstStatePrimaryNameByCode(code);
+  return name ? `${name} (${code})` : code;
+}
+
+function readFirstText(source: Record<string, unknown>, keys: string[]): string {
+  for (const key of keys) {
+    const text = asText(source[key]);
+    if (text) return text;
+  }
+  return "";
+}
+
+function buildSupplierAddress(seller: Record<string, unknown>): string[] {
+  const line1 = readFirstText(seller, ["addressLine1", "address1", "registeredAddressLine1", "line1"]);
+  const line2 = readFirstText(seller, ["addressLine2", "address2", "registeredAddressLine2", "line2"]);
+  const city = readFirstText(seller, ["city", "town"]);
+  const district = readFirstText(seller, ["district"]);
+  const postalCode = readFirstText(seller, ["postalCode", "pincode", "zip"]);
+  const state = formatStateDisplay(readFirstText(seller, ["stateCode", "state", "stateProvince"]));
+  const country = readFirstText(seller, ["country", "countryName"]);
+
+  return [line1, line2, [city, district].filter(Boolean).join(", "), [state, postalCode].filter(Boolean).join(" - "), country].filter(Boolean);
+}
+
 export async function renderGstPdf(gstDocumentId: string): Promise<GstServiceResult<GstPdfRenderPayload>> {
   const invoiceResult = await getGstInvoiceById(gstDocumentId);
   const documentResult = invoiceResult.ok ? invoiceResult : await getGstNoteById(gstDocumentId);
@@ -56,9 +84,14 @@ export async function renderGstPdf(gstDocumentId: string): Promise<GstServiceRes
   const classification = (snapshot.classification || {}) as Record<string, unknown>;
 
   const supplierName = asText(seller.legalName, "Supplier");
+  const supplierTradeName = asText(seller.tradeName);
   const supplierStateCode = asText(seller.stateCode);
+  const supplierStateDisplay = formatStateDisplay(supplierStateCode, supplierStateCode);
+  const supplierAddressLines = buildSupplierAddress(seller);
   const buyerName = asText(buyer.legalName, "Customer");
-  const placeOfSupply = asText(doc.placeOfSupplyStateCode || classification.placeOfSupplyStateCode || supplierStateCode, supplierStateCode);
+  const placeOfSupplyCode = asText(doc.placeOfSupplyStateCode || classification.placeOfSupplyStateCode || supplierStateCode, supplierStateCode);
+  const placeOfSupply = formatStateDisplay(placeOfSupplyCode, placeOfSupplyCode);
+  const buyerStateDisplay = formatStateDisplay(asText(buyer.stateCode, placeOfSupplyCode), placeOfSupply);
   const orderNumber = asText(doc.shopifyOrderName || doc.sourceOrderNumber);
   const orderDate = formatDate(metadata.orderCreatedAt || doc.documentDate);
   const declaration = asText(metadata.declarationText || seller.declarationText);
@@ -97,7 +130,7 @@ export async function renderGstPdf(gstDocumentId: string): Promise<GstServiceRes
     <title>${escapeHtml(String(doc.documentNumber || ""))}</title>
     <style>
       @page { size: A4; margin: 14mm; }
-      body { font-family: Arial, sans-serif; padding: 0; color: #111; font-size: 12px; }
+      body { font-family: Arial, sans-serif; padding: 0; color: #111; font-size: 12px; margin: 0; }
       .brand-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:14px; }
       .company { font-size:18px; font-weight:bold; }
       .sub { font-size:12px; color:#555; }
@@ -109,16 +142,31 @@ export async function renderGstPdf(gstDocumentId: string): Promise<GstServiceRes
       .totals { width: 380px; margin-left: auto; margin-top: 12px; }
       .totals td { border: 0; padding: 4px 0; }
       .signature { margin-top: 24px; text-align: right; }
+      .no-print { margin-bottom: 10px; }
+      .btn { border: 1px solid #888; background: #f5f5f5; border-radius: 4px; padding: 6px 10px; cursor: pointer; }
+      .brand-line { font-size: 11px; color:#444; margin-top: 2px; }
+      .page-wrap { width: 100%; max-width: 100%; }
+      @media print {
+        .no-print { display: none !important; }
+        .brand-header { break-inside: avoid; }
+        .meta-grid { break-inside: avoid; }
+        table, tr, td, th { page-break-inside: avoid; }
+      }
     </style>
   </head>
   <body>
+    <div class="no-print">
+      <button class="btn" onclick="window.print()">Download PDF</button>
+    </div>
+    <div class="page-wrap">
 
     <div class="brand-header">
       <div>
         <div class="company">${escapeHtml(supplierName)}</div>
-        <div class="sub">${escapeHtml(asText(seller.tradeName))}</div>
+        <div class="sub">${escapeHtml(supplierTradeName)}</div>
+        <div class="brand-line">MEGASKA | www.megaska.com</div>
         <div class="sub">GSTIN: ${escapeHtml(String(seller.gstin || ""))}</div>
-        <div class="sub">State: ${escapeHtml(supplierStateCode)}</div>
+        <div class="sub">State: ${escapeHtml(supplierStateDisplay)}</div>
       </div>
       <div>
         <div><strong>${title}</strong></div>
@@ -126,6 +174,8 @@ export async function renderGstPdf(gstDocumentId: string): Promise<GstServiceRes
         <div>Date: ${formatDate(doc.documentDate)}</div>
         <div>Order No: ${escapeHtml(orderNumber)}</div>
         <div>Order Date: ${escapeHtml(orderDate)}</div>
+        <div>Store: MEGASKA | www.megaska.com</div>
+        <div>State: ${escapeHtml(supplierStateDisplay)}</div>
         <div>Place of Supply: ${escapeHtml(placeOfSupply)}</div>
       </div>
     </div>
@@ -134,14 +184,17 @@ export async function renderGstPdf(gstDocumentId: string): Promise<GstServiceRes
       <div class="block">
         <strong>Supplier</strong>
         <div>${escapeHtml(supplierName)}</div>
+        <div>${escapeHtml(supplierTradeName)}</div>
         <div>GSTIN: ${escapeHtml(asText(seller.gstin))}</div>
-        <div>State Code: ${escapeHtml(supplierStateCode)}</div>
+        <div>State: ${escapeHtml(supplierStateDisplay)}</div>
+        ${supplierAddressLines.map((line) => `<div>${escapeHtml(line)}</div>`).join("")}
+        <div>Website: www.megaska.com</div>
       </div>
       <div class="block">
         <strong>Buyer</strong>
         <div>${escapeHtml(buyerName)}</div>
         <div>GSTIN: ${escapeHtml(asText(buyer.gstin, "UNREGISTERED"))}</div>
-        <div>State Code: ${escapeHtml(asText(buyer.stateCode, placeOfSupply))}</div>
+        <div>State: ${escapeHtml(buyerStateDisplay)}</div>
       </div>
     </div>
 
@@ -169,6 +222,7 @@ export async function renderGstPdf(gstDocumentId: string): Promise<GstServiceRes
     </div>
     <div class="signature">
       ${signature ? `<div>For ${escapeHtml(supplierName)}</div><div style="margin-top:16px;">${escapeHtml(signature)}</div>` : ""}
+    </div>
     </div>
 
   </body>

@@ -73,3 +73,12 @@ export function resolveGstStateCode(value: string | null | undefined): string | 
 export function isKnownGstStateCode(value: string | null | undefined): boolean {
   return GST_STATE_CODES.has(String(value ?? "").trim());
 }
+
+export function getGstStatePrimaryNameByCode(value: string | null | undefined): string | null {
+  const code = resolveGstStateCode(value);
+  if (!code) return null;
+  const names = GST_STATE_CODE_TO_NAMES[code];
+  const primary = names?.[0];
+  if (!primary) return null;
+  return primary.replace(/\b\w/g, (char) => char.toUpperCase());
+}
