@@ -139,6 +139,14 @@ function normalizeText(value: unknown): string {
   return String(value ?? "").trim();
 }
 
+function generateUuid(): string {
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (char) => {
+    const random = Math.floor(Math.random() * 16);
+    const value = char === "x" ? random : (random & 0x3) | 0x8;
+    return value.toString(16);
+  });
+}
+
 async function ensureBuyerParty(input: GstInvoiceDraftInput) {
   const normalizedBuyer = {
     ...(input.buyer || {}),
@@ -277,12 +285,19 @@ export async function buildInvoiceDraft(
       totals: taxData.totals,
     };
 
+    const gstDocumentId = generateUuid();
+    const gstSubtotalAmount = new Prisma.Decimal(taxData.totals.taxableAmount);
+    const gstUpdatedAt = new Date();
+
     const createPayload = {
+      id: gstDocumentId,
       documentType: "TAX_INVOICE",
       status: GST_DEFAULT_DOCUMENT_STATUS,
       documentNumber: numberingData.documentNumber,
       documentDate,
       gstSettingsId: settings.id,
+      settingsId: settings.id,
+      issueDate: documentDate,
       shopifyOrderId: input.shopifyOrderId || null,
       shopifyOrderName: input.shopifyOrderName || null,
       sourceOrderId: input.sourceOrderId || null,
@@ -292,7 +307,8 @@ export async function buildInvoiceDraft(
       placeOfSupplyStateCode: classificationData.placeOfSupplyStateCode,
       isInterstate: classificationData.isInterstate,
       currency: payloadData.normalizedCurrency,
-      taxableAmount: new Prisma.Decimal(taxData.totals.taxableAmount),
+      taxableAmount: gstSubtotalAmount,
+      subtotalAmount: gstSubtotalAmount,
       cgstAmount: new Prisma.Decimal(taxData.totals.cgstAmount),
       sgstAmount: new Prisma.Decimal(taxData.totals.sgstAmount),
       igstAmount: new Prisma.Decimal(taxData.totals.igstAmount),
@@ -300,6 +316,7 @@ export async function buildInvoiceDraft(
       totalAmount: new Prisma.Decimal(taxData.totals.totalAmount),
       jsonSnapshot: snapshot,
       metadata: input.metadata || {},
+      updatedAt: gstUpdatedAt,
     };
 
     console.info("[GST DEBUG][INVOICE][CREATE]", {
@@ -360,13 +377,117 @@ export async function buildInvoiceDraft(
         );
       }
 
-      const document = await tx.gstDocument.create({
-        data: createPayload,
-      });
+      const requiresLegacyInsert = requiredDbColumns.some((columnName) =>
+        columnName === "settingsId" || columnName === "issueDate" || columnName === "subtotalAmount"
+      );
+
+      let resolvedDocument: { id: string; documentNumber: string } | null = null;
+
+      if (requiresLegacyInsert) {
+        const metadataJson = createPayload.metadata ?? {};
+        const insertedDocuments = await txWithRaw.$queryRaw<Array<{ id: string; documentNumber: string }>>(Prisma.sql`
+            INSERT INTO "GstDocument" (
+              "id",
+              "documentType",
+              "status",
+              "documentNumber",
+              "documentDate",
+              "gstSettingsId",
+              "settingsId",
+              "issueDate",
+              "shopifyOrderId",
+              "shopifyOrderName",
+              "sourceOrderId",
+              "sourceOrderNumber",
+              "sourceReference",
+              "supplyType",
+              "placeOfSupplyStateCode",
+              "isInterstate",
+              "currency",
+              "taxableAmount",
+              "subtotalAmount",
+              "cgstAmount",
+              "sgstAmount",
+              "igstAmount",
+              "cessAmount",
+              "totalAmount",
+              "jsonSnapshot",
+              "metadata",
+              "updatedAt"
+            ) VALUES (
+              ${createPayload.id},
+              ${createPayload.documentType},
+              ${createPayload.status},
+              ${createPayload.documentNumber},
+              ${createPayload.documentDate},
+              ${createPayload.gstSettingsId},
+              ${createPayload.settingsId},
+              ${createPayload.issueDate},
+              ${createPayload.shopifyOrderId},
+              ${createPayload.shopifyOrderName},
+              ${createPayload.sourceOrderId},
+              ${createPayload.sourceOrderNumber},
+              ${createPayload.sourceReference},
+              ${createPayload.supplyType},
+              ${createPayload.placeOfSupplyStateCode},
+              ${createPayload.isInterstate},
+              ${createPayload.currency},
+              ${createPayload.taxableAmount},
+              ${createPayload.subtotalAmount},
+              ${createPayload.cgstAmount},
+              ${createPayload.sgstAmount},
+              ${createPayload.igstAmount},
+              ${createPayload.cessAmount},
+              ${createPayload.totalAmount},
+              ${JSON.stringify(createPayload.jsonSnapshot)}::jsonb,
+              ${JSON.stringify(metadataJson)}::jsonb,
+              ${createPayload.updatedAt}
+            )
+            RETURNING "id", "documentNumber"
+          `);
+        resolvedDocument = insertedDocuments[0] ?? null;
+      } else {
+        const createdDocument = await tx.gstDocument.create({
+          data: {
+            id: createPayload.id,
+            documentType: createPayload.documentType,
+            status: createPayload.status,
+            documentNumber: createPayload.documentNumber,
+            documentDate: createPayload.documentDate,
+            gstSettingsId: createPayload.gstSettingsId,
+            shopifyOrderId: createPayload.shopifyOrderId,
+            shopifyOrderName: createPayload.shopifyOrderName,
+            sourceOrderId: createPayload.sourceOrderId,
+            sourceOrderNumber: createPayload.sourceOrderNumber,
+            sourceReference: createPayload.sourceReference,
+            supplyType: createPayload.supplyType,
+            placeOfSupplyStateCode: createPayload.placeOfSupplyStateCode,
+            isInterstate: createPayload.isInterstate,
+            currency: createPayload.currency,
+            taxableAmount: createPayload.taxableAmount,
+            cgstAmount: createPayload.cgstAmount,
+            sgstAmount: createPayload.sgstAmount,
+            igstAmount: createPayload.igstAmount,
+            cessAmount: createPayload.cessAmount,
+            totalAmount: createPayload.totalAmount,
+            jsonSnapshot: createPayload.jsonSnapshot,
+            metadata: createPayload.metadata,
+            updatedAt: createPayload.updatedAt,
+          },
+        });
+        resolvedDocument = {
+          id: createdDocument.id,
+          documentNumber: createdDocument.documentNumber,
+        };
+      }
+
+      if (!resolvedDocument) {
+        throw new Error("Failed to persist GstDocument");
+      }
 
       await tx.gstDocumentLine.createMany({
         data: taxData.lines.map((line) => ({
-          gstDocumentId: document.id,
+          gstDocumentId: resolvedDocument.id,
           lineNumber: line.lineNumber,
           description: line.description,
           hsnOrSac: line.hsnOrSac || null,
@@ -384,7 +505,7 @@ export async function buildInvoiceDraft(
         })),
       });
 
-      return document;
+      return resolvedDocument;
     });
 
     await writeGstAuditLog(
