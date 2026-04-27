@@ -3,43 +3,67 @@ import {
   GST_DEFAULT_NUMBERING_STRATEGY,
   isGstNumberingStrategy,
 } from "../../../../services/gst/constants";
-import { getActiveGstSettings, upsertGstSettings } from "../../../../services/gst/settings";
-import { getShopDomainFromRequest, resolveShopConfig } from "../../../../services/shopify/shop-resolver";
+import { writeGstAuditLog } from "../../../../services/gst/audit";
+import { validateGstIdentityConfig } from "../../../../services/gst/settings";
+import { prisma } from "../../../../services/db/prisma";
+import { getShopByDomain, getShopDomainFromRequest } from "../../../../services/shopify/shop-resolver";
 
 export const runtime = "nodejs";
 
+const DEBUG_VERSION = "GST_SETTINGS_SHOP_SCOPE_V1";
+
 export async function GET(req: NextRequest) {
   const shopDomain = getShopDomainFromRequest(req);
-  const shop = await resolveShopConfig(shopDomain);
-  console.info("[GST DEBUG][SETTINGS][GET]", {
-    requestUrl: req.url,
-    resolvedShopDomain: shopDomain || null,
-    resolvedShopId: shop.id ?? null,
-  });
-  const result = await getActiveGstSettings({ shopId: shop.id });
-  if (!result.ok || !result.data) {
-    return NextResponse.json({ ok: false, error: result.error }, { status: 404 });
+  const shop = shopDomain ? await getShopByDomain(shopDomain) : null;
+  const resolvedShopId = shop?.id ?? null;
+
+  let settings =
+    resolvedShopId
+      ? await prisma.gstSettings.findFirst({
+          where: { isActive: true, shopId: resolvedShopId },
+          orderBy: { updatedAt: "desc" },
+        })
+      : null;
+
+  let usedFallbackGlobal = false;
+  if (!settings) {
+    settings = await prisma.gstSettings.findFirst({
+      where: { isActive: true, shopId: null },
+      orderBy: { updatedAt: "desc" },
+    });
+    usedFallbackGlobal = Boolean(settings) && Boolean(resolvedShopId);
   }
 
-  const settings = result.data;
-  return NextResponse.json({ ok: true, data: { settings }, settings });
+  if (!settings) {
+    return NextResponse.json({ ok: false, error: "No active GST settings configured" }, { status: 404 });
+  }
+
+  return NextResponse.json({
+    ok: true,
+    data: { settings },
+    settings,
+    __debugVersion: DEBUG_VERSION,
+    __resolvedShopDomain: shopDomain || null,
+    __resolvedShopId: resolvedShopId,
+    __usedFallbackGlobal: usedFallbackGlobal,
+  });
 }
 
 async function saveSettings(req: NextRequest) {
   const shopDomain = getShopDomainFromRequest(req);
-  const shop = await resolveShopConfig(shopDomain);
-  const resolvedShopId = shop.id ? String(shop.id) : null;
-  console.info("[GST DEBUG][SETTINGS][SAVE][REQUEST]", {
-    requestUrl: req.url,
-    resolvedShopDomain: shopDomain || null,
-    resolvedShopId,
-    saveUsesShopId: Boolean(resolvedShopId),
-    saveUsesNullShopId: !resolvedShopId,
-  });
+  const shop = shopDomain ? await getShopByDomain(shopDomain) : null;
+  const resolvedShopId = shop?.id ?? null;
 
   if (!resolvedShopId) {
     return NextResponse.json(
-      { ok: false, error: "Unable to resolve current shopId for GST settings save." },
+      {
+        ok: false,
+        error: "Unable to resolve current shopId for GST settings save.",
+        __debugVersion: DEBUG_VERSION,
+        __resolvedShopDomain: shopDomain || null,
+        __resolvedShopId: null,
+        __usedFallbackGlobal: false,
+      },
       { status: 400 },
     );
   }
@@ -49,38 +73,121 @@ async function saveSettings(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "Invalid JSON payload" }, { status: 400 });
   }
 
-  const result = await upsertGstSettings({
-    shopId: resolvedShopId,
-    legalName: String(body.legalName || ""),
-    tradeName: body.tradeName ? String(body.tradeName) : null,
-    gstin: String(body.gstin || ""),
-    pan: body.pan ? String(body.pan) : null,
-    stateCode: String(body.stateCode || ""),
-    invoicePrefix: String(body.invoicePrefix || ""),
-    creditNotePrefix: String(body.creditNotePrefix || ""),
-    debitNotePrefix: String(body.debitNotePrefix || ""),
+  const existingShopSettings = await prisma.gstSettings.findFirst({
+    where: { shopId: resolvedShopId },
+    orderBy: { updatedAt: "desc" },
+  });
+  const fallbackGlobalSettings = existingShopSettings
+    ? null
+    : await prisma.gstSettings.findFirst({
+        where: { shopId: null, isActive: true },
+        orderBy: { updatedAt: "desc" },
+      });
+
+  const baseValues = existingShopSettings ?? fallbackGlobalSettings;
+
+  const candidateInput = {
+    legalName: body.legalName ?? baseValues?.legalName ?? "",
+    tradeName: body.tradeName ?? baseValues?.tradeName ?? null,
+    gstin: body.gstin ?? baseValues?.gstin ?? "",
+    pan: body.pan ?? baseValues?.pan ?? null,
+    stateCode: body.stateCode ?? baseValues?.stateCode ?? "",
+    invoicePrefix: body.invoicePrefix ?? baseValues?.invoicePrefix ?? "",
+    creditNotePrefix: body.creditNotePrefix ?? baseValues?.creditNotePrefix ?? "",
+    debitNotePrefix: body.debitNotePrefix ?? baseValues?.debitNotePrefix ?? "",
     invoiceNumberStrategy: isGstNumberingStrategy(body.invoiceNumberStrategy)
       ? body.invoiceNumberStrategy
-      : GST_DEFAULT_NUMBERING_STRATEGY,
-    defaultCurrency: body.defaultCurrency ? String(body.defaultCurrency) : "INR",
-    priceIncludesTax: body.priceIncludesTax === false ? false : true,
-    einvoiceEnabled: Boolean(body.einvoiceEnabled),
-    isActive: body.isActive === false ? false : true,
-  });
+      : baseValues?.invoiceNumberStrategy ?? GST_DEFAULT_NUMBERING_STRATEGY,
+    defaultCurrency: body.defaultCurrency ?? baseValues?.defaultCurrency ?? "INR",
+    priceIncludesTax:
+      typeof body.priceIncludesTax === "boolean"
+        ? body.priceIncludesTax
+        : (baseValues?.priceIncludesTax ?? true),
+    einvoiceEnabled:
+      typeof body.einvoiceEnabled === "boolean"
+        ? body.einvoiceEnabled
+        : (baseValues?.einvoiceEnabled ?? false),
+    isActive: typeof body.isActive === "boolean" ? body.isActive : (baseValues?.isActive ?? true),
+  };
 
-  if (!result.ok || !result.data) {
-    return NextResponse.json({ ok: false, error: result.error }, { status: 400 });
+  const validation = validateGstIdentityConfig(candidateInput);
+  if (!validation.ok || !validation.data?.normalized) {
+    return NextResponse.json({ ok: false, error: validation.error || "Invalid GST settings" }, { status: 400 });
   }
 
-  const settings = result.data;
-  console.info("[GST DEBUG][SETTINGS][SAVE][RESULT]", {
-    requestUrl: req.url,
-    resolvedShopDomain: shopDomain || null,
-    resolvedShopId,
-    persistedSettingsId: settings.id,
-    persistedSettingsShopId: settings.shopId ?? null,
+  const normalized = validation.data.normalized;
+
+  const settings = await prisma.$transaction(async (tx) => {
+    if (normalized.isActive) {
+      await tx.gstSettings.updateMany({
+        where: { isActive: true, shopId: resolvedShopId },
+        data: { isActive: false },
+      });
+    }
+
+    if (existingShopSettings) {
+      return tx.gstSettings.update({
+        where: { id: existingShopSettings.id },
+        data: {
+          legalName: String(normalized.legalName),
+          tradeName: normalized.tradeName ?? null,
+          gstin: String(normalized.gstin),
+          pan: normalized.pan ?? null,
+          stateCode: String(normalized.stateCode),
+          invoicePrefix: String(normalized.invoicePrefix),
+          creditNotePrefix: String(normalized.creditNotePrefix),
+          debitNotePrefix: String(normalized.debitNotePrefix),
+          invoiceNumberStrategy: normalized.invoiceNumberStrategy,
+          defaultCurrency: String(normalized.defaultCurrency || "INR"),
+          priceIncludesTax: normalized.priceIncludesTax !== false,
+          einvoiceEnabled: Boolean(normalized.einvoiceEnabled),
+          isActive: normalized.isActive ?? true,
+        },
+      });
+    }
+
+    return tx.gstSettings.create({
+      data: {
+        shopId: resolvedShopId,
+        legalName: String(normalized.legalName),
+        tradeName: normalized.tradeName ?? null,
+        gstin: String(normalized.gstin),
+        pan: normalized.pan ?? null,
+        stateCode: String(normalized.stateCode),
+        invoicePrefix: String(normalized.invoicePrefix),
+        creditNotePrefix: String(normalized.creditNotePrefix),
+        debitNotePrefix: String(normalized.debitNotePrefix),
+        invoiceNumberStrategy: normalized.invoiceNumberStrategy,
+        defaultCurrency: String(normalized.defaultCurrency || "INR"),
+        priceIncludesTax: normalized.priceIncludesTax !== false,
+        einvoiceEnabled: Boolean(normalized.einvoiceEnabled),
+        isActive: normalized.isActive ?? true,
+      },
+    });
   });
-  return NextResponse.json({ ok: true, data: { settings }, settings }, { status: 201 });
+
+  await writeGstAuditLog(
+    {
+      action: "GST_SETTINGS_UPSERT",
+      gstSettingsId: settings.id,
+      nextState: settings,
+      metadata: { gstin: settings.gstin },
+    },
+    { actorType: "SYSTEM" },
+  );
+
+  return NextResponse.json(
+    {
+      ok: true,
+      data: { settings },
+      settings,
+      __debugVersion: DEBUG_VERSION,
+      __resolvedShopDomain: shopDomain || null,
+      __resolvedShopId: resolvedShopId,
+      __usedFallbackGlobal: Boolean(fallbackGlobalSettings && !existingShopSettings),
+    },
+    { status: existingShopSettings ? 200 : 201 },
+  );
 }
 
 export async function POST(req: NextRequest) {
