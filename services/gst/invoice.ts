@@ -37,7 +37,7 @@ const GST_DOCUMENT_REQUIRED_FIELDS = [
   "jsonSnapshot",
 ] as const;
 
-type GstDocumentColumnInfo = {
+type GstColumnInfo = {
   column_name: string;
   is_nullable: "YES" | "NO";
   data_type: string;
@@ -70,8 +70,7 @@ const GST_DOCUMENT_LINE_PRISMA_COLUMNS = new Set([
 ]);
 
 function isValidDateValue(value: unknown): boolean {
-  if (!(value instanceof Date)) return false;
-  return !Number.isNaN(value.getTime());
+  return value instanceof Date && !Number.isNaN(value.getTime());
 }
 
 function isValidDecimalValue(value: unknown): boolean {
@@ -81,27 +80,28 @@ function isValidDecimalValue(value: unknown): boolean {
   return Number.isFinite(numeric);
 }
 
-function validateGstDocumentCreatePayload(
-  createPayload: Record<string, unknown>
-): string[] {
+function validateGstDocumentCreatePayload(createPayload: Record<string, unknown>): string[] {
   const errors: string[] = [];
 
   for (const field of GST_DOCUMENT_REQUIRED_FIELDS) {
     const value = createPayload[field];
+
     if (value === null || value === undefined) {
       errors.push(`${field}: value is ${value === null ? "null" : "undefined"}`);
       continue;
     }
 
     if (
-      (field === "documentType"
-        || field === "status"
-        || field === "documentNumber"
-        || field === "gstSettingsId"
-        || field === "supplyType"
-        || field === "placeOfSupplyStateCode"
-        || field === "currency")
-      && String(value).trim().length === 0
+      (
+        field === "documentType" ||
+        field === "status" ||
+        field === "documentNumber" ||
+        field === "gstSettingsId" ||
+        field === "supplyType" ||
+        field === "placeOfSupplyStateCode" ||
+        field === "currency"
+      ) &&
+      String(value).trim().length === 0
     ) {
       errors.push(`${field}: value is empty`);
       continue;
@@ -118,13 +118,15 @@ function validateGstDocumentCreatePayload(
     }
 
     if (
-      (field === "taxableAmount"
-        || field === "cgstAmount"
-        || field === "sgstAmount"
-        || field === "igstAmount"
-        || field === "cessAmount"
-        || field === "totalAmount")
-      && !isValidDecimalValue(value)
+      (
+        field === "taxableAmount" ||
+        field === "cgstAmount" ||
+        field === "sgstAmount" ||
+        field === "igstAmount" ||
+        field === "cessAmount" ||
+        field === "totalAmount"
+      ) &&
+      !isValidDecimalValue(value)
     ) {
       errors.push(`${field}: invalid decimal value`);
       continue;
@@ -165,6 +167,10 @@ function normalizeText(value: unknown): string {
 }
 
 function generateUuid(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+
   return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (char) => {
     const random = Math.floor(Math.random() * 16);
     const value = char === "x" ? random : (random & 0x3) | 0x8;
@@ -179,20 +185,26 @@ function toNullableTrimmedString(value: unknown): string | null {
 
 function pickLineSku(taxLine: Record<string, unknown>, sourceLine: Record<string, unknown>): string | null {
   return toNullableTrimmedString(
-    taxLine.sku
-    ?? taxLine.productSku
-    ?? taxLine.variantSku
-    ?? sourceLine.sku
-    ?? sourceLine.productSku
-    ?? sourceLine.variantSku
+    taxLine.sku ??
+      taxLine.productSku ??
+      taxLine.variantSku ??
+      sourceLine.sku ??
+      sourceLine.productSku ??
+      sourceLine.variantSku
   );
+}
+
+function getRequiredColumnsWithoutDefault(columns: GstColumnInfo[]): string[] {
+  return columns
+    .filter((col) => col.is_nullable === "NO" && col.column_default === null)
+    .map((col) => col.column_name);
 }
 
 function buildGstDocumentLineInsertRows(args: {
   documentId: string;
   taxLines: Array<Record<string, unknown>>;
   sourceLines: Array<Record<string, unknown>>;
-  dbColumns: GstDocumentColumnInfo[];
+  dbColumns: GstColumnInfo[];
 }): { rows: GstDocumentLineInsertRow[]; missingRequiredColumns: string[] } {
   const { documentId, taxLines, sourceLines, dbColumns } = args;
   const now = new Date();
@@ -206,15 +218,15 @@ function buildGstDocumentLineInsertRows(args: {
     const row: GstDocumentLineInsertRow = {
       id: generateUuid(),
       gstDocumentId: documentId,
-      lineNumber: Number(line.lineNumber),
-      description: String(line.description ?? ""),
-      hsnOrSac: toNullableTrimmedString(line.hsnOrSac),
-      quantity: new Prisma.Decimal(Number(line.quantity ?? 0)),
-      unit: toNullableTrimmedString(line.unit),
-      unitPrice: new Prisma.Decimal(Number(line.unitPrice ?? 0)),
-      discount: new Prisma.Decimal(Number(line.discount ?? 0)),
+      lineNumber: Number(line.lineNumber || index + 1),
+      description: String(line.description ?? sourceLine.description ?? sourceLine.title ?? `Line ${index + 1}`),
+      hsnOrSac: toNullableTrimmedString(line.hsnOrSac ?? line.hsnCode ?? sourceLine.hsnOrSac ?? sourceLine.hsnCode),
+      quantity: new Prisma.Decimal(Number(line.quantity ?? sourceLine.quantity ?? 0)),
+      unit: toNullableTrimmedString(line.unit ?? sourceLine.unit),
+      unitPrice: new Prisma.Decimal(Number(line.unitPrice ?? sourceLine.unitPrice ?? sourceLine.price ?? 0)),
+      discount: new Prisma.Decimal(Number(line.discount ?? sourceLine.discount ?? 0)),
       taxableAmount: new Prisma.Decimal(Number(line.taxableAmount ?? 0)),
-      taxRate: new Prisma.Decimal(Number(line.taxRate ?? 0)),
+      taxRate: new Prisma.Decimal(Number(line.taxRate ?? sourceLine.taxRate ?? 0)),
       cgstAmount: new Prisma.Decimal(Number(line.cgstAmount ?? 0)),
       sgstAmount: new Prisma.Decimal(Number(line.sgstAmount ?? 0)),
       igstAmount: new Prisma.Decimal(Number(line.igstAmount ?? 0)),
@@ -223,6 +235,14 @@ function buildGstDocumentLineInsertRows(args: {
       createdAt: now,
       updatedAt: now,
     };
+
+    /*
+      Production DB has at least one legacy required column not present in
+      generated Prisma schema: taxRateType. Keep it in the row unconditionally
+      so required-column validation sees it before deciding between Prisma
+      createMany and raw SQL insert.
+    */
+    row.taxRateType = "GST";
 
     if (columnNames.has("documentId")) row.documentId = documentId;
     if (columnNames.has("itemName")) row.itemName = row.description;
@@ -236,10 +256,7 @@ function buildGstDocumentLineInsertRows(args: {
     return row;
   });
 
-  const requiredDbColumns = dbColumns
-    .filter((col) => col.is_nullable === "NO" && col.column_default === null)
-    .map((col) => col.column_name);
-
+  const requiredDbColumns = getRequiredColumnsWithoutDefault(dbColumns);
   const missingRequiredColumns = requiredDbColumns.filter((columnName) =>
     rows.some((row) => row[columnName] === undefined || row[columnName] === null)
   );
@@ -248,22 +265,20 @@ function buildGstDocumentLineInsertRows(args: {
 }
 
 async function ensureBuyerParty(input: GstInvoiceDraftInput) {
-  const normalizedBuyer = {
+  return {
     ...(input.buyer || {}),
     legalName: String(input.buyer?.legalName || "").trim() || null,
-    gstin: String(input.buyer?.gstin || "")
-      .trim()
-      .toUpperCase() || null,
+    gstin:
+      String(input.buyer?.gstin || "")
+        .trim()
+        .toUpperCase() || null,
     stateCode: String(input.buyer?.stateCode || "").trim() || null,
     email: input.buyer?.email || null,
     phone: input.buyer?.phone || null,
   };
-  return normalizedBuyer;
 }
 
-export async function buildInvoiceDraft(
-  input: GstInvoiceDraftInput
-): Promise<GstServiceResult<GstInvoiceDraftResult>> {
+export async function buildInvoiceDraft(input: GstInvoiceDraftInput): Promise<GstServiceResult<GstInvoiceDraftResult>> {
   try {
     const payloadValidation = validateDocumentDraftPayload(input);
     if (!payloadValidation.ok || !payloadValidation.data) {
@@ -274,21 +289,21 @@ export async function buildInvoiceDraft(
     }
 
     const payloadData = payloadValidation.data;
-
     const requestedShopId = normalizeText(input.shopId) || null;
 
     const scopedSettingsResult = requestedShopId
       ? await getActiveGstSettings({ shopId: requestedShopId })
       : { ok: false, data: null, error: "missing shopId" };
+
     const globalSettingsResult = await getActiveGstSettings({ shopId: null });
     const byIdSettingsResult = input.gstSettingsId ? await getGstSettingsById(input.gstSettingsId) : null;
 
     const settings =
-      (scopedSettingsResult.ok && scopedSettingsResult.data)
+      scopedSettingsResult.ok && scopedSettingsResult.data
         ? scopedSettingsResult.data
-        : (globalSettingsResult.ok && globalSettingsResult.data)
+        : globalSettingsResult.ok && globalSettingsResult.data
           ? globalSettingsResult.data
-          : (byIdSettingsResult?.ok && byIdSettingsResult.data)
+          : byIdSettingsResult?.ok && byIdSettingsResult.data
             ? byIdSettingsResult.data
             : null;
 
@@ -296,10 +311,14 @@ export async function buildInvoiceDraft(
       return {
         ok: false,
         error: toInvoiceDraftError(
-          scopedSettingsResult.error || globalSettingsResult.error || byIdSettingsResult?.error || "Unable to resolve GST settings",
+          scopedSettingsResult.error ||
+            globalSettingsResult.error ||
+            byIdSettingsResult?.error ||
+            "Unable to resolve GST settings"
         ),
       };
     }
+
     const documentDate = normalizeDate(input.documentDate);
 
     const classification = classifySupply({
@@ -351,8 +370,8 @@ export async function buildInvoiceDraft(
     }
 
     const numberingData = numberingResult.data;
-
     const invoiceWarnings = [...classificationData.warnings];
+
     const buyerParty = await ensureBuyerParty({
       ...input,
       buyer: {
@@ -396,8 +415,12 @@ export async function buildInvoiceDraft(
       documentNumber: numberingData.documentNumber,
       documentDate,
       gstSettingsId: settings.id,
+
+      // Legacy production DB compatibility fields.
       settingsId: settings.id,
       issueDate: documentDate,
+      subtotalAmount: gstSubtotalAmount,
+
       shopifyOrderId: input.shopifyOrderId || null,
       shopifyOrderName: input.shopifyOrderName || null,
       sourceOrderId: input.sourceOrderId || null,
@@ -408,7 +431,6 @@ export async function buildInvoiceDraft(
       isInterstate: classificationData.isInterstate,
       currency: payloadData.normalizedCurrency,
       taxableAmount: gstSubtotalAmount,
-      subtotalAmount: gstSubtotalAmount,
       cgstAmount: new Prisma.Decimal(taxData.totals.cgstAmount),
       sgstAmount: new Prisma.Decimal(taxData.totals.sgstAmount),
       igstAmount: new Prisma.Decimal(taxData.totals.igstAmount),
@@ -429,47 +451,41 @@ export async function buildInvoiceDraft(
 
     const created = await gstDb.$transaction(async (tx) => {
       const txWithRaw = tx as typeof tx & {
-        $queryRaw: <T = unknown>(...args: unknown[]) => Promise<T>;
+        $queryRaw: <T = unknown>(query: TemplateStringsArray | Prisma.Sql, ...values: unknown[]) => Promise<T>;
+        $executeRaw: (query: TemplateStringsArray | Prisma.Sql, ...values: unknown[]) => Promise<number>;
       };
 
-      const dbColumns = await txWithRaw.$queryRaw<GstDocumentColumnInfo[]>(Prisma.sql`
+      const documentColumns = await txWithRaw.$queryRaw<GstColumnInfo[]>(Prisma.sql`
         SELECT column_name, is_nullable, data_type, column_default
         FROM information_schema.columns
         WHERE table_schema = 'public' AND table_name = 'GstDocument'
         ORDER BY ordinal_position
       `);
 
-      const requiredDbColumns = dbColumns
-        .filter((col) => col.is_nullable === "NO" && col.column_default === null)
-        .map((col) => col.column_name);
-
-      const payloadValidationErrors = validateGstDocumentCreatePayload(
-        createPayload as Record<string, unknown>
-      );
+      const requiredDocumentColumns = getRequiredColumnsWithoutDefault(documentColumns);
+      const payloadValidationErrors = validateGstDocumentCreatePayload(createPayload as Record<string, unknown>);
 
       console.info("[GST DEBUG][INVOICE][DB_SCHEMA][GstDocument]", {
-        columns: dbColumns,
-        requiredColumnsWithoutDefault: requiredDbColumns,
+        columns: documentColumns,
+        requiredColumnsWithoutDefault: requiredDocumentColumns,
       });
 
       if (payloadValidationErrors.length > 0) {
         console.error("[GST INVOICE] pre-create payload validation failed", {
           payloadValidationErrors,
         });
-        throw new Error(
-          `GST document payload validation failed: ${payloadValidationErrors.join("; ")}`
-        );
+        throw new Error(`GST document payload validation failed: ${payloadValidationErrors.join("; ")}`);
       }
 
       const createPayloadKeys = new Set(Object.keys(createPayload));
-      const requiredColumnsMissingFromPayload = requiredDbColumns.filter(
+      const requiredColumnsMissingFromPayload = requiredDocumentColumns.filter(
         (columnName) => !createPayloadKeys.has(columnName)
       );
 
       if (requiredColumnsMissingFromPayload.length > 0) {
         console.error("[GST INVOICE] DB requires columns missing from createPayload", {
           requiredColumnsMissingFromPayload,
-          requiredDbColumns,
+          requiredDocumentColumns,
           createPayloadKeys: [...createPayloadKeys].sort(),
         });
         throw new Error(
@@ -477,74 +493,76 @@ export async function buildInvoiceDraft(
         );
       }
 
-      const requiresLegacyInsert = requiredDbColumns.some((columnName) =>
-        columnName === "settingsId" || columnName === "issueDate" || columnName === "subtotalAmount"
+      const requiresLegacyDocumentInsert = requiredDocumentColumns.some(
+        (columnName) =>
+          columnName === "settingsId" || columnName === "issueDate" || columnName === "subtotalAmount"
       );
 
       let resolvedDocument: { id: string; documentNumber: string } | null = null;
 
-      if (requiresLegacyInsert) {
+      if (requiresLegacyDocumentInsert) {
         const metadataJson = createPayload.metadata ?? {};
         const insertedDocuments = await txWithRaw.$queryRaw<Array<{ id: string; documentNumber: string }>>(Prisma.sql`
-            INSERT INTO "GstDocument" (
-              "id",
-              "documentType",
-              "status",
-              "documentNumber",
-              "documentDate",
-              "gstSettingsId",
-              "settingsId",
-              "issueDate",
-              "shopifyOrderId",
-              "shopifyOrderName",
-              "sourceOrderId",
-              "sourceOrderNumber",
-              "sourceReference",
-              "supplyType",
-              "placeOfSupplyStateCode",
-              "isInterstate",
-              "currency",
-              "taxableAmount",
-              "subtotalAmount",
-              "cgstAmount",
-              "sgstAmount",
-              "igstAmount",
-              "cessAmount",
-              "totalAmount",
-              "jsonSnapshot",
-              "metadata",
-              "updatedAt"
-            ) VALUES (
-              ${createPayload.id},
-              ${createPayload.documentType},
-              ${createPayload.status},
-              ${createPayload.documentNumber},
-              ${createPayload.documentDate},
-              ${createPayload.gstSettingsId},
-              ${createPayload.settingsId},
-              ${createPayload.issueDate},
-              ${createPayload.shopifyOrderId},
-              ${createPayload.shopifyOrderName},
-              ${createPayload.sourceOrderId},
-              ${createPayload.sourceOrderNumber},
-              ${createPayload.sourceReference},
-              ${createPayload.supplyType},
-              ${createPayload.placeOfSupplyStateCode},
-              ${createPayload.isInterstate},
-              ${createPayload.currency},
-              ${createPayload.taxableAmount},
-              ${createPayload.subtotalAmount},
-              ${createPayload.cgstAmount},
-              ${createPayload.sgstAmount},
-              ${createPayload.igstAmount},
-              ${createPayload.cessAmount},
-              ${createPayload.totalAmount},
-              ${JSON.stringify(createPayload.jsonSnapshot)}::jsonb,
-              ${JSON.stringify(metadataJson)}::jsonb,
-              ${createPayload.updatedAt}
-            )
-            RETURNING "id", "documentNumber"
-          `);
+          INSERT INTO "GstDocument" (
+            "id",
+            "documentType",
+            "status",
+            "documentNumber",
+            "documentDate",
+            "gstSettingsId",
+            "settingsId",
+            "issueDate",
+            "shopifyOrderId",
+            "shopifyOrderName",
+            "sourceOrderId",
+            "sourceOrderNumber",
+            "sourceReference",
+            "supplyType",
+            "placeOfSupplyStateCode",
+            "isInterstate",
+            "currency",
+            "taxableAmount",
+            "subtotalAmount",
+            "cgstAmount",
+            "sgstAmount",
+            "igstAmount",
+            "cessAmount",
+            "totalAmount",
+            "jsonSnapshot",
+            "metadata",
+            "updatedAt"
+          ) VALUES (
+            ${createPayload.id},
+            ${createPayload.documentType},
+            ${createPayload.status},
+            ${createPayload.documentNumber},
+            ${createPayload.documentDate},
+            ${createPayload.gstSettingsId},
+            ${createPayload.settingsId},
+            ${createPayload.issueDate},
+            ${createPayload.shopifyOrderId},
+            ${createPayload.shopifyOrderName},
+            ${createPayload.sourceOrderId},
+            ${createPayload.sourceOrderNumber},
+            ${createPayload.sourceReference},
+            ${createPayload.supplyType},
+            ${createPayload.placeOfSupplyStateCode},
+            ${createPayload.isInterstate},
+            ${createPayload.currency},
+            ${createPayload.taxableAmount},
+            ${createPayload.subtotalAmount},
+            ${createPayload.cgstAmount},
+            ${createPayload.sgstAmount},
+            ${createPayload.igstAmount},
+            ${createPayload.cessAmount},
+            ${createPayload.totalAmount},
+            ${JSON.stringify(createPayload.jsonSnapshot)}::jsonb,
+            ${JSON.stringify(metadataJson)}::jsonb,
+            ${createPayload.updatedAt}
+          )
+          RETURNING "id", "documentNumber"
+        `);
+
         resolvedDocument = insertedDocuments[0] ?? null;
       } else {
         const createdDocument = await tx.gstDocument.create({
@@ -575,6 +593,7 @@ export async function buildInvoiceDraft(
             updatedAt: createPayload.updatedAt,
           },
         });
+
         resolvedDocument = {
           id: createdDocument.id,
           documentNumber: createdDocument.documentNumber,
@@ -585,7 +604,7 @@ export async function buildInvoiceDraft(
         throw new Error("Failed to persist GstDocument");
       }
 
-      const lineColumns = await txWithRaw.$queryRaw<GstDocumentColumnInfo[]>(Prisma.sql`
+      const lineColumns = await txWithRaw.$queryRaw<GstColumnInfo[]>(Prisma.sql`
         SELECT column_name, is_nullable, data_type, column_default
         FROM information_schema.columns
         WHERE table_schema = 'public' AND table_name = 'GstDocumentLine'
@@ -601,6 +620,7 @@ export async function buildInvoiceDraft(
 
       console.info("[GST DEBUG][INVOICE][DB_SCHEMA][GstDocumentLine]", {
         columns: lineColumns,
+        firstLinePayloadKeys: Object.keys(lineRows[0] || {}).sort(),
       });
 
       if (missingRequiredColumns.length > 0) {
@@ -620,7 +640,7 @@ export async function buildInvoiceDraft(
           const insertColumns = Object.keys(row).filter((columnName) => dbColumnSet.has(columnName));
           const insertValues = insertColumns.map((columnName) => row[columnName]);
 
-          await txWithRaw.$queryRaw(Prisma.sql`
+          await txWithRaw.$executeRaw(Prisma.sql`
             INSERT INTO "GstDocumentLine" (
               ${Prisma.join(insertColumns.map((columnName) => Prisma.raw(`"${columnName}"`)), ", ")}
             ) VALUES (
@@ -631,13 +651,13 @@ export async function buildInvoiceDraft(
       } else {
         await tx.gstDocumentLine.createMany({
           data: lineRows.map((row) => ({
-            id: row.id,
-            gstDocumentId: row.gstDocumentId,
-            lineNumber: row.lineNumber,
-            description: row.description,
-            hsnOrSac: row.hsnOrSac,
+            id: String(row.id),
+            gstDocumentId: String(row.gstDocumentId),
+            lineNumber: Number(row.lineNumber),
+            description: String(row.description || ""),
+            hsnOrSac: row.hsnOrSac ? String(row.hsnOrSac) : null,
             quantity: row.quantity,
-            unit: row.unit,
+            unit: row.unit ? String(row.unit) : null,
             unitPrice: row.unitPrice,
             discount: row.discount,
             taxableAmount: row.taxableAmount,
@@ -679,6 +699,7 @@ export async function buildInvoiceDraft(
     };
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
+
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       console.error("[GST INVOICE] PrismaClientKnownRequestError", {
         code: error.code,
@@ -686,9 +707,11 @@ export async function buildInvoiceDraft(
         message: error.message,
       });
     }
+
     console.error("[GST INVOICE] buildInvoiceDraft failed", {
       error: reason,
     });
+
     return { ok: false, error: toInvoiceDraftError(reason) };
   }
 }
