@@ -291,32 +291,10 @@ export async function importOrderByShopifyId(
   }
 
   try {
-    const resolvedShopId = normalizeString(context?.shopId) || normalizeString((await resolveShopConfig(context?.shopDomain)).id) || null;
-    const existing = await orderDb.gstOrderImport.findUnique({
-      where: { shopId_shopifyOrderId: { shopId: resolvedShopId, shopifyOrderId } },
-      include: { lines: true },
-    });
-
-    if (existing) {
-      const existingLines = ((existing.lines as Array<Record<string, unknown>> | undefined) || []).map((line) => ({
-        mappingStatus: String(line.mappingStatus || "UNMAPPED"),
-        sku: line.sku == null ? null : String(line.sku),
-      }));
-      const mappingCompleteness = calculateMappingCompleteness(existingLines);
-      const unmappedSkus = collectUnmappedSkus(existingLines);
-      const updated = await orderDb.gstOrderImport.update({
-        where: { id: String(existing.id) },
-        data: { lastSyncedAt: new Date() },
-      });
-      return {
-        ok: true,
-        data: toOrderImportRecord(updated, {
-          mappingCompleteness,
-          unmappedSkus,
-          warnings: collectMissingMappingMessages(existingLines),
-        }),
-      };
-    }
+    const resolvedShopId =
+      normalizeString(context?.shopId) ||
+      normalizeString((await resolveShopConfig(context?.shopDomain)).id) ||
+      null;
 
     const activeSettings = await getActiveGstSettings({ shopId: resolvedShopId });
     if (!activeSettings.ok || !activeSettings.data) {
@@ -344,6 +322,75 @@ export async function importOrderByShopifyId(
       priceIncludesTax: activeSettings.data.priceIncludesTax !== false,
     });
     const mappingCompleteness = calculateMappingCompleteness(mappedLines);
+    const unmappedSkus = collectUnmappedSkus(mappedLines);
+    const warnings = collectMissingMappingMessages(mappedLines);
+    const customerName = extractCustomerName(payload);
+
+    const existing = await orderDb.gstOrderImport.findUnique({
+      where: { shopId_shopifyOrderId: { shopId: resolvedShopId, shopifyOrderId } },
+      include: { lines: true },
+    });
+
+    if (existing) {
+      const updated = await orderDb.$transaction(async (tx) => {
+        const orderImport = await tx.gstOrderImport.update({
+          where: { id: String(existing.id) },
+          data: {
+            snapshot: payload,
+            shopifyOrderName: normalizedOrder.shopifyOrderName,
+            orderCreatedAt: normalizedOrder.orderCreatedAt,
+            orderCurrency: normalizedOrder.orderCurrency,
+            orderSubtotal: normalizedOrder.orderSubtotal,
+            orderTaxTotal: normalizedOrder.orderTaxTotal,
+            orderGrandTotal: normalizedOrder.orderGrandTotal,
+            shippingStateCode: normalizedOrder.shippingStateCode,
+            billingStateCode: normalizedOrder.billingStateCode,
+            importStatus: readiness.importStatus,
+            eligibilityStatus: readiness.eligibilityStatus,
+            readinessErrors: readiness.readinessErrors,
+            lastSyncedAt: new Date(),
+          },
+        });
+
+        await tx.gstOrderImportLine.deleteMany({
+          where: { gstOrderImportId: String(existing.id) },
+        });
+
+        if (mappedLines.length > 0) {
+          await tx.gstOrderImportLine.createMany({
+            data: mappedLines.map((line) => ({
+              gstOrderImportId: String(existing.id),
+              lineNumber: line.lineNumber,
+              shopifyLineItemId: line.shopifyLineItemId,
+              shopifyProductId: line.shopifyProductId,
+              shopifyVariantId: line.shopifyVariantId,
+              title: line.title,
+              sku: line.sku,
+              quantity: line.quantity,
+              unitPrice: line.unitPrice,
+              discount: line.discount,
+              taxableAmount: line.taxableAmount,
+              mappedHsnCode: line.mappedHsnCode,
+              mappedTaxRate: line.mappedTaxRate,
+              mappedCessRate: line.mappedCessRate,
+              mappingStatus: line.mappingStatus,
+            })),
+          });
+        }
+
+        return orderImport;
+      });
+
+      return {
+        ok: true,
+        data: toOrderImportRecord(updated, {
+          mappingCompleteness,
+          unmappedSkus,
+          warnings,
+          customerName,
+        }),
+      };
+    }
 
     const created = await orderDb.$transaction(async (tx) => {
       const orderImport = await tx.gstOrderImport.create({
@@ -396,8 +443,9 @@ export async function importOrderByShopifyId(
       ok: true,
       data: toOrderImportRecord(created, {
         mappingCompleteness,
-        unmappedSkus: collectUnmappedSkus(mappedLines),
-        warnings: collectMissingMappingMessages(mappedLines),
+        unmappedSkus,
+        warnings,
+        customerName,
       }),
     };
   } catch (error) {
