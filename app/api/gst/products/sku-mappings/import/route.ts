@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { importSkuMappingsAndRecompute } from "../../../../../../services/gst/sku-tax-map";
+import { importSkuMappingsCsv } from "../../../../../../services/gst/sku-tax-map";
 import { getShopDomainFromRequest, resolveShopConfig } from "../../../../../../services/shopify/shop-resolver";
 
 export const runtime = "nodejs";
@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "csvText or file is required" }, { status: 400 });
   }
 
-  const result = await importSkuMappingsAndRecompute(csvText, shop.id);
+  const result = await importSkuMappingsCsv(csvText, shop.id);
   if (!result.ok || !result.data) {
     const errorMessage = "error" in result ? result.error : undefined;
     return NextResponse.json({ ok: false, error: errorMessage || "Failed to import sku mappings" }, { status: 400 });

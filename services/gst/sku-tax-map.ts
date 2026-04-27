@@ -1,6 +1,4 @@
 import { gstDb } from "./db";
-import { deriveStyleCodeFromSku } from "./product-tax-map";
-import { recomputeImportedOrderMappings } from "./order-import";
 import type { GstServiceResult } from "./types";
 
 type SkuMapDbClient = {
@@ -22,6 +20,15 @@ const skuMapDb = gstDb as unknown as SkuMapDbClient;
 
 function norm(value: unknown): string {
   return String(value || "").trim();
+}
+
+function deriveStyleCodeFromSku(sku: string | null | undefined): string | null {
+  const normalizedSku = norm(sku);
+  if (!normalizedSku) {
+    return null;
+  }
+  const segments = normalizedSku.split(/[-_\/\s]+/).filter(Boolean);
+  return segments.length > 0 ? segments[0].toUpperCase() : normalizedSku.toUpperCase();
 }
 
 function csvEscape(value: unknown): string {
@@ -205,12 +212,7 @@ export async function upsertSkuTaxMapping(input: {
         },
       });
 
-  const recompute = await recomputeImportedOrderMappings({ shopId: input.shopId || null });
-  if (!recompute.ok) {
-    return { ok: false, error: recompute.error || "Failed to recompute order readiness" };
-  }
-
-  return { ok: true, data: { ...record, recompute: recompute.data } };
+  return { ok: true, data: record };
 }
 
 export async function exportUnmappedSkuMappingsCsv(shopId?: string | null): Promise<GstServiceResult<string>> {
@@ -379,24 +381,4 @@ export async function importSkuMappingsCsv(
   }
 
   return { ok: true, data: { imported, skipped, errors } };
-}
-
-export async function importSkuMappingsAndRecompute(csvText: string, shopId?: string | null) {
-  const imported = await importSkuMappingsCsv(csvText, shopId);
-  if (!imported.ok || !imported.data) {
-    return imported;
-  }
-
-  const recompute = await recomputeImportedOrderMappings({ shopId: shopId || null });
-  if (!recompute.ok) {
-    return { ok: false as const, error: recompute.error || "Failed to recompute order readiness" };
-  }
-
-  return {
-    ok: true as const,
-    data: {
-      ...imported.data,
-      recompute: recompute.data,
-    },
-  };
 }
