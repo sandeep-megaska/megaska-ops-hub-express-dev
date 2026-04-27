@@ -121,8 +121,10 @@ export async function buildInvoiceDraft(
 
     const classification = classifySupply({
       sellerStateCode: settings.stateCode,
-      billingStateCode: payloadData.normalizedBillingStateCode,
-      shippingStateCode: payloadData.normalizedShippingStateCode,
+      billingStateCode: payloadData.normalizedBillingStateCode || input.billingStateCode,
+      shippingStateCode: payloadData.normalizedShippingStateCode || input.shippingStateCode,
+      shopifyShippingProvince: input.shopifyShippingProvince,
+      shopifyBillingProvince: input.shopifyBillingProvince,
       buyerStateCode: payloadData.normalizedBuyerStateCode,
       placeOfSupplyStateCode: payloadData.normalizedPlaceOfSupplyStateCode,
       buyerGstin: payloadData.normalizedBuyerGstin,

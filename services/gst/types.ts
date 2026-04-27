@@ -73,6 +73,8 @@ export interface GstInvoiceDraftInput {
   documentDate?: Date | string;
   billingStateCode?: string | null;
   shippingStateCode?: string | null;
+  shopifyShippingProvince?: string | null;
+  shopifyBillingProvince?: string | null;
   buyer?: GstPartyInput;
   supplyType?: GstSupplyType;
   placeOfSupplyStateCode?: string;

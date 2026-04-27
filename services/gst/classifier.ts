@@ -1,5 +1,5 @@
 import { GST_DEFAULT_SUPPLY_TYPE } from "./constants";
-import { resolveGstStateCode } from "./state-codes";
+import { isKnownGstStateCode, resolveGstStateCode } from "./state-codes";
 import type { GstServiceResult, GstSupplyType } from "./types";
 
 export interface GstClassificationInput {
@@ -8,6 +8,8 @@ export interface GstClassificationInput {
   buyerStateCode?: string | null;
   shippingStateCode?: string | null;
   billingStateCode?: string | null;
+  shopifyShippingProvince?: string | null;
+  shopifyBillingProvince?: string | null;
   placeOfSupplyStateCode?: string | null;
   explicitSupplyType?: GstSupplyType;
 }
@@ -33,9 +35,29 @@ export function determineSupplyType(input: GstClassificationInput): GstSupplyTyp
 }
 
 export function determinePlaceOfSupply(input: GstClassificationInput): string | null {
+  const shippingCode = String(input.shippingStateCode ?? "").trim();
+  if (isKnownGstStateCode(shippingCode)) {
+    return shippingCode;
+  }
+
+  const billingCode = String(input.billingStateCode ?? "").trim();
+  if (isKnownGstStateCode(billingCode)) {
+    return billingCode;
+  }
+
+  const normalizedShippingProvince =
+    normalizeStateCode(input.shopifyShippingProvince) || normalizeStateCode(input.shippingStateCode);
+  if (normalizedShippingProvince) {
+    return normalizedShippingProvince;
+  }
+
+  const normalizedBillingProvince =
+    normalizeStateCode(input.shopifyBillingProvince) || normalizeStateCode(input.billingStateCode);
+  if (normalizedBillingProvince) {
+    return normalizedBillingProvince;
+  }
+
   return (
-    normalizeStateCode(input.shippingStateCode) ||
-    normalizeStateCode(input.billingStateCode) ||
     normalizeStateCode(input.buyerStateCode) ||
     normalizeStateCode(input.placeOfSupplyStateCode)
   );
@@ -54,13 +76,9 @@ export function classifySupply(
     return { ok: false, error: "sellerStateCode is required for GST classification" };
   }
 
-  if (!placeOfSupplyStateCode && supplyType === "B2C") {
+  if (!placeOfSupplyStateCode) {
     placeOfSupplyStateCode = sellerStateCode;
     warnings.push("Place of supply missing; defaulted to supplier state");
-  }
-
-  if (!placeOfSupplyStateCode) {
-    return { ok: false, error: "missing placeOfSupplyStateCode" };
   }
 
   const isInterstate = sellerStateCode !== placeOfSupplyStateCode;

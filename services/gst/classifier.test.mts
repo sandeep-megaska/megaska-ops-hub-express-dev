@@ -3,12 +3,23 @@ import assert from "node:assert/strict";
 
 import { classifySupply, determinePlaceOfSupply } from "./classifier.ts";
 
-test("determinePlaceOfSupply resolves Shopify province names to GST state code with priority", () => {
+test("determinePlaceOfSupply prioritizes valid state codes before province-name mapping", () => {
   const place = determinePlaceOfSupply({
     shippingStateCode: "Rajasthan",
-    billingStateCode: "Delhi",
+    billingStateCode: "07",
     buyerStateCode: "Maharashtra",
     placeOfSupplyStateCode: "Karnataka",
+  });
+
+  assert.equal(place, "07");
+});
+
+test("determinePlaceOfSupply resolves Shopify province/state names", () => {
+  const place = determinePlaceOfSupply({
+    shippingStateCode: null,
+    billingStateCode: null,
+    shopifyShippingProvince: "Rajasthan",
+    shopifyBillingProvince: "Delhi",
   });
 
   assert.equal(place, "08");
@@ -29,9 +40,10 @@ test("classifySupply uses customer default state before manual fallback", () => 
   assert.deepEqual(result.data?.warnings, []);
 });
 
-test("classifySupply falls back to seller state for B2C when place of supply is missing", () => {
+test("classifySupply falls back to seller state when place of supply is missing", () => {
   const result = classifySupply({
     sellerStateCode: "08",
+    buyerGstin: "07ABCDE1234F1Z5",
     shippingStateCode: null,
     billingStateCode: null,
     buyerStateCode: null,
@@ -42,18 +54,4 @@ test("classifySupply falls back to seller state for B2C when place of supply is 
   assert.equal(result.data?.placeOfSupplyStateCode, "08");
   assert.equal(result.data?.isInterstate, false);
   assert.deepEqual(result.data?.warnings, ["Place of supply missing; defaulted to supplier state"]);
-});
-
-test("classifySupply returns clear missing place-of-supply error for B2B", () => {
-  const result = classifySupply({
-    sellerStateCode: "08",
-    buyerGstin: "07ABCDE1234F1Z5",
-    shippingStateCode: null,
-    billingStateCode: null,
-    buyerStateCode: null,
-    placeOfSupplyStateCode: null,
-  });
-
-  assert.equal(result.ok, false);
-  assert.equal(result.error, "missing placeOfSupplyStateCode");
 });

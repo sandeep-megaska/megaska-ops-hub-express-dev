@@ -16,6 +16,8 @@ function parseDraftPayload(body: Record<string, unknown>): GstInvoiceDraftInput 
     documentDate: body.documentDate ? String(body.documentDate) : undefined,
     billingStateCode: body.billingStateCode ? String(body.billingStateCode) : null,
     shippingStateCode: body.shippingStateCode ? String(body.shippingStateCode) : null,
+    shopifyShippingProvince: body.shopifyShippingProvince ? String(body.shopifyShippingProvince) : null,
+    shopifyBillingProvince: body.shopifyBillingProvince ? String(body.shopifyBillingProvince) : null,
     buyer: {
       legalName: body.buyer && typeof body.buyer === "object" ? String((body.buyer as Record<string, unknown>).legalName || "") : undefined,
       gstin: body.buyer && typeof body.buyer === "object" ? String((body.buyer as Record<string, unknown>).gstin || "") : null,
