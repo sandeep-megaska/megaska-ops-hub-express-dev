@@ -80,6 +80,21 @@ export const createOrUpdateGstSettings = async (payload: Record<string, unknown>
   return { ok: true, data: (res.data as { settings?: Record<string, unknown> })?.settings || {} } as const
 }
 
+export const getDefaultGstTemplate = async () => {
+  const res = await request<Record<string, unknown> & { template?: Record<string, unknown> | null }>('/api/gst/templates/default')
+  if (!res.ok) return res
+  return { ok: true, data: (res.data as { template?: Record<string, unknown> | null })?.template || null } as const
+}
+
+export const saveDefaultGstTemplate = async (payload: Record<string, unknown>) => {
+  const res = await request<Record<string, unknown> & { template?: Record<string, unknown> }>('/api/gst/templates/default', {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) return res
+  return { ok: true, data: (res.data as { template?: Record<string, unknown> })?.template || {} } as const
+}
+
 export const listSkuTaxMappings = (query: { search?: string } = {}) => {
   const search = new URLSearchParams()
   if (query.search) search.set('search', query.search)
