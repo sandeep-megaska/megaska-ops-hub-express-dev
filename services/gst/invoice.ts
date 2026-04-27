@@ -13,6 +13,24 @@ export interface GstInvoiceDraftResult {
   id: string;
   documentNumber: string;
   status: typeof GST_DEFAULT_DOCUMENT_STATUS;
+  placeOfSupplyStateCode: string;
+  isInterstate: boolean;
+  warnings: string[];
+}
+
+function toInvoiceDraftError(reason: unknown): string {
+  const message = String(reason || "").trim();
+  const lc = message.toLowerCase();
+
+  if (!message) return "Failed to create GST invoice draft";
+  if (lc.includes("missing placeofsupplystatecode")) return "missing placeOfSupplyStateCode";
+  if (lc.includes("missing gst mapping") || lc.includes("missing sku mapping")) return "missing SKU mapping";
+  if (lc.includes("template")) return "missing template";
+  if (lc.includes("totals") || lc.includes("tax computation")) return `invalid totals: ${message}`;
+  if (lc.includes("gst settings") || lc.includes("statecode is required") || lc.includes("unable to resolve")) {
+    return `invalid GST settings: ${message}`;
+  }
+  return message;
 }
 
 function normalizeDate(value: Date | string | undefined): Date {
@@ -81,7 +99,7 @@ export async function buildInvoiceDraft(
     if (!payloadValidation.ok || !payloadValidation.data) {
       return {
         ok: false,
-        error: payloadValidation.error || "Invalid GST document payload",
+        error: toInvoiceDraftError(payloadValidation.error || "Invalid GST document payload"),
       };
     }
 
@@ -94,7 +112,7 @@ export async function buildInvoiceDraft(
     if (!settingsResult.ok || !settingsResult.data) {
       return {
         ok: false,
-        error: settingsResult.error || "Unable to resolve GST settings",
+        error: toInvoiceDraftError(settingsResult.error || "Unable to resolve GST settings"),
       };
     }
 
@@ -114,7 +132,7 @@ export async function buildInvoiceDraft(
     if (!classification.ok || !classification.data) {
       return {
         ok: false,
-        error: classification.error || "GST classification failed",
+        error: toInvoiceDraftError(classification.error || "GST classification failed"),
       };
     }
 
@@ -128,7 +146,7 @@ export async function buildInvoiceDraft(
     if (!taxResult.ok || !taxResult.data) {
       return {
         ok: false,
-        error: taxResult.error || "GST tax computation failed",
+        error: toInvoiceDraftError(taxResult.error || "GST tax computation failed"),
       };
     }
 
@@ -248,13 +266,17 @@ export async function buildInvoiceDraft(
         id: created.id,
         documentNumber: created.documentNumber,
         status: GST_DEFAULT_DOCUMENT_STATUS,
+        placeOfSupplyStateCode: classificationData.placeOfSupplyStateCode,
+        isInterstate: classificationData.isInterstate,
+        warnings: classificationData.warnings,
       },
     };
   } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
     console.error("[GST INVOICE] buildInvoiceDraft failed", {
-      error: error instanceof Error ? error.message : String(error),
+      error: reason,
     });
-    return { ok: false, error: "Failed to create GST invoice draft" };
+    return { ok: false, error: toInvoiceDraftError(reason) };
   }
 }
 

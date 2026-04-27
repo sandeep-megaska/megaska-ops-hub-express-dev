@@ -73,13 +73,9 @@ export function validateDocumentDraftPayload(
     return { ok: false, error: "placeOfSupplyStateCode must be a valid GST state code" };
   }
 
-  if (normalize(payload.billingStateCode) && !billingStateCode) {
-    return { ok: false, error: "billingStateCode must be a valid GST state code" };
-  }
-
-  if (normalize(payload.shippingStateCode) && !shippingStateCode) {
-    return { ok: false, error: "shippingStateCode must be a valid GST state code" };
-  }
+  // Billing/shipping state fields may arrive as noisy data from marketplace imports.
+  // We normalize when possible and continue, allowing place-of-supply resolution + fallback
+  // logic to decide whether invoice generation can proceed.
 
   const buyerGstin = normalize(payload.buyer?.gstin).toUpperCase();
   if (buyerGstin && !GSTIN_REGEX.test(buyerGstin)) {

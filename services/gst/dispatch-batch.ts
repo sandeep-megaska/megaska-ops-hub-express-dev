@@ -4,6 +4,7 @@ import type { GstDocumentLineInput, GstServiceResult } from "./types";
 import { buildInvoiceDraft } from "./invoice";
 import { markOrderInvoiced } from "./order-import";
 import { resolveSkuTaxMap } from "./sku-tax-map";
+import { getTemplateById } from "./template";
 
 interface DispatchFilters {
   from?: string | Date;
@@ -151,6 +152,13 @@ export async function listDispatchReadyOrders(filters: DispatchFilters): Promise
 
 export async function generateInvoiceBatch(input: BatchGenerateInput) {
   const ids = Array.from(new Set((input.orderImportIds || []).map((id) => String(id).trim()).filter(Boolean)));
+
+  if (input.templateId) {
+    const template = await getTemplateById(input.templateId);
+    if (!template.ok || !template.data) {
+      return { ok: false, error: "missing template" };
+    }
+  }
   if (!ids.length) {
     return { ok: false, error: "orderImportIds[] is required" } as const;
   }
@@ -216,7 +224,7 @@ export async function generateInvoiceBatch(input: BatchGenerateInput) {
 
     if (lineErrors.length > 0) {
       summary.failed += 1;
-      summary.results.push({ id, status: "FAILED", error: "Line mapping missing", lineErrors });
+      summary.results.push({ id, status: "FAILED", error: "missing SKU mapping", lineErrors });
       continue;
     }
 
@@ -250,7 +258,16 @@ export async function generateInvoiceBatch(input: BatchGenerateInput) {
 
     await markOrderInvoiced({ gstOrderImportId: id, gstDocumentId: invoice.data.id });
     summary.generated += 1;
-    summary.results.push({ id, status: "GENERATED", documentId: invoice.data.id, documentNumber: invoice.data.documentNumber, readinessWarnings: readinessErrors });
+    summary.results.push({
+      id,
+      status: "GENERATED",
+      documentId: invoice.data.id,
+      documentNumber: invoice.data.documentNumber,
+      placeOfSupplyStateCode: invoice.data.placeOfSupplyStateCode,
+      isInterstate: invoice.data.isInterstate,
+      warnings: invoice.data.warnings,
+      readinessWarnings: readinessErrors,
+    });
   }
 
   return { ok: true, data: summary } as const;

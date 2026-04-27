@@ -17,6 +17,7 @@ export interface GstClassificationResult {
   placeOfSupplyStateCode: string;
   isInterstate: boolean;
   customerType: "B2B" | "B2C";
+  warnings: string[];
 }
 
 export function normalizeStateCode(value: string | null | undefined): string | null {
@@ -44,16 +45,24 @@ export function classifySupply(
   input: GstClassificationInput,
 ): GstServiceResult<GstClassificationResult> {
   const sellerStateCode = normalizeStateCode(input.sellerStateCode);
-  const placeOfSupplyStateCode = determinePlaceOfSupply(input);
+  const supplyType = determineSupplyType(input);
+  const warnings: string[] = [];
+
+  let placeOfSupplyStateCode = determinePlaceOfSupply(input);
 
   if (!sellerStateCode) {
     return { ok: false, error: "sellerStateCode is required for GST classification" };
   }
-  if (!placeOfSupplyStateCode) {
-    return { ok: false, error: "Missing shipping/billing state for GST place of supply" };
+
+  if (!placeOfSupplyStateCode && supplyType === "B2C") {
+    placeOfSupplyStateCode = sellerStateCode;
+    warnings.push("Place of supply missing; defaulted to supplier state");
   }
 
-  const supplyType = determineSupplyType(input);
+  if (!placeOfSupplyStateCode) {
+    return { ok: false, error: "missing placeOfSupplyStateCode" };
+  }
+
   const isInterstate = sellerStateCode !== placeOfSupplyStateCode;
 
   return {
@@ -63,6 +72,7 @@ export function classifySupply(
       placeOfSupplyStateCode,
       isInterstate,
       customerType: input.buyerGstin ? "B2B" : GST_DEFAULT_SUPPLY_TYPE,
+      warnings,
     },
   };
 }
