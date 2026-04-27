@@ -41,7 +41,6 @@ async function resolveShopContext(req: NextRequest) {
 export async function GET(req: NextRequest) {
   const { requestedShopDomain, resolvedShop, usedGlobalFallback } = await resolveShopContext(req);
   const resolvedShopId = resolvedShop.id ?? null;
-  let createdFromFallback = false;
 
   let settings =
     resolvedShopId
@@ -53,49 +52,11 @@ export async function GET(req: NextRequest) {
 
   let usedFallbackGlobal = false;
   if (!settings && resolvedShopId) {
-    settings = await prisma.$transaction(async (tx) => {
-      const existingForShop = await tx.gstSettings.findFirst({
-        where: { shopId: resolvedShopId },
-        orderBy: { updatedAt: "desc" },
-      });
-
-      if (existingForShop) {
-        return tx.gstSettings.findFirst({
-          where: { isActive: true, shopId: null },
-          orderBy: { updatedAt: "desc" },
-        });
-      }
-
-      const fallback = await tx.gstSettings.findFirst({
-        where: { isActive: true, shopId: null },
-        orderBy: { updatedAt: "desc" },
-      });
-
-      if (!fallback) {
-        return null;
-      }
-
-      createdFromFallback = true;
-      return tx.gstSettings.create({
-        data: {
-          shopId: resolvedShopId,
-          legalName: fallback.legalName,
-          tradeName: fallback.tradeName,
-          gstin: fallback.gstin,
-          pan: fallback.pan,
-          stateCode: fallback.stateCode,
-          invoicePrefix: fallback.invoicePrefix,
-          creditNotePrefix: fallback.creditNotePrefix,
-          debitNotePrefix: fallback.debitNotePrefix,
-          invoiceNumberStrategy: fallback.invoiceNumberStrategy,
-          defaultCurrency: fallback.defaultCurrency,
-          priceIncludesTax: fallback.priceIncludesTax,
-          einvoiceEnabled: fallback.einvoiceEnabled,
-          isActive: fallback.isActive,
-        },
-      });
+    settings = await prisma.gstSettings.findFirst({
+      where: { isActive: true, shopId: null },
+      orderBy: { updatedAt: "desc" },
     });
-    usedFallbackGlobal = Boolean(settings && !createdFromFallback);
+    usedFallbackGlobal = Boolean(settings);
   }
 
   if (!settings) {
@@ -117,8 +78,8 @@ export async function GET(req: NextRequest) {
     __debugVersion: DEBUG_VERSION,
     __resolvedShopDomain: resolvedShop.shopDomain || requestedShopDomain || null,
     __resolvedShopId: resolvedShopId,
-    __usedGlobalFallback: createdFromFallback ? false : usedGlobalFallback || usedFallbackGlobal,
-    __createdFromFallback: createdFromFallback,
+    __usedGlobalFallback: usedGlobalFallback || usedFallbackGlobal,
+    __createdFromFallback: false,
   });
 }
 
@@ -190,38 +151,16 @@ async function saveSettings(req: NextRequest) {
   const normalized = validation.data.normalized;
   const invoiceNumberStrategy = normalized.invoiceNumberStrategy ?? GST_DEFAULT_NUMBERING_STRATEGY;
 
-  const settings = await prisma.$transaction(async (tx) => {
-    if (normalized.isActive) {
-      await tx.gstSettings.updateMany({
-        where: { isActive: true, shopId: resolvedShopId },
-        data: { isActive: false },
-      });
-    }
+  try {
+    const settings = await prisma.$transaction(async (tx) => {
+      if (normalized.isActive) {
+        await tx.gstSettings.updateMany({
+          where: { isActive: true, shopId: resolvedShopId },
+          data: { isActive: false },
+        });
+      }
 
-    if (existingShopSettings) {
-      return tx.gstSettings.update({
-        where: { id: existingShopSettings.id },
-        data: {
-          shopId: resolvedShopId,
-          legalName: String(normalized.legalName),
-          tradeName: normalized.tradeName ?? null,
-          gstin: String(normalized.gstin),
-          pan: normalized.pan ?? null,
-          stateCode: String(normalized.stateCode),
-          invoicePrefix: String(normalized.invoicePrefix),
-          creditNotePrefix: String(normalized.creditNotePrefix),
-          debitNotePrefix: String(normalized.debitNotePrefix),
-          invoiceNumberStrategy,
-          defaultCurrency: String(normalized.defaultCurrency || "INR"),
-          priceIncludesTax: normalized.priceIncludesTax !== false,
-          einvoiceEnabled: Boolean(normalized.einvoiceEnabled),
-          isActive: normalized.isActive ?? true,
-        },
-      });
-    }
-
-    return tx.gstSettings.create({
-      data: {
+      const upsertData = {
         shopId: resolvedShopId,
         legalName: String(normalized.legalName),
         tradeName: normalized.tradeName ?? null,
@@ -236,32 +175,56 @@ async function saveSettings(req: NextRequest) {
         priceIncludesTax: normalized.priceIncludesTax !== false,
         einvoiceEnabled: Boolean(normalized.einvoiceEnabled),
         isActive: normalized.isActive ?? true,
-      },
+      };
+
+      if (existingShopSettings) {
+        return tx.gstSettings.update({
+          where: { id: existingShopSettings.id },
+          data: upsertData,
+        });
+      }
+
+      if (fallbackGlobalSettings) {
+        return tx.gstSettings.update({
+          where: { id: fallbackGlobalSettings.id },
+          data: upsertData,
+        });
+      }
+
+      return tx.gstSettings.create({ data: upsertData });
     });
-  });
 
-  await writeGstAuditLog(
-    {
-      action: "GST_SETTINGS_UPSERT",
-      gstSettingsId: settings.id,
-      nextState: settings,
-      metadata: { gstin: settings.gstin },
-    },
-    { actorType: "SYSTEM" },
-  );
+    await writeGstAuditLog(
+      {
+        action: "GST_SETTINGS_UPSERT",
+        gstSettingsId: settings.id,
+        nextState: settings,
+        metadata: { gstin: settings.gstin },
+      },
+      { actorType: "SYSTEM" },
+    );
 
-  return NextResponse.json(
-    {
-      ok: true,
-      data: { settings },
-      settings,
-      __debugVersion: DEBUG_VERSION,
-      __resolvedShopDomain: resolvedShop.shopDomain || requestedShopDomain || null,
-      __resolvedShopId: resolvedShopId,
-      __usedGlobalFallback: usedGlobalFallback || Boolean(fallbackGlobalSettings && !existingShopSettings),
-    },
-    { status: existingShopSettings ? 200 : 201 },
-  );
+    return NextResponse.json(
+      {
+        ok: true,
+        data: { settings },
+        settings,
+        __debugVersion: DEBUG_VERSION,
+        __resolvedShopDomain: resolvedShop.shopDomain || requestedShopDomain || null,
+        __resolvedShopId: resolvedShopId,
+        __usedGlobalFallback: usedGlobalFallback || Boolean(fallbackGlobalSettings && !existingShopSettings),
+      },
+      { status: existingShopSettings || fallbackGlobalSettings ? 200 : 201 },
+    );
+  } catch (error) {
+    const knownError = error as { message?: string; code?: string; meta?: unknown } | undefined;
+    console.error("[GST SETTINGS SAVE] failed", {
+      message: knownError?.message ?? String(error),
+      code: knownError?.code,
+      meta: knownError?.meta,
+    });
+    return NextResponse.json({ ok: false, error: "Failed to save GST settings" }, { status: 500 });
+  }
 }
 
 export async function POST(req: NextRequest) {
