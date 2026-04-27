@@ -274,8 +274,9 @@ export async function upsertGstSettings(input: GstSettingsWriteInput): Promise<G
       }
 
       if (existingForShop?.id) {
-        return tx.gstSettings.update({
-          where: { id: String(existingForShop.id) },
+        const existingId = String(existingForShop.id);
+        await tx.gstSettings.updateMany({
+          where: { id: existingId },
           data: {
             legalName: String(normalized.legalName),
             tradeName: normalized.tradeName ?? null,
@@ -292,6 +293,13 @@ export async function upsertGstSettings(input: GstSettingsWriteInput): Promise<G
             isActive: normalized.isActive ?? true,
           },
         });
+
+        const updated = await tx.gstSettings.findUnique({ where: { id: existingId } });
+        if (!updated) {
+          return Promise.reject(new Error("Failed to load updated GST settings"));
+        }
+
+        return updated;
       }
 
       return tx.gstSettings.upsert({
