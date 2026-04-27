@@ -37,6 +37,82 @@ const GST_DOCUMENT_REQUIRED_FIELDS = [
   "jsonSnapshot",
 ] as const;
 
+type GstDocumentColumnInfo = {
+  column_name: string;
+  is_nullable: "YES" | "NO";
+  data_type: string;
+  column_default: string | null;
+};
+
+function isValidDateValue(value: unknown): boolean {
+  if (!(value instanceof Date)) return false;
+  return !Number.isNaN(value.getTime());
+}
+
+function isValidDecimalValue(value: unknown): boolean {
+  if (value === null || value === undefined) return false;
+  if (value instanceof Prisma.Decimal) return value.isFinite();
+  const numeric = Number(value);
+  return Number.isFinite(numeric);
+}
+
+function validateGstDocumentCreatePayload(
+  createPayload: Record<string, unknown>
+): string[] {
+  const errors: string[] = [];
+
+  for (const field of GST_DOCUMENT_REQUIRED_FIELDS) {
+    const value = createPayload[field];
+    if (value === null || value === undefined) {
+      errors.push(`${field}: value is ${value === null ? "null" : "undefined"}`);
+      continue;
+    }
+
+    if (
+      (field === "documentType"
+        || field === "status"
+        || field === "documentNumber"
+        || field === "gstSettingsId"
+        || field === "supplyType"
+        || field === "placeOfSupplyStateCode"
+        || field === "currency")
+      && String(value).trim().length === 0
+    ) {
+      errors.push(`${field}: value is empty`);
+      continue;
+    }
+
+    if (field === "documentDate" && !isValidDateValue(value)) {
+      errors.push(`${field}: invalid Date value`);
+      continue;
+    }
+
+    if (field === "isInterstate" && typeof value !== "boolean") {
+      errors.push(`${field}: expected boolean, got ${typeof value}`);
+      continue;
+    }
+
+    if (
+      (field === "taxableAmount"
+        || field === "cgstAmount"
+        || field === "sgstAmount"
+        || field === "igstAmount"
+        || field === "cessAmount"
+        || field === "totalAmount")
+      && !isValidDecimalValue(value)
+    ) {
+      errors.push(`${field}: invalid decimal value`);
+      continue;
+    }
+
+    if (field === "jsonSnapshot" && (typeof value !== "object" || value === null)) {
+      errors.push(`${field}: expected JSON object`);
+    }
+  }
+
+  return errors;
+}
+
 function toInvoiceDraftError(reason: unknown): string {
   const message = String(reason || "").trim();
   const lc = message.toLowerCase();
@@ -235,6 +311,55 @@ export async function buildInvoiceDraft(
     });
 
     const created = await gstDb.$transaction(async (tx) => {
+      const txWithRaw = tx as typeof tx & {
+        $queryRaw: <T = unknown>(...args: unknown[]) => Promise<T>;
+      };
+
+      const dbColumns = await txWithRaw.$queryRaw<GstDocumentColumnInfo[]>(Prisma.sql`
+        SELECT column_name, is_nullable, data_type, column_default
+        FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'GstDocument'
+        ORDER BY ordinal_position
+      `);
+
+      const requiredDbColumns = dbColumns
+        .filter((col) => col.is_nullable === "NO" && col.column_default === null)
+        .map((col) => col.column_name);
+
+      const payloadValidationErrors = validateGstDocumentCreatePayload(
+        createPayload as Record<string, unknown>
+      );
+
+      console.info("[GST DEBUG][INVOICE][DB_SCHEMA][GstDocument]", {
+        columns: dbColumns,
+        requiredColumnsWithoutDefault: requiredDbColumns,
+      });
+
+      if (payloadValidationErrors.length > 0) {
+        console.error("[GST INVOICE] pre-create payload validation failed", {
+          payloadValidationErrors,
+        });
+        throw new Error(
+          `GST document payload validation failed: ${payloadValidationErrors.join("; ")}`
+        );
+      }
+
+      const createPayloadKeys = new Set(Object.keys(createPayload));
+      const requiredColumnsMissingFromPayload = requiredDbColumns.filter(
+        (columnName) => !createPayloadKeys.has(columnName)
+      );
+
+      if (requiredColumnsMissingFromPayload.length > 0) {
+        console.error("[GST INVOICE] DB requires columns missing from createPayload", {
+          requiredColumnsMissingFromPayload,
+          requiredDbColumns,
+          createPayloadKeys: [...createPayloadKeys].sort(),
+        });
+        throw new Error(
+          `GstDocument createPayload missing required DB column(s): ${requiredColumnsMissingFromPayload.join(", ")}`
+        );
+      }
+
       const document = await tx.gstDocument.create({
         data: createPayload,
       });
@@ -285,6 +410,13 @@ export async function buildInvoiceDraft(
     };
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      console.error("[GST INVOICE] PrismaClientKnownRequestError", {
+        code: error.code,
+        meta: error.meta,
+        message: error.message,
+      });
+    }
     console.error("[GST INVOICE] buildInvoiceDraft failed", {
       error: reason,
     });
