@@ -513,27 +513,27 @@ export async function buildInvoiceDraft(input: GstInvoiceDraftInput): Promise<Gs
     const numberingData = numberingResult.data;
     const invoiceWarnings = [...classificationData.warnings];
 
+    const customerDetails = extractCustomerDetailsForInvoice(input);
+
+    const resolvedBuyer = {
+      ...customerDetails.buyer,
+      gstin: payloadData.normalizedBuyerGstin || customerDetails.buyer.gstin,
+      stateCode:
+        payloadData.normalizedBuyerStateCode ||
+        customerDetails.buyer.stateCode,
+    };
+
     const buyerParty = await ensureBuyerParty({
       ...input,
-      buyer: {
-  ...customerDetails.buyer,
-  gstin: payloadData.normalizedBuyerGstin || customerDetails.buyer.gstin,
-  stateCode:
-    payloadData.normalizedBuyerStateCode ||
-    customerDetails.buyer.stateCode,
-},
-billingAddress: customerDetails.billingAddress,
-shippingAddress: customerDetails.shippingAddress,
+      buyer: resolvedBuyer,
     });
-const customerDetails = extractCustomerDetailsForInvoice(input);
+
     const snapshot = {
       settings,
       classification: classificationData,
-      buyer: {
-        ...(input.buyer || {}),
-        gstin: payloadData.normalizedBuyerGstin,
-        stateCode: payloadData.normalizedBuyerStateCode,
-      },
+      buyer: resolvedBuyer,
+      billingAddress: customerDetails.billingAddress,
+      shippingAddress: customerDetails.shippingAddress,
       buyerParty,
       metadata: input.metadata || {},
       reverseCharge: Boolean(input.reverseCharge),
