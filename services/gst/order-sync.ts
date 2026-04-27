@@ -34,14 +34,11 @@ interface ShopifyOrderLike {
   totalPrice?: number;
   shippingStateCode?: string | null;
   billingStateCode?: string | null;
-
-  // ✅ FIX — ADD THESE
   customerName?: string | null;
   email?: string | null;
   phone?: string | null;
   shippingAddress?: unknown;
   billingAddress?: unknown;
-
   lines?: ShopifyOrderLine[];
 }
 
@@ -80,10 +77,6 @@ function parseDate(value: string | Date, field: string): Date {
   return parsed;
 }
 
-/**
- * 🔥 CRITICAL FIX
- * Preserve customer + address data in snapshot
- */
 function normalizeOrderPayload(order: ShopifyOrderLike): Record<string, unknown> {
   return {
     shopifyOrderName: String(order.name || order.id || ""),
@@ -92,17 +85,13 @@ function normalizeOrderPayload(order: ShopifyOrderLike): Record<string, unknown>
     orderSubtotal: Number(order.subtotalPrice || 0),
     orderTaxTotal: Number(order.totalTax || 0),
     orderGrandTotal: Number(order.totalPrice || 0),
-
     shippingStateCode: order.shippingStateCode || null,
     billingStateCode: order.billingStateCode || null,
-
-    // ✅ THIS WAS MISSING
     customerName: order.customerName || null,
     email: order.email || null,
     phone: order.phone || null,
     shippingAddress: order.shippingAddress || null,
     billingAddress: order.billingAddress || null,
-
     lines: Array.isArray(order.lines)
       ? order.lines.map((line) => ({
           shopifyLineItemId: line.id ? String(line.id) : undefined,
@@ -119,21 +108,25 @@ function normalizeOrderPayload(order: ShopifyOrderLike): Record<string, unknown>
 }
 
 function listStrings(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
+  if (!Array.isArray(value)) {
+    return [];
+  }
   return value.map((entry) => String(entry || "").trim()).filter(Boolean);
 }
 
-export function deriveSyncReadinessMetrics(order: ImportedOrderLike) {
+export function deriveSyncReadinessMetrics(order: ImportedOrderLike): {
+  readinessErrors: string[];
+  mappingCompleteness: number;
+  unmappedSkus: string[];
+  warnings: string[];
+  isNotReady: boolean;
+} {
   const readinessErrors = listStrings(order.readinessErrors);
   const unmappedSkus = listStrings(order.unmappedSkus);
   const warnings = listStrings(order.warnings);
   const mappingCompleteness = Number(order.mappingCompleteness || 0);
   const eligibilityStatus = String(order.eligibilityStatus || "");
-
-  const isNotReady =
-    readinessErrors.length > 0 ||
-    eligibilityStatus === "REVIEW_REQUIRED" ||
-    eligibilityStatus === "NOT_ELIGIBLE";
+  const isNotReady = readinessErrors.length > 0 || eligibilityStatus === "REVIEW_REQUIRED" || eligibilityStatus === "NOT_ELIGIBLE";
 
   return {
     readinessErrors,
@@ -144,7 +137,7 @@ export function deriveSyncReadinessMetrics(order: ImportedOrderLike) {
   };
 }
 
-export function computeSyncCountersForImportedOrder(order: ImportedOrderLike) {
+export function computeSyncCountersForImportedOrder(order: ImportedOrderLike): { imported: number; notReady: number } {
   const readiness = deriveSyncReadinessMetrics(order);
   return { imported: 1, notReady: readiness.isNotReady ? 1 : 0 };
 }
@@ -153,9 +146,12 @@ export async function syncOrdersByDateRange(input: SyncFilters): Promise<GstServ
   try {
     const from = parseDate(input.from, "from");
     const to = parseDate(input.to, "to");
-
     const resolvedShop = await resolveShopConfig(input.shopDomain);
     const resolvedShopId = resolvedShop.id ? String(resolvedShop.id).trim() : null;
+
+    if (from > to) {
+      return { ok: false, error: "from must be less than or equal to to" };
+    }
 
     const shopifyOrders = await getShopifyOrdersForGstSync({
       from,
@@ -178,6 +174,11 @@ export async function syncOrdersByDateRange(input: SyncFilters): Promise<GstServ
     for (const order of shopifyOrders) {
       const shopifyOrderId = String(order.id || "").trim();
       const orderName = String(order.name || shopifyOrderId);
+      if (!shopifyOrderId) {
+        summary.failed += 1;
+        summary.perOrder.push({ orderName, status: "FAILED", error: "Missing Shopify order id" });
+        continue;
+      }
 
       const existing = await syncDb.gstOrderImport.findUnique({
         where: { shopId_shopifyOrderId: { shopId: resolvedShopId, shopifyOrderId } },
@@ -185,53 +186,116 @@ export async function syncOrdersByDateRange(input: SyncFilters): Promise<GstServ
       });
 
       if (existing && !input.forceResync) {
-        summary.alreadySynced++;
+        summary.alreadySynced += 1;
+        summary.perOrder.push({ orderName, shopifyOrderId, status: "ALREADY_SYNCED" });
         continue;
       }
 
-      const result = await importOrderByShopifyId(
+      const result = await importOrderByShopifyId(shopifyOrderId, normalizeOrderPayload(order), { shopId: resolvedShopId });
+      if (!result.ok || !result.data) {
+        summary.failed += 1;
+        summary.perOrder.push({ orderName, shopifyOrderId, status: "FAILED", error: result.error || "Import failed" });
+        continue;
+      }
+
+      const counters = computeSyncCountersForImportedOrder(result.data);
+      summary.imported += counters.imported;
+      summary.notReady += counters.notReady;
+      const readiness = deriveSyncReadinessMetrics(result.data);
+
+      summary.perOrder.push({
+        orderName,
         shopifyOrderId,
-        normalizeOrderPayload(order),
-        { shopId: resolvedShopId }
-      );
+        status: result.data.importStatus,
+        eligibilityStatus: result.data.eligibilityStatus,
+        mappingCompleteness: readiness.mappingCompleteness,
+        readinessErrors: readiness.readinessErrors,
+        unmappedSkus: readiness.unmappedSkus,
+        warnings: readiness.warnings,
+      });
+    }
 
-      if (!result.ok) {
-        summary.failed++;
-        continue;
-      }
-
-      summary.imported++;
+    if (summary.failed > 0) {
+      summary.warnings.push(`${summary.failed} orders failed during sync`);
     }
 
     return { ok: true, data: summary };
   } catch (error) {
-    return { ok: false, error: "Sync failed" };
+    return { ok: false, error: error instanceof Error ? error.message : "Failed to sync orders" };
   }
 }
 
-export async function syncSingleOrder(input: {
-  orderName?: string;
-  orderNumber?: string;
-  forceResync?: boolean;
-  shopDomain?: string;
-}) {
+export async function syncSingleOrder(input: { orderName?: string; orderNumber?: string; forceResync?: boolean; shopDomain?: string }) {
   const key = String(input.orderName || input.orderNumber || "").trim();
+  if (!key) {
+    return { ok: false, error: "orderName or orderNumber is required" } as const;
+  }
 
-  const resolvedShop = await resolveShopConfig(input.shopDomain);
-  const resolvedShopId = resolvedShop.id ? String(resolvedShop.id).trim() : null;
+  try {
+    const resolvedShop = await resolveShopConfig(input.shopDomain);
+    const resolvedShopId = resolvedShop.id ? String(resolvedShop.id).trim() : null;
 
-  const order = await getSingleShopifyOrderForGstSync({
-    orderNameOrNumber: key,
-    shopDomain: resolvedShop.shopDomain,
-  });
+    const order = await getSingleShopifyOrderForGstSync({
+      orderNameOrNumber: key,
+      shopDomain: resolvedShop.shopDomain,
+    });
+    if (!order) {
+      return { ok: false, error: "Order not found in Shopify" } as const;
+    }
 
-  if (!order) return { ok: false, error: "Order not found" };
+    const shopifyOrderId = String(order.id || "").trim();
+    if (!shopifyOrderId) {
+      return { ok: false, error: "Shopify order id missing for selected order" } as const;
+    }
 
-  const result = await importOrderByShopifyId(
-    String(order.id),
-    normalizeOrderPayload(order),
-    { shopId: resolvedShopId }
-  );
+    const existing = await syncDb.gstOrderImport.findUnique({
+      where: { shopId_shopifyOrderId: { shopId: resolvedShopId, shopifyOrderId } },
+      select: { id: true },
+    });
+    if (existing && !input.forceResync) {
+      return {
+        ok: true,
+        data: {
+          fetched: 1,
+          imported: 0,
+          alreadySynced: 1,
+          notReady: 0,
+          failed: 0,
+          warnings: [],
+          perOrder: [{ orderName: order.name, shopifyOrderId, status: "ALREADY_SYNCED" }],
+        } satisfies GstOrderSyncSummary,
+      } as const;
+    }
 
-  return result;
+    const imported = await importOrderByShopifyId(shopifyOrderId, normalizeOrderPayload(order), { shopId: resolvedShopId });
+    if (!imported.ok || !imported.data) {
+      return { ok: false, error: imported.error || "Failed to import single order" } as const;
+    }
+
+    const readiness = deriveSyncReadinessMetrics(imported.data);
+    const counters = computeSyncCountersForImportedOrder(imported.data);
+    return {
+      ok: true,
+      data: {
+        fetched: 1,
+        imported: counters.imported,
+        alreadySynced: 0,
+        notReady: counters.notReady,
+        failed: 0,
+        warnings: [],
+        perOrder: [{
+          orderName: order.name,
+          shopifyOrderId,
+          status: imported.data.importStatus,
+          eligibilityStatus: imported.data.eligibilityStatus,
+          mappingCompleteness: readiness.mappingCompleteness,
+          readinessErrors: readiness.readinessErrors,
+          unmappedSkus: readiness.unmappedSkus,
+          warnings: readiness.warnings,
+        }],
+      } satisfies GstOrderSyncSummary,
+    } as const;
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "Failed to sync single order" } as const;
+  }
 }
