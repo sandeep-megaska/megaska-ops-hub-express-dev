@@ -183,6 +183,22 @@ function toNullableTrimmedString(value: unknown): string | null {
   return normalized.length > 0 ? normalized : null;
 }
 
+function toGstTaxRateType(rateValue: unknown): string {
+  const rate = Number(rateValue);
+  if (!Number.isFinite(rate) || rate <= 0) return "ZERO";
+
+  const rounded = Math.round(rate * 100) / 100;
+  if (rounded === 3) return "GST_003";
+  if (rounded === 5) return "GST_005";
+  if (rounded === 12) return "GST_012";
+  if (rounded === 18) return "GST_018";
+  if (rounded === 28) return "GST_028";
+
+  // Production legacy enum only supports standard GST slabs. If a future
+  // non-standard rate appears, fail clearly instead of inserting invalid enum.
+  throw new Error(`Unsupported GST taxRateType for tax rate ${rate}`);
+}
+
 function pickLineSku(taxLine: Record<string, unknown>, sourceLine: Record<string, unknown>): string | null {
   return toNullableTrimmedString(
     taxLine.sku ??
@@ -237,12 +253,11 @@ function buildGstDocumentLineInsertRows(args: {
     };
 
     /*
-      Production DB has at least one legacy required column not present in
-      generated Prisma schema: taxRateType. Keep it in the row unconditionally
-      so required-column validation sees it before deciding between Prisma
-      createMany and raw SQL insert.
+      Production DB has a legacy enum column taxRateType that is not present in
+      the generated Prisma schema. Valid enum values are NIL, ZERO, GST_003,
+      GST_005, GST_012, GST_018, and GST_028.
     */
-    row.taxRateType = "GST";
+    row.taxRateType = toGstTaxRateType(row.taxRate);
 
     if (columnNames.has("documentId")) row.documentId = documentId;
     if (columnNames.has("itemName")) row.itemName = row.description;
@@ -250,6 +265,8 @@ function buildGstDocumentLineInsertRows(args: {
     if (columnNames.has("title")) row.title = row.description;
     if (columnNames.has("sku")) row.sku = lineSku;
     if (columnNames.has("hsnCode")) row.hsnCode = row.hsnOrSac;
+    if (columnNames.has("taxRatePercent")) row.taxRatePercent = row.taxRate;
+    if (columnNames.has("discountAmount")) row.discountAmount = row.discount;
     if (columnNames.has("totalAmount")) row.totalAmount = row.lineTotal;
     if (columnNames.has("grossAmount")) row.grossAmount = row.lineTotal;
 
