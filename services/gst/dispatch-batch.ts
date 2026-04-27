@@ -49,6 +49,10 @@ function parseNum(value: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+function round2(value: number): number {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
 function parseJson(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
 }
@@ -81,7 +85,21 @@ export async function listDispatchReadyOrders(filters: DispatchFilters): Promise
     const rows = await dispatchDb.gstOrderImport.findMany({
       where,
       include: {
-        lines: { select: { sku: true, mappingStatus: true } },
+        lines: {
+          orderBy: { lineNumber: "asc" },
+          select: {
+            lineNumber: true,
+            title: true,
+            sku: true,
+            quantity: true,
+            unitPrice: true,
+            discount: true,
+            taxableAmount: true,
+            mappingStatus: true,
+            mappedHsnCode: true,
+            mappedTaxRate: true,
+          },
+        },
       },
       orderBy: [{ orderCreatedAt: "desc" }],
       take: 500,
@@ -101,6 +119,25 @@ export async function listDispatchReadyOrders(filters: DispatchFilters): Promise
             .filter(Boolean),
         ),
       );
+      const lineItems = lines.map((line) => {
+        const quantity = parseNum(line.quantity);
+        const unitPrice = parseNum(line.unitPrice);
+        const discount = parseNum(line.discount);
+        const grossAmount = round2(Math.max(0, quantity * unitPrice - discount));
+        return {
+          lineNumber: parseNum(line.lineNumber),
+          title: String(line.title || ""),
+          sku: String(line.sku || ""),
+          quantity,
+          unitPrice: round2(unitPrice),
+          grossAmount,
+          mappingStatus: String(line.mappingStatus || "UNMAPPED"),
+          hsnCode: line.mappedHsnCode ? String(line.mappedHsnCode) : null,
+          taxRate: line.mappedTaxRate == null ? null : parseNum(line.mappedTaxRate),
+          taxableAmount: round2(parseNum(line.taxableAmount)),
+        };
+      });
+
       const invoice = await dispatchDb.gstDocument.findFirst({
         where: {
           documentType: "TAX_INVOICE",
@@ -123,6 +160,7 @@ export async function listDispatchReadyOrders(filters: DispatchFilters): Promise
         customerSummary: String(parseJson(row.snapshot).customerName || "-") || "-",
         skuCount: new Set(lines.map((line) => String(line.sku || "").trim()).filter(Boolean)).size,
         itemCount: lines.length,
+        lineItems,
         mappingCompleteness,
         readinessErrors,
         unmappedSkus,
@@ -198,21 +236,29 @@ export async function generateInvoiceBatch(input: BatchGenerateInput) {
     const snapshot = parseJson(order.snapshot);
     const customerDefaultStateCode = extractCustomerDefaultStateCode(snapshot);
     const invoiceLines: GstDocumentLineInput[] = [];
-    const lineErrors: string[] = [];
+    const lineErrors: Array<Record<string, unknown>> = [];
     for (const line of Array.isArray(order.lines) ? order.lines : []) {
       const row = line as Record<string, unknown>;
       const sku = String(row.sku || "").trim();
       const mapping = await resolveSkuTaxMap({ shopId: String(order.shopId || "") || null, sku });
       if (!mapping.ok) {
-        lineErrors.push(mapping.error || `Missing GST mapping for SKU ${sku || `LINE-${String(row.lineNumber || "")}`}`);
+        lineErrors.push({
+          lineNumber: parseNum(row.lineNumber),
+          sku: sku || null,
+          error: mapping.error || `Missing GST mapping for SKU ${sku || `LINE-${String(row.lineNumber || "")}`}`,
+        });
         continue;
       }
       if (!mapping.data) {
-        lineErrors.push(`Missing GST mapping for SKU ${sku || `LINE-${String(row.lineNumber || "")}`}`);
+        lineErrors.push({
+          lineNumber: parseNum(row.lineNumber),
+          sku: sku || null,
+          error: `Missing GST mapping for SKU ${sku || `LINE-${String(row.lineNumber || "")}`}`,
+        });
         continue;
       }
       invoiceLines.push({
-        description: String(row.title || sku || "Item"),
+        description: sku ? `${sku} • ${String(row.title || "Item")}` : String(row.title || "Item"),
         quantity: parseNum(row.quantity),
         unitPrice: parseNum(row.unitPrice),
         taxRate: Number(mapping.data.taxRate || 0),
@@ -224,7 +270,7 @@ export async function generateInvoiceBatch(input: BatchGenerateInput) {
 
     if (lineErrors.length > 0) {
       summary.failed += 1;
-      summary.results.push({ id, status: "FAILED", error: "missing SKU mapping", lineErrors });
+      summary.results.push({ id, status: "FAILED", error: "Missing SKU mappings", lineErrors });
       continue;
     }
 
@@ -247,7 +293,12 @@ export async function generateInvoiceBatch(input: BatchGenerateInput) {
       },
       currency: String(order.orderCurrency || "INR"),
       lines: invoiceLines,
-      metadata: { dispatchBatch: true, templateId: input.templateId || null, gstOrderImportId: String(order.id) },
+      metadata: {
+        dispatchBatch: true,
+        templateId: input.templateId || null,
+        gstOrderImportId: String(order.id),
+        orderCreatedAt: asDate(order.orderCreatedAt)?.toISOString() || null,
+      },
     });
 
     if (!invoice.ok || !invoice.data) {

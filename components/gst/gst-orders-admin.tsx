@@ -1,10 +1,36 @@
 'use client'
 
-import { useEffect, useState, type FormEvent } from 'react'
-import { generateBatchInvoices, listDispatchReadyOrders, preparePrintBatch, syncOrders } from '../../lib/gst-client'
+import { Fragment, useEffect, useMemo, useState, type FormEvent } from 'react'
+import {
+  generateBatchInvoices,
+  listDispatchReadyOrders,
+  preparePrintBatch,
+  syncOrders,
+} from '../../lib/gst-client'
 import { GstResponseViewer } from './gst-response-viewer'
 
-type Row = Record<string, unknown>
+type OrderLineRow = {
+  lineNumber: number
+  title: string
+  sku: string
+  quantity: number
+  unitPrice: number
+  grossAmount: number
+  mappingStatus: string
+  hsnCode: string | null
+  taxRate: number | null
+}
+
+type OrderRow = {
+  id: string
+  orderName: string
+  orderDate: string | null
+  mappingCompleteness: number
+  unmappedSkus: string[]
+  invoiceStatus: string
+  invoiceDocumentId: string | null
+  lineItems: OrderLineRow[]
+}
 
 const dateToday = new Date().toISOString().slice(0, 10)
 const dateThirtyDaysAgo = new Date(Date.now() - 29 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
@@ -12,10 +38,11 @@ const dateThirtyDaysAgo = new Date(Date.now() - 29 * 24 * 60 * 60 * 1000).toISOS
 export function GstOrdersAdmin() {
   const [from, setFrom] = useState(dateThirtyDaysAgo)
   const [to, setTo] = useState(dateToday)
-  const [rows, setRows] = useState<Row[]>([])
+  const [rows, setRows] = useState<OrderRow[]>([])
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<unknown>()
   const [error, setError] = useState<string>()
+  const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({})
 
   async function loadOrders() {
     const res = await listDispatchReadyOrders({ from, to })
@@ -23,7 +50,38 @@ export function GstOrdersAdmin() {
       setError(res.error)
       return
     }
-    setRows(Array.isArray(res.data) ? res.data : [])
+    const parsedRows = (Array.isArray(res.data) ? res.data : []).map((raw) => {
+      const row = raw as Record<string, unknown>
+      const lineItems = Array.isArray(row.lineItems)
+        ? row.lineItems.map((line) => {
+            const casted = line as Record<string, unknown>
+            return {
+              lineNumber: Number(casted.lineNumber || 0),
+              title: String(casted.title || ''),
+              sku: String(casted.sku || ''),
+              quantity: Number(casted.quantity || 0),
+              unitPrice: Number(casted.unitPrice || 0),
+              grossAmount: Number(casted.grossAmount || 0),
+              mappingStatus: String(casted.mappingStatus || 'UNMAPPED'),
+              hsnCode: casted.hsnCode ? String(casted.hsnCode) : null,
+              taxRate: casted.taxRate == null ? null : Number(casted.taxRate),
+            } satisfies OrderLineRow
+          })
+        : []
+
+      return {
+        id: String(row.id || ''),
+        orderName: String(row.orderName || ''),
+        orderDate: row.orderDate ? String(row.orderDate) : null,
+        mappingCompleteness: Number(row.mappingCompleteness || 0),
+        unmappedSkus: Array.isArray(row.unmappedSkus) ? row.unmappedSkus.map((sku) => String(sku)) : [],
+        invoiceStatus: String(row.invoiceStatus || 'NOT_INVOICED'),
+        invoiceDocumentId: row.invoiceDocumentId ? String(row.invoiceDocumentId) : null,
+        lineItems,
+      } satisfies OrderRow
+    })
+
+    setRows(parsedRows)
   }
 
   useEffect(() => {
@@ -80,20 +138,93 @@ export function GstOrdersAdmin() {
       return
     }
 
+    const payload = await fetch(pdfUrl, { credentials: 'include' }).then((response) => response.json()) as {
+      ok?: boolean
+      pdf?: { html?: string }
+      error?: string
+    }
+
+    if (!payload.ok || !payload.pdf?.html) {
+      setError(payload.error || 'Unable to render invoice preview')
+      setLoading(false)
+      return
+    }
+
     if (mode === 'print') {
-      window.open(pdfUrl, '_blank', 'noopener,noreferrer')
+      const popup = window.open('', '_blank', 'noopener,noreferrer')
+      if (!popup) {
+        setError('Unable to open print preview window')
+        setLoading(false)
+        return
+      }
+      popup.document.open()
+      popup.document.write(payload.pdf.html)
+      popup.document.close()
+      popup.focus()
+      popup.print()
     } else {
+      const blob = new Blob([payload.pdf.html], { type: 'text/html;charset=utf-8' })
+      const blobUrl = URL.createObjectURL(blob)
       const anchor = document.createElement('a')
-      anchor.href = pdfUrl
-      anchor.download = ''
+      anchor.href = blobUrl
+      anchor.download = `gst-invoice-${id}.html`
       document.body.appendChild(anchor)
       anchor.click()
       document.body.removeChild(anchor)
+      URL.revokeObjectURL(blobUrl)
     }
 
     setResult(res.data)
     setLoading(false)
   }
+
+  async function onGenerateReport(reportType: 'b2c_sales_register' | 'credit_note_register' | 'debit_note_register') {
+    setLoading(true)
+    setError(undefined)
+
+    const runRes = await fetch('/api/gst/reports/runs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({
+        reportType,
+        format: 'CSV',
+        periodStart: `${from}T00:00:00.000Z`,
+        periodEnd: `${to}T23:59:59.999Z`,
+      }),
+    })
+    const runPayload = (await runRes.json().catch(() => ({}))) as {
+      ok?: boolean
+      error?: string
+      run?: { id?: string }
+    }
+
+    if (!runRes.ok || !runPayload.ok || !runPayload.run?.id) {
+      setError(runPayload.error || 'Failed to generate report')
+      setLoading(false)
+      return
+    }
+
+    const fileRes = await fetch(`/api/gst/reports/runs/${encodeURIComponent(runPayload.run.id)}/download`, {
+      credentials: 'include',
+    })
+    const filePayload = (await fileRes.json().catch(() => ({}))) as {
+      ok?: boolean
+      error?: string
+      fileUrl?: string
+    }
+    if (!fileRes.ok || !filePayload.ok || !filePayload.fileUrl) {
+      setError(filePayload.error || 'Report generated, but no downloadable file was returned')
+      setLoading(false)
+      return
+    }
+
+    window.open(filePayload.fileUrl, '_blank', 'noopener,noreferrer')
+    setResult({ reportType, run: runPayload.run, file: { fileUrl: filePayload.fileUrl } })
+    setLoading(false)
+  }
+
+  const hasOrders = useMemo(() => rows.length > 0, [rows])
 
   return (
     <div className="grid gap-6 xl:grid-cols-[1.25fr_0.75fr]">
@@ -108,6 +239,11 @@ export function GstOrdersAdmin() {
           <button type="button" className="rounded-xl border border-gray-300 px-4 py-2 text-sm" onClick={() => void loadOrders()}>
             Refresh Order List
           </button>
+          <div className="flex flex-wrap gap-2 pt-2">
+            <button type="button" className="rounded-xl border border-gray-300 px-3 py-1.5 text-sm" onClick={() => void onGenerateReport('b2c_sales_register')} disabled={loading}>B2C Export</button>
+            <button type="button" className="rounded-xl border border-gray-300 px-3 py-1.5 text-sm" onClick={() => void onGenerateReport('credit_note_register')} disabled={loading}>Credit Note Export</button>
+            <button type="button" className="rounded-xl border border-gray-300 px-3 py-1.5 text-sm" onClick={() => void onGenerateReport('debit_note_register')} disabled={loading}>Debit Note Export</button>
+          </div>
         </form>
 
         <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
@@ -117,26 +253,73 @@ export function GstOrdersAdmin() {
               <thead className="bg-gray-50 text-left text-gray-600"><tr><th className="px-3 py-2">Order</th><th className="px-3 py-2">Date</th><th className="px-3 py-2">Mapping</th><th className="px-3 py-2">Missing SKU</th><th className="px-3 py-2">Invoice</th><th className="px-3 py-2">Actions</th></tr></thead>
               <tbody>
                 {rows.map((row) => {
-                  const id = String(row.id || '')
-                  const unmappedSkus = Array.isArray(row.unmappedSkus) ? row.unmappedSkus.map((sku) => String(sku)) : []
+                  const id = row.id
+                  const unmappedSkus = row.unmappedSkus
+                  const expanded = Boolean(expandedRows[id])
                   return (
-                    <tr key={id} className="border-t border-gray-100 align-top">
-                      <td className="px-3 py-2 font-medium">{String(row.orderName || '')}</td>
+                    <Fragment key={id}>
+                    <tr className="border-t border-gray-100 align-top">
+                      <td className="px-3 py-2 font-medium">
+                        <button className="mr-2 rounded border border-gray-300 px-2 py-0.5 text-xs" onClick={() => setExpandedRows((prev) => ({ ...prev, [id]: !expanded }))}>
+                          {expanded ? 'Hide' : 'Show'} lines
+                        </button>
+                        {row.orderName}
+                      </td>
                       <td className="px-3 py-2">{String(row.orderDate || '').slice(0, 10)}</td>
-                      <td className="px-3 py-2">{String(row.mappingCompleteness || 0)}%</td>
+                      <td className="px-3 py-2">{row.mappingCompleteness}%</td>
                       <td className="px-3 py-2 text-xs text-amber-700">{unmappedSkus.length > 0 ? unmappedSkus.join(', ') : 'None'}</td>
-                      <td className="px-3 py-2">{String(row.invoiceStatus || 'NOT_INVOICED')}</td>
+                      <td className="px-3 py-2">{row.invoiceStatus}</td>
                       <td className="space-x-2 whitespace-nowrap px-3 py-2">
                         <button className="rounded-lg border border-gray-300 px-3 py-1.5" onClick={() => void onGenerate(id)}>Generate Invoice</button>
-                        <button className="rounded-lg border border-gray-300 px-3 py-1.5" onClick={() => void onPrintOrDownload(id, 'print')}>Print</button>
-                        <button className="rounded-lg border border-gray-300 px-3 py-1.5" onClick={() => void onPrintOrDownload(id, 'download')}>Download</button>
+                        {row.invoiceDocumentId ? (
+                          <>
+                            <button className="rounded-lg border border-gray-300 px-3 py-1.5" onClick={() => void onPrintOrDownload(id, 'print')}>Print Invoice</button>
+                            <button className="rounded-lg border border-gray-300 px-3 py-1.5" onClick={() => void onPrintOrDownload(id, 'download')}>Download PDF</button>
+                          </>
+                        ) : null}
                       </td>
                     </tr>
+                    {expanded ? (
+                      <tr className="border-t border-gray-100 bg-gray-50/50">
+                        <td className="px-3 py-3" colSpan={6}>
+                          <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
+                            <table className="min-w-full text-xs">
+                              <thead className="bg-gray-100 text-gray-600">
+                                <tr>
+                                  <th className="px-2 py-1.5 text-left">SKU</th>
+                                  <th className="px-2 py-1.5 text-right">Qty</th>
+                                  <th className="px-2 py-1.5 text-right">Price</th>
+                                  <th className="px-2 py-1.5 text-right">Gross</th>
+                                  <th className="px-2 py-1.5 text-left">Mapping</th>
+                                  <th className="px-2 py-1.5 text-left">HSN</th>
+                                  <th className="px-2 py-1.5 text-right">GST %</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {row.lineItems.map((line) => (
+                                  <tr key={`${id}-${line.lineNumber}`} className="border-t border-gray-100">
+                                    <td className="px-2 py-1.5">{line.sku || '-'}</td>
+                                    <td className="px-2 py-1.5 text-right">{line.quantity.toFixed(3).replace(/\.?0+$/, '')}</td>
+                                    <td className="px-2 py-1.5 text-right">{line.unitPrice.toFixed(2)}</td>
+                                    <td className="px-2 py-1.5 text-right">{line.grossAmount.toFixed(2)}</td>
+                                    <td className="px-2 py-1.5">{line.mappingStatus}</td>
+                                    <td className="px-2 py-1.5">{line.hsnCode || '-'}</td>
+                                    <td className="px-2 py-1.5 text-right">{line.taxRate == null ? '-' : line.taxRate.toFixed(2)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : null}
+                    </Fragment>
                   )
                 })}
               </tbody>
             </table>
           </div>
+          {!hasOrders ? <p className="mt-3 text-sm text-gray-500">No synced orders found for this date range.</p> : null}
         </div>
       </div>
 
