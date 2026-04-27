@@ -176,6 +176,129 @@ async function loadSourceOrderSnapshot(sourceOrderId: unknown): Promise<Record<s
   return order.snapshot as Record<string, unknown>;
 }
 
+async function loadLinkedOrderSnapshot(document: Record<string, unknown>, snapshot: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const sourceSnapshot = getObject(snapshot, ["source"]);
+  if (Object.keys(sourceSnapshot).length > 0) {
+    return sourceSnapshot;
+  }
+
+  const candidates: Array<{ field: "id" | "shopifyOrderId" | "shopifyOrderName"; value: string }> = [];
+  const sourceOrderId = asText(document.sourceOrderId);
+  const sourceOrderNumber = asText(document.sourceOrderNumber);
+  const shopifyOrderId = asText(document.shopifyOrderId || snapshot.shopifyOrderId || sourceSnapshot.shopifyOrderId);
+  const shopifyOrderName = asText(document.shopifyOrderName || snapshot.shopifyOrderName || sourceSnapshot.shopifyOrderName);
+
+  if (sourceOrderId) candidates.push({ field: "id", value: sourceOrderId });
+  if (shopifyOrderId) candidates.push({ field: "shopifyOrderId", value: shopifyOrderId });
+  if (sourceOrderNumber) candidates.push({ field: "shopifyOrderName", value: sourceOrderNumber });
+  if (shopifyOrderName && !candidates.some((candidate) => candidate.field === "shopifyOrderName" && candidate.value === shopifyOrderName)) {
+    candidates.push({ field: "shopifyOrderName", value: shopifyOrderName });
+  }
+
+  for (const candidate of candidates) {
+    const order = await prisma.gstOrderImport.findFirst({
+      where: { [candidate.field]: candidate.value } as Record<string, string>,
+      select: { snapshot: true },
+      orderBy: { createdAt: "desc" },
+    });
+    if (order?.snapshot && typeof order.snapshot === "object") {
+      return order.snapshot as Record<string, unknown>;
+    }
+  }
+
+  if (sourceOrderId) {
+    return loadSourceOrderSnapshot(sourceOrderId);
+  }
+  return {};
+}
+
+function fullNameFromObject(source: Record<string, unknown>): string {
+  return [asText(source.firstName || source.first_name), asText(source.lastName || source.last_name)].filter(Boolean).join(" ").trim();
+}
+
+function resolvePartyName(candidates: unknown[], fallback = "Customer"): string {
+  for (const candidate of candidates) {
+    const text = asText(candidate);
+    if (text) return text;
+  }
+  return fallback;
+}
+
+function getInvoicePartyDetails(document: Record<string, unknown>): {
+  buyerName: string;
+  buyerGstin: string;
+  buyerPhone: string;
+  buyerEmail: string;
+  billingName: string;
+  shippingName: string;
+  billingLines: string[];
+  shippingLines: string[];
+} {
+  const snapshot = (document.jsonSnapshot || {}) as Record<string, unknown>;
+  const sourceSnapshot = getObject(snapshot, ["source"]);
+  const buyerSnapshot = getObject(snapshot, ["buyer", "buyerParty"]);
+  const metadata = { ...getObject(snapshot, ["metadata"]), ...getObject(document, ["metadata"]) };
+
+  const shippingSnapshot = getObject(sourceSnapshot, ["shippingAddress", "shipping_address", "shipping"]);
+  const billingSnapshot = getObject(sourceSnapshot, ["billingAddress", "billing_address", "billing"]);
+  const customerSnapshot = getObject(sourceSnapshot, ["customer", "buyer"]);
+
+  const billingLines = buildAddressLines(billingSnapshot);
+  const shippingLines = buildAddressLines(shippingSnapshot);
+
+  const orderEmail = asText(sourceSnapshot.email || sourceSnapshot.contactEmail || sourceSnapshot.customerEmail || customerSnapshot.email || metadata.email);
+  const fallbackNameFromCustomer = fullNameFromObject(customerSnapshot);
+  const fallbackNameFromShipping = resolvePartyName([shippingSnapshot.name, fullNameFromObject(shippingSnapshot)]);
+  const fallbackNameFromBilling = resolvePartyName([billingSnapshot.name, fullNameFromObject(billingSnapshot)]);
+  const buyerName = resolvePartyName(
+    [
+      buyerSnapshot.legalName,
+      buyerSnapshot.name,
+      sourceSnapshot.customerName,
+      sourceSnapshot.customer_name,
+      fallbackNameFromShipping,
+      fallbackNameFromBilling,
+      fallbackNameFromCustomer,
+      orderEmail,
+    ],
+    "Customer",
+  );
+
+  const buyerEmail = resolvePartyName(
+    [buyerSnapshot.email, customerSnapshot.email, shippingSnapshot.email, billingSnapshot.email, orderEmail],
+    "",
+  );
+  const buyerPhone = resolvePartyName(
+    [buyerSnapshot.phone, customerSnapshot.phone, shippingSnapshot.phone, billingSnapshot.phone, sourceSnapshot.customerPhone],
+    "",
+  );
+
+  const buyerGstin = resolvePartyName(
+    [buyerSnapshot.gstin, sourceSnapshot.gstin, sourceSnapshot.customerGstin, metadata.customerGstin],
+    "UNREGISTERED",
+  );
+
+  const shippingName = resolvePartyName(
+    [shippingSnapshot.name, fullNameFromObject(shippingSnapshot), buyerName, buyerEmail],
+    buyerName,
+  );
+  const billingName = resolvePartyName(
+    [billingSnapshot.name, fullNameFromObject(billingSnapshot), shippingName, buyerName, buyerEmail],
+    buyerName,
+  );
+
+  return {
+    buyerName,
+    buyerGstin: buyerGstin || "UNREGISTERED",
+    buyerPhone,
+    buyerEmail,
+    billingName,
+    shippingName,
+    billingLines: billingLines.length ? billingLines : shippingLines,
+    shippingLines: shippingLines.length ? shippingLines : billingLines,
+  };
+}
+
 export async function buildGstInvoiceRenderModel(gstDocumentId: string): Promise<GstServiceResult<GstInvoiceRenderModel>> {
   const invoiceResult = await getGstInvoiceById(gstDocumentId);
   const documentResult = invoiceResult.ok ? invoiceResult : await getGstNoteById(gstDocumentId);
@@ -195,29 +318,16 @@ export async function buildGstInvoiceRenderModel(gstDocumentId: string): Promise
   const lines = Array.isArray(doc.lines) ? (doc.lines as Array<Record<string, unknown>>) : [];
   const snapshot = (doc.jsonSnapshot || {}) as Record<string, unknown>;
   const seller = (snapshot.settings || {}) as Record<string, unknown>;
-  const buyer = (snapshot.buyerParty || snapshot.buyer || {}) as Record<string, unknown>;
   const metadata = (doc.metadata || snapshot.metadata || {}) as Record<string, unknown>;
   const classification = (snapshot.classification || {}) as Record<string, unknown>;
-  const sourceSnapshot = await loadSourceOrderSnapshot(doc.sourceOrderId);
-
-  const shippingSnapshot = getObject(sourceSnapshot, ["shippingAddress", "shipping_address", "shipping"]);
-  const billingSnapshot = getObject(sourceSnapshot, ["billingAddress", "billing_address", "billing"]);
-  const customerSnapshot = getObject(sourceSnapshot, ["customer", "buyer"]);
+  const sourceSnapshot = await loadLinkedOrderSnapshot(doc as Record<string, unknown>, snapshot);
+  const enrichedDocument = { ...(doc as Record<string, unknown>), jsonSnapshot: { ...snapshot, source: sourceSnapshot } };
+  const partyDetails = getInvoicePartyDetails(enrichedDocument);
 
   const supplierName = asText(seller.legalName, "Supplier");
   const supplierTradeName = asText(seller.tradeName);
   const supplierStateCode = asText(seller.stateCode);
   const supplierAddressLines = buildAddressLines(seller);
-
-  const customerName = asText(
-    buyer.legalName || sourceSnapshot.customerName || sourceSnapshot.customer_name || customerSnapshot.displayName || customerSnapshot.name,
-    "Customer",
-  );
-  const customerPhone = asText(buyer.phone || sourceSnapshot.customerPhone || customerSnapshot.phone || billingSnapshot.phone || shippingSnapshot.phone);
-  const customerEmail = asText(buyer.email || sourceSnapshot.customerEmail || customerSnapshot.email || billingSnapshot.email || shippingSnapshot.email);
-
-  const billingLines = buildAddressLines(billingSnapshot);
-  const shippingLines = buildAddressLines(shippingSnapshot);
 
   const placeOfSupplyCode = asText(doc.placeOfSupplyStateCode || classification.placeOfSupplyStateCode || supplierStateCode, supplierStateCode);
   const placeOfSupply = formatStateDisplay(placeOfSupplyCode, placeOfSupplyCode);
@@ -266,18 +376,15 @@ export async function buildGstInvoiceRenderModel(gstDocumentId: string): Promise
         lines: supplierAddressLines,
       },
       buyer: {
-        name: customerName,
-        gstin: asText(buyer.gstin || sourceSnapshot.gstin || sourceSnapshot.customerGstin, "UNREGISTERED"),
-        phone: customerPhone,
-        email: customerEmail,
-        lines: billingLines.length ? billingLines : shippingLines,
+        name: partyDetails.billingName,
+        gstin: partyDetails.buyerGstin || "UNREGISTERED",
+        phone: partyDetails.buyerPhone,
+        email: partyDetails.buyerEmail,
+        lines: partyDetails.billingLines,
       },
       shipping: {
-        name: asText(
-          sourceSnapshot.shippingName || sourceSnapshot.shipping_name || shippingSnapshot.name || `${shippingSnapshot.firstName || ""} ${shippingSnapshot.lastName || ""}`,
-          customerName,
-        ),
-        lines: shippingLines.length ? shippingLines : billingLines,
+        name: partyDetails.shippingName,
+        lines: partyDetails.shippingLines,
       },
       rows,
       totals: {
