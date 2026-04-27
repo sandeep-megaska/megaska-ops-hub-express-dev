@@ -37,20 +37,21 @@ export function GstSettingsForm() {
   useEffect(() => {
     void (async () => {
       const res = await getGstSettings()
-      if (!res.ok || !res.data) return
+      if (!res.ok) return
+      const data = res.data ?? {}
       setForm((prev) => ({
         ...prev,
-        legalName: String(res.data.legalName || ''),
-        tradeName: String(res.data.tradeName || ''),
-        gstin: String(res.data.gstin || ''),
-        pan: String(res.data.pan || ''),
-        stateCode: String(res.data.stateCode || ''),
-        invoicePrefix: String(res.data.invoicePrefix || 'INV'),
-        creditNotePrefix: String(res.data.creditNotePrefix || 'CN'),
-        debitNotePrefix: String(res.data.debitNotePrefix || 'DN'),
-        priceIncludesTax: res.data.priceIncludesTax !== false,
+        legalName: String(data.legalName || ''),
+        tradeName: String(data.tradeName || ''),
+        gstin: String(data.gstin || ''),
+        pan: String(data.pan || ''),
+        stateCode: String(data.stateCode || ''),
+        invoicePrefix: String(data.invoicePrefix || 'INV'),
+        creditNotePrefix: String(data.creditNotePrefix || 'CN'),
+        debitNotePrefix: String(data.debitNotePrefix || 'DN'),
+        priceIncludesTax: data.priceIncludesTax !== false,
       }))
-      setResult(res.data)
+      setResult(data)
     })()
   }, [])
 

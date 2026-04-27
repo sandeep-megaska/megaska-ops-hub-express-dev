@@ -70,14 +70,14 @@ export function classifySupply(
   const supplyType = determineSupplyType(input);
   const warnings: string[] = [];
 
-  let placeOfSupplyStateCode = determinePlaceOfSupply(input);
-
   if (!sellerStateCode) {
     return { ok: false, error: "sellerStateCode is required for GST classification" };
   }
 
-  if (!placeOfSupplyStateCode) {
-    placeOfSupplyStateCode = sellerStateCode;
+  const determinedPlaceOfSupply = determinePlaceOfSupply(input);
+  const placeOfSupplyStateCode = determinedPlaceOfSupply || sellerStateCode;
+
+  if (!determinedPlaceOfSupply) {
     warnings.push("Place of supply missing; defaulted to supplier state");
   }
 
