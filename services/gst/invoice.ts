@@ -18,6 +18,25 @@ export interface GstInvoiceDraftResult {
   warnings: string[];
 }
 
+const GST_DOCUMENT_REQUIRED_FIELDS = [
+  "documentType",
+  "status",
+  "documentNumber",
+  "documentDate",
+  "gstSettingsId",
+  "supplyType",
+  "placeOfSupplyStateCode",
+  "isInterstate",
+  "currency",
+  "taxableAmount",
+  "cgstAmount",
+  "sgstAmount",
+  "igstAmount",
+  "cessAmount",
+  "totalAmount",
+  "jsonSnapshot",
+] as const;
+
 function toInvoiceDraftError(reason: unknown): string {
   const message = String(reason || "").trim();
   const lc = message.toLowerCase();
@@ -176,32 +195,42 @@ export async function buildInvoiceDraft(
       totals: taxData.totals,
     };
 
+    const createPayload = {
+      documentType: "TAX_INVOICE",
+      status: GST_DEFAULT_DOCUMENT_STATUS,
+      documentNumber: numberingData.documentNumber,
+      documentDate,
+      gstSettingsId: settings.id,
+      shopifyOrderId: input.shopifyOrderId || null,
+      shopifyOrderName: input.shopifyOrderName || null,
+      sourceOrderId: input.sourceOrderId || null,
+      sourceOrderNumber: input.sourceOrderNumber || null,
+      sourceReference: input.sourceReference || null,
+      supplyType: classificationData.supplyType,
+      placeOfSupplyStateCode: classificationData.placeOfSupplyStateCode,
+      isInterstate: classificationData.isInterstate,
+      currency: payloadData.normalizedCurrency,
+      taxableAmount: new Prisma.Decimal(taxData.totals.taxableAmount),
+      cgstAmount: new Prisma.Decimal(taxData.totals.cgstAmount),
+      sgstAmount: new Prisma.Decimal(taxData.totals.sgstAmount),
+      igstAmount: new Prisma.Decimal(taxData.totals.igstAmount),
+      cessAmount: new Prisma.Decimal(taxData.totals.cessAmount),
+      totalAmount: new Prisma.Decimal(taxData.totals.totalAmount),
+      jsonSnapshot: snapshot,
+      metadata: input.metadata || {},
+    };
+
+    console.info("[GST DEBUG][INVOICE][CREATE]", {
+      resolvedShopId: requestedShopId,
+      selectedGstSettingsId: settings.id,
+      selectedGstSettingsShopId: settings.shopId ?? null,
+      requiredGstDocumentFields: GST_DOCUMENT_REQUIRED_FIELDS,
+      createPayloadKeys: Object.keys(createPayload).sort(),
+    });
+
     const created = await gstDb.$transaction(async (tx) => {
       const document = await tx.gstDocument.create({
-        data: {
-          documentType: "TAX_INVOICE",
-          status: GST_DEFAULT_DOCUMENT_STATUS,
-          documentNumber: numberingData.documentNumber,
-          documentDate,
-          gstSettingsId: settings.id,
-          shopifyOrderId: input.shopifyOrderId || null,
-          shopifyOrderName: input.shopifyOrderName || null,
-          sourceOrderId: input.sourceOrderId || null,
-          sourceOrderNumber: input.sourceOrderNumber || null,
-          sourceReference: input.sourceReference || null,
-          supplyType: classificationData.supplyType,
-          placeOfSupplyStateCode: classificationData.placeOfSupplyStateCode,
-          isInterstate: classificationData.isInterstate,
-          currency: payloadData.normalizedCurrency,
-          taxableAmount: new Prisma.Decimal(taxData.totals.taxableAmount),
-          cgstAmount: new Prisma.Decimal(taxData.totals.cgstAmount),
-          sgstAmount: new Prisma.Decimal(taxData.totals.sgstAmount),
-          igstAmount: new Prisma.Decimal(taxData.totals.igstAmount),
-          cessAmount: new Prisma.Decimal(taxData.totals.cessAmount),
-          totalAmount: new Prisma.Decimal(taxData.totals.totalAmount),
-          jsonSnapshot: snapshot,
-          metadata: input.metadata || {},
-        },
+        data: createPayload,
       });
 
       await tx.gstDocumentLine.createMany({
