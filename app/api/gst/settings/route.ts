@@ -41,6 +41,7 @@ async function resolveShopContext(req: NextRequest) {
 export async function GET(req: NextRequest) {
   const { requestedShopDomain, resolvedShop, usedGlobalFallback } = await resolveShopContext(req);
   const resolvedShopId = resolvedShop.id ?? null;
+  let createdFromFallback = false;
 
   let settings =
     resolvedShopId
@@ -51,6 +52,52 @@ export async function GET(req: NextRequest) {
       : null;
 
   let usedFallbackGlobal = false;
+  if (!settings && resolvedShopId) {
+    settings = await prisma.$transaction(async (tx) => {
+      const existingForShop = await tx.gstSettings.findFirst({
+        where: { shopId: resolvedShopId },
+        orderBy: { updatedAt: "desc" },
+      });
+
+      if (existingForShop) {
+        return tx.gstSettings.findFirst({
+          where: { isActive: true, shopId: null },
+          orderBy: { updatedAt: "desc" },
+        });
+      }
+
+      const fallback = await tx.gstSettings.findFirst({
+        where: { isActive: true, shopId: null },
+        orderBy: { updatedAt: "desc" },
+      });
+
+      if (!fallback) {
+        return null;
+      }
+
+      createdFromFallback = true;
+      return tx.gstSettings.create({
+        data: {
+          shopId: resolvedShopId,
+          legalName: fallback.legalName,
+          tradeName: fallback.tradeName,
+          gstin: fallback.gstin,
+          pan: fallback.pan,
+          stateCode: fallback.stateCode,
+          invoicePrefix: fallback.invoicePrefix,
+          creditNotePrefix: fallback.creditNotePrefix,
+          debitNotePrefix: fallback.debitNotePrefix,
+          invoiceNumberStrategy: fallback.invoiceNumberStrategy,
+          defaultCurrency: fallback.defaultCurrency,
+          priceIncludesTax: fallback.priceIncludesTax,
+          einvoiceEnabled: fallback.einvoiceEnabled,
+          isActive: fallback.isActive,
+        },
+      });
+    });
+    usedFallbackGlobal = Boolean(settings && !createdFromFallback);
+  }
+
   if (!settings) {
     settings = await prisma.gstSettings.findFirst({
       where: { isActive: true, shopId: null },
@@ -70,7 +117,8 @@ export async function GET(req: NextRequest) {
     __debugVersion: DEBUG_VERSION,
     __resolvedShopDomain: resolvedShop.shopDomain || requestedShopDomain || null,
     __resolvedShopId: resolvedShopId,
-    __usedGlobalFallback: usedGlobalFallback || usedFallbackGlobal,
+    __usedGlobalFallback: createdFromFallback ? false : usedGlobalFallback || usedFallbackGlobal,
+    __createdFromFallback: createdFromFallback,
   });
 }
 
