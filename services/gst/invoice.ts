@@ -516,12 +516,16 @@ export async function buildInvoiceDraft(input: GstInvoiceDraftInput): Promise<Gs
     const buyerParty = await ensureBuyerParty({
       ...input,
       buyer: {
-        ...input.buyer,
-        gstin: payloadData.normalizedBuyerGstin,
-        stateCode: payloadData.normalizedBuyerStateCode,
-      },
+  ...customerDetails.buyer,
+  gstin: payloadData.normalizedBuyerGstin || customerDetails.buyer.gstin,
+  stateCode:
+    payloadData.normalizedBuyerStateCode ||
+    customerDetails.buyer.stateCode,
+},
+billingAddress: customerDetails.billingAddress,
+shippingAddress: customerDetails.shippingAddress,
     });
-
+const customerDetails = extractCustomerDetailsForInvoice(input);
     const snapshot = {
       settings,
       classification: classificationData,
