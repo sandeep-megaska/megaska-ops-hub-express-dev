@@ -1,4 +1,5 @@
 import { prisma } from "../db/prisma";
+import { existsSync } from "node:fs";
 import { getGstInvoiceById } from "./invoice";
 import { getGstNoteById } from "./notes";
 import { getGstStatePrimaryNameByCode, resolveGstStateCode } from "./state-codes";
@@ -41,6 +42,8 @@ export interface GstInvoiceRenderModel {
   };
   shipping: {
     name: string;
+    phone?: string;
+    email?: string;
     lines: string[];
   };
   rows: Array<{
@@ -69,6 +72,10 @@ export interface GstInvoiceRenderModel {
   declaration: string;
   footer: string;
   signature: string;
+  branding: {
+    headerLogoSrc: string | null;
+    footerLogoSrc: string | null;
+  };
 }
 
 function escapeHtml(value: string): string {
@@ -124,6 +131,13 @@ function buildAddressLines(source: Record<string, unknown>): string[] {
   const country = readFirstText(source, ["country", "countryName"]);
 
   return [line1, line2, [city, state].filter(Boolean).join(", "), [pincode, country].filter(Boolean).join(", ")].filter(Boolean);
+}
+
+function resolvePublicAsset(candidates: string[]): string | null {
+  for (const candidate of candidates) {
+    if (existsSync(`./public${candidate}`)) return candidate;
+  }
+  return null;
 }
 
 function numberToWords(value: number): string {
@@ -233,6 +247,8 @@ function getInvoicePartyDetails(document: Record<string, unknown>): {
   shippingName: string;
   billingLines: string[];
   shippingLines: string[];
+  shippingPhone: string;
+  shippingEmail: string;
 } {
   const snapshot = (document.jsonSnapshot || {}) as Record<string, unknown>;
   const sourceSnapshot = getObject(snapshot, ["source"]);
@@ -242,50 +258,45 @@ function getInvoicePartyDetails(document: Record<string, unknown>): {
   const shippingSnapshot = getObject(sourceSnapshot, ["shippingAddress", "shipping_address", "shipping"]);
   const billingSnapshot = getObject(sourceSnapshot, ["billingAddress", "billing_address", "billing"]);
   const customerSnapshot = getObject(sourceSnapshot, ["customer", "buyer"]);
-
-  const billingLines = buildAddressLines(billingSnapshot);
-  const shippingLines = buildAddressLines(shippingSnapshot);
-
-  const orderEmail = asText(sourceSnapshot.email || sourceSnapshot.contactEmail || sourceSnapshot.customerEmail || customerSnapshot.email || metadata.email);
-  const fallbackNameFromCustomer = fullNameFromObject(customerSnapshot);
-  const fallbackNameFromShipping = resolvePartyName([shippingSnapshot.name, fullNameFromObject(shippingSnapshot)]);
-  const fallbackNameFromBilling = resolvePartyName([billingSnapshot.name, fullNameFromObject(billingSnapshot)]);
-  const buyerName = resolvePartyName(
-    [
-      buyerSnapshot.legalName,
-      buyerSnapshot.name,
+  const pickParty = (
+    primary: Record<string, unknown>,
+    fallback: Record<string, unknown>,
+  ): { name: string; lines: string[]; phone: string; email: string } => {
+    const name = resolvePartyName([
+      primary.name,
+      fullNameFromObject(primary),
+      fallback.name,
+      fullNameFromObject(fallback),
       sourceSnapshot.customerName,
       sourceSnapshot.customer_name,
-      fallbackNameFromShipping,
-      fallbackNameFromBilling,
-      fallbackNameFromCustomer,
-      orderEmail,
-    ],
-    "Customer",
-  );
+      fullNameFromObject(customerSnapshot),
+    ]);
+    const linesPrimary = buildAddressLines(primary);
+    const linesFallback = buildAddressLines(fallback);
+    return {
+      name,
+      lines: linesPrimary.length ? linesPrimary : linesFallback,
+      phone: resolvePartyName([primary.phone, primary.mobile, fallback.phone, fallback.mobile, customerSnapshot.phone], ""),
+      email: resolvePartyName(
+        [primary.email, primary.contactEmail, fallback.email, fallback.contactEmail, customerSnapshot.email, sourceSnapshot.email, sourceSnapshot.contactEmail, metadata.email],
+        "",
+      ),
+    };
+  };
 
-  const buyerEmail = resolvePartyName(
-    [buyerSnapshot.email, customerSnapshot.email, shippingSnapshot.email, billingSnapshot.email, orderEmail],
-    "",
-  );
-  const buyerPhone = resolvePartyName(
-    [buyerSnapshot.phone, customerSnapshot.phone, shippingSnapshot.phone, billingSnapshot.phone, sourceSnapshot.customerPhone],
-    "",
-  );
+  const shipParty = pickParty(shippingSnapshot, billingSnapshot);
+  const billParty = pickParty(billingSnapshot, shippingSnapshot);
+  const buyerName = resolvePartyName([buyerSnapshot.legalName, buyerSnapshot.name, billParty.name, shipParty.name], "Customer");
+  const buyerEmail = resolvePartyName([buyerSnapshot.email, billParty.email, shipParty.email], "");
+  const buyerPhone = resolvePartyName([buyerSnapshot.phone, billParty.phone, shipParty.phone], "");
 
   const buyerGstin = resolvePartyName(
     [buyerSnapshot.gstin, sourceSnapshot.gstin, sourceSnapshot.customerGstin, metadata.customerGstin],
     "UNREGISTERED",
   );
 
-  const shippingName = resolvePartyName(
-    [shippingSnapshot.name, fullNameFromObject(shippingSnapshot), buyerName, buyerEmail],
-    buyerName,
-  );
-  const billingName = resolvePartyName(
-    [billingSnapshot.name, fullNameFromObject(billingSnapshot), shippingName, buyerName, buyerEmail],
-    buyerName,
-  );
+  const shippingName = resolvePartyName([shipParty.name, buyerName, buyerEmail], buyerName);
+  const billingName = resolvePartyName([billParty.name, shippingName, buyerName, buyerEmail], buyerName);
 
   return {
     buyerName,
@@ -294,8 +305,10 @@ function getInvoicePartyDetails(document: Record<string, unknown>): {
     buyerEmail,
     billingName,
     shippingName,
-    billingLines: billingLines.length ? billingLines : shippingLines,
-    shippingLines: shippingLines.length ? shippingLines : billingLines,
+    billingLines: billParty.lines.length ? billParty.lines : shipParty.lines,
+    shippingLines: shipParty.lines.length ? shipParty.lines : billParty.lines,
+    shippingPhone: shipParty.phone || buyerPhone,
+    shippingEmail: shipParty.email || buyerEmail,
   };
 }
 
@@ -328,6 +341,7 @@ export async function buildGstInvoiceRenderModel(gstDocumentId: string): Promise
   const supplierTradeName = asText(seller.tradeName);
   const supplierStateCode = asText(seller.stateCode);
   const supplierAddressLines = buildAddressLines(seller);
+  const fallbackSupplierAddress = "Mahadev Nagar, Plot No.3, Nandpuri, Market, Jaipur, Rajasthan, 302019";
 
   const placeOfSupplyCode = asText(doc.placeOfSupplyStateCode || classification.placeOfSupplyStateCode || supplierStateCode, supplierStateCode);
   const placeOfSupply = formatStateDisplay(placeOfSupplyCode, placeOfSupplyCode);
@@ -373,7 +387,7 @@ export async function buildGstInvoiceRenderModel(gstDocumentId: string): Promise
         gstin: asText(seller.gstin, "UNREGISTERED"),
         phone: asText(seller.phone || seller.mobile),
         email: asText(seller.email),
-        lines: supplierAddressLines,
+        lines: supplierAddressLines.length ? supplierAddressLines : [fallbackSupplierAddress],
       },
       buyer: {
         name: partyDetails.billingName,
@@ -384,6 +398,8 @@ export async function buildGstInvoiceRenderModel(gstDocumentId: string): Promise
       },
       shipping: {
         name: partyDetails.shippingName,
+        phone: partyDetails.shippingPhone,
+        email: partyDetails.shippingEmail,
         lines: partyDetails.shippingLines,
       },
       rows,
@@ -399,6 +415,10 @@ export async function buildGstInvoiceRenderModel(gstDocumentId: string): Promise
       declaration: asText(metadata.declarationText || seller.declarationText),
       footer: asText(metadata.footerText || seller.footerText, "This is a system generated GST document."),
       signature: asText(metadata.signatureName || seller.authorizedSignatory),
+      branding: {
+        headerLogoSrc: resolvePublicAsset(["/logos/bigonbuy-logo.svg", "/bigonbuy-logo.svg", "/bigonbuy.svg"]),
+        footerLogoSrc: resolvePublicAsset(["/logos/megaska-logo.svg", "/megaska-logo.svg", "/megaska.svg"]),
+      },
     },
   };
 }
@@ -414,7 +434,7 @@ export async function renderGstPdf(gstDocumentId: string): Promise<GstServiceRes
     .map(
       (line) => `<tr>
       <td>${escapeHtml(line.lineNumber)}</td><td>${escapeHtml(line.sku)}</td><td>${escapeHtml(line.description)}</td><td>${escapeHtml(line.hsn)}</td>
-      <td>${escapeHtml(line.quantity)}</td><td>${line.gross}</td><td>${line.taxable}</td><td>${line.gstRate}</td><td>${line.cgst}</td><td>${line.sgst}</td><td>${line.igst}</td><td>${line.total}</td>
+      <td>${escapeHtml(line.quantity)}</td><td>${line.taxable}</td><td>${line.gstRate}</td><td>${line.cgst}</td><td>${line.sgst}</td><td>${line.igst}</td><td>${line.total}</td>
     </tr>`,
     )
     .join("\n");
@@ -430,31 +450,46 @@ export async function renderGstPdf(gstDocumentId: string): Promise<GstServiceRes
 
   const html = `<!doctype html><html><head><meta charset="utf-8" /><title>${escapeHtml(model.documentNumber)}</title>
     <style>
-      @page { size: A4; margin: 12mm; }
-      body { font-family: Arial, sans-serif; color:#111; font-size:11px; margin:0; }
+      @page { size: A4 landscape; margin: 10mm; }
+      body { font-family: Arial, sans-serif; color:#111; font-size:9px; margin:0; }
       .topline { display:flex; justify-content:space-between; border-bottom:1px solid #111; padding-bottom:8px; margin-bottom:10px; }
       .meta { text-align:right; }
       .grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; margin: 10px 0; }
       .block { border:1px solid #ddd; padding:8px; min-height:90px; }
-      table{ border-collapse:collapse; width:100%; } th,td{ border:1px solid #ddd; padding:4px; } th{ background:#f6f6f6; }
+      .header-logo{ display:flex; justify-content:center; align-items:center; margin-bottom:8px; min-height:34px; font-size:16px; font-weight:700; letter-spacing:1px; text-transform:lowercase; }
+      .header-logo img{ max-height:32px; max-width:220px; object-fit:contain; }
+      table{ border-collapse:collapse; width:100%; table-layout:fixed; } th,td{ border:1px solid #ddd; padding:3px; vertical-align:top; font-size:8px; } th{ background:#f6f6f6; font-size:7.5px; }
+      td:nth-child(2){ word-break:break-word; }
+      td:nth-child(3){ word-break:break-word; }
       .totals{ width:320px; margin-left:auto; margin-top:10px; } .totals td{ border:0; padding:3px 0; }
+      .footer-logo{ margin-top:8px; display:flex; justify-content:flex-end; min-height:22px; font-size:12px; font-weight:700; }
+      .footer-logo img{ max-height:20px; max-width:140px; object-fit:contain; }
       .print-btn{ margin-bottom:8px; }
       @media print { .print-btn { display:none; } }
     </style></head><body>
     <button class="print-btn" onclick="window.print()">Print Invoice</button>
+    <div class="header-logo">${model.branding.headerLogoSrc ? `<img src="${escapeHtml(model.branding.headerLogoSrc)}" alt="BIGONBUY logo" />` : "bigonbuy"}</div>
     <div class="topline"><div><div><strong>GSTIN: ${escapeHtml(model.supplier.gstin)}</strong></div><div>${escapeHtml(model.title)}</div><div>Original for Recipient</div></div>
     <div class="meta"><div><strong>${escapeHtml(model.supplier.tradeName || model.supplier.name)}</strong></div><div>${escapeHtml(model.supplier.name)}</div></div></div>
     <div class="topline"><div>Invoice No: ${escapeHtml(model.documentNumber)}<br/>Invoice Date: ${escapeHtml(model.documentDate)}<br/>Order: ${escapeHtml(model.orderNumber)}</div><div class="meta">Place of Supply: ${escapeHtml(model.placeOfSupply)}<br/>Order Date: ${escapeHtml(model.orderDate)}</div></div>
     <div class="grid">
       ${renderParty("BILLED TO", model.buyer)}
-      ${renderParty("SHIP TO", { name: model.shipping.name, lines: model.shipping.lines })}
+      ${renderParty("SHIP TO", model.shipping)}
       ${renderParty("SUPPLIER", model.supplier)}
     </div>
-    <table><thead><tr><th>#</th><th>SKU</th><th>Item</th><th>HSN</th><th>Qty</th><th>Gross</th><th>Taxable</th><th>GST%</th><th>CGST</th><th>SGST</th><th>IGST</th><th>Total</th></tr></thead><tbody>${rows}</tbody></table>
+    <table>
+      <colgroup>
+        <col style="width:4%"><col style="width:14%"><col style="width:28%"><col style="width:9%"><col style="width:5%">
+        <col style="width:10%"><col style="width:6%"><col style="width:7%"><col style="width:7%"><col style="width:7%"><col style="width:9%">
+      </colgroup>
+      <thead><tr><th>#</th><th>SKU</th><th>Item</th><th>HSN</th><th>Qty</th><th>Taxable</th><th>GST%</th><th>CGST</th><th>SGST</th><th>IGST</th><th>Total</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
     <table class="totals"><tr><td>Taxable</td><td>${model.totals.taxable}</td></tr><tr><td>CGST</td><td>${model.totals.cgst}</td></tr><tr><td>SGST</td><td>${model.totals.sgst}</td></tr><tr><td>IGST</td><td>${model.totals.igst}</td></tr><tr><td>CESS</td><td>${model.totals.cess}</td></tr><tr><td><strong>Total</strong></td><td><strong>${model.totals.total}</strong></td></tr></table>
     <p><strong>Amount in Words:</strong> ${escapeHtml(model.amountInWords)}</p>
     ${model.declaration ? `<p><strong>Declaration:</strong> ${escapeHtml(model.declaration)}</p>` : ""}
     <p>${escapeHtml(model.footer)}</p>
+    <div class="footer-logo">${model.branding.footerLogoSrc ? `<img src="${escapeHtml(model.branding.footerLogoSrc)}" alt="MEGASKA logo" />` : "MEGASKA"}</div>
     ${model.signature ? `<p style="text-align:right; margin-top:18px;">For ${escapeHtml(model.supplier.name)}<br/><br/>${escapeHtml(model.signature)}</p>` : ""}
   </body></html>`;
 
