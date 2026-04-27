@@ -11,17 +11,42 @@ type ShopifyMoneySet = {
   shopMoney?: ShopifyMoney | null;
 };
 
+type ShopifyOrderAddress = {
+  name?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  address1?: string | null;
+  address2?: string | null;
+  city?: string | null;
+  province?: string | null;
+  provinceCode?: string | null;
+  zip?: string | null;
+  country?: string | null;
+  phone?: string | null;
+};
+
+type ShopifyOrderCustomer = {
+  firstName?: string | null;
+  lastName?: string | null;
+  displayName?: string | null;
+  email?: string | null;
+  phone?: string | null;
+} | null;
+
 type GstSyncOrderNode = {
   id: string;
   name?: string | null;
   createdAt?: string | null;
+  email?: string | null;
+  phone?: string | null;
   displayFinancialStatus?: string | null;
   displayFulfillmentStatus?: string | null;
   subtotalPriceSet?: ShopifyMoneySet | null;
   totalTaxSet?: ShopifyMoneySet | null;
   totalPriceSet?: ShopifyMoneySet | null;
-  shippingAddress?: { provinceCode?: string | null; province?: string | null } | null;
-  billingAddress?: { provinceCode?: string | null; province?: string | null } | null;
+  customer?: ShopifyOrderCustomer;
+  shippingAddress?: ShopifyOrderAddress | null;
+  billingAddress?: ShopifyOrderAddress | null;
   lineItems?: {
     nodes?: Array<{
       id: string;
@@ -151,17 +176,47 @@ function extractShopifyEntityId(gid: string | null | undefined): string {
   return raw.split("/").pop() || raw;
 }
 
+function joinName(first?: string | null, last?: string | null) {
+  return [first, last].map((part) => String(part || "").trim()).filter(Boolean).join(" ").trim();
+}
+
+function addressName(address?: ShopifyOrderAddress | null) {
+  return (
+    String(address?.name || "").trim() ||
+    joinName(address?.firstName, address?.lastName) ||
+    null
+  );
+}
+
 function normalizeGstSyncOrder(node: GstSyncOrderNode) {
+  const customerName =
+    String(node.customer?.displayName || "").trim() ||
+    joinName(node.customer?.firstName, node.customer?.lastName) ||
+    addressName(node.shippingAddress) ||
+    addressName(node.billingAddress) ||
+    null;
+
   return {
     id: extractShopifyEntityId(node.id),
     name: String(node.name || "").trim() || extractShopifyEntityId(node.id),
     createdAt: node.createdAt || new Date().toISOString(),
+    financialStatus: String(node.displayFinancialStatus || "").trim() || null,
+    fulfillmentStatus: String(node.displayFulfillmentStatus || "").trim() || null,
+
     currency: String(node.subtotalPriceSet?.shopMoney?.currencyCode || "INR"),
     subtotalPrice: Number(node.subtotalPriceSet?.shopMoney?.amount || 0),
     totalTax: Number(node.totalTaxSet?.shopMoney?.amount || 0),
     totalPrice: Number(node.totalPriceSet?.shopMoney?.amount || 0),
+
+    email: node.email || node.customer?.email || null,
+    phone: node.phone || node.customer?.phone || node.shippingAddress?.phone || node.billingAddress?.phone || null,
+    customerName,
+
+    shippingAddress: node.shippingAddress || null,
+    billingAddress: node.billingAddress || null,
     shippingStateCode: node.shippingAddress?.provinceCode || node.shippingAddress?.province || null,
     billingStateCode: node.billingAddress?.provinceCode || node.billingAddress?.province || null,
+
     lines: (node.lineItems?.nodes || []).map((line) => ({
       id: extractShopifyEntityId(line.id),
       productId: extractShopifyEntityId(line.product?.id || ""),
@@ -174,6 +229,63 @@ function normalizeGstSyncOrder(node: GstSyncOrderNode) {
     })),
   };
 }
+
+const GST_ORDER_FIELDS = `
+  id
+  name
+  createdAt
+  email
+  phone
+  displayFinancialStatus
+  displayFulfillmentStatus
+  subtotalPriceSet { shopMoney { amount currencyCode } }
+  totalTaxSet { shopMoney { amount } }
+  totalPriceSet { shopMoney { amount } }
+  customer {
+    firstName
+    lastName
+    displayName
+    email
+    phone
+  }
+  shippingAddress {
+    name
+    firstName
+    lastName
+    address1
+    address2
+    city
+    province
+    provinceCode
+    zip
+    country
+    phone
+  }
+  billingAddress {
+    name
+    firstName
+    lastName
+    address1
+    address2
+    city
+    province
+    provinceCode
+    zip
+    country
+    phone
+  }
+  lineItems(first: 100) {
+    nodes {
+      id
+      title
+      sku
+      quantity
+      discountedUnitPriceAfterAllDiscountsSet { shopMoney { amount } }
+      product { id }
+      variant { id }
+    }
+  }
+`;
 
 export async function getShopifyOrdersForGstSync(input: {
   from: Date;
@@ -195,27 +307,7 @@ export async function getShopifyOrdersForGstSync(input: {
       query GstOrdersForSync($query: String!) {
         orders(first: 100, sortKey: CREATED_AT, reverse: true, query: $query) {
           nodes {
-            id
-            name
-            createdAt
-            displayFinancialStatus
-            displayFulfillmentStatus
-            subtotalPriceSet { shopMoney { amount currencyCode } }
-            totalTaxSet { shopMoney { amount } }
-            totalPriceSet { shopMoney { amount } }
-            shippingAddress { provinceCode province }
-            billingAddress { provinceCode province }
-            lineItems(first: 100) {
-              nodes {
-                id
-                title
-                sku
-                quantity
-                discountedUnitPriceAfterAllDiscountsSet { shopMoney { amount } }
-                product { id }
-                variant { id }
-              }
-            }
+            ${GST_ORDER_FIELDS}
           }
         }
       }
@@ -237,27 +329,7 @@ export async function getSingleShopifyOrderForGstSync(input: { orderNameOrNumber
       query GstSingleOrderForSync($query: String!) {
         orders(first: 1, sortKey: CREATED_AT, reverse: true, query: $query) {
           nodes {
-            id
-            name
-            createdAt
-            displayFinancialStatus
-            displayFulfillmentStatus
-            subtotalPriceSet { shopMoney { amount currencyCode } }
-            totalTaxSet { shopMoney { amount } }
-            totalPriceSet { shopMoney { amount } }
-            shippingAddress { provinceCode province }
-            billingAddress { provinceCode province }
-            lineItems(first: 100) {
-              nodes {
-                id
-                title
-                sku
-                quantity
-                discountedUnitPriceAfterAllDiscountsSet { shopMoney { amount } }
-                product { id }
-                variant { id }
-              }
-            }
+            ${GST_ORDER_FIELDS}
           }
         }
       }
