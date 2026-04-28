@@ -1,5 +1,4 @@
 import { prisma } from "../db/prisma";
-import fs from 'fs'
 const headerLogo = fs.readFileSync('./public/logos/header-logo.png', 'base64')
 const footerLogo = fs.readFileSync('./public/logos/footer-logo.png', 'base64')
 import { getGstInvoiceById } from "./invoice";
@@ -18,7 +17,13 @@ export interface GstPdfRenderPayload {
     templateType: "invoice" | "credit_note" | "debit_note";
   };
 }
+function publicAssetUrl(path: string): string {
+  const base =
+    process.env.NEXT_PUBLIC_APP_URL ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '')
 
+  return base ? `${base.replace(/\/$/, '')}${path}` : path
+}
 export interface GstInvoiceRenderModel {
   gstDocumentId: string;
   templateType: "invoice" | "credit_note" | "debit_note";
