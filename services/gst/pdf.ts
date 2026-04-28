@@ -15,13 +15,7 @@ export interface GstPdfRenderPayload {
     templateType: "invoice" | "credit_note" | "debit_note";
   };
 }
-function publicAssetUrl(path: string): string {
-  const base =
-    process.env.NEXT_PUBLIC_APP_URL ||
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '')
 
-  return base ? `${base.replace(/\/$/, '')}${path}` : path
-}
 export interface GstInvoiceRenderModel {
   gstDocumentId: string;
   templateType: "invoice" | "credit_note" | "debit_note";
@@ -145,6 +139,13 @@ function buildAddressLines(source: Record<string, unknown>): string[] {
     .filter(Boolean);
 }
 
+function publicAssetUrl(path: string): string {
+  const base =
+    process.env.NEXT_PUBLIC_APP_URL ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "");
+
+  return base ? `${base.replace(/\/$/, "")}${path}` : path;
+}
 
 function numberToWords(value: number): string {
   if (!Number.isFinite(value) || value <= 0) return "Zero Rupees Only";
@@ -482,10 +483,10 @@ export async function buildGstInvoiceRenderModel(gstDocumentId: string): Promise
       declaration: asText(metadata.declarationText || seller.declarationText),
       footer: asText(metadata.footerText || seller.footerText, "This is a system generated GST document."),
       signature: asText(metadata.signatureName || seller.authorizedSignatory),
-    branding: {
-  headerLogoSrc: publicAssetUrl("/logos/header-logo.png"),
-  footerLogoSrc: publicAssetUrl("/logos/footer-logo.avif"),
-},
+      branding: {
+        headerLogoSrc: publicAssetUrl("/logos/header-logo.png"),
+        footerLogoSrc: publicAssetUrl("/logos/footer-logo.avif"),
+      },
     },
   };
 }
