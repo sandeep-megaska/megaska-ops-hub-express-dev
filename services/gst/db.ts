@@ -83,7 +83,9 @@ export interface GstPrismaClient {
     create: (args: unknown) => Promise<GstDocumentRecord>;
     update: (args: unknown) => Promise<GstDocumentRecord>;
     findUnique: (args: unknown) => Promise<GstDocumentRecord | null>;
+    findFirst: (args: unknown) => Promise<GstDocumentRecord | null>;
     findMany: (args: unknown) => Promise<GstDocumentRecord[]>;
+    count: (args: unknown) => Promise<number>;
   };
   gstDocumentLine: {
     createMany: (args: unknown) => Promise<{ count: number }>;
