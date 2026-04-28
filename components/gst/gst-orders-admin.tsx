@@ -76,9 +76,10 @@ function extractGeneratedDocumentId(data: unknown, orderImportId: string): strin
 export function GstOrdersAdmin() {
   const [from, setFrom] = useState(dateThirtyDaysAgo)
   const [to, setTo] = useState(dateToday)
-  const [rows, setRows] = useState<OrderRow[]>([])
- const [generatingId, setGeneratingId] = useState<string | null>(null)
-  const [result, setResult] = useState<unknown>()
+ const [rows, setRows] = useState<OrderRow[]>([])
+const [loading, setLoading] = useState(false)
+const [generatingId, setGeneratingId] = useState<string | null>(null)
+const [result, setResult] = useState<unknown>()
   const [error, setError] = useState<string>()
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({})
 
@@ -178,6 +179,8 @@ export function GstOrdersAdmin() {
   onDownloadPdf(documentId)
   setGeneratingId(null)
 }
+  const printFrameRef = useRef<HTMLIFrameElement | null>(null)
+const [printHtml, setPrintHtml] = useState<string | null>(null)
   async function onPrintInvoice(invoiceDocumentId: string) {
     setLoading(true)
     setError(undefined)
