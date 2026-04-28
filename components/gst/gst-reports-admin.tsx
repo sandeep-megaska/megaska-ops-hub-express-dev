@@ -11,6 +11,18 @@ type ReportWarning = {
   lineNumber?: number
 }
 
+function isReportWarning(value: unknown): value is ReportWarning {
+  if (typeof value !== 'object' || value === null) return false
+  const record = value as Record<string, unknown>
+  return (
+    typeof record.code === 'string' &&
+    typeof record.message === 'string' &&
+    typeof record.documentId === 'string' &&
+    typeof record.documentNumber === 'string' &&
+    (typeof record.lineNumber === 'undefined' || typeof record.lineNumber === 'number')
+  )
+}
+
 const dateToday = new Date().toISOString().slice(0, 10)
 const monthStart = new Date()
 monthStart.setUTCDate(1)
@@ -65,7 +77,7 @@ export function GstReportsAdmin() {
       return
     }
 
-    const warnings = Array.isArray(runRes.data.warnings) ? runRes.data.warnings : []
+    const warnings = Array.isArray(runRes.data.warnings) ? runRes.data.warnings.filter(isReportWarning) : []
     setB2cWarnings(warnings)
 
     if (typeof (runRes.data as Record<string, unknown>).csv === 'string' && String((runRes.data as Record<string, unknown>).csv).length > 0) {
