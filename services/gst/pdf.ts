@@ -1,5 +1,4 @@
 import { prisma } from "../db/prisma";
-import { existsSync } from "node:fs";
 import { getGstInvoiceById } from "./invoice";
 import { getGstNoteById } from "./notes";
 import { getSingleShopifyOrderForGstSync } from "./shopify-runtime-admin";
@@ -141,10 +140,7 @@ function buildAddressLines(source: Record<string, unknown>): string[] {
 }
 
 function resolvePublicAsset(candidates: string[]): string | null {
-  for (const candidate of candidates) {
-    if (existsSync(`./public${candidate}`)) return candidate;
-  }
-  return null;
+  return candidates.find((candidate) => candidate.startsWith("/")) || null;
 }
 
 function numberToWords(value: number): string {
