@@ -77,7 +77,7 @@ export function GstOrdersAdmin() {
   const [from, setFrom] = useState(dateThirtyDaysAgo)
   const [to, setTo] = useState(dateToday)
   const [rows, setRows] = useState<OrderRow[]>([])
-  const [loading, setLoading] = useState(false)
+ const [generatingId, setGeneratingId] = useState<string | null>(null)
   const [result, setResult] = useState<unknown>()
   const [error, setError] = useState<string>()
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({})
