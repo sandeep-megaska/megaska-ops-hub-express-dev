@@ -483,10 +483,14 @@ export async function buildGstInvoiceRenderModel(gstDocumentId: string): Promise
       declaration: asText(metadata.declarationText || seller.declarationText),
       footer: asText(metadata.footerText || seller.footerText, "This is a system generated GST document."),
       signature: asText(metadata.signatureName || seller.authorizedSignatory),
-      branding: {
-        headerLogoSrc: resolvePublicAsset(["/logos/bigonbuy-logo.svg", "/bigonbuy-logo.svg", "/bigonbuy.svg"]),
-        footerLogoSrc: resolvePublicAsset(["/logos/megaska-logo.svg", "/megaska-logo.svg", "/megaska.svg"]),
-      },
+     branding: {
+  headerLogoSrc: resolvePublicAsset([
+    "/logos/header-logo.png"
+  ]),
+  footerLogoSrc: resolvePublicAsset([
+    "/logos/footer-logo.png"
+  ]),
+}
     },
   };
 }
