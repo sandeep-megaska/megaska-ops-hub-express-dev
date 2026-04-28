@@ -420,6 +420,16 @@ async function ensureBuyerParty(input: GstInvoiceDraftInput) {
 }
 
 export async function buildInvoiceDraft(input: GstInvoiceDraftInput): Promise<GstServiceResult<GstInvoiceDraftResult>> {
+  const diagnosticState: {
+    phase: string;
+    gstDocumentCreateAttempted: boolean;
+    gstDocumentCreateFailedReason: string | null;
+  } = {
+    phase: "VALIDATE_DRAFT_PAYLOAD",
+    gstDocumentCreateAttempted: false,
+    gstDocumentCreateFailedReason: null,
+  };
+
   try {
     const payloadValidation = validateDocumentDraftPayload(input);
     if (!payloadValidation.ok || !payloadValidation.data) {
@@ -462,6 +472,7 @@ export async function buildInvoiceDraft(input: GstInvoiceDraftInput): Promise<Gs
 
     const documentDate = normalizeDate(input.documentDate);
 
+    diagnosticState.phase = "CLASSIFY_SUPPLY";
     const classification = classifySupply({
       sellerStateCode: settings.stateCode,
       billingStateCode: payloadData.normalizedBillingStateCode || input.billingStateCode,
@@ -483,6 +494,7 @@ export async function buildInvoiceDraft(input: GstInvoiceDraftInput): Promise<Gs
 
     const classificationData = classification.data;
 
+    diagnosticState.phase = "COMPUTE_TOTALS";
     const taxResult = computeTotals(input.lines, classificationData.isInterstate, {
       priceIncludesTax: settings.priceIncludesTax !== false,
       cessRates: input.lines.map((line) => Number(line.cessRate || 0)),
@@ -497,6 +509,7 @@ export async function buildInvoiceDraft(input: GstInvoiceDraftInput): Promise<Gs
 
     const taxData = taxResult.data;
 
+    diagnosticState.phase = "RESERVE_GST_NUMBER";
     const numberingResult = await reserveGstNumber({
       gstSettingsId: settings.id,
       documentType: "TAX_INVOICE",
@@ -523,6 +536,7 @@ export async function buildInvoiceDraft(input: GstInvoiceDraftInput): Promise<Gs
         customerDetails.buyer.stateCode,
     };
 
+    diagnosticState.phase = "ENSURE_BUYER_PARTY";
     const buyerParty = await ensureBuyerParty({
       ...input,
       buyer: resolvedBuyer,
@@ -594,6 +608,7 @@ export async function buildInvoiceDraft(input: GstInvoiceDraftInput): Promise<Gs
       createPayloadKeys: Object.keys(createPayload).sort(),
     });
 
+    diagnosticState.phase = "PERSIST_GST_DOCUMENT";
     const created = await gstDb.$transaction(async (tx) => {
       const txWithRaw = tx as typeof tx & {
         $queryRaw: <T = unknown>(query: TemplateStringsArray | Prisma.Sql, ...values: unknown[]) => Promise<T>;
@@ -646,9 +661,12 @@ export async function buildInvoiceDraft(input: GstInvoiceDraftInput): Promise<Gs
       let resolvedDocument: { id: string; documentNumber: string } | null = null;
 
       if (requiresLegacyDocumentInsert) {
+        diagnosticState.gstDocumentCreateAttempted = true;
         const metadataJson = createPayload.metadata ?? {};
-        const insertedDocuments = await txWithRaw.$queryRaw<Array<{ id: string; documentNumber: string }>>(Prisma.sql`
-          INSERT INTO "GstDocument" (
+        let insertedDocuments: Array<{ id: string; documentNumber: string }>;
+        try {
+          insertedDocuments = await txWithRaw.$queryRaw<Array<{ id: string; documentNumber: string }>>(Prisma.sql`
+            INSERT INTO "GstDocument" (
             "id",
             "documentType",
             "status",
@@ -705,39 +723,50 @@ export async function buildInvoiceDraft(input: GstInvoiceDraftInput): Promise<Gs
             ${JSON.stringify(metadataJson)}::jsonb,
             ${createPayload.updatedAt}
           )
-          RETURNING "id", "documentNumber"
-        `);
+            RETURNING "id", "documentNumber"
+          `);
+        } catch (error) {
+          diagnosticState.gstDocumentCreateFailedReason = error instanceof Error ? error.message : String(error);
+          throw error;
+        }
 
         resolvedDocument = insertedDocuments[0] ?? null;
       } else {
-        const createdDocument = await tx.gstDocument.create({
-          data: {
-            id: createPayload.id,
-            documentType: createPayload.documentType,
-            status: createPayload.status,
-            documentNumber: createPayload.documentNumber,
-            documentDate: createPayload.documentDate,
-            gstSettingsId: createPayload.gstSettingsId,
-            shopifyOrderId: createPayload.shopifyOrderId,
-            shopifyOrderName: createPayload.shopifyOrderName,
-            sourceOrderId: createPayload.sourceOrderId,
-            sourceOrderNumber: createPayload.sourceOrderNumber,
-            sourceReference: createPayload.sourceReference,
-            supplyType: createPayload.supplyType,
-            placeOfSupplyStateCode: createPayload.placeOfSupplyStateCode,
-            isInterstate: createPayload.isInterstate,
-            currency: createPayload.currency,
-            taxableAmount: createPayload.taxableAmount,
-            cgstAmount: createPayload.cgstAmount,
-            sgstAmount: createPayload.sgstAmount,
-            igstAmount: createPayload.igstAmount,
-            cessAmount: createPayload.cessAmount,
-            totalAmount: createPayload.totalAmount,
-            jsonSnapshot: createPayload.jsonSnapshot,
-            metadata: createPayload.metadata,
-            updatedAt: createPayload.updatedAt,
-          },
-        });
+        diagnosticState.gstDocumentCreateAttempted = true;
+        let createdDocument;
+        try {
+          createdDocument = await tx.gstDocument.create({
+            data: {
+              id: createPayload.id,
+              documentType: createPayload.documentType,
+              status: createPayload.status,
+              documentNumber: createPayload.documentNumber,
+              documentDate: createPayload.documentDate,
+              gstSettingsId: createPayload.gstSettingsId,
+              shopifyOrderId: createPayload.shopifyOrderId,
+              shopifyOrderName: createPayload.shopifyOrderName,
+              sourceOrderId: createPayload.sourceOrderId,
+              sourceOrderNumber: createPayload.sourceOrderNumber,
+              sourceReference: createPayload.sourceReference,
+              supplyType: createPayload.supplyType,
+              placeOfSupplyStateCode: createPayload.placeOfSupplyStateCode,
+              isInterstate: createPayload.isInterstate,
+              currency: createPayload.currency,
+              taxableAmount: createPayload.taxableAmount,
+              cgstAmount: createPayload.cgstAmount,
+              sgstAmount: createPayload.sgstAmount,
+              igstAmount: createPayload.igstAmount,
+              cessAmount: createPayload.cessAmount,
+              totalAmount: createPayload.totalAmount,
+              jsonSnapshot: createPayload.jsonSnapshot,
+              metadata: createPayload.metadata,
+              updatedAt: createPayload.updatedAt,
+            },
+          });
+        } catch (error) {
+          diagnosticState.gstDocumentCreateFailedReason = error instanceof Error ? error.message : String(error);
+          throw error;
+        }
 
         resolvedDocument = {
           id: createdDocument.id,
@@ -844,6 +873,7 @@ export async function buildInvoiceDraft(input: GstInvoiceDraftInput): Promise<Gs
     };
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
+    const stack = error instanceof Error ? error.stack : undefined;
 
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       console.error("[GST INVOICE] PrismaClientKnownRequestError", {
@@ -855,9 +885,20 @@ export async function buildInvoiceDraft(input: GstInvoiceDraftInput): Promise<Gs
 
     console.error("[GST INVOICE] buildInvoiceDraft failed", {
       error: reason,
+      stack,
+      diagnosticState,
     });
 
-    return { ok: false, error: toInvoiceDraftError(reason) };
+    return {
+      ok: false,
+      error: toInvoiceDraftError(reason),
+      errorDetails: {
+        phase: diagnosticState.phase,
+        stack,
+        gstDocumentCreateAttempted: diagnosticState.gstDocumentCreateAttempted,
+        gstDocumentCreateFailedReason: diagnosticState.gstDocumentCreateFailedReason,
+      },
+    };
   }
 }
 

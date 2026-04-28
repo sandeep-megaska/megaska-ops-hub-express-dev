@@ -60,6 +60,20 @@ function parseJson(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
 }
 
+function extractSkuList(lines: unknown): string[] {
+  if (!Array.isArray(lines)) return [];
+  return Array.from(
+    new Set(
+      lines
+        .map((line) => {
+          const row = line && typeof line === "object" ? (line as Record<string, unknown>) : {};
+          return String(row.sku || "").trim();
+        })
+        .filter(Boolean)
+    )
+  );
+}
+
 function normalizeReadinessWarnings(readinessErrors: unknown, priceIncludesTax: boolean): string[] {
   const warnings = Array.isArray(readinessErrors) ? readinessErrors.map((warning) => String(warning || "").trim()).filter(Boolean) : [];
   if (!priceIncludesTax) {
@@ -270,6 +284,9 @@ export async function generateInvoiceBatch(input: BatchGenerateInput) {
     }
 
     const snapshot = parseJson(order.snapshot);
+    const shippingAddress = snapshot.shippingAddress && typeof snapshot.shippingAddress === "object" ? (snapshot.shippingAddress as Record<string, unknown>) : null;
+    const customer = snapshot.customer && typeof snapshot.customer === "object" ? (snapshot.customer as Record<string, unknown>) : null;
+    const skuList = extractSkuList(order.lines);
     const customerDefaultStateCode = extractCustomerDefaultStateCode(snapshot);
     const invoiceLines: GstDocumentLineInput[] = [];
     const lineErrors: Array<Record<string, unknown>> = [];
@@ -306,7 +323,22 @@ export async function generateInvoiceBatch(input: BatchGenerateInput) {
 
     if (lineErrors.length > 0) {
       summary.failed += 1;
-      summary.results.push({ id, status: "FAILED", error: "Missing SKU mappings", lineErrors });
+      summary.results.push({
+        id,
+        orderName: String(order.shopifyOrderName || order.shopifyOrderId || ""),
+        orderNumber: String(order.shopifyOrderName || "").replace(/^#/, ""),
+        skuList,
+        customerPresent: Boolean(customer || snapshot.customerName || snapshot.customerEmail || snapshot.email),
+        shippingAddressPresent: Boolean(shippingAddress),
+        readinessWarnings: readinessErrors,
+        status: "FAILED",
+        error: "Missing SKU mappings",
+        lineErrors,
+        invoiceGenerationErrorMessage: "Missing SKU mappings",
+        invoiceGenerationStackTrace: null,
+        gstDocumentCreateAttempted: false,
+        gstDocumentCreateFailureReason: "Invoice draft creation skipped because SKU mappings are missing",
+      });
       continue;
     }
 
@@ -369,7 +401,29 @@ export async function generateInvoiceBatch(input: BatchGenerateInput) {
 
     if (!invoice.ok || !invoice.data) {
       summary.failed += 1;
-      summary.results.push({ id, status: "FAILED", error: invoice.error || "Invoice generation failed", readinessErrors });
+      summary.results.push({
+        id,
+        orderName: String(order.shopifyOrderName || order.shopifyOrderId || ""),
+        orderNumber: String(order.shopifyOrderName || "").replace(/^#/, ""),
+        skuList,
+        customerPresent: Boolean(customer || snapshot.customerName || snapshot.customerEmail || snapshot.email),
+        shippingAddressPresent: Boolean(shippingAddress),
+        readinessWarnings: readinessErrors,
+        status: "FAILED",
+        error: invoice.error || "Invoice generation failed",
+        invoiceGenerationErrorMessage: invoice.error || "Invoice generation failed",
+        invoiceGenerationStackTrace:
+          invoice.errorDetails && typeof invoice.errorDetails.stack === "string"
+            ? invoice.errorDetails.stack
+            : null,
+        gstDocumentCreateAttempted: Boolean(invoice.errorDetails?.gstDocumentCreateAttempted),
+        gstDocumentCreateFailureReason:
+          invoice.errorDetails && typeof invoice.errorDetails.gstDocumentCreateFailedReason === "string"
+            ? invoice.errorDetails.gstDocumentCreateFailedReason
+            : invoice.errorDetails && typeof invoice.errorDetails.phase === "string"
+              ? `Failed before GstDocument.create during phase ${invoice.errorDetails.phase}`
+              : "Unknown failure before GstDocument.create",
+      });
       continue;
     }
 

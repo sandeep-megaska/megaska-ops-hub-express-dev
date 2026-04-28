@@ -319,9 +319,31 @@ export async function prepareB2cSalesRegisterReport(input: PrepareB2cReportInput
 
     const generatedSummary = generated.data;
     if (generatedSummary?.failed) {
+      const failedOrderDiagnostics = (Array.isArray(generatedSummary.results) ? generatedSummary.results : [])
+        .filter((result) => String(result.status || "") === "FAILED")
+        .slice(0, 3)
+        .map((result) => ({
+          orderImportId: result.id || null,
+          orderName: result.orderName || null,
+          orderNumber: result.orderNumber || null,
+          skuList: Array.isArray(result.skuList) ? result.skuList : [],
+          customerPresence: result.customerPresent ? "present" : "missing",
+          shippingAddressPresence: result.shippingAddressPresent ? "present" : "missing",
+          readinessWarnings: Array.isArray(result.readinessWarnings) ? result.readinessWarnings : [],
+          invoiceGenerationErrorMessage: result.invoiceGenerationErrorMessage || result.error || "Unknown error",
+          invoiceGenerationStackTrace: result.invoiceGenerationStackTrace || null,
+          gstDocumentCreateAttempted: Boolean(result.gstDocumentCreateAttempted),
+          gstDocumentCreateFailureReason: result.gstDocumentCreateFailureReason || null,
+        }));
+
+      console.error("[GST_B2C_REPORT][INVOICE_GENERATION_FAILURE_SUMMARY]", {
+        failedCount: generatedSummary.failed,
+        firstFailedOrders: failedOrderDiagnostics,
+      });
+
       warnings.push({
         code: "INVOICE_GENERATION_FAILED",
-        message: `${generatedSummary.failed} order(s) failed during invoice generation`,
+        message: `${generatedSummary.failed} order(s) failed during invoice generation. First failures: ${JSON.stringify(failedOrderDiagnostics)}`,
         documentId: "",
         documentNumber: "",
       });
