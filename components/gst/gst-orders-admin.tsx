@@ -144,42 +144,40 @@ export function GstOrdersAdmin() {
   }
 
   async function onGenerate(id: string) {
-    setLoading(true)
-    setError(undefined)
+  setGeneratingId(id)
+  setError(undefined)
 
-    const res = await generateBatchInvoices({ orderImportIds: [id] })
-    if (!res.ok) {
-      setError(res.error)
-      setLoading(false)
-      return
-    }
+  const res = await generateBatchInvoices({ orderImportIds: [id] })
 
-   setResult(res.data)
+  if (!res.ok) {
+    setError(res.error)
+    setGeneratingId(null)
+    return
+  }
 
-let documentId = extractGeneratedDocumentId(res.data, id)
+  setResult(res.data)
 
-if (documentId) {
+  let documentId = extractGeneratedDocumentId(res.data, id)
+
+  if (documentId) {
+    onDownloadPdf(documentId)   // ✅ immediate
+    setGeneratingId(null)
+    void loadOrders()
+    return
+  }
+
+  const refreshed = await loadOrders()
+  documentId = refreshed.find(r => r.id === id)?.invoiceDocumentId || null
+
+  if (!documentId) {
+    setError('Invoice exists but not visible yet')
+    setGeneratingId(null)
+    return
+  }
+
   onDownloadPdf(documentId)
-  void loadOrders()
-  setLoading(false)
-  return
+  setGeneratingId(null)
 }
-
-const refreshedRows = await loadOrders()
-documentId = refreshedRows.find((row) => row.id === id)?.invoiceDocumentId || null
-
-if (!documentId) {
-  setError('Invoice exists, but no PDF document id was found. Refresh the order list and use Download PDF.')
-  setLoading(false)
-  return
-}
-
-onDownloadPdf(documentId)
-setLoading(false)  }
-
-  const printFrameRef = useRef<HTMLIFrameElement | null>(null)
-  const [printHtml, setPrintHtml] = useState<string | null>(null)
-
   async function onPrintInvoice(invoiceDocumentId: string) {
     setLoading(true)
     setError(undefined)
@@ -300,7 +298,12 @@ setLoading(false)  }
                       <td className="px-3 py-2 text-xs text-amber-700">{unmappedSkus.length > 0 ? unmappedSkus.join(', ') : 'None'}</td>
                       <td className="px-3 py-2">{row.invoiceStatus}</td>
                       <td className="space-x-2 whitespace-nowrap px-3 py-2">
-                        <button className="rounded-lg border border-gray-300 px-3 py-1.5" onClick={() => void onGenerate(id)} disabled={loading}>{loading ? 'Generating...' : 'Generate Invoice'}</button>
+                      <button
+  onClick={() => void onGenerate(id)}
+  disabled={generatingId === id}
+>
+  {generatingId === id ? 'Generating...' : 'Generate Invoice'}
+</button>
                         {row.invoiceDocumentId ? (
                           <>
                             <button className="rounded-lg border border-gray-300 px-3 py-1.5" onClick={() => void onPrintInvoice(row.invoiceDocumentId!)}>Print Invoice</button>
