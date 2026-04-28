@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { listSkuTaxMappings, upsertSkuTaxMapping } from "../../../../../services/gst/sku-tax-map";
+import {
+  listSkuTaxMappings,
+  listUnmappedSkusFromImportedOrders,
+  upsertSkuTaxMapping,
+} from "../../../../../services/gst/sku-tax-map";
 import { getShopDomainFromRequest, resolveShopConfig } from "../../../../../services/shopify/shop";
 
 export const runtime = "nodejs";
@@ -8,11 +12,18 @@ export async function GET(req: NextRequest) {
   const shopDomain = getShopDomainFromRequest(req);
   const shop = await resolveShopConfig(shopDomain);
   const search = req.nextUrl.searchParams.get("search") || undefined;
+  const view = (req.nextUrl.searchParams.get("view") || "").toLowerCase();
 
-  const result = await listSkuTaxMappings({
-    shopId: shop.id,
-    search,
-  });
+  const result =
+    view === "unmapped"
+      ? await listUnmappedSkusFromImportedOrders({
+          shopId: shop.id,
+          search,
+        })
+      : await listSkuTaxMappings({
+          shopId: shop.id,
+          search,
+        });
 
   if (!result.ok) {
     return NextResponse.json({ ok: false, error: result.error || "Failed to list SKU mappings" }, { status: 400 });

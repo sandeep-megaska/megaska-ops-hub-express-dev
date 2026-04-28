@@ -114,6 +114,115 @@ export async function listSkuTaxMappings(input: { shopId?: string | null; search
   return { ok: true, data: rows };
 }
 
+export async function listUnmappedSkusFromImportedOrders(input: {
+  shopId?: string | null;
+  search?: string;
+}): Promise<GstServiceResult<Array<Record<string, unknown>>>> {
+  const where: Record<string, unknown> = { mappingStatus: "UNMAPPED" };
+  if (input.shopId) {
+    where.orderImport = { shopId: norm(input.shopId) };
+  }
+
+  const search = norm(input.search).toLowerCase();
+  const rows = await skuMapDb.gstOrderImportLine.findMany({
+    where,
+    select: {
+      sku: true,
+      title: true,
+      updatedAt: true,
+      orderImport: {
+        select: {
+          id: true,
+          shopifyOrderName: true,
+        },
+      },
+    },
+    take: 10000,
+    orderBy: [{ updatedAt: "desc" }],
+  });
+
+  const usage = new Map<
+    string,
+    {
+      sku: string;
+      styleCode: string | null;
+      sampleTitle: string;
+      orderIds: Set<string>;
+      orderNames: Set<string>;
+      lineCount: number;
+      lastSeenAt: string | null;
+    }
+  >();
+
+  for (const row of rows) {
+    const sku = norm(row.sku);
+    const styleCode = deriveStyleCodeFromSku(sku);
+    if (!sku && !styleCode) {
+      continue;
+    }
+
+    if (search) {
+      const haystack = `${sku} ${styleCode || ""} ${norm(row.title)}`.toLowerCase();
+      if (!haystack.includes(search)) {
+        continue;
+      }
+    }
+
+    const key = `${sku || "_"}|${styleCode || "_"}`;
+    const existing = usage.get(key) || {
+      sku,
+      styleCode,
+      sampleTitle: norm(row.title),
+      orderIds: new Set<string>(),
+      orderNames: new Set<string>(),
+      lineCount: 0,
+      lastSeenAt: null,
+    };
+    existing.lineCount += 1;
+
+    const orderImport = row.orderImport as { id?: unknown; shopifyOrderName?: unknown } | undefined;
+    const orderId = norm(orderImport?.id);
+    if (orderId) {
+      existing.orderIds.add(orderId);
+    }
+    const orderName = norm(orderImport?.shopifyOrderName);
+    if (orderName) {
+      existing.orderNames.add(orderName);
+    }
+    if (!existing.sampleTitle) {
+      existing.sampleTitle = norm(row.title);
+    }
+
+    const updatedAt = row.updatedAt instanceof Date ? row.updatedAt.toISOString() : null;
+    if (!existing.lastSeenAt || (updatedAt && updatedAt > existing.lastSeenAt)) {
+      existing.lastSeenAt = updatedAt;
+    }
+
+    usage.set(key, existing);
+  }
+
+  const data: Array<Record<string, unknown>> = [];
+  for (const item of usage.values()) {
+    const mapping = await resolveSkuTaxMap({ shopId: input.shopId || null, sku: item.sku });
+    if (mapping.ok && mapping.data) {
+      continue;
+    }
+
+    data.push({
+      sku: item.sku,
+      styleCode: item.styleCode,
+      sampleTitle: item.sampleTitle,
+      orderCount: item.orderIds.size,
+      lineCount: item.lineCount,
+      sampleOrders: Array.from(item.orderNames).slice(0, 5),
+      lastSeenAt: item.lastSeenAt,
+    });
+  }
+
+  data.sort((a, b) => Number(b.lineCount || 0) - Number(a.lineCount || 0));
+  return { ok: true, data };
+}
+
 export async function resolveSkuTaxMap(input: {
   shopId?: string | null;
   sku?: string | null;

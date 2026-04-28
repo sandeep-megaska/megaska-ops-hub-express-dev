@@ -95,9 +95,10 @@ export const saveDefaultGstTemplate = async (payload: Record<string, unknown>) =
   return { ok: true, data: (res.data as { template?: Record<string, unknown> })?.template || {} } as const
 }
 
-export const listSkuTaxMappings = (query: { search?: string } = {}) => {
+export const listSkuTaxMappings = (query: { search?: string; view?: 'all' | 'unmapped' } = {}) => {
   const search = new URLSearchParams()
   if (query.search) search.set('search', query.search)
+  if (query.view === 'unmapped') search.set('view', 'unmapped')
   const suffix = search.toString() ? `?${search.toString()}` : ''
   return request<Array<Record<string, unknown>>>(`/api/gst/products/sku-mappings${suffix}`)
 }
