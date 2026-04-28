@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
 
   const result = await generateReportRun({
     gstSettingsId: settings.data.id,
-    reportType: String(body.reportType || "invoice_register"),
+    reportType: String(body.reportType || "B2C_SALES_REGISTER"),
     periodStart,
     periodEnd,
     format: body.format === "XLSX" ? "XLSX" : "CSV",

@@ -1,5 +1,7 @@
 import { createHash } from "crypto";
 import { gstDb } from "./db";
+import { generateB2cSalesRegisterCsv } from "./reports/b2c-sales-register";
+import type { ReportWarning } from "./reports/types";
 import type { GstServiceResult } from "./types";
 
 export interface GenerateReportRunInput {
@@ -23,6 +25,7 @@ export interface GstReportRunRecord {
   rowCount: number;
   generatedAt: Date | null;
   errorMessage: string | null;
+  warnings?: ReportWarning[];
 }
 
 export interface ReportRunFilters {
@@ -49,8 +52,16 @@ function toIsoDate(value: Date | string): Date {
   return value instanceof Date ? value : new Date(value);
 }
 
+function normalizeReportType(reportType: string): string {
+  const normalized = reportType.trim().toLowerCase();
+  if (normalized === "b2c_sales_register" || normalized === "b2c-sales-register") {
+    return "B2C_SALES_REGISTER";
+  }
+  return normalized;
+}
+
 function normalizeTypeFilter(reportType: string): string[] | undefined {
-  if (reportType === "invoice_register" || reportType === "b2c_sales_register") return ["TAX_INVOICE"];
+  if (reportType === "invoice_register") return ["TAX_INVOICE"];
   if (reportType === "notes_register") return ["CREDIT_NOTE", "DEBIT_NOTE"];
   if (reportType === "credit_note_register") return ["CREDIT_NOTE"];
   if (reportType === "debit_note_register") return ["DEBIT_NOTE"];
@@ -105,6 +116,10 @@ function toDataUrl(csv: string): string {
 }
 
 function pickRun(record: Record<string, unknown>): GstReportRunRecord {
+  const filters = (record.filters && typeof record.filters === "object" ? (record.filters as Record<string, unknown>) : {}) as {
+    warnings?: ReportWarning[];
+  };
+
   return {
     id: String(record.id),
     gstSettingsId: String(record.gstSettingsId),
@@ -117,6 +132,7 @@ function pickRun(record: Record<string, unknown>): GstReportRunRecord {
     rowCount: Number(record.rowCount || 0),
     generatedAt: record.generatedAt ? new Date(String(record.generatedAt)) : null,
     errorMessage: record.errorMessage ? String(record.errorMessage) : null,
+    warnings: Array.isArray(filters.warnings) ? filters.warnings : [],
   };
 }
 
@@ -131,10 +147,12 @@ export async function generateReportRun(input: GenerateReportRunInput): Promise<
     return { ok: false, error: "Only CSV format is supported right now" };
   }
 
+  const normalizedReportType = normalizeReportType(input.reportType);
+
   const reportRun = await gstDb.gstReportRun.create({
     data: {
       gstSettingsId: input.gstSettingsId,
-      reportType: input.reportType,
+      reportType: normalizedReportType,
       periodStart,
       periodEnd,
       format: input.format,
@@ -145,17 +163,35 @@ export async function generateReportRun(input: GenerateReportRunInput): Promise<
   });
 
   try {
-    const typeFilter = normalizeTypeFilter(input.reportType);
-    const documents = await gstDb.gstDocument.findMany({
-      where: {
-        gstSettingsId: input.gstSettingsId,
-        documentDate: { gte: periodStart, lte: periodEnd },
-        ...(typeFilter ? { documentType: { in: typeFilter } } : {}),
-      },
-      orderBy: [{ documentDate: "asc" }, { documentNumber: "asc" }],
-    });
+    let csv: string;
+    let rowCount = 0;
+    let warnings: ReportWarning[] = [];
 
-    const { csv, rowCount } = toCsv(documents as ReportDocument[]);
+    if (normalizedReportType === "B2C_SALES_REGISTER") {
+      const result = await generateB2cSalesRegisterCsv({
+        gstSettingsId: input.gstSettingsId,
+        periodStart,
+        periodEnd,
+      });
+      csv = result.csv;
+      rowCount = result.rowCount;
+      warnings = result.warnings;
+    } else {
+      const typeFilter = normalizeTypeFilter(normalizedReportType);
+      const documents = await gstDb.gstDocument.findMany({
+        where: {
+          gstSettingsId: input.gstSettingsId,
+          documentDate: { gte: periodStart, lte: periodEnd },
+          ...(typeFilter ? { documentType: { in: typeFilter } } : {}),
+        },
+        orderBy: [{ documentDate: "asc" }, { documentNumber: "asc" }],
+      });
+
+      const result = toCsv(documents as ReportDocument[]);
+      csv = result.csv;
+      rowCount = result.rowCount;
+    }
+
     const checksum = createHash("sha256").update(csv).digest("hex");
     const fileUrl = toDataUrl(csv);
 
@@ -166,6 +202,10 @@ export async function generateReportRun(input: GenerateReportRunInput): Promise<
         rowCount,
         fileUrl,
         checksum,
+        filters: {
+          ...((input.filters || {}) as Record<string, unknown>),
+          warnings,
+        },
         generatedAt: new Date(),
         errorMessage: null,
       },
