@@ -31,6 +31,14 @@ type OrderRow = {
   lineItems: OrderLineRow[]
 }
 
+type ReportWarning = {
+  code: string
+  message: string
+  documentId: string
+  documentNumber: string
+  lineNumber?: number
+}
+
 const dateToday = new Date().toISOString().slice(0, 10)
 const dateThreeDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
 
@@ -73,6 +81,18 @@ function extractGeneratedDocumentId(data: unknown): string | null {
   return null
 }
 
+function downloadCsv(filename: string, csv: string) {
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = filename
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+  URL.revokeObjectURL(url)
+}
+
 export function GstOrdersAdmin() {
   const [from, setFrom] = useState(dateThreeDaysAgo)
   const [to, setTo] = useState(dateToday)
@@ -84,6 +104,9 @@ export function GstOrdersAdmin() {
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({})
   const printFrameRef = useRef<HTMLIFrameElement | null>(null)
   const [printHtml, setPrintHtml] = useState<string | null>(null)
+  const [isB2cExporting, setIsB2cExporting] = useState(false)
+  const [b2cExportError, setB2cExportError] = useState<string>()
+  const [b2cWarnings, setB2cWarnings] = useState<ReportWarning[]>([])
 
   async function loadOrders(): Promise<OrderRow[]> {
     const res = await listDispatchReadyOrders({ from, to })
@@ -209,50 +232,105 @@ export function GstOrdersAdmin() {
     document.body.removeChild(link)
   }
 
-  async function onGenerateReport(reportType: 'b2c_sales_register' | 'credit_note_register' | 'debit_note_register') {
-    setLoading(true)
-    setError(undefined)
+  async function onGenerateB2cReport() {
+    setIsB2cExporting(true)
+    setB2cExportError(undefined)
+    setB2cWarnings([])
 
-    const runRes = await fetch('/api/gst/reports/runs', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({
-        reportType,
-        format: 'CSV',
-        periodStart: `${from}T00:00:00.000Z`,
-        periodEnd: `${to}T23:59:59.999Z`,
-      }),
-    })
-    const runPayload = (await runRes.json().catch(() => ({}))) as {
-      ok?: boolean
-      error?: string
-      run?: { id?: string }
-    }
+    const filename = from && to ? `gst-b2c-sales-register-${from}-to-${to}.csv` : 'gst-b2c-sales-register.csv'
+    try {
+      const runRes = await fetch('/api/gst/reports/runs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          reportType: 'B2C_SALES_REGISTER',
+          format: 'CSV',
+          periodStart: `${from}T00:00:00.000Z`,
+          periodEnd: `${to}T23:59:59.999Z`,
+        }),
+      })
+      const runPayload = (await runRes.json().catch(() => ({}))) as {
+        ok?: boolean
+        error?: string
+        run?: { id?: string; fileUrl?: string | null; warnings?: ReportWarning[] }
+        csv?: string
+        warnings?: ReportWarning[]
+      }
 
-    if (!runRes.ok || !runPayload.ok || !runPayload.run?.id) {
-      setError(runPayload.error || 'Failed to generate report')
-      setLoading(false)
-      return
-    }
+      if (!runRes.ok || !runPayload.ok || !runPayload.run) {
+        setB2cExportError(runPayload.error || 'Failed to generate B2C export')
+        return
+      }
 
-    const fileRes = await fetch(`/api/gst/reports/runs/${encodeURIComponent(runPayload.run.id)}/download`, {
-      credentials: 'include',
-    })
-    const filePayload = (await fileRes.json().catch(() => ({}))) as {
-      ok?: boolean
-      error?: string
-      fileUrl?: string
-    }
-    if (!fileRes.ok || !filePayload.ok || !filePayload.fileUrl) {
-      setError(filePayload.error || 'Report generated, but no downloadable file was returned')
-      setLoading(false)
-      return
-    }
+      const warnings = Array.isArray(runPayload.run.warnings)
+        ? runPayload.run.warnings
+        : Array.isArray(runPayload.warnings)
+          ? runPayload.warnings
+          : []
+      setB2cWarnings(warnings)
 
-    window.open(filePayload.fileUrl, '_blank', 'noopener,noreferrer')
-    setResult({ reportType, run: runPayload.run, file: { fileUrl: filePayload.fileUrl } })
-    setLoading(false)
+      if (typeof runPayload.csv === 'string' && runPayload.csv.length > 0) {
+        downloadCsv(filename, runPayload.csv)
+        setResult({ reportType: 'B2C_SALES_REGISTER', run: runPayload.run, warnings })
+        return
+      }
+
+      if (runPayload.run.fileUrl) {
+        const link = document.createElement('a')
+        link.href = runPayload.run.fileUrl
+        link.download = filename
+        document.body.appendChild(link)
+        link.click()
+        link.remove()
+        setResult({ reportType: 'B2C_SALES_REGISTER', run: runPayload.run, warnings })
+        return
+      }
+
+      if (!runPayload.run.id) {
+        setB2cExportError('Report generated, but no download reference was returned')
+        return
+      }
+
+      const fileRes = await fetch(`/api/gst/reports/runs/${encodeURIComponent(runPayload.run.id)}/download`, {
+        credentials: 'include',
+      })
+      const filePayload = (await fileRes.json().catch(() => ({}))) as {
+        ok?: boolean
+        error?: string
+        fileUrl?: string
+        csv?: string
+        warnings?: ReportWarning[]
+      }
+      if (!fileRes.ok || !filePayload.ok) {
+        setB2cExportError(filePayload.error || 'Failed to download B2C export')
+        return
+      }
+
+      if (typeof filePayload.csv === 'string' && filePayload.csv.length > 0) {
+        downloadCsv(filename, filePayload.csv)
+      } else if (filePayload.fileUrl) {
+        const link = document.createElement('a')
+        link.href = filePayload.fileUrl
+        link.download = filename
+        document.body.appendChild(link)
+        link.click()
+        link.remove()
+      } else {
+        setB2cExportError('Report generated, but no downloadable file was returned')
+        return
+      }
+
+      if (Array.isArray(filePayload.warnings) && filePayload.warnings.length > 0) {
+        setB2cWarnings(filePayload.warnings)
+      }
+
+      setResult({ reportType: 'B2C_SALES_REGISTER', run: runPayload.run, file: filePayload, warnings })
+    } catch (error) {
+      setB2cExportError(error instanceof Error ? error.message : 'Failed to export B2C sales register')
+    } finally {
+      setIsB2cExporting(false)
+    }
   }
 
   const hasOrders = useMemo(() => rows.length > 0, [rows])
@@ -271,10 +349,25 @@ export function GstOrdersAdmin() {
             Refresh Order List
           </button>
           <div className="flex flex-wrap gap-2 pt-2">
-            <button type="button" className="rounded-xl border border-gray-300 px-3 py-1.5 text-sm" onClick={() => void onGenerateReport('b2c_sales_register')} disabled={loading}>B2C Export</button>
-            <button type="button" className="rounded-xl border border-gray-300 px-3 py-1.5 text-sm" onClick={() => void onGenerateReport('credit_note_register')} disabled={loading}>Credit Note Export</button>
-            <button type="button" className="rounded-xl border border-gray-300 px-3 py-1.5 text-sm" onClick={() => void onGenerateReport('debit_note_register')} disabled={loading}>Debit Note Export</button>
+            <button type="button" className="rounded-xl border border-gray-300 px-3 py-1.5 text-sm" onClick={() => void onGenerateB2cReport()} disabled={isB2cExporting}>
+              {isB2cExporting ? 'Exporting B2C...' : 'B2C Export'}
+            </button>
+            <button type="button" className="rounded-xl border border-gray-300 px-3 py-1.5 text-sm text-gray-500" disabled title="Coming soon">Credit Note Export</button>
+            <button type="button" className="rounded-xl border border-gray-300 px-3 py-1.5 text-sm text-gray-500" disabled title="Coming soon">Debit Note Export</button>
           </div>
+          {b2cExportError ? <p className="pt-2 text-sm text-red-600">{b2cExportError}</p> : null}
+          {b2cWarnings.length > 0 ? (
+            <div className="pt-2 text-sm text-amber-700">
+              <p className="font-medium">B2C export warnings ({b2cWarnings.length}):</p>
+              <ul className="list-disc pl-5">
+                {b2cWarnings.map((warning, index) => (
+                  <li key={`${warning.code}-${warning.documentId}-${warning.lineNumber ?? 'na'}-${index}`}>
+                    {warning.message} (Doc: {warning.documentNumber}{warning.lineNumber != null ? `, Line ${warning.lineNumber}` : ''})
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
         </form>
 
         <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
