@@ -154,23 +154,28 @@ export function GstOrdersAdmin() {
       return
     }
 
-    setResult(res.data)
-    const refreshedRows = await loadOrders()
+   setResult(res.data)
 
-    const documentId =
-      extractGeneratedDocumentId(res.data, id) ||
-      refreshedRows.find((row) => row.id === id)?.invoiceDocumentId ||
-      null
+let documentId = extractGeneratedDocumentId(res.data, id)
 
-    if (!documentId) {
-      setError('Invoice exists, but no PDF document id was found. Refresh the order list and use Download PDF.')
-      setLoading(false)
-      return
-    }
+if (documentId) {
+  onDownloadPdf(documentId)
+  void loadOrders()
+  setLoading(false)
+  return
+}
 
-    onDownloadPdf(documentId)
-    setLoading(false)
-  }
+const refreshedRows = await loadOrders()
+documentId = refreshedRows.find((row) => row.id === id)?.invoiceDocumentId || null
+
+if (!documentId) {
+  setError('Invoice exists, but no PDF document id was found. Refresh the order list and use Download PDF.')
+  setLoading(false)
+  return
+}
+
+onDownloadPdf(documentId)
+setLoading(false)  }
 
   const printFrameRef = useRef<HTMLIFrameElement | null>(null)
   const [printHtml, setPrintHtml] = useState<string | null>(null)
