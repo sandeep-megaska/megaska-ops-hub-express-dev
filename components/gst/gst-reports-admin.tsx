@@ -51,6 +51,7 @@ export function GstReportsAdmin() {
 
     const filename = from && to ? `gst-b2c-sales-register-${from}-to-${to}.csv` : 'gst-b2c-sales-register.csv'
     const runRes = await generateB2cSalesRegisterRun({ from, to })
+    console.log('B2C generate run response:', runRes)
 
     if (!runRes.ok) {
       setB2cError(runRes.error || 'Failed to generate B2C export')
@@ -73,8 +74,26 @@ export function GstReportsAdmin() {
       return
     }
 
-    const runId = typeof runRes.data.id === 'string' ? runRes.data.id : ''
+    const runResRecord: Record<string, unknown> = typeof runRes === 'object' && runRes !== null ? runRes : {}
+    const runData = runRes.data
+    const runDataRecord: Record<string, unknown> = typeof runData === 'object' && runData !== null ? runData : {}
+    const runId =
+      (typeof runDataRecord.id === 'string' && runDataRecord.id.length > 0 ? runDataRecord.id : '') ||
+      (typeof runDataRecord.runId === 'string' && runDataRecord.runId.length > 0 ? runDataRecord.runId : '') ||
+      (typeof runResRecord.id === 'string' && runResRecord.id.length > 0 ? runResRecord.id : '') ||
+      (typeof runResRecord.runId === 'string' && runResRecord.runId.length > 0 ? runResRecord.runId : '')
+
     if (!runId) {
+      const inlineCsv =
+        (typeof runDataRecord.csv === 'string' && runDataRecord.csv.length > 0 ? runDataRecord.csv : '') ||
+        (typeof runResRecord.csv === 'string' && runResRecord.csv.length > 0 ? runResRecord.csv : '')
+
+      if (inlineCsv) {
+        downloadCsv(filename, inlineCsv)
+        setIsExportingB2c(false)
+        return
+      }
+
       setB2cError('Failed to generate B2C export')
       setIsExportingB2c(false)
       return
