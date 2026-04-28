@@ -1,4 +1,7 @@
 import { prisma } from "../db/prisma";
+import fs from 'fs'
+const headerLogo = fs.readFileSync('./public/logos/header-logo.png', 'base64')
+const footerLogo = fs.readFileSync('./public/logos/footer-logo.png', 'base64')
 import { getGstInvoiceById } from "./invoice";
 import { getGstNoteById } from "./notes";
 import { getSingleShopifyOrderForGstSync } from "./shopify-runtime-admin";
@@ -479,10 +482,10 @@ export async function buildGstInvoiceRenderModel(gstDocumentId: string): Promise
       declaration: asText(metadata.declarationText || seller.declarationText),
       footer: asText(metadata.footerText || seller.footerText, "This is a system generated GST document."),
       signature: asText(metadata.signatureName || seller.authorizedSignatory),
-      branding: {
-        headerLogoSrc: resolvePublicAsset(["/logos/header-logo.png", "/logos/bigonbuy-logo.svg"]),
-        footerLogoSrc: resolvePublicAsset(["/logos/footer-logo.avif", "/logos/megaska-logo.svg"]),
-      },
+     branding: {
+  headerLogoSrc: `data:image/png;base64,${headerLogo}`,
+  footerLogoSrc: `data:image/png;base64,${footerLogo}`,
+}
     },
   };
 }
