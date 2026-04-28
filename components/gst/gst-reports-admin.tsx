@@ -52,8 +52,14 @@ export function GstReportsAdmin() {
     const filename = from && to ? `gst-b2c-sales-register-${from}-to-${to}.csv` : 'gst-b2c-sales-register.csv'
     const runRes = await generateB2cSalesRegisterRun({ from, to })
 
-    if (!runRes.ok || !runRes.data) {
+    if (!runRes.ok) {
       setB2cError(runRes.error || 'Failed to generate B2C export')
+      setIsExportingB2c(false)
+      return
+    }
+
+    if (!runRes.data) {
+      setB2cError('Failed to generate B2C export')
       setIsExportingB2c(false)
       return
     }
