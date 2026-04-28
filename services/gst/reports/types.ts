@@ -8,7 +8,8 @@ export type ReportWarningCode =
   | "MISSING_LINE_TAX_RATE"
   | "NO_LINES_FALLBACK_TO_DOCUMENT"
   | "LINE_ITEMS_MISSING_IN_SNAPSHOT"
-  | "NO_INVOICES_IN_RANGE";
+  | "NO_INVOICES_IN_RANGE"
+  | "DIAGNOSTIC_COUNTS";
 
 export type ReportWarning = {
   code: ReportWarningCode;
