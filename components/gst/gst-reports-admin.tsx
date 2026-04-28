@@ -67,7 +67,7 @@ export function GstReportsAdmin() {
     const warnings = Array.isArray(runRes.data.warnings) ? runRes.data.warnings : []
     setB2cWarnings(warnings)
 
-    if (runRes.data.fileUrl) {
+    if (typeof runRes.data.fileUrl === 'string' && runRes.data.fileUrl.length > 0) {
       downloadFileUrl(runRes.data.fileUrl, filename)
       setIsExportingB2c(false)
       return
@@ -86,7 +86,7 @@ export function GstReportsAdmin() {
       return
     }
 
-    if (fileRes.data?.fileUrl) {
+    if (typeof fileRes.data?.fileUrl === 'string' && fileRes.data.fileUrl.length > 0) {
       downloadFileUrl(fileRes.data.fileUrl, filename)
       setIsExportingB2c(false)
       return
