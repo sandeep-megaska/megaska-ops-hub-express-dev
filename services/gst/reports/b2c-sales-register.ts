@@ -151,42 +151,53 @@ export async function buildB2cSalesRegisterExport(input: {
   periodStart: Date;
   periodEnd: Date;
 }): Promise<B2cSalesRegisterExport> {
-  const documents = (await gstDb.gstDocument.findMany({
-    where: {
-      gstSettingsId: input.gstSettingsId,
-      documentType: "TAX_INVOICE",
-      supplyType: "B2C",
-      status: "ISSUED",
-      documentDate: { gte: input.periodStart, lte: input.periodEnd },
-    },
-    select: {
-      id: true,
-      documentNumber: true,
-      documentDate: true,
-      placeOfSupplyStateCode: true,
-      taxableAmount: true,
-      cgstAmount: true,
-      sgstAmount: true,
-      igstAmount: true,
-      cessAmount: true,
-      totalAmount: true,
-      jsonSnapshot: true,
-      lines: {
-        orderBy: { lineNumber: "asc" },
-        select: {
-          lineNumber: true,
-          hsnOrSac: true,
-          taxableAmount: true,
-          taxRate: true,
-          cgstAmount: true,
-          sgstAmount: true,
-          igstAmount: true,
-          cessAmount: true,
+  let documents: GstDocumentForReport[];
+  try {
+    documents = (await gstDb.gstDocument.findMany({
+      where: {
+        gstSettingsId: input.gstSettingsId,
+        documentType: "TAX_INVOICE",
+        supplyType: "B2C",
+        status: "ISSUED",
+        documentDate: { gte: input.periodStart, lte: input.periodEnd },
+      },
+      select: {
+        id: true,
+        documentNumber: true,
+        documentDate: true,
+        placeOfSupplyStateCode: true,
+        taxableAmount: true,
+        cgstAmount: true,
+        sgstAmount: true,
+        igstAmount: true,
+        cessAmount: true,
+        totalAmount: true,
+        jsonSnapshot: true,
+        lines: {
+          orderBy: { lineNumber: "asc" },
+          select: {
+            lineNumber: true,
+            hsnOrSac: true,
+            taxableAmount: true,
+            taxRate: true,
+            cgstAmount: true,
+            sgstAmount: true,
+            igstAmount: true,
+            cessAmount: true,
+          },
         },
       },
-    },
-    orderBy: [{ documentDate: "asc" }, { documentNumber: "asc" }],
-  })) as unknown as GstDocumentForReport[];
+      orderBy: [{ documentDate: "asc" }, { documentNumber: "asc" }],
+    })) as unknown as GstDocumentForReport[];
+  } catch (error) {
+    console.error("[GST_B2C_REPORT] caught error:", {
+      name: error instanceof Error ? error.name : typeof error,
+      message: error instanceof Error ? error.message : "Failed to load GST documents",
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+    throw error;
+  }
+  console.log("[GST_B2C_REPORT] number of GstDocument rows found:", documents.length);
 
   const rows: B2cSalesRegisterRow[] = [];
   const warnings: ReportWarning[] = [];

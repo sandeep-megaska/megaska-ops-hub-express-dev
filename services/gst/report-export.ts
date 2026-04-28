@@ -137,6 +137,7 @@ function pickRun(record: Record<string, unknown>): GstReportRunRecord {
 }
 
 export async function generateReportRun(input: GenerateReportRunInput): Promise<GstServiceResult<GstReportRunRecord>> {
+  console.log("[GST_REPORT_EXPORT] requested reportType:", input.reportType);
   const periodStart = toIsoDate(input.periodStart);
   const periodEnd = toIsoDate(input.periodEnd);
   if (Number.isNaN(periodStart.getTime()) || Number.isNaN(periodEnd.getTime())) {
@@ -186,6 +187,7 @@ export async function generateReportRun(input: GenerateReportRunInput): Promise<
         },
         orderBy: [{ documentDate: "asc" }, { documentNumber: "asc" }],
       });
+      console.log("[GST_REPORT_EXPORT] number of GstDocument rows found:", documents.length);
 
       const result = toCsv(documents as ReportDocument[]);
       csv = result.csv;
@@ -213,6 +215,11 @@ export async function generateReportRun(input: GenerateReportRunInput): Promise<
 
     return { ok: true, data: pickRun(updated as Record<string, unknown>) };
   } catch (error) {
+    console.error("[GST_REPORT_EXPORT] caught error:", {
+      name: error instanceof Error ? error.name : typeof error,
+      message: error instanceof Error ? error.message : "Failed to generate report",
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     const message = error instanceof Error ? error.message : "Failed to generate report";
     await gstDb.gstReportRun.update({
       where: { id: reportRun.id },

@@ -10,13 +10,24 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "Invalid JSON payload" }, { status: 400 });
   }
 
+  console.log("[GST_REPORTS_RUNS][POST] requested reportType:", String(body.reportType || "B2C_SALES_REGISTER"));
+  console.log("[GST_REPORTS_RUNS][POST] fromDate/toDate received:", {
+    fromDate: body.fromDate ?? null,
+    toDate: body.toDate ?? null,
+    periodStart: body.periodStart ?? null,
+    periodEnd: body.periodEnd ?? null,
+  });
+
   const settings = await getActiveGstSettings();
   if (!settings.ok || !settings.data) {
     return NextResponse.json({ ok: false, error: settings.error || "Active GST settings not found" }, { status: 404 });
   }
+  console.log("[GST_REPORTS_RUNS][POST] shop value resolved:", settings.data.shopId ?? null);
 
-  const periodStart = new Date(String(body.periodStart || ""));
-  const periodEnd = new Date(String(body.periodEnd || ""));
+  const rawPeriodStart = body.periodStart ?? body.fromDate;
+  const rawPeriodEnd = body.periodEnd ?? body.toDate;
+  const periodStart = new Date(String(rawPeriodStart || ""));
+  const periodEnd = new Date(String(rawPeriodEnd || ""));
   if (Number.isNaN(periodStart.getTime()) || Number.isNaN(periodEnd.getTime())) {
     return NextResponse.json({ ok: false, error: "periodStart and periodEnd are required ISO dates" }, { status: 400 });
   }
