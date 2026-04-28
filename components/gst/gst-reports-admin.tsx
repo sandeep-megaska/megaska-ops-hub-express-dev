@@ -1,7 +1,14 @@
 'use client'
 
 import { useState } from 'react'
-import { downloadReportRunFile, generateB2cSalesRegisterRun, getB2cInvoiceAvailability, syncOrders } from '../../lib/gst-client'
+import {
+  downloadReportRunFile,
+  generateB2cSalesRegisterRun,
+  generateBatchInvoices,
+  getB2cInvoiceAvailability,
+  listDispatchReadyOrders,
+  syncOrders,
+} from '../../lib/gst-client'
 
 type ReportWarning = {
   code: string
@@ -54,6 +61,7 @@ export function GstReportsAdmin() {
   const [to, setTo] = useState(dateToday)
   const [isSyncingRange, setIsSyncingRange] = useState(false)
   const [isExportingB2c, setIsExportingB2c] = useState(false)
+  const [isGeneratingInvoices, setIsGeneratingInvoices] = useState(false)
   const [b2cError, setB2cError] = useState<string>()
   const [b2cWarnings, setB2cWarnings] = useState<ReportWarning[]>([])
   const [rangeSyncSummary, setRangeSyncSummary] = useState<{
@@ -194,13 +202,92 @@ export function GstReportsAdmin() {
     setIsExportingB2c(false)
   }
 
+  async function onGenerateInvoicesForRange() {
+    if (!rangeSyncSummary || rangeSyncSummary.invoiceCount > 0) return
+
+    setIsGeneratingInvoices(true)
+    setB2cError(undefined)
+
+    const listRes = await listDispatchReadyOrders({ from, to, invoiceStatus: 'NOT_INVOICED' })
+    if (!listRes.ok) {
+      setB2cError(listRes.error || 'Failed to load non-invoiced GST orders for selected range')
+      setIsGeneratingInvoices(false)
+      return
+    }
+
+    const orderImportIds = (Array.isArray(listRes.data) ? listRes.data : [])
+      .map((entry) => {
+        const row = entry as Record<string, unknown>
+        return typeof row.id === 'string' ? row.id : ''
+      })
+      .filter(Boolean)
+
+    if (orderImportIds.length === 0) {
+      const availabilityRes = await getB2cInvoiceAvailability({ from, to })
+      if (availabilityRes.ok) {
+        setRangeSyncSummary((prev) =>
+          prev
+            ? {
+                ...prev,
+                invoiceCount: Number(availabilityRes.data?.invoiceCount || 0),
+              }
+            : prev,
+        )
+      }
+      setIsGeneratingInvoices(false)
+      return
+    }
+
+    const generateRes = await generateBatchInvoices({ orderImportIds })
+    if (!generateRes.ok) {
+      setB2cError(generateRes.error || 'Failed to generate GST invoices for selected range')
+      setIsGeneratingInvoices(false)
+      return
+    }
+
+    const batchData = (generateRes.data || {}) as Record<string, unknown>
+    const batchWarnings: string[] = []
+    const warningOnly = Number(batchData.warningOnly || 0)
+    const failed = Number(batchData.failed || 0)
+    const skipped = Number(batchData.skippedAlreadyInvoiced || 0)
+    if (warningOnly > 0) batchWarnings.push(`${warningOnly} order(s) generated with readiness warnings`)
+    if (failed > 0) batchWarnings.push(`${failed} order(s) failed during invoice generation`)
+    if (skipped > 0) batchWarnings.push(`${skipped} order(s) were already invoiced and skipped`)
+
+    const availabilityRes = await getB2cInvoiceAvailability({ from, to })
+    if (!availabilityRes.ok) {
+      setB2cError(availabilityRes.error || 'Invoices generated, but failed to refresh GST invoice availability')
+      setRangeSyncSummary((prev) =>
+        prev
+          ? {
+              ...prev,
+              warnings: [...prev.warnings, ...batchWarnings],
+            }
+          : prev,
+      )
+      setIsGeneratingInvoices(false)
+      return
+    }
+
+    setRangeSyncSummary((prev) =>
+      prev
+        ? {
+            ...prev,
+            invoiceCount: Number(availabilityRes.data?.invoiceCount || 0),
+            warnings: [...prev.warnings.filter((warning) => !warning.toLowerCase().includes('no gst invoices found')), ...batchWarnings],
+          }
+        : prev,
+    )
+    setIsGeneratingInvoices(false)
+  }
+
   return (
     <div className="space-y-5">
       <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
         <h2 className="text-base font-semibold text-gray-900">Reports</h2>
         <p className="mt-1 text-sm text-gray-600">Download GST exports without rebuilding report history.</p>
 
-        <div className="mt-4 grid gap-3 md:grid-cols-4">
+        <div className="mt-4 grid gap-3 md:grid-cols-5">
           <input
             type="date"
             className="rounded-xl border border-gray-300 px-3 py-2.5 text-sm"
@@ -227,11 +314,23 @@ export function GstReportsAdmin() {
           >
             {isSyncingRange ? 'Syncing Orders...' : 'Sync Orders for Range'}
           </button>
+          {rangeSyncSummary?.invoiceCount === 0 ? (
+            <button
+              type="button"
+              className="rounded-xl border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
+              onClick={() => void onGenerateInvoicesForRange()}
+              disabled={isGeneratingInvoices || isExportingB2c || isSyncingRange}
+            >
+              {isGeneratingInvoices ? 'Generating GST Invoices...' : 'Generate GST Invoices for Range'}
+            </button>
+          ) : (
+            <div />
+          )}
           <button
             type="button"
             className="rounded-xl bg-gray-900 px-4 py-2.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
             onClick={() => void onDownloadB2cCsv()}
-            disabled={isExportingB2c || isSyncingRange || !rangeSyncSummary || rangeSyncSummary.invoiceCount <= 0}
+            disabled={isExportingB2c || isSyncingRange || isGeneratingInvoices || !rangeSyncSummary || rangeSyncSummary.invoiceCount <= 0}
           >
             {isExportingB2c ? 'Downloading B2C CSV...' : 'Download B2C CSV'}
           </button>

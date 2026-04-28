@@ -127,10 +127,12 @@ export const getB2cInvoiceAvailability = ({ from, to }: { from: string; to: stri
   return request<{ invoiceCount?: number }>(`/api/gst/reports/b2c/availability?${search.toString()}`)
 }
 
-export const listDispatchReadyOrders = (query: { from?: string; to?: string } = {}) => {
+export const listDispatchReadyOrders = (query: { from?: string; to?: string; invoiceStatus?: string; readiness?: string } = {}) => {
   const search = new URLSearchParams()
   if (query.from) search.set('from', query.from)
   if (query.to) search.set('to', query.to)
+  if (query.invoiceStatus) search.set('invoiceStatus', query.invoiceStatus)
+  if (query.readiness) search.set('readiness', query.readiness)
   const suffix = search.toString() ? `?${search.toString()}` : ''
   return request<Array<Record<string, unknown>>>(`/api/gst/orders/dispatch-ready${suffix}`)
 }
