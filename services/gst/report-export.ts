@@ -1,6 +1,6 @@
 import { createHash } from "crypto";
 import { gstDb } from "./db";
-import { generateB2cSalesRegisterCsv } from "./reports/b2c-sales-register";
+import { buildB2cSalesRegisterExport } from "./reports/b2c-sales-register";
 import type { ReportWarning } from "./reports/types";
 import type { GstServiceResult } from "./types";
 
@@ -168,7 +168,7 @@ export async function generateReportRun(input: GenerateReportRunInput): Promise<
     let warnings: ReportWarning[] = [];
 
     if (normalizedReportType === "B2C_SALES_REGISTER") {
-      const result = await generateB2cSalesRegisterCsv({
+      const result = await buildB2cSalesRegisterExport({
         gstSettingsId: input.gstSettingsId,
         periodStart,
         periodEnd,

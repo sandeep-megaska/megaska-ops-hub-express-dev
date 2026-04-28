@@ -1,6 +1,6 @@
 import { gstDb } from "../db";
 import { formatDateDdMmYyyy, toCsv } from "./csv";
-import type { B2cSalesRegisterRow, ReportWarning } from "./types";
+import type { B2cSalesRegisterExport, B2cSalesRegisterRow, ReportWarning } from "./types";
 
 type GstDocumentForReport = {
   id: string;
@@ -26,7 +26,7 @@ type GstDocumentForReport = {
   }>;
 };
 
-const B2C_HEADERS = [
+export const B2C_SALES_REGISTER_HEADERS = [
   "Invoice Number",
   "Invoice Date",
   "Customer Name",
@@ -126,11 +126,31 @@ function toDocumentFallbackRow(document: GstDocumentForReport, customer: { custo
   };
 }
 
-export async function generateB2cSalesRegisterCsv(input: {
+function serializeRows(rows: B2cSalesRegisterRow[]): string {
+  const csvRows = rows.map((row) => [
+    row.invoiceNumber,
+    row.invoiceDate,
+    row.customerName,
+    row.customerGstin,
+    row.placeOfSupply,
+    row.invoiceValue,
+    row.taxableValue,
+    row.gstRate,
+    row.cgst,
+    row.sgst,
+    row.igst,
+    row.cess,
+    row.hsnCode,
+  ]);
+
+  return toCsv([...B2C_SALES_REGISTER_HEADERS], csvRows);
+}
+
+export async function buildB2cSalesRegisterExport(input: {
   gstSettingsId: string;
   periodStart: Date;
   periodEnd: Date;
-}): Promise<{ csv: string; rowCount: number; warnings: ReportWarning[] }> {
+}): Promise<B2cSalesRegisterExport> {
   const documents = (await gstDb.gstDocument.findMany({
     where: {
       gstSettingsId: input.gstSettingsId,
@@ -217,25 +237,21 @@ export async function generateB2cSalesRegisterCsv(input: {
     }
   }
 
-  const csvRows = rows.map((row) => [
-    row.invoiceNumber,
-    row.invoiceDate,
-    row.customerName,
-    row.customerGstin,
-    row.placeOfSupply,
-    row.invoiceValue,
-    row.taxableValue,
-    row.gstRate,
-    row.cgst,
-    row.sgst,
-    row.igst,
-    row.cess,
-    row.hsnCode,
-  ]);
-
   return {
-    csv: toCsv([...B2C_HEADERS], csvRows),
-    rowCount: rows.length,
+    reportType: "B2C_SALES_REGISTER",
+    headers: B2C_SALES_REGISTER_HEADERS,
+    rows,
     warnings,
+    rowCount: rows.length,
+    csv: serializeRows(rows),
   };
+}
+
+export async function generateB2cSalesRegisterCsv(input: {
+  gstSettingsId: string;
+  periodStart: Date;
+  periodEnd: Date;
+}): Promise<{ csv: string; rowCount: number; warnings: ReportWarning[] }> {
+  const result = await buildB2cSalesRegisterExport(input);
+  return { csv: result.csv, rowCount: result.rowCount, warnings: result.warnings };
 }

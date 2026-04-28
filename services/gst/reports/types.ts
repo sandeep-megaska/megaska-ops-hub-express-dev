@@ -27,3 +27,12 @@ export type B2cSalesRegisterRow = {
   cess: number;
   hsnCode: string;
 };
+
+export type B2cSalesRegisterExport = {
+  reportType: "B2C_SALES_REGISTER";
+  headers: readonly string[];
+  rows: B2cSalesRegisterRow[];
+  warnings: ReportWarning[];
+  rowCount: number;
+  csv: string;
+};

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 
 import { gstDb } from "../db.ts";
 import { csvEscape, toCsv, formatDateDdMmYyyy } from "./csv.ts";
-import { generateB2cSalesRegisterCsv } from "./b2c-sales-register.ts";
+import { buildB2cSalesRegisterExport, generateB2cSalesRegisterCsv, B2C_SALES_REGISTER_HEADERS } from "./b2c-sales-register.ts";
 
 const originalFindMany = gstDb.gstDocument.findMany;
 
@@ -68,4 +68,19 @@ test("generateB2cSalesRegisterCsv uses line-level GstDocument data and UNREGISTE
   assert.match(result.csv, /UNREGISTERED/);
   assert.equal(result.warnings.some((warning) => warning.code === "MISSING_CUSTOMER_NAME"), true);
   assert.equal(result.warnings.some((warning) => warning.code === "MISSING_LINE_HSN"), true);
+});
+
+test("buildB2cSalesRegisterExport exposes stable B2C data shape", async () => {
+  gstDb.gstDocument.findMany = async () => [] as never;
+
+  const result = await buildB2cSalesRegisterExport({
+    gstSettingsId: "gst-settings-1",
+    periodStart: new Date("2026-04-01T00:00:00.000Z"),
+    periodEnd: new Date("2026-04-30T00:00:00.000Z"),
+  });
+
+  assert.equal(result.reportType, "B2C_SALES_REGISTER");
+  assert.deepEqual(result.headers, B2C_SALES_REGISTER_HEADERS);
+  assert.equal(result.rowCount, 0);
+  assert.equal(result.csv, B2C_SALES_REGISTER_HEADERS.join(","));
 });
