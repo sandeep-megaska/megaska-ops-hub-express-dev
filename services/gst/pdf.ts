@@ -1,6 +1,4 @@
 import { prisma } from "../db/prisma";
-const headerLogo = fs.readFileSync('./public/logos/header-logo.png', 'base64')
-const footerLogo = fs.readFileSync('./public/logos/footer-logo.png', 'base64')
 import { getGstInvoiceById } from "./invoice";
 import { getGstNoteById } from "./notes";
 import { getSingleShopifyOrderForGstSync } from "./shopify-runtime-admin";
