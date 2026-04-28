@@ -483,14 +483,10 @@ export async function buildGstInvoiceRenderModel(gstDocumentId: string): Promise
       declaration: asText(metadata.declarationText || seller.declarationText),
       footer: asText(metadata.footerText || seller.footerText, "This is a system generated GST document."),
       signature: asText(metadata.signatureName || seller.authorizedSignatory),
-     branding: {
-  headerLogoSrc: resolvePublicAsset([
-    "/logos/header-logo.png"
-  ]),
-  footerLogoSrc: resolvePublicAsset([
-    "/logos/footer-logo.png"
-  ]),
-}
+      branding: {
+        headerLogoSrc: resolvePublicAsset(["/logos/header-logo.png", "/logos/bigonbuy-logo.svg"]),
+        footerLogoSrc: resolvePublicAsset(["/logos/footer-logo.avif", "/logos/megaska-logo.svg"]),
+      },
     },
   };
 }
@@ -540,7 +536,7 @@ export async function renderGstPdf(gstDocumentId: string): Promise<GstServiceRes
       @media print { .print-btn { display:none; } }
     </style></head><body>
     <button class="print-btn" onclick="window.print()">Print Invoice</button>
-    <div class="header-logo">${model.branding.headerLogoSrc ? `<img src="${escapeHtml(model.branding.headerLogoSrc)}" alt="BIGONBUY logo" />` : "bigonbuy"}</div>
+    <div class="header-logo">${model.branding.headerLogoSrc ? `<img src="${escapeHtml(model.branding.headerLogoSrc)}" alt="Header logo" />` : "bigonbuy"}</div>
     <div class="topline"><div><div><strong>GSTIN: ${escapeHtml(model.supplier.gstin)}</strong></div><div>${escapeHtml(model.title)}</div><div>Original for Recipient</div></div>
     <div class="meta"><div><strong>${escapeHtml(model.supplier.tradeName || model.supplier.name)}</strong></div><div>${escapeHtml(model.supplier.name)}</div></div></div>
     <div class="topline"><div>Invoice No: ${escapeHtml(model.documentNumber)}<br/>Invoice Date: ${escapeHtml(model.documentDate)}<br/>Order: ${escapeHtml(model.orderNumber)}</div><div class="meta">Place of Supply: ${escapeHtml(model.placeOfSupply)}<br/>Order Date: ${escapeHtml(model.orderDate)}</div></div>
@@ -561,7 +557,7 @@ export async function renderGstPdf(gstDocumentId: string): Promise<GstServiceRes
     <p><strong>Amount in Words:</strong> ${escapeHtml(model.amountInWords)}</p>
     ${model.declaration ? `<p><strong>Declaration:</strong> ${escapeHtml(model.declaration)}</p>` : ""}
     <p>${escapeHtml(model.footer)}</p>
-    <div class="footer-logo">${model.branding.footerLogoSrc ? `<img src="${escapeHtml(model.branding.footerLogoSrc)}" alt="MEGASKA logo" />` : "MEGASKA"}</div>
+    <div class="footer-logo">${model.branding.footerLogoSrc ? `<img src="${escapeHtml(model.branding.footerLogoSrc)}" alt="Footer logo" />` : "MEGASKA"}</div>
     ${model.signature ? `<p style="text-align:right; margin-top:18px;">For ${escapeHtml(model.supplier.name)}<br/><br/>${escapeHtml(model.signature)}</p>` : ""}
   </body></html>`;
 
