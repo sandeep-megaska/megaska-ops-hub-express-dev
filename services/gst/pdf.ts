@@ -145,9 +145,6 @@ function buildAddressLines(source: Record<string, unknown>): string[] {
     .filter(Boolean);
 }
 
-function resolvePublicAsset(candidates: string[]): string | null {
-  return candidates.find((candidate) => candidate.startsWith("/")) || null;
-}
 
 function numberToWords(value: number): string {
   if (!Number.isFinite(value) || value <= 0) return "Zero Rupees Only";
@@ -485,10 +482,10 @@ export async function buildGstInvoiceRenderModel(gstDocumentId: string): Promise
       declaration: asText(metadata.declarationText || seller.declarationText),
       footer: asText(metadata.footerText || seller.footerText, "This is a system generated GST document."),
       signature: asText(metadata.signatureName || seller.authorizedSignatory),
-     branding: {
-  headerLogoSrc: `data:image/png;base64,${headerLogo}`,
-  footerLogoSrc: `data:image/png;base64,${footerLogo}`,
-}
+    branding: {
+  headerLogoSrc: publicAssetUrl("/logos/header-logo.png"),
+  footerLogoSrc: publicAssetUrl("/logos/footer-logo.avif"),
+},
     },
   };
 }
