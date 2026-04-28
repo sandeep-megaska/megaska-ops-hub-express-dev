@@ -120,6 +120,13 @@ export const syncOrders = (payload: Record<string, unknown>) =>
     body: JSON.stringify(payload),
   })
 
+export const getB2cInvoiceAvailability = ({ from, to }: { from: string; to: string }) => {
+  const search = new URLSearchParams()
+  search.set('from', from)
+  search.set('to', to)
+  return request<{ invoiceCount?: number }>(`/api/gst/reports/b2c/availability?${search.toString()}`)
+}
+
 export const listDispatchReadyOrders = (query: { from?: string; to?: string } = {}) => {
   const search = new URLSearchParams()
   if (query.from) search.set('from', query.from)

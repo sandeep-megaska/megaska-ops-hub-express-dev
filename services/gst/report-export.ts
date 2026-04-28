@@ -42,6 +42,10 @@ export interface ReportRunFilters {
   status?: string;
 }
 
+export interface B2cInvoiceAvailability {
+  invoiceCount: number;
+}
+
 type ReportDocument = {
   id: string;
   documentType: string;
@@ -260,6 +264,46 @@ export async function getReportRun(id: string): Promise<GstServiceResult<GstRepo
     return { ok: true, data: run ? pickRun(run as Record<string, unknown>) : null };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : "Failed to load report run" };
+  }
+}
+
+export async function getB2cInvoiceAvailability(input: {
+  gstSettingsId: string;
+  periodStart: Date | string;
+  periodEnd: Date | string;
+}): Promise<GstServiceResult<B2cInvoiceAvailability>> {
+  try {
+    const periodStart = toIsoDate(input.periodStart);
+    const periodEnd = toIsoDate(input.periodEnd);
+    if (Number.isNaN(periodStart.getTime()) || Number.isNaN(periodEnd.getTime())) {
+      return { ok: false, error: "periodStart and periodEnd must be valid ISO dates" };
+    }
+
+    if (periodStart > periodEnd) {
+      return { ok: false, error: "periodStart must be less than or equal to periodEnd" };
+    }
+
+    const invoiceCount = await gstDb.gstDocument.count({
+      where: {
+        gstSettingsId: input.gstSettingsId,
+        documentType: "TAX_INVOICE",
+        supplyType: "B2C",
+        status: "ISSUED",
+        documentDate: { gte: periodStart, lte: periodEnd },
+      },
+    });
+
+    return {
+      ok: true,
+      data: {
+        invoiceCount,
+      },
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "Failed to load B2C invoice availability",
+    };
   }
 }
 
