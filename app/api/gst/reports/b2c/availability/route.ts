@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getActiveGstSettings } from "../../../../../../../services/gst/settings";
-import { getB2cInvoiceAvailability } from "../../../../../../../services/gst/report-export";
+import { getActiveGstSettings } from "../../../../../../services/gst/settings";
+import { getB2cInvoiceAvailability } from "../../../../../../services/gst/report-export";
 
 export const runtime = "nodejs";
 
