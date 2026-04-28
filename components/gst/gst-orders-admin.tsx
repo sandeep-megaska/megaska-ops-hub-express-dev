@@ -32,7 +32,7 @@ type OrderRow = {
 }
 
 const dateToday = new Date().toISOString().slice(0, 10)
-const dateThirtyDaysAgo = new Date(Date.now() - 29 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+const dateThreeDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
 
 function asObject(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
@@ -74,7 +74,7 @@ function extractGeneratedDocumentId(data: unknown, orderImportId: string): strin
 }
 
 export function GstOrdersAdmin() {
-  const [from, setFrom] = useState(dateThirtyDaysAgo)
+ const [from, setFrom] = useState(dateThreeDaysAgo)
   const [to, setTo] = useState(dateToday)
  const [rows, setRows] = useState<OrderRow[]>([])
 const [loading, setLoading] = useState(false)
@@ -158,25 +158,25 @@ const [result, setResult] = useState<unknown>()
 
   setResult(res.data)
 
-  let documentId = extractGeneratedDocumentId(res.data, id)
+  const documentId = extractGeneratedDocumentId(res.data, id)
 
   if (documentId) {
-    onDownloadPdf(documentId)   // ✅ immediate
+    onDownloadPdf(documentId)
     setGeneratingId(null)
     void loadOrders()
     return
   }
 
   const refreshed = await loadOrders()
-  documentId = refreshed.find(r => r.id === id)?.invoiceDocumentId || null
+  const fallbackDocumentId = refreshed.find((row) => row.id === id)?.invoiceDocumentId || null
 
-  if (!documentId) {
-    setError('Invoice exists but not visible yet')
+  if (!fallbackDocumentId) {
+    setError('Invoice exists, but no PDF document id was found.')
     setGeneratingId(null)
     return
   }
 
-  onDownloadPdf(documentId)
+  onDownloadPdf(fallbackDocumentId)
   setGeneratingId(null)
 }
   const printFrameRef = useRef<HTMLIFrameElement | null>(null)
@@ -301,7 +301,8 @@ const [printHtml, setPrintHtml] = useState<string | null>(null)
                       <td className="px-3 py-2 text-xs text-amber-700">{unmappedSkus.length > 0 ? unmappedSkus.join(', ') : 'None'}</td>
                       <td className="px-3 py-2">{row.invoiceStatus}</td>
                       <td className="space-x-2 whitespace-nowrap px-3 py-2">
-                      <button
+                     <button
+  className="rounded-lg border border-gray-300 px-3 py-1.5"
   onClick={() => void onGenerate(id)}
   disabled={generatingId === id}
 >
