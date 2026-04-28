@@ -245,9 +245,6 @@ export async function buildB2cSalesRegisterExport(input: {
   periodStart: Date;
   periodEnd: Date;
 }): Promise<B2cSalesRegisterExport> {
-  const documentCountForSettings = await gstDb.gstDocument.count({ where: { gstSettingsId: input.gstSettingsId } });
-  console.log("[GST_B2C_REPORT] GstDocument count for gstSettings before filters:", documentCountForSettings);
-
   const invoiceTypeWhere = {
     gstSettingsId: input.gstSettingsId,
     documentType: "TAX_INVOICE" as const,
@@ -261,68 +258,11 @@ export async function buildB2cSalesRegisterExport(input: {
     supplyType: "B2C" as const,
   };
 
-  const [
-    taxInvoiceCount,
-    taxInvoiceInRangeCount,
-    taxInvoiceInRangeB2cCount,
-    taxInvoiceInRangeB2cStatusCounts,
-  ] = await Promise.all([
-    gstDb.gstDocument.count({ where: invoiceTypeWhere }),
-    gstDb.gstDocument.count({ where: invoiceTypeInRangeWhere }),
-    gstDb.gstDocument.count({ where: invoiceTypeInRangeB2cWhere }),
-    gstDb.gstDocument.groupBy({
-      by: ["status"],
-      where: invoiceTypeInRangeB2cWhere,
-      _count: { _all: true },
-    }),
-  ]);
-
-  const statusBreakdown = taxInvoiceInRangeB2cStatusCounts.reduce<Record<string, number>>((acc, row) => {
-    acc[String(row.status)] = Number(row._count?._all || 0);
-    return acc;
-  }, {});
-
-  const diagnostics = {
-    gstSettingsDocumentCount: documentCountForSettings,
-    taxInvoiceCount,
-    taxInvoiceInRangeCount,
-    taxInvoiceInRangeB2cCount,
-    taxInvoiceInRangeB2cByStatus: statusBreakdown,
-  };
-
   const where = {
     ...invoiceTypeInRangeB2cWhere,
-    // Report preparation currently creates draft invoices first; include both until issuance is enforced in the generation flow.
+    // Report preparation creates draft GST documents; B2C export includes DRAFT and ISSUED GstDocument records because GstDocument is the finalized tax snapshot for export.
     status: { in: ["DRAFT", "ISSUED"] as const },
   };
-
-  const filteredDocumentCount = await gstDb.gstDocument.count({ where });
-  console.log("[GST_B2C_REPORT] GstDocument count after filters:", filteredDocumentCount);
-  console.log("[GST_B2C_REPORT] diagnostics:", diagnostics);
-  console.log("[GST_B2C_REPORT] filters:", {
-    gstSettingsId: input.gstSettingsId,
-    periodStart: input.periodStart.toISOString(),
-    periodEnd: input.periodEnd.toISOString(),
-    where,
-  });
-
-  const sampleDocument = await gstDb.gstDocument.findFirst({
-    where: { gstSettingsId: input.gstSettingsId },
-    orderBy: { documentDate: "desc" },
-    select: {
-      id: true,
-      documentNumber: true,
-      documentDate: true,
-      status: true,
-      documentType: true,
-      supplyType: true,
-      placeOfSupplyStateCode: true,
-      sourceOrderNumber: true,
-      shopifyOrderName: true,
-      jsonSnapshot: true,
-    },
-  });
-  console.log("[GST_B2C_REPORT] sample GstDocument shape:", sampleDocument);
 
   let documents: GstDocumentForReport[];
   try {
@@ -369,17 +309,8 @@ export async function buildB2cSalesRegisterExport(input: {
     });
     throw error;
   }
-  console.log("[GST_B2C_REPORT] number of GstDocument rows loaded:", documents.length);
-
   const rows: B2cSalesRegisterRow[] = [];
   const warnings: ReportWarning[] = [];
-
-  warnings.push({
-    code: "DIAGNOSTIC_COUNTS",
-    message: `Temporary B2C export diagnostics: ${JSON.stringify(diagnostics)}`,
-    documentId: "",
-    documentNumber: "",
-  });
 
   if (documents.length === 0) {
     warnings.push({
