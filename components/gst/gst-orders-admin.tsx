@@ -38,12 +38,14 @@ function asObject(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
 }
 
-function pickDocumentId(row: Record<string, unknown>): string | null {
+function pickDocumentId(value: unknown): string | null {
+  const row = asObject(value)
   const direct = row.documentId || row.invoiceDocumentId || row.gstDocumentId
   if (direct) return String(direct)
 
   const document = asObject(row.document)
   if (document.id) return String(document.id)
+  if (document.documentId) return String(document.documentId)
 
   const invoice = asObject(row.invoice)
   if (invoice.id) return String(invoice.id)
@@ -52,20 +54,18 @@ function pickDocumentId(row: Record<string, unknown>): string | null {
   return null
 }
 
-function extractGeneratedDocumentId(data: unknown, orderImportId: string): string | null {
-  const payloads = [asObject(data), asObject(asObject(data).data)]
+function extractGeneratedDocumentId(data: unknown): string | null {
+  const payload = asObject(data)
+  const nestedPayload = asObject(payload.data)
+  const candidates = [payload, nestedPayload]
 
-  for (const payload of payloads) {
-    const direct = pickDocumentId(payload)
+  for (const candidate of candidates) {
+    const direct = pickDocumentId(candidate)
     if (direct) return direct
 
-    const results = Array.isArray(payload.results) ? payload.results : []
-    const exactMatch = results.find((item) => String(asObject(item).id || '') === orderImportId)
-    const exactDocumentId = pickDocumentId(asObject(exactMatch))
-    if (exactDocumentId) return exactDocumentId
-
-    for (const item of results) {
-      const documentId = pickDocumentId(asObject(item))
+    const results = Array.isArray(candidate.results) ? candidate.results : []
+    for (const result of results) {
+      const documentId = pickDocumentId(result)
       if (documentId) return documentId
     }
   }
@@ -74,14 +74,16 @@ function extractGeneratedDocumentId(data: unknown, orderImportId: string): strin
 }
 
 export function GstOrdersAdmin() {
- const [from, setFrom] = useState(dateThreeDaysAgo)
+  const [from, setFrom] = useState(dateThreeDaysAgo)
   const [to, setTo] = useState(dateToday)
- const [rows, setRows] = useState<OrderRow[]>([])
-const [loading, setLoading] = useState(false)
-const [generatingId, setGeneratingId] = useState<string | null>(null)
-const [result, setResult] = useState<unknown>()
+  const [rows, setRows] = useState<OrderRow[]>([])
+  const [loading, setLoading] = useState(false)
+  const [generatingId, setGeneratingId] = useState<string | null>(null)
+  const [result, setResult] = useState<unknown>()
   const [error, setError] = useState<string>()
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({})
+  const printFrameRef = useRef<HTMLIFrameElement | null>(null)
+  const [printHtml, setPrintHtml] = useState<string | null>(null)
 
   async function loadOrders(): Promise<OrderRow[]> {
     const res = await listDispatchReadyOrders({ from, to })
@@ -89,6 +91,7 @@ const [result, setResult] = useState<unknown>()
       setError(res.error)
       return []
     }
+
     const parsedRows = (Array.isArray(res.data) ? res.data : []).map((raw) => {
       const row = raw as Record<string, unknown>
       const lineItems = Array.isArray(row.lineItems)
@@ -145,42 +148,39 @@ const [result, setResult] = useState<unknown>()
   }
 
   async function onGenerate(id: string) {
-  setGeneratingId(id)
-  setError(undefined)
+    setGeneratingId(id)
+    setError(undefined)
 
-  const res = await generateBatchInvoices({ orderImportIds: [id] })
+    const res = await generateBatchInvoices({ orderImportIds: [id] })
 
-  if (!res.ok) {
-    setError(res.error)
+    if (!res.ok) {
+      setError(res.error)
+      setGeneratingId(null)
+      return
+    }
+
+    setResult(res.data)
+
+    const documentId = extractGeneratedDocumentId(res.data)
+    if (documentId) {
+      onDownloadPdf(documentId)
+      setGeneratingId(null)
+      void loadOrders()
+      return
+    }
+
+    const refreshedRows = await loadOrders()
+    const fallbackDocumentId = refreshedRows.find((row) => row.id === id)?.invoiceDocumentId || null
+    if (fallbackDocumentId) {
+      onDownloadPdf(fallbackDocumentId)
+      setGeneratingId(null)
+      return
+    }
+
+    setError('Invoice was not generated. Check the response for missing SKU mappings or validation errors.')
     setGeneratingId(null)
-    return
   }
 
-  setResult(res.data)
-
-  const documentId = extractGeneratedDocumentId(res.data, id)
-
-  if (documentId) {
-    onDownloadPdf(documentId)
-    setGeneratingId(null)
-    void loadOrders()
-    return
-  }
-
-  const refreshed = await loadOrders()
-  const fallbackDocumentId = refreshed.find((row) => row.id === id)?.invoiceDocumentId || null
-
-  if (!fallbackDocumentId) {
-    setError('Invoice exists, but no PDF document id was found.')
-    setGeneratingId(null)
-    return
-  }
-
-  onDownloadPdf(fallbackDocumentId)
-  setGeneratingId(null)
-}
-  const printFrameRef = useRef<HTMLIFrameElement | null>(null)
-const [printHtml, setPrintHtml] = useState<string | null>(null)
   async function onPrintInvoice(invoiceDocumentId: string) {
     setLoading(true)
     setError(undefined)
@@ -301,13 +301,9 @@ const [printHtml, setPrintHtml] = useState<string | null>(null)
                       <td className="px-3 py-2 text-xs text-amber-700">{unmappedSkus.length > 0 ? unmappedSkus.join(', ') : 'None'}</td>
                       <td className="px-3 py-2">{row.invoiceStatus}</td>
                       <td className="space-x-2 whitespace-nowrap px-3 py-2">
-                     <button
-  className="rounded-lg border border-gray-300 px-3 py-1.5"
-  onClick={() => void onGenerate(id)}
-  disabled={generatingId === id}
->
-  {generatingId === id ? 'Generating...' : 'Generate Invoice'}
-</button>
+                        <button className="rounded-lg border border-gray-300 px-3 py-1.5" onClick={() => void onGenerate(id)} disabled={generatingId === id}>
+                          {generatingId === id ? 'Generating...' : 'Generate Invoice'}
+                        </button>
                         {row.invoiceDocumentId ? (
                           <>
                             <button className="rounded-lg border border-gray-300 px-3 py-1.5" onClick={() => void onPrintInvoice(row.invoiceDocumentId!)}>Print Invoice</button>
@@ -366,10 +362,7 @@ const [printHtml, setPrintHtml] = useState<string | null>(null)
             <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
               <h3 className="text-sm font-semibold text-gray-900">Invoice Preview</h3>
               <div className="space-x-2">
-                <button
-                  className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
-                  onClick={() => printFrameRef.current?.contentWindow?.print()}
-                >
+                <button className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm" onClick={() => printFrameRef.current?.contentWindow?.print()}>
                   Print
                 </button>
                 <button className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm" onClick={() => setPrintHtml(null)}>
