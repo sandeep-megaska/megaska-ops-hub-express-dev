@@ -73,7 +73,14 @@ export function GstReportsAdmin() {
       return
     }
 
-    const fileRes = await downloadReportRunFile(runRes.data.id)
+    const runId = typeof runRes.data.id === 'string' ? runRes.data.id : ''
+    if (!runId) {
+      setB2cError('Failed to generate B2C export')
+      setIsExportingB2c(false)
+      return
+    }
+
+    const fileRes = await downloadReportRunFile(runId)
     if (!fileRes.ok) {
       setB2cError(fileRes.error || 'Failed to download B2C export')
       setIsExportingB2c(false)
