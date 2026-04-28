@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { generateReportRun, listReportRuns } from "../../../../../services/gst/report-export";
+import { listReportRuns, prepareB2cSalesRegisterReport } from "../../../../../services/gst/report-export";
 import { getActiveGstSettings } from "../../../../../services/gst/settings";
 
 export const runtime = "nodejs";
@@ -55,24 +55,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "periodStart and periodEnd are required ISO dates" }, { status: 400 });
     }
 
-    const result = await generateReportRun({
+    if (String(body.reportType || "B2C_SALES_REGISTER").trim().toUpperCase() !== "B2C_SALES_REGISTER") {
+      return NextResponse.json({ ok: false, error: "Only B2C_SALES_REGISTER is supported" }, { status: 400 });
+    }
+
+    const result = await prepareB2cSalesRegisterReport({
       gstSettingsId: settings.data.id,
-      reportType: String(body.reportType || "B2C_SALES_REGISTER"),
+      shopId: settings.data.shopId ? String(settings.data.shopId) : undefined,
       periodStart,
       periodEnd,
-      format: body.format === "XLSX" ? "XLSX" : "CSV",
-      filters: body.filters && typeof body.filters === "object" ? (body.filters as Record<string, unknown>) : {},
     });
 
     if (!result.ok || !result.data) {
       return NextResponse.json({ ok: false, error: result.error || "Failed to generate report run" }, { status: 400 });
     }
 
-    if (result.data.reportType === "B2C_SALES_REGISTER" && "csv" in result.data) {
-      return NextResponse.json({ ok: true, ...result.data }, { status: 201 });
-    }
-
-    return NextResponse.json({ ok: true, run: result.data }, { status: 201 });
+    return NextResponse.json({ ok: true, ...result.data }, { status: 201 });
   } catch (error) {
     console.error("B2C export failed", {
       error,

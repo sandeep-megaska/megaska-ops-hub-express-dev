@@ -1,6 +1,8 @@
 import { createHash } from "crypto";
 import { gstDb } from "./db";
 import { buildB2cSalesRegisterExport } from "./reports/b2c-sales-register";
+import { generateInvoiceBatch, listDispatchReadyOrders } from "./dispatch-batch";
+import { syncOrdersByDateRange } from "./order-sync";
 import type { ReportWarning } from "./reports/types";
 import type { GstServiceResult } from "./types";
 
@@ -34,6 +36,13 @@ export interface B2cReportPayload {
   csv: string;
   warnings: ReportWarning[];
   rowCount: number;
+}
+
+export interface PrepareB2cReportInput {
+  gstSettingsId: string;
+  shopId?: string | null;
+  periodStart: Date | string;
+  periodEnd: Date | string;
 }
 
 export interface ReportRunFilters {
@@ -256,6 +265,101 @@ export async function generateReportRun(input: GenerateReportRunInput): Promise<
     });
     return { ok: false, error: message };
   }
+}
+
+export async function prepareB2cSalesRegisterReport(input: PrepareB2cReportInput): Promise<GstServiceResult<B2cReportPayload>> {
+  const periodStart = toIsoDate(input.periodStart);
+  const periodEnd = toIsoDate(input.periodEnd);
+  if (Number.isNaN(periodStart.getTime()) || Number.isNaN(periodEnd.getTime())) {
+    return { ok: false, error: "periodStart and periodEnd must be valid ISO dates" };
+  }
+
+  if (periodStart > periodEnd) {
+    return { ok: false, error: "periodStart must be less than or equal to periodEnd" };
+  }
+
+  const warnings: ReportWarning[] = [];
+  const from = periodStart.toISOString().slice(0, 10);
+  const to = periodEnd.toISOString().slice(0, 10);
+
+  const syncResult = await syncOrdersByDateRange({ from, to });
+  if (!syncResult.ok) {
+    return { ok: false, error: syncResult.error || "Failed to sync orders for selected range" };
+  }
+  for (const warning of syncResult.data?.warnings || []) {
+    warnings.push({
+      code: "SYNC_WARNING",
+      message: warning,
+      documentId: "",
+      documentNumber: "",
+    });
+  }
+
+  const notInvoiced = await listDispatchReadyOrders({
+    shopId: input.shopId || undefined,
+    from,
+    to,
+    invoiceStatus: "NOT_INVOICED",
+  });
+  if (!notInvoiced.ok) {
+    return { ok: false, error: notInvoiced.error || "Failed to load non-invoiced GST orders for selected range" };
+  }
+
+  const orderImportIds = (notInvoiced.data || [])
+    .map((row) => String(row.id || "").trim())
+    .filter(Boolean);
+  if (orderImportIds.length > 0) {
+    const generated = await generateInvoiceBatch({
+      shopId: input.shopId || undefined,
+      orderImportIds,
+    });
+    if (!generated.ok) {
+      return { ok: false, error: generated.error || "Failed to generate GST invoices for selected range" };
+    }
+
+    const generatedSummary = generated.data;
+    if (generatedSummary?.failed) {
+      warnings.push({
+        code: "INVOICE_GENERATION_FAILED",
+        message: `${generatedSummary.failed} order(s) failed during invoice generation`,
+        documentId: "",
+        documentNumber: "",
+      });
+    }
+    if (generatedSummary?.warningOnly) {
+      warnings.push({
+        code: "INVOICE_GENERATION_WARNING",
+        message: `${generatedSummary.warningOnly} order(s) generated with readiness warnings`,
+        documentId: "",
+        documentNumber: "",
+      });
+    }
+    if (generatedSummary?.skippedAlreadyInvoiced) {
+      warnings.push({
+        code: "INVOICE_GENERATION_SKIPPED",
+        message: `${generatedSummary.skippedAlreadyInvoiced} order(s) were already invoiced and skipped`,
+        documentId: "",
+        documentNumber: "",
+      });
+    }
+  }
+
+  const result = await buildB2cSalesRegisterExport({
+    gstSettingsId: input.gstSettingsId,
+    periodStart,
+    periodEnd,
+  });
+
+  return {
+    ok: true,
+    data: {
+      reportType: "B2C_SALES_REGISTER",
+      headers: result.headers,
+      csv: result.csv,
+      rowCount: result.rowCount,
+      warnings: [...warnings, ...result.warnings],
+    },
+  };
 }
 
 export async function getReportRun(id: string): Promise<GstServiceResult<GstReportRunRecord | null>> {
