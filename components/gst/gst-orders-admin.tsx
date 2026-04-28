@@ -266,8 +266,9 @@ export function GstOrdersAdmin() {
         return
       }
 
-      const warnings = Array.isArray(runPayload.run.warnings)
-        ? runPayload.run.warnings
+      const runWarnings = runPayload.run?.warnings
+      const warnings = Array.isArray(runWarnings)
+        ? runWarnings
         : Array.isArray(runPayload.warnings)
           ? runPayload.warnings
           : []
