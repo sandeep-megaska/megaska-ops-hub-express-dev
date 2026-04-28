@@ -92,7 +92,9 @@ export async function listDispatchReadyOrders(filters: DispatchFilters): Promise
     if (filters.from || filters.to) {
       where.orderCreatedAt = {
         ...(filters.from ? { gte: new Date(String(filters.from)) } : {}),
-        ...(filters.to ? { lte: new Date(String(filters.to)) } : {}),
+       ...(filters.to
+  ? { lte: new Date(`${String(filters.to).slice(0, 10)}T23:59:59.999Z`) }
+  : {}),
       };
     }
 
