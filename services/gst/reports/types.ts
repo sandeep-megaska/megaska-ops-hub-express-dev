@@ -2,7 +2,9 @@ export type ReportWarningCode =
   | "MISSING_CUSTOMER_NAME"
   | "MISSING_LINE_HSN"
   | "MISSING_LINE_TAX_RATE"
-  | "NO_LINES_FALLBACK_TO_DOCUMENT";
+  | "NO_LINES_FALLBACK_TO_DOCUMENT"
+  | "LINE_ITEMS_MISSING_IN_SNAPSHOT"
+  | "NO_INVOICES_IN_RANGE";
 
 export type ReportWarning = {
   code: ReportWarningCode;
@@ -13,19 +15,26 @@ export type ReportWarning = {
 };
 
 export type B2cSalesRegisterRow = {
-  invoiceNumber: string;
   invoiceDate: string;
-  customerName: string;
-  customerGstin: string;
+  invoiceNumber: string;
+  orderNumber: string;
+  customer: string;
   placeOfSupply: string;
-  invoiceValue: number;
-  taxableValue: number;
-  gstRate: number;
+  product: string;
+  variant: string;
+  hsn: string;
+  quantity: number;
+  price: number;
+  gstPercent: number;
+  igst: number;
   cgst: number;
   sgst: number;
-  igst: number;
   cess: number;
-  hsnCode: string;
+  total: number;
+  itemType: string;
+  paymentStatus: string;
+  paymentGateway: string;
+  fulfillmentStatus: string;
 };
 
 export type B2cSalesRegisterExport = {

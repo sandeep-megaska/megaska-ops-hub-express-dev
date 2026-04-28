@@ -4,6 +4,27 @@ import { getActiveGstSettings } from "../../../../../services/gst/settings";
 
 export const runtime = "nodejs";
 
+
+function parseDateInput(value: unknown, mode: "start" | "end"): Date | null {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    const suffix = mode === "start" ? "T00:00:00.000Z" : "T23:59:59.999Z";
+    const parsed = new Date(`${raw}${suffix}`);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return null;
+
+  if (mode === "end" && /^\d{4}-\d{2}-\d{2}T00:00:00(?:\.000)?Z$/.test(raw)) {
+    parsed.setUTCHours(23, 59, 59, 999);
+  }
+
+  return parsed;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
@@ -27,9 +48,10 @@ export async function POST(req: NextRequest) {
 
     const rawPeriodStart = body.periodStart ?? body.fromDate;
     const rawPeriodEnd = body.periodEnd ?? body.toDate;
-    const periodStart = new Date(String(rawPeriodStart || ""));
-    const periodEnd = new Date(String(rawPeriodEnd || ""));
-    if (Number.isNaN(periodStart.getTime()) || Number.isNaN(periodEnd.getTime())) {
+    const periodStart = parseDateInput(rawPeriodStart, "start");
+    const periodEnd = parseDateInput(rawPeriodEnd, "end");
+
+    if (!periodStart || !periodEnd) {
       return NextResponse.json({ ok: false, error: "periodStart and periodEnd are required ISO dates" }, { status: 400 });
     }
 

@@ -1,11 +1,13 @@
 import { gstDb } from "../db";
-import { formatDateDdMmYyyy, toCsv } from "./csv";
+import { toCsv } from "./csv";
 import type { B2cSalesRegisterExport, B2cSalesRegisterRow, ReportWarning } from "./types";
 
 type GstDocumentForReport = {
   id: string;
   documentNumber: string;
   documentDate: Date;
+  sourceOrderNumber: string | null;
+  shopifyOrderName: string | null;
   placeOfSupplyStateCode: string;
   taxableAmount: unknown;
   cgstAmount: unknown;
@@ -16,30 +18,54 @@ type GstDocumentForReport = {
   jsonSnapshot: unknown;
   lines: Array<{
     lineNumber: number;
+    description: string;
     hsnOrSac: string | null;
-    taxableAmount: unknown;
+    quantity: unknown;
+    unitPrice: unknown;
     taxRate: unknown;
     cgstAmount: unknown;
     sgstAmount: unknown;
     igstAmount: unknown;
     cessAmount: unknown;
+    lineTotal: unknown;
   }>;
 };
 
+type SnapshotLine = {
+  product: string;
+  variant: string;
+  hsn: string;
+  quantity: unknown;
+  price: unknown;
+  gstRate: unknown;
+  igst: unknown;
+  cgst: unknown;
+  sgst: unknown;
+  cess: unknown;
+  total: unknown;
+};
+
 export const B2C_SALES_REGISTER_HEADERS = [
-  "Invoice Number",
   "Invoice Date",
-  "Customer Name",
-  "Customer GSTIN",
+  "Invoice Number",
+  "Order Number",
+  "Customer",
   "Place of Supply",
-  "Invoice Value",
-  "Taxable Value",
-  "GST Rate",
+  "Product",
+  "Variant",
+  "HSN",
+  "Quantity",
+  "Price",
+  "GST %",
+  "IGST",
   "CGST",
   "SGST",
-  "IGST",
   "CESS",
-  "HSN Code",
+  "Total",
+  "Item Type",
+  "Payment Status",
+  "Payment Gateway",
+  "Fulfillment Status",
 ] as const;
 
 function asFiniteNumber(value: unknown): number {
@@ -59,6 +85,10 @@ function asText(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function formatDateYyyyMmDd(value: Date): string {
+  return value.toISOString().slice(0, 10);
+}
+
 function snapshotValue(snapshot: Record<string, unknown>, paths: string[][]): string {
   for (const path of paths) {
     let current: unknown = snapshot;
@@ -75,75 +105,139 @@ function snapshotValue(snapshot: Record<string, unknown>, paths: string[][]): st
   return "";
 }
 
-function extractCustomer(snapshotRaw: unknown): { customerName: string; customerGstin: string } {
-  const snapshot = typeof snapshotRaw === "object" && snapshotRaw !== null ? (snapshotRaw as Record<string, unknown>) : {};
-
-  const customerName =
-    snapshotValue(snapshot, [["buyer", "legalName"], ["buyer", "tradeName"], ["billingAddress", "name"], ["shippingAddress", "name"], ["metadata", "customerName"]]) ||
-    "UNREGISTERED";
-
-  const gstin = snapshotValue(snapshot, [["buyer", "gstin"], ["metadata", "customerGstin"], ["source", "customerGstin"]]);
-
-  return {
-    customerName,
-    customerGstin: gstin || "UNREGISTERED",
-  };
+function extractSnapshot(snapshotRaw: unknown): Record<string, unknown> {
+  return typeof snapshotRaw === "object" && snapshotRaw !== null ? (snapshotRaw as Record<string, unknown>) : {};
 }
 
-function toLineRow(document: GstDocumentForReport, line: GstDocumentForReport["lines"][number], customer: { customerName: string; customerGstin: string }): B2cSalesRegisterRow {
-  return {
-    invoiceNumber: document.documentNumber,
-    invoiceDate: formatDateDdMmYyyy(document.documentDate),
-    customerName: customer.customerName,
-    customerGstin: customer.customerGstin,
-    placeOfSupply: document.placeOfSupplyStateCode,
-    invoiceValue: asFiniteNumber(document.totalAmount),
-    taxableValue: asFiniteNumber(line.taxableAmount),
-    gstRate: asFiniteNumber(line.taxRate),
-    cgst: asFiniteNumber(line.cgstAmount),
-    sgst: asFiniteNumber(line.sgstAmount),
-    igst: asFiniteNumber(line.igstAmount),
-    cess: asFiniteNumber(line.cessAmount),
-    hsnCode: line.hsnOrSac?.trim() || "",
-  };
+function extractCustomer(snapshot: Record<string, unknown>): string {
+  return (
+    snapshotValue(snapshot, [["buyer", "legalName"], ["buyer", "tradeName"], ["billingAddress", "name"], ["shippingAddress", "name"], ["metadata", "customerName"], ["customer", "displayName"], ["customer", "name"]]) ||
+    "UNREGISTERED"
+  );
 }
 
-function toDocumentFallbackRow(document: GstDocumentForReport, customer: { customerName: string; customerGstin: string }): B2cSalesRegisterRow {
+function extractOrderNumber(document: GstDocumentForReport, snapshot: Record<string, unknown>): string {
+  return (
+    snapshotValue(snapshot, [["source", "sourceOrderNumber"], ["source", "shopifyOrderName"], ["metadata", "orderNumber"], ["metadata", "sourceOrderNumber"], ["orderNumber"], ["order", "name"], ["order", "orderNumber"]]) ||
+    asText(document.sourceOrderNumber) ||
+    asText(document.shopifyOrderName) ||
+    ""
+  );
+}
+
+function extractLineItems(snapshot: Record<string, unknown>): SnapshotLine[] {
+  const lineGroups: unknown[] = [
+    snapshot.lines,
+    snapshot.lineItems,
+    snapshot.orderLines,
+    typeof snapshot.order === "object" && snapshot.order !== null ? (snapshot.order as Record<string, unknown>).lineItems : null,
+    typeof snapshot.metadata === "object" && snapshot.metadata !== null ? (snapshot.metadata as Record<string, unknown>).lineItems : null,
+  ];
+
+  const lines = lineGroups.find((group) => Array.isArray(group));
+  if (!Array.isArray(lines)) return [];
+
+  return lines.map((item) => {
+    const line = typeof item === "object" && item !== null ? (item as Record<string, unknown>) : {};
+    return {
+      product: asText(line.product) || asText(line.productName) || asText(line.title) || asText(line.description),
+      variant: asText(line.variant) || asText(line.variantName) || asText(line.variantTitle),
+      hsn: asText(line.hsn) || asText(line.hsnCode) || asText(line.hsnOrSac),
+      quantity: line.quantity,
+      price: line.price ?? line.unitPrice,
+      gstRate: line.gstRate ?? line.taxRate,
+      igst: line.igst ?? line.igstAmount,
+      cgst: line.cgst ?? line.cgstAmount,
+      sgst: line.sgst ?? line.sgstAmount,
+      cess: line.cess ?? line.cessAmount,
+      total: line.total ?? line.lineTotal,
+    };
+  });
+}
+
+function buildRow(input: {
+  document: GstDocumentForReport;
+  orderNumber: string;
+  customer: string;
+  product?: string;
+  variant?: string;
+  hsn?: string;
+  quantity?: unknown;
+  price?: unknown;
+  gstRate?: unknown;
+  igst?: unknown;
+  cgst?: unknown;
+  sgst?: unknown;
+  cess?: unknown;
+  total?: unknown;
+  itemType?: string;
+  paymentStatus?: string;
+  paymentGateway?: string;
+  fulfillmentStatus?: string;
+}): B2cSalesRegisterRow {
   return {
-    invoiceNumber: document.documentNumber,
-    invoiceDate: formatDateDdMmYyyy(document.documentDate),
-    customerName: customer.customerName,
-    customerGstin: customer.customerGstin,
-    placeOfSupply: document.placeOfSupplyStateCode,
-    invoiceValue: asFiniteNumber(document.totalAmount),
-    taxableValue: asFiniteNumber(document.taxableAmount),
-    gstRate: 0,
-    cgst: asFiniteNumber(document.cgstAmount),
-    sgst: asFiniteNumber(document.sgstAmount),
-    igst: asFiniteNumber(document.igstAmount),
-    cess: asFiniteNumber(document.cessAmount),
-    hsnCode: "",
+    invoiceDate: formatDateYyyyMmDd(input.document.documentDate),
+    invoiceNumber: input.document.documentNumber,
+    orderNumber: input.orderNumber,
+    customer: input.customer,
+    placeOfSupply: input.document.placeOfSupplyStateCode,
+    product: input.product || "",
+    variant: input.variant || "",
+    hsn: input.hsn || "",
+    quantity: asFiniteNumber(input.quantity),
+    price: asFiniteNumber(input.price),
+    gstPercent: asFiniteNumber(input.gstRate),
+    igst: asFiniteNumber(input.igst),
+    cgst: asFiniteNumber(input.cgst),
+    sgst: asFiniteNumber(input.sgst),
+    cess: asFiniteNumber(input.cess),
+    total: asFiniteNumber(input.total),
+    itemType: input.itemType || "",
+    paymentStatus: input.paymentStatus || "",
+    paymentGateway: input.paymentGateway || "",
+    fulfillmentStatus: input.fulfillmentStatus || "",
   };
 }
 
 function serializeRows(rows: B2cSalesRegisterRow[]): string {
   const csvRows = rows.map((row) => [
-    row.invoiceNumber,
     row.invoiceDate,
-    row.customerName,
-    row.customerGstin,
+    row.invoiceNumber,
+    row.orderNumber,
+    row.customer,
     row.placeOfSupply,
-    row.invoiceValue,
-    row.taxableValue,
-    row.gstRate,
+    row.product,
+    row.variant,
+    row.hsn,
+    row.quantity,
+    row.price,
+    row.gstPercent,
+    row.igst,
     row.cgst,
     row.sgst,
-    row.igst,
     row.cess,
-    row.hsnCode,
+    row.total,
+    row.itemType,
+    row.paymentStatus,
+    row.paymentGateway,
+    row.fulfillmentStatus,
   ]);
 
   return toCsv([...B2C_SALES_REGISTER_HEADERS], csvRows);
+}
+
+function extractOrderStatusFields(snapshot: Record<string, unknown>): {
+  paymentStatus: string;
+  paymentGateway: string;
+  fulfillmentStatus: string;
+  itemType: string;
+} {
+  return {
+    paymentStatus: snapshotValue(snapshot, [["paymentStatus"], ["order", "paymentStatus"], ["source", "paymentStatus"]]),
+    paymentGateway: snapshotValue(snapshot, [["paymentGateway"], ["order", "paymentGateway"], ["source", "paymentGateway"]]),
+    fulfillmentStatus: snapshotValue(snapshot, [["fulfillmentStatus"], ["order", "fulfillmentStatus"], ["source", "fulfillmentStatus"]]),
+    itemType: snapshotValue(snapshot, [["itemType"], ["order", "itemType"], ["source", "itemType"]]),
+  };
 }
 
 export async function buildB2cSalesRegisterExport(input: {
@@ -151,20 +245,54 @@ export async function buildB2cSalesRegisterExport(input: {
   periodStart: Date;
   periodEnd: Date;
 }): Promise<B2cSalesRegisterExport> {
+  const documentCountForSettings = await gstDb.gstDocument.count({ where: { gstSettingsId: input.gstSettingsId } });
+  console.log("[GST_B2C_REPORT] GstDocument count for gstSettings before filters:", documentCountForSettings);
+
+  const where = {
+    gstSettingsId: input.gstSettingsId,
+    documentType: "TAX_INVOICE" as const,
+    supplyType: "B2C" as const,
+    status: "ISSUED" as const,
+    documentDate: { gte: input.periodStart, lte: input.periodEnd },
+  };
+
+  const filteredDocumentCount = await gstDb.gstDocument.count({ where });
+  console.log("[GST_B2C_REPORT] GstDocument count after filters:", filteredDocumentCount);
+  console.log("[GST_B2C_REPORT] filters:", {
+    gstSettingsId: input.gstSettingsId,
+    periodStart: input.periodStart.toISOString(),
+    periodEnd: input.periodEnd.toISOString(),
+    where,
+  });
+
+  const sampleDocument = await gstDb.gstDocument.findFirst({
+    where: { gstSettingsId: input.gstSettingsId },
+    orderBy: { documentDate: "desc" },
+    select: {
+      id: true,
+      documentNumber: true,
+      documentDate: true,
+      status: true,
+      documentType: true,
+      supplyType: true,
+      placeOfSupplyStateCode: true,
+      sourceOrderNumber: true,
+      shopifyOrderName: true,
+      jsonSnapshot: true,
+    },
+  });
+  console.log("[GST_B2C_REPORT] sample GstDocument shape:", sampleDocument);
+
   let documents: GstDocumentForReport[];
   try {
     documents = (await gstDb.gstDocument.findMany({
-      where: {
-        gstSettingsId: input.gstSettingsId,
-        documentType: "TAX_INVOICE",
-        supplyType: "B2C",
-        status: "ISSUED",
-        documentDate: { gte: input.periodStart, lte: input.periodEnd },
-      },
+      where,
       select: {
         id: true,
         documentNumber: true,
         documentDate: true,
+        sourceOrderNumber: true,
+        shopifyOrderName: true,
         placeOfSupplyStateCode: true,
         taxableAmount: true,
         cgstAmount: true,
@@ -177,13 +305,16 @@ export async function buildB2cSalesRegisterExport(input: {
           orderBy: { lineNumber: "asc" },
           select: {
             lineNumber: true,
+            description: true,
             hsnOrSac: true,
-            taxableAmount: true,
+            quantity: true,
+            unitPrice: true,
             taxRate: true,
             cgstAmount: true,
             sgstAmount: true,
             igstAmount: true,
             cessAmount: true,
+            lineTotal: true,
           },
         },
       },
@@ -197,15 +328,27 @@ export async function buildB2cSalesRegisterExport(input: {
     });
     throw error;
   }
-  console.log("[GST_B2C_REPORT] number of GstDocument rows found:", documents.length);
+  console.log("[GST_B2C_REPORT] number of GstDocument rows loaded:", documents.length);
 
   const rows: B2cSalesRegisterRow[] = [];
   const warnings: ReportWarning[] = [];
 
-  for (const document of documents) {
-    const customer = extractCustomer(document.jsonSnapshot);
+  if (documents.length === 0) {
+    warnings.push({
+      code: "NO_INVOICES_IN_RANGE",
+      message: "No GstDocument invoices found for selected range.",
+      documentId: "",
+      documentNumber: "",
+    });
+  }
 
-    if (customer.customerName === "UNREGISTERED") {
+  for (const document of documents) {
+    const snapshot = extractSnapshot(document.jsonSnapshot);
+    const customer = extractCustomer(snapshot);
+    const orderNumber = extractOrderNumber(document, snapshot);
+    const statusFields = extractOrderStatusFields(snapshot);
+
+    if (customer === "UNREGISTERED") {
       warnings.push({
         code: "MISSING_CUSTOMER_NAME",
         message: "Customer name missing in jsonSnapshot; exported as UNREGISTERED",
@@ -214,38 +357,83 @@ export async function buildB2cSalesRegisterExport(input: {
       });
     }
 
-    if (!document.lines.length) {
-      warnings.push({
-        code: "NO_LINES_FALLBACK_TO_DOCUMENT",
-        message: "Document has no line-level rows; exported using document-level totals",
-        documentId: document.id,
-        documentNumber: document.documentNumber,
-      });
-      rows.push(toDocumentFallbackRow(document, customer));
+    const snapshotLines = extractLineItems(snapshot);
+    if (snapshotLines.length > 0) {
+      for (const snapshotLine of snapshotLines) {
+        rows.push(
+          buildRow({
+            document,
+            orderNumber,
+            customer,
+            product: snapshotLine.product,
+            variant: snapshotLine.variant,
+            hsn: snapshotLine.hsn,
+            quantity: snapshotLine.quantity,
+            price: snapshotLine.price,
+            gstRate: snapshotLine.gstRate,
+            igst: snapshotLine.igst,
+            cgst: snapshotLine.cgst,
+            sgst: snapshotLine.sgst,
+            cess: snapshotLine.cess,
+            total: snapshotLine.total,
+            ...statusFields,
+          })
+        );
+      }
       continue;
     }
 
-    for (const line of document.lines) {
-      if (!line.hsnOrSac?.trim()) {
-        warnings.push({
-          code: "MISSING_LINE_HSN",
-          message: "Line has no HSN/SAC code",
-          documentId: document.id,
-          documentNumber: document.documentNumber,
-          lineNumber: line.lineNumber,
-        });
+    if (document.lines.length > 0) {
+      warnings.push({
+        code: "LINE_ITEMS_MISSING_IN_SNAPSHOT",
+        message: "jsonSnapshot line items missing; exported from stored GstDocument lines",
+        documentId: document.id,
+        documentNumber: document.documentNumber,
+      });
+
+      for (const line of document.lines) {
+        rows.push(
+          buildRow({
+            document,
+            orderNumber,
+            customer,
+            product: line.description,
+            hsn: line.hsnOrSac || "",
+            quantity: line.quantity,
+            price: line.unitPrice,
+            gstRate: line.taxRate,
+            igst: line.igstAmount,
+            cgst: line.cgstAmount,
+            sgst: line.sgstAmount,
+            cess: line.cessAmount,
+            total: line.lineTotal,
+            ...statusFields,
+          })
+        );
       }
-      if (!asFiniteNumber(line.taxRate)) {
-        warnings.push({
-          code: "MISSING_LINE_TAX_RATE",
-          message: "Line has missing GST rate; exported as 0",
-          documentId: document.id,
-          documentNumber: document.documentNumber,
-          lineNumber: line.lineNumber,
-        });
-      }
-      rows.push(toLineRow(document, line, customer));
+      continue;
     }
+
+    warnings.push({
+      code: "NO_LINES_FALLBACK_TO_DOCUMENT",
+      message: "No line items found; exported one document-level row using stored totals",
+      documentId: document.id,
+      documentNumber: document.documentNumber,
+    });
+
+    rows.push(
+      buildRow({
+        document,
+        orderNumber,
+        customer,
+        igst: document.igstAmount,
+        cgst: document.cgstAmount,
+        sgst: document.sgstAmount,
+        cess: document.cessAmount,
+        total: document.totalAmount,
+        ...statusFields,
+      })
+    );
   }
 
   return {
