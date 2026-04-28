@@ -34,18 +34,43 @@ type OrderRow = {
 const dateToday = new Date().toISOString().slice(0, 10)
 const dateThirtyDaysAgo = new Date(Date.now() - 29 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
 
+function asObject(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
+}
+
+function pickDocumentId(row: Record<string, unknown>): string | null {
+  const direct = row.documentId || row.invoiceDocumentId || row.gstDocumentId
+  if (direct) return String(direct)
+
+  const document = asObject(row.document)
+  if (document.id) return String(document.id)
+
+  const invoice = asObject(row.invoice)
+  if (invoice.id) return String(invoice.id)
+  if (invoice.documentId) return String(invoice.documentId)
+
+  return null
+}
+
 function extractGeneratedDocumentId(data: unknown, orderImportId: string): string | null {
-  const payload = data && typeof data === 'object' ? (data as Record<string, unknown>) : {}
-  const results = Array.isArray(payload.results) ? payload.results : []
-  const match = results.find((item) => {
-    const row = item && typeof item === 'object' ? (item as Record<string, unknown>) : {}
-    return String(row.id || '') === orderImportId && row.documentId
-  })
+  const payloads = [asObject(data), asObject(asObject(data).data)]
 
-  if (!match || typeof match !== 'object') return null
+  for (const payload of payloads) {
+    const direct = pickDocumentId(payload)
+    if (direct) return direct
 
-  const documentId = (match as Record<string, unknown>).documentId
-  return documentId ? String(documentId) : null
+    const results = Array.isArray(payload.results) ? payload.results : []
+    const exactMatch = results.find((item) => String(asObject(item).id || '') === orderImportId)
+    const exactDocumentId = pickDocumentId(asObject(exactMatch))
+    if (exactDocumentId) return exactDocumentId
+
+    for (const item of results) {
+      const documentId = pickDocumentId(asObject(item))
+      if (documentId) return documentId
+    }
+  }
+
+  return null
 }
 
 export function GstOrdersAdmin() {
@@ -57,11 +82,11 @@ export function GstOrdersAdmin() {
   const [error, setError] = useState<string>()
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({})
 
-  async function loadOrders() {
+  async function loadOrders(): Promise<OrderRow[]> {
     const res = await listDispatchReadyOrders({ from, to })
     if (!res.ok) {
       setError(res.error)
-      return
+      return []
     }
     const parsedRows = (Array.isArray(res.data) ? res.data : []).map((raw) => {
       const row = raw as Record<string, unknown>
@@ -95,6 +120,7 @@ export function GstOrdersAdmin() {
     })
 
     setRows(parsedRows)
+    return parsedRows
   }
 
   useEffect(() => {
@@ -129,11 +155,15 @@ export function GstOrdersAdmin() {
     }
 
     setResult(res.data)
-    await loadOrders()
+    const refreshedRows = await loadOrders()
 
-    const documentId = extractGeneratedDocumentId(res.data, id)
+    const documentId =
+      extractGeneratedDocumentId(res.data, id) ||
+      refreshedRows.find((row) => row.id === id)?.invoiceDocumentId ||
+      null
+
     if (!documentId) {
-      setError('Invoice was generated, but no PDF document id was returned')
+      setError('Invoice exists, but no PDF document id was found. Refresh the order list and use Download PDF.')
       setLoading(false)
       return
     }
