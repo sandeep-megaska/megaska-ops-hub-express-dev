@@ -254,11 +254,14 @@ export function GstOrdersAdmin() {
         ok?: boolean
         error?: string
         run?: { id?: string; fileUrl?: string | null; warnings?: ReportWarning[] }
+        reportType?: string
+        headers?: string[]
+        rowCount?: number
         csv?: string
         warnings?: ReportWarning[]
       }
 
-      if (!runRes.ok || !runPayload.ok || !runPayload.run) {
+      if (!runRes.ok || !runPayload.ok) {
         setB2cExportError(runPayload.error || 'Failed to generate B2C export')
         return
       }
@@ -272,7 +275,19 @@ export function GstOrdersAdmin() {
 
       if (typeof runPayload.csv === 'string' && runPayload.csv.length > 0) {
         downloadCsv(filename, runPayload.csv)
-        setResult({ reportType: 'B2C_SALES_REGISTER', run: runPayload.run, warnings })
+        setResult({
+          reportType: 'B2C_SALES_REGISTER',
+          run: runPayload.run,
+          csv: runPayload.csv,
+          headers: runPayload.headers,
+          rowCount: runPayload.rowCount,
+          warnings,
+        })
+        return
+      }
+
+      if (!runPayload.run) {
+        setB2cExportError('Report generated, but no download reference was returned')
         return
       }
 

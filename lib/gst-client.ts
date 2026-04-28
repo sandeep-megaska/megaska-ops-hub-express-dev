@@ -147,8 +147,20 @@ type GstReportRun = {
 }
 
 export const generateB2cSalesRegisterRun = async ({ from, to }: { from: string; to: string }) => {
-  const res = await request<Record<string, unknown> & { run?: GstReportRun }>('/api/gst/reports/runs', {
+  const apiBase = getApiBase()
+
+  if (apiBase === '__GST_APP_ORIGIN_REQUIRED__') {
+    return {
+      ok: false,
+      error: 'GST runtime config error: NEXT_PUBLIC_APP_URL is required for embedded admin.shopify.com context.',
+    } as const
+  }
+
+  const res = await fetch(`${apiBase}/api/gst/reports/runs`, {
     method: 'POST',
+    cache: 'no-store',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       reportType: 'B2C_SALES_REGISTER',
       format: 'CSV',
@@ -157,8 +169,22 @@ export const generateB2cSalesRegisterRun = async ({ from, to }: { from: string; 
     }),
   })
 
-  if (!res.ok) return res
-  return { ok: true, data: (res.data as { run?: GstReportRun })?.run || null } as const
+  const payload = (await res.json().catch(() => ({}))) as {
+    ok?: boolean
+    error?: string
+    run?: GstReportRun
+    csv?: string
+    warnings?: Array<Record<string, unknown>>
+    headers?: string[]
+    rowCount?: number
+    reportType?: string
+  }
+
+  if (!res.ok || !payload.ok) {
+    return { ok: false, error: payload.error || `Request failed with status ${res.status}` } as const
+  }
+
+  return { ok: true, data: payload } as const
 }
 
 export const downloadReportRunFile = (id: string) =>

@@ -68,14 +68,23 @@ export function GstReportsAdmin() {
     const warnings = Array.isArray(runRes.data.warnings) ? runRes.data.warnings : []
     setB2cWarnings(warnings)
 
-    if (typeof runRes.data.fileUrl === 'string' && runRes.data.fileUrl.length > 0) {
-      downloadFileUrl(runRes.data.fileUrl, filename)
+    if (typeof (runRes.data as Record<string, unknown>).csv === 'string' && String((runRes.data as Record<string, unknown>).csv).length > 0) {
+      downloadCsv(filename, String((runRes.data as Record<string, unknown>).csv))
+      setIsExportingB2c(false)
+      return
+    }
+
+    const runRecord = ((runRes.data as Record<string, unknown>).run as Record<string, unknown> | undefined) || {}
+    const runFileUrl = typeof runRecord.fileUrl === 'string' ? runRecord.fileUrl : ''
+
+    if (runFileUrl.length > 0) {
+      downloadFileUrl(runFileUrl, filename)
       setIsExportingB2c(false)
       return
     }
 
     const runResRecord: Record<string, unknown> = typeof runRes === 'object' && runRes !== null ? runRes : {}
-    const runData = runRes.data
+    const runData = runRecord
     const runDataRecord: Record<string, unknown> = typeof runData === 'object' && runData !== null ? runData : {}
     const runId =
       (typeof runDataRecord.id === 'string' && runDataRecord.id.length > 0 ? runDataRecord.id : '') ||
@@ -84,16 +93,6 @@ export function GstReportsAdmin() {
       (typeof runResRecord.runId === 'string' && runResRecord.runId.length > 0 ? runResRecord.runId : '')
 
     if (!runId) {
-      const inlineCsv =
-        (typeof runDataRecord.csv === 'string' && runDataRecord.csv.length > 0 ? runDataRecord.csv : '') ||
-        (typeof runResRecord.csv === 'string' && runResRecord.csv.length > 0 ? runResRecord.csv : '')
-
-      if (inlineCsv) {
-        downloadCsv(filename, inlineCsv)
-        setIsExportingB2c(false)
-        return
-      }
-
       setB2cError('Failed to generate B2C export')
       setIsExportingB2c(false)
       return

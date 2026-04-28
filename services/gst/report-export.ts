@@ -28,6 +28,14 @@ export interface GstReportRunRecord {
   warnings?: ReportWarning[];
 }
 
+export interface B2cReportPayload {
+  reportType: "B2C_SALES_REGISTER";
+  headers: readonly string[];
+  csv: string;
+  warnings: ReportWarning[];
+  rowCount: number;
+}
+
 export interface ReportRunFilters {
   gstSettingsId?: string;
   reportType?: string;
@@ -136,7 +144,7 @@ function pickRun(record: Record<string, unknown>): GstReportRunRecord {
   };
 }
 
-export async function generateReportRun(input: GenerateReportRunInput): Promise<GstServiceResult<GstReportRunRecord>> {
+export async function generateReportRun(input: GenerateReportRunInput): Promise<GstServiceResult<GstReportRunRecord | B2cReportPayload>> {
   console.log("[GST_REPORT_EXPORT] requested reportType:", input.reportType);
   const periodStart = toIsoDate(input.periodStart);
   const periodEnd = toIsoDate(input.periodEnd);
@@ -149,6 +157,30 @@ export async function generateReportRun(input: GenerateReportRunInput): Promise<
   }
 
   const normalizedReportType = normalizeReportType(input.reportType);
+
+  if (normalizedReportType === "B2C_SALES_REGISTER") {
+    try {
+      const result = await buildB2cSalesRegisterExport({
+        gstSettingsId: input.gstSettingsId,
+        periodStart,
+        periodEnd,
+      });
+
+      return {
+        ok: true,
+        data: {
+          reportType: result.reportType,
+          headers: result.headers,
+          csv: result.csv,
+          warnings: result.warnings,
+          rowCount: result.rowCount,
+        },
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to generate report";
+      return { ok: false, error: message };
+    }
+  }
 
   const reportRun = await gstDb.gstReportRun.create({
     data: {
@@ -166,33 +198,22 @@ export async function generateReportRun(input: GenerateReportRunInput): Promise<
   try {
     let csv: string;
     let rowCount = 0;
-    let warnings: ReportWarning[] = [];
+    const warnings: ReportWarning[] = [];
 
-    if (normalizedReportType === "B2C_SALES_REGISTER") {
-      const result = await buildB2cSalesRegisterExport({
+    const typeFilter = normalizeTypeFilter(normalizedReportType);
+    const documents = await gstDb.gstDocument.findMany({
+      where: {
         gstSettingsId: input.gstSettingsId,
-        periodStart,
-        periodEnd,
-      });
-      csv = result.csv;
-      rowCount = result.rowCount;
-      warnings = result.warnings;
-    } else {
-      const typeFilter = normalizeTypeFilter(normalizedReportType);
-      const documents = await gstDb.gstDocument.findMany({
-        where: {
-          gstSettingsId: input.gstSettingsId,
-          documentDate: { gte: periodStart, lte: periodEnd },
-          ...(typeFilter ? { documentType: { in: typeFilter } } : {}),
-        },
-        orderBy: [{ documentDate: "asc" }, { documentNumber: "asc" }],
-      });
-      console.log("[GST_REPORT_EXPORT] number of GstDocument rows found:", documents.length);
+        documentDate: { gte: periodStart, lte: periodEnd },
+        ...(typeFilter ? { documentType: { in: typeFilter } } : {}),
+      },
+      orderBy: [{ documentDate: "asc" }, { documentNumber: "asc" }],
+    });
+    console.log("[GST_REPORT_EXPORT] number of GstDocument rows found:", documents.length);
 
-      const result = toCsv(documents as ReportDocument[]);
-      csv = result.csv;
-      rowCount = result.rowCount;
-    }
+    const result = toCsv(documents as ReportDocument[]);
+    csv = result.csv;
+    rowCount = result.rowCount;
 
     const checksum = createHash("sha256").update(csv).digest("hex");
     const fileUrl = toDataUrl(csv);

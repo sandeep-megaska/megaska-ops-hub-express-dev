@@ -46,6 +46,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: result.error || "Failed to generate report run" }, { status: 400 });
     }
 
+    if (result.data.reportType === "B2C_SALES_REGISTER" && "csv" in result.data) {
+      return NextResponse.json({ ok: true, ...result.data }, { status: 201 });
+    }
+
     return NextResponse.json({ ok: true, run: result.data }, { status: 201 });
   } catch (error) {
     console.error("B2C export failed", {
