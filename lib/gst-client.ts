@@ -139,3 +139,27 @@ export const preparePrintBatch = (payload: Record<string, unknown>) =>
     method: 'POST',
     body: JSON.stringify(payload),
   })
+
+type GstReportRun = {
+  id: string
+  fileUrl?: string | null
+  warnings?: Array<Record<string, unknown>>
+}
+
+export const generateB2cSalesRegisterRun = async ({ from, to }: { from: string; to: string }) => {
+  const res = await request<Record<string, unknown> & { run?: GstReportRun }>('/api/gst/reports/runs', {
+    method: 'POST',
+    body: JSON.stringify({
+      reportType: 'B2C_SALES_REGISTER',
+      format: 'CSV',
+      periodStart: `${from}T00:00:00.000Z`,
+      periodEnd: `${to}T23:59:59.999Z`,
+    }),
+  })
+
+  if (!res.ok) return res
+  return { ok: true, data: (res.data as { run?: GstReportRun })?.run || null } as const
+}
+
+export const downloadReportRunFile = (id: string) =>
+  request<{ fileUrl?: string | null; csv?: string }>(`/api/gst/reports/runs/${encodeURIComponent(id)}/download`)
