@@ -223,13 +223,34 @@ export function GstOrdersAdmin() {
     setLoading(false)
   }
 
-  function onDownloadPdf(invoiceDocumentId: string) {
-    const link = document.createElement('a')
-    link.href = `/api/gst/invoices/${encodeURIComponent(invoiceDocumentId)}/pdf`
-    link.download = `gst-invoice-${invoiceDocumentId}.pdf`
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
+  async function onDownloadPdf(invoiceDocumentId: string) {
+    setLoading(true)
+    setError(undefined)
+
+    const response = await fetch(`/api/gst/invoices/${encodeURIComponent(invoiceDocumentId)}/pdf?format=html`, {
+      credentials: 'include',
+      cache: 'no-store',
+    })
+    const html = await response.text().catch(() => '')
+    if (!response.ok || !html) {
+      setError('Unable to prepare invoice for PDF download')
+      setLoading(false)
+      return
+    }
+
+    const popup = window.open('', '_blank', 'noopener,noreferrer')
+    if (!popup) {
+      setError('Popup blocked. Please allow popups and try again.')
+      setLoading(false)
+      return
+    }
+
+    const printReadyHtml = `${html}
+<script>(async()=>{const wait=(ms)=>new Promise(r=>setTimeout(r,ms));const imgs=[...document.images];await Promise.all(imgs.map((img)=>img.complete?Promise.resolve():new Promise((resolve)=>{img.addEventListener('load',resolve,{once:true});img.addEventListener('error',resolve,{once:true});})));await wait(120);window.print();})();</script>`
+    popup.document.open()
+    popup.document.write(printReadyHtml)
+    popup.document.close()
+    setLoading(false)
   }
 
   async function onGenerateB2cReport() {
