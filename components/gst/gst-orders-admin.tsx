@@ -227,30 +227,46 @@ export function GstOrdersAdmin() {
     setLoading(true)
     setError(undefined)
 
-    const response = await fetch(`/api/gst/invoices/${encodeURIComponent(invoiceDocumentId)}/pdf?format=html`, {
-      credentials: 'include',
-      cache: 'no-store',
-    })
-    const html = await response.text().catch(() => '')
-    if (!response.ok || !html) {
-      setError('Unable to prepare invoice for PDF download')
-      setLoading(false)
-      return
-    }
+    try {
+      const response = await fetch(`/api/gst/invoices/${encodeURIComponent(invoiceDocumentId)}/pdf`, {
+        credentials: 'include',
+        cache: 'no-store',
+      })
 
-    const popup = window.open('', '_blank', 'noopener,noreferrer')
-    if (!popup) {
-      setError('Popup blocked. Please allow popups and try again.')
-      setLoading(false)
-      return
-    }
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({} as { error?: string }))
+        setError(payload.error || 'Unable to generate invoice PDF')
+        return
+      }
 
-    const printReadyHtml = `${html}
-<script>(async()=>{const wait=(ms)=>new Promise(r=>setTimeout(r,ms));const imgs=[...document.images];await Promise.all(imgs.map((img)=>img.complete?Promise.resolve():new Promise((resolve)=>{img.addEventListener('load',resolve,{once:true});img.addEventListener('error',resolve,{once:true});})));await wait(120);window.print();})();</script>`
-    popup.document.open()
-    popup.document.write(printReadyHtml)
-    popup.document.close()
-    setLoading(false)
+      const contentType = response.headers.get('content-type') || ''
+      if (!contentType.toLowerCase().includes('application/pdf')) {
+        console.error('Unexpected GST invoice PDF response content-type', { invoiceDocumentId, contentType })
+        setError('Unable to generate invoice PDF')
+        return
+      }
+
+      const blob = await response.blob()
+      if (!blob.size) {
+        console.error('Generated GST invoice PDF was empty', { invoiceDocumentId })
+        setError('Unable to generate invoice PDF')
+        return
+      }
+
+      const fileUrl = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = fileUrl
+      anchor.download = `gst-invoice-${invoiceDocumentId}.pdf`
+      document.body.appendChild(anchor)
+      anchor.click()
+      anchor.remove()
+      URL.revokeObjectURL(fileUrl)
+    } catch (downloadError) {
+      console.error('GST invoice PDF download failed', { invoiceDocumentId, downloadError })
+      setError('Unable to generate invoice PDF')
+    } finally {
+      setLoading(false)
+    }
   }
 
   async function onGenerateB2cReport() {
