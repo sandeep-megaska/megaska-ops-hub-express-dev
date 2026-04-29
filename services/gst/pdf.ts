@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+import path from "node:path";
 import { prisma } from "../db/prisma";
 import { getGstInvoiceById } from "./invoice";
 import { getGstNoteById } from "./notes";
@@ -378,6 +380,15 @@ function getInvoicePartyDetails(document: Record<string, unknown>): {
   };
 }
 
+
+function resolveLogoSrc(customUrl: unknown, fallbackPath: string): string | null {
+  const custom = typeof customUrl === "string" ? customUrl.trim() : "";
+  if (custom) return publicAssetUrl(custom);
+
+  const absolute = path.join(process.cwd(), "public", fallbackPath.replace(/^\//, ""));
+  if (existsSync(absolute)) return publicAssetUrl(fallbackPath);
+  return null;
+}
 export async function buildGstInvoiceRenderModel(gstDocumentId: string): Promise<GstServiceResult<GstInvoiceRenderModel>> {
   const invoiceResult = await getGstInvoiceById(gstDocumentId);
   const documentResult = invoiceResult.ok ? invoiceResult : await getGstNoteById(gstDocumentId);
@@ -399,6 +410,11 @@ export async function buildGstInvoiceRenderModel(gstDocumentId: string): Promise
   const snapshot = (doc.jsonSnapshot || {}) as Record<string, unknown>;
   const seller = (snapshot.settings || {}) as Record<string, unknown>;
   const metadata = (doc.metadata || snapshot.metadata || {}) as Record<string, unknown>;
+  const template = await prisma.gstInvoiceTemplate.findFirst({
+    where: { gstSettingsId: String((doc as Record<string, unknown>).gstSettingsId || ""), isDefault: true },
+    select: { themeConfig: true },
+  });
+  const themeConfig = ((template?.themeConfig || {}) as Record<string, unknown>);
   const classification = (snapshot.classification || {}) as Record<string, unknown>;
 
   const sourceSnapshot = await loadLinkedOrderSnapshot(doc as Record<string, unknown>, snapshot);
@@ -484,8 +500,8 @@ export async function buildGstInvoiceRenderModel(gstDocumentId: string): Promise
       footer: asText(metadata.footerText || seller.footerText, "This is a system generated GST document."),
       signature: asText(metadata.signatureName || seller.authorizedSignatory),
       branding: {
-        headerLogoSrc: publicAssetUrl("/logos/header-logo.png"),
-        footerLogoSrc: publicAssetUrl("/logos/footer-logo.avif"),
+        headerLogoSrc: resolveLogoSrc(themeConfig.headerLogoUrl, "/logos/header-logo.png"),
+        footerLogoSrc: resolveLogoSrc(themeConfig.footerLogoUrl, "/logos/footer-logo.avif"),
       },
     },
   };
