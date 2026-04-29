@@ -490,7 +490,7 @@ export async function buildGstInvoiceRenderModel(gstDocumentId: string): Promise
 
   const [headerLogoSrc, footerLogoSrc] = await Promise.all([
     resolveInvoiceLogoForPdf(themeConfig.headerLogoUrl, "/logos/header-logo.png"),
-    resolveInvoiceLogoForPdf(themeConfig.footerLogoUrl, "/logos/footer-logo.avif"),
+    resolveInvoiceLogoForPdf(themeConfig.footerLogoUrl, "/logos/footer-logo.png"),
   ]);
 
   return {
