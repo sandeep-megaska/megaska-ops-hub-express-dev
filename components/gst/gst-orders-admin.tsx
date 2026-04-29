@@ -105,6 +105,7 @@ export function GstOrdersAdmin() {
   const printFrameRef = useRef<HTMLIFrameElement | null>(null)
   const [printHtml, setPrintHtml] = useState<string | null>(null)
   const [isB2cExporting, setIsB2cExporting] = useState(false)
+  const [downloadingPdfId, setDownloadingPdfId] = useState<string | null>(null)
   const [b2cExportError, setB2cExportError] = useState<string>()
   const [b2cWarnings, setB2cWarnings] = useState<ReportWarning[]>([])
 
@@ -224,6 +225,8 @@ export function GstOrdersAdmin() {
   }
 
   async function onDownloadPdf(invoiceDocumentId: string) {
+    if (downloadingPdfId) return
+    setDownloadingPdfId(invoiceDocumentId)
     setLoading(true)
     setError(undefined)
 
@@ -235,21 +238,21 @@ export function GstOrdersAdmin() {
 
       if (!response.ok) {
         const payload = await response.json().catch(() => ({} as { error?: string }))
-        setError(payload.error || 'Unable to generate invoice PDF')
+        setError(payload.error || 'Unable to generate invoice PDF. Please try again.')
         return
       }
 
       const contentType = response.headers.get('content-type') || ''
       if (!contentType.toLowerCase().includes('application/pdf')) {
         console.error('Unexpected GST invoice PDF response content-type', { invoiceDocumentId, contentType })
-        setError('Unable to generate invoice PDF')
+        setError('Unable to generate invoice PDF. Unexpected response from server.')
         return
       }
 
       const blob = await response.blob()
       if (!blob.size) {
         console.error('Generated GST invoice PDF was empty', { invoiceDocumentId })
-        setError('Unable to generate invoice PDF')
+        setError('Unable to generate invoice PDF. Empty document was returned.')
         return
       }
 
@@ -263,9 +266,10 @@ export function GstOrdersAdmin() {
       URL.revokeObjectURL(fileUrl)
     } catch (downloadError) {
       console.error('GST invoice PDF download failed', { invoiceDocumentId, downloadError })
-      setError('Unable to generate invoice PDF')
+      setError('Unable to generate invoice PDF right now. Please retry in a moment.')
     } finally {
       setLoading(false)
+      setDownloadingPdfId(null)
     }
   }
 
@@ -453,7 +457,9 @@ export function GstOrdersAdmin() {
                         {row.invoiceDocumentId ? (
                           <>
                             <button className="rounded-lg border border-gray-300 px-3 py-1.5" onClick={() => void onPrintInvoice(row.invoiceDocumentId!)}>Print Invoice</button>
-                            <button className="rounded-lg border border-gray-300 px-3 py-1.5" onClick={() => onDownloadPdf(row.invoiceDocumentId!)}>Download PDF</button>
+                            <button className="rounded-lg border border-gray-300 px-3 py-1.5 disabled:cursor-not-allowed disabled:opacity-60" onClick={() => onDownloadPdf(row.invoiceDocumentId!)} disabled={Boolean(downloadingPdfId)}>
+                              {downloadingPdfId === row.invoiceDocumentId ? 'Downloading PDF...' : 'Download PDF'}
+                            </button>
                           </>
                         ) : null}
                       </td>

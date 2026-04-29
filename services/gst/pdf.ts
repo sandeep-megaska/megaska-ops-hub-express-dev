@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { prisma } from "../db/prisma";
 import { getGstInvoiceById } from "./invoice";
@@ -381,13 +381,47 @@ function getInvoicePartyDetails(document: Record<string, unknown>): {
 }
 
 
-function resolveLogoSrc(customUrl: unknown, fallbackPath: string): string | null {
-  const custom = typeof customUrl === "string" ? customUrl.trim() : "";
-  if (custom) return publicAssetUrl(custom);
+function inferMimeType(filePath: string): string {
+  const ext = path.extname(filePath).toLowerCase();
+  if (ext === ".png") return "image/png";
+  if (ext === ".jpg" || ext === ".jpeg") return "image/jpeg";
+  if (ext === ".webp") return "image/webp";
+  if (ext === ".avif") return "image/avif";
+  if (ext === ".svg") return "image/svg+xml";
+  return "application/octet-stream";
+}
 
-  const absolute = path.join(process.cwd(), "public", fallbackPath.replace(/^\//, ""));
-  if (existsSync(absolute)) return publicAssetUrl(fallbackPath);
-  return null;
+function fileToDataUrl(filePath: string): string | null {
+  try {
+    const absolute = path.join(process.cwd(), "public", filePath.replace(/^\//, ""));
+    if (!existsSync(absolute)) return null;
+    const bytes = readFileSync(absolute);
+    return `data:${inferMimeType(filePath)};base64,${bytes.toString("base64")}`;
+  } catch {
+    return null;
+  }
+}
+
+async function resolveInvoiceLogoForPdf(customUrl: unknown, fallbackPath: string): Promise<string | null> {
+  const custom = typeof customUrl === "string" ? customUrl.trim() : "";
+  if (custom.startsWith("data:image/")) return custom;
+  if (custom.startsWith("blob:")) return null;
+  if (custom.startsWith("/")) {
+    const localData = fileToDataUrl(custom);
+    if (localData) return localData;
+  }
+  if (custom) {
+    try {
+      const response = await fetch(publicAssetUrl(custom), { cache: "no-store" });
+      if (response.ok) {
+        const mime = response.headers.get("content-type") || "image/png";
+        const buffer = Buffer.from(await response.arrayBuffer());
+        return `data:${mime};base64,${buffer.toString("base64")}`;
+      }
+    } catch {}
+  }
+
+  return fileToDataUrl(fallbackPath);
 }
 export async function buildGstInvoiceRenderModel(gstDocumentId: string): Promise<GstServiceResult<GstInvoiceRenderModel>> {
   const invoiceResult = await getGstInvoiceById(gstDocumentId);
@@ -454,6 +488,11 @@ export async function buildGstInvoiceRenderModel(gstDocumentId: string): Promise
 
   const totalValue = Number(doc.totalAmount || 0);
 
+  const [headerLogoSrc, footerLogoSrc] = await Promise.all([
+    resolveInvoiceLogoForPdf(themeConfig.headerLogoUrl, "/logos/header-logo.png"),
+    resolveInvoiceLogoForPdf(themeConfig.footerLogoUrl, "/logos/footer-logo.avif"),
+  ]);
+
   return {
     ok: true,
     data: {
@@ -500,8 +539,8 @@ export async function buildGstInvoiceRenderModel(gstDocumentId: string): Promise
       footer: asText(metadata.footerText || seller.footerText, "This is a system generated GST document."),
       signature: asText(metadata.signatureName || seller.authorizedSignatory),
       branding: {
-        headerLogoSrc: resolveLogoSrc(themeConfig.headerLogoUrl, "/logos/header-logo.png"),
-        footerLogoSrc: resolveLogoSrc(themeConfig.footerLogoUrl, "/logos/footer-logo.avif"),
+        headerLogoSrc,
+        footerLogoSrc,
       },
     },
   };
