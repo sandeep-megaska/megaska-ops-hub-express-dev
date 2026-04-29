@@ -51,9 +51,8 @@ function getShopDomainFromEmbedContext() {
 
 export default function AdminExchangesPage() {
   const [requests, setRequests] = useState<ExchangeRequest[]>([]);
-  const [adminKey, setAdminKey] = useState("");
   const [shopDomain, setShopDomain] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   const stats = useMemo(
@@ -69,33 +68,27 @@ export default function AdminExchangesPage() {
     [requests]
   );
 
-  async function loadRequests(key = adminKey, domain = shopDomain) {
+  async function loadRequests(domain: string) {
     setError("");
-
-    const cleanKey = key.trim();
     const cleanDomain = normalizeShopDomain(domain);
 
-    if (!cleanKey) {
-      setError("Admin key is required");
-      return;
-    }
-
     if (!cleanDomain) {
-      setError("Shop context missing from Shopify embedded app");
+      setError(
+        "We couldn’t detect your Shopify shop context. Please open this page from your embedded Shopify admin app."
+      );
+      setRequests([]);
+      setLoading(false);
       return;
     }
 
     try {
       setLoading(true);
-
-      localStorage.setItem("megaska_admin_key", cleanKey);
       localStorage.setItem("megaska_shop_domain", cleanDomain);
 
       const res = await fetch("/api/admin/exchange-requests", {
         method: "GET",
         cache: "no-store",
         headers: {
-          "x-admin-key": cleanKey,
           "x-shopify-shop-domain": cleanDomain,
         },
       });
@@ -118,15 +111,10 @@ export default function AdminExchangesPage() {
   }
 
   useEffect(() => {
-    const storedKey = localStorage.getItem("megaska_admin_key") || "";
     const detectedShop = getShopDomainFromEmbedContext();
 
-    setAdminKey(storedKey);
     setShopDomain(detectedShop);
-
-    if (storedKey && detectedShop) {
-      loadRequests(storedKey, detectedShop);
-    }
+    loadRequests(detectedShop);
   }, []);
 
   return (
@@ -158,28 +146,6 @@ export default function AdminExchangesPage() {
       </div>
 
       <div className="mb-6 rounded-xl border bg-white p-5 shadow-sm">
-        <div className="grid gap-4 md:grid-cols-[1fr_auto]">
-          <label className="text-sm">
-            <span className="mb-1 block text-slate-600">Admin Key</span>
-            <input
-              type="password"
-              value={adminKey}
-              onChange={(e) => setAdminKey(e.target.value)}
-              className="w-full rounded-lg border px-3 py-2"
-              placeholder="ADMIN_OPS_KEY"
-            />
-          </label>
-
-          <button
-            type="button"
-            onClick={() => loadRequests()}
-            disabled={loading}
-            className="self-end rounded-lg bg-slate-950 px-5 py-2 text-white disabled:opacity-50"
-          >
-            {loading ? "Loading..." : "Load"}
-          </button>
-        </div>
-
         <p className="mt-3 text-xs text-slate-500">
           Shop context: {shopDomain || "not detected"}
         </p>
@@ -188,6 +154,12 @@ export default function AdminExchangesPage() {
       {error ? (
         <div className="mb-6 rounded-xl border border-red-200 bg-red-50 p-5 text-red-700">
           {error}
+        </div>
+      ) : null}
+
+      {loading ? (
+        <div className="rounded-xl border bg-white p-8 text-slate-500">
+          Loading exchange requests...
         </div>
       ) : null}
 

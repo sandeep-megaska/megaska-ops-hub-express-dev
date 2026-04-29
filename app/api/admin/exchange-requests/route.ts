@@ -5,12 +5,6 @@ import {
   ShopResolutionError,
 } from "../../../../services/shopify/shop";
 
-function isAdmin(req: NextRequest) {
-  const key = req.headers.get("x-admin-key") || "";
-  const expected = String(process.env.ADMIN_OPS_KEY || "").trim();
-  return Boolean(expected && key === expected);
-}
-
 function parseDateStart(value: string | null) {
   if (!value) return null;
   const parsed = new Date(value);
@@ -29,10 +23,6 @@ function parseDateEnd(value: string | null) {
 
 export async function GET(req: NextRequest) {
   try {
-    if (!isAdmin(req)) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     const shop = await requireShopFromRequest(req);
 
     const status = req.nextUrl.searchParams.get("status")?.trim();
