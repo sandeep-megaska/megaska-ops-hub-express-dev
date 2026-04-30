@@ -930,7 +930,7 @@ function renderSuccessStep(message) {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
   }
 
-  function needsProfileCompletion(customer) {
+ /* function needsProfileCompletion(customer) {
     const firstName = normalizeText(customer?.firstName || "");
     const lastName = normalizeText(customer?.lastName || "");
     const email = normalizeEmail(customer?.email || "");
@@ -949,8 +949,10 @@ function renderSuccessStep(message) {
       postalCode &&
       countryRegion
     );
-  }
-
+  }*/
+function needsProfileCompletion() {
+  return false;
+}
   function renderProfileStep(customer) {
     state.step = "profile";
     state.errorMessage = "";
