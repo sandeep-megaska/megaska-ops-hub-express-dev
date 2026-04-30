@@ -862,7 +862,7 @@
     modal.setAttribute("aria-hidden", "false");
     document.documentElement.classList.add("megaska-otp-open");
     renderStep();
-    focusPhoneInput();
+    //focusPhoneInput();
 
     if (triggerSource) {
       console.log("[Megaska OTP] modal opened", { triggerSource });
@@ -905,7 +905,7 @@ function renderOtpStep() {
   state.statusMessage = state.requesting ? "Sending OTP..." : "";
   state.otpDigits = ["", "", "", ""];
   renderStep();
-  focusOtpInput(0);
+ // focusOtpInput(0);
 }
 
 function renderSuccessStep(message) {
@@ -1112,7 +1112,7 @@ function needsProfileCompletion() {
     state.errorMessage = error.message || "Invalid or expired OTP. Please try again.";
     state.otpDigits = ["", "", "", ""];
     renderStep();
-    focusOtpInput(0);
+    //focusOtpInput(0);
   }
 }
   async function handleProfileSubmit() {
