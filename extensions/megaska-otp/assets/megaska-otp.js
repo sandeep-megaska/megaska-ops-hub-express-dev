@@ -296,8 +296,8 @@
     state.savingProfile = false;
     state.resendSeconds = 0;
     state.errorMessage = "";
-    statusMessage: "",
-    state.successMessage = message || "🌊 Welcome back. Your beach look awaits";
+    statusMessage: "";
+    state.successMessage = "🌊 Welcome back. Your beach look awaits";
     state.profileFirstName = "";
     state.profileLastName = "";
     state.profileEmail = "";
