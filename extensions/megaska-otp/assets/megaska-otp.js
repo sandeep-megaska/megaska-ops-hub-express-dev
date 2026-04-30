@@ -297,7 +297,7 @@
     state.resendSeconds = 0;
     state.errorMessage = "";
     statusMessage: "",
-    state.successMessage = "Welcome back to Megaska";
+    state.successMessage = message || "🌊 Welcome back. Your beach look awaits";
     state.profileFirstName = "";
     state.profileLastName = "";
     state.profileEmail = "";
@@ -1025,7 +1025,7 @@ function needsProfileCompletion() {
 
   state.requesting = true;
   state.errorMessage = "";
-  state.statusMessage = "Sending OTP...";
+ state.statusMessage = "📲 Sending your beach passcode...";
   state.normalizedPhone = normalizedPhone;
 
   renderOtpStep();
@@ -1077,7 +1077,7 @@ function needsProfileCompletion() {
 
   state.verifying = true;
   state.errorMessage = "";
-  state.statusMessage = "Verifying OTP...";
+  state.statusMessage = "✨ Verifying your secure access OTP...";
   renderStep();
 
   try {
@@ -1103,9 +1103,21 @@ function needsProfileCompletion() {
       return;
     }
 
-    await resumePendingAction(sessionCustomer);
-    renderSuccessStep("Login successful. Welcome to Megaska");
-    setTimeout(() => closeModal("success", { force: true }), SUCCESS_CLOSE_DELAY_MS);
+   const hasCheckoutPending =
+  pendingAction &&
+  ["navigate", "buy-now-submit"].includes(pendingAction.type);
+
+if (hasCheckoutPending) {
+  renderSuccessStep("🌊 Preparing your beach-ready checkout...");
+} else {
+  renderSuccessStep("✨ You're in! Let’s dive into Megaska");
+}
+
+await resumePendingAction(sessionCustomer);
+
+if (!hasCheckoutPending) {
+  setTimeout(() => closeModal("success", { force: true }), SUCCESS_CLOSE_DELAY_MS);
+}
   } catch (error) {
     state.verifying = false;
     state.statusMessage = "";
@@ -1215,7 +1227,7 @@ if (accountRedirectTarget) {
 }
 
 await resumePendingAction(sessionCustomer);
-renderSuccessStep("Profile saved. Welcome to Megaska");
+renderSuccessStep("✨ Saved! Your next checkout will be even faster");
 setTimeout(() => closeModal("success", { force: true }), SUCCESS_CLOSE_DELAY_MS);
     } catch (error) {
       state.savingProfile = false;
@@ -1224,27 +1236,38 @@ setTimeout(() => closeModal("success", { force: true }), SUCCESS_CLOSE_DELAY_MS)
     }
   }
 
-  function handleOtpInput(event) {
-    if (!isModalOpen()) return;
+ function handleOtpInput(event) {
+  if (!isModalOpen()) return;
 
-    const input = event.target;
-    const index = Number(input.dataset.index);
-    const digit = sanitizeDigits(input.value, 1);
+  const input = event.target;
+  const index = Number(input.dataset.index);
+  const value = String(input.value || "");
 
-    state.otpDigits[index] = digit;
-    input.value = digit;
+  // FULL OTP autofill (key fix)
+  if (value.length > 1) {
+    const digits = value.replace(/\D/g, "").slice(0, OTP_LENGTH);
+    state.otpDigits = digits.split("").concat(Array(OTP_LENGTH).fill("")).slice(0, OTP_LENGTH);
     state.errorMessage = "";
     renderStep();
 
-    if (digit && index < OTP_LENGTH - 1) {
-      focusOtpInput(index + 1);
-    }
-
-    if (collectOtpDigits().length === OTP_LENGTH) {
+    if (digits.length === OTP_LENGTH) {
       submitOtpIfReady();
     }
+    return;
   }
 
+  const digit = value.replace(/\D/g, "").slice(0, 1);
+  state.otpDigits[index] = digit;
+  input.value = digit;
+
+  if (digit && index < OTP_LENGTH - 1) {
+    focusOtpInput(index + 1);
+  }
+
+  if (collectOtpDigits().length === OTP_LENGTH) {
+    submitOtpIfReady();
+  }
+}
   function handleOtpKeyDown(event) {
     if (!isModalOpen()) return;
 
@@ -1278,25 +1301,23 @@ setTimeout(() => closeModal("success", { force: true }), SUCCESS_CLOSE_DELAY_MS)
   }
 
   function handleOtpPaste(event) {
-    if (!isModalOpen()) return;
+  if (!isModalOpen()) return;
 
-    event.preventDefault();
-    const pasted = sanitizeDigits(event.clipboardData.getData("text"), OTP_LENGTH);
+  event.preventDefault();
 
-    if (!pasted) return;
+  const pasted = event.clipboardData.getData("text");
+  const digits = pasted.replace(/\D/g, "").slice(0, OTP_LENGTH);
 
-    const values = pasted.split("");
-    state.otpDigits = Array.from({ length: OTP_LENGTH }, (_, i) => values[i] || "");
-    state.errorMessage = "";
-    renderStep();
+  if (!digits) return;
 
-    if (pasted.length === OTP_LENGTH) {
-      submitOtpIfReady();
-    } else {
-      focusOtpInput(Math.min(pasted.length, OTP_LENGTH - 1));
-    }
+  state.otpDigits = digits.split("").concat(Array(OTP_LENGTH).fill("")).slice(0, OTP_LENGTH);
+  state.errorMessage = "";
+  renderStep();
+
+  if (digits.length === OTP_LENGTH) {
+    submitOtpIfReady();
   }
-
+}
   async function handleResend() {
     if (!isModalOpen()) return;
     if (state.requesting || state.resendSeconds > 0 || !state.normalizedPhone) return;
