@@ -147,7 +147,7 @@ async function fetchShopifyCancelledOrders(shopDomain: string, accessToken: stri
         source: "Shopify Cancellation" as const,
       };
     })
-    .filter((row): row is CancellationRow => Boolean(row));
+    .filter((row): row is NonNullable<typeof row> => row !== null);
 }
 
 export default async function CancellationsPage({
