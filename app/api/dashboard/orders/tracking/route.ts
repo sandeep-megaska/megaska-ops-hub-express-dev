@@ -40,7 +40,30 @@ export async function GET(req: NextRequest) {
       take: 20,
     });
 
-    return withCors(req, NextResponse.json({ orders }));
+    const responseOrders = orders.map((order) => {
+      const shipments = order.shipments.map((shipment) => ({
+        ...shipment,
+        isMock: Boolean((shipment.metadata as { mock?: boolean } | null)?.mock),
+        events: shipment.events.map((event) => ({
+          ...event,
+          isMock: Boolean((event.metadata as { mock?: boolean } | null)?.mock),
+        })),
+      }));
+
+      const hasShipmentWithAwb = shipments.some((shipment) => Boolean(String(shipment.awb || "").trim()));
+
+      return {
+        ...order,
+        shipments,
+        hasTracking: hasShipmentWithAwb,
+        fallback: {
+          title: "Order confirmed",
+          message: "Tracking will appear once your order is shipped.",
+        },
+      };
+    });
+
+    return withCors(req, NextResponse.json({ orders: responseOrders }));
   } catch (error) {
     return withCors(req, NextResponse.json({ error: error instanceof Error ? error.message : "Internal error" }, { status: 500 }));
   }

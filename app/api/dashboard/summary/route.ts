@@ -268,6 +268,10 @@ if (isShopifyAdminConfigured()) {
         order.shopifyOrderName,
         {
           orderStatus: order.status,
+          fallback: {
+            title: "Order confirmed",
+            message: "Tracking will appear once your order is shipped.",
+          },
           shipments: order.shipments.map((shipment) => ({
             id: shipment.id,
             provider: shipment.provider,
@@ -276,6 +280,7 @@ if (isShopifyAdminConfigured()) {
             normalizedStatus: shipment.normalizedStatus,
             statusLabel: formatShipmentTimelineStatus(shipment.normalizedStatus),
             statusUpdatedAt: shipment.statusUpdatedAt,
+            isMock: Boolean((shipment.metadata as { mock?: boolean } | null)?.mock),
             timeline: shipment.events.map((event) => ({
               id: event.id,
               normalizedStatus: event.normalizedStatus,
@@ -283,6 +288,7 @@ if (isShopifyAdminConfigured()) {
               occurredAt: event.occurredAt,
               description: event.description,
               location: event.location,
+              isMock: Boolean((event.metadata as { mock?: boolean } | null)?.mock),
             })),
           })),
         },
@@ -300,7 +306,15 @@ if (isShopifyAdminConfigured()) {
         latestCancellationStatus: latestCancellation?.status || null,
         latestExchangeStatus: latestExchange?.status || null,
         latestIssueStatus: latestIssue?.status || null,
-        tracking: orderTrackingByOrderName.get(orderNumber) || null,
+        tracking: (() => {
+          const tracking = orderTrackingByOrderName.get(orderNumber) || null;
+          if (!tracking) return null;
+          const hasShipmentWithAwb = tracking.shipments.some((shipment) => Boolean(String(shipment.awb || "").trim()));
+          return {
+            ...tracking,
+            hasTracking: hasShipmentWithAwb,
+          };
+        })(),
         hasActiveExchangeRequest: ACTIVE_EXCHANGE_STATUSES.includes(
           String(latestExchange?.status || "").trim().toUpperCase() as (typeof ACTIVE_EXCHANGE_STATUSES)[number]
         ),
