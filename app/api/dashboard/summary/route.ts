@@ -1,3 +1,4 @@
+import { MegaskaOrderStatus } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 import { withCors, handleOptions } from "../../_lib/cors";
 import { prisma } from "../../../../services/db/prisma";
@@ -17,6 +18,11 @@ import { ACTIVE_EXCHANGE_STATUSES } from "../../../../services/exchange/lifecycl
 import { getOrCreateWalletAccount, listWalletTransactions } from "../../../../services/wallet";
 
 export const runtime = "nodejs";
+
+function formatShipmentTimelineStatus(status: MegaskaOrderStatus) {
+  return status.replace(/_/g, " ");
+}
+
 
 export async function OPTIONS(req: NextRequest) {
   return handleOptions(req);
@@ -236,6 +242,53 @@ if (isShopifyAdminConfigured()) {
       savedAddresses: savedAddressCount,
     };
 
+    const megaskaOrders = orderNumbers.length
+      ? await prisma.megaskaOrder.findMany({
+          where: {
+            customerProfileId: customer.id,
+            shopId: shop.id,
+            shopifyOrderName: { in: orderNumbers },
+          },
+          include: {
+            shipments: {
+              include: {
+                events: {
+                  orderBy: { occurredAt: "desc" },
+                  take: 8,
+                },
+              },
+              orderBy: { updatedAt: "desc" },
+            },
+          },
+        })
+      : [];
+
+    const orderTrackingByOrderName = new Map(
+      megaskaOrders.map((order) => [
+        order.shopifyOrderName,
+        {
+          orderStatus: order.status,
+          shipments: order.shipments.map((shipment) => ({
+            id: shipment.id,
+            provider: shipment.provider,
+            awb: shipment.awb,
+            trackingUrl: shipment.trackingUrl,
+            normalizedStatus: shipment.normalizedStatus,
+            statusLabel: formatShipmentTimelineStatus(shipment.normalizedStatus),
+            statusUpdatedAt: shipment.statusUpdatedAt,
+            timeline: shipment.events.map((event) => ({
+              id: event.id,
+              normalizedStatus: event.normalizedStatus,
+              statusLabel: formatShipmentTimelineStatus(event.normalizedStatus),
+              occurredAt: event.occurredAt,
+              description: event.description,
+              location: event.location,
+            })),
+          })),
+        },
+      ])
+    );
+
     const orders = (shopifyDashboard?.recentOrders || []).map((order) => {
       const orderNumber = String(order?.name || "").trim();
       const latestCancellation = latestCancellationByOrder.get(orderNumber);
@@ -247,6 +300,7 @@ if (isShopifyAdminConfigured()) {
         latestCancellationStatus: latestCancellation?.status || null,
         latestExchangeStatus: latestExchange?.status || null,
         latestIssueStatus: latestIssue?.status || null,
+        tracking: orderTrackingByOrderName.get(orderNumber) || null,
         hasActiveExchangeRequest: ACTIVE_EXCHANGE_STATUSES.includes(
           String(latestExchange?.status || "").trim().toUpperCase() as (typeof ACTIVE_EXCHANGE_STATUSES)[number]
         ),

@@ -184,17 +184,20 @@ model OrderActionRequest {
   deliveryDateSnapshot  DateTime?
   eligibilityDecision   String?
   eligibilityReason     String?
+  megaskaOrderId        String?
 
   customerProfile       CustomerProfile       @relation(fields: [customerProfileId], references: [id])
   shop                  Shop?                 @relation(fields: [shopId], references: [id], onDelete: SetNull)
   items                 OrderActionItem[]
   payments              RequestPayment[]
   shipments             ShipmentTracking[]
+  megaskaOrder          MegaskaOrder?         @relation(fields: [megaskaOrderId], references: [id], onDelete: SetNull)
 
   @@index([customerProfileId])
   @@index([status])
   @@index([orderNumber])
   @@index([shopId])
+  @@index([megaskaOrderId])
 }
 
 model OrderActionItem {
@@ -260,6 +263,96 @@ model ShipmentTracking {
 
   @@index([requestId])
   @@unique([requestId, direction])
+}
+
+
+enum MegaskaOrderStatus {
+  ORDER_CONFIRMED
+  PROCESSING
+  PACKED
+  READY_FOR_PICKUP
+  PICKED_UP
+  IN_TRANSIT
+  OUT_FOR_DELIVERY
+  DELIVERED
+  DELIVERY_FAILED
+  RTO_INITIATED
+  RTO_DELIVERED
+  CANCELLED
+  RETURN_REQUESTED
+  RETURN_IN_TRANSIT
+  REFUNDED
+}
+
+enum CourierProvider {
+  DELHIVERY
+  DTDC
+  ATS
+  OTHER
+}
+
+
+model MegaskaOrder {
+  id                 String             @id @default(uuid())
+  shopId             String
+  customerProfileId  String
+  shopifyOrderId     String?
+  shopifyOrderName   String
+  orderPlacedAt      DateTime?
+  status             MegaskaOrderStatus @default(ORDER_CONFIRMED)
+  statusSource       String?
+  statusUpdatedAt    DateTime?
+  metadata           Json?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  shop               Shop               @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  customerProfile    CustomerProfile    @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+  shipments          OrderShipment[]
+  actionRequests     OrderActionRequest[]
+
+  @@unique([shopId, shopifyOrderName])
+  @@index([customerProfileId, createdAt])
+  @@index([shopifyOrderId])
+  @@index([status])
+}
+
+model OrderShipment {
+  id                 String             @id @default(uuid())
+  orderId            String
+  provider           CourierProvider    @default(OTHER)
+  providerReference  String?
+  awb                String?
+  trackingUrl        String?
+  normalizedStatus   MegaskaOrderStatus @default(ORDER_CONFIRMED)
+  statusUpdatedAt    DateTime?
+  rawStatus          String?
+  metadata           Json?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  order              MegaskaOrder       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  events             OrderShipmentEvent[]
+
+  @@index([orderId, createdAt])
+  @@index([provider, providerReference])
+  @@index([awb])
+}
+
+model OrderShipmentEvent {
+  id                 String             @id @default(uuid())
+  shipmentId         String
+  occurredAt         DateTime
+  normalizedStatus   MegaskaOrderStatus
+  rawStatus          String?
+  description        String?
+  location           String?
+  metadata           Json?
+  createdAt          DateTime           @default(now())
+
+  shipment           OrderShipment      @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+
+  @@index([shipmentId, occurredAt])
 }
 
 enum WalletDirection {
@@ -436,6 +529,7 @@ model GstSettings {
   shop                  Shop?    @relation(fields: [shopId], references: [id], onDelete: SetNull)
 
   @@index([shopId])
+  @@index([megaskaOrderId])
 }
 
 model GstCounter {
