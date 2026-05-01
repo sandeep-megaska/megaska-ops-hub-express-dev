@@ -529,7 +529,6 @@ model GstSettings {
   shop                  Shop?    @relation(fields: [shopId], references: [id], onDelete: SetNull)
 
   @@index([shopId])
-  @@index([megaskaOrderId])
 }
 
 model GstCounter {
