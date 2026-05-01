@@ -1,4 +1,6 @@
 import { prisma } from "../../../services/db/prisma";
+import { headers } from "next/headers";
+import { getShopByDomain, normalizeShopDomain, resolveShopConfig } from "../../../services/shopify/shop";
 
 const PENDING_OPEN_STATUSES = new Set(["OPEN", "PENDING", "AWAITING_PAYMENT"]);
 const APPROVED_CLOSED_STATUSES = new Set(["APPROVED", "CLOSED"]);
@@ -10,9 +12,32 @@ function formatDateTime(value: Date | null | undefined) {
 }
 
 export default async function CancellationsPage() {
+  const headerStore = await headers();
+  const requestedShopDomain = normalizeShopDomain(
+    headerStore.get("x-shopify-shop-domain") || ""
+  );
+
+  const currentShop = requestedShopDomain
+    ? await getShopByDomain(requestedShopDomain)
+    : await resolveShopConfig();
+
+  if (!currentShop?.id) {
+    return (
+      <div className="mk-page">
+        <section className="mk-card">
+          <h2 className="mk-section-title">Cancellation Queue</h2>
+          <p className="mk-section-subtitle">
+            Shop context is unavailable. Open this page from the embedded admin for a specific shop.
+          </p>
+        </section>
+      </div>
+    );
+  }
+
   const requests = await prisma.orderActionRequest.findMany({
     where: {
       requestType: "CANCELLATION",
+      shopId: currentShop.id,
     },
     orderBy: {
       requestedAt: "desc",

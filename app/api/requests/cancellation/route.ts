@@ -44,6 +44,7 @@ export async function POST(req: NextRequest) {
     const existingBlockingRequest = await prisma.orderActionRequest.findFirst({
       where: {
         customerProfileId: session.customer.id,
+        shopId: session.customer.shopId,
         requestType: "CANCELLATION",
         orderNumber,
         status: { in: ["OPEN", "APPROVED", "CLOSED"] },
@@ -68,6 +69,7 @@ export async function POST(req: NextRequest) {
       data: {
         requestType: "CANCELLATION",
         customerProfileId: session.customer.id,
+        shopId: session.customer.shopId,
         shopifyCustomerId: session.customer.shopifyCustomerId || null,
         shopifyOrderId,
         orderNumber,
