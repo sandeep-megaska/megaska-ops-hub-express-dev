@@ -1,4 +1,4 @@
-import { MegaskaOrderStatus } from "@prisma/client";
+import { MegaskaOrderStatus } from "../../../../generated/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { withCors, handleOptions } from "../../_lib/cors";
 import { prisma } from "../../../../services/db/prisma";
