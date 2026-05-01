@@ -1,4 +1,4 @@
-import { CourierProvider, MegaskaOrderStatus } from "@prisma/client";
+import { CourierProvider, MegaskaOrderStatus } from "../../generated/prisma";
 
 export type CourierTrackingEvent = {
   occurredAt: Date;

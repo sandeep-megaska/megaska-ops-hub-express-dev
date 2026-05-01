@@ -1,4 +1,4 @@
-import { CourierProvider, MegaskaOrderStatus } from "@prisma/client";
+import { CourierProvider, MegaskaOrderStatus } from "../../generated/prisma";
 import { getDelhiveryCapabilityState } from "./delhivery";
 import type { CourierAdapter, CourierTrackingSnapshot } from "./courier-service";
 
