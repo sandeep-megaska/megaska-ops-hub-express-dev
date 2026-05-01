@@ -216,7 +216,7 @@ export default async function CancellationsPage({
     eventAt: order.statusUpdatedAt || order.updatedAt,
     cancelledBy: "Megaska",
     customerName: [order.customerProfile.firstName, order.customerProfile.lastName].filter(Boolean).join(" ") || "—",
-    phone: order.customerProfile.phone || "—",
+    phone: order.customerProfile.phoneE164 || "—",
     email: order.customerProfile.email || "—",
     reason: "Reason not provided",
     customerNote: "—",
