@@ -2250,8 +2250,11 @@ function consumePendingAccountRedirect() {
   hardBlockEvent(event);
 
   const gateState = await getMegaskaCheckoutGateState();
-  const authenticated = Boolean(gateState?.authenticated || hasKnownMegaskaSession());
   const accountDestination = resolveAccountDestinationUrl(triggerEl);
+
+  const authenticated =
+    Boolean(gateState?.authenticated) &&
+    Boolean(gateState?.verifiedPhonePresent);
 
   if (!authenticated) {
     setPendingAction({
@@ -2266,15 +2269,22 @@ function consumePendingAccountRedirect() {
       await handlePromptFallback();
     }
 
-    console.log("[Megaska OTP] account trigger intercepted", { authenticated: false, accountDestination });
+    console.log("[Megaska OTP] account trigger intercepted", {
+      authenticated: false,
+      accountDestination,
+    });
     return;
   }
 
   hideAccountMenu();
-  console.log("[Megaska OTP] account trigger intercepted", { authenticated: true, accountDestination });
+
+  console.log("[Megaska OTP] account trigger intercepted", {
+    authenticated: true,
+    accountDestination,
+  });
+
   window.location.assign(accountDestination);
 }
-
   async function ensureMegaskaAuthenticatedBeforeCheckout(options) {
   const opts = options || {};
   const pending =
