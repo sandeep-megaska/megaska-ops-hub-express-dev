@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 import { prisma } from "../../../services/db/prisma";
 import { getShopByDomain, normalizeShopDomain, resolveShopConfig } from "../../../services/shopify/shop";
+import { getShopifyCancelledOrders } from "../../../services/shopify/admin";
 
 type RangeKey = "7d" | "30d" | "90d" | "custom";
 
@@ -66,80 +67,8 @@ function getDateRange(searchParams: Record<string, string | string[] | undefined
   return { range: range === "custom" ? "30d" : range, start, end, fromRaw: "", toRaw: "" };
 }
 
-async function fetchShopifyCancelledOrders(shopDomain: string, accessToken: string, start: Date, end: Date) {
-  const query = `
-    query CancelledOrders($query: String!) {
-      orders(first: 100, sortKey: UPDATED_AT, reverse: true, query: $query) {
-        nodes {
-          id
-          name
-          cancelledAt
-          cancelReason
-          updatedAt
-          displayFinancialStatus
-          customer {
-            firstName
-            lastName
-            email
-            phone
-          }
-          email
-          phone
-          note
-        }
-      }
-    }
-  `;
-
-  const rangeQuery = `updated_at:>=${start.toISOString()} updated_at:<=${end.toISOString()}`;
-
-  const response = await fetch(`https://${shopDomain}/admin/api/2026-01/graphql.json`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Shopify-Access-Token": accessToken,
-    },
-    body: JSON.stringify({ query, variables: { query: rangeQuery } }),
-    cache: "no-store",
-  });
-
-  if (!response.ok) {
-    const responseBody = await response.text().catch(() => "");
-    const message = `Shopify cancelled orders query failed with status ${response.status} ${response.statusText}${responseBody ? `: ${responseBody.slice(0, 500)}` : ""}`;
-    console.error("[ADMIN CANCELLATIONS] Shopify API HTTP error", {
-      shopDomain,
-      status: response.status,
-      statusText: response.statusText,
-      responseBody,
-    });
-    throw new Error(message);
-  }
-  const payload = (await response.json()) as {
-    data?: {
-      orders?: {
-        nodes?: Array<{
-          id: string;
-          name?: string | null;
-          cancelledAt?: string | null;
-          cancelReason?: string | null;
-          updatedAt?: string | null;
-          displayFinancialStatus?: string | null;
-          customer?: { firstName?: string | null; lastName?: string | null; email?: string | null; phone?: string | null } | null;
-          email?: string | null;
-          phone?: string | null;
-          note?: string | null;
-        }>;
-      };
-    };
-  };
-
-  if ((payload as { errors?: unknown }).errors) {
-    const serializedErrors = JSON.stringify((payload as { errors?: unknown }).errors);
-    console.error("[ADMIN CANCELLATIONS] Shopify GraphQL errors", { shopDomain, errors: serializedErrors });
-    throw new Error(`Shopify GraphQL error: ${serializedErrors}`);
-  }
-
-  return (payload.data?.orders?.nodes || [])
+function mapShopifyOrdersToCancellationRows(orders: Awaited<ReturnType<typeof getShopifyCancelledOrders>>) {
+  return (orders || [])
     .map((order) => {
       const cancelledAt = toDate(order.cancelledAt);
       const updatedAt = toDate(order.updatedAt);
@@ -261,9 +190,14 @@ export default async function CancellationsPage({
 
   let shopifyRows: CancellationRow[] = [];
   let shopifyFetchError: string | null = null;
-  if (currentShop.shopDomain && currentShop.accessToken) {
+  if (currentShop.shopDomain) {
     try {
-      shopifyRows = await fetchShopifyCancelledOrders(currentShop.shopDomain, currentShop.accessToken, start, end);
+      const shopifyOrders = await getShopifyCancelledOrders({
+        shopDomain: currentShop.shopDomain,
+        from: start,
+        to: end,
+      });
+      shopifyRows = mapShopifyOrdersToCancellationRows(shopifyOrders);
     } catch (error) {
       shopifyFetchError = error instanceof Error ? error.message : String(error);
       console.error("[ADMIN CANCELLATIONS] Failed to fetch Shopify cancelled orders", {

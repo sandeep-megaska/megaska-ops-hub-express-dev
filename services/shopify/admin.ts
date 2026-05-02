@@ -408,6 +408,24 @@ type AdminRequestOptions = {
   shopDomain?: string | null;
 };
 
+export type ShopifyCancelledOrder = {
+  id: string;
+  name?: string | null;
+  cancelledAt?: string | null;
+  cancelReason?: string | null;
+  updatedAt?: string | null;
+  displayFinancialStatus?: string | null;
+  customer?: {
+    firstName?: string | null;
+    lastName?: string | null;
+    email?: string | null;
+    phone?: string | null;
+  } | null;
+  email?: string | null;
+  phone?: string | null;
+  note?: string | null;
+};
+
 async function adminGraphql<T>(
   query: string,
   variables?: Record<string, unknown>,
@@ -506,6 +524,62 @@ async function adminGraphql<T>(
 }
 export function isShopifyAdminConfigured() {
   return Boolean(getEnvTrimmed("SHOPIFY_STORE_DOMAIN") && (hasRuntimeCredentialConfig() || getEnvTrimmed("SHOPIFY_ADMIN_ACCESS_TOKEN")));
+}
+
+export async function getShopifyCancelledOrders(input: {
+  shopDomain: string;
+  from: Date;
+  to: Date;
+}) {
+  const primaryQuery = [
+    `cancelled_at:>=${input.from.toISOString()}`,
+    `cancelled_at:<=${input.to.toISOString()}`,
+  ].join(" ");
+  const fallbackQuery = [
+    `updated_at:>=${input.from.toISOString()}`,
+    `updated_at:<=${input.to.toISOString()}`,
+  ].join(" ");
+
+  const queryDocument = `
+    query CancelledOrders($query: String!) {
+      orders(first: 100, sortKey: UPDATED_AT, reverse: true, query: $query) {
+        nodes {
+          id
+          name
+          cancelledAt
+          cancelReason
+          updatedAt
+          displayFinancialStatus
+          customer {
+            firstName
+            lastName
+            email
+            phone
+          }
+          email
+          phone
+          note
+        }
+      }
+    }
+  `;
+
+  const primaryData = await adminGraphql<{ orders: { nodes: ShopifyCancelledOrder[] } }>(
+    queryDocument,
+    { query: primaryQuery },
+    { shopDomain: input.shopDomain }
+  );
+
+  const primaryNodes = primaryData.orders?.nodes || [];
+  if (primaryNodes.length > 0) return primaryNodes;
+
+  const fallbackData = await adminGraphql<{ orders: { nodes: ShopifyCancelledOrder[] } }>(
+    queryDocument,
+    { query: fallbackQuery },
+    { shopDomain: input.shopDomain }
+  );
+
+  return (fallbackData.orders?.nodes || []).filter((order) => Boolean(order.cancelledAt));
 }
 
 
