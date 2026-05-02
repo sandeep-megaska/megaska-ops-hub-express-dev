@@ -91,7 +91,7 @@ async function fetchShopifyCancelledOrders(shopDomain: string, accessToken: stri
     }
   `;
 
-  const rangeQuery = `cancelled_at:>=${start.toISOString()} cancelled_at:<=${end.toISOString()}`;
+  const rangeQuery = `updated_at:>=${start.toISOString()} updated_at:<=${end.toISOString()}`;
 
   const response = await fetch(`https://${shopDomain}/admin/api/2026-01/graphql.json`, {
     method: "POST",
@@ -103,7 +103,17 @@ async function fetchShopifyCancelledOrders(shopDomain: string, accessToken: stri
     cache: "no-store",
   });
 
-  if (!response.ok) return [] as CancellationRow[];
+  if (!response.ok) {
+    const responseBody = await response.text().catch(() => "");
+    const message = `Shopify cancelled orders query failed with status ${response.status} ${response.statusText}${responseBody ? `: ${responseBody.slice(0, 500)}` : ""}`;
+    console.error("[ADMIN CANCELLATIONS] Shopify API HTTP error", {
+      shopDomain,
+      status: response.status,
+      statusText: response.statusText,
+      responseBody,
+    });
+    throw new Error(message);
+  }
   const payload = (await response.json()) as {
     data?: {
       orders?: {
@@ -123,12 +133,18 @@ async function fetchShopifyCancelledOrders(shopDomain: string, accessToken: stri
     };
   };
 
+  if ((payload as { errors?: unknown }).errors) {
+    const serializedErrors = JSON.stringify((payload as { errors?: unknown }).errors);
+    console.error("[ADMIN CANCELLATIONS] Shopify GraphQL errors", { shopDomain, errors: serializedErrors });
+    throw new Error(`Shopify GraphQL error: ${serializedErrors}`);
+  }
+
   return (payload.data?.orders?.nodes || [])
     .map((order) => {
       const cancelledAt = toDate(order.cancelledAt);
       const updatedAt = toDate(order.updatedAt);
       const eventAt = cancelledAt || updatedAt;
-      if (!eventAt) return null;
+      if (!eventAt || !cancelledAt) return null;
 
       const customerName = `${order.customer?.firstName || ""} ${order.customer?.lastName || ""}`.trim();
 
@@ -170,7 +186,16 @@ export default async function CancellationsPage({
     prisma.orderActionRequest.findMany({
       where: {
         requestType: "CANCELLATION",
-        shopId: currentShop.id,
+        OR: [
+          { shopId: currentShop.id },
+          {
+            shopId: null,
+            OR: [
+              { customerProfile: { shopId: currentShop.id } },
+              { megaskaOrder: { shopId: currentShop.id } },
+            ],
+          },
+        ],
         requestedAt: {
           gte: start,
           lte: end,
@@ -181,6 +206,9 @@ export default async function CancellationsPage({
       select: {
         id: true, orderNumber: true, customerNameSnapshot: true, customerPhoneSnapshot: true, customerEmailSnapshot: true,
         reason: true, customerNote: true, adminNote: true, status: true, requestedAt: true,
+        customerProfileId: true,
+        customerProfile: { select: { shopId: true } },
+        megaskaOrder: { select: { shopId: true } },
       },
     }),
     prisma.megaskaOrder.findMany({
@@ -195,7 +223,13 @@ export default async function CancellationsPage({
     }),
   ]);
 
-  const cancellationRows: CancellationRow[] = customerRequests.map((request) => ({
+  const safeCustomerRequests = customerRequests.filter((request) => {
+    if (request.customerProfile?.shopId === currentShop.id) return true;
+    if (request.megaskaOrder?.shopId === currentShop.id) return true;
+    return request.orderNumber && omsOrders.some((order) => order.shopifyOrderName === request.orderNumber);
+  });
+
+  const cancellationRows: CancellationRow[] = safeCustomerRequests.map((request) => ({
     id: request.id,
     orderNumber: request.orderNumber || "—",
     eventAt: request.requestedAt,
@@ -225,13 +259,25 @@ export default async function CancellationsPage({
     source: "OMS",
   }));
 
-  const shopifyRows = currentShop.shopDomain && currentShop.accessToken
-    ? await fetchShopifyCancelledOrders(currentShop.shopDomain, currentShop.accessToken, start, end)
-    : [];
+  let shopifyRows: CancellationRow[] = [];
+  let shopifyFetchError: string | null = null;
+  if (currentShop.shopDomain && currentShop.accessToken) {
+    try {
+      shopifyRows = await fetchShopifyCancelledOrders(currentShop.shopDomain, currentShop.accessToken, start, end);
+    } catch (error) {
+      shopifyFetchError = error instanceof Error ? error.message : String(error);
+      console.error("[ADMIN CANCELLATIONS] Failed to fetch Shopify cancelled orders", {
+        shopId: currentShop.id,
+        shopDomain: currentShop.shopDomain,
+        errorMessage: shopifyFetchError,
+      });
+    }
+  }
 
   const merged = [...cancellationRows, ...omsRows, ...shopifyRows].sort(
     (a, b) => b.eventAt.getTime() - a.eventAt.getTime()
   );
+  const showDebugStatus = true; // Admin cancellations page is an admin-only surface.
 
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
@@ -288,6 +334,17 @@ export default async function CancellationsPage({
         <div className="mk-card mk-stat-card"><p className="mk-stat-label">Approved / Closed</p><p className="mk-stat-value">{stats.approvedClosed}</p></div>
         <div className="mk-card mk-stat-card"><p className="mk-stat-label">Rejected / Locked</p><p className="mk-stat-value">{stats.rejectedLocked}</p></div>
       </section>
+      {showDebugStatus ? (
+        <section className="mk-card">
+          <h2 className="mk-section-title">Debug Status</h2>
+          <p className="mk-list-subtitle">currentShop.id: {currentShop.id}</p>
+          <p className="mk-list-subtitle">currentShop.shopDomain: {currentShop.shopDomain || "—"}</p>
+          <p className="mk-list-subtitle">customer cancellation count: {cancellationRows.length}</p>
+          <p className="mk-list-subtitle">OMS cancellation count: {omsRows.length}</p>
+          <p className="mk-list-subtitle">Shopify cancellation count: {shopifyRows.length}</p>
+          <p className="mk-list-subtitle">Shopify API error: {shopifyFetchError || "none"}</p>
+        </section>
+      ) : null}
       <section className="mk-grid-4">
         <div className="mk-card mk-stat-card"><p className="mk-stat-label">Today&apos;s cancellations</p><p className="mk-stat-value">{stats.todaysCancellations}</p></div>
       </section>

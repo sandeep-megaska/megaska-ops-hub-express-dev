@@ -4,6 +4,7 @@ import { prisma } from "../../../../services/db/prisma";
 import { getAuthenticatedCustomer } from "../../../../services/exchange/auth";
 import { evaluateCancellationEligibility, isCancellationStatusBlocking } from "../../../../services/exchange/cancellation";
 import { sendCancellationRequestCreatedEmail } from "../../../../services/notifications/cancellation";
+import { getShopByDomain, normalizeShopDomain, resolveShopConfig } from "../../../../services/shopify/shop";
 
 export const runtime = "nodejs";
 
@@ -41,10 +42,17 @@ export async function POST(req: NextRequest) {
       return withCors(req, NextResponse.json({ error: eligibility.reason }, { status: 400 }));
     }
 
+    const requestedShopDomain = normalizeShopDomain(req.headers.get("x-shopify-shop-domain") || "");
+    const resolvedShop = requestedShopDomain ? await getShopByDomain(requestedShopDomain) : await resolveShopConfig();
+    const effectiveShopId = session.customer.shopId || resolvedShop?.id || null;
+    if (!effectiveShopId) {
+      return withCors(req, NextResponse.json({ error: "Unable to resolve shop context for cancellation request." }, { status: 400 }));
+    }
+
     const existingBlockingRequest = await prisma.orderActionRequest.findFirst({
       where: {
         customerProfileId: session.customer.id,
-        shopId: session.customer.shopId,
+        shopId: effectiveShopId,
         requestType: "CANCELLATION",
         orderNumber,
         status: { in: ["OPEN", "APPROVED", "CLOSED"] },
@@ -69,7 +77,7 @@ export async function POST(req: NextRequest) {
       data: {
         requestType: "CANCELLATION",
         customerProfileId: session.customer.id,
-        shopId: session.customer.shopId,
+        shopId: effectiveShopId,
         shopifyCustomerId: session.customer.shopifyCustomerId || null,
         shopifyOrderId,
         orderNumber,
