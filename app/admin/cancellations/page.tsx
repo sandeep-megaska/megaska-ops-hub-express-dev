@@ -189,7 +189,6 @@ export default async function CancellationsPage({
   }));
 
   let shopifyRows: CancellationRow[] = [];
-  let shopifyFetchError: string | null = null;
   if (currentShop.shopDomain) {
     try {
       const shopifyOrders = await getShopifyCancelledOrders({
@@ -199,11 +198,11 @@ export default async function CancellationsPage({
       });
       shopifyRows = mapShopifyOrdersToCancellationRows(shopifyOrders);
     } catch (error) {
-      shopifyFetchError = error instanceof Error ? error.message : String(error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
       console.error("[ADMIN CANCELLATIONS] Failed to fetch Shopify cancelled orders", {
         shopId: currentShop.id,
         shopDomain: currentShop.shopDomain,
-        errorMessage: shopifyFetchError,
+        errorMessage,
       });
     }
   }
@@ -211,8 +210,6 @@ export default async function CancellationsPage({
   const merged = [...cancellationRows, ...omsRows, ...shopifyRows].sort(
     (a, b) => b.eventAt.getTime() - a.eventAt.getTime()
   );
-  const showDebugStatus = true; // Admin cancellations page is an admin-only surface.
-
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
 
@@ -268,17 +265,6 @@ export default async function CancellationsPage({
         <div className="mk-card mk-stat-card"><p className="mk-stat-label">Approved / Closed</p><p className="mk-stat-value">{stats.approvedClosed}</p></div>
         <div className="mk-card mk-stat-card"><p className="mk-stat-label">Rejected / Locked</p><p className="mk-stat-value">{stats.rejectedLocked}</p></div>
       </section>
-      {showDebugStatus ? (
-        <section className="mk-card">
-          <h2 className="mk-section-title">Debug Status</h2>
-          <p className="mk-list-subtitle">currentShop.id: {currentShop.id}</p>
-          <p className="mk-list-subtitle">currentShop.shopDomain: {currentShop.shopDomain || "—"}</p>
-          <p className="mk-list-subtitle">customer cancellation count: {cancellationRows.length}</p>
-          <p className="mk-list-subtitle">OMS cancellation count: {omsRows.length}</p>
-          <p className="mk-list-subtitle">Shopify cancellation count: {shopifyRows.length}</p>
-          <p className="mk-list-subtitle">Shopify API error: {shopifyFetchError || "none"}</p>
-        </section>
-      ) : null}
       <section className="mk-grid-4">
         <div className="mk-card mk-stat-card"><p className="mk-stat-label">Today&apos;s cancellations</p><p className="mk-stat-value">{stats.todaysCancellations}</p></div>
       </section>
