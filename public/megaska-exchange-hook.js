@@ -454,6 +454,10 @@
     if (!text) return "Exchange request creation failed. Please try again.";
 
     if (
+      text.includes("Product category is excluded from exchange") ||
+      text.includes("Clearance items are not exchangeable") ||
+      text.includes("We couldn’t confirm the delivery date for this order. Please contact support for help.") ||
+      text.includes("We couldn't confirm the delivery date for this order. Please contact support for help.") ||
       text.includes("Exchange can be requested only after the order has been delivered") ||
       text.includes("Exchange requests cannot be processed more than") ||
       text.includes("Requested size is required") ||
