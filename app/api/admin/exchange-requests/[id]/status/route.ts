@@ -137,18 +137,34 @@ export async function PATCH(
       if (shouldRequirePayment) {
         const latestPayment = existing.payments[0];
         if (latestPayment) {
+          const nextPaymentStatus = latestPayment.status === "PAID"
+            ? "PAID"
+            : latestPayment.status === "PENDING"
+              ? "PENDING"
+              : "NOT_CREATED";
           await tx.requestPayment.update({
             where: { id: latestPayment.id },
             data: {
               amount: pickupChargePaise,
               currency: "INR",
-              status: latestPayment.status === "PAID" ? "PAID" : "NOT_CREATED",
-              paymentLinkId: latestPayment.status === "PAID" ? latestPayment.paymentLinkId : null,
-              paymentLinkUrl: latestPayment.status === "PAID" ? latestPayment.paymentLinkUrl : null,
+              status: nextPaymentStatus,
+              paymentLinkId:
+                latestPayment.status === "PAID" || latestPayment.status === "PENDING"
+                  ? latestPayment.paymentLinkId
+                  : null,
+              paymentLinkUrl:
+                latestPayment.status === "PAID" || latestPayment.status === "PENDING"
+                  ? latestPayment.paymentLinkUrl
+                  : null,
               providerReferenceId:
-                latestPayment.status === "PAID" ? latestPayment.providerReferenceId : null,
+                latestPayment.status === "PAID" || latestPayment.status === "PENDING"
+                  ? latestPayment.providerReferenceId
+                  : null,
               paymentId: latestPayment.status === "PAID" ? latestPayment.paymentId : null,
-              expiresAt: latestPayment.status === "PAID" ? latestPayment.expiresAt : null,
+              expiresAt:
+                latestPayment.status === "PAID" || latestPayment.status === "PENDING"
+                  ? latestPayment.expiresAt
+                  : null,
             },
           });
         } else {

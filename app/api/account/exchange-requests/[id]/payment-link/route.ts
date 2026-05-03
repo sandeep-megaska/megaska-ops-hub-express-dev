@@ -15,10 +15,12 @@ export async function OPTIONS(req: NextRequest) {
 
 function hasActivePaymentLink(payment: {
   status: string;
+  paymentLinkId: string | null;
   paymentLinkUrl: string | null;
   expiresAt: Date | null;
 }) {
   if (payment.status !== "PENDING") return false;
+  if (!payment.paymentLinkId) return false;
   if (!payment.paymentLinkUrl) return false;
   if (!payment.expiresAt) return true;
   return payment.expiresAt.getTime() > Date.now();

@@ -23,10 +23,14 @@ export async function POST(req: NextRequest) {
   const payload = (JSON.parse(rawBody || "{}") || {}) as Record<string, unknown>;
   const event = String(payload.event || "");
   const payloadObj = payload["payload"] as Record<string, unknown> | undefined;
-  const paymentLinkPayload = payloadObj?.["payment_link"] as { entity?: Record<string, unknown> } | undefined;
-  const paymentPayload = payloadObj?.["payment"] as { entity?: Record<string, unknown> } | undefined;
-  const paymentEntity = paymentLinkPayload?.entity || paymentPayload?.entity || {};
-  const paymentLinkId = String(paymentEntity["id"] || "").trim();
+  const paymentLinkPayload = payloadObj?.["payment_link"] as
+    | { entity?: Record<string, unknown> }
+    | undefined;
+  const paymentPayload = payloadObj?.["payment"] as
+    | { entity?: Record<string, unknown> }
+    | undefined;
+  const paymentLinkEntity = paymentLinkPayload?.entity || {};
+  const paymentLinkId = String(paymentLinkEntity["id"] || "").trim();
   const paymentId = String(paymentPayload?.entity?.["id"] || "").trim() || null;
 
   if (!paymentLinkId) {
@@ -37,7 +41,10 @@ export async function POST(req: NextRequest) {
   const status = mapPaymentStatus(event);
 
   const payment = await prisma.requestPayment.findFirst({
-    where: { paymentLinkId },
+    where: {
+      paymentLinkId,
+      request: { requestType: "EXCHANGE" },
+    },
     include: { request: { include: { items: { take: 1 } } } },
   });
 
@@ -46,16 +53,36 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, ignored: true });
   }
 
-  const updatedPayment = await prisma.requestPayment.update({
-    where: { id: payment.id },
-    data: {
-      status: status as never,
-      paymentId,
-      paidAt: status === "PAID" ? new Date() : payment.paidAt,
-    },
-  });
+  if (payment.status === "PAID" && status !== "PAID") {
+    return NextResponse.json({ ok: true, ignored: true, reason: "already_paid" });
+  }
+
+  const isDuplicatePaidWebhook =
+    status === "PAID" &&
+    payment.status === "PAID" &&
+    Boolean(payment.paidAt) &&
+    (!paymentId || payment.paymentId === paymentId);
+
+  const shouldUpdatePaymentStatus =
+    !isDuplicatePaidWebhook &&
+    (payment.status !== status || (status === "PAID" && payment.paymentId !== paymentId));
+
+  const updatedPayment = shouldUpdatePaymentStatus
+    ? await prisma.requestPayment.update({
+        where: { id: payment.id },
+        data: {
+          status: status as never,
+          paymentId,
+          paidAt: status === "PAID" ? payment.paidAt ?? new Date() : payment.paidAt,
+        },
+      })
+    : payment;
 
   if (status === "PAID") {
+    if (isDuplicatePaidWebhook) {
+      return NextResponse.json({ ok: true, duplicate: true });
+    }
+
     const canSetPaymentReceived = canTransitionExchangeStatus(
       payment.request.status,
       "PAYMENT_RECEIVED"
