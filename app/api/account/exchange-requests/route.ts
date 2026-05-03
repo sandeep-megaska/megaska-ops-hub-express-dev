@@ -152,7 +152,7 @@ export async function POST(req: NextRequest) {
 
     const trustedFulfillment = await resolveTrustedFulfillment({
       shopId: shop.id,
-      shopDomain: shop.shop,
+      shopDomain: shop.shopDomain,
       customerProfileId: customer.id,
       customerShopifyId: customer.shopifyCustomerId,
       customerEmail: customer.email,
