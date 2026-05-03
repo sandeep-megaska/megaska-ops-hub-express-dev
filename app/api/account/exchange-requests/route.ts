@@ -6,6 +6,105 @@ import { getAuthenticatedExchangeCustomer } from "../../../../services/exchange/
 import { evaluateExchangeEligibility } from "../../../../services/exchange/eligibility";
 import { sendExchangeRequestCreatedEmail } from "../../../../services/notifications/exchange";
 import { ACTIVE_EXCHANGE_STATUSES } from "../../../../services/exchange/lifecycle";
+import { getMegaskaCustomerDashboardData } from "../../../../services/shopify/dashboard";
+
+function normalizeOrderNumber(value: string | null | undefined) {
+  const trimmed = String(value || "").trim();
+  return trimmed.startsWith("#") ? trimmed : trimmed ? `#${trimmed}` : "";
+}
+
+async function resolveTrustedFulfillment(input: {
+  shopId: string;
+  shopDomain: string;
+  customerProfileId: string;
+  customerShopifyId?: string | null;
+  customerEmail?: string | null;
+  customerPhone?: string | null;
+  orderNumber: string;
+  shopifyOrderId?: string | null;
+}) {
+  const targetOrderNumber = normalizeOrderNumber(input.orderNumber);
+
+  const localOrder = await prisma.megaskaOrder.findFirst({
+    where: {
+      shopId: input.shopId,
+      customerProfileId: input.customerProfileId,
+      OR: [
+        ...(input.shopifyOrderId ? [{ shopifyOrderId: input.shopifyOrderId }] : []),
+        ...(targetOrderNumber ? [{ shopifyOrderName: targetOrderNumber }] : []),
+      ],
+    },
+    select: {
+      status: true,
+      statusUpdatedAt: true,
+      shipments: {
+        orderBy: [{ statusUpdatedAt: "desc" }, { updatedAt: "desc" }],
+        select: {
+          normalizedStatus: true,
+          statusUpdatedAt: true,
+          updatedAt: true,
+        },
+      },
+    },
+  });
+
+  if (localOrder) {
+    const deliveredShipment = localOrder.shipments.find(
+      (shipment) => shipment.normalizedStatus === "DELIVERED"
+    );
+    if (deliveredShipment) {
+      return {
+        deliveredAt: (deliveredShipment.statusUpdatedAt || deliveredShipment.updatedAt).toISOString(),
+        fulfillmentStatus: "delivered",
+      };
+    }
+
+    if (localOrder.status === "DELIVERED") {
+      return {
+        deliveredAt: localOrder.statusUpdatedAt?.toISOString() || null,
+        fulfillmentStatus: "delivered",
+      };
+    }
+
+    return {
+      deliveredAt: null,
+      fulfillmentStatus: localOrder.status.toLowerCase(),
+    };
+  }
+
+  try {
+    const dashboard = await getMegaskaCustomerDashboardData({
+      shopDomain: input.shopDomain,
+      customerId: input.customerShopifyId,
+      email: input.customerEmail,
+      phoneE164: input.customerPhone,
+    });
+
+    const matchingOrder =
+      dashboard?.recentOrders.find((order) => {
+        const matchesById = Boolean(input.shopifyOrderId && order.shopifyOrderId === input.shopifyOrderId);
+        const matchesByName = Boolean(
+          targetOrderNumber && normalizeOrderNumber(order.name) === targetOrderNumber
+        );
+        return matchesById || matchesByName;
+      }) || null;
+
+    if (matchingOrder) {
+      return {
+        deliveredAt: matchingOrder.deliveredAt || null,
+        fulfillmentStatus: matchingOrder.fulfillmentStatus || null,
+      };
+    }
+  } catch (error) {
+    console.warn("[EXCHANGE ELIGIBILITY] Shopify fallback lookup failed", {
+      orderNumber: input.orderNumber,
+      shopifyOrderId: input.shopifyOrderId || null,
+      errorMessage: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  return null;
+}
 
 export const runtime = "nodejs";
 
@@ -51,14 +150,30 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const trustedFulfillment = await resolveTrustedFulfillment({
+      shopId: shop.id,
+      shopDomain: shop.shop,
+      customerProfileId: customer.id,
+      customerShopifyId: customer.shopifyCustomerId,
+      customerEmail: customer.email,
+      customerPhone: customer.phoneE164,
+      orderNumber,
+      shopifyOrderId,
+    });
+
+    const resolvedDeliveredAt =
+      trustedFulfillment?.deliveredAt ?? effectiveDeliveredAt;
+    const resolvedFulfillmentStatus =
+      trustedFulfillment?.fulfillmentStatus ?? fulfillmentStatus;
+
     const eligibility = evaluateExchangeEligibility({
       requestedSize,
       currentSize,
       productTitle,
       variantTitle,
       reason,
-      deliveredAt: effectiveDeliveredAt,
-      fulfillmentStatus,
+      deliveredAt: resolvedDeliveredAt,
+      fulfillmentStatus: resolvedFulfillmentStatus,
     });
 
     if (eligibility.blocked) {
@@ -129,8 +244,8 @@ export async function POST(req: NextRequest) {
         customerPhoneSnapshot: customer.phoneE164,
         customerEmailSnapshot: customer.email,
         orderAmountSnapshot: amountSnapshot,
-        deliveryDateSnapshot: effectiveDeliveredAt
-          ? new Date(effectiveDeliveredAt)
+        deliveryDateSnapshot: resolvedDeliveredAt
+          ? new Date(resolvedDeliveredAt)
           : null,
         eligibilityDecision: eligibility.decision,
         eligibilityReason: eligibility.reason,
