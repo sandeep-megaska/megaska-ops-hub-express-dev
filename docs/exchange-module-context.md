@@ -55,7 +55,7 @@
 
 ### APIs implemented
 - Shop-scoped customer APIs under `/api/account/exchange-requests/*`.
-- Legacy non-shop-scoped customer APIs under `/api/requests/exchange/*` (backward compatibility path).
+- Legacy non-shop-scoped customer APIs under `/api/requests/exchange/*` now return HTTP 410 Gone and should not be used by active clients.
 - Admin APIs under `/api/admin/exchange-requests/*`.
 - Razorpay webhook endpoint: `/api/webhooks/razorpay`.
 
@@ -112,10 +112,7 @@
 - `POST /api/account/exchange-requests/:id/payment-link` — create/reuse reverse-pickup payment link (only in `AWAITING_PAYMENT`).
 
 ### Legacy customer APIs (`/api/requests/*`)
-- `POST /api/requests/exchange`
-- `GET /api/requests/exchange`
-- `GET /api/requests/exchange/:id`
-- `POST /api/requests/exchange/:id/payment-link`
+- Deprecated: `/api/requests/exchange/*` endpoints now return HTTP 410 Gone with migration guidance to `/api/account/exchange-requests/*`.
 
 ### Admin exchange APIs (`/api/admin/*`)
 - `GET /api/admin/exchange-requests` — list/filter requests.
@@ -126,7 +123,7 @@
 
 ### Payment-link and payment status APIs
 - `POST /api/account/exchange-requests/:id/payment-link`
-- `POST /api/requests/exchange/:id/payment-link` (legacy)
+- `POST /api/requests/exchange/:id/payment-link` (deprecated; returns HTTP 410)
 - `POST /api/webhooks/razorpay` — updates `RequestPayment` and request lifecycle.
 
 ### Shipment endpoints
