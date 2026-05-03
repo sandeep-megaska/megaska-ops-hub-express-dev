@@ -512,7 +512,7 @@
     try {
       setSubmittingState(true);
 
-      const createResponse = await fetch(API_BASE_URL + "/api/requests/exchange", {
+      const createResponse = await fetch(API_BASE_URL + "/api/account/exchange-requests", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -950,7 +950,7 @@
 
           const endpoint = isCancellationAction
             ? "/api/requests/cancellation"
-            : (isIssueAction ? "/api/requests/issue" : "/api/requests/exchange");
+            : (isIssueAction ? "/api/requests/issue" : "/api/account/exchange-requests");
           const response = await fetch(API_BASE_URL + endpoint, {
             headers: {
               Authorization: "Bearer " + token,
