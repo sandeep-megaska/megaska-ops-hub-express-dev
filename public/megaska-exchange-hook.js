@@ -148,6 +148,29 @@
     return String((node.dataset && node.dataset[camel]) || node.getAttribute("data-" + key) || "").trim();
   }
 
+  function normalizeShopDomain(value) {
+    const raw = String(value || "").trim().toLowerCase();
+    if (!raw) return "";
+
+    const sanitized = raw.replace(/^https?:\/\//, "").split("/")[0].split("?")[0];
+    return sanitized.endsWith(".myshopify.com") ? sanitized : "";
+  }
+
+  function detectShopDomain() {
+    const fromWindowShopify = normalizeShopDomain(window?.Shopify?.shop);
+    if (fromWindowShopify) return fromWindowShopify;
+
+    const fromGlobalShopify = typeof Shopify !== "undefined" ? normalizeShopDomain(Shopify?.shop) : "";
+    if (fromGlobalShopify) return fromGlobalShopify;
+
+    const fromDocument =
+      normalizeShopDomain(getDataValue(document.documentElement, "shop-domain")) ||
+      normalizeShopDomain(getDataValue(document.body, "shop-domain"));
+    if (fromDocument) return fromDocument;
+
+    return normalizeShopDomain(window?.location?.hostname);
+  }
+
   function findStructuredOrderSource(drawer, sourceButton) {
     if (sourceButton && sourceButton.closest) {
       const candidate = sourceButton.closest("[data-shopify-order-id], [data-order-number]");
@@ -517,6 +540,7 @@
         headers: {
           "Content-Type": "application/json",
           Authorization: "Bearer " + token,
+          "x-shopify-shop-domain": detectShopDomain(),
         },
         body: JSON.stringify({
           orderNumber: context.orderNumber,
@@ -951,10 +975,14 @@
           const endpoint = isCancellationAction
             ? "/api/requests/cancellation"
             : (isIssueAction ? "/api/requests/issue" : "/api/account/exchange-requests");
+          const headers = {
+            Authorization: "Bearer " + token,
+          };
+          if (!isCancellationAction && !isIssueAction) {
+            headers["x-shopify-shop-domain"] = detectShopDomain();
+          }
           const response = await fetch(API_BASE_URL + endpoint, {
-            headers: {
-              Authorization: "Bearer " + token,
-            },
+            headers,
           });
           const data = await response.json().catch(function () {
             return {};
