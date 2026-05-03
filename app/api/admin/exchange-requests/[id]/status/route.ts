@@ -12,6 +12,8 @@ import {
   sendExchangeApprovedPaymentRequiredEmail,
   sendExchangeStatusChangedEmail,
 } from "../../../../../../services/notifications/exchange";
+import { createReversePickupPaymentLink } from "../../../../../../services/exchange/razorpay";
+import { REVERSE_PICKUP_CURRENCY } from "../../../../../../services/exchange/constants";
 
 export const runtime = "nodejs";
 
@@ -29,6 +31,18 @@ function parsePickupChargePaise(raw: unknown) {
     return DEFAULT_PICKUP_CHARGE_PAISE;
   }
   return Math.round(value * 100);
+}
+
+function hasActivePendingPaymentLink(payment: {
+  status: string;
+  paymentLinkId: string | null;
+  paymentLinkUrl: string | null;
+  expiresAt: Date | null;
+}) {
+  if (payment.status !== "PENDING") return false;
+  if (!payment.paymentLinkId || !payment.paymentLinkUrl) return false;
+  if (!payment.expiresAt) return true;
+  return payment.expiresAt.getTime() > Date.now();
 }
 
 export async function PATCH(
@@ -133,7 +147,18 @@ export async function PATCH(
 
     const shouldRequirePayment = isApprovalFlow && returnMethod === "REVERSE_PICKUP";
 
-    const updated = await prisma.$transaction(async (tx) => {
+    const { updated, reversePickupPayment } = await prisma.$transaction(async (tx) => {
+      let reversePickupPaymentRow: {
+        id: string;
+        amount: number;
+        currency: string;
+        status: string;
+        paymentLinkId: string | null;
+        paymentLinkUrl: string | null;
+        providerReferenceId: string | null;
+        expiresAt: Date | null;
+      } | null = null;
+
       if (shouldRequirePayment) {
         const latestPayment = existing.payments[0];
         if (latestPayment) {
@@ -142,7 +167,7 @@ export async function PATCH(
             : latestPayment.status === "PENDING"
               ? "PENDING"
               : "NOT_CREATED";
-          await tx.requestPayment.update({
+          reversePickupPaymentRow = await tx.requestPayment.update({
             where: { id: latestPayment.id },
             data: {
               amount: pickupChargePaise,
@@ -168,7 +193,7 @@ export async function PATCH(
             },
           });
         } else {
-          await tx.requestPayment.create({
+          reversePickupPaymentRow = await tx.requestPayment.create({
             data: {
               requestId: existing.id,
               purpose: "REVERSE_PICKUP_FEE",
@@ -194,7 +219,7 @@ export async function PATCH(
         });
       }
 
-      return tx.orderActionRequest.update({
+      const request = await tx.orderActionRequest.update({
         where: { id: existing.id },
         data: {
           status: targetStatus as never,
@@ -202,7 +227,35 @@ export async function PATCH(
         },
         include: { items: { take: 1 } },
       });
+      return { updated: request, reversePickupPayment: reversePickupPaymentRow };
     });
+
+    if (
+      shouldRequirePayment &&
+      reversePickupPayment &&
+      reversePickupPayment.status !== "PAID" &&
+      !hasActivePendingPaymentLink(reversePickupPayment)
+    ) {
+      const paymentLink = await createReversePickupPaymentLink({
+        requestId: updated.id,
+        customerName: updated.customerNameSnapshot,
+        customerPhone: updated.customerPhoneSnapshot,
+        customerEmail: updated.customerEmailSnapshot,
+        amount: reversePickupPayment.amount,
+        currency: reversePickupPayment.currency || REVERSE_PICKUP_CURRENCY,
+      });
+
+      await prisma.requestPayment.update({
+        where: { id: reversePickupPayment.id },
+        data: {
+          status: "PENDING",
+          paymentLinkId: paymentLink.id,
+          paymentLinkUrl: paymentLink.shortUrl,
+          providerReferenceId: paymentLink.referenceId,
+          expiresAt: paymentLink.expiresAt,
+        },
+      });
+    }
 
     if (shouldRequirePayment) {
       void sendExchangeApprovedPaymentRequiredEmail({
