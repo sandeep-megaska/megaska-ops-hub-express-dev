@@ -142,6 +142,8 @@ export async function POST(req: NextRequest) {
     const amountSnapshot = String(body?.orderAmountSnapshot || "").trim() || null;
     const shopifyLineItemId = String(body?.shopifyLineItemId || "").trim() || null;
     const sku = String(body?.sku || "").trim() || null;
+    const preferredReturnMethodRaw = String(body?.preferredReturnMethod || "").trim().toUpperCase();
+    const preferredReturnMethod = preferredReturnMethodRaw === "SELF_SHIP" ? "SELF_SHIP" : "REVERSE_PICKUP";
 
     if (!orderNumber || !productTitle || !requestedSize) {
       return withCors(
@@ -225,6 +227,10 @@ export async function POST(req: NextRequest) {
     }
 
     const initialStatus = "OPEN";
+    const normalizedCustomerNote = customerNote || null;
+    const customerNoteWithReturnMethod = normalizedCustomerNote
+      ? `${normalizedCustomerNote}\n\nPreferred return method: ${preferredReturnMethod}`
+      : `Preferred return method: ${preferredReturnMethod}`;
 
     const created = await prisma.orderActionRequest.create({
       data: {
@@ -236,7 +242,7 @@ export async function POST(req: NextRequest) {
         orderNumber,
         status: initialStatus,
         reason,
-        customerNote,
+        customerNote: customerNoteWithReturnMethod,
         customerNameSnapshot:
           `${customer.firstName || ""} ${customer.lastName || ""}`.trim() ||
           customer.fullName ||

@@ -234,7 +234,14 @@
           getDataValue(structuredSource, "item-title"),
           productTitle,
         ]) || "",
-      currentSize: "",
+      currentSize: readFirstValue([
+        getDataValue(sourceButton, "current-size"),
+        getDataValue(structuredSource, "current-size"),
+        getDataValue(sourceButton, "size"),
+        getDataValue(structuredSource, "size"),
+        getDataValue(sourceButton, "variant-title"),
+        getDataValue(structuredSource, "variant-title"),
+      ]),
       variantTitle: readFirstValue([
         getDataValue(sourceButton, "variant-title"),
         getDataValue(structuredSource, "variant-title"),
@@ -326,12 +333,21 @@
 
         <div class="mk-ex-row">
           <label class="mk-ex-label">Current size (if available)</label>
-          <input class="mk-ex-input" id="mk-ex-current-size" value="${escapeHtml(context.currentSize || "")}" placeholder="e.g. M" />
+          <input class="mk-ex-input" id="mk-ex-current-size" value="${escapeHtml(context.currentSize || "")}" placeholder="e.g. M" ${context.currentSize ? "readonly" : ""} />
         </div>
 
         <div class="mk-ex-row">
           <label class="mk-ex-label">Requested size</label>
           <input class="mk-ex-input" id="mk-ex-requested-size" placeholder="e.g. L" />
+        </div>
+
+        <div class="mk-ex-row">
+          <label class="mk-ex-label">Return shipping method</label>
+          <select class="mk-ex-input" id="mk-ex-return-method">
+            <option value="REVERSE_PICKUP" selected>Reverse pickup</option>
+            <option value="SELF_SHIP">Self ship</option>
+          </select>
+          <div class="mk-ex-muted" id="mk-ex-return-method-note">Reverse pickup has a ₹120 charge. After Megaska approves your exchange, you will receive a Razorpay payment link.</div>
         </div>
 
         <div class="mk-ex-row">
@@ -362,6 +378,18 @@
     if (submitBtn) {
       submitBtn.addEventListener("click", function () {
         submitExchange(context);
+      });
+    }
+
+    const methodSelect = document.getElementById("mk-ex-return-method");
+    const methodNote = document.getElementById("mk-ex-return-method-note");
+    if (methodSelect && methodNote) {
+      methodSelect.addEventListener("change", function () {
+        const method = String(methodSelect.value || "REVERSE_PICKUP").trim().toUpperCase();
+        methodNote.textContent =
+          method === "SELF_SHIP"
+            ? "You will ship the item to Megaska after approval. No reverse pickup charge applies."
+            : "Reverse pickup has a ₹120 charge. After Megaska approves your exchange, you will receive a Razorpay payment link.";
       });
     }
   }
@@ -402,10 +430,9 @@
       <strong>Exchange request created</strong>
       <div>Request ID: ${escapeHtml(request?.id || "—")}</div>
       <div>Request status: ${escapeHtml(request?.status || "OPEN")}</div>
-      <div>Reverse pickup fee: ₹120</div>
-      <div>Payment: Manual support follow-up</div>
-      <div class="mk-ex-muted">Payment for reverse pickup is currently handled manually. Our support team will share the payment instructions or next steps after reviewing your request.</div>
-      <div class="mk-ex-muted">Forward shipping for the replacement item will be free once the exchange is approved.</div>
+      <div>Request received. Megaska will review stock and pickup availability.</div>
+      <div>If reverse pickup is approved, you will receive a ₹120 Razorpay payment link.</div>
+      <div>Forward shipping for the replacement item is free after approval.</div>
       <div class="mk-ex-muted">${escapeHtml(stockReviewMessage || "Exchange approval depends on the availability of the requested size.")}</div>
       <div class="mk-ex-muted">If the requested size is unavailable, our team will contact you with the next steps.</div>
     `;
@@ -519,6 +546,7 @@
     const requestedSize = document.getElementById("mk-ex-requested-size")?.value?.trim() || "";
     const reason = document.getElementById("mk-ex-reason")?.value?.trim() || "";
     const currentSize = document.getElementById("mk-ex-current-size")?.value?.trim() || "";
+    const preferredReturnMethod = String(document.getElementById("mk-ex-return-method")?.value || "REVERSE_PICKUP").trim().toUpperCase() === "SELF_SHIP" ? "SELF_SHIP" : "REVERSE_PICKUP";
 
     if (!context.orderNumber || !context.productTitle) {
       showError("Order details are missing. Please close and reopen this order.");
@@ -561,6 +589,7 @@
           fulfilledAt: context.fulfilledAt || null,
           fulfillmentStatus: context.fulfillmentStatus || null,
           quantity: 1,
+          preferredReturnMethod,
         }),
       });
 
@@ -953,17 +982,6 @@
       if (!context) return;
 
       if (isCancellationAction) {
-        const cancellationEligibility = isCancellationEligible(context);
-        if (!cancellationEligibility.eligible) {
-          renderCancellationModal(context);
-          showError(cancellationEligibility.reason);
-          const actions = document.getElementById("mk-ex-form-actions");
-          if (actions) {
-            actions.innerHTML = '<button class="mk-ex-btn" type="button" data-mk-ex-close="1">Close</button>';
-          }
-          return;
-        }
-
         renderCancellationModal(context);
       } else if (isIssueAction) {
         renderIssueModal(context);

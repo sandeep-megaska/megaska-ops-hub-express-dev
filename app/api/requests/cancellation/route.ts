@@ -6,6 +6,44 @@ import { evaluateCancellationEligibility, isCancellationStatusBlocking } from ".
 import { sendCancellationRequestCreatedEmail } from "../../../../services/notifications/cancellation";
 import { getShopByDomain, normalizeShopDomain, resolveShopConfig } from "../../../../services/shopify/shop";
 
+
+
+async function resolveTrustedCancellationStatus(input: {
+  shopId: string;
+  customerProfileId: string;
+  orderNumber: string;
+  shopifyOrderId?: string | null;
+}) {
+  const order = await prisma.megaskaOrder.findFirst({
+    where: {
+      shopId: input.shopId,
+      customerProfileId: input.customerProfileId,
+      OR: [
+        ...(input.shopifyOrderId ? [{ shopifyOrderId: input.shopifyOrderId }] : []),
+        { shopifyOrderName: input.orderNumber.startsWith("#") ? input.orderNumber : `#${input.orderNumber}` },
+      ],
+    },
+    select: {
+      status: true,
+      financialStatus: true,
+      cancelledAt: true,
+      shipments: {
+        orderBy: [{ statusUpdatedAt: "desc" }, { updatedAt: "desc" }],
+        select: { normalizedStatus: true },
+        take: 1,
+      },
+    },
+  });
+
+  if (!order) return null;
+
+  return {
+    fulfillmentStatus: order.shipments[0]?.normalizedStatus || order.status || null,
+    financialStatus: order.financialStatus || null,
+    orderCancelled: Boolean(order.cancelledAt),
+  };
+}
+
 export const runtime = "nodejs";
 
 export async function OPTIONS(req: NextRequest) {
@@ -32,21 +70,28 @@ export async function POST(req: NextRequest) {
       return withCors(req, NextResponse.json({ error: "orderNumber and reason are required" }, { status: 400 }));
     }
 
-    const eligibility = evaluateCancellationEligibility({
-      fulfillmentStatus,
-      financialStatus,
-      orderCancelled: Boolean(body?.orderCancelled),
-    });
-
-    if (!eligibility.eligible) {
-      return withCors(req, NextResponse.json({ error: eligibility.reason }, { status: 400 }));
-    }
-
     const requestedShopDomain = normalizeShopDomain(req.headers.get("x-shopify-shop-domain") || "");
     const resolvedShop = requestedShopDomain ? await getShopByDomain(requestedShopDomain) : await resolveShopConfig();
     const effectiveShopId = session.customer.shopId || resolvedShop?.id || null;
     if (!effectiveShopId) {
       return withCors(req, NextResponse.json({ error: "Unable to resolve shop context for cancellation request." }, { status: 400 }));
+    }
+
+    const trustedStatus = await resolveTrustedCancellationStatus({
+      shopId: effectiveShopId,
+      customerProfileId: session.customer.id,
+      orderNumber,
+      shopifyOrderId,
+    });
+
+    const eligibility = evaluateCancellationEligibility({
+      fulfillmentStatus: trustedStatus?.fulfillmentStatus ?? fulfillmentStatus,
+      financialStatus: trustedStatus?.financialStatus ?? financialStatus,
+      orderCancelled: trustedStatus?.orderCancelled ?? Boolean(body?.orderCancelled),
+    });
+
+    if (!eligibility.eligible) {
+      return withCors(req, NextResponse.json({ error: eligibility.reason }, { status: 400 }));
     }
 
     const existingBlockingRequest = await prisma.orderActionRequest.findFirst({
