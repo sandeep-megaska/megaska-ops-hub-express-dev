@@ -86,7 +86,7 @@ export default function AdminExchangesPage() {
 
     try {
       setLoading(true);
-      const res = await fetch("/api/admin/exchange-requests", {
+      const res = await fetch("/api/admin/exchanges", {
         method: "GET",
         cache: "no-store",
         headers: {
