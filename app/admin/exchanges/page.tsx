@@ -77,31 +77,35 @@ export default function AdminExchangesPage() {
     setError("");
     const cleanDomain = normalizeShopDomain(domain);
 
-    if (!cleanDomain) {
-      setError("Unable to load exchange requests right now. Please refresh and try again.");
-      setRequests([]);
-      setLoading(false);
-      return;
-    }
-
     try {
       setLoading(true);
-      const res = await fetch("/api/admin/exchanges", {
+      const endpoint = cleanDomain
+        ? `/api/admin/exchanges?shop=${encodeURIComponent(cleanDomain)}`
+        : "/api/admin/exchanges";
+
+      const res = await fetch(endpoint, {
         method: "GET",
         cache: "no-store",
-        headers: {
-          "x-shopify-shop-domain": cleanDomain,
-        },
+        headers: cleanDomain
+          ? {
+              "x-shopify-shop-domain": cleanDomain,
+            }
+          : undefined,
       });
 
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        throw new Error(data?.error || "Failed to load exchange requests");
+        throw new Error(
+          `Exchange request list failed (${res.status}): ${String(
+            data?.error || "Failed to load exchange requests"
+          )}`
+        );
       }
 
       setRequests(Array.isArray(data?.requests) ? data.requests : []);
     } catch (err) {
+      console.error("[ADMIN_EXCHANGES_LOAD_FAILED]", err);
       setError("Unable to load exchange requests right now. Please refresh and try again.");
       setRequests([]);
     } finally {
