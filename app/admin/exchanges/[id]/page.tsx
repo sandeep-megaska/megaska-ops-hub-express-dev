@@ -122,6 +122,7 @@ export default async function AdminExchangeDetailPage({
 
       <ExchangeLifecycleControls
         requestId={request.id}
+        shopDomain={shopDomain}
         currentStatus={request.status}
         allowedTransitions={nextTransitions}
         currentAdminNote={request.adminNote || ""}
