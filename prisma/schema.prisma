@@ -38,6 +38,7 @@ model CustomerProfile {
   walletReservations  WalletReservation[]
   gstDocuments        GstDocument[]
   gstParties          GstParty[]
+  refundRequests      RefundRequest[]
 
   @@unique([shopId, shopifyCustomerId])
   @@index([shopId])
