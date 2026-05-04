@@ -42,7 +42,7 @@ export default async function AdminExchangeDetailPage({
     return (
       <main className="p-8">
         <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-red-700">
-          Missing shop context. Open this page from the exchanges list so the <code>shop</code> query param is present.
+          Unable to load exchange request details right now. Please return to the exchanges list and try again.
         </div>
       </main>
     );
@@ -53,7 +53,7 @@ export default async function AdminExchangeDetailPage({
     return (
       <main className="p-8">
         <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-red-700">
-          Shop not found for domain: {shopDomain}
+          Unable to load exchange request details right now. Please refresh and try again.
         </div>
       </main>
     );

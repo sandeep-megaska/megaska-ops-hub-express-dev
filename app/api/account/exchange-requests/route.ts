@@ -13,6 +13,36 @@ function normalizeOrderNumber(value: string | null | undefined) {
   return trimmed.startsWith("#") ? trimmed : trimmed ? `#${trimmed}` : "";
 }
 
+function resolveCustomerSnapshots(customer: Record<string, unknown>) {
+  const firstName = String(customer.firstName || "").trim();
+  const lastName = String(customer.lastName || "").trim();
+  const fullName = String(customer.fullName || "").trim();
+  const displayName = String(customer.displayName || "").trim();
+  const profileName = String(customer.name || "").trim();
+  const shopifyName = String(customer.shopifyCustomerName || "").trim();
+  const compositeName = `${firstName} ${lastName}`.trim();
+
+  const customerNameSnapshot =
+    compositeName || fullName || displayName || profileName || shopifyName || null;
+
+  const customerEmailSnapshot =
+    String(customer.email || "").trim() ||
+    String(customer.shopifyCustomerEmail || "").trim() ||
+    null;
+
+  const customerPhoneSnapshot =
+    String(customer.phoneE164 || "").trim() ||
+    String(customer.phone || "").trim() ||
+    String(customer.shopifyCustomerPhone || "").trim() ||
+    null;
+
+  return {
+    customerNameSnapshot,
+    customerEmailSnapshot,
+    customerPhoneSnapshot,
+  };
+}
+
 async function resolveTrustedFulfillment(input: {
   shopId: string;
   shopDomain: string;
@@ -232,6 +262,8 @@ export async function POST(req: NextRequest) {
       ? `${normalizedCustomerNote}\n\nPreferred return method: ${preferredReturnMethod}`
       : `Preferred return method: ${preferredReturnMethod}`;
 
+    const customerSnapshots = resolveCustomerSnapshots(customer as unknown as Record<string, unknown>);
+
     const created = await prisma.orderActionRequest.create({
       data: {
         shopId: shop.id,
@@ -243,12 +275,9 @@ export async function POST(req: NextRequest) {
         status: initialStatus,
         reason,
         customerNote: customerNoteWithReturnMethod,
-        customerNameSnapshot:
-          `${customer.firstName || ""} ${customer.lastName || ""}`.trim() ||
-          customer.fullName ||
-          null,
-        customerPhoneSnapshot: customer.phoneE164,
-        customerEmailSnapshot: customer.email,
+        customerNameSnapshot: customerSnapshots.customerNameSnapshot,
+        customerPhoneSnapshot: customerSnapshots.customerPhoneSnapshot,
+        customerEmailSnapshot: customerSnapshots.customerEmailSnapshot,
         orderAmountSnapshot: amountSnapshot,
         deliveryDateSnapshot: resolvedDeliveredAt
           ? new Date(resolvedDeliveredAt)

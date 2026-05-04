@@ -36,6 +36,11 @@ function getShopDomainFromEmbedContext() {
   );
   if (fromQuery) return fromQuery;
 
+  const fromTopLevel = normalizeShopDomain(
+    new URLSearchParams(window.location.search).get("shopify_shop")
+  );
+  if (fromTopLevel) return fromTopLevel;
+
   const fromHtml = normalizeShopDomain(
     document.documentElement.getAttribute("data-shop-domain")
   );
@@ -73,9 +78,7 @@ export default function AdminExchangesPage() {
     const cleanDomain = normalizeShopDomain(domain);
 
     if (!cleanDomain) {
-      setError(
-        "We couldn’t detect your Shopify shop context. Please open this page from your embedded Shopify admin app."
-      );
+      setError("Unable to load exchange requests right now. Please refresh and try again.");
       setRequests([]);
       setLoading(false);
       return;
@@ -101,9 +104,7 @@ export default function AdminExchangesPage() {
 
       setRequests(Array.isArray(data?.requests) ? data.requests : []);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to load exchange requests"
-      );
+      setError("Unable to load exchange requests right now. Please refresh and try again.");
       setRequests([]);
     } finally {
       setLoading(false);
@@ -143,12 +144,6 @@ export default function AdminExchangesPage() {
           <p className="text-sm text-slate-500">Approved</p>
           <p className="mt-1 text-2xl font-bold">{stats.approved}</p>
         </div>
-      </div>
-
-      <div className="mb-6 rounded-xl border bg-white p-5 shadow-sm">
-        <p className="mt-3 text-xs text-slate-500">
-          Shop context: {shopDomain || "not detected"}
-        </p>
       </div>
 
       {error ? (
@@ -194,6 +189,7 @@ export default function AdminExchangesPage() {
                   <td className="px-5 py-4">
                     {request.customerNameSnapshot ||
                       request.customerEmailSnapshot ||
+                      request.customerPhoneSnapshot ||
                       "—"}
                   </td>
 
