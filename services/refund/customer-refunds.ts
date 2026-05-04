@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import { prisma } from "../db/prisma";
 import { type AuthenticatedExchangeContext } from "../exchange/auth";
-import type { RefundPayoutRail, RefundRequest, RefundStatus } from "@prisma/client";
+import type { RefundPayoutRail, RefundRequest, RefundStatus } from "../../generated/prisma/index.js";
 
 const UPI_REGEX = /^[a-z0-9._-]{2,}@[a-z]{2,}$/i;
 const IFSC_REGEX = /^[A-Z]{4}0[A-Z0-9]{6}$/;
@@ -47,7 +47,7 @@ function maskUpi(value: string) {
 
 function validateSubmission(input: Record<string, unknown>) {
   const rail = String(input.rail || "").toUpperCase();
-  if (rail !== "UPI" && rail !== "BANK") {
+  if (rail !== "UPI" && rail !== "BANK_TRANSFER") {
     return { error: "Invalid payout method" };
   }
 
@@ -162,14 +162,14 @@ export async function submitCustomerPayoutDetails(auth: AuthenticatedExchangeCon
         where: { refundRequestId: id },
         create: {
           refundRequestId: id,
-          rail: "BANK",
+          rail: "BANK_TRANSFER",
           accountHolderName: validated.accountHolderName,
           bankAccountMasked: maskAccount(validated.accountNumber),
           bankAccountEnc: encryptValue(validated.accountNumber),
           bankIfsc: encryptValue(validated.ifsc),
         },
         update: {
-          rail: "BANK",
+          rail: "BANK_TRANSFER",
           accountHolderName: validated.accountHolderName,
           bankAccountMasked: maskAccount(validated.accountNumber),
           bankAccountEnc: encryptValue(validated.accountNumber),
