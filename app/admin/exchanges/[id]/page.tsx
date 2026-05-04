@@ -3,6 +3,7 @@ import { prisma } from "../../../../services/db/prisma";
 import { getShopByDomain, normalizeShopDomain } from "../../../../services/shopify/shop";
 import ExchangeLifecycleControls from "./ExchangeLifecycleControls";
 import { getDelhiveryCapabilityState } from "../../../../services/logistics/delhivery";
+import { headers } from "next/headers";
 
 export const dynamic = "force-dynamic";
 
@@ -32,11 +33,16 @@ export default async function AdminExchangeDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ shop?: string }>;
+  searchParams: Promise<{ shop?: string; shopify_shop?: string }>;
 }) {
   const { id } = await params;
   const parsedSearch = await searchParams;
-  const shopDomain = normalizeShopDomain(parsedSearch?.shop);
+  const requestHeaders = await headers();
+  const shopDomain = normalizeShopDomain(
+    parsedSearch?.shop ||
+      parsedSearch?.shopify_shop ||
+      requestHeaders.get("x-shopify-shop-domain")
+  );
 
   if (!shopDomain) {
     return (
@@ -111,10 +117,6 @@ export default async function AdminExchangeDetailPage({
             <p className="text-slate-500">Last Updated</p>
             <p className="font-medium text-slate-900">{formatDate(request.updatedAt)}</p>
           </div>
-          <div>
-            <p className="text-slate-500">Shop</p>
-            <p className="font-medium text-slate-900">{shop.shopDomain}</p>
-          </div>
         </div>
       </section>
 
@@ -168,7 +170,6 @@ export default async function AdminExchangeDetailPage({
             : null
         }
         delhiveryCapability={delhiveryCapability}
-        shopDomain={shop.shopDomain}
         forwardShipment={
           forwardShipment
             ? {

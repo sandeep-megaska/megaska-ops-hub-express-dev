@@ -23,6 +23,26 @@ function parseDateEnd(value: string | null) {
 
 export async function GET(req: NextRequest) {
   try {
+    const detectedShopDomain = String(
+      req.nextUrl.searchParams.get("shop") ||
+        req.nextUrl.searchParams.get("shopify_shop") ||
+        (() => {
+          try {
+            const referer = req.headers.get("referer");
+            if (!referer) return "";
+            const refererUrl = new URL(referer);
+            return (
+              refererUrl.searchParams.get("shop") ||
+              refererUrl.searchParams.get("shopify_shop") ||
+              ""
+            );
+          } catch {
+            return "";
+          }
+        })() ||
+        req.headers.get("x-shopify-shop-domain") ||
+        ""
+    ).trim();
     const shop = await requireShopFromRequest(req);
 
     const status = req.nextUrl.searchParams.get("status")?.trim();
@@ -72,6 +92,11 @@ export async function GET(req: NextRequest) {
       },
       orderBy: { requestedAt: "desc" },
       take: 300,
+    });
+    console.log("[ADMIN_EXCHANGE_LIST]", {
+      detectedShopDomain,
+      resolvedShopId: shop.id,
+      countReturned: data.length,
     });
 
     return NextResponse.json({ requests: data });

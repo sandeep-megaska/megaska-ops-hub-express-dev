@@ -42,14 +42,28 @@ export function normalizeShopDomain(input: string | null | undefined) {
 }
 
 export function getShopDomainFromRequest(req: NextRequest) {
-  const headerDomain = normalizeShopDomain(
-    req.headers.get("x-shopify-shop-domain")
-  );
-  if (headerDomain) return headerDomain;
-
   const url = new URL(req.url);
-  const queryDomain = normalizeShopDomain(url.searchParams.get("shop"));
-  if (queryDomain) return queryDomain;
+  const fromEmbeddedQuery = normalizeShopDomain(
+    url.searchParams.get("shop") || url.searchParams.get("shopify_shop")
+  );
+  if (fromEmbeddedQuery) return fromEmbeddedQuery;
+
+  const referer = req.headers.get("referer");
+  if (referer) {
+    try {
+      const refererUrl = new URL(referer);
+      const fromRefererQuery = normalizeShopDomain(
+        refererUrl.searchParams.get("shop") ||
+          refererUrl.searchParams.get("shopify_shop")
+      );
+      if (fromRefererQuery) return fromRefererQuery;
+    } catch {
+      // Ignore malformed referer.
+    }
+  }
+
+  const headerDomain = normalizeShopDomain(req.headers.get("x-shopify-shop-domain"));
+  if (headerDomain) return headerDomain;
 
   return "";
 }

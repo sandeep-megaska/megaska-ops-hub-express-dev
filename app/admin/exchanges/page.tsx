@@ -51,7 +51,7 @@ function getShopDomainFromEmbedContext() {
   );
   if (fromBody) return fromBody;
 
-  return normalizeShopDomain(localStorage.getItem("megaska_shop_domain"));
+  return "";
 }
 
 export default function AdminExchangesPage() {
@@ -86,8 +86,6 @@ export default function AdminExchangesPage() {
 
     try {
       setLoading(true);
-      localStorage.setItem("megaska_shop_domain", cleanDomain);
-
       const res = await fetch("/api/admin/exchange-requests", {
         method: "GET",
         cache: "no-store",
@@ -217,9 +215,11 @@ export default function AdminExchangesPage() {
 
                   <td className="px-5 py-4 text-right">
                     <Link
-                      href={`/admin/exchanges/${request.id}?shop=${encodeURIComponent(
+                      href={
                         shopDomain
-                      )}`}
+                          ? `/admin/exchanges/${request.id}?shop=${encodeURIComponent(shopDomain)}`
+                          : `/admin/exchanges/${request.id}`
+                      }
                       className="font-medium text-indigo-600 hover:underline"
                     >
                       View
