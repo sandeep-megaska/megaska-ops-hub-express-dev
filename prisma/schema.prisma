@@ -65,6 +65,7 @@ model Shop {
   gstProductTaxMaps     GstProductTaxMap[]
   gstSkuTaxMaps         GstSkuTaxMap[]
   gstOrderImports       GstOrderImport[]
+  refundRequests        RefundRequest[]
 }
 model AuthSession {
   id                  String   @id @default(uuid())
@@ -149,6 +150,47 @@ enum PaymentStatus {
   FAILED
   EXPIRED
   CANCELLED
+}
+
+enum RefundSource {
+  ORDER_ACTION_REQUEST
+  SHOPIFY_REFUND
+}
+
+enum RefundMethod {
+  COD
+  PREPAID
+}
+
+enum RefundStatus {
+  DETAILS_PENDING
+  DETAILS_SUBMITTED
+  REVIEW_PENDING
+  APPROVED
+  REJECTED
+  PAYOUT_PENDING
+  PAID
+  FAILED
+  CANCELLED
+}
+
+enum RefundPayoutRail {
+  UPI
+  BANK_TRANSFER
+}
+
+enum RefundPayoutStatus {
+  CREATED
+  IN_PROGRESS
+  SUCCESS
+  FAILED
+  CANCELLED
+}
+
+enum RefundActorType {
+  SYSTEM
+  ADMIN
+  CUSTOMER
 }
 
 
@@ -477,6 +519,100 @@ model WalletReservation {
   @@index([discountCode])
   @@index([shopifyOrderId])
   @@index([shopId, status, expiresAt])
+}
+
+model RefundRequest {
+  id                      String          @id @default(uuid())
+  shopId                  String
+  source                  RefundSource
+  sourceId                String
+  method                  RefundMethod    @default(COD)
+  status                  RefundStatus    @default(DETAILS_PENDING)
+  currency                String          @default("INR")
+  amount                  Int
+  customerProfileId       String?
+  orderActionRequestId    String?
+  shopifyOrderId          String?
+  shopifyRefundId         String?
+  reason                  String?
+  customerNote            String?
+  adminNote               String?
+  metadata                Json?
+  detailsSubmittedAt      DateTime?
+  approvedAt              DateTime?
+  rejectedAt              DateTime?
+  paidAt                  DateTime?
+  createdAt               DateTime        @default(now())
+  updatedAt               DateTime        @updatedAt
+
+  shop                    Shop            @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  customerProfile         CustomerProfile? @relation(fields: [customerProfileId], references: [id], onDelete: SetNull)
+  orderActionRequest      OrderActionRequest? @relation(fields: [orderActionRequestId], references: [id], onDelete: SetNull)
+  payoutDetails           RefundPayoutDetails?
+  payouts                 RefundPayout[]
+  events                  RefundEvent[]
+
+  @@unique([shopId, source, sourceId])
+  @@index([shopId, status, createdAt])
+  @@index([customerProfileId, createdAt])
+  @@index([orderActionRequestId])
+}
+
+model RefundPayoutDetails {
+  id                      String           @id @default(uuid())
+  refundRequestId         String           @unique
+  rail                    RefundPayoutRail
+  accountHolderName       String?
+  bankAccountMasked       String?
+  bankAccountEnc          String?
+  bankIfsc                String?
+  upiIdMasked             String?
+  upiIdEnc                String?
+  phoneMasked             String?
+  phoneEnc                String?
+  verifiedAt              DateTime?
+  createdAt               DateTime         @default(now())
+  updatedAt               DateTime         @updatedAt
+
+  refundRequest           RefundRequest    @relation(fields: [refundRequestId], references: [id], onDelete: Cascade)
+}
+
+model RefundPayout {
+  id                      String            @id @default(uuid())
+  refundRequestId         String
+  status                  RefundPayoutStatus @default(CREATED)
+  provider                String?           // manual, razorpay, etc.
+  providerReferenceId     String?
+  amount                  Int
+  currency                String            @default("INR")
+  initiatedAt             DateTime?
+  completedAt             DateTime?
+  failureReason           String?
+  metadata                Json?
+  createdAt               DateTime          @default(now())
+  updatedAt               DateTime          @updatedAt
+
+  refundRequest           RefundRequest     @relation(fields: [refundRequestId], references: [id], onDelete: Cascade)
+
+  @@index([refundRequestId, createdAt])
+  @@index([status, createdAt])
+}
+
+model RefundEvent {
+  id                      String          @id @default(uuid())
+  refundRequestId         String
+  actorType               RefundActorType
+  actorId                 String?
+  eventType               String
+  fromStatus              RefundStatus?
+  toStatus                RefundStatus?
+  message                 String?
+  payload                 Json?
+  createdAt               DateTime        @default(now())
+
+  refundRequest           RefundRequest   @relation(fields: [refundRequestId], references: [id], onDelete: Cascade)
+
+  @@index([refundRequestId, createdAt])
 }
 
 
