@@ -23,6 +23,7 @@ type RequestPayment = {
   paymentId: string | null;
   createdAtIso: string;
   paidAtIso: string | null;
+  invoice: { id: string; invoiceNumber: string; invoiceStatus: string; invoiceDateIso: string; totalPaise: number; gstPaise: number } | null;
 };
 
 type ReverseShipmentSnapshot = {
@@ -158,6 +159,7 @@ export default function ExchangeLifecycleControls({
   const [noteLoading, setNoteLoading] = useState(false);
   const [reverseShipmentLoading, setReverseShipmentLoading] = useState(false);
   const [forwardShipmentLoading, setForwardShipmentLoading] = useState(false);
+  const [invoiceLoadingId, setInvoiceLoadingId] = useState<string | null>(null);
 
   const stepState = useMemo(() => getStepState(currentStatus), [currentStatus]);
   const latestPayment = payments[0] || null;
@@ -462,6 +464,7 @@ export default function ExchangeLifecycleControls({
                     <th className="px-2 py-2">Payment ID</th>
                     <th className="px-2 py-2">Created At</th>
                     <th className="px-2 py-2">Paid At</th>
+                    <th className="px-2 py-2">Invoice</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -487,6 +490,7 @@ export default function ExchangeLifecycleControls({
                       <td className="px-2 py-2">{payment.paymentId || "—"}</td>
                       <td className="px-2 py-2">{formatDate(payment.createdAtIso)}</td>
                       <td className="px-2 py-2">{formatDate(payment.paidAtIso)}</td>
+                      <td className="px-2 py-2">{payment.invoice ? payment.invoice.invoiceNumber : "—"}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -504,14 +508,21 @@ export default function ExchangeLifecycleControls({
         </div>
 
         <div className="mt-5 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4">
-          <h3 className="text-sm font-semibold text-slate-900">GST invoice (reserved)</h3>
+          <h3 className="text-sm font-semibold text-slate-900">GST invoice</h3>
           <div className="mt-2 grid gap-2 text-sm text-slate-600">
-            <p>Invoice status: Coming next</p>
-            <p>Invoice number: —</p>
+            {latestPayment?.invoice ? (
+              <>
+                <p>Invoice status: {latestPayment.invoice.invoiceStatus}</p>
+                <p>Invoice number: {latestPayment.invoice.invoiceNumber}</p>
+                <p>GST amount: ₹{(latestPayment.invoice.gstPaise / 100).toFixed(2)}</p>
+              </>
+            ) : (
+              <p>{latestPayment?.status === "PAID" ? "Ready to generate invoice." : "Invoice will be available after payment is completed."}</p>
+            )}
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
-            <button type="button" disabled className="cursor-not-allowed rounded-lg border px-3 py-2 text-xs text-slate-500">Generate GST invoice (Coming next)</button>
-            <button type="button" disabled className="cursor-not-allowed rounded-lg border px-3 py-2 text-xs text-slate-500">Send invoice email via Resend (Coming next)</button>
+            <button type="button" onClick={async()=>{ if(!ensureAdminContext()) return; setInvoiceLoadingId("generate"); const r=await fetch(`/api/admin/exchange-requests/${requestId}/invoice`,{method:"POST",headers:getHeaders(),body:JSON.stringify({action:"generate"})}); setInvoiceLoadingId(null); if(r.ok){setSuccess("Invoice generated. Refresh to view latest values.")} else {const d=await r.json().catch(()=>({})); setError(d?.error||"Failed");}}} disabled={latestPayment?.status!=="PAID" || Boolean(latestPayment?.invoice) || invoiceLoadingId!==null} className="rounded-lg border px-3 py-2 text-xs">{invoiceLoadingId==="generate"?"Generating...":"Generate GST Invoice"}</button>
+            <button type="button" onClick={async()=>{ if(!ensureAdminContext()) return; setInvoiceLoadingId("send"); const r=await fetch(`/api/admin/exchange-requests/${requestId}/invoice`,{method:"POST",headers:getHeaders(),body:JSON.stringify({action:"send"})}); setInvoiceLoadingId(null); if(r.ok){setSuccess("Invoice email sent.")} else {const d=await r.json().catch(()=>({})); setError(d?.error||"Failed");}}} disabled={latestPayment?.status!=="PAID" || invoiceLoadingId!==null} className="rounded-lg border px-3 py-2 text-xs">{invoiceLoadingId==="send"?"Sending...":"Send Invoice Email"}</button>
           </div>
         </div>
       </section>

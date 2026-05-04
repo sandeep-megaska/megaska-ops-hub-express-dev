@@ -63,7 +63,7 @@ export default async function AdminExchangeDetailPage({
     where: { id, requestType: "EXCHANGE", shopId: shop.id },
     include: {
       items: true,
-      payments: { orderBy: { createdAt: "desc" } },
+      payments: { orderBy: { createdAt: "desc" }, include: { invoice: true } },
       shipments: true,
     },
   });
@@ -145,6 +145,14 @@ export default async function AdminExchangeDetailPage({
           paymentId: payment.paymentId,
           createdAtIso: payment.createdAt.toISOString(),
           paidAtIso: payment.paidAt?.toISOString() || null,
+          invoice: payment.invoice ? {
+            id: payment.invoice.id,
+            invoiceNumber: payment.invoice.invoiceNumber,
+            invoiceStatus: payment.invoice.invoiceStatus,
+            invoiceDateIso: payment.invoice.invoiceDate.toISOString(),
+            totalPaise: payment.invoice.totalPaise,
+            gstPaise: payment.invoice.cgstPaise + payment.invoice.sgstPaise + payment.invoice.igstPaise,
+          } : null,
         }))}
         reverseShipment={
           reverseShipment

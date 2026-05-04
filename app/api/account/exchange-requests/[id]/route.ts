@@ -33,7 +33,7 @@ export async function GET(
       },
       include: {
         items: true,
-        payments: { orderBy: { createdAt: "desc" } },
+        payments: { orderBy: { createdAt: "desc" }, include: { invoice: true } },
         shipments: true,
       },
     });
@@ -60,6 +60,8 @@ export async function GET(
           paymentActionEndpoint: canPayReversePickup
             ? `/api/account/exchange-requests/${item.id}/payment-link`
             : null,
+          invoiceEndpoint: latestPayment?.invoice ? `/api/account/exchange-requests/${item.id}/invoice` : null,
+          invoiceMessage: latestPayment?.status === "PAID" && !latestPayment?.invoice ? "Invoice will be available after payment confirmation." : null,
         },
       })
     );

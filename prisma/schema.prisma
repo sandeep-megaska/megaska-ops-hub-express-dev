@@ -151,6 +151,13 @@ enum PaymentStatus {
   CANCELLED
 }
 
+
+enum ExchangePaymentInvoiceStatus {
+  GENERATED
+  SENT
+  CANCELLED
+}
+
 enum ShipmentDirection {
   REVERSE_PICKUP
   FORWARD_REPLACEMENT
@@ -192,6 +199,7 @@ model OrderActionRequest {
   shop                  Shop?                 @relation(fields: [shopId], references: [id], onDelete: SetNull)
   items                 OrderActionItem[]
   payments              RequestPayment[]
+  invoices              ExchangePaymentInvoice[]
   shipments             ShipmentTracking[]
   megaskaOrder          MegaskaOrder?         @relation(fields: [megaskaOrderId], references: [id], onDelete: SetNull)
 
@@ -240,6 +248,7 @@ model RequestPayment {
   updatedAt           DateTime       @updatedAt
 
   request             OrderActionRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  invoice             ExchangePaymentInvoice?
 
   @@index([requestId])
   @@index([status])
@@ -976,4 +985,38 @@ model GstReportRun {
 
   @@index([gstSettingsId, reportType, periodStart, periodEnd])
   @@index([status, createdAt])
+}
+
+
+model ExchangePaymentInvoice {
+  id                 String @id @default(uuid())
+  requestPaymentId   String @unique
+  requestId          String
+  invoiceNumber      String @unique
+  invoiceDate        DateTime
+  invoiceStatus      ExchangePaymentInvoiceStatus @default(GENERATED)
+  customerName       String
+  customerPhone      String?
+  customerEmail      String?
+  orderNumber        String
+  description        String
+  amountPaise        Int
+  taxableAmountPaise Int
+  gstRatePercent     Float
+  cgstPaise          Int @default(0)
+  sgstPaise          Int @default(0)
+  igstPaise          Int @default(0)
+  totalPaise         Int
+  currency           String @default("INR")
+  pdfUrl             String?
+  htmlSnapshot       String?
+  textSnapshot       String?
+  sentAt             DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  requestPayment     RequestPayment @relation(fields: [requestPaymentId], references: [id], onDelete: Cascade)
+  request            OrderActionRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([requestId])
 }

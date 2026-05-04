@@ -120,3 +120,28 @@ export async function sendExchangePaymentReceivedOpsEmail(
   const template = buildExchangePaymentReceivedOpsTemplate(payload);
   await sendOpsAlert(template.subject, template.text);
 }
+
+
+export async function sendExchangeInvoiceEmail(invoice: {
+  invoiceNumber: string;
+  customerEmail: string | null;
+  orderNumber: string;
+  totalPaise: number;
+  currency: string;
+  requestId: string;
+}) {
+  const appBaseUrl = String(process.env.APP_BASE_URL || "").trim().replace(/\/$/, "");
+  const invoiceLink = appBaseUrl
+    ? `${appBaseUrl}/api/account/exchange-requests/${encodeURIComponent(invoice.requestId)}/invoice`
+    : "";
+  const amount = `${invoice.currency} ${(invoice.totalPaise / 100).toFixed(2)}`;
+  const subject = `GST invoice ${invoice.invoiceNumber} for order #${invoice.orderNumber}`;
+  const text = [
+    `Invoice Number: ${invoice.invoiceNumber}`,
+    `Order Number: ${invoice.orderNumber}`,
+    `Amount Paid: ${amount}`,
+    invoiceLink ? `Invoice Link: ${invoiceLink}` : "",
+  ].filter(Boolean).join("\n");
+
+  await sendCustomerEmail(invoice.customerEmail, subject, text);
+}
