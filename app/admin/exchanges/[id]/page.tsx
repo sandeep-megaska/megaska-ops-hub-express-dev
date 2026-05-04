@@ -1,6 +1,10 @@
 import { allowedStatusTransitions } from "../../../../services/exchange/lifecycle";
 import { prisma } from "../../../../services/db/prisma";
-import { getShopByDomain, normalizeShopDomain } from "../../../../services/shopify/shop";
+import {
+  getShopByDomain,
+  normalizeShopDomain,
+  resolveShopConfig,
+} from "../../../../services/shopify/shop";
 import ExchangeLifecycleControls from "./ExchangeLifecycleControls";
 import { getDelhiveryCapabilityState } from "../../../../services/logistics/delhivery";
 import { headers } from "next/headers";
@@ -44,17 +48,9 @@ export default async function AdminExchangeDetailPage({
       requestHeaders.get("x-shopify-shop-domain")
   );
 
-  if (!shopDomain) {
-    return (
-      <main className="p-8">
-        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-red-700">
-          Unable to load exchange request details right now. Please return to the exchanges list and try again.
-        </div>
-      </main>
-    );
-  }
-
-  const shop = await getShopByDomain(shopDomain);
+  const shop = shopDomain
+    ? await getShopByDomain(shopDomain)
+    : await resolveShopConfig();
   if (!shop) {
     return (
       <main className="p-8">
