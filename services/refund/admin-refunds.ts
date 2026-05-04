@@ -124,7 +124,7 @@ export async function markAdminRefundPaid(shopId: string, id: string, payload: R
     await tx.refundPayout.create({
       data: {
         refundRequestId: id,
-        status: "COMPLETED",
+        status: "SUCCESS",
         provider: "manual",
         providerReferenceId: referenceId,
         amount: refund.amount,
