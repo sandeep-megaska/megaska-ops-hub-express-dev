@@ -1,5 +1,5 @@
 import { Prisma, RefundMethod, RefundSource, RefundStatus } from "../generated/prisma/index.js";
-import { prisma } from "./db/prisma.ts";
+import { prisma } from "./db/prisma";
 
 type CreateRefundRequestInput = {
   shop: { id: string };

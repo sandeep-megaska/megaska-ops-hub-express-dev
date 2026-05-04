@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { createRefundRequest } from "./refund-request.ts";
-import { prisma } from "./db/prisma.ts";
+import { prisma } from "./db/prisma";
 
 const originalOrderFindFirst = prisma.orderActionRequest.findFirst;
 const originalRefundCreate = prisma.refundRequest.create;
