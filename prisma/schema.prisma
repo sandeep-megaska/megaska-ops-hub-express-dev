@@ -243,6 +243,7 @@ model OrderActionRequest {
   payments              RequestPayment[]
   invoices              ExchangePaymentInvoice[]
   shipments             ShipmentTracking[]
+  refundRequests        RefundRequest[]
   megaskaOrder          MegaskaOrder?         @relation(fields: [megaskaOrderId], references: [id], onDelete: SetNull)
 
   @@index([customerProfileId])
