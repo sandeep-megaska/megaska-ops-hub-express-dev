@@ -131,7 +131,6 @@ export default function ExchangeLifecycleControls({
   forwardShipment,
   delhiveryCapability,
 }: Props) {
-  const [adminKey, setAdminKey] = useState("");
   const [nextStatus, setNextStatus] = useState(allowedTransitions[0] || currentStatus);
   const [adminNote, setAdminNote] = useState(currentAdminNote);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -182,7 +181,6 @@ export default function ExchangeLifecycleControls({
   function getHeaders() {
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
-      "x-admin-key": adminKey,
     };
 
     if (shopDomain) {
@@ -193,11 +191,6 @@ export default function ExchangeLifecycleControls({
   }
 
   function ensureAdminContext() {
-    if (!adminKey.trim()) {
-      setError("Admin key is required.");
-      return false;
-    }
-
     if (!shopDomain) {
       setError("Shop domain is missing in this admin session.");
       return false;
@@ -370,17 +363,6 @@ export default function ExchangeLifecycleControls({
 
       <section className="rounded-xl border bg-white p-6 shadow-sm">
         <h2 className={cardTitleClass()}>Ops review</h2>
-        <div className="mt-4 grid gap-4 lg:grid-cols-2">
-          <label className="text-sm">
-            <span className="mb-1 block text-slate-600">Admin key</span>
-            <input type="password" value={adminKey} onChange={(event) => setAdminKey(event.target.value)} className="w-full rounded-lg border px-3 py-2" placeholder="ADMIN_OPS_KEY" />
-          </label>
-          <label className="text-sm">
-            <span className="mb-1 block text-slate-600">Shop domain</span>
-            <input value={shopDomain} disabled className="w-full rounded-lg border bg-slate-50 px-3 py-2 text-slate-500" />
-          </label>
-        </div>
-
         <div className="mt-4 grid gap-4 lg:grid-cols-2">
           <label className="text-sm">
             <span className="mb-1 block text-slate-600">Admin note</span>
