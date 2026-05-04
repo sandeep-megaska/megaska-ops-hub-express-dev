@@ -1,13 +1,13 @@
 "use client";
 import { useState } from "react";
 
-export default function RefundActions({ id, status }: { id: string; status: string }) {
+export default function RefundActions({ id, status, shopDomain }: { id: string; status: string; shopDomain?: string }) {
   const [note, setNote] = useState("");
   const [referenceId, setReferenceId] = useState("");
   const [reason, setReason] = useState("");
   const [message, setMessage] = useState("");
   const act = async (path: string, body?: Record<string, string>) => {
-    const response = await fetch(`/api/admin/refunds/${id}/${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+    const response = await fetch(`/api/admin/refunds/${id}/${path}`, { method: "POST", headers: { "Content-Type": "application/json", ...(shopDomain ? { "x-shopify-shop-domain": shopDomain } : {}) }, body: body ? JSON.stringify(body) : undefined });
     const data = await response.json().catch(() => ({}));
     setMessage(response.ok ? "Action completed. Refresh to see latest status." : data?.error || "Action failed");
   };
