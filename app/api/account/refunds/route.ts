@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { withCors, handleOptions } from "../_lib/cors";
+import { withCors, handleOptions } from "../../_lib/cors";
 import { getAuthenticatedExchangeCustomer } from "../../../../services/exchange/auth";
 import { listCustomerRefunds } from "../../../../services/refund/customer-refunds";
 
