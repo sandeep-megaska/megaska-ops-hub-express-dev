@@ -18,8 +18,11 @@ type RequestPayment = {
   status: string;
   amount: number;
   currency: string;
+  provider: string;
   paymentLinkUrl: string | null;
+  paymentId: string | null;
   createdAtIso: string;
+  paidAtIso: string | null;
 };
 
 type ReverseShipmentSnapshot = {
@@ -103,6 +106,15 @@ function getStepState(currentStatus: string) {
 function cardTitleClass() {
   return "text-base font-semibold text-slate-900";
 }
+
+function paymentStatusBadgeClass(status: string) {
+  if (status === "PAID") return "bg-emerald-100 text-emerald-700 border-emerald-200";
+  if (status === "PENDING") return "bg-amber-100 text-amber-700 border-amber-200";
+  if (status === "FAILED") return "bg-red-100 text-red-700 border-red-200";
+  if (status === "CANCELLED") return "bg-slate-200 text-slate-700 border-slate-300";
+  return "bg-slate-100 text-slate-700 border-slate-200";
+}
+
 
 export default function ExchangeLifecycleControls({
   requestId,
@@ -435,27 +447,60 @@ export default function ExchangeLifecycleControls({
         <h2 className={cardTitleClass()}>Payment + GST</h2>
         <div className="mt-4 rounded-lg border border-slate-200">
           <div className="border-b bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700">Payment records</div>
-          <div className="p-4 text-sm">
+          <div className="overflow-x-auto p-4 text-sm">
             {payments.length === 0 ? (
-              <p className="text-slate-500">No payment records found.</p>
+              <p className="text-slate-500">No payment records found yet.</p>
             ) : (
-              <div className="space-y-3">
-                {payments.map((payment) => (
-                  <div key={payment.id} className="rounded-lg border p-3">
-                    <p><span className="text-slate-500">Purpose:</span> {payment.purpose}</p>
-                    <p><span className="text-slate-500">Status:</span> {payment.status}</p>
-                    <p><span className="text-slate-500">Amount:</span> {payment.amount} {payment.currency}</p>
-                    <p><span className="text-slate-500">Created:</span> {formatDate(payment.createdAtIso)}</p>
-                    <p className="break-all"><span className="text-slate-500">Link:</span> {payment.paymentLinkUrl || "—"}</p>
-                  </div>
-                ))}
-              </div>
+              <table className="min-w-full border-collapse">
+                <thead>
+                  <tr className="border-b text-left text-xs uppercase tracking-wide text-slate-500">
+                    <th className="px-2 py-2">Amount</th>
+                    <th className="px-2 py-2">Purpose</th>
+                    <th className="px-2 py-2">Status</th>
+                    <th className="px-2 py-2">Provider</th>
+                    <th className="px-2 py-2">Payment Link</th>
+                    <th className="px-2 py-2">Payment ID</th>
+                    <th className="px-2 py-2">Created At</th>
+                    <th className="px-2 py-2">Paid At</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {payments.map((payment) => (
+                    <tr key={payment.id} className="border-b align-top">
+                      <td className="px-2 py-2 font-medium text-slate-900">₹{payment.amount}</td>
+                      <td className="px-2 py-2">{payment.purpose}</td>
+                      <td className="px-2 py-2">
+                        <span className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold ${paymentStatusBadgeClass(payment.status)}`}>
+                          {payment.status}
+                        </span>
+                      </td>
+                      <td className="px-2 py-2">{payment.provider}</td>
+                      <td className="max-w-64 break-all px-2 py-2">
+                        {payment.paymentLinkUrl ? (
+                          <a href={payment.paymentLinkUrl} target="_blank" rel="noreferrer" className="text-indigo-600 underline">
+                            Open payment link
+                          </a>
+                        ) : (
+                          <span className="text-slate-500">Payment link will be generated after approval</span>
+                        )}
+                      </td>
+                      <td className="px-2 py-2">{payment.paymentId || "—"}</td>
+                      <td className="px-2 py-2">{formatDate(payment.createdAtIso)}</td>
+                      <td className="px-2 py-2">{formatDate(payment.paidAtIso)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             )}
           </div>
         </div>
 
         <div className="mt-4 rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-xs text-indigo-700">
-          Admin cannot collect payment directly. After approval with reverse pickup, customer dashboard should call <code>/api/account/exchange-requests/{'{'}id{'}'}/payment-link</code> using Bearer <code>megaska_session_token</code>.
+          {latestPayment?.status === "PAID"
+            ? "Payment received via Razorpay"
+            : latestPayment?.status === "PENDING"
+              ? "Customer can pay via dashboard"
+              : "Customer can pay via dashboard"}
         </div>
 
         <div className="mt-5 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4">

@@ -140,8 +140,11 @@ export default async function AdminExchangeDetailPage({
           status: payment.status,
           amount: payment.amount,
           currency: payment.currency,
+          provider: payment.provider,
           paymentLinkUrl: payment.paymentLinkUrl,
+          paymentId: payment.paymentId,
           createdAtIso: payment.createdAt.toISOString(),
+          paidAtIso: payment.paidAt?.toISOString() || null,
         }))}
         reverseShipment={
           reverseShipment
