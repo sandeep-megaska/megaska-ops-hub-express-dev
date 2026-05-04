@@ -1,7 +1,11 @@
-"use client";
-
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { headers } from "next/headers";
+import { prisma } from "../../../services/db/prisma";
+import {
+  getShopByDomain,
+  normalizeShopDomain,
+  resolveShopConfig,
+} from "../../../services/shopify/shop";
 
 type ExchangeRequest = {
   id: string;
@@ -10,125 +14,68 @@ type ExchangeRequest = {
   customerPhoneSnapshot?: string | null;
   customerEmailSnapshot?: string | null;
   status: string;
-  requestedAt?: string | null;
-  createdAt?: string | null;
+  requestedAt?: Date | null;
+  createdAt?: Date | null;
   items?: unknown[];
 };
 
-function normalizeShopDomain(input: string | null | undefined) {
-  return String(input || "")
-    .trim()
-    .replace(/^https?:\/\//, "")
-    .replace(/\/$/, "")
-    .toLowerCase();
+function formatDateTime(value: Date | null | undefined) {
+  if (!value) return "—";
+  return value.toLocaleString();
 }
 
-function getShopDomainFromEmbedContext() {
-  if (typeof window === "undefined") return "";
-
-  const fromShopify = normalizeShopDomain(
-    (window as Window & { Shopify?: { shop?: string } }).Shopify?.shop
-  );
-  if (fromShopify) return fromShopify;
-
-  const fromQuery = normalizeShopDomain(
-    new URLSearchParams(window.location.search).get("shop")
-  );
-  if (fromQuery) return fromQuery;
-
-  const fromTopLevel = normalizeShopDomain(
-    new URLSearchParams(window.location.search).get("shopify_shop")
-  );
-  if (fromTopLevel) return fromTopLevel;
-
-  const fromHtml = normalizeShopDomain(
-    document.documentElement.getAttribute("data-shop-domain")
-  );
-  if (fromHtml) return fromHtml;
-
-  const fromBody = normalizeShopDomain(
-    document.body.getAttribute("data-shop-domain")
-  );
-  if (fromBody) return fromBody;
-
-  return "";
-}
-
-export default function AdminExchangesPage() {
-  const [requests, setRequests] = useState<ExchangeRequest[]>([]);
-  const [shopDomain, setShopDomain] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
-  const stats = useMemo(
-    () => ({
-      total: requests.length,
-      pending: requests.filter((r) =>
-        ["OPEN", "PENDING", "AWAITING_PAYMENT"].includes(r.status)
-      ).length,
-      approved: requests.filter((r) =>
-        ["APPROVED", "COMPLETED"].includes(r.status)
-      ).length,
-    }),
-    [requests]
+export default async function AdminExchangesPage() {
+  const headerStore = await headers();
+  const requestedShopDomain = normalizeShopDomain(
+    headerStore.get("x-shopify-shop-domain") || ""
   );
 
-  async function loadRequests(domain: string) {
-    setError("");
-    const cleanDomain = normalizeShopDomain(domain);
+  const currentShop = requestedShopDomain
+    ? await getShopByDomain(requestedShopDomain)
+    : await resolveShopConfig();
 
-    try {
-      setLoading(true);
-      const endpoint = cleanDomain
-        ? `/api/admin/exchanges?shop=${encodeURIComponent(cleanDomain)}`
-        : "/api/admin/exchanges";
-
-      const res = await fetch(endpoint, {
-        method: "GET",
-        cache: "no-store",
-        headers: cleanDomain
-          ? {
-              "x-shopify-shop-domain": cleanDomain,
-            }
-          : undefined,
-      });
-
-      const data = await res.json().catch(() => ({}));
-
-      if (!res.ok) {
-        throw new Error(
-          `Exchange request list failed (${res.status}): ${String(
-            data?.error || "Failed to load exchange requests"
-          )}`
-        );
-      }
-
-      setRequests(Array.isArray(data?.requests) ? data.requests : []);
-    } catch (err) {
-      console.error("[ADMIN_EXCHANGES_LOAD_FAILED]", err);
-      setError("Unable to load exchange requests right now. Please refresh and try again.");
-      setRequests([]);
-    } finally {
-      setLoading(false);
-    }
+  if (!currentShop?.id) {
+    return (
+      <main className="p-8">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-slate-950">Exchange Requests</h1>
+          <p className="mt-1 text-slate-500">Manage customer exchange requests.</p>
+        </div>
+        <div className="rounded-xl border bg-white p-8 text-slate-500">
+          Shop context is unavailable. Open this page from the embedded admin for a specific shop.
+        </div>
+      </main>
+    );
   }
 
-  useEffect(() => {
-    const detectedShop = getShopDomainFromEmbedContext();
+  const requests: ExchangeRequest[] = await prisma.orderActionRequest.findMany({
+    where: {
+      requestType: "EXCHANGE",
+      shopId: currentShop.id,
+    },
+    include: {
+      items: true,
+      payments: { orderBy: { createdAt: "desc" }, take: 1 },
+      shipments: true,
+    },
+    orderBy: { requestedAt: "desc" },
+    take: 300,
+  });
 
-    setShopDomain(detectedShop);
-    loadRequests(detectedShop);
-  }, []);
+  const shopDomain = requestedShopDomain || "";
+  const stats = {
+    total: requests.length,
+    pending: requests.filter((r) =>
+      ["OPEN", "PENDING", "AWAITING_PAYMENT"].includes(r.status)
+    ).length,
+    approved: requests.filter((r) => ["APPROVED", "COMPLETED"].includes(r.status)).length,
+  };
 
   return (
     <main className="p-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-slate-950">
-          Exchange Requests
-        </h1>
-        <p className="mt-1 text-slate-500">
-          Manage customer exchange requests.
-        </p>
+        <h1 className="text-3xl font-bold text-slate-950">Exchange Requests</h1>
+        <p className="mt-1 text-slate-500">Manage customer exchange requests.</p>
       </div>
 
       <div className="mb-6 grid gap-4 md:grid-cols-3">
@@ -148,22 +95,8 @@ export default function AdminExchangesPage() {
         </div>
       </div>
 
-      {error ? (
-        <div className="mb-6 rounded-xl border border-red-200 bg-red-50 p-5 text-red-700">
-          {error}
-        </div>
-      ) : null}
-
-      {loading ? (
-        <div className="rounded-xl border bg-white p-8 text-slate-500">
-          Loading exchange requests...
-        </div>
-      ) : null}
-
-      {!loading && !error && requests.length === 0 ? (
-        <div className="rounded-xl border bg-white p-8 text-slate-500">
-          No exchange requests found.
-        </div>
+      {requests.length === 0 ? (
+        <div className="rounded-xl border bg-white p-8 text-slate-500">No exchange requests found.</div>
       ) : null}
 
       {requests.length > 0 ? (
@@ -184,9 +117,7 @@ export default function AdminExchangesPage() {
             <tbody>
               {requests.map((request) => (
                 <tr key={request.id} className="border-t">
-                  <td className="px-5 py-4 font-medium">
-                    {request.orderNumber || "—"}
-                  </td>
+                  <td className="px-5 py-4 font-medium">{request.orderNumber || "—"}</td>
 
                   <td className="px-5 py-4">
                     {request.customerNameSnapshot ||
@@ -195,27 +126,15 @@ export default function AdminExchangesPage() {
                       "—"}
                   </td>
 
-                  <td className="px-5 py-4">
-                    {request.customerPhoneSnapshot || "—"}
-                  </td>
+                  <td className="px-5 py-4">{request.customerPhoneSnapshot || "—"}</td>
+
+                  <td className="px-5 py-4">{Array.isArray(request.items) ? request.items.length : "—"}</td>
 
                   <td className="px-5 py-4">
-                    {Array.isArray(request.items) ? request.items.length : "—"}
+                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold">{request.status}</span>
                   </td>
 
-                  <td className="px-5 py-4">
-                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold">
-                      {request.status}
-                    </span>
-                  </td>
-
-                  <td className="px-5 py-4">
-                    {request.requestedAt || request.createdAt
-                      ? new Date(
-                          request.requestedAt || request.createdAt || ""
-                        ).toLocaleString()
-                      : "—"}
-                  </td>
+                  <td className="px-5 py-4">{formatDateTime(request.requestedAt || request.createdAt)}</td>
 
                   <td className="px-5 py-4 text-right">
                     <Link
