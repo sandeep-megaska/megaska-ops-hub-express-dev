@@ -113,13 +113,16 @@
   function normalizeFulfillmentStatus(value) {
     const status = String(value || "")
       .trim()
-      .toLowerCase();
+      .toLowerCase()
+      .replace(/[-\s]+/g, "_");
 
     if (!status) return null;
     if (status === "unfulfilled") return "UNFULFILLED";
     if (status === "fulfilled") return "FULFILLED";
     if (status === "delivered") return "DELIVERED";
-    if (status === "partial" || status === "partially fulfilled" || status === "partially_fulfilled") return "PARTIAL";
+    if (status === "in_transit") return "IN_TRANSIT";
+    if (status === "out_for_delivery") return "OUT_FOR_DELIVERY";
+    if (status === "partial" || status === "partially_fulfilled") return "PARTIAL";
     return null;
   }
 
@@ -201,9 +204,19 @@
     const statusText = readFirstValue([
       getDataValue(sourceButton, "order-fulfillment-status"),
       getDataValue(sourceButton, "fulfillment-status"),
+      getDataValue(structuredSource, "order-fulfillment-status"),
+      getDataValue(structuredSource, "fulfillment-status"),
       getDataValue(drawer, "order-fulfillment-status"),
       getDataValue(drawer, "fulfillment-status"),
       getDataValue(drawer.querySelector("[data-order-fulfillment-status]"), "order-fulfillment-status"),
+    ]);
+    const deliveryStatusText = readFirstValue([
+      getDataValue(sourceButton, "order-delivery-status"),
+      getDataValue(sourceButton, "delivery-status"),
+      getDataValue(structuredSource, "order-delivery-status"),
+      getDataValue(structuredSource, "delivery-status"),
+      getDataValue(drawer, "order-delivery-status"),
+      getDataValue(drawer, "delivery-status"),
     ]);
     const deliveredAt = readFirstValue([
       getDataValue(sourceButton, "order-delivered-at"),
@@ -216,14 +229,15 @@
     ]);
 
     const metaLower = metaText.toLowerCase();
-    const inferredStatus = statusText
-      ? statusText
-      : metaLower.includes("delivered")
-        ? "delivered"
-        : metaLower.includes("fulfilled")
-          ? "fulfilled"
-          : metaLower.includes("unfulfilled")
-            ? "unfulfilled"
+    const hasStructuredStatus = Boolean(statusText || deliveryStatusText);
+    const inferredStatus = hasStructuredStatus
+      ? (statusText || deliveryStatusText)
+      : metaLower.includes("unfulfilled")
+        ? "unfulfilled"
+        : metaLower.includes("delivered")
+          ? "delivered"
+          : metaLower.includes("fulfilled")
+            ? "fulfilled"
             : "";
 
     return {
@@ -287,14 +301,20 @@
   }
 
   function isCancellationEligible(context) {
-    const fulfillmentStatus = normalizeStatusValue(context?.fulfillmentStatus);
+    const fulfillmentStatus = String(context?.fulfillmentStatus || "").trim().toUpperCase();
     const financialStatus = normalizeStatusValue(context?.financialStatus);
+    const fulfilledAt = normalizeDeliveredAt(context?.fulfilledAt);
+    const deliveredAt = normalizeDeliveredAt(context?.deliveredAt);
 
     if (["void", "cancel", "refunded"].some(function (keyword) { return financialStatus.includes(keyword); })) {
       return { eligible: false, reason: "Order is already cancelled." };
     }
 
-    if (["fulfilled", "delivered", "shipped", "in transit", "out for delivery", "ready for pickup", "label printed", "partial"].some(function (keyword) { return fulfillmentStatus.includes(keyword); })) {
+    if (fulfilledAt || deliveredAt) {
+      return { eligible: false, reason: "Cancellation not possible — order already shipped." };
+    }
+
+    if (["FULFILLED", "DELIVERED", "IN_TRANSIT", "OUT_FOR_DELIVERY", "PARTIAL"].includes(fulfillmentStatus)) {
       return { eligible: false, reason: "Cancellation not possible — order already shipped." };
     }
 
