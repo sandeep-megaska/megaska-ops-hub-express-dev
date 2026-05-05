@@ -52,7 +52,7 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
 
     if (nextStatus.toUpperCase() === "APPROVED") {
       const refundAmountMinor = Number(updated.orderAmountSnapshot || 0);
-      if (Number.isFinite(refundAmountMinor) && refundAmountMinor > 0) {
+      if (Number.isFinite(refundAmountMinor) && refundAmountMinor > 0 && updated.shopId) {
         await createRefundRequest({
           shop: { id: updated.shopId },
           orderId: updated.id,
