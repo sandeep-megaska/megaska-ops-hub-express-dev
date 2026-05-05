@@ -156,6 +156,8 @@ enum PaymentStatus {
 enum RefundSource {
   ORDER_ACTION_REQUEST
   SHOPIFY_REFUND
+  ISSUE_REQUEST
+  CANCELLATION_REQUEST
 }
 
 enum RefundMethod {

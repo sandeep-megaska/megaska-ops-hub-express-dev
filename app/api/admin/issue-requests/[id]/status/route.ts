@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "../../../../../../services/db/prisma";
 import { ISSUE_ALLOWED_STATUS_TRANSITIONS } from "../../../../../../services/exchange/issue";
-import { applyWalletTransaction, parseAmountToMinorUnits } from "../../../../../../services/wallet";
+import { createRefundRequest } from "../../../../../../services/refund-request";
 
 export const runtime = "nodejs";
 
@@ -50,36 +50,18 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       include: { items: { take: 1 }, customerProfile: { select: { id: true } } },
     });
 
-    const paymentGatewayName =
-      updated.items[0]?.eligibilitySnapshot &&
-      typeof updated.items[0].eligibilitySnapshot === "object" &&
-      "paymentGatewayName" in updated.items[0].eligibilitySnapshot
-        ? String((updated.items[0].eligibilitySnapshot as { paymentGatewayName?: unknown }).paymentGatewayName || "")
-        : "";
-    const isCodRefund = paymentGatewayName.toLowerCase().includes("cod") || paymentGatewayName.toLowerCase().includes("cash");
-    const refundAmountMinor = parseAmountToMinorUnits(updated.orderAmountSnapshot || "");
-
-    if (nextStatus.toUpperCase() === "APPROVED" && isCodRefund && refundAmountMinor > 0) {
-      try {
-        await applyWalletTransaction({
-          customerProfileId: updated.customerProfile.id,
-          amount: refundAmountMinor,
-          direction: "CREDIT",
-          transactionType: "COD_REFUND_CREDIT",
-          sourceType: "ISSUE_REQUEST",
+    if (nextStatus.toUpperCase() === "APPROVED") {
+      const refundAmountMinor = Number(updated.orderAmountSnapshot || 0);
+      if (Number.isFinite(refundAmountMinor) && refundAmountMinor > 0) {
+        await createRefundRequest({
+          shop: { id: updated.shopId },
+          orderId: updated.id,
+          amount: Math.trunc(refundAmountMinor),
+          reason: "Issue approved",
+          source: "ISSUE_REQUEST",
           sourceId: updated.id,
-          sourceReference: updated.id,
-          orderNumber: updated.orderNumber,
-          reason: "COD refund approved to wallet",
-          adminNote: adminNote || "Approved from issue request status transition",
-          createdByType: "SYSTEM",
-          createdById: adminId,
+          customer: { id: updated.customerProfile.id },
         });
-      } catch (walletError) {
-        const message = walletError instanceof Error ? walletError.message : "Wallet credit failed";
-        if (!message.includes("Unique constraint")) {
-          return NextResponse.json({ error: message }, { status: 500 });
-        }
       }
     }
 

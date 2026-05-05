@@ -4,6 +4,7 @@ import {
   CANCELLATION_ALLOWED_STATUS_TRANSITIONS,
   evaluateCancellationEligibility,
 } from "../../../../../../services/exchange/cancellation";
+import { createRefundRequest } from "../../../../../../services/refund-request";
 
 export const runtime = "nodejs";
 
@@ -59,8 +60,23 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
         status: nextStatus as never,
         adminNote: adminNote ?? existing.adminNote,
       },
-      include: { payments: { orderBy: { createdAt: "desc" }, take: 1 } },
+      include: { payments: { orderBy: { createdAt: "desc" }, take: 1 }, customerProfile: { select: { id: true } } },
     });
+
+    if (nextStatus.toUpperCase() === "APPROVED") {
+      const refundAmountMinor = Number(updated.orderAmountSnapshot || 0);
+      if (Number.isFinite(refundAmountMinor) && refundAmountMinor > 0) {
+        await createRefundRequest({
+          shop: { id: updated.shopId },
+          orderId: updated.id,
+          amount: Math.trunc(refundAmountMinor),
+          reason: "Cancellation approved",
+          source: "CANCELLATION_REQUEST",
+          sourceId: updated.id,
+          customer: { id: updated.customerProfile.id },
+        });
+      }
+    }
 
     return NextResponse.json({ request: updated });
   } catch (error) {
