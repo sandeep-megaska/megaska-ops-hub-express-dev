@@ -65,15 +65,16 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
 
     if (nextStatus.toUpperCase() === "APPROVED") {
       const refundAmountMinor = Number(updated.orderAmountSnapshot || 0);
-      if (Number.isFinite(refundAmountMinor) && refundAmountMinor > 0) {
+      const shopId = updated.shopId;
+      if (shopId && Number.isFinite(refundAmountMinor) && refundAmountMinor > 0) {
         await createRefundRequest({
-          shop: { id: updated.shopId },
+          shop: { id: shopId },
           orderId: updated.id,
           amount: Math.trunc(refundAmountMinor),
           reason: "Cancellation approved",
           source: "CANCELLATION_REQUEST",
           sourceId: updated.id,
-          customer: { id: updated.customerProfile.id },
+          customer: { id: updated.customerProfile?.id },
         });
       }
     }
