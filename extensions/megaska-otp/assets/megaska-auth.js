@@ -885,7 +885,9 @@ if (token) {
     } else if (isShippedOrFulfilled) {
       pills.push({ label: "Shipped", tone: "neutral" });
     }
-
+    else if (statusMatchesAny(fulfillmentStatus, new Set(["unfulfilled"])) || !normalizeStatus(fulfillmentStatus)) {
+  pills.push({ label: "Unfulfilled", tone: "info" });
+}
     if (hasActiveExchangeRequest) {
       pills.push({ label: "Exchange Requested", tone: "info" });
     } else if (exchangeAvailable) {
@@ -941,6 +943,10 @@ if (token) {
             const fulfilledAt = order?.fulfilledAt || "";
             const fulfillmentStatus = order?.fulfillmentStatus || "";
             const shopifyOrderId = order?.shopifyOrderId || order?.id || "";
+            const lineItemId = order?.firstLineItemId || order?.lineItemId || "";
+const itemTitle = order?.firstLineItemTitle || order?.displayTitle || order?.itemTitle || "";
+const variantTitle = order?.firstLineItemVariantTitle || order?.variantTitle || "";
+const sku = order?.firstLineItemSku || order?.sku || "";
             const orderTotal =
               order?.totalAmount && order?.currencyCode
                 ? `${escHtml(order.currencyCode)} ${escHtml(order.totalAmount)}`
@@ -961,17 +967,18 @@ if (token) {
                   .join("")}</div>`
               : "";
 
-            return `<li class="megaska-dashboard-list-item" data-order-fulfillment-status="${escHtml(
-              fulfillmentStatus
-            )}" data-order-delivered-at="${escHtml(deliveredAt)}" data-order-fulfilled-at="${escHtml(fulfilledAt)}" data-order-financial-status="${escHtml(
-              order?.financialStatus || ""
-            )}" data-order-line-item-id="${escHtml(order?.lineItemId || "")}" data-order-item-title="${escHtml(
-              order?.itemTitle || ""
-            )}" data-order-variant-title="${escHtml(order?.variantTitle || "")}" data-order-sku="${escHtml(
-              order?.sku || ""
-            )}" data-shopify-order-id="${escHtml(
-              shopifyOrderId
-)}">
+            return `<li
+  class="megaska-dashboard-list-item"
+  data-order-fulfillment-status="${escHtml(fulfillmentStatus)}"
+  data-order-fulfilled-at="${escHtml(fulfilledAt)}"
+  data-order-delivered-at="${escHtml(deliveredAt)}"
+  data-order-financial-status="${escHtml(order?.financialStatus || "")}"
+  data-shopify-order-id="${escHtml(shopifyOrderId)}"
+  data-shopify-line-item-id="${escHtml(lineItemId)}"
+  data-item-title="${escHtml(itemTitle)}"
+  data-variant-title="${escHtml(variantTitle)}"
+  data-sku="${escHtml(sku)}"
+>
               <div>
                 <strong>${escHtml(order?.name || "Order")}</strong>
                 <div class="megaska-dashboard-subtle">${escHtml(formatDate(order?.processedAt) || "")}</div>
