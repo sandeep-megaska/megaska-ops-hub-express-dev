@@ -805,16 +805,43 @@ if (token) {
     return String(value || "").trim().toLowerCase();
   }
 
-  function getOrderCancellationDisplayState(order) {
-    const financialStatus = normalizeStatus(order?.financialStatus);
-    const fulfillmentStatus = normalizeStatus(order?.fulfillmentStatus);
-    const cancellationStatus = String(order?.latestCancellationStatus || "").trim().toUpperCase();
+  function normalizeStatusForMatch(value) {
+    return normalizeStatus(value)
+      .replace(/[_-]+/g, " ")
+      .replace(/\s+/g, " ");
+  }
 
-    if (["void", "cancel", "refunded"].some((keyword) => financialStatus.includes(keyword))) {
+  function statusMatchesAny(value, allowedStatuses) {
+    const normalizedValue = normalizeStatusForMatch(value);
+    return normalizedValue ? allowedStatuses.has(normalizedValue) : false;
+  }
+
+  const CANCELLED_FINANCIAL_STATUSES = new Set(["void", "cancelled", "refunded"]);
+  const SHIPPED_OR_FULFILLED_STATUSES = new Set([
+    "fulfilled",
+    "delivered",
+    "shipped",
+    "in transit",
+    "out for delivery",
+    "ready for pickup",
+    "label printed",
+    "partially fulfilled",
+    "partial",
+  ]);
+  const EXCHANGE_ELIGIBLE_STATUSES = new Set(["fulfilled", "delivered"]);
+
+  function getOrderCancellationDisplayState(order) {
+    const financialStatus = order?.financialStatus;
+    const fulfillmentStatus = order?.fulfillmentStatus;
+    const cancellationStatus = String(order?.latestCancellationStatus || "").trim().toUpperCase();
+    const fulfilledAt = order?.fulfilledAt || "";
+    const deliveredAt = order?.deliveredAt || "";
+
+    if (statusMatchesAny(financialStatus, CANCELLED_FINANCIAL_STATUSES)) {
       return "Cancelled";
     }
 
-    if (["fulfilled", "delivered", "shipped", "in transit", "out for delivery", "ready for pickup", "label printed", "partial"].some((keyword) => fulfillmentStatus.includes(keyword))) {
+    if (statusMatchesAny(fulfillmentStatus, SHIPPED_OR_FULFILLED_STATUSES) || fulfilledAt || deliveredAt) {
       return "Cancellation not possible — already shipped";
     }
 
@@ -830,28 +857,24 @@ if (token) {
   }
 
   function getOrderActionStatePills(order) {
-    const financialStatus = normalizeStatus(order?.financialStatus);
-    const fulfillmentStatus = normalizeStatus(order?.fulfillmentStatus);
+    const financialStatus = order?.financialStatus;
+    const fulfillmentStatus = order?.fulfillmentStatus;
     const cancellationStatus = String(order?.latestCancellationStatus || "").trim().toUpperCase();
     const exchangeStatus = String(order?.latestExchangeStatus || "").trim().toUpperCase();
     const hasActiveExchangeRequest = Boolean(order?.hasActiveExchangeRequest);
+    const fulfilledAt = order?.fulfilledAt || "";
+    const deliveredAt = order?.deliveredAt || "";
 
     const isCancelled =
-      ["void", "cancel", "refunded"].some((keyword) => financialStatus.includes(keyword)) ||
-      cancellationStatus === "CLOSED";
+      statusMatchesAny(financialStatus, CANCELLED_FINANCIAL_STATUSES) || cancellationStatus === "CLOSED";
     const hasCancellationRequest = ["OPEN", "APPROVED"].includes(cancellationStatus);
-    const isShippedOrFulfilled = [
-      "fulfilled",
-      "delivered",
-      "shipped",
-      "in transit",
-      "out for delivery",
-      "ready for pickup",
-      "label printed",
-      "partial",
-    ].some((keyword) => fulfillmentStatus.includes(keyword));
+    const isShippedOrFulfilled =
+      statusMatchesAny(fulfillmentStatus, SHIPPED_OR_FULFILLED_STATUSES) || Boolean(fulfilledAt || deliveredAt);
     const exchangeAvailable =
-      !isCancelled && !hasCancellationRequest && !hasActiveExchangeRequest && ["fulfilled", "delivered"].some((keyword) => fulfillmentStatus.includes(keyword));
+      !isCancelled &&
+      !hasCancellationRequest &&
+      !hasActiveExchangeRequest &&
+      statusMatchesAny(fulfillmentStatus, EXCHANGE_ELIGIBLE_STATUSES);
 
     const pills = [];
 
@@ -914,7 +937,8 @@ if (token) {
     const ordersHtml = orders.length
       ? orders
           .map((order) => {
-            const deliveredAt = order?.deliveredAt || order?.processedAt || "";
+            const deliveredAt = order?.deliveredAt || "";
+            const fulfilledAt = order?.fulfilledAt || "";
             const fulfillmentStatus = order?.fulfillmentStatus || "";
             const shopifyOrderId = order?.shopifyOrderId || order?.id || "";
             const orderTotal =
@@ -939,7 +963,13 @@ if (token) {
 
             return `<li class="megaska-dashboard-list-item" data-order-fulfillment-status="${escHtml(
               fulfillmentStatus
-            )}" data-order-delivered-at="${escHtml(deliveredAt)}" data-shopify-order-id="${escHtml(
+            )}" data-order-delivered-at="${escHtml(deliveredAt)}" data-order-fulfilled-at="${escHtml(fulfilledAt)}" data-order-financial-status="${escHtml(
+              order?.financialStatus || ""
+            )}" data-order-line-item-id="${escHtml(order?.lineItemId || "")}" data-order-item-title="${escHtml(
+              order?.itemTitle || ""
+            )}" data-order-variant-title="${escHtml(order?.variantTitle || "")}" data-order-sku="${escHtml(
+              order?.sku || ""
+            )}" data-shopify-order-id="${escHtml(
               shopifyOrderId
 )}">
               <div>
