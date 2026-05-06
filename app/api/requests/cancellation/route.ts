@@ -13,7 +13,13 @@ async function resolveTrustedCancellationStatus(input: {
   customerProfileId: string;
   orderNumber: string;
   shopifyOrderId?: string | null;
-}) {
+}): Promise<{
+  fulfillmentStatus: string | null;
+  fulfilledAt: Date | null;
+  deliveredAt: Date | null;
+  financialStatus: string | null;
+  orderCancelled: boolean;
+} | null> {
   const order = await prisma.megaskaOrder.findFirst({
     where: {
       shopId: input.shopId,
