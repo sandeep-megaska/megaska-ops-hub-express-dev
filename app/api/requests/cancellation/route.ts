@@ -27,7 +27,7 @@ async function resolveTrustedCancellationStatus(input: {
       status: true,
       shipments: {
         orderBy: [{ statusUpdatedAt: "desc" }, { updatedAt: "desc" }],
-        select: { normalizedStatus: true, statusUpdatedAt: true, deliveredAt: true },
+        select: { normalizedStatus: true, statusUpdatedAt: true },
         take: 1,
       },
     },
@@ -38,7 +38,7 @@ async function resolveTrustedCancellationStatus(input: {
   return {
     fulfillmentStatus: order.shipments[0]?.normalizedStatus || order.status || null,
     fulfilledAt: order.shipments[0]?.statusUpdatedAt || null,
-    deliveredAt: order.shipments[0]?.deliveredAt || null,
+    deliveredAt: null,
     financialStatus: null,
     orderCancelled: order.status === "CANCELLED",
   };
