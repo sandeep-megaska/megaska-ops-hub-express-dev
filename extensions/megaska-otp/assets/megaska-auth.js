@@ -833,12 +833,23 @@ if (token) {
   function getOrderCancellationDisplayState(order) {
     const financialStatus = order?.financialStatus;
     const fulfillmentStatus = order?.fulfillmentStatus;
+    const normalizedFulfillmentStatus = normalizeStatusForMatch(fulfillmentStatus);
     const cancellationStatus = String(order?.latestCancellationStatus || "").trim().toUpperCase();
     const fulfilledAt = order?.fulfilledAt || "";
     const deliveredAt = order?.deliveredAt || "";
 
     if (statusMatchesAny(financialStatus, CANCELLED_FINANCIAL_STATUSES)) {
       return "Cancelled";
+    }
+
+    if (normalizedFulfillmentStatus === "unfulfilled") {
+      if (["OPEN", "APPROVED"].includes(cancellationStatus)) {
+        return "Cancellation Requested";
+      }
+      if (cancellationStatus === "CLOSED") {
+        return "Cancelled";
+      }
+      return "Cancel Order";
     }
 
     if (statusMatchesAny(fulfillmentStatus, SHIPPED_OR_FULFILLED_STATUSES) || fulfilledAt || deliveredAt) {
@@ -859,6 +870,7 @@ if (token) {
   function getOrderActionStatePills(order) {
     const financialStatus = order?.financialStatus;
     const fulfillmentStatus = order?.fulfillmentStatus;
+    const normalizedFulfillmentStatus = normalizeStatusForMatch(fulfillmentStatus);
     const cancellationStatus = String(order?.latestCancellationStatus || "").trim().toUpperCase();
     const exchangeStatus = String(order?.latestExchangeStatus || "").trim().toUpperCase();
     const hasActiveExchangeRequest = Boolean(order?.hasActiveExchangeRequest);
@@ -868,8 +880,10 @@ if (token) {
     const isCancelled =
       statusMatchesAny(financialStatus, CANCELLED_FINANCIAL_STATUSES) || cancellationStatus === "CLOSED";
     const hasCancellationRequest = ["OPEN", "APPROVED"].includes(cancellationStatus);
+    const isExplicitlyUnfulfilled = normalizedFulfillmentStatus === "unfulfilled";
     const isShippedOrFulfilled =
-      statusMatchesAny(fulfillmentStatus, SHIPPED_OR_FULFILLED_STATUSES) || Boolean(fulfilledAt || deliveredAt);
+      !isExplicitlyUnfulfilled &&
+      (statusMatchesAny(fulfillmentStatus, SHIPPED_OR_FULFILLED_STATUSES) || Boolean(fulfilledAt || deliveredAt));
     const exchangeAvailable =
       !isCancelled &&
       !hasCancellationRequest &&
@@ -885,9 +899,9 @@ if (token) {
     } else if (isShippedOrFulfilled) {
       pills.push({ label: "Shipped", tone: "neutral" });
     }
-    else if (statusMatchesAny(fulfillmentStatus, new Set(["unfulfilled"])) || !normalizeStatus(fulfillmentStatus)) {
-  pills.push({ label: "Unfulfilled", tone: "info" });
-}
+    else if (isExplicitlyUnfulfilled || !normalizeStatus(fulfillmentStatus)) {
+      pills.push({ label: "Unfulfilled", tone: "info" });
+    }
     if (hasActiveExchangeRequest) {
       pills.push({ label: "Exchange Requested", tone: "info" });
     } else if (exchangeAvailable) {

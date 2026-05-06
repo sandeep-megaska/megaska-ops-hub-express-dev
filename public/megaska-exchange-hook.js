@@ -246,9 +246,15 @@
     getDataValue(drawer, "order-fulfilled-at"),
   ]);
 
+  const normalizedStatusText = normalizeFulfillmentStatus(statusText);
+  const normalizedDeliveryText = normalizeFulfillmentStatus(deliveryText);
   let inferredStatus = "";
 
-  if (statusText) {
+  if (normalizedStatusText === "UNFULFILLED") {
+    inferredStatus = "unfulfilled";
+  } else if (normalizedDeliveryText === "UNFULFILLED") {
+    inferredStatus = "unfulfilled";
+  } else if (statusText) {
     inferredStatus = statusText;
   } else if (deliveryText) {
     inferredStatus = deliveryText;
@@ -305,10 +311,7 @@
     displayMeta: metaText,
     deliveredAt: normalizeDeliveredAt(deliveredAtRaw),
     fulfilledAt: normalizeDeliveredAt(fulfilledAtRaw),
-    fulfillmentStatus:
-      String(inferredStatus || "").trim().toLowerCase() === "unfulfilled"
-        ? "UNFULFILLED"
-        : normalizedStatus,
+    fulfillmentStatus: normalizedStatus,
     financialStatus: readFirstValue([
       getDataValue(sourceButton, "order-financial-status"),
       getDataValue(structuredSource, "order-financial-status"),
