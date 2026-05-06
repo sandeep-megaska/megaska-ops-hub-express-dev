@@ -27,7 +27,7 @@ async function resolveTrustedCancellationStatus(input: {
       status: true,
       shipments: {
         orderBy: [{ statusUpdatedAt: "desc" }, { updatedAt: "desc" }],
-        select: { normalizedStatus: true },
+        select: { normalizedStatus: true, statusUpdatedAt: true, deliveredAt: true },
         take: 1,
       },
     },
@@ -37,6 +37,8 @@ async function resolveTrustedCancellationStatus(input: {
 
   return {
     fulfillmentStatus: order.shipments[0]?.normalizedStatus || order.status || null,
+    fulfilledAt: order.shipments[0]?.statusUpdatedAt || null,
+    deliveredAt: order.shipments[0]?.deliveredAt || null,
     financialStatus: null,
     orderCancelled: order.status === "CANCELLED",
   };
@@ -62,6 +64,8 @@ export async function POST(req: NextRequest) {
     const customerNote = String(body?.customerNote || "").trim() || null;
     const fulfillmentStatus = String(body?.fulfillmentStatus || "").trim() || null;
     const financialStatus = String(body?.financialStatus || "").trim() || null;
+    const fulfilledAt = String(body?.fulfilledAt || "").trim() || null;
+    const deliveredAt = String(body?.deliveredAt || "").trim() || null;
     const amountSnapshot = String(body?.orderAmountSnapshot || "").trim() || null;
 
     if (!orderNumber || !reason) {
@@ -85,6 +89,8 @@ export async function POST(req: NextRequest) {
     const eligibility = evaluateCancellationEligibility({
       fulfillmentStatus: trustedStatus?.fulfillmentStatus ?? fulfillmentStatus,
       financialStatus: trustedStatus?.financialStatus ?? financialStatus,
+      fulfilledAt: trustedStatus?.fulfilledAt ?? fulfilledAt,
+      deliveredAt: trustedStatus?.deliveredAt ?? deliveredAt,
       orderCancelled: trustedStatus?.orderCancelled ?? Boolean(body?.orderCancelled),
     });
 

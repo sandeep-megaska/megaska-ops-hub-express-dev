@@ -2,6 +2,7 @@
   const API_BASE_URL = "https://megaska-ops-hub-exs1.vercel.app";
   const SESSION_STORAGE_KEY = "megaska_session_token";
   const MODAL_ID = "mk-exchange-modal-layer";
+  const DEBUG_CANCEL_FLAG = "megaska_debug_cancel";
 
 
   const ACTIVE_STATUSES = [
@@ -296,6 +297,21 @@
 
 
 
+  function isCancellationDebugEnabled() {
+    try {
+      return localStorage.getItem(DEBUG_CANCEL_FLAG) === "1";
+    } catch {
+      return false;
+    }
+  }
+
+  function logCancellationDebug(eventName, payload) {
+    if (!isCancellationDebugEnabled()) return;
+    try {
+      console.log("[MEGASKA CANCEL DEBUG] " + eventName, payload);
+    } catch {}
+  }
+
   function normalizeStatusValue(value) {
     return String(value || "").trim().toLowerCase();
   }
@@ -307,18 +323,26 @@
     const deliveredAt = normalizeDeliveredAt(context?.deliveredAt);
 
     if (["void", "cancel", "refunded"].some(function (keyword) { return financialStatus.includes(keyword); })) {
-      return { eligible: false, reason: "Order is already cancelled." };
+      const decision = { eligible: false, reason: "Order is already cancelled." };
+      logCancellationDebug("eligibility", { fulfillmentStatus, financialStatus, fulfilledAt, deliveredAt, decision });
+      return decision;
     }
 
     if (fulfilledAt || deliveredAt) {
-      return { eligible: false, reason: "Cancellation not possible — order already shipped." };
+      const decision = { eligible: false, reason: "Cancellation not possible — order already shipped." };
+      logCancellationDebug("eligibility", { fulfillmentStatus, financialStatus, fulfilledAt, deliveredAt, decision });
+      return decision;
     }
 
-    if (["FULFILLED", "DELIVERED", "IN_TRANSIT", "OUT_FOR_DELIVERY", "PARTIAL"].includes(fulfillmentStatus)) {
-      return { eligible: false, reason: "Cancellation not possible — order already shipped." };
+    if (["FULFILLED", "DELIVERED", "IN_TRANSIT", "OUT_FOR_DELIVERY", "PARTIAL", "SHIPPED"].includes(fulfillmentStatus)) {
+      const decision = { eligible: false, reason: "Cancellation not possible — order already shipped." };
+      logCancellationDebug("eligibility", { fulfillmentStatus, financialStatus, fulfilledAt, deliveredAt, decision });
+      return decision;
     }
 
-    return { eligible: true, reason: "Eligible" };
+    const decision = { eligible: true, reason: "Eligible" };
+    logCancellationDebug("eligibility", { fulfillmentStatus, financialStatus, fulfilledAt, deliveredAt, decision });
+    return decision;
   }
 
   function getBlockingCancellationMessage(requestStatus) {
@@ -946,6 +970,8 @@
           shopifyOrderId: context.shopifyOrderId || null,
           fulfillmentStatus: context.fulfillmentStatus || null,
           financialStatus: context.financialStatus || null,
+          fulfilledAt: context.fulfilledAt || null,
+          deliveredAt: context.deliveredAt || null,
           reason,
           customerNote: customerNote || null,
         }),
@@ -1002,6 +1028,7 @@
       if (!context) return;
 
       if (isCancellationAction) {
+        logCancellationDebug("drawer-context", context);
         renderCancellationModal(context);
       } else if (isIssueAction) {
         renderIssueModal(context);
