@@ -917,10 +917,6 @@ if (token) {
             const deliveredAt = order?.deliveredAt || order?.processedAt || "";
             const fulfillmentStatus = order?.fulfillmentStatus || "";
             const shopifyOrderId = order?.shopifyOrderId || order?.id || "";
-            const lineItemId = order?.firstLineItemId || "";
-            const itemTitle = order?.firstLineItemTitle || order?.displayTitle || "";
-            const variantTitle = order?.firstLineItemVariantTitle || "";
-            const sku = order?.firstLineItemSku || "";
             const orderTotal =
               order?.totalAmount && order?.currencyCode
                 ? `${escHtml(order.currencyCode)} ${escHtml(order.totalAmount)}`
@@ -945,9 +941,7 @@ if (token) {
               fulfillmentStatus
             )}" data-order-delivered-at="${escHtml(deliveredAt)}" data-shopify-order-id="${escHtml(
               shopifyOrderId
-            )}" data-shopify-line-item-id="${escHtml(lineItemId)}" data-item-title="${escHtml(
-              itemTitle
-            )}" data-variant-title="${escHtml(variantTitle)}" data-sku="${escHtml(sku)}">
+)}">
               <div>
                 <strong>${escHtml(order?.name || "Order")}</strong>
                 <div class="megaska-dashboard-subtle">${escHtml(formatDate(order?.processedAt) || "")}</div>
