@@ -231,15 +231,19 @@
 
     const metaLower = metaText.toLowerCase();
     const hasStructuredStatus = Boolean(statusText || deliveryStatusText);
-    const inferredStatus = hasStructuredStatus
-      ? (statusText || deliveryStatusText)
-      : metaLower.includes("unfulfilled")
-        ? "unfulfilled"
-        : metaLower.includes("delivered")
-          ? "delivered"
-          : metaLower.includes("fulfilled")
-            ? "fulfilled"
-            : "";
+    let inferredStatus = "";
+
+if (hasStructuredStatus) {
+  inferredStatus = statusText || deliveryStatusText;
+} else {
+  if (metaLower.includes("unfulfilled")) {
+    inferredStatus = "unfulfilled";
+  } else if (metaLower.includes("delivered")) {
+    inferredStatus = "delivered";
+  } else if (metaLower.includes("fulfilled")) {
+    inferredStatus = "fulfilled";
+  }
+}
 
     return {
       orderNumber,
@@ -282,6 +286,10 @@
         getDataValue(drawer, "order-fulfilled-at"),
       ])),
       fulfillmentStatus: normalizeFulfillmentStatus(inferredStatus),
+      // HARD FIX: Never override UNFULFILLED
+if (String(inferredStatus || "").toLowerCase() === "unfulfilled") {
+  contextFulfillmentStatus = "UNFULFILLED";
+}
       financialStatus: readFirstValue([
         getDataValue(sourceButton, "order-financial-status"),
         getDataValue(structuredSource, "order-financial-status"),
