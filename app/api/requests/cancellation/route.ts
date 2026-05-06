@@ -89,8 +89,8 @@ export async function POST(req: NextRequest) {
     const eligibility = evaluateCancellationEligibility({
       fulfillmentStatus: trustedStatus?.fulfillmentStatus ?? fulfillmentStatus,
       financialStatus: trustedStatus?.financialStatus ?? financialStatus,
-      fulfilledAt: trustedStatus?.fulfilledAt ?? fulfilledAt,
-      deliveredAt: trustedStatus?.deliveredAt ?? deliveredAt,
+      fulfilledAt: trustedStatus?.fulfilledAt ? trustedStatus.fulfilledAt.toISOString() : fulfilledAt,
+      deliveredAt: trustedStatus?.deliveredAt ? trustedStatus.deliveredAt.toISOString() : deliveredAt,
       orderCancelled: trustedStatus?.orderCancelled ?? Boolean(body?.orderCancelled),
     });
 
