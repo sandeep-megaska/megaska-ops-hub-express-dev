@@ -187,122 +187,140 @@
     return fromDrawer || drawer;
   }
 
-  function getDrawerOrderContext(sourceButton) {
-    const drawer = document.getElementById("mk-order-drawer");
-    if (!drawer) return null;
-    const structuredSource = findStructuredOrderSource(drawer, sourceButton);
+ function getDrawerOrderContext(sourceButton) {
+  const drawer = document.getElementById("mk-order-drawer");
+  if (!drawer) return null;
 
-    const productTitle = drawer.querySelector(".mk-order-hero-name")?.textContent?.trim() || "";
-    const metaText = drawer.querySelector(".mk-order-hero-meta")?.textContent?.trim() || "";
-    const orderNumber =
-      readFirstValue([
-        getDataValue(sourceButton, "order-number"),
-        getDataValue(structuredSource, "order-number"),
-        getDataValue(drawer, "order-number"),
-      ]) ||
-      metaText.split("•")[0]?.trim() ||
-      "";
-    const statusText = readFirstValue([
-      getDataValue(sourceButton, "order-fulfillment-status"),
-      getDataValue(sourceButton, "fulfillment-status"),
-      getDataValue(structuredSource, "order-fulfillment-status"),
-      getDataValue(structuredSource, "fulfillment-status"),
-      getDataValue(drawer, "order-fulfillment-status"),
-      getDataValue(drawer, "fulfillment-status"),
-      getDataValue(drawer.querySelector("[data-order-fulfillment-status]"), "order-fulfillment-status"),
-    ]);
-    const deliveryStatusText = readFirstValue([
-      getDataValue(sourceButton, "order-delivery-status"),
-      getDataValue(sourceButton, "delivery-status"),
-      getDataValue(structuredSource, "order-delivery-status"),
-      getDataValue(structuredSource, "delivery-status"),
-      getDataValue(drawer, "order-delivery-status"),
-      getDataValue(drawer, "delivery-status"),
-    ]);
-    const deliveredAt = readFirstValue([
-      getDataValue(sourceButton, "order-delivered-at"),
-      getDataValue(sourceButton, "delivered-at"),
-      getDataValue(structuredSource, "order-delivered-at"),
-      getDataValue(structuredSource, "delivered-at"),
-      getDataValue(drawer, "order-delivered-at"),
-      getDataValue(drawer, "delivered-at"),
-      getDataValue(drawer.querySelector("[data-order-delivered-at]"), "order-delivered-at"),
-    ]);
+  const structuredSource = findStructuredOrderSource(drawer, sourceButton);
 
+  const productTitle =
+    drawer.querySelector(".mk-order-hero-name")?.textContent?.trim() || "";
+
+  const metaText =
+    drawer.querySelector(".mk-order-hero-meta")?.textContent?.trim() || "";
+
+  const orderNumber =
+    readFirstValue([
+      getDataValue(sourceButton, "order-number"),
+      getDataValue(structuredSource, "order-number"),
+      getDataValue(drawer, "order-number"),
+    ]) ||
+    metaText.split("•")[0]?.trim() ||
+    "";
+
+  const statusText = readFirstValue([
+    getDataValue(sourceButton, "order-fulfillment-status"),
+    getDataValue(sourceButton, "fulfillment-status"),
+    getDataValue(structuredSource, "order-fulfillment-status"),
+    getDataValue(structuredSource, "fulfillment-status"),
+    getDataValue(drawer, "order-fulfillment-status"),
+    getDataValue(drawer, "fulfillment-status"),
+    getDataValue(
+      drawer.querySelector("[data-order-fulfillment-status]"),
+      "order-fulfillment-status"
+    ),
+  ]);
+
+  const deliveryText = Array.from(
+    drawer.querySelectorAll(".mk-order-info-row")
+  ).find((row) =>
+    row.textContent.toLowerCase().includes("delivery")
+  )?.querySelector("strong")?.textContent?.trim() || "";
+
+  const deliveredAtRaw = readFirstValue([
+    getDataValue(sourceButton, "order-delivered-at"),
+    getDataValue(sourceButton, "delivered-at"),
+    getDataValue(structuredSource, "order-delivered-at"),
+    getDataValue(structuredSource, "delivered-at"),
+    getDataValue(drawer, "order-delivered-at"),
+    getDataValue(drawer, "delivered-at"),
+    getDataValue(
+      drawer.querySelector("[data-order-delivered-at]"),
+      "order-delivered-at"
+    ),
+  ]);
+
+  const fulfilledAtRaw = readFirstValue([
+    getDataValue(sourceButton, "order-fulfilled-at"),
+    getDataValue(structuredSource, "order-fulfilled-at"),
+    getDataValue(drawer, "order-fulfilled-at"),
+  ]);
+
+  let inferredStatus = "";
+
+  if (statusText) {
+    inferredStatus = statusText;
+  } else if (deliveryText) {
+    inferredStatus = deliveryText;
+  } else {
     const metaLower = metaText.toLowerCase();
-    const hasStructuredStatus = Boolean(statusText || deliveryStatusText);
-    let inferredStatus = "";
 
-if (hasStructuredStatus) {
-  inferredStatus = statusText || deliveryStatusText;
-} else {
-  if (metaLower.includes("unfulfilled")) {
-    inferredStatus = "unfulfilled";
-  } else if (metaLower.includes("delivered")) {
-    inferredStatus = "delivered";
-  } else if (metaLower.includes("fulfilled")) {
-    inferredStatus = "fulfilled";
-  }
-}
-
-    return {
-      orderNumber,
-      productTitle:
-        readFirstValue([
-          getDataValue(sourceButton, "item-title"),
-          getDataValue(structuredSource, "item-title"),
-          productTitle,
-        ]) || "",
-      currentSize: readFirstValue([
-        getDataValue(sourceButton, "current-size"),
-        getDataValue(structuredSource, "current-size"),
-        getDataValue(sourceButton, "size"),
-        getDataValue(structuredSource, "size"),
-        getDataValue(sourceButton, "variant-title"),
-        getDataValue(structuredSource, "variant-title"),
-      ]),
-      variantTitle: readFirstValue([
-        getDataValue(sourceButton, "variant-title"),
-        getDataValue(structuredSource, "variant-title"),
-      ]),
-      sku: readFirstValue([getDataValue(sourceButton, "sku"), getDataValue(structuredSource, "sku")]),
-      shopifyOrderId: readFirstValue([
-        getDataValue(sourceButton, "shopify-order-id"),
-        getDataValue(structuredSource, "shopify-order-id"),
-        getDataValue(sourceButton, "order-id"),
-        getDataValue(structuredSource, "order-id"),
-      ]),
-      shopifyLineItemId: readFirstValue([
-        getDataValue(sourceButton, "shopify-line-item-id"),
-        getDataValue(structuredSource, "shopify-line-item-id"),
-        getDataValue(sourceButton, "line-item-id"),
-        getDataValue(structuredSource, "line-item-id"),
-      ]),
-      displayMeta: metaText,
-      deliveredAt: normalizeDeliveredAt(deliveredAt),
-      fulfilledAt: normalizeDeliveredAt(readFirstValue([
-        getDataValue(sourceButton, "order-fulfilled-at"),
-        getDataValue(structuredSource, "order-fulfilled-at"),
-        getDataValue(drawer, "order-fulfilled-at"),
-      ])),
-      fulfillmentStatus: normalizeFulfillmentStatus(inferredStatus),
-      // HARD FIX: Never override UNFULFILLED
-if (String(inferredStatus || "").toLowerCase() === "unfulfilled") {
-  contextFulfillmentStatus = "UNFULFILLED";
-}
-      financialStatus: readFirstValue([
-        getDataValue(sourceButton, "order-financial-status"),
-        getDataValue(structuredSource, "order-financial-status"),
-        getDataValue(drawer, "order-financial-status"),
-      ]),
-      paymentGatewayName: readFirstValue([
-        getDataValue(sourceButton, "payment-gateway-name"),
-        getDataValue(structuredSource, "payment-gateway-name"),
-        getDataValue(drawer, "payment-gateway-name"),
-      ]),
-    };
+    if (metaLower.includes("unfulfilled")) {
+      inferredStatus = "unfulfilled";
+    } else if (metaLower.includes("delivered")) {
+      inferredStatus = "delivered";
+    } else if (metaLower.includes("fulfilled")) {
+      inferredStatus = "fulfilled";
+    }
   }
 
+  const normalizedStatus = normalizeFulfillmentStatus(inferredStatus);
+
+  return {
+    orderNumber,
+    productTitle:
+      readFirstValue([
+        getDataValue(sourceButton, "item-title"),
+        getDataValue(structuredSource, "item-title"),
+        productTitle,
+      ]) || "",
+    currentSize: readFirstValue([
+      getDataValue(sourceButton, "current-size"),
+      getDataValue(structuredSource, "current-size"),
+      getDataValue(sourceButton, "size"),
+      getDataValue(structuredSource, "size"),
+      getDataValue(sourceButton, "variant-title"),
+      getDataValue(structuredSource, "variant-title"),
+    ]),
+    variantTitle: readFirstValue([
+      getDataValue(sourceButton, "variant-title"),
+      getDataValue(structuredSource, "variant-title"),
+    ]),
+    sku: readFirstValue([
+      getDataValue(sourceButton, "sku"),
+      getDataValue(structuredSource, "sku"),
+    ]),
+    shopifyOrderId: readFirstValue([
+      getDataValue(sourceButton, "shopify-order-id"),
+      getDataValue(structuredSource, "shopify-order-id"),
+      getDataValue(sourceButton, "order-id"),
+      getDataValue(structuredSource, "order-id"),
+    ]),
+    shopifyLineItemId: readFirstValue([
+      getDataValue(sourceButton, "shopify-line-item-id"),
+      getDataValue(structuredSource, "shopify-line-item-id"),
+      getDataValue(sourceButton, "line-item-id"),
+      getDataValue(structuredSource, "line-item-id"),
+    ]),
+    displayMeta: metaText,
+    deliveredAt: normalizeDeliveredAt(deliveredAtRaw),
+    fulfilledAt: normalizeDeliveredAt(fulfilledAtRaw),
+    fulfillmentStatus:
+      String(inferredStatus || "").trim().toLowerCase() === "unfulfilled"
+        ? "UNFULFILLED"
+        : normalizedStatus,
+    financialStatus: readFirstValue([
+      getDataValue(sourceButton, "order-financial-status"),
+      getDataValue(structuredSource, "order-financial-status"),
+      getDataValue(drawer, "order-financial-status"),
+    ]),
+    paymentGatewayName: readFirstValue([
+      getDataValue(sourceButton, "payment-gateway-name"),
+      getDataValue(structuredSource, "payment-gateway-name"),
+      getDataValue(drawer, "payment-gateway-name"),
+    ]),
+  };
+}
 
 
   function isCancellationDebugEnabled() {
@@ -325,34 +343,91 @@ if (String(inferredStatus || "").toLowerCase() === "unfulfilled") {
   }
 
   function isCancellationEligible(context) {
-    const fulfillmentStatus = String(context?.fulfillmentStatus || "").trim().toUpperCase();
-    const financialStatus = normalizeStatusValue(context?.financialStatus);
-    const fulfilledAt = normalizeDeliveredAt(context?.fulfilledAt);
-    const deliveredAt = normalizeDeliveredAt(context?.deliveredAt);
+  const fulfillmentStatus = String(context?.fulfillmentStatus || "")
+    .trim()
+    .toUpperCase();
 
-    if (["void", "cancel", "refunded"].some(function (keyword) { return financialStatus.includes(keyword); })) {
-      const decision = { eligible: false, reason: "Order is already cancelled." };
-      logCancellationDebug("eligibility", { fulfillmentStatus, financialStatus, fulfilledAt, deliveredAt, decision });
-      return decision;
-    }
+  const financialStatus = normalizeStatusValue(context?.financialStatus);
+  const fulfilledAt = normalizeDeliveredAt(context?.fulfilledAt);
+  const deliveredAt = normalizeDeliveredAt(context?.deliveredAt);
 
-    if (fulfilledAt || deliveredAt) {
-      const decision = { eligible: false, reason: "Cancellation not possible — order already shipped." };
-      logCancellationDebug("eligibility", { fulfillmentStatus, financialStatus, fulfilledAt, deliveredAt, decision });
-      return decision;
-    }
-
-    if (["FULFILLED", "DELIVERED", "IN_TRANSIT", "OUT_FOR_DELIVERY", "PARTIAL", "SHIPPED"].includes(fulfillmentStatus)) {
-      const decision = { eligible: false, reason: "Cancellation not possible — order already shipped." };
-      logCancellationDebug("eligibility", { fulfillmentStatus, financialStatus, fulfilledAt, deliveredAt, decision });
-      return decision;
-    }
-
-    const decision = { eligible: true, reason: "Eligible" };
-    logCancellationDebug("eligibility", { fulfillmentStatus, financialStatus, fulfilledAt, deliveredAt, decision });
+  if (
+    ["void", "cancel", "cancelled", "refunded"].some(function (keyword) {
+      return financialStatus.includes(keyword);
+    })
+  ) {
+    const decision = { eligible: false, reason: "Order is already cancelled." };
+    logCancellationDebug("eligibility", {
+      fulfillmentStatus,
+      financialStatus,
+      fulfilledAt,
+      deliveredAt,
+      decision,
+    });
     return decision;
   }
 
+  if (fulfillmentStatus === "UNFULFILLED") {
+    const decision = { eligible: true, reason: "Eligible" };
+    logCancellationDebug("eligibility", {
+      fulfillmentStatus,
+      financialStatus,
+      fulfilledAt,
+      deliveredAt,
+      decision,
+    });
+    return decision;
+  }
+
+  if (fulfilledAt || deliveredAt) {
+    const decision = {
+      eligible: false,
+      reason: "Cancellation not possible — order already shipped.",
+    };
+    logCancellationDebug("eligibility", {
+      fulfillmentStatus,
+      financialStatus,
+      fulfilledAt,
+      deliveredAt,
+      decision,
+    });
+    return decision;
+  }
+
+  if (
+    [
+      "FULFILLED",
+      "DELIVERED",
+      "IN_TRANSIT",
+      "OUT_FOR_DELIVERY",
+      "PARTIAL",
+      "SHIPPED",
+    ].includes(fulfillmentStatus)
+  ) {
+    const decision = {
+      eligible: false,
+      reason: "Cancellation not possible — order already shipped.",
+    };
+    logCancellationDebug("eligibility", {
+      fulfillmentStatus,
+      financialStatus,
+      fulfilledAt,
+      deliveredAt,
+      decision,
+    });
+    return decision;
+  }
+
+  const decision = { eligible: true, reason: "Eligible" };
+  logCancellationDebug("eligibility", {
+    fulfillmentStatus,
+    financialStatus,
+    fulfilledAt,
+    deliveredAt,
+    decision,
+  });
+  return decision;
+}
   function getBlockingCancellationMessage(requestStatus) {
     const status = String(requestStatus || "").trim().toUpperCase();
     return status === "CLOSED" ? "Cancelled" : "Cancellation Requested";
