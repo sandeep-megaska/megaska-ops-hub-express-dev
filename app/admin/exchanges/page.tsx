@@ -24,10 +24,18 @@ function formatDateTime(value: Date | null | undefined) {
   return value.toLocaleString();
 }
 
-export default async function AdminExchangesPage() {
+export default async function AdminExchangesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ shop?: string; shopify_shop?: string }>;
+}) {
   const headerStore = await headers();
+  const parsedSearch = await searchParams;
   const requestedShopDomain = normalizeShopDomain(
-    headerStore.get("x-shopify-shop-domain") || ""
+    parsedSearch?.shop ||
+      parsedSearch?.shopify_shop ||
+      headerStore.get("x-shopify-shop-domain") ||
+      ""
   );
 
   const currentShop = requestedShopDomain
@@ -62,7 +70,7 @@ export default async function AdminExchangesPage() {
     take: 300,
   });
 
-  const shopDomain = requestedShopDomain || "";
+  const shopDomain = requestedShopDomain || currentShop.shopDomain || "";
   const stats = {
     total: requests.length,
     pending: requests.filter((r) =>
