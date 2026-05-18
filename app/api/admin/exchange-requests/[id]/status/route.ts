@@ -19,12 +19,6 @@ export const runtime = "nodejs";
 
 const DEFAULT_PICKUP_CHARGE_PAISE = 12000;
 
-function isAdmin(req: NextRequest) {
-  const key = req.headers.get("x-admin-key") || "";
-  const expected = String(process.env.ADMIN_OPS_KEY || "").trim();
-  return Boolean(expected && key === expected);
-}
-
 function parsePickupChargePaise(raw: unknown) {
   const value = Number(raw);
   if (!Number.isFinite(value) || value < 0) {
@@ -50,10 +44,6 @@ export async function PATCH(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
-    if (!isAdmin(req)) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     const shop = await requireShopFromRequest(req);
     const { id } = await context.params;
     const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
