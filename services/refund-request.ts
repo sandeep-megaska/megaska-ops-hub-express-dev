@@ -9,15 +9,19 @@ type CreateRefundRequestInput = {
   source: RefundSource;
   sourceId: string;
   customer?: { id?: string | null } | null;
+  method?: RefundMethod;
+  status?: RefundStatus;
+  createdBy?: { type: "SYSTEM" | "ADMIN"; id?: string | null };
 };
 
 function detectRefundMethodFromGateway(paymentGatewayName: string | null | undefined): RefundMethod {
   const normalized = String(paymentGatewayName || "").trim().toLowerCase();
-  return normalized.includes("cod") || normalized.includes("cash") ? "COD" : "PREPAID";
+  if (normalized === "cod" || normalized === "cash on delivery") return "COD";
+  return "PREPAID";
 }
 
 function initialStatusForMethod(method: RefundMethod): RefundStatus {
-  return method === "COD" ? "DETAILS_PENDING" : "APPROVED";
+  return method === "COD" ? "MANUAL_PENDING" : "PENDING";
 }
 
 function isUniqueConstraintError(error: unknown): boolean {
@@ -48,8 +52,8 @@ export async function createRefundRequest(input: CreateRefundRequestInput) {
       ? String((order.items[0].eligibilitySnapshot as { paymentGatewayName?: unknown }).paymentGatewayName || "")
       : "";
 
-  const method = detectRefundMethodFromGateway(paymentGatewayName);
-  const status = initialStatusForMethod(method);
+  const method = input.method || detectRefundMethodFromGateway(paymentGatewayName);
+  const status = input.status || initialStatusForMethod(method);
 
   const baseCreate = {
     shopId: input.shop.id,
@@ -74,9 +78,16 @@ export async function createRefundRequest(input: CreateRefundRequestInput) {
         eventType: "REFUND_REQUEST_CREATED",
         toStatus: status,
         message: `Refund request created with initial status ${status}`,
-        payload: { method, source: input.source, sourceId: input.sourceId },
+        payload: {
+          method,
+          source: input.source,
+          sourceId: input.sourceId,
+          createdByType: input.createdBy?.type || "SYSTEM",
+          createdById: input.createdBy?.id || null,
+        },
       },
     });
+    console.info("[refund-request] created", { id: refund.id, source: input.source, sourceId: input.sourceId, method, status });
     return refund;
   } catch (error) {
     if (!isUniqueConstraintError(error)) throw error;
@@ -91,6 +102,7 @@ export async function createRefundRequest(input: CreateRefundRequestInput) {
       },
     });
     if (!existing) throw error;
+    console.info("[refund-request] duplicate-skip", { id: existing.id, source: input.source, sourceId: input.sourceId });
     return existing;
   }
 }

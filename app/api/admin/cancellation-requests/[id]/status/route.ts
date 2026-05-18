@@ -8,7 +8,7 @@ import { createRefundRequest } from "../../../../../../services/refund-request";
 
 export const runtime = "nodejs";
 
-type RefundMethod = "COD" | "PREPAID";
+type RefundType = "COD" | "PREPAID" | "NO_REFUND";
 
 function isAdmin(req: NextRequest) {
   const key = req.headers.get("x-admin-key") || "";
@@ -16,9 +16,10 @@ function isAdmin(req: NextRequest) {
   return Boolean(expected && key === expected);
 }
 
-function detectPaymentMethod(paymentGatewayName: string | null | undefined): RefundMethod {
+function detectPaymentMethod(paymentGatewayName: string | null | undefined): Exclude<RefundType, "NO_REFUND"> {
   const normalized = String(paymentGatewayName || "").trim().toLowerCase();
-  return normalized.includes("cod") || normalized.includes("cash") ? "COD" : "PREPAID";
+  if (normalized === "cod" || normalized === "cash on delivery") return "COD";
+  return "PREPAID";
 }
 
 function shouldForceCodRefund(body: Record<string, unknown> | null): boolean {
@@ -80,7 +81,7 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
 
     let orchestrationNote: string | null = null;
 
-    if (nextStatus.toUpperCase() === "APPROVED") {
+    if (nextStatus === "APPROVED") {
       const paymentGatewayName =
         existing.items[0]?.eligibilitySnapshot &&
         typeof existing.items[0].eligibilitySnapshot === "object" &&
@@ -92,30 +93,34 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       const refundMethod = detectPaymentMethod(paymentGatewayName);
       const refundRequiredForCod = shouldForceCodRefund(body);
       const refundAmountMinor = Number(existing.orderAmountSnapshot || 0);
-      const canCreateRefund =
-        Boolean(existing.shopId) &&
-        Number.isFinite(refundAmountMinor) &&
-        refundAmountMinor > 0 &&
-        (refundMethod === "PREPAID" || refundRequiredForCod);
+      const hasValidAmount = Boolean(Number.isFinite(refundAmountMinor) && refundAmountMinor > 0);
+      const refundType: RefundType = hasValidAmount
+        ? refundMethod === "COD" && !refundRequiredForCod
+          ? "NO_REFUND"
+          : refundMethod
+        : "NO_REFUND";
 
-      if (canCreateRefund) {
+      if (existing.shopId) {
         await createRefundRequest({
           shop: { id: String(existing.shopId) },
           orderId: existing.id,
-          amount: Math.trunc(refundAmountMinor),
+          amount: hasValidAmount ? Math.trunc(refundAmountMinor) : 1,
           reason: "Cancellation approved",
           source: "CANCELLATION_REQUEST",
           sourceId: existing.id,
           customer: { id: existing.customerProfileId },
+          method: refundType === "NO_REFUND" ? "PREPAID" : refundType,
+          status:
+            refundType === "PREPAID"
+              ? "PENDING"
+              : refundType === "COD"
+                ? "MANUAL_PENDING"
+                : "NOT_REQUIRED",
+          createdBy: { type: "ADMIN", id: req.headers.get("x-admin-id") || null },
         });
-        orchestrationNote =
-          refundMethod === "COD"
-            ? "RefundRequest created after cancellation approval (COD override: refundRequired=true)."
-            : "RefundRequest created after cancellation approval (PREPAID).";
-      } else if (refundMethod === "COD") {
-        orchestrationNote = "No RefundRequest created: cancellation approved for COD order (default policy).";
+        orchestrationNote = `RefundRequest created after cancellation approval (${refundType}).`;
       } else {
-        orchestrationNote = "No RefundRequest created: cancellation approved but refund amount/shop context missing.";
+        orchestrationNote = "No RefundRequest created: cancellation approved but shop context missing.";
       }
     }
 

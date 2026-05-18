@@ -48,7 +48,7 @@ test("returns existing record on duplicate creation (idempotent)", async () => {
   assert.equal(result.id, "refund-existing");
 });
 
-test("sets COD refunds to DETAILS_PENDING initially", async () => {
+test("sets COD refunds to MANUAL_PENDING initially", async () => {
   const eventCalls: Array<{ toStatus?: string | null; eventType?: string }> = [];
 
   prisma.orderActionRequest.findFirst = async () => ({
@@ -76,8 +76,8 @@ test("sets COD refunds to DETAILS_PENDING initially", async () => {
     customer: { id: "cust-1" },
   });
 
-  assert.equal(created.status, "DETAILS_PENDING");
+  assert.equal(created.status, "MANUAL_PENDING");
   assert.equal(eventCalls.length, 1);
   assert.equal(eventCalls[0]?.eventType, "REFUND_REQUEST_CREATED");
-  assert.equal(eventCalls[0]?.toStatus, "DETAILS_PENDING");
+  assert.equal(eventCalls[0]?.toStatus, "MANUAL_PENDING");
 });
