@@ -309,13 +309,15 @@ export async function getShopifyOrdersForGstSync(input: {
   let cursor: string | null = null;
   let pagesFetched = 0;
 
+  type GstOrdersForSyncResponse = {
+    orders: {
+      nodes: GstSyncOrderNode[];
+      pageInfo: { hasNextPage: boolean; endCursor: string | null };
+    };
+  };
+
   while (hasNextPage && pagesFetched < maxPages) {
-    const data = await gstRuntimeAdminGraphql<{
-      orders: {
-        nodes: GstSyncOrderNode[];
-        pageInfo: { hasNextPage: boolean; endCursor: string | null };
-      };
-    }>(
+    const response: GstOrdersForSyncResponse = await gstRuntimeAdminGraphql<GstOrdersForSyncResponse>(
       `
         query GstOrdersForSync($query: String!, $cursor: String) {
           orders(first: 100, after: $cursor, sortKey: CREATED_AT, reverse: true, query: $query) {
@@ -334,9 +336,9 @@ export async function getShopifyOrdersForGstSync(input: {
     );
 
     pagesFetched += 1;
-    allNodes.push(...(data.orders.nodes || []));
-    hasNextPage = Boolean(data.orders.pageInfo?.hasNextPage);
-    cursor = data.orders.pageInfo?.endCursor || null;
+    allNodes.push(...(response.orders.nodes || []));
+    hasNextPage = Boolean(response.orders.pageInfo?.hasNextPage);
+    cursor = response.orders.pageInfo?.endCursor || null;
   }
 
   const uniqueOrders = Array.from(
