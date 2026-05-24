@@ -171,48 +171,97 @@ export async function syncOrdersByDateRange(input: SyncFilters): Promise<GstServ
       perOrder: [],
     };
 
-    for (const order of shopifyOrders) {
-      const shopifyOrderId = String(order.id || "").trim();
-      const orderName = String(order.name || shopifyOrderId);
-      if (!shopifyOrderId) {
-        summary.failed += 1;
-        summary.perOrder.push({ orderName, status: "FAILED", error: "Missing Shopify order id" });
-        continue;
+    const batchSize = 5;
+    const totalOrders = shopifyOrders.length;
+    const syncStartedAtMs = Date.now();
+
+    for (let batchStart = 0; batchStart < totalOrders; batchStart += batchSize) {
+      const batchEnd = Math.min(batchStart + batchSize, totalOrders);
+      const batchNumber = Math.floor(batchStart / batchSize) + 1;
+      const totalBatches = Math.ceil(totalOrders / batchSize);
+      const batch = shopifyOrders.slice(batchStart, batchEnd);
+      const batchStartedAtMs = Date.now();
+
+      console.log(
+        `[GST Sync] Processing batch ${batchNumber}/${totalBatches} (orders ${batchStart + 1}-${batchEnd} of ${totalOrders})`,
+      );
+
+      const batchResults = await Promise.all(
+        batch.map(async (order) => {
+          const shopifyOrderId = String(order.id || "").trim();
+          const orderName = String(order.name || shopifyOrderId);
+
+          if (!shopifyOrderId) {
+            return {
+              imported: 0,
+              alreadySynced: 0,
+              notReady: 0,
+              failed: 1,
+              perOrder: { orderName, status: "FAILED", error: "Missing Shopify order id" },
+            };
+          }
+
+          const existing = await syncDb.gstOrderImport.findUnique({
+            where: { shopId_shopifyOrderId: { shopId: resolvedShopId, shopifyOrderId } },
+            select: { id: true },
+          });
+
+          if (existing && !input.forceResync) {
+            return {
+              imported: 0,
+              alreadySynced: 1,
+              notReady: 0,
+              failed: 0,
+              perOrder: { orderName, shopifyOrderId, status: "ALREADY_SYNCED" },
+            };
+          }
+
+          const result = await importOrderByShopifyId(shopifyOrderId, normalizeOrderPayload(order), { shopId: resolvedShopId });
+          if (!result.ok || !result.data) {
+            return {
+              imported: 0,
+              alreadySynced: 0,
+              notReady: 0,
+              failed: 1,
+              perOrder: { orderName, shopifyOrderId, status: "FAILED", error: result.error || "Import failed" },
+            };
+          }
+
+          const counters = computeSyncCountersForImportedOrder(result.data);
+          const readiness = deriveSyncReadinessMetrics(result.data);
+
+          return {
+            imported: counters.imported,
+            alreadySynced: 0,
+            notReady: counters.notReady,
+            failed: 0,
+            perOrder: {
+              orderName,
+              shopifyOrderId,
+              status: result.data.importStatus,
+              eligibilityStatus: result.data.eligibilityStatus,
+              mappingCompleteness: readiness.mappingCompleteness,
+              readinessErrors: readiness.readinessErrors,
+              unmappedSkus: readiness.unmappedSkus,
+              warnings: readiness.warnings,
+            },
+          };
+        }),
+      );
+
+      for (const result of batchResults) {
+        summary.imported += result.imported;
+        summary.alreadySynced += result.alreadySynced;
+        summary.notReady += result.notReady;
+        summary.failed += result.failed;
+        summary.perOrder.push(result.perOrder);
       }
 
-      const existing = await syncDb.gstOrderImport.findUnique({
-        where: { shopId_shopifyOrderId: { shopId: resolvedShopId, shopifyOrderId } },
-        select: { id: true },
-      });
-
-      if (existing && !input.forceResync) {
-        summary.alreadySynced += 1;
-        summary.perOrder.push({ orderName, shopifyOrderId, status: "ALREADY_SYNCED" });
-        continue;
-      }
-
-      const result = await importOrderByShopifyId(shopifyOrderId, normalizeOrderPayload(order), { shopId: resolvedShopId });
-      if (!result.ok || !result.data) {
-        summary.failed += 1;
-        summary.perOrder.push({ orderName, shopifyOrderId, status: "FAILED", error: result.error || "Import failed" });
-        continue;
-      }
-
-      const counters = computeSyncCountersForImportedOrder(result.data);
-      summary.imported += counters.imported;
-      summary.notReady += counters.notReady;
-      const readiness = deriveSyncReadinessMetrics(result.data);
-
-      summary.perOrder.push({
-        orderName,
-        shopifyOrderId,
-        status: result.data.importStatus,
-        eligibilityStatus: result.data.eligibilityStatus,
-        mappingCompleteness: readiness.mappingCompleteness,
-        readinessErrors: readiness.readinessErrors,
-        unmappedSkus: readiness.unmappedSkus,
-        warnings: readiness.warnings,
-      });
+      const batchElapsedMs = Date.now() - batchStartedAtMs;
+      const totalElapsedMs = Date.now() - syncStartedAtMs;
+      console.log(
+        `[GST Sync] Completed batch ${batchNumber}/${totalBatches} in ${batchElapsedMs}ms (processed ${batchEnd}/${totalOrders}, total elapsed ${totalElapsedMs}ms)`,
+      );
     }
 
     if (summary.failed > 0) {
