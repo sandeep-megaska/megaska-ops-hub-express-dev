@@ -302,21 +302,55 @@ export async function getShopifyOrdersForGstSync(input: {
     filters.push(`(fulfillment_status:${input.fulfillmentStatus?.map((status) => status.toLowerCase()).join(" OR fulfillment_status:")})`);
   }
 
-  const data = await gstRuntimeAdminGraphql<{ orders: { nodes: GstSyncOrderNode[] } }>(
-    `
-      query GstOrdersForSync($query: String!) {
-        orders(first: 100, sortKey: CREATED_AT, reverse: true, query: $query) {
-          nodes {
-            ${GST_ORDER_FIELDS}
+  const maxPages = 100;
+  const query = filters.join(" ");
+  const allNodes: GstSyncOrderNode[] = [];
+  let hasNextPage = true;
+  let cursor: string | null = null;
+  let pagesFetched = 0;
+
+  while (hasNextPage && pagesFetched < maxPages) {
+    const data = await gstRuntimeAdminGraphql<{
+      orders: {
+        nodes: GstSyncOrderNode[];
+        pageInfo: { hasNextPage: boolean; endCursor: string | null };
+      };
+    }>(
+      `
+        query GstOrdersForSync($query: String!, $cursor: String) {
+          orders(first: 100, after: $cursor, sortKey: CREATED_AT, reverse: true, query: $query) {
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+            nodes {
+              ${GST_ORDER_FIELDS}
+            }
           }
         }
-      }
-    `,
-    { query: filters.join(" ") },
-    { shopDomain: input.shopDomain }
+      `,
+      { query, cursor },
+      { shopDomain: input.shopDomain }
+    );
+
+    pagesFetched += 1;
+    allNodes.push(...(data.orders.nodes || []));
+    hasNextPage = Boolean(data.orders.pageInfo?.hasNextPage);
+    cursor = data.orders.pageInfo?.endCursor || null;
+  }
+
+  const uniqueOrders = Array.from(
+    new Map(allNodes.map((node) => [extractShopifyEntityId(node.id), node])).values()
   );
 
-  return (data.orders.nodes || []).map(normalizeGstSyncOrder);
+  console.log("[GST SHOPIFY RUNTIME] GST order sync pagination", {
+    pagesFetched,
+    totalOrdersFetched: allNodes.length,
+    uniqueOrdersFetched: uniqueOrders.length,
+    maxPagesReached: hasNextPage && pagesFetched >= maxPages,
+  });
+
+  return uniqueOrders.map(normalizeGstSyncOrder);
 }
 
 export async function getSingleShopifyOrderForGstSync(input: { orderNameOrNumber: string; shopDomain?: string }) {
