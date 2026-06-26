@@ -256,6 +256,8 @@ export async function POST(req: NextRequest) {
     : 0;
   const detectedWalletCode = detectWalletDiscountCode(discountCodes);
   const resolvedWalletDiscountCode = detectedWalletCode || walletDiscountCode;
+  const codAdvanceIntentId = String(attributes.megaska_cod_advance_intent_id || "").trim();
+  const codAdvancePaid = String(attributes.megaska_cod_advance_paid || "").trim() === "true";
 
   const orderContactPhone = resolveOrderContactPhone(payload);
   const orderContactEmail = resolveCheckoutContactEmail(payload);
@@ -300,6 +302,45 @@ export async function POST(req: NextRequest) {
 
   if (!orderId) {
     return NextResponse.json({ ok: false, skipped: true, reason: "missing-order-id" });
+  }
+
+  if (codAdvanceIntentId && codAdvancePaid) {
+    try {
+      const result = await (prisma as any).codAdvanceIntent.updateMany({
+        where: {
+          id: codAdvanceIntentId,
+          status: { in: ["ADVANCE_PAID", "PAYMENT_PENDING", "CREATED"] },
+        },
+        data: {
+          shopifyOrderId: orderId,
+          shopifyOrderName: String(payload.name || "").trim() || null,
+          status: "ORDER_LINKED",
+        },
+      });
+      console.log("[COD ADVANCE WEBHOOK] order link processed", {
+        orderId,
+        orderName: String(payload.name || "").trim() || null,
+        codAdvanceIntentId,
+        linkedCount: result.count,
+      });
+      if (result.count > 0) {
+        await prisma.auditEvent.create({
+          data: {
+            actorType: "system",
+            eventType: "cod_advance.intent.order_linked",
+            entityType: "CodAdvanceIntent",
+            entityId: codAdvanceIntentId,
+            payload: { shopifyOrderId: orderId, shopifyOrderName: String(payload.name || "").trim() || null },
+          },
+        });
+      }
+    } catch (error) {
+      console.error("[COD ADVANCE WEBHOOK] order link failed", {
+        orderId,
+        codAdvanceIntentId,
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
   }
 
   console.log("[WALLET WEBHOOK] order create received", {

@@ -49,8 +49,54 @@ export async function POST(req: NextRequest) {
   });
 
   if (!payment) {
-    console.info("[RAZORPAY WEBHOOK] No matching RequestPayment", { event, paymentLinkId });
-    return NextResponse.json({ ok: true, ignored: true });
+    const codAdvanceIntent = await (prisma as any).codAdvanceIntent.findFirst({
+      where: { razorpayPaymentLinkId: paymentLinkId },
+    });
+
+    if (!codAdvanceIntent) {
+      console.info("[RAZORPAY WEBHOOK] No matching RequestPayment or CodAdvanceIntent", { event, paymentLinkId });
+      return NextResponse.json({ ok: true, ignored: true });
+    }
+
+    if (codAdvanceIntent.status === "ADVANCE_PAID" && status !== "PAID") {
+      return NextResponse.json({ ok: true, ignored: true, reason: "cod_advance_already_paid" });
+    }
+
+    const codStatus =
+      status === "PAID"
+        ? "ADVANCE_PAID"
+        : status === "EXPIRED"
+          ? "EXPIRED"
+          : status === "FAILED"
+            ? "FAILED"
+            : status === "CANCELLED"
+              ? "CANCELLED"
+              : codAdvanceIntent.status;
+
+    if (codStatus !== codAdvanceIntent.status || (status === "PAID" && codAdvanceIntent.razorpayPaymentId !== paymentId)) {
+      await (prisma as any).codAdvanceIntent.update({
+        where: { id: codAdvanceIntent.id },
+        data: {
+          status: codStatus,
+          razorpayPaymentId: status === "PAID" ? paymentId : codAdvanceIntent.razorpayPaymentId,
+          paidAt: status === "PAID" ? codAdvanceIntent.paidAt ?? new Date() : codAdvanceIntent.paidAt,
+        },
+      });
+
+      if (status === "PAID") {
+        await prisma.auditEvent.create({
+          data: {
+            actorType: "system",
+            eventType: "cod_advance.payment.paid",
+            entityType: "CodAdvanceIntent",
+            entityId: codAdvanceIntent.id,
+            payload: { paymentLinkId, paymentId },
+          },
+        });
+      }
+    }
+
+    return NextResponse.json({ ok: true, module: "cod_advance" });
   }
 
   if (payment.status === "PAID" && status !== "PAID") {

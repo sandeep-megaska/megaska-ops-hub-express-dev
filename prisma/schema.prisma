@@ -39,6 +39,7 @@ model CustomerProfile {
   gstDocuments        GstDocument[]
   gstParties          GstParty[]
   refundRequests      RefundRequest[]
+  codAdvanceIntents   CodAdvanceIntent[]
 
   @@unique([shopId, shopifyCustomerId])
   @@index([shopId])
@@ -67,6 +68,8 @@ model Shop {
   gstSkuTaxMaps         GstSkuTaxMap[]
   gstOrderImports       GstOrderImport[]
   refundRequests        RefundRequest[]
+  codAdvanceSettings    CodAdvanceSettings[]
+  codAdvanceIntents     CodAdvanceIntent[]
 }
 model AuthSession {
   id                  String   @id @default(uuid())
@@ -148,6 +151,16 @@ enum PaymentStatus {
   NOT_CREATED
   PENDING
   PAID
+  FAILED
+  EXPIRED
+  CANCELLED
+}
+
+enum CodAdvanceStatus {
+  CREATED
+  PAYMENT_PENDING
+  ADVANCE_PAID
+  ORDER_LINKED
   FAILED
   EXPIRED
   CANCELLED
@@ -306,6 +319,56 @@ model RequestPayment {
   @@index([requestId])
   @@index([status])
   @@index([paymentLinkId])
+}
+
+model CodAdvanceSettings {
+  id                        String   @id @default(uuid())
+  shopId                    String
+  enabled                   Boolean  @default(false)
+  fixedAdvanceAmountPaise   Int      @default(12000)
+  currency                  String   @default("INR")
+  minOrderAmountPaise       Int?
+  maxOrderAmountPaise       Int?
+  policyText                String?
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+
+  shop                      Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@index([shopId])
+}
+
+model CodAdvanceIntent {
+  id                         String           @id @default(uuid())
+  shopId                     String
+  customerProfileId          String?
+  cartReference              String?
+  checkoutReference          String?
+  shopifyOrderId             String?
+  shopifyOrderName           String?
+  orderAmountPaise           Int
+  advanceAmountPaise         Int
+  codBalanceAmountPaise      Int
+  currency                   String           @default("INR")
+  status                     CodAdvanceStatus @default(CREATED)
+  razorpayPaymentLinkId      String?
+  razorpayPaymentLinkUrl     String?
+  razorpayPaymentId          String?
+  providerReferenceId        String?
+  paidAt                     DateTime?
+  expiresAt                  DateTime?
+  metadata                   Json?
+  createdAt                  DateTime         @default(now())
+  updatedAt                  DateTime         @updatedAt
+
+  shop                       Shop             @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  customerProfile            CustomerProfile? @relation(fields: [customerProfileId], references: [id])
+
+  @@index([shopId])
+  @@index([status])
+  @@index([razorpayPaymentLinkId])
+  @@index([shopifyOrderId])
+  @@index([customerProfileId, createdAt])
 }
 
 model ShipmentTracking {
