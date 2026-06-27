@@ -1,5 +1,5 @@
 (function () {
-  const API_BASE_URL = "https://megaska-ops-hub-exs1.vercel.app";
+  const API_BASE_URL = "https://megaska-ops-hub-express-dev.vercel.app";
   const SESSION_STORAGE_KEY = "megaska_session_token";
   const MODAL_ID = "mk-exchange-modal-layer";
   const DEBUG_CANCEL_FLAG = "megaska_debug_cancel";
