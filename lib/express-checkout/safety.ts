@@ -1,12 +1,12 @@
 import type { NextRequest } from "next/server";
-import { prisma } from "../../../services/db/prisma";
-import { hashSessionToken } from "../../../services/auth/session";
+import { prisma } from "../../services/db/prisma";
+import { hashSessionToken } from "../../services/auth/session";
 import {
   getShopDomainFromRequest,
   normalizeShopDomain,
   requireShopFromRequest,
   ShopResolutionError,
-} from "../../../services/shopify/shop";
+} from "../../services/shopify/shop";
 
 export type ExpressCheckoutSafetyError = {
   status: 401 | 403;
