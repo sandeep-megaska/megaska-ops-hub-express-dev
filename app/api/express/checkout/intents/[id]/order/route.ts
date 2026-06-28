@@ -208,6 +208,16 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
   }
 
   const discountAmount = Math.max(0, intent.discounts.reduce((sum, discount) => sum + discount.discountAmountPaise, 0));
+  const diagnostic = {
+    shopId: shop.shopId,
+    checkoutIntentId: intentId,
+    lineItemCount: lineItems.length,
+    paymentMethod: intent.selectedPaymentMethod,
+    hasAddress: Boolean(address),
+    hasDiscount: discountAmount > 0,
+    totalAmount: intent.totalAmountPaise,
+  };
+  console.info("[EXPRESS CHECKOUT ORDER] creating draft order", diagnostic);
   const shippingAddress = {
     firstName: address.name,
     address1: address.address1,
@@ -320,6 +330,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     return jsonWithCors(req, { ok: true, intent: updatedIntent, orderLink, shopifyOrder: order }, { status: 201 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Order creation failed";
+    console.error("[EXPRESS CHECKOUT ORDER] draft order failed", { ...diagnostic, error: message });
     return jsonWithCors(req, { ok: false, error: message }, { status: 502 });
   }
 }

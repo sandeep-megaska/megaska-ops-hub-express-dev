@@ -37,6 +37,47 @@ function stringOrNull(value: unknown) {
 }
 
 
+
+function asRecord(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+}
+
+function extractDiscountCode(cartSnapshot: unknown, body: Record<string, unknown>) {
+  const direct = stringOrNull(body.discountCode) || stringOrNull(body.couponCode);
+  if (direct) return direct.toUpperCase();
+
+  const snapshot = asRecord(cartSnapshot);
+  const attributes = asRecord(snapshot?.attributes);
+  const attributeCode = stringOrNull(attributes?.discountCode) || stringOrNull(attributes?.couponCode) || stringOrNull(attributes?.megaska_discount_code);
+  if (attributeCode) return attributeCode.toUpperCase();
+
+  const discountCodes = Array.isArray(snapshot?.discount_codes) ? snapshot.discount_codes : Array.isArray(snapshot?.discountCodes) ? snapshot.discountCodes : [];
+  for (const entry of discountCodes) {
+    const record = asRecord(entry);
+    const code = stringOrNull(record?.code) || (typeof entry === "string" ? entry.trim() : null);
+    if (code) return code.toUpperCase();
+  }
+
+  return null;
+}
+
+function calculateKnownDiscount(code: string | null, subtotalAmountPaise: number, fallbackDiscountAmountPaise: number) {
+  if (!code) return null;
+  const normalizedCode = code.trim().toUpperCase();
+
+  if (normalizedCode === "MEGA15") {
+    const discountAmountPaise = Math.min(subtotalAmountPaise, Math.round(subtotalAmountPaise * 0.15));
+    return { code: normalizedCode, title: "15% OFF", discountAmountPaise, rawShopifyPayload: { discountCode: normalizedCode, discountType: "PERCENTAGE", discountValue: 15, discountAmountPaise, source: "megaska_known_coupon" } };
+  }
+
+  if (fallbackDiscountAmountPaise > 0) {
+    const discountAmountPaise = Math.min(subtotalAmountPaise, fallbackDiscountAmountPaise);
+    return { code: normalizedCode, title: "Discount", discountAmountPaise, rawShopifyPayload: { discountCode: normalizedCode, discountType: "FIXED_AMOUNT", discountValue: discountAmountPaise, discountAmountPaise, source: "cart_snapshot" } };
+  }
+
+  return null;
+}
+
 function hasCartLineItems(cartSnapshot: unknown) {
   const snapshot = cartSnapshot && typeof cartSnapshot === "object" && !Array.isArray(cartSnapshot)
     ? (cartSnapshot as Record<string, unknown>)
@@ -134,6 +175,20 @@ export async function POST(req: NextRequest) {
   }
 
   const cartSnapshot = body.cartSnapshot ?? undefined;
+  const capturedDiscount = calculateKnownDiscount(
+    extractDiscountCode(cartSnapshot, body),
+    paiseValues.subtotalAmountPaise,
+    paiseValues.discountAmountPaise
+  );
+
+  if (capturedDiscount) {
+    paiseValues.discountAmountPaise = capturedDiscount.discountAmountPaise;
+    paiseValues.totalAmountPaise = Math.max(
+      0,
+      paiseValues.subtotalAmountPaise + paiseValues.shippingAmountPaise + paiseValues.codFeeAmountPaise - capturedDiscount.discountAmountPaise
+    );
+  }
+
   if (cartSnapshot !== undefined && !hasCartLineItems(cartSnapshot)) {
     return jsonWithCors(req, { ok: false, error: "Cart line items required", reason: "cartSnapshot must include lineItems/items/lines with variantId or variant_id and quantity" }, { status: 400 });
   }
@@ -153,15 +208,39 @@ export async function POST(req: NextRequest) {
     : null;
 
   if (reusableIntent) {
-    const reusableHasLines = hasCartLineItems(reusableIntent.cartSnapshot);
-    if (cartSnapshot !== undefined && !reusableHasLines) {
-      const updatedIntent = await prisma.expressCheckoutIntent.update({
-        where: { id: reusableIntent.id },
-        data: { cartSnapshot, status: "CART_SNAPSHOT_LOCKED", ...paiseValues },
+    const updatedIntent = cartSnapshot !== undefined || capturedDiscount
+      ? await prisma.expressCheckoutIntent.update({
+          where: { id: reusableIntent.id },
+          data: {
+            ...(cartSnapshot !== undefined ? { cartSnapshot } : {}),
+            status: capturedDiscount ? "DISCOUNT_APPLIED" : cartSnapshot !== undefined ? "CART_SNAPSHOT_LOCKED" : reusableIntent.status,
+            ...paiseValues,
+          },
+        })
+      : reusableIntent;
+
+    if (capturedDiscount) {
+      await prisma.expressCheckoutDiscount.deleteMany({
+        where: { shopId: shop.shopId, intentId: updatedIntent.id, type: "MANUAL_CODE" },
       });
-      return jsonWithCors(req, { ok: true, intent: updatedIntent, idempotent: true });
+      await prisma.expressCheckoutDiscount.create({
+        data: {
+          shopId: shop.shopId,
+          intentId: updatedIntent.id,
+          type: "MANUAL_CODE",
+          code: capturedDiscount.code,
+          title: capturedDiscount.title,
+          discountAmountPaise: capturedDiscount.discountAmountPaise,
+          rawShopifyPayload: capturedDiscount.rawShopifyPayload,
+        },
+      });
     }
-    return jsonWithCors(req, { ok: true, intent: reusableIntent, idempotent: true });
+
+    const intent = await prisma.expressCheckoutIntent.findFirst({
+      where: { id: updatedIntent.id },
+      include: { discounts: { orderBy: { createdAt: "desc" } } },
+    });
+    return jsonWithCors(req, { ok: true, intent: intent || updatedIntent, idempotent: true });
   }
 
   const intent = await prisma.expressCheckoutIntent.create({
@@ -169,7 +248,7 @@ export async function POST(req: NextRequest) {
       shopId: shop.shopId,
       customerProfileId,
       sessionTokenHash: hashSessionToken(sessionToken),
-      status: cartSnapshot ? "CART_SNAPSHOT_LOCKED" : "CUSTOMER_AUTHENTICATED",
+      status: capturedDiscount ? "DISCOUNT_APPLIED" : cartSnapshot ? "CART_SNAPSHOT_LOCKED" : "CUSTOMER_AUTHENTICATED",
       phoneSnapshot: stringOrNull(auth.customer.phoneE164),
       cartToken,
       shopifyCartId,
@@ -180,5 +259,23 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  return jsonWithCors(req, { ok: true, intent, idempotent: false }, { status: 201 });
+  if (capturedDiscount) {
+    await prisma.expressCheckoutDiscount.create({
+      data: {
+        shopId: shop.shopId,
+        intentId: intent.id,
+        type: "MANUAL_CODE",
+        code: capturedDiscount.code,
+        title: capturedDiscount.title,
+        discountAmountPaise: capturedDiscount.discountAmountPaise,
+        rawShopifyPayload: capturedDiscount.rawShopifyPayload,
+      },
+    });
+  }
+
+  const intentWithDiscounts = capturedDiscount
+    ? await prisma.expressCheckoutIntent.findFirst({ where: { id: intent.id }, include: { discounts: { orderBy: { createdAt: "desc" } } } })
+    : intent;
+
+  return jsonWithCors(req, { ok: true, intent: intentWithDiscounts, idempotent: false }, { status: 201 });
 }

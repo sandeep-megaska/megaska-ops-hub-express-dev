@@ -30,6 +30,60 @@ function integerPaise(value: unknown, field: string) {
   return { ok: true as const, value: Number(value) };
 }
 
+
+type DiscountCalculation = {
+  code: string;
+  title: string;
+  discountAmountPaise: number;
+  rawShopifyPayload: Record<string, unknown>;
+};
+
+function calculateKnownDiscount(input: { code: string; subtotalAmountPaise: number; requestedDiscountAmountPaise?: number; rawShopifyPayload?: unknown }): DiscountCalculation | null {
+  const code = input.code.trim().toUpperCase();
+  const requested = Math.max(0, Math.floor(Number(input.requestedDiscountAmountPaise || 0)));
+
+  if (code === "MEGA15") {
+    const discountAmountPaise = Math.min(
+      input.subtotalAmountPaise,
+      Math.round(input.subtotalAmountPaise * 0.15)
+    );
+
+    return {
+      code,
+      title: "15% OFF",
+      discountAmountPaise,
+      rawShopifyPayload: {
+        discountCode: code,
+        discountType: "PERCENTAGE",
+        discountValue: 15,
+        discountAmountPaise,
+        source: "megaska_known_coupon",
+        upstream: input.rawShopifyPayload ?? null,
+      },
+    };
+  }
+
+  if (requested > 0) {
+    const discountAmountPaise = Math.min(input.subtotalAmountPaise, requested);
+
+    return {
+      code,
+      title: "Discount",
+      discountAmountPaise,
+      rawShopifyPayload: {
+        discountCode: code,
+        discountType: "FIXED_AMOUNT",
+        discountValue: discountAmountPaise,
+        discountAmountPaise,
+        source: "client_supplied_validated_amount",
+        upstream: input.rawShopifyPayload ?? null,
+      },
+    };
+  }
+
+  return null;
+}
+
 function recalculateTotal(intent: {
   subtotalAmountPaise: number;
   shippingAmountPaise: number;
@@ -125,7 +179,18 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     return jsonWithCors(req, { ok: false, error: discountAmount.error }, { status: 400 });
   }
 
-  const totalAmountPaise = recalculateTotal(editable.intent, discountAmount.value);
+  const calculatedDiscount = calculateKnownDiscount({
+    code,
+    subtotalAmountPaise: editable.intent.subtotalAmountPaise,
+    requestedDiscountAmountPaise: discountAmount.value,
+    rawShopifyPayload: body.rawShopifyPayload,
+  });
+
+  if (!calculatedDiscount) {
+    return jsonWithCors(req, { ok: false, error: "Discount code is not valid for this checkout" }, { status: 400 });
+  }
+
+  const totalAmountPaise = recalculateTotal(editable.intent, calculatedDiscount.discountAmountPaise);
 
   const result = await prisma.$transaction(async (tx) => {
     await tx.expressCheckoutDiscount.deleteMany({
@@ -141,10 +206,10 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
         shopId: editable.shopId,
         intentId: editable.intentId,
         type: "MANUAL_CODE",
-        code,
-        title: optionalString(body.title),
-        discountAmountPaise: discountAmount.value,
-        rawShopifyPayload: body.rawShopifyPayload ?? undefined,
+        code: calculatedDiscount.code,
+        title: optionalString(body.title) || calculatedDiscount.title,
+        discountAmountPaise: calculatedDiscount.discountAmountPaise,
+        rawShopifyPayload: calculatedDiscount.rawShopifyPayload,
       },
     });
 
@@ -155,7 +220,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
         customerProfileId: editable.customerProfileId,
       },
       data: {
-        discountAmountPaise: discountAmount.value,
+        discountAmountPaise: calculatedDiscount.discountAmountPaise,
         totalAmountPaise,
         status: "DISCOUNT_APPLIED",
       },

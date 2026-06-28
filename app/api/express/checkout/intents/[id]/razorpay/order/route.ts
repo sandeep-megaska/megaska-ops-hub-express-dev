@@ -68,15 +68,32 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
   if (intent.selectedPaymentMethod !== "PREPAID") return jsonWithCors(req, { ok: false, error: "PREPAID payment method required" }, { status: 409 });
   if (intent.totalAmountPaise <= 0) return jsonWithCors(req, { ok: false, error: "Payment amount must be greater than 0" }, { status: 400 });
 
+  const diagnostic = {
+    shopId: shop.shopId,
+    checkoutIntentId: intentId,
+    lineItemCount: Array.isArray((intent.cartSnapshot as { lineItems?: unknown[] } | null)?.lineItems)
+      ? (intent.cartSnapshot as { lineItems?: unknown[] }).lineItems?.length || 0
+      : 0,
+    paymentMethod: intent.selectedPaymentMethod,
+    hasAddress: false,
+    hasDiscount: intent.discountAmountPaise > 0,
+    totalAmount: intent.totalAmountPaise,
+  };
+  console.info("[EXPRESS CHECKOUT RAZORPAY] creating order", diagnostic);
+
   let razorpayOrder: RazorpayOrder;
 
   try {
     razorpayOrder = await createRazorpayOrder(intent.totalAmountPaise, intent.currency, `ec_${intent.id.slice(0, 32)}`);
   } catch (error) {
-    return jsonWithCors(req, { ok: false, error: error instanceof Error ? error.message : "Unable to create Razorpay order" }, { status: 502 });
+    const message = error instanceof Error ? error.message : "Unable to create Razorpay order";
+    console.error("[EXPRESS CHECKOUT RAZORPAY] gateway order failed", { ...diagnostic, error: message });
+    return jsonWithCors(req, { ok: false, error: message }, { status: 502 });
   }
 
-  const result = await prisma.$transaction(async (tx) => {
+  let result;
+  try {
+    result = await prisma.$transaction(async (tx) => {
     await tx.expressCheckoutPayment.deleteMany({ where: { shopId: shop.shopId, intentId, method: "PREPAID", status: "PENDING", intent: { customerProfileId } } });
 
     const payment = await tx.expressCheckoutPayment.create({
@@ -95,8 +112,13 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     await tx.expressCheckoutIntent.updateMany({ where: intentWhere, data: { status: "PAYMENT_PENDING" } });
     const updatedIntent = await tx.expressCheckoutIntent.findFirstOrThrow({ where: intentWhere });
 
-    return { intent: updatedIntent, payment };
-  });
+      return { intent: updatedIntent, payment };
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unable to persist Razorpay order";
+    console.error("[EXPRESS CHECKOUT RAZORPAY] persistence failed", { ...diagnostic, error: message });
+    return jsonWithCors(req, { ok: false, error: message }, { status: 502 });
+  }
 
   return jsonWithCors(req, { ok: true, ...result, razorpayOrder: { id: razorpayOrder.id, amount: razorpayOrder.amount, currency: razorpayOrder.currency, receipt: razorpayOrder.receipt, status: razorpayOrder.status, keyId: process.env.RAZORPAY_KEY_ID } }, { status: 201 });
 }
