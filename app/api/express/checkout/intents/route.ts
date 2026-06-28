@@ -19,29 +19,11 @@ const ACTIVE_STATUSES = [
   "PAYMENT_METHOD_SELECTED",
   "PAYMENT_PENDING",
   "PAYMENT_CONFIRMED",
-];
-
-type ExpressCheckoutIntent = {
-  id: string;
-  shopId: string;
-  customerProfileId: string | null;
-  status: string;
-  expiresAt: Date | null;
-  createdAt: Date;
-};
+] as const;
 
 type ExpressCheckoutIntentWhereInput = {
   cartToken?: string;
   shopifyCartId?: string;
-};
-
-type ExpressCheckoutIntentDelegate = {
-  findFirst(args: unknown): Promise<ExpressCheckoutIntent | null>;
-  create(args: unknown): Promise<ExpressCheckoutIntent>;
-};
-
-const expressCheckoutDb = prisma as unknown as typeof prisma & {
-  expressCheckoutIntent: ExpressCheckoutIntentDelegate;
 };
 
 function jsonWithCors(req: NextRequest, body: unknown, init?: ResponseInit) {
@@ -136,11 +118,11 @@ export async function POST(req: NextRequest) {
 
   const now = new Date();
   const reusableIntent = reuseConditions.length > 0
-    ? await expressCheckoutDb.expressCheckoutIntent.findFirst({
+    ? await prisma.expressCheckoutIntent.findFirst({
         where: {
           shopId: shop.shopId,
           customerProfileId,
-          status: { in: ACTIVE_STATUSES },
+          status: { in: [...ACTIVE_STATUSES] },
           expiresAt: { gt: now },
           OR: reuseConditions,
         },
@@ -153,7 +135,7 @@ export async function POST(req: NextRequest) {
   }
 
   const cartSnapshot = body.cartSnapshot ?? undefined;
-  const intent = await expressCheckoutDb.expressCheckoutIntent.create({
+  const intent = await prisma.expressCheckoutIntent.create({
     data: {
       shopId: shop.shopId,
       customerProfileId,
