@@ -57,6 +57,18 @@ model Shop {
   uninstalledAt         DateTime?
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
+  myshopifyDomain          String?  @unique
+  primaryDomain            String?
+  shopName                 String?
+  accessTokenEncrypted     String?
+  storefrontTokenEncrypted String?
+  appProxyPrefix           String?
+  appProxySubpath          String?
+  appProxyEnabled          Boolean  @default(false)
+  installationStatus       String   @default("DEV")
+  checkoutEnabled          Boolean  @default(false)
+  tokenExpiresAt           DateTime?
+  tokenRotationRequiredAt  DateTime?
 
   customers             CustomerProfile[]
   otpChallenges         OTPChallenge[]
@@ -70,6 +82,9 @@ model Shop {
   refundRequests        RefundRequest[]
   codAdvanceSettings    CodAdvanceSettings[]
   codAdvanceIntents     CodAdvanceIntent[]
+  moduleConfigs         ShopModuleConfig[]
+  proxyRoutes           ShopProxyRoute[]
+  installationEvents    ShopInstallationEvent[]
 }
 model AuthSession {
   id                  String   @id @default(uuid())
@@ -1386,4 +1401,52 @@ model ExpressCheckoutOrderLink {
   @@index([shopId, id])
   @@index([shopId, intentId])
   @@index([shopId, shopifyOrderId])
+}
+
+model ShopModuleConfig {
+  id        String   @id @default(uuid())
+  shopId    String
+  moduleKey String
+  enabled   Boolean  @default(false)
+  config    Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  shop      Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@unique([shopId, moduleKey])
+  @@index([shopId])
+  @@index([moduleKey, enabled])
+}
+
+model ShopProxyRoute {
+  id           String   @id @default(uuid())
+  shopId       String
+  routeKey     String
+  proxyPrefix  String
+  proxySubpath String
+  targetModule String
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  shop         Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@unique([shopId, routeKey])
+  @@index([shopId, isActive])
+  @@index([targetModule, isActive])
+}
+
+model ShopInstallationEvent {
+  id        String   @id @default(uuid())
+  shopId    String
+  eventType String
+  scopes    String?
+  payload   Json?
+  createdAt DateTime @default(now())
+
+  shop      Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@index([shopId, createdAt])
+  @@index([eventType, createdAt])
 }
