@@ -214,7 +214,13 @@
   }
 
   if (!hasBody && response.status !== 204) {
-    throw new Error("Empty server response");
+    if (path === "/otp/request" && response.status === 200) {
+      console.warn("[Megaska OTP] empty 200 response treated as sent");
+      data = { ok: true, sent: true };
+      jsonOk = true;
+    } else {
+      throw new Error("Empty server response");
+    }
   }
 
   if (hasBody && !jsonOk) {
