@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "../../../../services/db/prisma";
-import { hashSessionToken } from "../../../../services/auth/session";
+import { hashSessionToken, getSessionTokenFromRequest } from "../../../../services/auth/session";
 import { withCors, handleOptions } from "../../_lib/cors";
 
 export async function OPTIONS(req: NextRequest) {
@@ -9,13 +9,7 @@ export async function OPTIONS(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
   try {
-    const authHeader = req.headers.get("authorization");
-    const bearerToken = authHeader?.startsWith("Bearer ")
-      ? authHeader.slice(7).trim()
-      : "";
-
-    const queryToken = req.nextUrl.searchParams.get("token")?.trim() ?? "";
-    const sessionToken = bearerToken || queryToken;
+    const sessionToken = getSessionTokenFromRequest(req);
 
     if (!sessionToken) {
       return withCors(

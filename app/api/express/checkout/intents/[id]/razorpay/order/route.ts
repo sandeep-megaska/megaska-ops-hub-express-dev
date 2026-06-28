@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getSessionTokenFromRequest } from "../../../../../../../../services/auth/session";
 import { withCors, handleOptions } from "../../../../../../_lib/cors";
 import { prisma } from "../../../../../../../../services/db/prisma";
 import {
@@ -16,13 +17,6 @@ function jsonWithCors(req: NextRequest, body: unknown, init?: ResponseInit) {
   return withCors(req, NextResponse.json(body, init));
 }
 
-function getSessionToken(req: NextRequest) {
-  const authHeader = req.headers.get("authorization") || "";
-  const bearerToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
-  const queryToken = req.nextUrl.searchParams.get("token")?.trim() || "";
-
-  return bearerToken || queryToken;
-}
 
 async function createRazorpayOrder(amountPaise: number, currency: string, receipt: string): Promise<RazorpayOrder> {
   const keyId = String(process.env.RAZORPAY_KEY_ID || "").trim();
@@ -55,7 +49,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
 
   if ("error" in shop) return jsonWithCors(req, { ok: false, error: shop.error }, { status: shop.status });
 
-  const auth = await requireCustomerSessionForShop(getSessionToken(req), shop.shopId);
+  const auth = await requireCustomerSessionForShop(getSessionTokenFromRequest(req), shop.shopId);
 
   if ("error" in auth) return jsonWithCors(req, { ok: false, error: auth.error }, { status: auth.status });
 

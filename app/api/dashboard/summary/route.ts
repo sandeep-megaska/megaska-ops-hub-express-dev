@@ -2,7 +2,7 @@ import { MegaskaOrderStatus } from "../../../../generated/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { withCors, handleOptions } from "../../_lib/cors";
 import { prisma } from "../../../../services/db/prisma";
-import { hashSessionToken } from "../../../../services/auth/session";
+import { hashSessionToken, getSessionTokenFromRequest } from "../../../../services/auth/session";
 import {
   debugShopifyAdminAuth,
   findShopifyCustomerIdByIdentity,
@@ -28,20 +28,12 @@ export async function OPTIONS(req: NextRequest) {
   return handleOptions(req);
 }
 
-function getSessionToken(req: NextRequest) {
-  const authHeader = req.headers.get("authorization");
-  const bearerToken = authHeader?.startsWith("Bearer ")
-    ? authHeader.slice(7).trim()
-    : "";
-  const queryToken = req.nextUrl.searchParams.get("token")?.trim() ?? "";
-  return bearerToken || queryToken;
-}
 
 export async function GET(req: NextRequest) {
   try {
     const shop = await requireShopFromRequest(req);
 
-    const sessionToken = getSessionToken(req);
+    const sessionToken = getSessionTokenFromRequest(req);
     if (!sessionToken) {
       return withCors(
         req,

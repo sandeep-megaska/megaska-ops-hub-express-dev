@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "../../../../services/db/prisma";
-import { hashSessionToken } from "../../../../services/auth/session";
+import {
+  CUSTOMER_SESSION_COOKIE_NAME,
+  getCustomerSessionCookieOptions,
+  getSessionTokenFromRequest,
+  hashSessionToken,
+} from "../../../../services/auth/session";
 import { withCors, handleOptions } from "../../_lib/cors";
 import {
   ShopResolutionError,
@@ -18,12 +23,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const bodyToken = String(body?.token ?? "").trim();
 
-    const authHeader = req.headers.get("authorization");
-    const bearerToken = authHeader?.startsWith("Bearer ")
-      ? authHeader.slice(7).trim()
-      : "";
-
-    const sessionToken = bearerToken || bodyToken;
+    const sessionToken = bodyToken || getSessionTokenFromRequest(req);
 
     if (!sessionToken) {
       return withCors(
@@ -69,13 +69,16 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    return withCors(
-      req,
-      NextResponse.json({
-        success: true,
-        revoked: true,
-      })
-    );
+    const response = NextResponse.json({
+      success: true,
+      revoked: true,
+    });
+    response.cookies.set(CUSTOMER_SESSION_COOKIE_NAME, "", {
+      ...getCustomerSessionCookieOptions(new Date(0)),
+      maxAge: 0,
+    });
+
+    return withCors(req, response);
   } catch (error) {
     console.error("[AUTH LOGOUT ERROR]", error);
 

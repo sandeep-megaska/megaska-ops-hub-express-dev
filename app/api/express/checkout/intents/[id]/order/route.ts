@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getSessionTokenFromRequest } from "../../../../../../../services/auth/session";
 import { withCors, handleOptions } from "../../../../../_lib/cors";
 import { prisma } from "../../../../../../../services/db/prisma";
 import {
@@ -44,13 +45,6 @@ function jsonWithCors(req: NextRequest, body: unknown, init?: ResponseInit) {
   return withCors(req, NextResponse.json(body, init));
 }
 
-function getSessionToken(req: NextRequest) {
-  const authHeader = req.headers.get("authorization") || "";
-  const bearerToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
-  const queryToken = req.nextUrl.searchParams.get("token")?.trim() || "";
-
-  return bearerToken || queryToken;
-}
 
 function paiseToAmount(paise: number) {
   return (Math.max(0, Math.round(Number(paise) || 0)) / 100).toFixed(2);
@@ -144,7 +138,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     return jsonWithCors(req, { ok: false, error: shop.error }, { status: shop.status });
   }
 
-  const auth = await requireCustomerSessionForShop(getSessionToken(req), shop.shopId);
+  const auth = await requireCustomerSessionForShop(getSessionTokenFromRequest(req), shop.shopId);
 
   if ("error" in auth) {
     return jsonWithCors(req, { ok: false, error: auth.error }, { status: auth.status });
