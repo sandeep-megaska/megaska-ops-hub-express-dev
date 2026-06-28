@@ -2,20 +2,40 @@ import { NextResponse } from "next/server";
 
 function withCors(response) {
   response.headers.set("Access-Control-Allow-Origin", "*");
-  response.headers.set("Access-Control-Allow-Methods", "GET, OPTIONS");
+  response.headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   response.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept");
   return response;
 }
 
 export async function OPTIONS() {
-  return withCors(new NextResponse(null, { status: 200 }));
+  return withCors(NextResponse.json({ ok: true }, { status: 200 }));
 }
 
-export async function GET(req) {
-  const { searchParams } = new URL(req.url);
-  const pin = (searchParams.get("pin") || "").toString().trim();
+function normalizePin(value) {
+  return String(value || "").trim();
+}
 
-  if (!pin || pin.length < 4) {
+async function readPin(req) {
+  const { searchParams } = new URL(req.url);
+  if (searchParams.has("pincode")) return normalizePin(searchParams.get("pincode"));
+  if (searchParams.has("pin")) return normalizePin(searchParams.get("pin"));
+
+  if (req.method === "POST") {
+    try {
+      const body = await req.json();
+      return normalizePin(body?.pincode || body?.pin);
+    } catch (_error) {
+      return "";
+    }
+  }
+
+  return "";
+}
+
+async function handlePincode(req) {
+  const pin = await readPin(req);
+
+  if (!/^\d{6}$/.test(pin)) {
     return withCors(
       NextResponse.json(
         { ok: false, error: "Invalid pincode" },
@@ -205,4 +225,12 @@ export async function GET(req) {
       )
     );
   }
+}
+
+export async function GET(req) {
+  return handlePincode(req);
+}
+
+export async function POST(req) {
+  return handlePincode(req);
 }
