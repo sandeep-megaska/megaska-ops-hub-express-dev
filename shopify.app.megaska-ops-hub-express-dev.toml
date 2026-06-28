@@ -18,3 +18,8 @@ redirect_urls = [
 
 [webhooks]
 api_version = "2026-04"
+
+[app_proxy]
+url = "https://megaska-ops-hub-express-dev.vercel.app/apps/megaska"
+subpath = "megaska"
+prefix = "apps"
