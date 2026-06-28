@@ -1,7 +1,7 @@
 (function () {
   const SESSION_KEY = "megaska_session_token";
   const APP_PROXY_API_BASE = "/apps/megaska/api";
-  const PAGE_FALLBACK_URL = "/pages/megaska-express-checkout";
+ const PAGE_FALLBACK_URL = "/apps/megaska/checkout";
   const TRIGGER_SELECTOR = "[data-megaska-express-checkout], [data-bag-action='checkout']";
   const DEBUG = /(?:^|[?&])megaska_debug=1(?:&|$)/.test(window.location.search) || window.MEGASKA_DEBUG === true;
 
