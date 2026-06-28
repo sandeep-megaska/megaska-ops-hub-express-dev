@@ -8,15 +8,6 @@ import {
 
 export const runtime = "nodejs";
 
-type ExpressCheckoutIntent = { id: string; customerProfileId: string | null };
-type ExpressCheckoutIntentDelegate = {
-  findFirst(args: unknown): Promise<ExpressCheckoutIntent | null>;
-};
-
-const expressCheckoutDb = prisma as unknown as typeof prisma & {
-  expressCheckoutIntent: ExpressCheckoutIntentDelegate;
-};
-
 function jsonWithCors(req: NextRequest, body: unknown, init?: ResponseInit) {
   return withCors(req, NextResponse.json(body, init));
 }
@@ -57,7 +48,7 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
     return jsonWithCors(req, { ok: false, error: "Customer profile required" }, { status: 401 });
   }
 
-  const intent = await expressCheckoutDb.expressCheckoutIntent.findFirst({
+  const intent = await prisma.expressCheckoutIntent.findFirst({
     where: {
       shopId: shop.shopId,
       id: intentId,
