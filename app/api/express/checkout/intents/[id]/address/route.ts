@@ -10,26 +10,6 @@ export const runtime = "nodejs";
 
 const BLOCKED_STATUSES = ["EXPIRED", "CANCELLED", "FAILED", "ORDER_CREATED"];
 
-type ExpressCheckoutIntent = {
-  id: string;
-  status: string;
-  expiresAt: Date | null;
-  customerProfileId: string | null;
-};
-type ExpressCheckoutAddressSnapshot = { id: string };
-type ExpressCheckoutIntentDelegate = {
-  findFirst(args: unknown): Promise<ExpressCheckoutIntent | null>;
-  updateMany(args: unknown): Promise<{ count: number }>;
-};
-type ExpressCheckoutAddressSnapshotDelegate = {
-  create(args: unknown): Promise<ExpressCheckoutAddressSnapshot>;
-};
-
-const expressCheckoutDb = prisma as unknown as typeof prisma & {
-  expressCheckoutIntent: ExpressCheckoutIntentDelegate;
-  expressCheckoutAddressSnapshot: ExpressCheckoutAddressSnapshotDelegate;
-};
-
 function jsonWithCors(req: NextRequest, body: unknown, init?: ResponseInit) {
   return withCors(req, NextResponse.json(body, init));
 }
@@ -95,7 +75,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     address[field] = value;
   }
 
-  const intent = await expressCheckoutDb.expressCheckoutIntent.findFirst({
+  const intent = await prisma.expressCheckoutIntent.findFirst({
     where: {
       shopId: shop.shopId,
       id: intentId,
@@ -115,7 +95,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     return jsonWithCors(req, { ok: false, error: "Intent expired" }, { status: 409 });
   }
 
-  const addressSnapshot = await expressCheckoutDb.expressCheckoutAddressSnapshot.create({
+  const addressSnapshot = await prisma.expressCheckoutAddressSnapshot.create({
     data: {
       shopId: shop.shopId,
       intentId,
@@ -132,7 +112,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     },
   });
 
-  await expressCheckoutDb.expressCheckoutIntent.updateMany({
+  await prisma.expressCheckoutIntent.updateMany({
     where: {
       shopId: shop.shopId,
       id: intentId,
@@ -141,7 +121,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     data: { status: "ADDRESS_CAPTURED" },
   });
 
-  const updatedIntent = await expressCheckoutDb.expressCheckoutIntent.findFirst({
+  const updatedIntent = await prisma.expressCheckoutIntent.findFirst({
     where: {
       shopId: shop.shopId,
       id: intentId,
