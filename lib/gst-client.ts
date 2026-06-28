@@ -6,33 +6,8 @@ type RequestResult<T> = {
   error?: string
 }
 
-const SHOPIFY_ADMIN_HOST = 'admin.shopify.com'
-
-function isBrowser(): boolean {
-  return typeof window !== 'undefined'
-}
-
-function getApiBase(): string {
-  if (!isBrowser()) return ''
-
-  const hostname = window.location.hostname
-  if (hostname === SHOPIFY_ADMIN_HOST) return '__GST_APP_ORIGIN_REQUIRED__'
-
-  const envBase = process.env.NEXT_PUBLIC_APP_URL || ''
-  return envBase.trim().replace(/\/$/, '')
-}
-
 async function request<T>(path: string, init?: RequestInit): Promise<RequestResult<T>> {
-  const apiBase = getApiBase()
-
-  if (apiBase === '__GST_APP_ORIGIN_REQUIRED__') {
-    return {
-      ok: false,
-      error: 'GST runtime config error: NEXT_PUBLIC_APP_URL is required for embedded admin.shopify.com context.',
-    }
-  }
-
-  const url = `${apiBase}${path}`
+  const url = path.startsWith('/') ? path : `/${path}`
 
   try {
     const res = await fetch(url, {
@@ -157,16 +132,7 @@ type GstReportRun = {
 }
 
 export const generateB2cSalesRegisterRun = async ({ from, to }: { from: string; to: string }) => {
-  const apiBase = getApiBase()
-
-  if (apiBase === '__GST_APP_ORIGIN_REQUIRED__') {
-    return {
-      ok: false,
-      error: 'GST runtime config error: NEXT_PUBLIC_APP_URL is required for embedded admin.shopify.com context.',
-    } as const
-  }
-
-  const res = await fetch(`${apiBase}/api/gst/reports/runs`, {
+  const res = await fetch('/api/gst/reports/runs', {
     method: 'POST',
     cache: 'no-store',
     credentials: 'include',
