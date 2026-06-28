@@ -1370,7 +1370,7 @@ model ExpressCheckoutPayment {
 model ExpressCheckoutOrderLink {
   id                String                @id @default(uuid())
   shopId            String
-  intentId          String
+  intentId          String                @unique
   draftOrderId      String?
   draftOrderName    String?
   shopifyOrderId    String?
@@ -1382,8 +1382,8 @@ model ExpressCheckoutOrderLink {
 
   intent            ExpressCheckoutIntent @relation(fields: [intentId], references: [id], onDelete: Cascade)
 
- @@unique([shopId, intentId])
-@@index([shopId, id])
-@@index([shopId, intentId])
-@@index([shopId, shopifyOrderId])
+  @@unique([shopId, intentId])
+  @@index([shopId, id])
+  @@index([shopId, intentId])
+  @@index([shopId, shopifyOrderId])
 }
