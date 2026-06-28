@@ -1,5 +1,5 @@
 (function () {
-  const API_BASE_URL = "https://megaska-ops-hub-express-dev.vercel.app";
+  const API_BASE_URL = String(window.MEGASKA_API_BASE || "/apps/megaska/api").replace(/\/$/, "");
   const SESSION_STORAGE_KEY = "megaska_session_token";
   const MODAL_ID = "mk-exchange-modal-layer";
   const DEBUG_CANCEL_FLAG = "megaska_debug_cancel";
@@ -697,7 +697,7 @@
     try {
       setSubmittingState(true);
 
-      const createResponse = await fetch(API_BASE_URL + "/api/account/exchange-requests", {
+      const createResponse = await fetch(API_BASE_URL + "/account/exchange-requests", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -975,7 +975,7 @@
 
     try {
       setSubmittingState(true);
-      const createResponse = await fetch(API_BASE_URL + "/api/requests/issue", {
+      const createResponse = await fetch(API_BASE_URL + "/requests/issue", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1045,7 +1045,7 @@
     try {
       setSubmittingState(true);
 
-      const createResponse = await fetch(API_BASE_URL + "/api/requests/cancellation", {
+      const createResponse = await fetch(API_BASE_URL + "/requests/cancellation", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1128,8 +1128,8 @@
           if (!token) return;
 
           const endpoint = isCancellationAction
-            ? "/api/requests/cancellation"
-            : (isIssueAction ? "/api/requests/issue" : "/api/account/exchange-requests");
+            ? "/requests/cancellation"
+            : (isIssueAction ? "/requests/issue" : "/account/exchange-requests");
           const headers = {
             Authorization: "Bearer " + token,
           };

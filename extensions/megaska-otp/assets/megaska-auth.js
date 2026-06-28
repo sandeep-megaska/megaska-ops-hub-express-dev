@@ -636,11 +636,6 @@ if (token) {
       .join("<br/>");
   }
 
-  function formatMinorCurrency(amountMinor, currency) {
-    const amountMajor = Number(amountMinor || 0) / 100;
-    return `${escHtml(currency || "INR")} ${amountMajor.toFixed(2)}`;
-  }
-
   function formatInrFromMinor(amountMinor) {
     const amountMajor = Number(amountMinor || 0) / 100;
     try {
@@ -913,7 +908,7 @@ if (token) {
     return pills;
   }
 
-  function renderDashboardSummary(container, summary, containerSelector) {
+  function renderDashboardSummary(container, summary) {
     const profileName =
       [summary?.customer?.firstName, summary?.customer?.lastName].filter(Boolean).join(" ") ||
       "Megaska Customer";
@@ -923,32 +918,8 @@ if (token) {
     const totalOrders = Number(summary?.stats?.totalOrders || 0);
     const openRequests = Number(summary?.stats?.openRequests || 0);
     const savedAddresses = Number(summary?.stats?.savedAddresses || 0);
-    const storeCredit = Number(summary?.wallet?.balance || 0);
-    const currency = summary?.wallet?.currency || "INR";
-    const walletTransactions = Array.isArray(summary?.wallet?.transactions) ? summary.wallet.transactions : [];
     const addressHtml = formatAddress(summary?.address);
     const orders = Array.isArray(summary?.orders) ? summary.orders : [];
-
-    const walletHistoryHtml = walletTransactions.length
-      ? walletTransactions
-          .map((txn) => {
-            const direction = String(txn?.direction || "").toUpperCase();
-            const sign = direction === "DEBIT" ? "-" : "+";
-            const reason = txn?.reason || txn?.transactionType || "Wallet transaction";
-            const orderRef = txn?.orderNumber ? ` • Order ${escHtml(txn.orderNumber)}` : "";
-            return `<li class="megaska-dashboard-list-item">
-              <div>
-                <strong>${escHtml(reason)}</strong>
-                <div class="megaska-dashboard-subtle">${escHtml(formatDate(txn?.createdAt) || "")}${orderRef}</div>
-              </div>
-              <div class="megaska-dashboard-order-right">
-                <strong>${sign} ${formatMinorCurrency(txn?.amount, txn?.currency || currency)}</strong>
-                <div class="megaska-dashboard-subtle">${escHtml(direction)}</div>
-              </div>
-            </li>`;
-          })
-          .join("")
-      : '<li class="megaska-dashboard-empty">No wallet transactions yet.</li>';
 
     const ordersHtml = orders.length
       ? orders
@@ -1020,11 +991,6 @@ const sku = order?.firstLineItemSku || order?.sku || "";
         <article class="megaska-dashboard-card"><h3>Total orders</h3><p>${totalOrders}</p></article>
         <article class="megaska-dashboard-card"><h3>Open requests</h3><p>${openRequests}</p></article>
         <article class="megaska-dashboard-card"><h3>Saved addresses</h3><p>${savedAddresses}</p></article>
-        <article class="megaska-dashboard-card"><h3>Wallet balance</h3><p>${formatMinorCurrency(storeCredit, currency)}</p></article>
-      </section>
-      <section class="megaska-dashboard-card">
-        <h3>Wallet history</h3>
-        <ul class="megaska-dashboard-list">${walletHistoryHtml}</ul>
       </section>
       <section class="megaska-dashboard-card">
         <h3>Recent orders</h3>
@@ -1047,8 +1013,6 @@ const sku = order?.firstLineItemSku || order?.sku || "";
         </div>
       </section>
     `;
-
-    renderWalletSectionIntoLiveContainer(container, summary, containerSelector);
   }
 
   async function initDashboardPage() {
@@ -1085,7 +1049,7 @@ const sku = order?.firstLineItemSku || order?.sku || "";
 
     try {
       const summary = await fetchDashboardSummary();
-      renderDashboardSummary(mountEl, summary, containerSelector);
+      renderDashboardSummary(mountEl, summary);
       bindLogoutButtons();
       bindWalletApplyButtons(mountEl);
 
