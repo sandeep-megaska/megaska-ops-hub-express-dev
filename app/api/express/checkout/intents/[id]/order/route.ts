@@ -72,7 +72,7 @@ function getCartLines(cartSnapshot: unknown) {
       if (!record) return null;
 
       const rawVariantId = String(
-        record.variantId || record.shopifyVariantId || record.merchandiseId || ""
+        record.variantId || record.shopifyVariantId || record.merchandiseId || record.variant_id || ""
       ).trim();
       const quantity = Math.max(0, Math.floor(Number(record.quantity || 0)));
 
@@ -86,7 +86,7 @@ function getCartLines(cartSnapshot: unknown) {
         return null;
       }
 
-      return { variantId, quantity };
+      return { variantId, quantity, title: record.title || record.product_title || undefined, variantTitle: record.variantTitle || record.variant_title || undefined, sku: record.sku || undefined };
     })
     .filter(Boolean) as Array<{ variantId: string; quantity: number }>;
 }
@@ -200,7 +200,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
 
   const lineItems: JsonRecord[] = getCartLines(intent.cartSnapshot);
   if (!lineItems.length) {
-    return jsonWithCors(req, { ok: false, error: "Cart line items required" }, { status: 400 });
+    return jsonWithCors(req, { ok: false, error: "Cart line items required", reason: "intent.cartSnapshot must include lineItems/items/lines with variantId or variant_id and quantity" }, { status: 400 });
   }
 
   if (intent.selectedPaymentMethod === "COD" && intent.codFeeAmountPaise > 0) {

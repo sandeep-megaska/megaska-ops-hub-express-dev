@@ -77,8 +77,33 @@
     return res.json();
   }
 
+  function variantGid(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+    if (raw.startsWith("gid://shopify/ProductVariant/")) return raw;
+    const numeric = raw.replace(/\D/g, "");
+    return numeric ? `gid://shopify/ProductVariant/${numeric}` : "";
+  }
+
+  function cartLineItem(item) {
+    const variantId = variantGid(item?.variant_id || item?.variantId || item?.id);
+    const quantity = Math.max(0, Math.floor(Number(item?.quantity || 0)));
+    if (!variantId || quantity <= 0) return null;
+    return {
+      variantId,
+      quantity,
+      title: item?.product_title || item?.title || "Item",
+      variantTitle: item?.variant_title || item?.variantTitle || "",
+      sku: item?.sku || "",
+      price: Number(item?.price || item?.final_price || 0),
+      image: item?.image || item?.featured_image?.url || "",
+    };
+  }
+
   function cartSnapshot(cart) {
-    return { token: cart?.token || "", items: Array.isArray(cart?.items) ? cart.items : [], item_count: Number(cart?.item_count || 0), total_price: Number(cart?.total_price || 0), total_discount: Number(cart?.total_discount || 0), currency: cart?.currency || "INR" };
+    const items = Array.isArray(cart?.items) ? cart.items : [];
+    const lineItems = items.map(cartLineItem).filter(Boolean);
+    return { token: cart?.token || "", items, lineItems, item_count: Number(cart?.item_count || 0), total_price: Number(cart?.total_price || 0), total_discount: Number(cart?.total_discount || 0), currency: cart?.currency || "INR" };
   }
 
   async function ensureAuthenticated(triggerEl, event) {
@@ -125,7 +150,7 @@
   }
 
   function address() { return Array.isArray(state.intent?.addressSnapshots) ? state.intent.addressSnapshots[0] || {} : {}; }
-  function lines() { return Array.isArray(state.intent?.cartSnapshot?.items) ? state.intent.cartSnapshot.items : []; }
+  function lines() { return Array.isArray(state.intent?.cartSnapshot?.lineItems) ? state.intent.cartSnapshot.lineItems : Array.isArray(state.intent?.cartSnapshot?.items) ? state.intent.cartSnapshot.items : []; }
   function payMethod() { return state.intent?.selectedPaymentMethod || "PREPAID"; }
 
   function render() {
@@ -138,7 +163,7 @@
 
   function renderCheckout(root) {
     const intent = state.intent || {}; const currentAddress = address(); const selected = payMethod();
-    root.innerHTML = `${state.error ? `<p class="megaska-otp-error">${escapeHtml(state.error)}</p>` : ""}<h2 id="megaska-express-title" class="megaska-otp-step-title">Express checkout</h2><div class="megaska-express-progress"><span>Address</span><span>Discount</span><span>Payment</span></div><section class="megaska-express-summary"><h3>Cart snapshot</h3>${lines().map((line) => `<p><span>${escapeHtml(line.product_title || line.title || "Item")} × ${escapeHtml(line.quantity || 1)}</span><strong>${money(line.line_price ?? line.final_line_price ?? line.price, intent.currency)}</strong></p>`).join("") || `<p class="megaska-otp-step-subtitle">Cart details unavailable.</p>`}<p class="megaska-express-total"><span>Total</span><strong>${money(intent.totalAmountPaise, intent.currency)}</strong></p></section><form data-express-form="address" class="megaska-express-stack"><h3>Delivery address</h3><input name="name" value="${escapeHtml(currentAddress.name || "")}" placeholder="Full name" required><input name="email" value="${escapeHtml(currentAddress.email || state.customer?.email || "")}" placeholder="Email" type="email"><input value="${escapeHtml(intent.phoneSnapshot || currentAddress.phone || "Verified phone")}" disabled><input name="address1" value="${escapeHtml(currentAddress.address1 || state.customer?.addressLine1 || "")}" placeholder="Address line 1" required><input name="address2" value="${escapeHtml(currentAddress.address2 || state.customer?.addressLine2 || "")}" placeholder="Address line 2"><div class="megaska-express-fields"><input name="city" value="${escapeHtml(currentAddress.city || state.customer?.city || "")}" placeholder="City" required><input name="province" value="${escapeHtml(currentAddress.province || state.customer?.stateProvince || "")}" placeholder="State" required></div><div class="megaska-express-fields"><input name="zip" value="${escapeHtml(currentAddress.zip || state.customer?.postalCode || "")}" placeholder="PIN code" required><input name="country" value="${escapeHtml(currentAddress.country || "India")}" placeholder="Country"></div><button class="megaska-otp-primary-btn" type="submit" ${state.busy ? "disabled" : ""}>Save address</button></form><form data-express-form="discount" class="megaska-express-stack"><h3>Discount</h3><div class="megaska-express-inline"><input name="code" value="${escapeHtml(state.discountCode)}" placeholder="Discount code"><button type="submit" ${state.busy ? "disabled" : ""}>Apply</button></div></form><section class="megaska-express-stack"><h3>Payment method</h3><label><input type="radio" name="paymentMethod" value="PREPAID" ${selected === "PREPAID" ? "checked" : ""}> Razorpay / prepaid</label><label><input type="radio" name="paymentMethod" value="COD" ${selected === "COD" ? "checked" : ""}> Cash on delivery</label><button class="megaska-otp-primary-btn" data-express-action="place-order" type="button" ${state.busy ? "disabled" : ""}>${state.busy ? "Processing..." : selected === "COD" ? "Place COD order" : "Pay now"}</button></section>`;
+    root.innerHTML = `${state.error ? `<p class="megaska-otp-error">${escapeHtml(state.error)}</p>` : ""}<h2 id="megaska-express-title" class="megaska-otp-step-title">Express checkout</h2><div class="megaska-express-progress"><span>Address</span><span>Discount</span><span>Payment</span></div><section class="megaska-express-summary"><h3>Cart snapshot</h3>${lines().map((line) => `<p><span>${escapeHtml(line.product_title || line.title || "Item")} × ${escapeHtml(line.quantity || 1)}</span><strong>${money(line.line_price ?? line.final_line_price ?? line.price, intent.currency)}</strong></p>`).join("") || `<p class="megaska-otp-step-subtitle">Cart details unavailable.</p>`}<p class="megaska-express-total"><span>Total</span><strong>${money(intent.totalAmountPaise, intent.currency)}</strong></p></section><form data-express-form="address" class="megaska-express-stack"><h3>Delivery address</h3><input name="name" value="${escapeHtml(currentAddress.name || "")}" placeholder="Full name" required><input name="email" value="${escapeHtml(currentAddress.email || state.customer?.email || "")}" placeholder="Email" type="email"><input value="${escapeHtml(intent.phoneSnapshot || currentAddress.phone || "Verified phone")}" disabled><input name="address1" value="${escapeHtml(currentAddress.address1 || state.customer?.addressLine1 || "")}" placeholder="Address line 1" required><input name="address2" value="${escapeHtml(currentAddress.address2 || state.customer?.addressLine2 || "")}" placeholder="Address line 2"><div class="megaska-express-fields"><input name="city" value="${escapeHtml(currentAddress.city || state.customer?.city || "")}" placeholder="City" required><input name="province" value="${escapeHtml(currentAddress.province || state.customer?.stateProvince || "")}" placeholder="State" required></div><div class="megaska-express-fields"><input name="zip" value="${escapeHtml(currentAddress.zip || state.customer?.postalCode || "")}" placeholder="PIN code" required><input name="country" value="${escapeHtml(currentAddress.country || "India")}" placeholder="Country"></div><p class="megaska-otp-step-subtitle">Address will be saved automatically when you place the order.</p></form><form data-express-form="discount" class="megaska-express-stack"><h3>Discount</h3><div class="megaska-express-inline"><input name="code" value="${escapeHtml(state.discountCode)}" placeholder="Discount code"><button type="submit" ${state.busy ? "disabled" : ""}>Apply</button></div></form><section class="megaska-express-stack"><h3>Payment method</h3><label><input type="radio" name="paymentMethod" value="PREPAID" ${selected === "PREPAID" ? "checked" : ""}> Razorpay / prepaid</label><label><input type="radio" name="paymentMethod" value="COD" ${selected === "COD" ? "checked" : ""}> Cash on delivery</label><button class="megaska-otp-primary-btn" data-express-action="place-order" type="button" ${state.busy ? "disabled" : ""}>${state.busy ? "Processing..." : selected === "COD" ? "Place COD order" : "Pay now"}</button></section>`;
   }
 
   async function refreshIntent() { const data = await apiFetch(`/express/checkout/intents/${encodeURIComponent(state.intent.id)}`); state.intent = data.intent; state.discountCode = state.intent?.discounts?.[0]?.code || state.discountCode; }
@@ -159,9 +184,24 @@
     catch (error) { state.step = "error"; state.error = error instanceof Error ? error.message : "Unable to prepare checkout."; render(); }
   }
 
+
+  function collectAddressPayload() {
+    const form = ensureModal().querySelector('[data-express-form="address"]');
+    if (!form) throw new Error("Address form unavailable.");
+    if (!form.reportValidity()) throw new Error("Please complete the delivery address.");
+    const data = new FormData(form);
+    return { name: data.get("name"), email: data.get("email") || null, phone: state.intent.phoneSnapshot || state.customer?.phoneE164 || state.customer?.phone || "", address1: data.get("address1"), address2: data.get("address2") || null, city: data.get("city"), province: data.get("province"), country: data.get("country") || "India", zip: data.get("zip") };
+  }
+
+  async function saveAddressFromCheckout() {
+    const intentId = encodeURIComponent(state.intent.id);
+    await apiFetch(`/express/checkout/intents/${intentId}/address`, { method: "POST", body: collectAddressPayload() });
+    await refreshIntent();
+  }
+
   async function onSubmit(event) {
     const form = event.target.closest("[data-express-form]"); if (!form) return; event.preventDefault();
-    try { state.busy = true; state.error = ""; render(); const intentId = encodeURIComponent(state.intent.id); const data = new FormData(form); if (form.dataset.expressForm === "address") await apiFetch(`/express/checkout/intents/${intentId}/address`, { method: "POST", body: { name: data.get("name"), email: data.get("email") || null, phone: state.intent.phoneSnapshot || "", address1: data.get("address1"), address2: data.get("address2") || null, city: data.get("city"), province: data.get("province"), country: data.get("country") || "India", zip: data.get("zip") } }); if (form.dataset.expressForm === "discount") { const code = String(data.get("code") || "").trim(); if (!code) throw new Error("Enter a discount code."); await apiFetch(`/express/checkout/intents/${intentId}/discount`, { method: "POST", body: { code, discountAmountPaise: 0 } }); state.discountCode = code; } await refreshIntent(); state.busy = false; render(); } catch (error) { state.busy = false; state.error = error instanceof Error ? error.message : "Something went wrong."; render(); }
+    try { state.busy = true; state.error = ""; render(); const intentId = encodeURIComponent(state.intent.id); const data = new FormData(form); if (form.dataset.expressForm === "address") await saveAddressFromCheckout(); if (form.dataset.expressForm === "discount") { const code = String(data.get("code") || "").trim(); if (!code) throw new Error("Enter a discount code."); await apiFetch(`/express/checkout/intents/${intentId}/discount`, { method: "POST", body: { code, discountAmountPaise: 0 } }); state.discountCode = code; } await refreshIntent(); state.busy = false; render(); } catch (error) { state.busy = false; state.error = error instanceof Error ? error.message : "Something went wrong."; render(); }
   }
 
   async function onChange(event) {
@@ -171,7 +211,7 @@
 
   function loadRazorpay() { return new Promise((resolve, reject) => { if (window.Razorpay) return resolve(); const script = document.createElement("script"); script.src = "https://checkout.razorpay.com/v1/checkout.js"; script.onload = resolve; script.onerror = () => reject(new Error("Unable to load Razorpay Checkout.")); document.head.appendChild(script); }); }
   async function createOrder() { const data = await apiFetch(`/express/checkout/intents/${encodeURIComponent(state.intent.id)}/order`, { method: "POST", body: {} }); state.step = "success"; state.error = `${data.orderLink?.shopifyOrderName || data.shopifyOrder?.name || "Your order"} has been created.`; state.busy = false; state.paymentStarted = false; render(); }
-  async function placeOrder() { state.busy = true; state.error = ""; render(); if (payMethod() === "COD") return createOrder(); state.paymentStarted = true; await loadRazorpay(); const data = await apiFetch(`/express/checkout/intents/${encodeURIComponent(state.intent.id)}/razorpay/order`, { method: "POST", body: {} }); const order = data.razorpayOrder; if (!order?.id || !order?.keyId) throw new Error("Razorpay order details are missing."); new window.Razorpay({ key: order.keyId, amount: order.amount, currency: order.currency || "INR", name: "Megaska", description: "Express Checkout", order_id: order.id, handler: async (response) => { await apiFetch(`/express/checkout/intents/${encodeURIComponent(state.intent.id)}/razorpay/verify`, { method: "POST", body: response }); await createOrder(); }, modal: { ondismiss: () => { state.busy = false; state.paymentStarted = false; state.error = "Payment was cancelled."; render(); } } }).open(); }
+  async function placeOrder() { state.busy = true; state.error = ""; render(); await saveAddressFromCheckout(); if (payMethod() === "COD") return createOrder(); state.paymentStarted = true; await loadRazorpay(); const data = await apiFetch(`/express/checkout/intents/${encodeURIComponent(state.intent.id)}/razorpay/order`, { method: "POST", body: {} }); const order = data.razorpayOrder; if (!order?.id || !order?.keyId) throw new Error("Razorpay order details are missing."); new window.Razorpay({ key: order.keyId, amount: order.amount, currency: order.currency || "INR", name: "Megaska", description: "Express Checkout", order_id: order.id, handler: async (response) => { await apiFetch(`/express/checkout/intents/${encodeURIComponent(state.intent.id)}/razorpay/verify`, { method: "POST", body: response }); await createOrder(); }, modal: { ondismiss: () => { state.busy = false; state.paymentStarted = false; state.error = "Payment was cancelled."; render(); } } }).open(); }
 
   async function onActionClick(event) {
     const action = event.target.closest("[data-express-action]")?.getAttribute("data-express-action"); if (!action) return;

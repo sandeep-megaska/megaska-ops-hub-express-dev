@@ -36,6 +36,30 @@ function stringOrNull(value: unknown) {
   return normalized || null;
 }
 
+
+function hasCartLineItems(cartSnapshot: unknown) {
+  const snapshot = cartSnapshot && typeof cartSnapshot === "object" && !Array.isArray(cartSnapshot)
+    ? (cartSnapshot as Record<string, unknown>)
+    : null;
+  const candidates = Array.isArray(cartSnapshot)
+    ? cartSnapshot
+    : Array.isArray(snapshot?.lineItems)
+      ? snapshot.lineItems
+      : Array.isArray(snapshot?.items)
+        ? snapshot.items
+        : Array.isArray(snapshot?.lines)
+          ? snapshot.lines
+          : [];
+
+  return candidates.some((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return false;
+    const record = item as Record<string, unknown>;
+    const variantId = String(record.variantId || record.shopifyVariantId || record.merchandiseId || record.variant_id || "").trim();
+    const quantity = Math.max(0, Math.floor(Number(record.quantity || 0)));
+    return Boolean(variantId) && quantity > 0;
+  });
+}
+
 function integerPaise(value: unknown, field: string) {
   if (!Number.isInteger(value) || Number(value) < 0) {
     return { ok: false as const, error: `${field} must be a non-negative integer paise value` };
@@ -109,6 +133,11 @@ export async function POST(req: NextRequest) {
     reuseConditions.push({ shopifyCartId });
   }
 
+  const cartSnapshot = body.cartSnapshot ?? undefined;
+  if (cartSnapshot !== undefined && !hasCartLineItems(cartSnapshot)) {
+    return jsonWithCors(req, { ok: false, error: "Cart line items required", reason: "cartSnapshot must include lineItems/items/lines with variantId or variant_id and quantity" }, { status: 400 });
+  }
+
   const now = new Date();
   const reusableIntent = reuseConditions.length > 0
     ? await prisma.expressCheckoutIntent.findFirst({
@@ -124,10 +153,17 @@ export async function POST(req: NextRequest) {
     : null;
 
   if (reusableIntent) {
+    const reusableHasLines = hasCartLineItems(reusableIntent.cartSnapshot);
+    if (cartSnapshot !== undefined && !reusableHasLines) {
+      const updatedIntent = await prisma.expressCheckoutIntent.update({
+        where: { id: reusableIntent.id },
+        data: { cartSnapshot, status: "CART_SNAPSHOT_LOCKED", ...paiseValues },
+      });
+      return jsonWithCors(req, { ok: true, intent: updatedIntent, idempotent: true });
+    }
     return jsonWithCors(req, { ok: true, intent: reusableIntent, idempotent: true });
   }
 
-  const cartSnapshot = body.cartSnapshot ?? undefined;
   const intent = await prisma.expressCheckoutIntent.create({
     data: {
       shopId: shop.shopId,

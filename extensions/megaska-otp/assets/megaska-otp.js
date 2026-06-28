@@ -48,6 +48,7 @@
   step: "phone",
   phoneDigits: "",
   normalizedPhone: "",
+  lastRequestedPhone: "",
   otpDigits: ["", "", "", ""],
   requesting: false,
   verifying: false,
@@ -291,6 +292,7 @@
     state.step = preservePhone && savedPhone ? "otp" : "phone";
     state.phoneDigits = savedPhone;
     state.normalizedPhone = savedNormalizedPhone;
+    state.lastRequestedPhone = preservePhone ? savedNormalizedPhone : "";
     state.otpDigits = ["", "", "", ""];
     state.requesting = false;
     state.verifying = false;
@@ -398,10 +400,7 @@
                 aria-label="Enter 10 digit mobile number"
               />
             </div>
-            <p class="megaska-otp-hint" data-megaska-phone-hint>Enter your 10-digit mobile number and continue to receive an OTP.</p>
-            <button type="button" class="megaska-otp-primary-btn" data-megaska-send-otp disabled>
-              Continue
-            </button>
+            <p class="megaska-otp-hint" data-megaska-phone-hint>Enter your 10-digit mobile number to receive an OTP automatically.</p>
             <p class="megaska-otp-trouble">We never share your number</p>
           </div>
 
@@ -598,8 +597,6 @@
         handleSendOtpClick(event);
       }
     });
-    modal.querySelector("[data-megaska-send-otp]").addEventListener("click", handleSendOtpClick);
-
     modal.querySelectorAll("[data-megaska-edit-phone]").forEach((editBtn) => {
       editBtn.addEventListener("click", handleEditPhone);
     });
@@ -713,7 +710,6 @@
     stepSuccess: modal.querySelector("[data-megaska-step-success]"),
     phoneInput: modal.querySelector("[data-megaska-phone-input]"),
     phoneHint: modal.querySelector("[data-megaska-phone-hint]"),
-    sendOtpBtn: modal.querySelector("[data-megaska-send-otp]"),
     phoneDisplay: modal.querySelector("[data-megaska-phone-display]"),
     otpInputs: Array.from(modal.querySelectorAll("[data-megaska-otp-digit]")),
     resendText: modal.querySelector("[data-megaska-resend-text]"),
@@ -740,7 +736,6 @@
     stepSuccess,
     phoneInput,
     phoneHint,
-    sendOtpBtn,
     phoneDisplay,
     otpInputs,
     resendText,
@@ -793,11 +788,6 @@
   profileSubmitBtn.disabled = state.savingProfile;
   profileSubmitBtn.textContent = state.savingProfile ? "Saving..." : "Save and Continue";
 
-  if (sendOtpBtn) {
-    sendOtpBtn.disabled = state.requesting || state.verifying || state.phoneDigits.length !== 10;
-    sendOtpBtn.textContent = state.requesting ? "Sending OTP..." : "Continue";
-  }
-
   otpInputs.forEach((input, index) => {
     input.value = state.otpDigits[index] || "";
     input.disabled = state.verifying;
@@ -807,9 +797,9 @@
     if (state.requesting) {
       phoneHint.textContent = "Sending OTP...";
     } else if (state.phoneDigits.length < 10) {
-      phoneHint.textContent = "Enter 10 digits, then tap Continue to receive an OTP.";
+      phoneHint.textContent = "Enter 10 digits to receive an OTP automatically.";
     } else {
-      phoneHint.textContent = "Ready to send OTP.";
+      phoneHint.textContent = state.normalizedPhone === state.lastRequestedPhone ? "OTP sent. Check your messages." : "Sending OTP automatically...";
     }
   }
 
@@ -1049,11 +1039,14 @@ function needsProfileCompletion() {
     return;
   }
 
+  if (state.lastRequestedPhone === normalizedPhone) return;
+
   state.requesting = true;
   state.errorMessage = "";
  state.statusMessage = "📲 Sending your beach passcode...";
   console.log("[Megaska OTP] submitting mobile number for OTP", { digitCount: state.phoneDigits.length });
   state.normalizedPhone = normalizedPhone;
+  state.lastRequestedPhone = normalizedPhone;
 
   renderOtpStep();
   startResendTimer();
@@ -1075,6 +1068,7 @@ function needsProfileCompletion() {
     state.requesting = false;
     state.step = "phone";
     state.statusMessage = "";
+    state.lastRequestedPhone = "";
     state.errorMessage = error.message || "Could not send OTP. Please try again.";
     renderStep();
     focusPhoneInput();
@@ -1089,6 +1083,7 @@ function needsProfileCompletion() {
     renderStep();
 
     console.log("[Megaska OTP] mobile input changed", { digitCount: state.phoneDigits.length });
+    submitPhoneIfReady();
   }
 
   function handleSendOtpClick(event) {
@@ -1366,6 +1361,7 @@ setTimeout(() => closeModal("success", { force: true }), SUCCESS_CLOSE_DELAY_MS)
         throw new Error(getOtpRequestErrorMessage(otpRequestResponse));
       }
       state.requesting = false;
+      state.lastRequestedPhone = state.normalizedPhone;
       state.otpDigits = ["", "", "", ""];
       renderStep();
       focusOtpInput(0);
