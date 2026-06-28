@@ -112,7 +112,11 @@
   function buildApiUrl(path) {
     const shopDomain = getCurrentShopDomain();
     const normalizedPath = String(path || "").startsWith("/") ? path : `/${path}`;
-    const url = new URL(`${API_BASE}${normalizedPath}`);
+    const apiBase = String(API_BASE || "/apps/megaska/api").replace(/\/$/, "");
+    const baseUrl = /^https?:\/\//i.test(apiBase)
+      ? apiBase
+      : `${window.location.origin}${apiBase.startsWith("/") ? apiBase : `/${apiBase}`}`;
+    const url = new URL(`${baseUrl}${normalizedPath}`);
 
     // Send shop in query also as a safe fallback for proxies/CDN/header-stripping edge cases.
     if (shopDomain) {

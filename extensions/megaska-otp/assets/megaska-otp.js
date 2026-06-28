@@ -296,7 +296,7 @@
     state.savingProfile = false;
     state.resendSeconds = 0;
     state.errorMessage = "";
-    statusMessage: "";
+    state.statusMessage = "";
     state.successMessage = "🌊 Welcome back. Your beach look awaits";
     state.profileFirstName = "";
     state.profileLastName = "";
@@ -985,7 +985,7 @@ function needsProfileCompletion() {
     const payload = getOtpRequestPayload(response);
     if (!payload) return false;
 
-    if (payload.success === true || payload.otpSent === true || payload.sent === true) {
+    if (payload.ok === true || payload.success === true || payload.otpSent === true || payload.sent === true) {
       return true;
     }
 
@@ -1046,7 +1046,7 @@ function needsProfileCompletion() {
     state.requesting = false;
     state.step = "phone";
     state.statusMessage = "";
-    state.errorMessage = error.message || "Unable to send OTP. Please try again.";
+    state.errorMessage = error.message || "Could not send OTP. Please try again.";
     renderStep();
     focusPhoneInput();
   }
@@ -1338,7 +1338,7 @@ setTimeout(() => closeModal("success", { force: true }), SUCCESS_CLOSE_DELAY_MS)
       startResendTimer();
     } catch (error) {
       state.requesting = false;
-      state.errorMessage = error.message || "Unable to resend OTP right now.";
+      state.errorMessage = error.message || "Could not send OTP. Please try again.";
       renderStep();
     }
   }
