@@ -103,7 +103,7 @@
   }
 
   async function apiFetch(path, options) {
-    const opts = Object.assign({ method: "GET" }, options || {});
+    const opts = Object.assign({ method: "GET", credentials: "include" }, options || {});
     opts.headers = await buildHeaders(opts.headers);
     if (opts.body && typeof opts.body !== "string") opts.body = JSON.stringify(opts.body);
 

@@ -58,7 +58,7 @@
     const headers = Object.assign({ "Content-Type": "application/json", Accept: "application/json" }, options?.headers || {});
     if (token) headers.Authorization = `Bearer ${token}`;
     if (shop) headers["x-shopify-shop-domain"] = shop;
-    const opts = Object.assign({ method: "GET" }, options || {}, { headers });
+    const opts = Object.assign({ method: "GET", credentials: "include" }, options || {}, { headers });
     if (opts.body && typeof opts.body !== "string") opts.body = JSON.stringify(opts.body);
     const res = await fetch(url.toString(), opts);
     const data = await res.json().catch(() => null);

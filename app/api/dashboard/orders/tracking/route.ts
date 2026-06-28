@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withCors, handleOptions } from "../../../_lib/cors";
 import { prisma } from "../../../../../services/db/prisma";
-import { hashSessionToken } from "../../../../../services/auth/session";
+import { hashSessionToken, getSessionTokenFromRequest } from "../../../../../services/auth/session";
 import { requireShopFromRequest } from "../../../../../services/shopify/shop";
 
 export const runtime = "nodejs";
@@ -10,15 +10,11 @@ export async function OPTIONS(req: NextRequest) {
   return handleOptions(req);
 }
 
-function getSessionToken(req: NextRequest) {
-  const authHeader = req.headers.get("authorization");
-  return authHeader?.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
-}
 
 export async function GET(req: NextRequest) {
   try {
     const shop = await requireShopFromRequest(req);
-    const token = getSessionToken(req);
+    const token = getSessionTokenFromRequest(req);
     if (!token) return withCors(req, NextResponse.json({ error: "Session token required" }, { status: 401 }));
 
     const session = await prisma.authSession.findFirst({

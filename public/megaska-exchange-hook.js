@@ -699,6 +699,7 @@
 
       const createResponse = await fetch(API_BASE_URL + "/account/exchange-requests", {
         method: "POST",
+        credentials: "include",
         headers: {
           "Content-Type": "application/json",
           Authorization: "Bearer " + token,
@@ -977,6 +978,7 @@
       setSubmittingState(true);
       const createResponse = await fetch(API_BASE_URL + "/requests/issue", {
         method: "POST",
+        credentials: "include",
         headers: {
           "Content-Type": "application/json",
           Authorization: "Bearer " + token,
@@ -1047,6 +1049,7 @@
 
       const createResponse = await fetch(API_BASE_URL + "/requests/cancellation", {
         method: "POST",
+        credentials: "include",
         headers: {
           "Content-Type": "application/json",
           Authorization: "Bearer " + token,
@@ -1137,6 +1140,7 @@
             headers["x-shopify-shop-domain"] = detectShopDomain();
           }
           const response = await fetch(API_BASE_URL + endpoint, {
+            credentials: "include",
             headers,
           });
           const data = await response.json().catch(function () {

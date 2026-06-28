@@ -1,26 +1,18 @@
 import { NextRequest } from "next/server";
 import { prisma } from "../db/prisma";
-import { hashSessionToken } from "../auth/session";
+import { getSessionTokenFromRequest, hashSessionToken } from "../auth/session";
 import {
   requireShopFromRequest,
   type ShopRow,
 } from "../shopify/shop";
 
-function getSessionToken(req: NextRequest) {
-  const authHeader = req.headers.get("authorization");
-  const bearerToken = authHeader?.startsWith("Bearer ")
-    ? authHeader.slice(7).trim()
-    : "";
-  const queryToken = req.nextUrl.searchParams.get("token")?.trim() ?? "";
-  return bearerToken || queryToken;
-}
 
 /**
  * Legacy helper kept for backward compatibility in non-shop-scoped flows.
  * Avoid using this in exchange/cancellation/issue/GST request flows.
  */
 export async function getAuthenticatedCustomer(req: NextRequest) {
-  const sessionToken = getSessionToken(req);
+  const sessionToken = getSessionTokenFromRequest(req);
 
   if (!sessionToken) {
     return null;
@@ -62,7 +54,7 @@ export async function getAuthenticatedExchangeCustomer(
   req: NextRequest
 ): Promise<AuthenticatedExchangeContext | null> {
   const shop = await requireShopFromRequest(req);
-  const sessionToken = getSessionToken(req);
+  const sessionToken = getSessionTokenFromRequest(req);
 
   if (!sessionToken) {
     return null;
