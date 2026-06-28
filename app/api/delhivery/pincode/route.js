@@ -97,7 +97,7 @@ async function handlePincode(req) {
     let raw;
     try {
       raw = JSON.parse(svcText);
-    } catch (_e) {
+    } catch {
       return withCors(
         NextResponse.json(
           {
@@ -171,7 +171,7 @@ async function handlePincode(req) {
 
         try {
           tatJson = JSON.parse(tatText);
-        } catch (_e) {}
+        } catch {}
 
         if (tatJson) {
           tatDays =

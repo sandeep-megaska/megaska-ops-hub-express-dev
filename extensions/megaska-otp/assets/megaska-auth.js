@@ -169,38 +169,77 @@
     let jsonOk = false;
     let jsonError = "";
 
-    if (hasBody) {
-      try {
-        data = JSON.parse(text);
-        jsonOk = true;
-      } catch (error) {
-        jsonError = error instanceof Error ? error.message : "Unable to parse JSON";
-      }
-    }
+const endpointUrl = buildApiUrl(path);
 
-    logRuntimeFetch(path, {
-      endpoint,
-      status: response.status,
-      hasBody,
-      contentType,
-      jsonOk,
-      jsonError,
-    });
+if (path === "/otp/request") {
+  console.log("[Megaska OTP] send OTP fetch start", {
+    endpointUrl,
+  });
+}
 
-    if (!hasBody && response.status !== 204) {
-      throw new Error("Empty server response");
-    }
+const response = await fetch(endpointUrl, opts);
 
-    if (hasBody && !jsonOk) {
-      throw new Error("Unexpected server response");
-    }
+const contentType = response.headers.get("content-type") || "";
 
-    if (!response.ok) {
-      throw new Error(parseApiError(data, `Request failed (${response.status})`));
-    }
+let responseText = "";
+try {
+  responseText = await response.text();
+} catch {
+  responseText = "";
+}
 
-    return data;
+const hasBody = Boolean(responseText);
+
+let data = null;
+let jsonOk = false;
+
+if (hasBody) {
+  try {
+    data = JSON.parse(responseText);
+    jsonOk = true;
+  } catch (error) {
+    jsonError =
+      error instanceof Error
+        ? error.message
+        : "Unable to parse JSON";
   }
+}
+
+logRuntimeFetch(path, {
+  endpoint: endpointUrl,
+  status: response.status,
+  hasBody,
+  contentType,
+  jsonOk,
+  jsonError,
+});
+
+if (path === "/otp/request") {
+  console.log("[Megaska OTP] send OTP response", {
+    status: response.status,
+    contentType,
+    bodyPresent: hasBody,
+  });
+}
+
+if (!hasBody && response.status !== 204) {
+  throw new Error("Empty server response");
+}
+
+if (hasBody && !jsonOk) {
+  throw new Error("Unexpected server response");
+}
+
+if (!response.ok) {
+  throw new Error(
+    parseApiError(
+      data,
+      `Request failed (${response.status})`,
+    ),
+  );
+}
+
+return data;
 
   function extractCustomer(sessionPayload) {
     return (
