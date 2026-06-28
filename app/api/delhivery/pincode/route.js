@@ -43,11 +43,11 @@ export async function GET(req) {
       );
     }
 
-    const svcUrl = `${baseUrl}?token=${encodeURIComponent(
-      token
-    )}&filter_codes=${encodeURIComponent(pin)}`;
+    const svcUrl = new URL(baseUrl);
+    svcUrl.searchParams.set("token", token);
+    svcUrl.searchParams.set("filter_codes", pin);
 
-    const dlRes = await fetch(svcUrl, {
+    const dlRes = await fetch(svcUrl.toString(), {
       method: "GET",
       headers: {
         Accept: "application/json",
@@ -77,7 +77,7 @@ export async function GET(req) {
     let raw;
     try {
       raw = JSON.parse(svcText);
-    } catch (_e) {
+    } catch {
       return withCors(
         NextResponse.json(
           {
@@ -151,7 +151,7 @@ export async function GET(req) {
 
         try {
           tatJson = JSON.parse(tatText);
-        } catch (_e) {}
+        } catch {}
 
         if (tatJson) {
           tatDays =

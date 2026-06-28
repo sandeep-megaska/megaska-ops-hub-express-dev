@@ -134,13 +134,36 @@
 
     opts.headers = buildHeaders(opts.headers);
 
-    const response = await fetch(buildApiUrl(path), opts);
+    const endpointUrl = buildApiUrl(path);
+    if (path === "/otp/request") {
+      console.log("[Megaska OTP] send OTP fetch start", { endpointUrl });
+    }
+
+    const response = await fetch(endpointUrl, opts);
+
+    const contentType = response.headers.get("content-type") || "";
+    let responseText = "";
+    try {
+      responseText = await response.text();
+    } catch {
+      responseText = "";
+    }
+
+    if (path === "/otp/request") {
+      console.log("[Megaska OTP] send OTP response", {
+        status: response.status,
+        contentType,
+        bodyPresent: Boolean(responseText),
+      });
+    }
 
     let data = null;
-    try {
-      data = await response.json();
-    } catch {
-      data = null;
+    if (responseText) {
+      try {
+        data = JSON.parse(responseText);
+      } catch {
+        data = null;
+      }
     }
 
     if (!response.ok) {
