@@ -122,6 +122,29 @@
     return url.toString();
   }
 
+  function shouldLogRuntimeFetch(path) {
+    const normalized = String(path || "");
+    return normalized.includes("/otp/request") || normalized.includes("/delhivery/pincode");
+  }
+
+  function logRuntimeFetch(path, details) {
+    if (!shouldLogRuntimeFetch(path)) return;
+    try {
+      console.log("[Megaska Runtime Fetch]", {
+        endpoint: details.endpoint,
+        status: details.status,
+        hasBody: details.hasBody,
+        contentType: details.contentType,
+        jsonOk: details.jsonOk,
+        jsonError: details.jsonError || null,
+      });
+    } catch (_error) {}
+  }
+
+  function parseApiError(data, fallback) {
+    return (data && (data.error || data.message || data?.data?.error || data?.data?.message)) || fallback;
+  }
+
   async function apiFetch(path, options) {
     const opts = Object.assign(
       {
@@ -133,21 +156,43 @@
     );
 
     opts.headers = buildHeaders(opts.headers);
-
-    const response = await fetch(buildApiUrl(path), opts);
-
+    const endpoint = buildApiUrl(path);
+    const response = await fetch(endpoint, opts);
+    const contentType = response.headers.get("content-type") || "";
+    const text = await response.text();
+    const hasBody = text.length > 0;
     let data = null;
-    try {
-      data = await response.json();
-    } catch {
-      data = null;
+    let jsonOk = false;
+    let jsonError = "";
+
+    if (hasBody) {
+      try {
+        data = JSON.parse(text);
+        jsonOk = true;
+      } catch (error) {
+        jsonError = error instanceof Error ? error.message : "Unable to parse JSON";
+      }
+    }
+
+    logRuntimeFetch(path, {
+      endpoint,
+      status: response.status,
+      hasBody,
+      contentType,
+      jsonOk,
+      jsonError,
+    });
+
+    if (!hasBody && response.status !== 204) {
+      throw new Error("Empty server response");
+    }
+
+    if (hasBody && !jsonOk) {
+      throw new Error("Unexpected server response");
     }
 
     if (!response.ok) {
-      const message =
-        (data && (data.error || data.message)) ||
-        `Request failed (${response.status})`;
-      throw new Error(message);
+      throw new Error(parseApiError(data, `Request failed (${response.status})`));
     }
 
     return data;
@@ -173,9 +218,21 @@
   }
 
   async function requestOtp(phone) {
+    console.log("[Megaska Auth] OTP request triggered", { endpoint: `${API_BASE}/otp/request` });
     return apiFetch("/otp/request", {
       method: "POST",
       body: JSON.stringify({ phone }),
+    });
+  }
+
+  async function checkPincode(pincode) {
+    const pin = String(pincode || "").trim();
+    if (!/^\d{6}$/.test(pin)) {
+      throw new Error("Enter a valid 6-digit PIN code.");
+    }
+
+    return apiFetch(`/delhivery/pincode?pincode=${encodeURIComponent(pin)}`, {
+      method: "GET",
     });
   }
 
@@ -1108,6 +1165,7 @@ const sku = order?.firstLineItemSku || order?.sku || "";
     saveSessionToken: setSessionToken,
     fetchSession,
     fetchDashboardSummary,
+    checkPincode,
     refreshAuthState,
     bootstrapAuth,
     requestOtp,
