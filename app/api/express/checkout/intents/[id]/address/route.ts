@@ -88,7 +88,11 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
   }
 
   if (BLOCKED_STATUSES.includes(intent.status)) {
-    return jsonWithCors(req, { ok: false, error: `Intent status ${intent.status} cannot be updated` }, { status: 409 });
+    return jsonWithCors(
+      req,
+      { ok: false, error: `Intent status ${intent.status} cannot be updated` },
+      { status: 409 }
+    );
   }
 
   if (intent.expiresAt && intent.expiresAt <= new Date()) {
