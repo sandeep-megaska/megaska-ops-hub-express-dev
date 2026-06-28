@@ -1,3 +1,4 @@
+import type { Prisma } from "../../../../../../../generated/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionTokenFromRequest } from "../../../../../../../services/auth/session";
 import { withCors, handleOptions } from "../../../../../_lib/cors";
@@ -35,7 +36,7 @@ type DiscountCalculation = {
   code: string;
   title: string;
   discountAmountPaise: number;
-  rawShopifyPayload: Record<string, unknown>;
+  rawShopifyPayload: Prisma.InputJsonObject;
 };
 
 function calculateKnownDiscount(input: { code: string; subtotalAmountPaise: number; requestedDiscountAmountPaise?: number; rawShopifyPayload?: unknown }): DiscountCalculation | null {
@@ -58,7 +59,7 @@ function calculateKnownDiscount(input: { code: string; subtotalAmountPaise: numb
         discountValue: 15,
         discountAmountPaise,
         source: "megaska_known_coupon",
-        upstream: input.rawShopifyPayload ?? null,
+        upstream: (input.rawShopifyPayload ?? null) as Prisma.InputJsonValue | null,
       },
     };
   }
@@ -76,7 +77,7 @@ function calculateKnownDiscount(input: { code: string; subtotalAmountPaise: numb
         discountValue: discountAmountPaise,
         discountAmountPaise,
         source: "client_supplied_validated_amount",
-        upstream: input.rawShopifyPayload ?? null,
+        upstream: (input.rawShopifyPayload ?? null) as Prisma.InputJsonValue | null,
       },
     };
   }
