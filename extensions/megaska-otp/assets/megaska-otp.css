@@ -917,3 +917,13 @@
 .megaska-express-inline { grid-template-columns: 1fr auto; }
 .megaska-express-inline button { border: 1px solid #0f172a; border-radius: 12px; background: #0f172a; color: #fff; padding: 0 14px; cursor: pointer; }
 @media (max-width: 520px) { .megaska-express-dialog { max-width: 100%; min-width: 0; } .megaska-express-fields { grid-template-columns: 1fr; } }
+
+.megaska-express-modal-header { align-items:center; display:flex; gap:12px; margin:0 0 12px; }
+.megaska-express-logo { align-items:center; background:#0f172a; border-radius:14px; color:#fff; display:inline-flex; font-weight:800; justify-content:center; min-height:44px; min-width:44px; overflow:hidden; padding:7px; }
+.megaska-express-logo-img { max-height:38px; max-width:120px; object-fit:contain; }
+.megaska-express-logo-text { max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.megaska-express-line { align-items:center; display:grid; gap:8px; grid-template-columns:48px 1fr auto; margin:8px 0; }
+.megaska-express-line span img, .megaska-express-line span i { background:#e2e8f0; border-radius:12px; display:block; height:48px; object-fit:cover; width:48px; }
+.megaska-express-line b, .megaska-express-line em { display:block; font-size:13px; font-style:normal; }
+.megaska-express-line em { color:#64748b; }
+.megaska-express-chip { background:#ecfdf5; border:1px solid #86efac; border-radius:999px; color:#166534; font-size:12px; margin:6px 0 0; padding:7px 10px; }

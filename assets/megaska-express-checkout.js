@@ -143,6 +143,39 @@
     return line.product_title || line.productTitle || line.title || line.name || line.variantTitle || "Item";
   }
 
+  function lineVariantTitle(line) {
+    const title = line.variant_title || line.variantTitle || line.options_with_values?.map?.((option) => option.value).filter(Boolean).join(" / ") || "";
+    return title && title !== "Default Title" ? title : "";
+  }
+
+  function lineImage(line) {
+    if (line.image) return line.image;
+    if (line.featured_image?.url) return line.featured_image.url;
+    if (line.featuredImage?.url) return line.featuredImage.url;
+    return "";
+  }
+
+  function shopLabel() {
+    const shop = getCurrentShopDomain();
+    if (!shop) return "Megaska";
+    return shop.replace(/\.myshopify\.com$/, "").split(/[.-]/).filter(Boolean).map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ") || "Megaska";
+  }
+
+  function logoMarkup() {
+    const logoUrl = window.MEGASKA_SHOP_LOGO_URL || window.MEGASKA_STORE_LOGO_URL || window.MEGASKA_LOGO_URL || "";
+    if (logoUrl) return `<img class="megaska-express-logo-img" src="${escapeHtml(logoUrl)}" alt="${escapeHtml(shopLabel())}" loading="lazy">`;
+    return `<span class="megaska-express-logo-text">${escapeHtml(shopLabel())}</span>`;
+  }
+
+  function discountMeta(discount) {
+    const raw = discount?.rawShopifyPayload || {};
+    return {
+      code: discount?.code || raw.discountCode || discount?.title || "Discount",
+      value: raw.discountValue,
+      type: raw.discountType,
+    };
+  }
+
   function linePricePaise(line) {
     const fallback = Number(line.price || 0) * Number(line.quantity || 1);
     const value = line.line_price ?? line.linePrice ?? line.final_line_price ?? line.pricePaise ?? line.totalAmountPaise ?? fallback;
@@ -191,21 +224,25 @@
 
     root.innerHTML = `
       ${state.error ? `<div class="megaska-express-alert" role="alert">${escapeHtml(state.error)}</div>` : ""}
+      <header class="megaska-express-modal-header">
+        <div class="megaska-express-logo">${logoMarkup()}</div>
+        <div><p class="megaska-express-eyebrow">Secure Checkout</p><h1>Express Checkout</h1></div>
+      </header>
       <div class="megaska-express-grid">
         <section class="megaska-express-card megaska-express-summary">
           <h2>Order summary</h2>
           <div class="megaska-express-lines">
             ${lines.length ? lines.map((line) => `
               <article class="megaska-express-line">
-                ${line.image ? `<img src="${escapeHtml(line.image)}" alt="${escapeHtml(lineTitle(line))}" loading="lazy">` : `<div class="megaska-express-line-placeholder"></div>`}
-                <div><h3>${escapeHtml(lineTitle(line))}</h3><p>Qty: ${escapeHtml(line.quantity || 1)}</p></div>
+                ${lineImage(line) ? `<img src="${escapeHtml(lineImage(line))}" alt="${escapeHtml(lineTitle(line))}" loading="lazy">` : `<div class="megaska-express-line-placeholder"></div>`}
+                <div><h3>${escapeHtml(lineTitle(line))}</h3><p>${lineVariantTitle(line) ? `${escapeHtml(lineVariantTitle(line))} · ` : ""}Qty: ${escapeHtml(line.quantity || 1)}</p></div>
                 <strong>${formatMoney(linePricePaise(line), intent.currency)}</strong>
               </article>`).join("") : `<p class="megaska-express-muted">Cart details are unavailable for this intent.</p>`}
           </div>
           <div class="megaska-express-totals">
             <p><span>Subtotal</span><strong>${formatMoney(intent.subtotalAmountPaise, intent.currency)}</strong></p>
             <p><span>Shipping</span><strong>${formatMoney(intent.shippingAmountPaise, intent.currency)}</strong></p>
-            <p><span>Discount</span><strong>- ${formatMoney(intent.discountAmountPaise, intent.currency)}</strong></p>
+            ${Number(intent.discountAmountPaise || 0) > 0 && discounts.length ? (() => { const discount = discountMeta(discounts[0]); return `<p><span>Discount: ${escapeHtml(discount.code)} applied${discount.type === "PERCENTAGE" && discount.value ? ` — ${escapeHtml(discount.value)}% OFF` : ""}<br><small>You saved ${formatMoney(intent.discountAmountPaise, intent.currency)}</small></span><strong>- ${formatMoney(intent.discountAmountPaise, intent.currency)}</strong></p>`; })() : `<p><span>Discount</span><strong>- ${formatMoney(intent.discountAmountPaise, intent.currency)}</strong></p>`}
             ${selectedMethod === "COD" ? `<p><span>COD fee</span><strong>${Number(intent.codFeeAmountPaise || 0) > 0 ? formatMoney(intent.codFeeAmountPaise, intent.currency) : "₹100 note"}</strong></p>` : ""}
             <p class="megaska-express-total"><span>Total</span><strong>${formatMoney(intent.totalAmountPaise, intent.currency)}</strong></p>
           </div>
@@ -229,7 +266,7 @@
           <form data-express-form="discount">
             <h2>Discount code</h2>
             <div class="megaska-express-inline"><input name="code" value="${escapeHtml(state.discountCode)}" placeholder="Enter code"><button class="megaska-express-btn" type="submit" ${state.busy === "discount" ? "disabled" : ""}>Apply</button></div>
-            ${discounts.length ? `<p class="megaska-express-chip">Applied: ${escapeHtml(discounts[0].code || discounts[0].title || "Discount")} <button type="button" data-express-action="remove-discount">Remove</button></p>` : ""}
+            ${discounts.length ? (() => { const discount = discountMeta(discounts[0]); return `<p class="megaska-express-chip"><strong>${escapeHtml(discount.code)} applied</strong> — You saved ${formatMoney(intent.discountAmountPaise, intent.currency)} <button type="button" data-express-action="remove-discount">Remove</button></p>`; })() : ""}
           </form>
 
           <div class="megaska-express-divider"></div>
@@ -316,7 +353,7 @@
         key: order.keyId,
         amount: order.amount,
         currency: order.currency || "INR",
-        name: "Megaska",
+        name: shopLabel(),
         description: "Express Checkout",
         order_id: order.id,
         prefill: { name: latestAddress()?.name || "", email: latestAddress()?.email || "", contact: state.intent?.phoneSnapshot || latestAddress()?.phone || "" },

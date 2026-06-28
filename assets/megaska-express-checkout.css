@@ -285,3 +285,47 @@
     grid-template-columns: 1fr auto;
   }
 }
+
+.megaska-express-modal-header {
+  align-items: center;
+  background: #fffaf4;
+  border: 1px solid rgba(32, 26, 22, 0.1);
+  border-radius: 22px;
+  box-shadow: 0 14px 42px rgba(58, 42, 28, 0.08);
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 14px 16px;
+}
+
+.megaska-express-modal-header h1 {
+  font-size: 1.35rem;
+  margin: 0;
+}
+
+.megaska-express-logo {
+  align-items: center;
+  background: #201a16;
+  border-radius: 16px;
+  color: #fffaf4;
+  display: inline-flex;
+  font-weight: 800;
+  justify-content: center;
+  min-height: 48px;
+  min-width: 48px;
+  overflow: hidden;
+  padding: 8px;
+}
+
+.megaska-express-logo-img {
+  max-height: 42px;
+  max-width: 132px;
+  object-fit: contain;
+}
+
+.megaska-express-logo-text {
+  max-width: 132px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
