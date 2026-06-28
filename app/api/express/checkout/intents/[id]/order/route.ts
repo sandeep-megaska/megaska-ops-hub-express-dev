@@ -100,7 +100,7 @@ function getCartLines(cartSnapshot: unknown) {
 async function shopifyAdminGraphql<T>(shopDomain: string, query: string, variables: JsonRecord) {
   const shopConfig = await resolveShopConfig(shopDomain);
   const normalizedShopDomain = normalizeShopDomain(shopConfig.shopDomain || shopDomain);
-  const accessToken = shopConfig.accessToken || String(process.env.SHOPIFY_ADMIN_ACCESS_TOKEN || "").trim();
+ const accessToken = shopConfig.accessToken;
 
   if (!normalizedShopDomain || !accessToken) {
     throw new Error("Shopify Admin API is not configured");
