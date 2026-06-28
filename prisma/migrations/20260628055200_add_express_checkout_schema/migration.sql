@@ -116,6 +116,7 @@ CREATE INDEX "ExpressCheckoutPayment_shopId_status_idx" ON "ExpressCheckoutPayme
 CREATE UNIQUE INDEX "ExpressCheckoutPayment_shopId_razorpayOrderId_key" ON "ExpressCheckoutPayment"("shopId", "razorpayOrderId");
 CREATE UNIQUE INDEX "ExpressCheckoutPayment_shopId_razorpayPaymentId_key" ON "ExpressCheckoutPayment"("shopId", "razorpayPaymentId");
 
+CREATE UNIQUE INDEX "ExpressCheckoutOrderLink_intentId_key" ON "ExpressCheckoutOrderLink"("intentId");
 CREATE UNIQUE INDEX "ExpressCheckoutOrderLink_shopId_intentId_key" ON "ExpressCheckoutOrderLink"("shopId", "intentId");
 CREATE INDEX "ExpressCheckoutOrderLink_shopId_id_idx" ON "ExpressCheckoutOrderLink"("shopId", "id");
 CREATE INDEX "ExpressCheckoutOrderLink_shopId_intentId_idx" ON "ExpressCheckoutOrderLink"("shopId", "intentId");
