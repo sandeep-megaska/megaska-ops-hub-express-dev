@@ -52,7 +52,7 @@ export async function OPTIONS(req: NextRequest) {
   return handleOptions(req);
 }
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   const shop = await requireExpressCheckoutShop(req);
 
   if ("error" in shop) {
@@ -65,7 +65,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     return jsonWithCors(req, { ok: false, error: auth.error }, { status: auth.status });
   }
 
-  const intentId = String(params.id || "").trim();
+  const intentId = String((await context.params).id || "").trim();
   const customerProfileId = String(auth.customer.id || "").trim();
 
   if (!intentId) {
