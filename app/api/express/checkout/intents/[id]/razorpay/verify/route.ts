@@ -91,7 +91,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
 
   if (!verified) {
     if (payment) {
-      await prisma.expressCheckoutPayment.updateMany({ where: paymentWhere, data: { status: "FAILED", failureReason: "Invalid Razorpay signature", rawGatewayPayload: body } });
+      await prisma.expressCheckoutPayment.updateMany({ where: paymentWhere, data: { status: "FAILED", failureReason: "Invalid Razorpay signature", rawGatewayPayload: JSON.parse(JSON.stringify(body)) } });
     }
 
     return jsonWithCors(req, { ok: false, error: "Invalid Razorpay signature" }, { status: 400 });
@@ -106,7 +106,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
         status: "CONFIRMED",
         razorpayPaymentId,
         razorpaySignatureHash: crypto.createHash("sha256").update(razorpaySignature).digest("hex"),
-        rawGatewayPayload: body,
+        rawGatewayPayload: JSON.parse(JSON.stringify(body)),
         failureReason: null,
       },
     });
