@@ -150,97 +150,88 @@
   }
 
   async function apiFetch(path, options) {
-    const opts = Object.assign(
-      {
-        method: "GET",
-        credentials: "include",
-        headers: buildHeaders(),
-      },
-      options || {}
-    );
-
-    opts.headers = buildHeaders(opts.headers);
-    const endpoint = buildApiUrl(path);
-    const response = await fetch(endpoint, opts);
-    const contentType = response.headers.get("content-type") || "";
-    const text = await response.text();
-    const hasBody = text.length > 0;
-    let data = null;
-    let jsonOk = false;
-    let jsonError = "";
-
-const endpointUrl = buildApiUrl(path);
-
-if (path === "/otp/request") {
-  console.log("[Megaska OTP] send OTP fetch start", {
-    endpointUrl,
-  });
-}
-
-const response = await fetch(endpointUrl, opts);
-
-const contentType = response.headers.get("content-type") || "";
-
-let responseText = "";
-try {
-  responseText = await response.text();
-} catch {
-  responseText = "";
-}
-
-const hasBody = Boolean(responseText);
-
-let data = null;
-let jsonOk = false;
-
-if (hasBody) {
-  try {
-    data = JSON.parse(responseText);
-    jsonOk = true;
-  } catch (error) {
-    jsonError =
-      error instanceof Error
-        ? error.message
-        : "Unable to parse JSON";
-  }
-}
-
-logRuntimeFetch(path, {
-  endpoint: endpointUrl,
-  status: response.status,
-  hasBody,
-  contentType,
-  jsonOk,
-  jsonError,
-});
-
-if (path === "/otp/request") {
-  console.log("[Megaska OTP] send OTP response", {
-    status: response.status,
-    contentType,
-    bodyPresent: hasBody,
-  });
-}
-
-if (!hasBody && response.status !== 204) {
-  throw new Error("Empty server response");
-}
-
-if (hasBody && !jsonOk) {
-  throw new Error("Unexpected server response");
-}
-
-if (!response.ok) {
-  throw new Error(
-    parseApiError(
-      data,
-      `Request failed (${response.status})`,
-    ),
+  const opts = Object.assign(
+    {
+      method: "GET",
+      credentials: "include",
+      headers: buildHeaders(),
+    },
+    options || {}
   );
+
+  opts.headers = buildHeaders(opts.headers);
+
+  const endpointUrl = buildApiUrl(path);
+
+  if (path === "/otp/request") {
+    console.log("[Megaska OTP] send OTP fetch start", {
+      endpointUrl,
+    });
+  }
+
+  const response = await fetch(endpointUrl, opts);
+  const contentType = response.headers.get("content-type") || "";
+
+  let responseText = "";
+  try {
+    responseText = await response.text();
+  } catch {
+    responseText = "";
+  }
+
+  const hasBody = Boolean(responseText);
+  let data = null;
+  let jsonOk = false;
+  let jsonError = "";
+
+  if (hasBody) {
+    try {
+      data = JSON.parse(responseText);
+      jsonOk = true;
+    } catch (error) {
+      jsonError =
+        error instanceof Error
+          ? error.message
+          : "Unable to parse JSON";
+    }
+  }
+
+  logRuntimeFetch(path, {
+    endpoint: endpointUrl,
+    status: response.status,
+    hasBody,
+    contentType,
+    jsonOk,
+    jsonError,
+  });
+
+  if (path === "/otp/request") {
+    console.log("[Megaska OTP] send OTP response", {
+      status: response.status,
+      contentType,
+      bodyPresent: hasBody,
+    });
+  }
+
+  if (!hasBody && response.status !== 204) {
+    throw new Error("Empty server response");
+  }
+
+  if (hasBody && !jsonOk) {
+    throw new Error("Unexpected server response");
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      parseApiError(
+        data,
+        `Request failed (${response.status})`,
+      ),
+    );
+  }
+
+  return data;
 }
-
-return data;
-
   function extractCustomer(sessionPayload) {
     return (
       sessionPayload?.customer ||
