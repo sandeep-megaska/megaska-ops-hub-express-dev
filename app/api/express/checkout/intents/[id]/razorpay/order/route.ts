@@ -94,7 +94,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
         amountPaise: intent.totalAmountPaise,
         currency: intent.currency,
         razorpayOrderId: razorpayOrder.id,
-        rawGatewayPayload: razorpayOrder,
+        rawGatewayPayload: JSON.parse(JSON.stringify(razorpayOrder)),
       },
     });
 
