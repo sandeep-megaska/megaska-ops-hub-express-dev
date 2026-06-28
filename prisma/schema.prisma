@@ -1230,3 +1230,159 @@ model ExchangePaymentInvoice {
 
   @@index([requestId])
 }
+
+enum ExpressCheckoutIntentStatus {
+  CREATED
+  CUSTOMER_AUTHENTICATED
+  CART_SNAPSHOT_LOCKED
+  ADDRESS_CAPTURED
+  DISCOUNT_APPLIED
+  PAYMENT_METHOD_SELECTED
+  PAYMENT_PENDING
+  PAYMENT_CONFIRMED
+  ORDER_CREATING
+  ORDER_CREATED
+  FAILED
+  EXPIRED
+  CANCELLED
+}
+
+enum ExpressCheckoutPaymentMethod {
+  PREPAID
+  COD
+}
+
+enum ExpressCheckoutPaymentStatus {
+  NOT_REQUIRED
+  PENDING
+  CONFIRMED
+  FAILED
+  REFUNDED
+}
+
+enum ExpressCheckoutDiscountType {
+  MANUAL_CODE
+  AUTOMATIC
+}
+
+model ExpressCheckoutIntent {
+  id                    String                       @id @default(uuid())
+  shopId                String
+  customerProfileId     String?
+  sessionTokenHash      String?
+  status                ExpressCheckoutIntentStatus @default(CREATED)
+  phoneSnapshot         String?
+  cartToken             String?
+  shopifyCartId         String?
+  cartSnapshot          Json?
+  subtotalAmountPaise   Int                         @default(0)
+  discountAmountPaise   Int                         @default(0)
+  shippingAmountPaise   Int                         @default(0)
+  codFeeAmountPaise     Int                         @default(0)
+  totalAmountPaise      Int                         @default(0)
+  currency              String                      @default("INR")
+  selectedPaymentMethod ExpressCheckoutPaymentMethod?
+  expiresAt             DateTime?
+  createdAt             DateTime                    @default(now())
+  updatedAt             DateTime                    @updatedAt
+
+  addressSnapshots      ExpressCheckoutAddressSnapshot[]
+  discounts             ExpressCheckoutDiscount[]
+  payments              ExpressCheckoutPayment[]
+  orderLink             ExpressCheckoutOrderLink?
+
+  @@index([shopId, id])
+  @@index([shopId, customerProfileId])
+  @@index([shopId, status])
+  @@index([shopId, sessionTokenHash])
+  @@index([shopId, cartToken])
+  @@index([shopId, shopifyCartId])
+}
+
+model ExpressCheckoutAddressSnapshot {
+  id                String                @id @default(uuid())
+  shopId            String
+  intentId          String
+  customerProfileId String?
+  name              String
+  phone             String
+  email             String?
+  address1          String
+  address2          String?
+  city              String
+  province          String
+  country           String                @default("India")
+  zip               String
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+
+  intent            ExpressCheckoutIntent @relation(fields: [intentId], references: [id], onDelete: Cascade)
+
+  @@index([shopId, id])
+  @@index([shopId, intentId])
+  @@index([shopId, customerProfileId])
+}
+
+model ExpressCheckoutDiscount {
+  id                  String                      @id @default(uuid())
+  shopId              String
+  intentId            String
+  type                ExpressCheckoutDiscountType
+  code                String?
+  title               String?
+  discountAmountPaise Int                         @default(0)
+  rawShopifyPayload   Json?
+  createdAt           DateTime                    @default(now())
+  updatedAt           DateTime                    @updatedAt
+
+  intent              ExpressCheckoutIntent       @relation(fields: [intentId], references: [id], onDelete: Cascade)
+
+  @@index([shopId, id])
+  @@index([shopId, intentId])
+  @@index([shopId, code])
+}
+
+model ExpressCheckoutPayment {
+  id                    String                       @id @default(uuid())
+  shopId                String
+  intentId              String
+  method                ExpressCheckoutPaymentMethod
+  status                ExpressCheckoutPaymentStatus @default(PENDING)
+  amountPaise           Int                          @default(0)
+  currency              String                       @default("INR")
+  razorpayOrderId       String?
+  razorpayPaymentId     String?
+  razorpaySignatureHash String?
+  failureReason         String?
+  rawGatewayPayload     Json?
+  createdAt             DateTime                     @default(now())
+  updatedAt             DateTime                     @updatedAt
+
+  intent                ExpressCheckoutIntent        @relation(fields: [intentId], references: [id], onDelete: Cascade)
+
+  @@index([shopId, id])
+  @@index([shopId, intentId])
+  @@index([shopId, status])
+  @@unique([shopId, razorpayOrderId])
+  @@unique([shopId, razorpayPaymentId])
+}
+
+model ExpressCheckoutOrderLink {
+  id                String                @id @default(uuid())
+  shopId            String
+  intentId          String                @unique
+  draftOrderId      String?
+  draftOrderName    String?
+  shopifyOrderId    String?
+  shopifyOrderName  String?
+  financialStatus   String?
+  fulfillmentStatus String?
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+
+  intent            ExpressCheckoutIntent @relation(fields: [intentId], references: [id], onDelete: Cascade)
+
+  @@index([shopId, id])
+  @@index([shopId, intentId])
+  @@index([shopId, shopifyOrderId])
+}
