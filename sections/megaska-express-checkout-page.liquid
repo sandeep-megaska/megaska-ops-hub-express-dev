@@ -1,0 +1,29 @@
+{{ 'megaska-express-checkout.css' | asset_url | stylesheet_tag }}
+<script src="{{ 'megaska-express-checkout.js' | asset_url }}" defer="defer"></script>
+
+<div id="megaska-express-checkout-page" class="megaska-express-page">
+  <div class="megaska-express-shell">
+    <header class="megaska-express-header">
+      <p class="megaska-express-eyebrow">Megaska Express Checkout</p>
+      <h1>Complete your order</h1>
+      <p>Confirm your delivery details and payment method to place your order.</p>
+    </header>
+
+    <div id="megaska-express-checkout-root" class="megaska-express-root" data-page="express-checkout">
+      <div class="megaska-express-loading">Loading checkout...</div>
+    </div>
+
+    <noscript>
+      <div class="megaska-express-noscript">
+        Please enable JavaScript to use Express Checkout.
+      </div>
+    </noscript>
+  </div>
+</div>
+
+{% schema %}
+{
+  "name": "Megaska Express Checkout",
+  "settings": []
+}
+{% endschema %}
