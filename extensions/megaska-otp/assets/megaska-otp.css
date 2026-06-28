@@ -876,3 +876,19 @@
   margin-top: 10px;
   font-size: 14px;
 }
+
+.megaska-express-dialog { max-width: 560px; }
+.megaska-express-modal h3 { margin: 12px 0 8px; font-size: 16px; color: #0f172a; }
+.megaska-express-spinner { text-align: center; color: #64748b; padding: 18px 0; }
+.megaska-express-progress { display: flex; justify-content: center; gap: 8px; margin: 8px 0 14px; flex-wrap: wrap; }
+.megaska-express-progress span { border: 1px solid #e2e8f0; border-radius: 999px; color: #334155; font-size: 12px; padding: 6px 9px; background: #f8fafc; }
+.megaska-express-summary { border: 1px solid #e2e8f0; border-radius: 14px; padding: 12px; background: #fff; margin-bottom: 12px; }
+.megaska-express-summary p, .megaska-express-total { display: flex; justify-content: space-between; gap: 12px; margin: 7px 0; color: #334155; font-size: 14px; }
+.megaska-express-total { border-top: 1px solid #e2e8f0; padding-top: 10px; color: #0f172a; }
+.megaska-express-stack { display: grid; gap: 10px; margin: 12px 0; }
+.megaska-express-stack input:not([type='radio']) { width: 100%; border: 1px solid #cbd5e1; border-radius: 12px; padding: 11px 12px; font: inherit; color: #0f172a; background: #fff; }
+.megaska-express-stack input:disabled { background: #f8fafc; color: #64748b; }
+.megaska-express-fields, .megaska-express-inline { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.megaska-express-inline { grid-template-columns: 1fr auto; }
+.megaska-express-inline button { border: 1px solid #0f172a; border-radius: 12px; background: #0f172a; color: #fff; padding: 0 14px; cursor: pointer; }
+@media (max-width: 520px) { .megaska-express-dialog { max-width: 100%; min-width: 0; } .megaska-express-fields { grid-template-columns: 1fr; } }

@@ -1,5 +1,5 @@
 (function () {
-  const API_BASE = "https://megaska-ops-hub-express-dev.vercel.app/api";
+  const API_BASE = String(window.MEGASKA_API_BASE || "/apps/megaska/api").replace(/\/$/, "");
   const SESSION_KEY = "megaska_session_token";
   const ACCOUNT_ENTRY_SELECTORS = [
     "[data-megaska-open-login]",
