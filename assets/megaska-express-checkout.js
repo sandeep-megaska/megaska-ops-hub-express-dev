@@ -2,7 +2,7 @@
   const root = document.getElementById("megaska-express-checkout-root");
   if (!root) return;
 
-  const API_BASE = "https://megaska-ops-hub-express-dev.vercel.app/api";
+  const API_BASE = String(window.MEGASKA_API_BASE || "/apps/megaska/api").replace(/\/$/, "");
   const SESSION_KEY = "megaska_session_token";
   const COD_FEE_NOTE = "COD handling fee: ₹100. This fee will be added only when backend fee support is enabled.";
 
