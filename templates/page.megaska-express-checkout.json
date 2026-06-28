@@ -1,0 +1,11 @@
+{
+  "sections": {
+    "main": {
+      "type": "megaska-express-checkout-page",
+      "settings": {}
+    }
+  },
+  "order": [
+    "main"
+  ]
+}
