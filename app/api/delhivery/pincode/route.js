@@ -128,6 +128,9 @@ async function handlePincode(req) {
       return withCors(
         NextResponse.json({
           ok: true,
+          pincode: pin,
+          serviceable: false,
+          error: "Delivery is not available for this PIN code.",
           pin,
           isServiceable: false,
           isCod,
@@ -204,6 +207,11 @@ async function handlePincode(req) {
     return withCors(
       NextResponse.json({
         ok: true,
+        pincode: pin,
+        serviceable: isServiceable,
+        state: stateCode,
+        stateName: stateCode,
+        estimatedDeliveryDate: estimatedDate,
         pin,
         isServiceable,
         isCod,

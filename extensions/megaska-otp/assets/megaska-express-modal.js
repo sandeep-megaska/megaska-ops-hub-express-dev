@@ -14,6 +14,16 @@
     paymentStarted: false,
     error: "",
     discountCode: "",
+    addressDraft: {},
+    pincode: "",
+    pincodeStatus: "idle",
+    pincodeMessage: "Enter 6-digit PIN code to check delivery.",
+    pincodeEta: "",
+    pincodeCity: "",
+    pincodeState: "",
+    lastCheckedPincode: "",
+    pincodeCache: {},
+    pincodeTimer: null,
   };
 
   function debugLog(message, payload) {
@@ -64,6 +74,90 @@
     const data = await res.json().catch(() => null);
     if (!res.ok || data?.ok === false) throw new Error(data?.error || data?.message || `Request failed (${res.status})`);
     return data;
+  }
+
+
+  function normalizePincodeResponse(payload, pincode) {
+    const body = payload && typeof payload === "object" ? payload : {};
+    const city = String(body.city || body.district || "").trim();
+    const province = String(body.state || body.stateName || body.province || body.stateCode || "").trim();
+    const eta = body.estimatedDeliveryDate || body.eta || body.edd || body.deliveryDate || body.estimatedDate || "";
+    const serviceable = body.serviceable === true || body.isServiceable === true || body.ok === true && body.serviceable !== false && body.isServiceable !== false;
+    return {
+      ok: body.ok !== false,
+      serviceable,
+      pincode: String(body.pincode || body.postalCode || body.pin || pincode || "").trim(),
+      city,
+      province,
+      eta: String(eta || "").trim(),
+      message: String(body.error || body.message || "").trim(),
+    };
+  }
+
+  function formatEta(value) {
+    if (!value) return "";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value);
+    try { return new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric" }).format(date); } catch (_error) { return String(value); }
+  }
+
+  function setPincodeState(status, message, details) {
+    state.pincodeStatus = status;
+    state.pincodeMessage = message;
+    state.pincodeEta = details?.eta || "";
+    state.pincodeCity = details?.city || "";
+    state.pincodeState = details?.province || "";
+    const modal = ensureModal();
+    const messageEl = modal.querySelector("[data-express-pincode-message]");
+    if (messageEl) {
+      messageEl.textContent = message;
+      messageEl.setAttribute("data-status", status);
+    }
+    const etaEl = modal.querySelector("[data-express-pincode-eta]");
+    if (etaEl) etaEl.textContent = state.pincodeEta ? `Estimated delivery by ${formatEta(state.pincodeEta)}` : "";
+  }
+
+  function applyPincodeResult(result) {
+    state.lastCheckedPincode = result.pincode || state.pincode;
+    if (result.serviceable) {
+      if (result.city) state.addressDraft.city = result.city;
+      if (result.province) state.addressDraft.province = result.province;
+      setPincodeState("serviceable", result.eta ? "Delivery available" : "Delivery available for this PIN code.", result);
+      const modal = ensureModal();
+      const cityInput = modal.querySelector('[name="city"]');
+      const provinceInput = modal.querySelector('[name="province"]');
+      if (cityInput && result.city) cityInput.value = result.city;
+      if (provinceInput && result.province) provinceInput.value = result.province;
+      return;
+    }
+    setPincodeState("unserviceable", "Delivery is not available for this PIN code.", {});
+  }
+
+  async function checkPincode(pincode) {
+    if (state.pincodeCache[pincode]) { applyPincodeResult(state.pincodeCache[pincode]); return; }
+    if (state.lastCheckedPincode === pincode && state.pincodeStatus === "serviceable") return;
+    state.lastCheckedPincode = pincode;
+    setPincodeState("checking", "Checking delivery...", {});
+    try {
+      const result = normalizePincodeResponse(await apiFetch(`/delhivery/pincode?pincode=${encodeURIComponent(pincode)}`), pincode);
+      state.pincodeCache[pincode] = result;
+      if (state.pincode !== pincode) return;
+      applyPincodeResult(result);
+    } catch (_error) {
+      setPincodeState("error", "Unable to check delivery right now. Please try again.", {});
+    }
+  }
+
+  function schedulePincodeCheck(rawValue) {
+    const pincode = String(rawValue || "").replace(/\D/g, "").slice(0, 6);
+    state.pincode = pincode;
+    state.addressDraft.zip = pincode;
+    if (state.pincodeTimer) clearTimeout(state.pincodeTimer);
+    if (!pincode) { state.lastCheckedPincode = ""; setPincodeState("idle", "Enter 6-digit PIN code to check delivery.", {}); return; }
+    if (pincode.length < 6) { state.lastCheckedPincode = ""; setPincodeState("idle", "Enter 6-digit PIN code to check delivery.", {}); return; }
+    if (!/^\d{6}$/.test(pincode)) { state.lastCheckedPincode = ""; setPincodeState("idle", "Enter a valid 6-digit PIN code.", {}); return; }
+    if (state.pincodeCache[pincode]) { applyPincodeResult(state.pincodeCache[pincode]); return; }
+    state.pincodeTimer = setTimeout(() => checkPincode(pincode), 300);
   }
 
   function money(paise, currency) {
@@ -135,6 +229,7 @@
     modal.addEventListener("click", (event) => { if (event.target.closest("[data-express-close]")) close(); });
     modal.addEventListener("submit", onSubmit);
     modal.addEventListener("change", onChange);
+    modal.addEventListener("input", onInput);
     modal.addEventListener("click", onActionClick);
     document.body.appendChild(modal);
     return modal;
@@ -162,8 +257,8 @@
   }
 
   function renderCheckout(root) {
-    const intent = state.intent || {}; const currentAddress = address(); const selected = payMethod();
-    root.innerHTML = `${state.error ? `<p class="megaska-otp-error">${escapeHtml(state.error)}</p>` : ""}<h2 id="megaska-express-title" class="megaska-otp-step-title">Express checkout</h2><div class="megaska-express-progress"><span>Address</span><span>Discount</span><span>Payment</span></div><section class="megaska-express-summary"><h3>Cart snapshot</h3>${lines().map((line) => `<p><span>${escapeHtml(line.product_title || line.title || "Item")} × ${escapeHtml(line.quantity || 1)}</span><strong>${money(line.line_price ?? line.final_line_price ?? line.price, intent.currency)}</strong></p>`).join("") || `<p class="megaska-otp-step-subtitle">Cart details unavailable.</p>`}<p class="megaska-express-total"><span>Total</span><strong>${money(intent.totalAmountPaise, intent.currency)}</strong></p></section><form data-express-form="address" class="megaska-express-stack"><h3>Delivery address</h3><input name="name" value="${escapeHtml(currentAddress.name || "")}" placeholder="Full name" required><input name="email" value="${escapeHtml(currentAddress.email || state.customer?.email || "")}" placeholder="Email" type="email"><input value="${escapeHtml(intent.phoneSnapshot || currentAddress.phone || "Verified phone")}" disabled><input name="address1" value="${escapeHtml(currentAddress.address1 || state.customer?.addressLine1 || "")}" placeholder="Address line 1" required><input name="address2" value="${escapeHtml(currentAddress.address2 || state.customer?.addressLine2 || "")}" placeholder="Address line 2"><div class="megaska-express-fields"><input name="city" value="${escapeHtml(currentAddress.city || state.customer?.city || "")}" placeholder="City" required><input name="province" value="${escapeHtml(currentAddress.province || state.customer?.stateProvince || "")}" placeholder="State" required></div><div class="megaska-express-fields"><input name="zip" value="${escapeHtml(currentAddress.zip || state.customer?.postalCode || "")}" placeholder="PIN code" required><input name="country" value="${escapeHtml(currentAddress.country || "India")}" placeholder="Country"></div><p class="megaska-otp-step-subtitle">Address will be saved automatically when you place the order.</p></form><form data-express-form="discount" class="megaska-express-stack"><h3>Discount</h3><div class="megaska-express-inline"><input name="code" value="${escapeHtml(state.discountCode)}" placeholder="Discount code"><button type="submit" ${state.busy ? "disabled" : ""}>Apply</button></div></form><section class="megaska-express-stack"><h3>Payment method</h3><label><input type="radio" name="paymentMethod" value="PREPAID" ${selected === "PREPAID" ? "checked" : ""}> Razorpay / prepaid</label><label><input type="radio" name="paymentMethod" value="COD" ${selected === "COD" ? "checked" : ""}> Cash on delivery</label><button class="megaska-otp-primary-btn" data-express-action="place-order" type="button" ${state.busy ? "disabled" : ""}>${state.busy ? "Processing..." : selected === "COD" ? "Place COD order" : "Pay now"}</button></section>`;
+    const intent = state.intent || {}; const currentAddress = Object.assign({}, address(), state.addressDraft); const selected = payMethod();
+    root.innerHTML = `${state.error ? `<p class="megaska-otp-error">${escapeHtml(state.error)}</p>` : ""}<h2 id="megaska-express-title" class="megaska-otp-step-title">Express checkout</h2><div class="megaska-express-progress"><span>Address</span><span>Discount</span><span>Payment</span></div><section class="megaska-express-summary"><h3>Cart snapshot</h3>${lines().map((line) => `<p><span>${escapeHtml(line.product_title || line.title || "Item")} × ${escapeHtml(line.quantity || 1)}</span><strong>${money(line.line_price ?? line.final_line_price ?? line.price, intent.currency)}</strong></p>`).join("") || `<p class="megaska-otp-step-subtitle">Cart details unavailable.</p>`}<p class="megaska-express-total"><span>Total</span><strong>${money(intent.totalAmountPaise, intent.currency)}</strong></p></section><form data-express-form="address" class="megaska-express-stack"><h3>Delivery address</h3><input name="name" value="${escapeHtml(currentAddress.name || "")}" placeholder="Full name" required><input name="email" value="${escapeHtml(currentAddress.email || state.customer?.email || "")}" placeholder="Mobile / Email" type="email"><input value="${escapeHtml(intent.phoneSnapshot || currentAddress.phone || "Verified phone")}" disabled><input name="zip" value="${escapeHtml(currentAddress.zip || state.customer?.postalCode || "")}" placeholder="PIN code" inputmode="numeric" pattern="\\d{6}" maxlength="6" required><p class="megaska-express-pincode-status" data-express-pincode-message data-status="${escapeHtml(state.pincodeStatus)}">${escapeHtml(state.pincodeMessage)}</p><p class="megaska-express-pincode-eta" data-express-pincode-eta>${state.pincodeEta ? `Estimated delivery by ${escapeHtml(formatEta(state.pincodeEta))}` : ""}</p><div class="megaska-express-fields"><input name="city" value="${escapeHtml(currentAddress.city || state.customer?.city || "")}" placeholder="City" required><input name="province" value="${escapeHtml(currentAddress.province || state.customer?.stateProvince || "")}" placeholder="State" required></div><input name="address1" value="${escapeHtml(currentAddress.address1 || state.customer?.addressLine1 || "")}" placeholder="Address line 1" required><input name="address2" value="${escapeHtml(currentAddress.address2 || state.customer?.addressLine2 || "")}" placeholder="Address line 2 / Landmark"><input name="country" value="${escapeHtml(currentAddress.country || "India")}" placeholder="Country"><p class="megaska-otp-step-subtitle">Address will be saved automatically when you place the order.</p></form><form data-express-form="discount" class="megaska-express-stack"><h3>Discount</h3><div class="megaska-express-inline"><input name="code" value="${escapeHtml(state.discountCode)}" placeholder="Discount code"><button type="submit" ${state.busy ? "disabled" : ""}>Apply</button></div></form><section class="megaska-express-stack"><h3>Payment method</h3><label><input type="radio" name="paymentMethod" value="PREPAID" ${selected === "PREPAID" ? "checked" : ""}> Razorpay / prepaid</label><label><input type="radio" name="paymentMethod" value="COD" ${selected === "COD" ? "checked" : ""}> Cash on delivery</label><button class="megaska-otp-primary-btn" data-express-action="place-order" type="button" ${state.busy ? "disabled" : ""}>${state.busy ? "Processing..." : selected === "COD" ? "Place COD order" : "Pay now"}</button></section>`;
   }
 
   async function refreshIntent() { const data = await apiFetch(`/express/checkout/intents/${encodeURIComponent(state.intent.id)}`); state.intent = data.intent; state.discountCode = state.intent?.discounts?.[0]?.code || state.discountCode; }
@@ -178,9 +273,9 @@
   }
 
   async function open(opts) {
-    state.open = true; state.step = "loading"; state.error = ""; state.busy = false; state.paymentStarted = false;
+    state.open = true; state.step = "loading"; state.error = ""; state.busy = false; state.paymentStarted = false; state.addressDraft = {}; state.pincode = ""; state.pincodeStatus = "idle"; state.pincodeMessage = "Enter 6-digit PIN code to check delivery."; state.pincodeEta = ""; state.pincodeCity = ""; state.pincodeState = ""; state.lastCheckedPincode = ""; state.pincodeCache = {};
     const modal = ensureModal(); modal.hidden = false; modal.setAttribute("aria-hidden", "false"); document.documentElement.classList.add("megaska-otp-open"); render();
-    try { if (!(await ensureAuthenticated(opts?.triggerEl, opts?.event))) { close(); return; } await createIntent(); state.step = "checkout"; debugLog("modal ready", { intentId: state.intent?.id }); render(); }
+    try { if (!(await ensureAuthenticated(opts?.triggerEl, opts?.event))) { close(); return; } await createIntent(); state.step = "checkout"; debugLog("modal ready", { intentId: state.intent?.id }); render(); const initialZip = ensureModal().querySelector('[name="zip"]')?.value || ""; if (initialZip) schedulePincodeCheck(initialZip); }
     catch (error) { state.step = "error"; state.error = error instanceof Error ? error.message : "Unable to prepare checkout."; render(); }
   }
 
@@ -190,7 +285,13 @@
     if (!form) throw new Error("Address form unavailable.");
     if (!form.reportValidity()) throw new Error("Please complete the delivery address.");
     const data = new FormData(form);
-    return { name: data.get("name"), email: data.get("email") || null, phone: state.intent.phoneSnapshot || state.customer?.phoneE164 || state.customer?.phone || "", address1: data.get("address1"), address2: data.get("address2") || null, city: data.get("city"), province: data.get("province"), country: data.get("country") || "India", zip: data.get("zip") };
+    const zip = String(data.get("zip") || "").trim();
+    const city = String(data.get("city") || "").trim();
+    const province = String(data.get("province") || "").trim();
+    if (!/^\d{6}$/.test(zip)) throw new Error("Enter a valid 6-digit PIN code.");
+    if (zip !== state.lastCheckedPincode || state.pincodeStatus !== "serviceable") throw new Error("Please confirm delivery availability for this PIN code.");
+    if (!city || !province) throw new Error("City and state are required for delivery.");
+    return { name: data.get("name"), email: data.get("email") || null, phone: state.intent.phoneSnapshot || state.customer?.phoneE164 || state.customer?.phone || "", address1: data.get("address1"), address2: data.get("address2") || null, city, province, country: data.get("country") || "India", zip };
   }
 
   async function saveAddressFromCheckout() {
@@ -202,6 +303,13 @@
   async function onSubmit(event) {
     const form = event.target.closest("[data-express-form]"); if (!form) return; event.preventDefault();
     try { state.busy = true; state.error = ""; render(); const intentId = encodeURIComponent(state.intent.id); const data = new FormData(form); if (form.dataset.expressForm === "address") await saveAddressFromCheckout(); if (form.dataset.expressForm === "discount") { const code = String(data.get("code") || "").trim(); if (!code) throw new Error("Enter a discount code."); await apiFetch(`/express/checkout/intents/${intentId}/discount`, { method: "POST", body: { code, discountAmountPaise: 0 } }); state.discountCode = code; } await refreshIntent(); state.busy = false; render(); } catch (error) { state.busy = false; state.error = error instanceof Error ? error.message : "Something went wrong."; render(); }
+  }
+
+  function onInput(event) {
+    const target = event.target;
+    if (!target.matches('[data-express-form="address"] input')) return;
+    state.addressDraft[target.name] = target.value;
+    if (target.name === "zip") schedulePincodeCheck(target.value);
   }
 
   async function onChange(event) {

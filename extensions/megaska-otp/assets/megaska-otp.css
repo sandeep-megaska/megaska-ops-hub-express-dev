@@ -452,6 +452,31 @@
   place-items: center;
 }
 
+.megaska-express-pincode-status {
+  min-height: 20px;
+  margin-top: -6px;
+  font-size: 13px;
+  text-align: left;
+}
+
+.megaska-express-pincode-status[data-status="serviceable"] {
+  color: #15803d;
+  font-weight: 700;
+}
+
+.megaska-express-pincode-status[data-status="unserviceable"],
+.megaska-express-pincode-status[data-status="error"] {
+  color: #dc2626;
+  font-weight: 700;
+}
+
+.megaska-express-pincode-eta {
+  margin-top: -10px;
+  color: #15803d;
+  font-size: 13px;
+  text-align: left;
+}
+
 .megaska-otp-error {
   min-height: 20px;
   margin-top: 4px;
