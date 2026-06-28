@@ -74,6 +74,33 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
   if (intent.selectedPaymentMethod !== "PREPAID") return jsonWithCors(req, { ok: false, error: "PREPAID payment method required" }, { status: 409 });
   if (intent.totalAmountPaise <= 0) return jsonWithCors(req, { ok: false, error: "Payment amount must be greater than 0" }, { status: 400 });
 
+  const existingPayment = await prisma.expressCheckoutPayment.findFirst({
+    where: { shopId: shop.shopId, intentId, method: "PREPAID", status: "PENDING", intent: { customerProfileId } },
+    orderBy: { createdAt: "desc" },
+  });
+
+  const existingRazorpayOrder = existingPayment?.rawGatewayPayload as RazorpayOrder | null;
+
+  if (existingPayment?.razorpayOrderId && existingRazorpayOrder?.id) {
+    return jsonWithCors(
+      req,
+      {
+        ok: true,
+        intent,
+        payment: existingPayment,
+        idempotent: true,
+        razorpayOrder: {
+          id: existingRazorpayOrder.id,
+          amount: existingRazorpayOrder.amount,
+          currency: existingRazorpayOrder.currency,
+          receipt: existingRazorpayOrder.receipt,
+          status: existingRazorpayOrder.status,
+          keyId: process.env.RAZORPAY_KEY_ID,
+        },
+      }
+    );
+  }
+
   let razorpayOrder: RazorpayOrder;
 
   try {

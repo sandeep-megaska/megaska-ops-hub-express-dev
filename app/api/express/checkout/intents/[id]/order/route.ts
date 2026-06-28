@@ -10,7 +10,7 @@ import { normalizeShopDomain, resolveShopConfig } from "../../../../../../../ser
 export const runtime = "nodejs";
 
 const SHOPIFY_API_VERSION = "2026-01";
-const BLOCKED_STATUSES = ["EXPIRED", "CANCELLED", "FAILED", "ORDER_CREATED"];
+const BLOCKED_STATUSES = ["EXPIRED", "CANCELLED", "FAILED", "ORDER_CREATED", "ORDER_CREATING"];
 
 type JsonRecord = Record<string, unknown>;
 
@@ -100,7 +100,7 @@ function getCartLines(cartSnapshot: unknown) {
 async function shopifyAdminGraphql<T>(shopDomain: string, query: string, variables: JsonRecord) {
   const shopConfig = await resolveShopConfig(shopDomain);
   const normalizedShopDomain = normalizeShopDomain(shopConfig.shopDomain || shopDomain);
- const accessToken = shopConfig.accessToken;
+  const accessToken = shopConfig.accessToken;
 
   if (!normalizedShopDomain || !accessToken) {
     throw new Error("Shopify Admin API is not configured");
@@ -188,7 +188,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     }
 
     const confirmedPayment = await prisma.expressCheckoutPayment.findFirst({
-      where: { shopId: shop.shopId, intentId, method: "PREPAID", status: "CONFIRMED" },
+      where: { shopId: shop.shopId, intentId, method: "PREPAID", status: "CONFIRMED", intent: { customerProfileId } },
       orderBy: { createdAt: "desc" },
     });
 
@@ -247,6 +247,31 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
         : undefined,
   };
 
+  const lockResult = await prisma.expressCheckoutIntent.updateMany({
+    where: {
+      shopId: shop.shopId,
+      id: intentId,
+      customerProfileId,
+      status: intent.status,
+    },
+    data: { status: "ORDER_CREATING" },
+  });
+
+  if (lockResult.count !== 1) {
+    const existingLink = await prisma.expressCheckoutOrderLink.findFirst({ where: { shopId: shop.shopId, intentId } });
+
+    if (existingLink) {
+      const refreshedIntent = await prisma.expressCheckoutIntent.findFirst({
+        where: { shopId: shop.shopId, id: intentId, customerProfileId },
+        include: { discounts: { orderBy: { createdAt: "desc" } }, orderLink: true },
+      });
+
+      return jsonWithCors(req, { ok: true, intent: refreshedIntent, orderLink: existingLink, shopifyOrder: null });
+    }
+
+    return jsonWithCors(req, { ok: false, error: "Order creation already in progress" }, { status: 409 });
+  }
+
   try {
     const created = await shopifyAdminGraphql<DraftOrderCreatePayload>(
       shop.shopDomain,
@@ -261,7 +286,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
 
     const createResult = created.draftOrderCreate;
     if (createResult?.userErrors?.length || !createResult?.draftOrder?.id) {
-      return jsonWithCors(req, { ok: false, error: userErrorMessage(createResult?.userErrors) }, { status: 502 });
+      throw new Error(userErrorMessage(createResult?.userErrors));
     }
 
     const completed = await shopifyAdminGraphql<DraftOrderCompletePayload>(
@@ -281,7 +306,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
 
     const completeResult = completed.draftOrderComplete;
     if (completeResult?.userErrors?.length || !completeResult?.draftOrder?.order?.id) {
-      return jsonWithCors(req, { ok: false, error: userErrorMessage(completeResult?.userErrors) }, { status: 502 });
+      throw new Error(userErrorMessage(completeResult?.userErrors));
     }
 
     const order = completeResult.draftOrder.order;
@@ -325,6 +350,11 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
 
     return jsonWithCors(req, { ok: true, intent: updatedIntent, orderLink, shopifyOrder: order }, { status: 201 });
   } catch (error) {
+    await prisma.expressCheckoutIntent.updateMany({
+      where: { shopId: shop.shopId, id: intentId, customerProfileId, status: "ORDER_CREATING" },
+      data: { status: intent.status },
+    });
+
     const message = error instanceof Error ? error.message : "Order creation failed";
     return jsonWithCors(req, { ok: false, error: message }, { status: 502 });
   }
