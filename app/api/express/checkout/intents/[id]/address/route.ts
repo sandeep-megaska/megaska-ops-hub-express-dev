@@ -16,10 +16,21 @@ function jsonWithCors(req: NextRequest, body: unknown, init?: ResponseInit) {
 }
 
 
-function requiredString(body: Record<string, unknown>, field: string) {
-  const value = typeof body[field] === "string" ? body[field].trim() : "";
+function stringFromAny(body: Record<string, unknown>, fields: string[]) {
+  for (const field of fields) {
+    const value = typeof body[field] === "string" ? body[field].trim() : "";
+    if (value) return value;
+  }
 
-  return value || null;
+  return null;
+}
+
+function requiredString(body: Record<string, unknown>, fields: string[], label: string) {
+  const value = stringFromAny(body, fields);
+
+  if (!value) return { ok: false as const, error: `${label} is required` };
+
+  return { ok: true as const, value };
 }
 
 export async function OPTIONS(req: NextRequest) {
@@ -56,18 +67,29 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     return jsonWithCors(req, { ok: false, error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const requiredFields = ["name", "phone", "address1", "city", "province", "zip"];
-  const address: Record<string, string> = {};
+  const requiredAddress = {
+    name: requiredString(body, ["name", "fullName"], "fullName"),
+    phone: requiredString(body, ["phone"], "phone"),
+    address1: requiredString(body, ["address1", "addressLine1"], "addressLine1"),
+    city: requiredString(body, ["city"], "city"),
+    province: requiredString(body, ["province", "state", "stateProvince"], "state"),
+    zip: requiredString(body, ["zip", "postalCode"], "postalCode"),
+    country: requiredString(body, ["country", "countryRegion"], "country"),
+  };
 
-  for (const field of requiredFields) {
-    const value = requiredString(body, field);
-
-    if (!value) {
-      return jsonWithCors(req, { ok: false, error: `${field} is required` }, { status: 400 });
-    }
-
-    address[field] = value;
+  for (const result of Object.values(requiredAddress)) {
+    if (!result.ok) return jsonWithCors(req, { ok: false, error: result.error }, { status: 400 });
   }
+
+  const address = {
+    name: requiredAddress.name.value,
+    phone: requiredAddress.phone.value,
+    address1: requiredAddress.address1.value,
+    city: requiredAddress.city.value,
+    province: requiredAddress.province.value,
+    zip: requiredAddress.zip.value,
+    country: requiredAddress.country.value,
+  };
 
   const intent = await prisma.expressCheckoutIntent.findFirst({
     where: {
@@ -100,23 +122,41 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
       customerProfileId,
       name: address.name,
       phone: address.phone,
-      email: requiredString(body, "email"),
+      email: stringFromAny(body, ["email"]),
       address1: address.address1,
-      address2: requiredString(body, "address2"),
+      address2: stringFromAny(body, ["address2", "addressLine2", "landmark"]),
       city: address.city,
       province: address.province,
-      country: requiredString(body, "country") || "India",
+      country: address.country,
       zip: address.zip,
     },
   });
 
-  await prisma.expressCheckoutIntent.updateMany({
-    where: {
-      shopId: shop.shopId,
-      id: intentId,
-      customerProfileId,
-    },
-    data: { status: "ADDRESS_CAPTURED" },
+  await prisma.$transaction(async (tx) => {
+    await tx.customerProfile.updateMany({
+      where: { id: customerProfileId, shopId: shop.shopId },
+      data: {
+        fullName: address.name,
+        phoneE164: address.phone,
+        email: stringFromAny(body, ["email"]),
+        addressLine1: address.address1,
+        addressLine2: stringFromAny(body, ["address2", "addressLine2", "landmark"]),
+        city: address.city,
+        stateProvince: address.province,
+        postalCode: address.zip,
+        countryRegion: address.country,
+        profileCompletedAt: new Date(),
+      },
+    });
+
+    await tx.expressCheckoutIntent.updateMany({
+      where: {
+        shopId: shop.shopId,
+        id: intentId,
+        customerProfileId,
+      },
+      data: { status: "ADDRESS_CAPTURED" },
+    });
   });
 
   const updatedIntent = await prisma.expressCheckoutIntent.findFirst({

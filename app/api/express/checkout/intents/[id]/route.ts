@@ -6,6 +6,7 @@ import {
   requireCustomerSessionForShop,
   requireExpressCheckoutShop,
 } from "../../../../../../lib/express-checkout/safety";
+import { getExpressCheckoutSettings } from "../../../../../../services/express-checkout/settings";
 
 export const runtime = "nodejs";
 
@@ -60,5 +61,28 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
     return jsonWithCors(req, { ok: false, error: "Intent not found" }, { status: 404 });
   }
 
-  return jsonWithCors(req, { ok: true, intent });
+  const customerAddress = {
+    name: auth.customer.fullName || [auth.customer.firstName, auth.customer.lastName].filter(Boolean).join(" ") || null,
+    phone: auth.customer.phoneE164 || null,
+    email: auth.customer.email || null,
+    address1: auth.customer.addressLine1 || null,
+    address2: auth.customer.addressLine2 || null,
+    city: auth.customer.city || null,
+    province: auth.customer.stateProvince || null,
+    country: auth.customer.countryRegion || "India",
+    zip: auth.customer.postalCode || null,
+  };
+  const hasCustomerAddress = Boolean(
+    customerAddress.name &&
+    customerAddress.phone &&
+    customerAddress.address1 &&
+    customerAddress.city &&
+    customerAddress.province &&
+    customerAddress.zip &&
+    customerAddress.country
+  );
+
+  const settings = await getExpressCheckoutSettings(shop.shopId);
+
+  return jsonWithCors(req, { ok: true, intent, customerDefaultAddress: hasCustomerAddress ? customerAddress : null, settings });
 }

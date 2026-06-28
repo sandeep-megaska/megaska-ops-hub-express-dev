@@ -10,7 +10,8 @@
     "lint": "eslint",
     "prisma:generate": "prisma generate",
     "postinstall": "prisma generate",
-    "dev:seed:mock-tracking": "ALLOW_MOCK_TRACKING_SEED=true node scripts/dev-seed-mock-tracking.mjs"
+    "dev:seed:mock-tracking": "ALLOW_MOCK_TRACKING_SEED=true node scripts/dev-seed-mock-tracking.mjs",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.6.0",

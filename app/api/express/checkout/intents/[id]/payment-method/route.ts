@@ -6,6 +6,7 @@ import {
   requireCustomerSessionForShop,
   requireExpressCheckoutShop,
 } from "../../../../../../../lib/express-checkout/safety";
+import { getExpressCheckoutSettings } from "../../../../../../../services/express-checkout/settings";
 
 export const runtime = "nodejs";
 
@@ -57,7 +58,10 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
   if (intent.expiresAt && intent.expiresAt <= new Date()) return jsonWithCors(req, { ok: false, error: "Intent expired" }, { status: 409 });
 
   const method = body.method;
-  const amountPaise = method === "COD" ? 0 : intent.totalAmountPaise;
+  const settings = await getExpressCheckoutSettings(shop.shopId);
+  const codFeeAmountPaise = method === "COD" ? settings.codFeeAmountPaise : 0;
+  const totalAmountPaise = Math.max(0, intent.subtotalAmountPaise + intent.shippingAmountPaise + codFeeAmountPaise - intent.discountAmountPaise);
+  const amountPaise = method === "COD" ? 0 : totalAmountPaise;
   const paymentStatus = method === "COD" ? "NOT_REQUIRED" : "PENDING";
 
   const result = await prisma.$transaction(async (tx) => {
@@ -65,7 +69,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
 
     const payment = await tx.expressCheckoutPayment.create({ data: { shopId: shop.shopId, intentId, method, status: paymentStatus, amountPaise, currency: intent.currency } });
 
-    await tx.expressCheckoutIntent.updateMany({ where: intentWhere, data: { selectedPaymentMethod: method, status: "PAYMENT_METHOD_SELECTED" } });
+    await tx.expressCheckoutIntent.updateMany({ where: intentWhere, data: { selectedPaymentMethod: method, codFeeAmountPaise, totalAmountPaise, status: "PAYMENT_METHOD_SELECTED" } });
     const updatedIntent = await tx.expressCheckoutIntent.findFirstOrThrow({ where: intentWhere });
 
     return { intent: updatedIntent, payment };
