@@ -4,7 +4,6 @@
 
   const API_BASE = String(window.MEGASKA_API_BASE || "/apps/megaska/api").replace(/\/$/, "");
   const SESSION_KEY = "megaska_session_token";
-  const COD_FEE_NOTE = "COD handling fee: ₹100. This fee will be added only when backend fee support is enabled.";
 
   const state = {
     intentId: new URLSearchParams(window.location.search).get("intent") || "",
@@ -275,7 +274,6 @@
             <p><span>Subtotal</span><strong>${formatMoney(intent.subtotalAmountPaise, intent.currency)}</strong></p>
             <p><span>Shipping</span><strong>${formatMoney(intent.shippingAmountPaise, intent.currency)}</strong></p>
             ${Number(intent.discountAmountPaise || 0) > 0 && discounts.length ? (() => { const discount = discountMeta(discounts[0]); return `<p><span>Discount: ${escapeHtml(discount.code)} applied${discount.type === "PERCENTAGE" && discount.value ? ` — ${escapeHtml(discount.value)}% OFF` : ""}<br><small>You saved ${formatMoney(intent.discountAmountPaise, intent.currency)}</small></span><strong>- ${formatMoney(intent.discountAmountPaise, intent.currency)}</strong></p>`; })() : `<p><span>Discount</span><strong>- ${formatMoney(intent.discountAmountPaise, intent.currency)}</strong></p>`}
-            ${selectedMethod === "COD" ? `<p><span>COD fee</span><strong>${Number(intent.codFeeAmountPaise || 0) > 0 ? formatMoney(intent.codFeeAmountPaise, intent.currency) : "₹100 note"}</strong></p>` : ""}
             <p class="megaska-express-total"><span>Total</span><strong>${formatMoney(intent.totalAmountPaise, intent.currency)}</strong></p>
           </div>
         </section>
@@ -296,8 +294,8 @@
           <div class="megaska-express-divider"></div>
 
           <form data-express-form="discount">
-            <h2>Discount code</h2>
-            <div class="megaska-express-inline"><input name="code" value="${escapeHtml(state.discountCode)}" placeholder="Enter code"><button class="megaska-express-btn" type="submit" ${state.busy === "discount" ? "disabled" : ""}>Apply</button></div>
+            <h2>Have a coupon?</h2>
+            <div class="megaska-express-inline"><input name="code" value="${escapeHtml(state.discountCode)}" placeholder="Enter coupon code"><button class="megaska-express-btn" type="submit" ${state.busy === "discount" ? "disabled" : ""}>Apply</button></div>
             ${discounts.length ? (() => { const discount = discountMeta(discounts[0]); return `<p class="megaska-express-chip"><strong>${escapeHtml(discount.code)} applied</strong> — You saved ${formatMoney(intent.discountAmountPaise, intent.currency)} <button type="button" data-express-action="remove-discount">Remove</button></p>`; })() : ""}
           </form>
 
@@ -305,10 +303,9 @@
 
           <div class="megaska-express-payment">
             <h2>Payment method</h2>
-            <label class="megaska-express-radio"><input type="radio" name="paymentMethod" value="PREPAID" ${selectedMethod === "PREPAID" ? "checked" : ""}> <span>PREPAID</span></label>
-            <label class="megaska-express-radio"><input type="radio" name="paymentMethod" value="COD" ${selectedMethod === "COD" ? "checked" : ""}> <span>COD</span></label>
+            <label class="megaska-express-radio"><input type="radio" name="paymentMethod" value="PREPAID" ${selectedMethod === "PREPAID" ? "checked" : ""}> <span><strong>Secure Online Payment</strong><small>UPI • Cards • Net Banking<br>(Powered by Razorpay)</small><b>Pay ${formatMoney(intent.totalAmountPaise, intent.currency)}</b></span></label>
+            <label class="megaska-express-radio"><input type="radio" name="paymentMethod" value="COD" ${selectedMethod === "COD" ? "checked" : ""}> <span><strong>Cash on Delivery</strong><small>Pay ${formatMoney(intent.totalAmountPaise, intent.currency)} on delivery<br>No advance payment. Pay the full amount on delivery.</small></span></label>
             ${state.paymentUpdating ? `<p class="megaska-express-note">Updating payment method...</p>` : ""}
-            ${selectedMethod === "COD" ? `<p class="megaska-express-note">${COD_FEE_NOTE}</p>` : ""}
             ${state.orderSubmitting ? `<p class="megaska-express-note">Placing your order securely. Please wait...</p>` : ""}
             <button class="megaska-express-btn megaska-express-btn--primary megaska-express-place" data-express-action="place-order" type="button" ${state.busy ? "disabled" : ""}>${state.orderSubmitting ? "Placing order..." : selectedMethod === "COD" ? "Place COD order" : "Pay now"}</button>
           </div>
