@@ -197,6 +197,18 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
   });
 
   if (!address) return jsonWithCors(req, { ok: false, error: "Address required" }, { status: 400 });
+  const missingAddressFields = [
+    ["fullName", address.name],
+    ["phone", address.phone],
+    ["addressLine1", address.address1],
+    ["city", address.city],
+    ["state", address.province],
+    ["postalCode", address.zip],
+    ["country", address.country],
+  ].filter(([, value]) => !String(value || "").trim()).map(([field]) => field);
+  if (missingAddressFields.length) {
+    return jsonWithCors(req, { ok: false, error: "Please complete the delivery address.", missingFields: missingAddressFields }, { status: 400 });
+  }
 
   const lineItems: JsonRecord[] = getCartLines(intent.cartSnapshot);
   if (!lineItems.length) {
