@@ -6,39 +6,22 @@ import {
   requireCustomerSessionForShop,
   requireExpressCheckoutShop,
 } from "../../../../../../../lib/express-checkout/safety";
-import { normalizeShopDomain } from "../../../../../../../services/shopify/shop";
-import { decryptShopifyToken } from "../../../../../../../services/shopify/token-crypto";
 import {
   attachAddressSnapshotToIntent,
   customerProfileToExpressAddress,
   latestCustomerAddressSnapshot,
   saveCustomerProfileAddress,
 } from "../../../../../../../services/express-checkout/address";
+import {
+  ShopifyAdminConfigError,
+  shopifyAdminGraphql,
+} from "../../../../../../../services/express-checkout/shopify-admin";
 
 export const runtime = "nodejs";
 
-const SHOPIFY_API_VERSION = "2026-01";
 const BLOCKED_STATUSES = ["EXPIRED", "CANCELLED", "FAILED", "ORDER_CREATED"];
 
 type JsonRecord = Record<string, unknown>;
-
-type ShopifyAdminShopDiagnostic = {
-  resolvedShopId: string | null;
-  requestShop: string | null;
-  myshopifyDomain: string | null;
-  installationStatus: string | null;
-  hasAccessToken: boolean;
-};
-
-class ControlledCheckoutError extends Error {
-  status: number;
-
-  constructor(status: number, message: string) {
-    super(message);
-    this.name = "ControlledCheckoutError";
-    this.status = status;
-  }
-}
 
 const INDIAN_STATE_CODES: Record<string, string> = {
   KL: "Kerala",
@@ -141,79 +124,6 @@ function getCartLines(cartSnapshot: unknown) {
   }
 
   return Array.from(dedupedByVariantId.values());
-}
-
-async function getShopifyAdminConfig(shopDomain: string) {
-  const requestShop = normalizeShopDomain(shopDomain);
-  const rows = await prisma.$queryRaw<Array<ShopifyAdminShopDiagnostic & { shopDomain: string | null; accessToken: string | null; accessTokenEncrypted: string | null }>>`
-    SELECT
-      "id" AS "resolvedShopId",
-      ${requestShop} AS "requestShop",
-      "shopDomain",
-      "myshopifyDomain",
-      "installationStatus",
-      "accessToken",
-      "accessTokenEncrypted",
-      ("accessTokenEncrypted" IS NOT NULL) AS "hasAccessToken"
-    FROM "Shop"
-    WHERE ("shopDomain" = ${requestShop} OR "myshopifyDomain" = ${requestShop})
-      AND "installationStatus" = 'ACTIVE'
-      AND "isActive" = true
-      AND "uninstalledAt" IS NULL
-      AND "accessTokenEncrypted" IS NOT NULL
-    ORDER BY "updatedAt" DESC
-    LIMIT 1
-  `;
-  const row = rows[0] || null;
-  const accessToken = decryptShopifyToken(row?.accessTokenEncrypted || null);
-  const diagnostic: ShopifyAdminShopDiagnostic = {
-    resolvedShopId: row?.resolvedShopId || null,
-    requestShop,
-    myshopifyDomain: row?.myshopifyDomain || null,
-    installationStatus: row?.installationStatus || null,
-    hasAccessToken: Boolean(row?.hasAccessToken && accessToken),
-  };
-
-  if (!row || !accessToken) {
-    console.warn("[SHOPIFY ADMIN CONFIG] missing active installation", diagnostic);
-    throw new ControlledCheckoutError(409, "No active Shopify installation found. Please reinstall the app.");
-  }
-
-  return {
-    shopDomain: normalizeShopDomain(row.myshopifyDomain || row.shopDomain || requestShop),
-    accessToken,
-    diagnostic,
-  };
-}
-
-async function shopifyAdminGraphql<T>(shopDomain: string, query: string, variables: JsonRecord) {
-  const adminConfig = await getShopifyAdminConfig(shopDomain);
-  const normalizedShopDomain = adminConfig.shopDomain;
-  const accessToken = adminConfig.accessToken;
-
-  console.info("[SHOPIFY ADMIN CONFIG] resolved", adminConfig.diagnostic);
-
-  const response = await fetch(
-    `https://${normalizedShopDomain}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Shopify-Access-Token": accessToken,
-      },
-      body: JSON.stringify({ query, variables }),
-    }
-  );
-  const rawText = await response.text().catch(() => "");
-  const payload = rawText ? (JSON.parse(rawText) as { data?: T; errors?: Array<{ message?: string }> }) : null;
-
-  if (!response.ok) throw new Error(`Shopify Admin API failed (${response.status})`);
-  if (payload?.errors?.length) {
-    throw new Error(payload.errors.map((error) => error.message).filter(Boolean).join(", "));
-  }
-  if (!payload?.data) throw new Error("Shopify Admin API response missing data");
-
-  return payload.data;
 }
 
 function normalizeShopifyUserErrors(errors?: Array<{ field?: string[] | null; message?: string | null }>) {
@@ -526,7 +436,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     const message = error instanceof Error ? error.message : "Order creation failed";
     const name = error instanceof Error ? error.name : "UnknownError";
     const stack = error instanceof Error ? error.stack : undefined;
-    const status = error instanceof ControlledCheckoutError ? error.status : 502;
+    const status = error instanceof ShopifyAdminConfigError ? error.status : 502;
     console.error("[SHOPIFY DRAFT ORDER EXCEPTION]", {
       name,
       message,
