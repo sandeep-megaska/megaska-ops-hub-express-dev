@@ -77,8 +77,26 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     country: requiredString(body, ["country", "countryRegion"], "country"),
   };
 
-  for (const result of Object.values(requiredAddress)) {
-    if (!result.ok) return jsonWithCors(req, { ok: false, error: result.error }, { status: 400 });
+  if (!requiredAddress.name.ok) {
+    return jsonWithCors(req, { ok: false, error: requiredAddress.name.error }, { status: 400 });
+  }
+  if (!requiredAddress.phone.ok) {
+    return jsonWithCors(req, { ok: false, error: requiredAddress.phone.error }, { status: 400 });
+  }
+  if (!requiredAddress.address1.ok) {
+    return jsonWithCors(req, { ok: false, error: requiredAddress.address1.error }, { status: 400 });
+  }
+  if (!requiredAddress.city.ok) {
+    return jsonWithCors(req, { ok: false, error: requiredAddress.city.error }, { status: 400 });
+  }
+  if (!requiredAddress.province.ok) {
+    return jsonWithCors(req, { ok: false, error: requiredAddress.province.error }, { status: 400 });
+  }
+  if (!requiredAddress.zip.ok) {
+    return jsonWithCors(req, { ok: false, error: requiredAddress.zip.error }, { status: 400 });
+  }
+  if (!requiredAddress.country.ok) {
+    return jsonWithCors(req, { ok: false, error: requiredAddress.country.error }, { status: 400 });
   }
 
   const address = {
