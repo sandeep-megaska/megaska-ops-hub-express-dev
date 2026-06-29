@@ -305,10 +305,6 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     return jsonWithCors(req, { ok: false, error: "Checkout session expired. Please start checkout again." }, { status: 409 });
   }
 
-  if (intent.selectedPaymentMethod === "COD" && intent.status === "EXPIRED") {
-    return jsonWithCors(req, { ok: false, error: "Checkout session expired. Please start checkout again." }, { status: 409 });
-  }
-
   if (intent.selectedPaymentMethod !== "COD" && intent.selectedPaymentMethod !== "PREPAID") {
     return jsonWithCors(req, { ok: false, error: "Payment method required" }, { status: 400 });
   }
