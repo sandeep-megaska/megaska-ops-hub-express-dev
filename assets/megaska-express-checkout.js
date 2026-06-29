@@ -390,8 +390,11 @@
         prefill: { name: latestAddress()?.name || "", email: latestAddress()?.email || "", contact: state.intent?.phoneSnapshot || latestAddress()?.phone || "" },
         handler: async function (response) {
           try {
-            await apiFetch(`/express/checkout/intents/${encodeURIComponent(state.intentId)}/razorpay/verify`, { method: "POST", body: response });
-            await createOrder();
+            const verified = await apiFetch(`/express/checkout/intents/${encodeURIComponent(state.intentId)}/razorpay/verify`, { method: "POST", body: response });
+            const name = verified.orderLink?.shopifyOrderName || verified.shopifyOrder?.name || "your order";
+            state.status = "success";
+            state.success = `${name} has been created. We will send confirmation details shortly.`;
+            render();
             resolve();
           } catch (error) { reject(error); }
         },
@@ -459,7 +462,7 @@
     } catch (error) {
       state.busy = null;
       state.orderSubmitting = false;
-      state.error = action === "place-order" ? "We could not place your order right now. Please try again." : error instanceof Error ? error.message : "Something went wrong.";
+      state.error = action === "place-order" ? (paymentMethod() === "PREPAID" ? (error instanceof Error ? error.message : "Payment received, but we could not create your order automatically. Please contact support.") : "We could not place your order right now. Please try again.") : error instanceof Error ? error.message : "Something went wrong.";
       render();
     }
   });

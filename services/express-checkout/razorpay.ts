@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { prisma } from "../db/prisma";
 import { getShopByDomain, normalizeShopDomain, ShopResolutionError } from "../shopify/shop";
+import { ExpressCheckoutOrderFinalizationError, finalizePrepaidExpressCheckoutOrder } from "./order-finalization";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -212,7 +213,16 @@ export async function verifyExpressCheckoutRazorpayPayment(params: VerifyParams)
 
   const paymentWhere = { shopId: shop.id, intentId: intent.id, method: "PREPAID" as const, razorpayOrderId: params.razorpay_order_id };
   const confirmedPayment = await prisma.expressCheckoutPayment.findFirst({ where: { ...paymentWhere, status: "CONFIRMED", razorpayPaymentId: params.razorpay_payment_id } });
-  if (confirmedPayment) return { ok: true, intentId: intent.id, paymentId: confirmedPayment.id, status: "PAYMENT_CONFIRMED", idempotent: true };
+  if (confirmedPayment) {
+    console.info("[EXPRESS PREPAID FINALIZATION] payment_confirmed", { shopId: shop.id, intentId: intent.id, paymentId: confirmedPayment.id, razorpayOrderId: params.razorpay_order_id, razorpayPaymentId: params.razorpay_payment_id, idempotent: true });
+    try {
+      const finalization = await finalizePrepaidExpressCheckoutOrder({ shopId: shop.id, shopDomain: shop.shopDomain, intentId: intent.id, customerProfileId: String(intent.customerProfileId || ""), paymentId: confirmedPayment.id, razorpayOrderId: params.razorpay_order_id, razorpayPaymentId: params.razorpay_payment_id });
+      return { ...finalization, intentId: intent.id, paymentId: confirmedPayment.id, status: "ORDER_CREATED", idempotent: true };
+    } catch (error) {
+      if (error instanceof ExpressCheckoutOrderFinalizationError) throw new ExpressCheckoutRazorpayError(error.status, error.publicMessage, error.message);
+      throw error;
+    }
+  }
 
   const payment = await prisma.expressCheckoutPayment.findFirst({ where: { ...paymentWhere, status: "PENDING" } });
   if (!payment) throw new ExpressCheckoutRazorpayError(404, "Could not verify payment. Please contact support if money was deducted.", "Pending payment not found");
@@ -245,5 +255,13 @@ export async function verifyExpressCheckoutRazorpayPayment(params: VerifyParams)
   });
 
   console.info("[EXPRESS RAZORPAY] verify_success", { shopId: shop.id, intentId: intent.id, paymentId: updated.id });
-  return { ok: true, intentId: intent.id, paymentId: updated.id, status: "PAYMENT_CONFIRMED", idempotent: false };
+  console.info("[EXPRESS PREPAID FINALIZATION] payment_confirmed", { shopId: shop.id, intentId: intent.id, paymentId: updated.id, razorpayOrderId: params.razorpay_order_id, razorpayPaymentId: params.razorpay_payment_id, idempotent: false });
+
+  try {
+    const finalization = await finalizePrepaidExpressCheckoutOrder({ shopId: shop.id, shopDomain: shop.shopDomain, intentId: intent.id, customerProfileId: String(intent.customerProfileId || ""), paymentId: updated.id, razorpayOrderId: params.razorpay_order_id, razorpayPaymentId: params.razorpay_payment_id });
+    return { ...finalization, intentId: intent.id, paymentId: updated.id, status: "ORDER_CREATED", idempotent: false };
+  } catch (error) {
+    if (error instanceof ExpressCheckoutOrderFinalizationError) throw new ExpressCheckoutRazorpayError(error.status, error.publicMessage, error.message);
+    throw error;
+  }
 }
