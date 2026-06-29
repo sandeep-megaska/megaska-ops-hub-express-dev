@@ -51,7 +51,7 @@ type CheckoutIntentUpdateDelegate = {
   }): Promise<{ count: number }>;
 };
 
-type CheckoutStateDb = {
+export type CheckoutStateDb = {
   expressCheckoutIntent: CheckoutIntentUpdateDelegate;
 };
 
