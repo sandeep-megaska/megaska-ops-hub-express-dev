@@ -21,6 +21,14 @@ const BLOCKED_STATUSES = ["EXPIRED", "CANCELLED", "FAILED", "ORDER_CREATED"];
 
 type JsonRecord = Record<string, unknown>;
 
+type ShopifyAdminShopDiagnostic = {
+  resolvedShopId: string | null;
+  requestShop: string | null;
+  myshopifyDomain: string | null;
+  installationStatus: string | null;
+  hasAccessToken: boolean;
+};
+
 class ControlledCheckoutError extends Error {
   status: number;
 
@@ -118,14 +126,54 @@ function getCartLines(cartSnapshot: unknown) {
   return Array.from(dedupedByVariantId.values());
 }
 
-async function shopifyAdminGraphql<T>(shopDomain: string, query: string, variables: JsonRecord) {
-  const shopConfig = await resolveShopConfig(shopDomain);
-  const normalizedShopDomain = normalizeShopDomain(shopConfig.shopDomain || shopDomain);
-  const accessToken = shopConfig.accessToken;
+async function getShopifyAdminConfig(shopDomain: string) {
+  const requestShop = normalizeShopDomain(shopDomain);
+  const rows = await prisma.$queryRaw<Array<ShopifyAdminShopDiagnostic & { shopDomain: string | null; accessToken: string | null; accessTokenEncrypted: string | null }>>`
+    SELECT
+      "id" AS "resolvedShopId",
+      ${requestShop} AS "requestShop",
+      "shopDomain",
+      "myshopifyDomain",
+      "installationStatus",
+      "accessToken",
+      "accessTokenEncrypted",
+      ("accessToken" IS NOT NULL OR "accessTokenEncrypted" IS NOT NULL) AS "hasAccessToken"
+    FROM "Shop"
+    WHERE ("shopDomain" = ${requestShop} OR "myshopifyDomain" = ${requestShop})
+      AND "installationStatus" = 'ACTIVE'
+      AND "isActive" = true
+      AND "uninstalledAt" IS NULL
+    ORDER BY "updatedAt" DESC
+    LIMIT 1
+  `;
+  const row = rows[0] || null;
+  const shopConfig = row ? await resolveShopConfig(row.myshopifyDomain || row.shopDomain || requestShop) : null;
+  const diagnostic: ShopifyAdminShopDiagnostic = {
+    resolvedShopId: row?.resolvedShopId || null,
+    requestShop,
+    myshopifyDomain: row?.myshopifyDomain || null,
+    installationStatus: row?.installationStatus || null,
+    hasAccessToken: Boolean(row?.hasAccessToken && shopConfig?.accessToken),
+  };
 
-  if (!normalizedShopDomain || !accessToken) {
-    throw new Error("Shopify Admin API is not configured");
+  if (!row || !shopConfig?.accessToken) {
+    console.warn("[SHOPIFY ADMIN CONFIG] missing active installation", diagnostic);
+    throw new ControlledCheckoutError(409, "No active Shopify installation found. Please reinstall the app.");
   }
+
+  return {
+    shopDomain: normalizeShopDomain(row.myshopifyDomain || shopConfig.shopDomain || requestShop),
+    accessToken: shopConfig.accessToken,
+    diagnostic,
+  };
+}
+
+async function shopifyAdminGraphql<T>(shopDomain: string, query: string, variables: JsonRecord) {
+  const adminConfig = await getShopifyAdminConfig(shopDomain);
+  const normalizedShopDomain = adminConfig.shopDomain;
+  const accessToken = adminConfig.accessToken;
+
+  console.info("[SHOPIFY ADMIN CONFIG] resolved", adminConfig.diagnostic);
 
   const response = await fetch(
     `https://${normalizedShopDomain}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`,

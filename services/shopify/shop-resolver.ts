@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { prisma } from "../db/prisma";
+import { decryptShopifyToken } from "./token-crypto";
 
 type ResolvedShopConfig = {
   id: string | null;
@@ -12,9 +13,13 @@ type ShopRow = {
   id: string;
   shopDomain: string;
   accessToken: string | null;
+  accessTokenEncrypted: string | null;
   storefrontAccessToken: string | null;
+  storefrontTokenEncrypted: string | null;
   scopes: string | null;
   isActive: boolean;
+  myshopifyDomain: string | null;
+  installationStatus: string | null;
   installedAt: Date | null;
   uninstalledAt: Date | null;
 };
@@ -47,9 +52,10 @@ export async function getShopByDomain(shopDomain: string) {
   if (!normalized) return null;
 
   const rows = await prisma.$queryRawUnsafe<ShopRow[]>(
-    `SELECT "id", "shopDomain", "accessToken", "storefrontAccessToken", "scopes", "isActive", "installedAt", "uninstalledAt"
+    `SELECT "id", "shopDomain", "accessToken", "accessTokenEncrypted", "storefrontAccessToken", "storefrontTokenEncrypted", "scopes", "isActive", "installedAt", "uninstalledAt", "myshopifyDomain", "installationStatus"
      FROM "Shop"
-     WHERE "shopDomain" = $1
+     WHERE "shopDomain" = $1 OR "myshopifyDomain" = $1
+     ORDER BY CASE WHEN "installationStatus" = 'ACTIVE' THEN 0 ELSE 1 END, "updatedAt" DESC
      LIMIT 1`,
     normalized
   );
@@ -77,7 +83,7 @@ export async function getDefaultShopFromConfig() {
        "storefrontAccessToken" = COALESCE(EXCLUDED."storefrontAccessToken", "Shop"."storefrontAccessToken"),
        "isActive" = true,
        "updatedAt" = NOW()
-     RETURNING "id", "shopDomain", "accessToken", "storefrontAccessToken", "scopes", "isActive", "installedAt", "uninstalledAt"`,
+     RETURNING "id", "shopDomain", "accessToken", "accessTokenEncrypted", "storefrontAccessToken", "storefrontTokenEncrypted", "scopes", "isActive", "installedAt", "uninstalledAt", "myshopifyDomain", "installationStatus"`,
     envDomain,
     envAdminToken,
     envStorefrontToken
@@ -94,8 +100,8 @@ export async function resolveShopConfig(preferredShopDomain?: string | null): Pr
       return {
         id: shop.id,
         shopDomain: shop.shopDomain,
-        accessToken: shop.accessToken,
-        storefrontAccessToken: shop.storefrontAccessToken,
+        accessToken: shop.accessToken || decryptShopifyToken(shop.accessTokenEncrypted),
+        storefrontAccessToken: shop.storefrontAccessToken || decryptShopifyToken(shop.storefrontTokenEncrypted),
       };
     }
   }
@@ -105,8 +111,8 @@ export async function resolveShopConfig(preferredShopDomain?: string | null): Pr
     return {
       id: defaultShop.id,
       shopDomain: defaultShop.shopDomain,
-      accessToken: defaultShop.accessToken,
-      storefrontAccessToken: defaultShop.storefrontAccessToken,
+      accessToken: defaultShop.accessToken || decryptShopifyToken(defaultShop.accessTokenEncrypted),
+      storefrontAccessToken: defaultShop.storefrontAccessToken || decryptShopifyToken(defaultShop.storefrontTokenEncrypted),
     };
   }
 

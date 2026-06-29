@@ -8,6 +8,9 @@ type AppProxyShop = {
   id: string;
   shopDomain: string;
   myshopifyDomain: string | null;
+  installationStatus: string | null;
+  accessTokenEncrypted: string | null;
+  accessToken: string | null;
 };
 
 export class AppProxyError extends Error {
@@ -91,10 +94,14 @@ export async function resolveShopFromAppProxyRequest(request: NextRequest): Prom
   if (!requestedShop) return null;
 
   const rows = await prisma.$queryRaw<AppProxyShop[]>`
-    SELECT "id", "shopDomain", "myshopifyDomain"
+    SELECT "id", "shopDomain", "myshopifyDomain", "installationStatus", "accessTokenEncrypted", "accessToken"
     FROM "Shop"
-    WHERE "shopDomain" = ${requestedShop}
-       OR "myshopifyDomain" = ${requestedShop}
+    WHERE ("shopDomain" = ${requestedShop}
+       OR "myshopifyDomain" = ${requestedShop})
+      AND "installationStatus" = 'ACTIVE'
+      AND "isActive" = true
+      AND "uninstalledAt" IS NULL
+    ORDER BY "updatedAt" DESC
     LIMIT 1
   `;
 
@@ -107,7 +114,7 @@ export async function requireShopFromAppProxy(request: NextRequest): Promise<App
   }
 
   const shop = await resolveShopFromAppProxyRequest(request);
-  if (!shop) throw new AppProxyError("Shop is unavailable for this app proxy request", 404);
+  if (!shop) throw new AppProxyError("No active Shopify installation found. Please reinstall the app.", 404);
   return shop;
 }
 
