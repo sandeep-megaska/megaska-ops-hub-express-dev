@@ -6,6 +6,7 @@ import {
   requireCustomerSessionForShop,
   requireExpressCheckoutShop,
 } from "../../../../../lib/express-checkout/safety";
+import { getExpressCheckoutSettings } from "../../../../../services/express-checkout/settings";
 import {
   attachAddressSnapshotToIntent,
   customerProfileToExpressAddress,
@@ -79,6 +80,22 @@ function extractDiscountCode(cartSnapshot: unknown, body: Record<string, unknown
   }
 
   return null;
+}
+
+function firstIntentAddress(intent: { addressSnapshots?: Array<Record<string, unknown>> } | null | undefined) {
+  const address = Array.isArray(intent?.addressSnapshots) ? intent.addressSnapshots[0] : null;
+  if (!address) return null;
+  return {
+    name: stringOrNull(address.name),
+    phone: stringOrNull(address.phone),
+    email: stringOrNull(address.email),
+    address1: stringOrNull(address.address1),
+    address2: stringOrNull(address.address2),
+    city: stringOrNull(address.city),
+    province: stringOrNull(address.province),
+    country: stringOrNull(address.country) || "India",
+    zip: stringOrNull(address.zip),
+  };
 }
 
 function calculateKnownDiscount(code: string | null, subtotalAmountPaise: number, fallbackDiscountAmountPaise: number) {
@@ -292,7 +309,8 @@ export async function POST(req: NextRequest) {
         discounts: { orderBy: { createdAt: "desc" } },
       },
     });
-    return jsonWithCors(req, { ok: true, intent: intent || updatedIntent, idempotent: true });
+    const settings = await getExpressCheckoutSettings(shop.shopId);
+    return jsonWithCors(req, { ok: true, intent: intent || updatedIntent, customerDefaultAddress: firstIntentAddress(intent), settings, idempotent: true });
   }
 
   const intent = await prisma.expressCheckoutIntent.create({
@@ -340,5 +358,6 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  return jsonWithCors(req, { ok: true, intent: intentWithDiscounts, idempotent: false }, { status: 201 });
+  const settings = await getExpressCheckoutSettings(shop.shopId);
+  return jsonWithCors(req, { ok: true, intent: intentWithDiscounts, customerDefaultAddress: firstIntentAddress(intentWithDiscounts), settings, idempotent: false }, { status: 201 });
 }

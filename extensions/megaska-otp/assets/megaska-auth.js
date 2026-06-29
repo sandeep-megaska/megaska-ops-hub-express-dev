@@ -1,5 +1,5 @@
 (function () {
-  const API_BASE = String(window.MEGASKA_API_BASE || "/apps/megaska/api").replace(/\/$/, "");
+  const API_BASE = "/apps/megaska/api";
   const SESSION_KEY = "megaska_session_token";
   const ACCOUNT_ENTRY_SELECTORS = [
     "[data-megaska-open-login]",
@@ -112,7 +112,7 @@
   function buildApiUrl(path) {
     const shopDomain = getCurrentShopDomain();
     const normalizedPath = String(path || "").startsWith("/") ? path : `/${path}`;
-    const apiBase = String(API_BASE || "/apps/megaska/api").replace(/\/$/, "");
+    const apiBase = API_BASE;
     const baseUrl = /^https?:\/\//i.test(apiBase)
       ? apiBase
       : `${window.location.origin}${apiBase.startsWith("/") ? apiBase : `/${apiBase}`}`;
