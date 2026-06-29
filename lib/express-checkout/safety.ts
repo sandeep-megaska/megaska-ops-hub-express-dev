@@ -4,7 +4,7 @@ import { hashSessionToken } from "../../services/auth/session";
 import {
   getShopDomainFromRequest,
   normalizeShopDomain,
-  requireShopFromRequest,
+  requireStorefrontShopFromRequest,
   ShopResolutionError,
 } from "../../services/shopify/shop";
 
@@ -101,7 +101,7 @@ export async function requireExpressCheckoutShop(
   }
 
   try {
-    const shop = await requireShopFromRequest(req);
+    const shop = await requireStorefrontShopFromRequest(req);
 
     return {
       shopDomain: shop.shopDomain,

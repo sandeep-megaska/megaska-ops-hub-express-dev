@@ -6,7 +6,8 @@ import {
   requireCustomerSessionForShop,
   requireExpressCheckoutShop,
 } from "../../../../../../../lib/express-checkout/safety";
-import { normalizeShopDomain, resolveShopConfig } from "../../../../../../../services/shopify/shop";
+import { normalizeShopDomain } from "../../../../../../../services/shopify/shop";
+import { decryptShopifyToken } from "../../../../../../../services/shopify/token-crypto";
 import {
   attachAddressSnapshotToIntent,
   customerProfileToExpressAddress,
@@ -137,33 +138,34 @@ async function getShopifyAdminConfig(shopDomain: string) {
       "installationStatus",
       "accessToken",
       "accessTokenEncrypted",
-      ("accessToken" IS NOT NULL OR "accessTokenEncrypted" IS NOT NULL) AS "hasAccessToken"
+      ("accessTokenEncrypted" IS NOT NULL) AS "hasAccessToken"
     FROM "Shop"
     WHERE ("shopDomain" = ${requestShop} OR "myshopifyDomain" = ${requestShop})
       AND "installationStatus" = 'ACTIVE'
       AND "isActive" = true
       AND "uninstalledAt" IS NULL
+      AND "accessTokenEncrypted" IS NOT NULL
     ORDER BY "updatedAt" DESC
     LIMIT 1
   `;
   const row = rows[0] || null;
-  const shopConfig = row ? await resolveShopConfig(row.myshopifyDomain || row.shopDomain || requestShop) : null;
+  const accessToken = decryptShopifyToken(row?.accessTokenEncrypted || null);
   const diagnostic: ShopifyAdminShopDiagnostic = {
     resolvedShopId: row?.resolvedShopId || null,
     requestShop,
     myshopifyDomain: row?.myshopifyDomain || null,
     installationStatus: row?.installationStatus || null,
-    hasAccessToken: Boolean(row?.hasAccessToken && shopConfig?.accessToken),
+    hasAccessToken: Boolean(row?.hasAccessToken && accessToken),
   };
 
-  if (!row || !shopConfig?.accessToken) {
+  if (!row || !accessToken) {
     console.warn("[SHOPIFY ADMIN CONFIG] missing active installation", diagnostic);
     throw new ControlledCheckoutError(409, "No active Shopify installation found. Please reinstall the app.");
   }
 
   return {
-    shopDomain: normalizeShopDomain(row.myshopifyDomain || shopConfig.shopDomain || requestShop),
-    accessToken: shopConfig.accessToken,
+    shopDomain: normalizeShopDomain(row.myshopifyDomain || row.shopDomain || requestShop),
+    accessToken,
     diagnostic,
   };
 }

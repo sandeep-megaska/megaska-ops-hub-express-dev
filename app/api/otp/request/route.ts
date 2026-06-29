@@ -10,7 +10,7 @@ import {
 } from "../../../../services/auth/otp";
 import {
   ShopResolutionError,
-  requireShopFromRequest,
+  requireStorefrontShopFromRequest,
 } from "../../../../services/shopify/shop";
 
 function generateOtp() {
@@ -177,7 +177,7 @@ async function createProviderChallenge(
 
 export async function POST(req: NextRequest) {
   try {
-    const shop = await requireShopFromRequest(req);
+    const shop = await requireStorefrontShopFromRequest(req);
 
     const body = await req.json();
     const phoneRaw = String(body?.phone ?? "").trim();

@@ -152,6 +152,45 @@ export async function resolveShopConfig(
   };
 }
 
+function isAllowedDevStorefrontFallback(shopDomain: string) {
+  if (process.env.NODE_ENV === "production") return false;
+  if (String(process.env.EXPRESS_CHECKOUT_ENABLED || "").toLowerCase() !== "true") return false;
+
+  const normalizedShopDomain = normalizeShopDomain(shopDomain);
+  if (!normalizedShopDomain) return false;
+
+  return String(process.env.EXPRESS_CHECKOUT_ALLOWED_SHOPS || "")
+    .split(",")
+    .map((shop) => normalizeShopDomain(shop))
+    .filter(Boolean)
+    .includes(normalizedShopDomain);
+}
+
+export async function requireStorefrontShopFromRequest(req: NextRequest): Promise<ShopRow> {
+  const shopDomain = getShopDomainFromRequest(req);
+
+  if (!shopDomain) {
+    throw new ShopResolutionError(400, "Missing shop domain in request");
+  }
+
+  const shop = await getShopByDomain(shopDomain);
+
+  if (shop?.isActive && !shop.uninstalledAt) {
+    return shop;
+  }
+
+  if (isAllowedDevStorefrontFallback(shopDomain)) {
+    const fallbackShop = await getDefaultShopFromConfig();
+    if (fallbackShop?.isActive && !fallbackShop.uninstalledAt) return fallbackShop;
+  }
+
+  if (!shop) {
+    throw new ShopResolutionError(404, "Shop not found");
+  }
+
+  throw new ShopResolutionError(403, "Shop is inactive");
+}
+
 /**
  * STRICT resolver for auth / OTP / customer session flows.
  * This does NOT fallback to env default shop, because that is unsafe in multi-store flows.

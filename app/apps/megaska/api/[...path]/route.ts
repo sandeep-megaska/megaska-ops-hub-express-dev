@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { appProxyJsonError, requireEnabledModule, requireShopFromAppProxy } from "../../../../../services/shopify/app-proxy";
+import { appProxyJsonError, requireEnabledModule, requireShopFromAppProxy, requireStorefrontShopFromAppProxy } from "../../../../../services/shopify/app-proxy";
 
 
 const HOP_BY_HOP_RESPONSE_HEADERS = new Set([
@@ -54,6 +54,20 @@ async function buildOtpRequestProxyResponse(response: Response) {
   );
 }
 
+const STOREFRONT_API_PREFIXES = [
+  "otp/request",
+  "otp/verify",
+  "auth/session",
+  "delhivery/pincode",
+  "express/checkout/",
+  "profile/",
+];
+
+function isStorefrontApiPath(path: string) {
+  const normalized = path.replace(/^\/+/, "");
+  return STOREFRONT_API_PREFIXES.some((prefix) => normalized === prefix || normalized.startsWith(prefix));
+}
+
 const API_MODULES: Array<{ prefix: string; moduleKey: string }> = [
   { prefix: "dashboard/", moduleKey: "dashboard" },
   { prefix: "express/checkout/", moduleKey: "express_checkout" },
@@ -76,9 +90,11 @@ function resolveModuleKey(path: string) {
 
 async function proxyInternalApi(request: NextRequest, context: { params: Promise<{ path: string[] }> }) {
   try {
-    const shop = await requireShopFromAppProxy(request);
     const { path } = await context.params;
     const proxyPath = path.join("/");
+    const shop = isStorefrontApiPath(proxyPath)
+      ? await requireStorefrontShopFromAppProxy(request)
+      : await requireShopFromAppProxy(request);
     const moduleKey = resolveModuleKey(proxyPath);
 
     if (!moduleKey) {
