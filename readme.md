@@ -56,3 +56,19 @@ Provider selection behavior:
 - If `OTP_PROVIDER` is not set, fallback order is: `twilio` -> `msg91` -> `mock`.
 
 Never expose OTP provider secrets as `NEXT_PUBLIC_*`.
+
+## WhatsApp provider environment variables
+
+The WhatsApp provider foundation uses Meta WhatsApp Cloud API and keeps credentials server-side only.
+
+Provider:
+- `META_CLOUD_API`
+
+Meta Cloud API config:
+- `WHATSAPP_META_ACCESS_TOKEN`
+- `WHATSAPP_META_PHONE_NUMBER_ID`
+- `WHATSAPP_META_BUSINESS_ACCOUNT_ID`
+- `WHATSAPP_META_WEBHOOK_VERIFY_TOKEN`
+- `WHATSAPP_META_GRAPH_VERSION` (optional; defaults to `v20.0`)
+
+Never expose WhatsApp provider secrets as `NEXT_PUBLIC_*`.
