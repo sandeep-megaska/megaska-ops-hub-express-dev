@@ -30,10 +30,36 @@
     lastCheckedPincode: "",
     pincodeCache: {},
     pincodeTimer: null,
+    perf: { openStart: 0, shellPaintLogged: false },
   };
 
   function debugLog(message, payload) {
     if (DEBUG) console.log(`[Megaska Express Modal] ${message}`, payload || {});
+  }
+
+  function perfNow() {
+    return window.performance && typeof window.performance.now === "function" ? window.performance.now() : Date.now();
+  }
+
+  function perfLog(label, value) {
+    if (typeof value === "number") console.log(`[EXPRESS MODAL PERF] ${label}`, Math.round(value));
+    else console.log(`[EXPRESS MODAL PERF] ${label}`);
+  }
+
+  function nextAnimationFrame() {
+    return new Promise((resolve) => {
+      if (typeof window.requestAnimationFrame === "function") window.requestAnimationFrame(resolve);
+      else window.setTimeout(resolve, 0);
+    });
+  }
+
+  async function waitForModalShellPaint(openStart) {
+    await nextAnimationFrame();
+    await nextAnimationFrame();
+    if (!state.perf.shellPaintLogged && state.open && state.step === "loading") {
+      state.perf.shellPaintLogged = true;
+      perfLog("modal_shell_open_ms", perfNow() - openStart);
+    }
   }
 
   function escapeHtml(value) {
@@ -267,7 +293,7 @@
 
   function render() {
     const root = ensureModal().querySelector("[data-express-root]");
-    if (state.step === "loading") root.innerHTML = `<h2 id="megaska-express-title" class="megaska-otp-step-title">Preparing checkout</h2><p class="megaska-otp-step-subtitle">Checking your verified session and cart.</p><div class="megaska-express-spinner">Loading...</div>`;
+    if (state.step === "loading") root.innerHTML = `<h2 id="megaska-express-title" class="megaska-otp-step-title">Preparing checkout...</h2><p class="megaska-otp-step-subtitle">Checking your verified session and cart.</p><div class="megaska-express-spinner" role="status" aria-live="polite">Loading...</div>`;
     else if (state.step === "success") root.innerHTML = `<section class="megaska-otp-success"><div class="megaska-otp-success-icon">✓</div><h2 id="megaska-express-title">Order placed successfully</h2><p>${escapeHtml(state.error || "Your order is confirmed.")}</p><a class="megaska-otp-primary-btn" href="/">Continue shopping</a></section>`;
     else if (state.step === "error") root.innerHTML = `<h2 id="megaska-express-title" class="megaska-otp-step-title">Checkout needs attention</h2><p class="megaska-otp-error">${escapeHtml(state.error)}</p><button class="megaska-otp-primary-btn" data-express-action="retry" type="button">Retry</button><a class="megaska-otp-link" href="/checkout">Use standard checkout</a>`;
     else renderCheckout(root);
@@ -301,9 +327,15 @@
   }
 
   async function open(opts) {
-    state.open = true; state.step = "loading"; state.error = ""; state.busy = false; state.paymentStarted = false; state.addressDraft = {}; state.editingAddress = false; state.discountMessage = ""; state.pincode = ""; state.pincodeStatus = "idle"; state.pincodeMessage = "Enter 6-digit PIN code to check delivery."; state.pincodeEta = ""; state.pincodeCity = ""; state.pincodeState = ""; state.lastCheckedPincode = ""; state.pincodeCache = {};
+    const openStart = Number(opts?.openStart || perfNow());
+    state.open = true; state.step = "loading"; state.error = ""; state.busy = false; state.paymentStarted = false; state.addressDraft = {}; state.editingAddress = false; state.discountMessage = ""; state.pincode = ""; state.pincodeStatus = "idle"; state.pincodeMessage = "Enter 6-digit PIN code to check delivery."; state.pincodeEta = ""; state.pincodeCity = ""; state.pincodeState = ""; state.lastCheckedPincode = ""; state.pincodeCache = {}; state.perf = { openStart, shellPaintLogged: false };
     const modal = ensureModal(); modal.hidden = false; modal.setAttribute("aria-hidden", "false"); document.documentElement.classList.add("megaska-otp-open"); render();
-    try { if (!(await ensureAuthenticated(opts?.triggerEl, opts?.event))) { close(); return; } await createIntent(); state.step = "checkout"; debugLog("modal ready", { intentId: state.intent?.id }); render(); const initialZip = ensureModal().querySelector('[name="zip"]')?.value || ""; if (initialZip) schedulePincodeCheck(initialZip); }
+    try {
+      await waitForModalShellPaint(openStart);
+      if (!(await ensureAuthenticated(opts?.triggerEl, opts?.event))) { close(); return; }
+      await createIntent();
+      state.step = "checkout"; debugLog("modal ready", { intentId: state.intent?.id }); render(); perfLog("modal_ready_total_ms", perfNow() - openStart); const initialZip = ensureModal().querySelector('[name="zip"]')?.value || ""; if (initialZip) schedulePincodeCheck(initialZip);
+    }
     catch (error) { state.step = "error"; state.error = error instanceof Error ? error.message : "Unable to prepare checkout."; render(); }
   }
 
@@ -398,7 +430,9 @@
     document.addEventListener("click", (event) => {
       const trigger = event.target.closest(TRIGGER_SELECTOR);
       if (!trigger || trigger.hasAttribute("data-megaska-express-disabled")) return;
-      event.preventDefault(); event.stopPropagation(); open({ triggerEl: trigger, event });
+      const openStart = perfNow();
+      perfLog("bag_place_order_click");
+      event.preventDefault(); event.stopPropagation(); open({ triggerEl: trigger, event, openStart });
     }, true);
   }
 
