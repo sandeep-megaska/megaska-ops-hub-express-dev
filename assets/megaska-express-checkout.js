@@ -341,9 +341,8 @@
 
               <div class="megaska-express-payment">
                 <h2>Choose payment method</h2>
-                <label class="megaska-express-radio ${selectedMethod === "PREPAID" ? "is-selected" : ""}"><input type="radio" name="paymentMethod" value="PREPAID" ${selectedMethod === "PREPAID" ? "checked" : ""}> <span><span class="megaska-express-payment-top"><strong>Secure Online Payment</strong><b>Pay ${formatMoney(intent.totalAmountPaise, intent.currency)}</b></span><span class="megaska-express-payment-icons">${paymentIconChips(["UPI", "VISA", "Mastercard", "RuPay", "Net Banking", "+ More"])}</span><small>UPI • Cards • Net Banking<br>(Powered by Razorpay)</small></span></label>
-                <label class="megaska-express-radio ${selectedMethod === "COD" ? "is-selected" : ""}"><input type="radio" name="paymentMethod" value="COD" ${selectedMethod === "COD" ? "checked" : ""}> <span><span class="megaska-express-payment-top"><strong>Cash on Delivery</strong><b>${formatMoney(intent.totalAmountPaise, intent.currency)}</b></span><small>Pay ${formatMoney(intent.totalAmountPaise, intent.currency)} on delivery<br>No advance payment. Pay the full amount on delivery.</small></span></label>
-                <div class="megaska-express-trust-row"><p><span>🔒</span><strong>100% Secure Payments</strong><small>Your payment details are safe and encrypted.</small></p><p><span>🛡</span><strong>Trusted & Reliable</strong><small>Secured by Razorpay. PCI DSS compliant.</small></p></div>
+                <label class="megaska-express-radio ${selectedMethod === "PREPAID" ? "is-selected" : ""}"><input type="radio" name="paymentMethod" value="PREPAID" ${selectedMethod === "PREPAID" ? "checked" : ""}> <span class="megaska-express-payment-body"><span class="megaska-express-payment-icons" aria-label="Supported online payment methods">${paymentIconChips(["UPI", "VISA", "Mastercard", "RuPay", "Net Banking", "+ More"])}</span><span class="megaska-express-payment-top"><strong>Secure Online Payment</strong><b>${formatMoney(intent.totalAmountPaise, intent.currency)}</b></span><small>UPI • Cards • Net Banking<br>(Powered by Razorpay)</small></span></label>
+                <label class="megaska-express-radio ${selectedMethod === "COD" ? "is-selected" : ""}"><input type="radio" name="paymentMethod" value="COD" ${selectedMethod === "COD" ? "checked" : ""}> <span class="megaska-express-payment-body"><span class="megaska-express-cod-chip" aria-hidden="true">COD</span><span class="megaska-express-payment-top"><strong>Cash on Delivery</strong><b>${formatMoney(intent.totalAmountPaise, intent.currency)}</b></span><small>Pay ${formatMoney(intent.totalAmountPaise, intent.currency)} on delivery<br>No advance payment. Pay the full amount on delivery.</small></span></label>
                 ${state.paymentUpdating ? `<p class="megaska-express-note">Updating payment method...</p>` : ""}
                 ${state.orderSubmitting ? `<p class="megaska-express-note">Placing your order securely. Please wait...</p>` : ""}
               </div>
@@ -351,8 +350,11 @@
           </div>
         </div>
         <div class="megaska-express-sticky-bar">
-          <div><span>Total Payable</span><strong>${formatMoney(intent.totalAmountPaise, intent.currency)}</strong><small>You save ${formatMoney(0, intent.currency)} on delivery</small></div>
-          <button class="megaska-express-btn megaska-express-btn--primary megaska-express-place" data-express-action="place-order" type="button" ${state.busy ? "disabled" : ""}>${placeOrderLabel} ›</button>
+          <div class="megaska-express-sticky-trust"><p><span>🔒</span><strong>100% Secure Payments</strong><small>Your payment details are safe and encrypted.</small></p><p><span>🛡</span><strong>Trusted & Reliable</strong><small>Secured by Razorpay.</small></p></div>
+          <div class="megaska-express-sticky-main">
+            <div class="megaska-express-sticky-total"><span>Total Payable</span><strong>${formatMoney(intent.totalAmountPaise, intent.currency)}</strong><small>You save ${formatMoney(0, intent.currency)} on delivery</small></div>
+            <button class="megaska-express-btn megaska-express-btn--primary megaska-express-place" data-express-action="place-order" type="button" ${state.busy ? "disabled" : ""}>${placeOrderLabel} ›</button>
+          </div>
         </div>
       </div>`;
   }
