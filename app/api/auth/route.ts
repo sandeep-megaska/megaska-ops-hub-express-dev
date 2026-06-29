@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
     `https://${shop}/admin/oauth/authorize` +
     `?client_id=${encodeURIComponent(SHOPIFY_API_KEY)}` +
     `&scope=${encodeURIComponent(
-      "read_orders,write_orders,read_customers,write_customers,read_products,write_products"
+      "read_all_orders,read_customers,write_customers,read_discounts,write_discounts,write_metaobject_definitions,read_orders,write_orders,read_products,write_products,unauthenticated_write_checkouts,unauthenticated_read_checkouts,unauthenticated_read_metaobjects,unauthenticated_read_product_listings"
     )}` +
     `&redirect_uri=${encodeURIComponent(redirectUri)}` +
     `&state=${encodeURIComponent(state)}`;
