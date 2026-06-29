@@ -222,8 +222,21 @@
     return [address.city, address.province, address.zip].filter(Boolean).join(", ");
   }
 
-  function paymentIconChips(labels) {
-    return labels.map((label) => `<span class="megaska-express-pay-chip">${escapeHtml(label)}</span>`).join("");
+  const PAYMENT_MARKS = [
+    { key: "upi", label: "UPI", markup: `<svg viewBox="0 0 54 20" aria-hidden="true" focusable="false"><path d="M4 2h12l5 8-5 8H4l5-8-5-8Z" fill="#0f9d58"/><path d="M15 2h12l5 8-5 8H15l5-8-5-8Z" fill="#f57c00"/><text x="32" y="14" fill="#17324d" font-size="11" font-weight="900" font-family="Arial, sans-serif">UPI</text></svg>` },
+    { key: "visa", label: "Visa", markup: `<svg viewBox="0 0 58 20" aria-hidden="true" focusable="false"><text x="4" y="15" fill="#1a1f71" font-size="17" font-weight="900" font-style="italic" font-family="Arial Black, Arial, sans-serif">VISA</text></svg>` },
+    { key: "mastercard", label: "Mastercard", markup: `<svg viewBox="0 0 58 20" aria-hidden="true" focusable="false"><circle cx="23" cy="10" r="8" fill="#eb001b"/><circle cx="35" cy="10" r="8" fill="#f79e1b" fill-opacity=".92"/><path d="M29 3.9a8 8 0 0 1 0 12.2 8 8 0 0 1 0-12.2Z" fill="#ff5f00"/></svg>` },
+    { key: "rupay", label: "RuPay", markup: `<svg viewBox="0 0 62 20" aria-hidden="true" focusable="false"><text x="4" y="14" fill="#123c7c" font-size="13" font-weight="900" font-family="Arial, sans-serif">RuPay</text><path d="M49 3h6l-4 14h-6l4-14Z" fill="#f58220"/><path d="M43 3h6l-4 14h-6l4-14Z" fill="#00a859"/></svg>` },
+    { key: "netbanking", label: "Net Banking", markup: `<svg viewBox="0 0 86 20" aria-hidden="true" focusable="false"><path d="M7 8h18L16 3 7 8Zm2 2h14v7H9v-7Zm-2 7h18" fill="none" stroke="#1e40af" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><text x="31" y="14" fill="#0f172a" font-size="10" font-weight="800" font-family="Arial, sans-serif">Net Banking</text></svg>` },
+    { key: "more", label: "More payment methods", markup: `<span aria-hidden="true">+ More</span>` },
+  ];
+
+  function paymentIconCards() {
+    return PAYMENT_MARKS.map((item) => `<span class="megaska-express-pay-card megaska-express-pay-card--${item.key}" title="${escapeHtml(item.label)}" aria-label="${escapeHtml(item.label)}">${item.markup}</span>`).join("");
+  }
+
+  function codIconCard() {
+    return `<span class="megaska-express-cod-card" aria-hidden="true"><svg viewBox="0 0 36 24" focusable="false"><rect x="3" y="5" width="26" height="16" rx="4" fill="#dcfce7" stroke="#22c55e" stroke-width="2"/><path d="M24 10h8v6h-8a3 3 0 0 1 0-6Z" fill="#16a34a"/><circle cx="25" cy="13" r="1.6" fill="#fff"/><path d="M10 12h8m-6-3h8m-10 6h7" stroke="#15803d" stroke-width="1.7" stroke-linecap="round"/></svg><strong>COD</strong></span>`;
   }
 
   function closeCheckout() {
@@ -341,8 +354,8 @@
 
               <div class="megaska-express-payment">
                 <h2>Choose payment method</h2>
-                <label class="megaska-express-radio ${selectedMethod === "PREPAID" ? "is-selected" : ""}"><input type="radio" name="paymentMethod" value="PREPAID" ${selectedMethod === "PREPAID" ? "checked" : ""}> <span class="megaska-express-payment-body"><span class="megaska-express-payment-icons" aria-label="Supported online payment methods">${paymentIconChips(["UPI", "VISA", "Mastercard", "RuPay", "Net Banking", "+ More"])}</span><span class="megaska-express-payment-top"><strong>Secure Online Payment</strong><b>${formatMoney(intent.totalAmountPaise, intent.currency)}</b></span><small>UPI • Cards • Net Banking<br>(Powered by Razorpay)</small></span></label>
-                <label class="megaska-express-radio ${selectedMethod === "COD" ? "is-selected" : ""}"><input type="radio" name="paymentMethod" value="COD" ${selectedMethod === "COD" ? "checked" : ""}> <span class="megaska-express-payment-body"><span class="megaska-express-cod-chip" aria-hidden="true">COD</span><span class="megaska-express-payment-top"><strong>Cash on Delivery</strong><b>${formatMoney(intent.totalAmountPaise, intent.currency)}</b></span><small>Pay ${formatMoney(intent.totalAmountPaise, intent.currency)} on delivery<br>No advance payment. Pay the full amount on delivery.</small></span></label>
+                <label class="megaska-express-radio ${selectedMethod === "PREPAID" ? "is-selected" : ""}"><input type="radio" name="paymentMethod" value="PREPAID" ${selectedMethod === "PREPAID" ? "checked" : ""}> <span class="megaska-express-payment-body"><span class="megaska-express-payment-icons" aria-label="Supported online payment methods">${paymentIconCards()}</span><span class="megaska-express-payment-top"><strong>Secure Online Payment</strong><b>${formatMoney(intent.totalAmountPaise, intent.currency)}</b></span><small>UPI • Cards • Net Banking<br>(Powered by Razorpay)</small></span></label>
+                <label class="megaska-express-radio ${selectedMethod === "COD" ? "is-selected" : ""}"><input type="radio" name="paymentMethod" value="COD" ${selectedMethod === "COD" ? "checked" : ""}> <span class="megaska-express-payment-body">${codIconCard()}<span class="megaska-express-payment-top"><strong>Cash on Delivery</strong><b>${formatMoney(intent.totalAmountPaise, intent.currency)}</b></span><small>Pay ${formatMoney(intent.totalAmountPaise, intent.currency)} on delivery<br>No advance payment. Pay the full amount on delivery.</small></span></label>
                 ${state.paymentUpdating ? `<p class="megaska-express-note">Updating payment method...</p>` : ""}
                 ${state.orderSubmitting ? `<p class="megaska-express-note">Placing your order securely. Please wait...</p>` : ""}
               </div>

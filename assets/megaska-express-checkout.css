@@ -36,9 +36,9 @@
 
 .megaska-express-scroll-area,
 .checkout-scroll-area {
-  max-height: calc(100vh - 172px);
+  max-height: calc(100vh - 156px);
   overflow-y: auto;
-  padding: 18px 14px 178px;
+  padding: 18px 14px 148px;
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
@@ -230,9 +230,18 @@
 .megaska-express-payment-top { align-items: start; display: flex; gap: 10px; justify-content: space-between; }
 .megaska-express-payment-top strong { color: #111827; font-size: 0.98rem; }
 .megaska-express-payment-top b { color: #111827; font-size: 0.98rem; white-space: nowrap; }
-.megaska-express-payment-icons { display: flex; flex-wrap: wrap; gap: 6px; }
-.megaska-express-pay-chip { background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 999px; box-shadow: inset 0 1px 0 rgba(255,255,255,.85); color: #1e3a8a; font-size: 0.7rem; font-weight: 900; letter-spacing: .01em; line-height: 1; padding: 7px 9px; }
-.megaska-express-cod-chip { align-items: center; background: #dcfce7; border: 1px solid #86efac; border-radius: 999px; color: #166534; display: inline-flex; font-size: 0.72rem; font-weight: 950; justify-content: center; letter-spacing: .08em; line-height: 1; padding: 7px 10px; width: fit-content; }
+.megaska-express-payment-icons { display: flex; flex-wrap: wrap; gap: 7px; }
+.megaska-express-pay-card,
+.megaska-express-cod-card { align-items: center; background: #fff; border: 1px solid rgba(15, 23, 42, 0.14); border-radius: 9px; box-shadow: inset 0 1px 0 rgba(255,255,255,.92), 0 2px 7px rgba(15, 23, 42, 0.06); color: #0f172a; display: inline-flex; font-size: 0.68rem; font-weight: 900; height: 32px; justify-content: center; line-height: 1; padding: 4px 8px; white-space: nowrap; }
+.megaska-express-pay-card svg { display: block; height: 20px; max-width: 86px; width: auto; }
+.megaska-express-pay-card--upi svg { width: 54px; }
+.megaska-express-pay-card--visa svg { width: 58px; }
+.megaska-express-pay-card--mastercard svg { width: 58px; }
+.megaska-express-pay-card--rupay svg { width: 62px; }
+.megaska-express-pay-card--netbanking svg { width: 86px; }
+.megaska-express-pay-card--more { background: #f8fafc; color: #334155; padding-inline: 10px; }
+.megaska-express-cod-card { background: #f0fdf4; border-color: #86efac; color: #166534; gap: 6px; letter-spacing: .06em; padding: 4px 10px 4px 7px; width: fit-content; }
+.megaska-express-cod-card svg { display: block; height: 24px; width: 36px; }
 
 .megaska-express-note { background: #fff3cd; border-radius: 12px; font-size: 0.9rem; margin: 0; padding: 10px 12px; }
 .megaska-express-place { font-size: 0.94rem; min-height: 50px; min-width: 190px; padding-left: 22px; padding-right: 22px; }
@@ -240,16 +249,16 @@
 .megaska-express-sticky-bar {
   background: rgba(255, 255, 255, 0.96);
   backdrop-filter: blur(12px);
-  border-radius: 0 0 26px 26px;
-  border-top: 1px solid rgba(15, 23, 42, 0.12);
-  bottom: 0;
-  box-shadow: 0 -18px 40px rgba(15, 23, 42, 0.14);
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 18px;
+  bottom: 10px;
+  box-shadow: 0 -10px 30px rgba(15, 23, 42, 0.13);
   display: grid;
   gap: 10px;
-  left: 0;
-  padding: 12px 14px 14px;
+  left: 14px;
+  padding: 10px 12px 12px;
   position: absolute;
-  right: 0;
+  right: 14px;
   z-index: 5;
 }
 
@@ -286,19 +295,20 @@
 
 @media (min-width: 680px) {
   .megaska-express-page { padding: 30px 20px 56px; }
-  .megaska-express-scroll-area { padding: 20px 18px 184px; }
+  .megaska-express-scroll-area { padding: 20px 18px 154px; }
   .megaska-express-grid { align-items: start; grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr); }
   .megaska-express-summary { position: sticky; top: 14px; }
   .megaska-express-card { padding: 18px; }
   .megaska-express-fields { grid-template-columns: 1fr 1fr; }
   .megaska-express-inline { grid-template-columns: 1fr auto; }
   .megaska-express-sticky-trust { grid-template-columns: 1fr 1fr; }
-  .megaska-express-sticky-bar { padding: 14px 18px 16px; }
+  .megaska-express-sticky-bar { left: 18px; padding: 12px 16px 14px; right: 18px; }
 }
 
 @media (max-width: 520px) {
   .megaska-express-checkout-frame { border-radius: 20px; max-height: calc(100vh - 16px); }
-  .megaska-express-scroll-area { max-height: calc(100vh - 156px); padding: 14px 10px 210px; }
+  .megaska-express-scroll-area { max-height: calc(100vh - 144px); padding: 14px 10px 190px; }
+  .megaska-express-sticky-bar { bottom: 8px; left: 8px; right: 8px; }
   .megaska-express-sticky-main { grid-template-columns: 1fr; }
   .megaska-express-place { min-width: 100%; width: 100%; }
 }
