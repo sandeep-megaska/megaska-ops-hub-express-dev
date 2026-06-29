@@ -131,7 +131,15 @@ async function loadValidatedIntent(params: CreateParams, shopId: string) {
   });
 
   if (!intent) throw new ExpressCheckoutRazorpayError(404, "Could not start secure payment. Please try again.", "Intent not found");
-  if (intent.expiresAt && intent.expiresAt <= new Date()) throw new ExpressCheckoutRazorpayError(409, "Could not start secure payment. Please try again.", "Intent expired");
+  if (intent.status === "ORDER_COMPLETED") throw new ExpressCheckoutRazorpayError(409, "Could not start secure payment. Please try again.", "Intent already completed", "CHECKOUT_INTENT_COMPLETED");
+  if (intent.status === "EXPIRED") throw new ExpressCheckoutRazorpayError(409, "Checkout session expired. Please start checkout again.", "Intent expired", "CHECKOUT_SESSION_EXPIRED");
+  if (intent.expiresAt && intent.expiresAt <= new Date()) {
+    await prisma.expressCheckoutIntent.updateMany({
+      where: { shopId, id: intent.id, status: { notIn: ["ORDER_COMPLETED", "EXPIRED"] } },
+      data: { status: "EXPIRED" },
+    });
+    throw new ExpressCheckoutRazorpayError(409, "Checkout session expired. Please start checkout again.", "Intent expired", "CHECKOUT_SESSION_EXPIRED");
+  }
   if (intent.selectedPaymentMethod !== "PREPAID") throw new ExpressCheckoutRazorpayError(409, "Could not start secure payment. Please try again.", "PREPAID payment method required");
   if (!Number.isFinite(intent.totalAmountPaise) || intent.totalAmountPaise <= 0) throw new ExpressCheckoutRazorpayError(400, "Could not start secure payment. Please try again.", "Invalid prepaid amount");
   if (!intent.customerProfileId) throw new ExpressCheckoutRazorpayError(409, "Could not start secure payment. Please try again.", "Customer profile required");
@@ -149,61 +157,62 @@ export async function createExpressCheckoutRazorpayOrder(params: CreateParams) {
   const address = intent.addressSnapshots[0];
   const { keyId } = getRazorpayCredentials();
 
-  const reusablePayment = await prisma.expressCheckoutPayment.findFirst({
-    where: {
-      shopId: shop.id,
-      intentId: intent.id,
-      method: "PREPAID",
-      status: "PENDING",
-      razorpayOrderId: { not: null },
-      amountPaise: intent.totalAmountPaise,
-      currency: intent.currency,
-    },
-    orderBy: { createdAt: "desc" },
-  });
-
-  if (reusablePayment?.razorpayOrderId) {
-    await prisma.expressCheckoutIntent.updateMany({ where: { shopId: shop.id, id: intent.id }, data: { status: "PAYMENT_PENDING" } });
-    console.info("[EXPRESS RAZORPAY] order_create_success", { shopId: shop.id, intentId: intent.id, paymentId: reusablePayment.id, reused: true });
-    return {
-      key: keyId,
-      razorpayOrderId: reusablePayment.razorpayOrderId,
-      amountPaise: reusablePayment.amountPaise,
-      currency: reusablePayment.currency,
-      intentId: intent.id,
-      paymentId: reusablePayment.id,
-      customer: { name: address.name, email: address.email, phone: address.phone },
-      notes: { intentId: intent.id, shopId: shop.id, paymentId: reusablePayment.id },
-    };
-  }
-
-  const payment = await prisma.expressCheckoutPayment.create({
-    data: { shopId: shop.id, intentId: intent.id, method: "PREPAID", status: "PENDING", amountPaise: intent.totalAmountPaise, currency: intent.currency },
-  });
-  const notes = { intentId: intent.id, shopId: shop.id, paymentId: payment.id };
-
   try {
-    const razorpayOrder = await createGatewayOrder({ amountPaise: intent.totalAmountPaise, currency: intent.currency, receipt: `megaska_express_${intent.id}`.slice(0, 40), notes });
-    const updatedPayment = await prisma.expressCheckoutPayment.update({
-      where: { id: payment.id },
-      data: { razorpayOrderId: razorpayOrder.id, rawGatewayPayload: safeJson(razorpayOrder) },
-    });
-    await prisma.expressCheckoutIntent.updateMany({ where: { shopId: shop.id, id: intent.id }, data: { status: "PAYMENT_PENDING" } });
-    console.info("[EXPRESS RAZORPAY] order_create_success", { shopId: shop.id, intentId: intent.id, paymentId: payment.id, reused: false });
+    return await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`${shop.id}:${intent.id}:razorpay_order`}))`;
 
-    return {
-      key: keyId,
-      razorpayOrderId: razorpayOrder.id,
-      amountPaise: updatedPayment.amountPaise,
-      currency: updatedPayment.currency,
-      intentId: intent.id,
-      paymentId: updatedPayment.id,
-      customer: { name: address.name, email: address.email, phone: address.phone },
-      notes,
-    };
+      const reusablePayment = await tx.expressCheckoutPayment.findFirst({
+        where: {
+          shopId: shop.id,
+          intentId: intent.id,
+          method: "PREPAID",
+          razorpayOrderId: { not: null },
+          amountPaise: intent.totalAmountPaise,
+          currency: intent.currency,
+        },
+        orderBy: { createdAt: "desc" },
+      });
+
+      if (reusablePayment?.razorpayOrderId) {
+        await tx.expressCheckoutIntent.updateMany({ where: { shopId: shop.id, id: intent.id, status: { notIn: ["ORDER_COMPLETED", "EXPIRED"] } }, data: { status: "PAYMENT_PENDING" } });
+        console.info("[CHECKOUT STATE] razorpay_order_idempotent_return", { shopId: shop.id, intentId: intent.id, paymentId: reusablePayment.id, razorpayOrderId: reusablePayment.razorpayOrderId });
+        return {
+          key: keyId,
+          razorpayOrderId: reusablePayment.razorpayOrderId,
+          amountPaise: reusablePayment.amountPaise,
+          currency: reusablePayment.currency,
+          intentId: intent.id,
+          paymentId: reusablePayment.id,
+          customer: { name: address.name, email: address.email, phone: address.phone },
+          notes: { intentId: intent.id, shopId: shop.id, paymentId: reusablePayment.id },
+        };
+      }
+
+      const payment = await tx.expressCheckoutPayment.create({
+        data: { shopId: shop.id, intentId: intent.id, method: "PREPAID", status: "PENDING", amountPaise: intent.totalAmountPaise, currency: intent.currency },
+      });
+      const notes = { intentId: intent.id, shopId: shop.id, paymentId: payment.id };
+      const razorpayOrder = await createGatewayOrder({ amountPaise: intent.totalAmountPaise, currency: intent.currency, receipt: `megaska_express_${intent.id}`.slice(0, 40), notes });
+      const updatedPayment = await tx.expressCheckoutPayment.update({
+        where: { id: payment.id },
+        data: { razorpayOrderId: razorpayOrder.id, rawGatewayPayload: safeJson(razorpayOrder) },
+      });
+      await tx.expressCheckoutIntent.updateMany({ where: { shopId: shop.id, id: intent.id, status: { notIn: ["ORDER_COMPLETED", "EXPIRED"] } }, data: { status: "PAYMENT_PENDING" } });
+      console.info("[CHECKOUT STATE] razorpay_order_created", { shopId: shop.id, intentId: intent.id, paymentId: payment.id, razorpayOrderId: razorpayOrder.id });
+
+      return {
+        key: keyId,
+        razorpayOrderId: razorpayOrder.id,
+        amountPaise: updatedPayment.amountPaise,
+        currency: updatedPayment.currency,
+        intentId: intent.id,
+        paymentId: updatedPayment.id,
+        customer: { name: address.name, email: address.email, phone: address.phone },
+        notes,
+      };
+    }, { timeout: 15000 });
   } catch (error) {
-    await prisma.expressCheckoutPayment.update({ where: { id: payment.id }, data: { status: "FAILED", failureReason: "Razorpay order creation failed" } });
-    console.error("[EXPRESS RAZORPAY] order_create_failed", { shopId: shop.id, intentId: intent.id, paymentId: payment.id, errorName: error instanceof Error ? error.name : "UnknownError", errorMessage: error instanceof Error ? error.message : "Unknown error" });
+    console.error("[EXPRESS RAZORPAY] order_create_failed", { shopId: shop.id, intentId: intent.id, errorName: error instanceof Error ? error.name : "UnknownError", errorMessage: error instanceof Error ? error.message : "Unknown error" });
     throw error;
   }
 }

@@ -11,6 +11,7 @@ function jsonWithCors(req: NextRequest, body: unknown, init?: ResponseInit) {
 }
 
 function razorpayOrderCreateMessage(code: string) {
+  if (code === "CHECKOUT_SESSION_EXPIRED") return "Checkout session expired. Please start checkout again.";
   return code === "RAZORPAY_NOT_CONFIGURED"
     ? "Secure payment is not configured for this test store."
     : "Could not start secure payment. Please try again.";
