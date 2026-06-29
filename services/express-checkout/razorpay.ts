@@ -20,12 +20,16 @@ type VerifyParams = CreateParams & {
 export class ExpressCheckoutRazorpayError extends Error {
   status: number;
   publicMessage: string;
+  stage: string;
+  code: string;
 
-  constructor(status: number, publicMessage: string, message = publicMessage) {
+  constructor(status: number, publicMessage: string, message = publicMessage, code = "RAZORPAY_ORDER_CREATE_FAILED", stage = "RAZORPAY_ORDER_CREATE") {
     super(message);
     this.name = "ExpressCheckoutRazorpayError";
     this.status = status;
     this.publicMessage = publicMessage;
+    this.stage = stage;
+    this.code = code;
   }
 }
 
@@ -65,7 +69,7 @@ function getRazorpayCredentials() {
   const keySecret = String(process.env.RAZORPAY_KEY_SECRET || "").trim();
 
   if (!keyId || !keySecret) {
-    throw new ExpressCheckoutRazorpayError(503, "Could not start secure payment. Please try again.", "Razorpay credentials are not configured");
+    throw new ExpressCheckoutRazorpayError(503, "Could not start secure payment. Please try again.", "Razorpay credentials are not configured", "RAZORPAY_NOT_CONFIGURED");
   }
 
   return { keyId, keySecret };
@@ -90,7 +94,7 @@ async function createGatewayOrder(input: { amountPaise: number; currency: string
   const payload = await response.json().catch(() => null);
 
   if (!response.ok || !asRecord(payload)?.id) {
-    throw new ExpressCheckoutRazorpayError(502, "Could not start secure payment. Please try again.", "Razorpay order creation failed");
+    throw new ExpressCheckoutRazorpayError(502, "Could not start secure payment. Please try again.", "Razorpay order creation failed", "RAZORPAY_ORDER_API_FAILED");
   }
 
   return payload as JsonRecord & { id: string; amount?: number; currency?: string };

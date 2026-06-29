@@ -115,6 +115,15 @@
     try { return String(localStorage.getItem(SESSION_KEY) || "").trim(); } catch { return ""; }
   }
 
+  class MegaskaApiError extends Error {
+    constructor(message, details) { super(message); this.name = "MegaskaApiError"; this.status = details?.status || 0; this.stage = details?.stage || ""; this.code = details?.code || ""; }
+  }
+
+  function prepaidPlaceOrderMessage(error) {
+    if (error?.stage === "RAZORPAY_ORDER_CREATE") return error.message || "Could not start secure payment. Please try again.";
+    return error instanceof Error ? error.message : "Payment was not completed. You can try again.";
+  }
+
   async function apiFetch(path, options) {
     const token = await getToken();
     const shop = getShopDomain();
@@ -129,7 +138,7 @@
     trackApiCall(opts.method || "GET", url.toString());
     const res = await fetch(url.toString(), opts);
     const data = await res.json().catch(() => null);
-    if (!res.ok || data?.ok === false) throw new Error(data?.error || data?.message || `Request failed (${res.status})`);
+    if (!res.ok || data?.ok === false) throw new MegaskaApiError(data?.message || data?.error || `Request failed (${res.status})`, { status: res.status, stage: data?.stage, code: data?.code });
     return data;
   }
 
@@ -467,11 +476,11 @@
 
   function loadRazorpay() { return new Promise((resolve, reject) => { if (window.Razorpay) return resolve(); const script = document.createElement("script"); script.src = "https://checkout.razorpay.com/v1/checkout.js"; script.onload = resolve; script.onerror = () => reject(new Error("Unable to load Razorpay Checkout.")); document.head.appendChild(script); }); }
   async function createOrder() { const data = await apiFetch(`/express/checkout/intents/${encodeURIComponent(state.intent.id)}/order`, { method: "POST", body: {} }); state.step = "success"; state.error = `${data.orderLink?.shopifyOrderName || data.shopifyOrder?.name || "Your order"} has been created.`; state.busy = false; state.paymentStarted = false; render(); }
-  async function placeOrder() { if (state.orderSubmitting) return; state.orderSubmitting = true; state.busy = true; state.error = ""; render(); await saveAddressFromCheckout(); if (payMethod() === "COD") return createOrder(); state.paymentStarted = true; await ensurePaymentMethod("PREPAID"); await loadRazorpay(); const data = await apiFetch(`/express/checkout/intents/${encodeURIComponent(state.intent.id)}/razorpay-order`, { method: "POST", body: {} }); const checkout = data.checkout || {}; if (!checkout.razorpayOrderId || !checkout.key) throw new Error("Could not start secure payment. Please try again."); new window.Razorpay({ key: checkout.key, amount: checkout.amountPaise, currency: checkout.currency || "INR", name: shopLabel(), description: "Express Checkout", order_id: checkout.razorpayOrderId, prefill: checkout.customer || {}, notes: checkout.notes || {}, handler: async (response) => { const verified = await apiFetch(`/express/checkout/intents/${encodeURIComponent(state.intent.id)}/razorpay-verify`, { method: "POST", body: response }); state.step = "success"; state.error = `${verified.orderLink?.shopifyOrderName || verified.shopifyOrder?.name || "Your order"} has been created.`; state.busy = false; state.orderSubmitting = false; state.paymentStarted = false; await refreshIntent(); render(); }, modal: { ondismiss: () => { state.busy = false; state.orderSubmitting = false; state.paymentStarted = false; state.error = "Payment was cancelled."; render(); } } }).open(); }
+  async function placeOrder() { if (state.orderSubmitting) return; state.orderSubmitting = true; state.busy = true; state.error = ""; render(); await saveAddressFromCheckout(); if (payMethod() === "COD") return createOrder(); state.paymentStarted = true; await ensurePaymentMethod("PREPAID"); await loadRazorpay(); const data = await apiFetch(`/express/checkout/intents/${encodeURIComponent(state.intent.id)}/razorpay-order`, { method: "POST", body: {} }); const checkout = data.checkout || {}; if (!checkout.razorpayOrderId || !checkout.key) throw new MegaskaApiError("Could not start secure payment. Please try again.", { stage: "RAZORPAY_ORDER_CREATE", code: "RAZORPAY_ORDER_DETAILS_MISSING" }); new window.Razorpay({ key: checkout.key, amount: checkout.amountPaise, currency: checkout.currency || "INR", name: shopLabel(), description: "Express Checkout", order_id: checkout.razorpayOrderId, prefill: checkout.customer || {}, notes: checkout.notes || {}, handler: async (response) => { const verified = await apiFetch(`/express/checkout/intents/${encodeURIComponent(state.intent.id)}/razorpay-verify`, { method: "POST", body: response }); state.step = "success"; state.error = `${verified.orderLink?.shopifyOrderName || verified.shopifyOrder?.name || "Your order"} has been created.`; state.busy = false; state.orderSubmitting = false; state.paymentStarted = false; await refreshIntent(); render(); }, modal: { ondismiss: () => { state.busy = false; state.orderSubmitting = false; state.paymentStarted = false; state.error = "Payment was not completed. You can try again."; render(); } } }).open(); }
 
   async function onActionClick(event) {
     const action = event.target.closest("[data-express-action]")?.getAttribute("data-express-action"); if (!action) return;
-    try { if (action === "retry") await open({}); if (action === "change-address") { state.editingAddress = true; render(); } if (action === "place-order" && !state.busy) await placeOrder(); } catch (error) { state.busy = false; state.orderSubmitting = false; state.paymentStarted = false; state.error = action === "place-order" ? (payMethod() === "PREPAID" ? "Payment received, but we could not create your order automatically. Please contact support." : "We could not place your order right now. Please try again.") : error instanceof Error ? error.message : "Something went wrong."; render(); }
+    try { if (action === "retry") await open({}); if (action === "change-address") { state.editingAddress = true; render(); } if (action === "place-order" && !state.busy) await placeOrder(); } catch (error) { state.busy = false; state.orderSubmitting = false; state.paymentStarted = false; state.error = action === "place-order" ? (payMethod() === "PREPAID" ? prepaidPlaceOrderMessage(error) : "We could not place your order right now. Please try again.") : error instanceof Error ? error.message : "Something went wrong."; render(); }
   }
 
   function bindTriggers() {

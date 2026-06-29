@@ -109,6 +109,22 @@
     return url.toString();
   }
 
+  class MegaskaApiError extends Error {
+    constructor(message, details) {
+      super(message);
+      this.name = "MegaskaApiError";
+      this.status = details?.status || 0;
+      this.stage = details?.stage || "";
+      this.code = details?.code || "";
+    }
+  }
+
+  function messageForPlaceOrderError(error) {
+    if (paymentMethod() !== "PREPAID" && (typeof payMethod !== "function" || payMethod() !== "PREPAID")) return "We could not place your order right now. Please try again.";
+    if (error?.stage === "RAZORPAY_ORDER_CREATE") return error.message || "Could not start secure payment. Please try again.";
+    return error instanceof Error ? error.message : "Payment was not completed. You can try again.";
+  }
+
   async function apiFetch(path, options) {
     const opts = Object.assign({ method: "GET", credentials: "include" }, options || {});
     opts.headers = await buildHeaders(opts.headers);
@@ -118,7 +134,7 @@
     const data = await response.json().catch(() => null);
 
     if (!response.ok || data?.ok === false) {
-      throw new Error(data?.error || data?.message || `Request failed (${response.status})`);
+      throw new MegaskaApiError(data?.message || data?.error || `Request failed (${response.status})`, { status: response.status, stage: data?.stage, code: data?.code });
     }
 
     return data;
@@ -375,9 +391,9 @@
   async function handlePrepaid() {
     await ensurePaymentMethod("PREPAID");
     await loadRazorpay();
-    const data = await apiFetch(`/express/checkout/intents/${encodeURIComponent(state.intentId)}/razorpay/order`, { method: "POST", body: {} });
+    const data = await apiFetch(`/express/checkout/intents/${encodeURIComponent(state.intentId)}/razorpay-order`, { method: "POST", body: {} });
     const order = data.razorpayOrder;
-    if (!order?.id || !order?.keyId) throw new Error("Razorpay order details are missing.");
+    if (!order?.id || !order?.keyId) throw new MegaskaApiError("Could not start secure payment. Please try again.", { stage: "RAZORPAY_ORDER_CREATE", code: "RAZORPAY_ORDER_DETAILS_MISSING" });
 
     await new Promise((resolve, reject) => {
       const checkout = new window.Razorpay({
@@ -398,7 +414,7 @@
             resolve();
           } catch (error) { reject(error); }
         },
-        modal: { ondismiss: function () { reject(new Error("Payment was cancelled.")); } },
+        modal: { ondismiss: function () { reject(new Error("Payment was not completed. You can try again.")); } },
       });
       checkout.open();
     });
@@ -462,7 +478,7 @@
     } catch (error) {
       state.busy = null;
       state.orderSubmitting = false;
-      state.error = action === "place-order" ? (paymentMethod() === "PREPAID" ? (error instanceof Error ? error.message : "Payment received, but we could not create your order automatically. Please contact support.") : "We could not place your order right now. Please try again.") : error instanceof Error ? error.message : "Something went wrong.";
+      state.error = action === "place-order" ? messageForPlaceOrderError(error) : error instanceof Error ? error.message : "Something went wrong.";
       render();
     }
   });
