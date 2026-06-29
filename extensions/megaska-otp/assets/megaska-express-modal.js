@@ -124,6 +124,12 @@
     return error instanceof Error ? error.message : "Payment was not completed. You can try again.";
   }
 
+  function razorpayOrderCreateMessage(body) {
+    if (body?.message) return body.message;
+    if (body?.code === "RAZORPAY_NOT_CONFIGURED") return "Secure payment is not configured for this test store.";
+    return "Could not start secure payment. Please try again.";
+  }
+
   async function apiFetch(path, options) {
     const token = await getToken();
     const shop = getShopDomain();
@@ -138,7 +144,10 @@
     trackApiCall(opts.method || "GET", url.toString());
     const res = await fetch(url.toString(), opts);
     const data = await res.json().catch(() => null);
-    if (!res.ok || data?.ok === false) throw new MegaskaApiError(data?.message || data?.error || `Request failed (${res.status})`, { status: res.status, stage: data?.stage, code: data?.code });
+    if (!res.ok || data?.ok === false) {
+      if (path.includes("/razorpay-order")) throw new MegaskaApiError(razorpayOrderCreateMessage(data), { status: res.status, stage: data?.stage || "RAZORPAY_ORDER_CREATE", code: data?.code });
+      throw new MegaskaApiError(data?.message || data?.error || `Request failed (${res.status})`, { status: res.status, stage: data?.stage, code: data?.code });
+    }
     return data;
   }
 

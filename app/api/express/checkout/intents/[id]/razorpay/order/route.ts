@@ -10,6 +10,12 @@ function jsonWithCors(req: NextRequest, body: unknown, init?: ResponseInit) {
   return withCors(req, NextResponse.json(body, init));
 }
 
+function razorpayOrderCreateMessage(code: string) {
+  return code === "RAZORPAY_NOT_CONFIGURED"
+    ? "Secure payment is not configured for this test store."
+    : "Could not start secure payment. Please try again.";
+}
+
 export async function OPTIONS(req: NextRequest) {
   return handleOptions(req);
 }
@@ -28,10 +34,10 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     const checkout = await createExpressCheckoutRazorpayOrder({ shopDomain: shop.shopDomain, intentId, customerProfileId: auth.customer.id });
     return jsonWithCors(req, { ok: true, checkout, razorpayOrder: { id: checkout.razorpayOrderId, amount: checkout.amountPaise, currency: checkout.currency, keyId: checkout.key } }, { status: 201 });
   } catch (error) {
-    const status = error instanceof ExpressCheckoutRazorpayError ? error.status : 500;
-    const publicMessage = error instanceof ExpressCheckoutRazorpayError ? error.publicMessage : "Could not start secure payment. Please try again.";
+    const status = error instanceof ExpressCheckoutRazorpayError ? error.status : 503;
     const stage = error instanceof ExpressCheckoutRazorpayError ? error.stage : "RAZORPAY_ORDER_CREATE";
     const code = error instanceof ExpressCheckoutRazorpayError ? error.code : "RAZORPAY_ORDER_CREATE_FAILED";
+    const publicMessage = razorpayOrderCreateMessage(code);
     console.error("[EXPRESS RAZORPAY] order_create_failed", { shopId: shop.shopId, intentId, errorName: error instanceof Error ? error.name : "UnknownError", errorMessage: error instanceof Error ? error.message : "Unknown error", stage, code });
     return jsonWithCors(req, { ok: false, stage, code, message: publicMessage, error: publicMessage }, { status });
   }
