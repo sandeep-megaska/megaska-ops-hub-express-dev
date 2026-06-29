@@ -196,7 +196,7 @@ export async function finalizePrepaidExpressCheckoutOrder(params: FinalizeParams
     const order = completeResult.draftOrder.order;
     const written = await db.$transaction(async (tx) => {
       const link = await tx.expressCheckoutOrderLink.create({ data: { shopId: params.shopId, intentId: params.intentId, draftOrderId: completeResult.draftOrder?.id || createResult.draftOrder?.id || null, draftOrderName: completeResult.draftOrder?.name || createResult.draftOrder?.name || null, shopifyOrderId: order.id || null, shopifyOrderName: order.name || null, financialStatus: order.displayFinancialStatus || "PAID", fulfillmentStatus: order.displayFulfillmentStatus || null } });
-      const updatedIntent = await tx.expressCheckoutIntent.update({ where: { id: params.intentId }, data: { status: "ORDER_CREATED" } });
+      const updatedIntent = await tx.expressCheckoutIntent.update({ where: { id: params.intentId }, data: { status: "ORDER_COMPLETED" } });
       return { link, updatedIntent };
     });
     console.info("[EXPRESS PREPAID FINALIZATION] shopify_order_create_success", { shopId: params.shopId, intentId: params.intentId, paymentId: params.paymentId || null, razorpayOrderId: params.razorpayOrderId || null, razorpayPaymentId: params.razorpayPaymentId || null, financialStatus: written.link.financialStatus || null, shopifyOrderId: written.link.shopifyOrderId || null, shopifyOrderName: written.link.shopifyOrderName || null });
