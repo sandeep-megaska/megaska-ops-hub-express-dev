@@ -12,6 +12,9 @@
     status: "loading",
     busy: null,
     error: null,
+    orderSubmitting: false,
+    paymentUpdating: false,
+    optimisticPaymentMethod: null,
     success: null,
     discountCode: "",
   };
@@ -187,7 +190,7 @@
   }
 
   function paymentMethod() {
-    return state.intent?.selectedPaymentMethod || "PREPAID";
+    return state.optimisticPaymentMethod || state.intent?.selectedPaymentMethod || "PREPAID";
   }
 
   function setBusy(name) {
@@ -279,8 +282,10 @@
             <h2>Payment method</h2>
             <label class="megaska-express-radio"><input type="radio" name="paymentMethod" value="PREPAID" ${selectedMethod === "PREPAID" ? "checked" : ""}> <span>PREPAID</span></label>
             <label class="megaska-express-radio"><input type="radio" name="paymentMethod" value="COD" ${selectedMethod === "COD" ? "checked" : ""}> <span>COD</span></label>
+            ${state.paymentUpdating ? `<p class="megaska-express-note">Updating payment method...</p>` : ""}
             ${selectedMethod === "COD" ? `<p class="megaska-express-note">${COD_FEE_NOTE}</p>` : ""}
-            <button class="megaska-express-btn megaska-express-btn--primary megaska-express-place" data-express-action="place-order" type="button" ${state.busy ? "disabled" : ""}>${state.busy ? "Processing..." : selectedMethod === "COD" ? "Place COD order" : "Pay now"}</button>
+            ${state.orderSubmitting ? `<p class="megaska-express-note">Placing your order securely. Please wait...</p>` : ""}
+            <button class="megaska-express-btn megaska-express-btn--primary megaska-express-place" data-express-action="place-order" type="button" ${state.busy ? "disabled" : ""}>${state.orderSubmitting ? "Placing order..." : selectedMethod === "COD" ? "Place COD order" : "Pay now"}</button>
           </div>
         </section>
       </div>`;
@@ -322,10 +327,21 @@
   }
 
   async function setPaymentMethod(method) {
-    setBusy("payment");
-    await ensurePaymentMethod(method);
-    state.busy = null;
+    const previous = paymentMethod();
+    state.optimisticPaymentMethod = method;
+    state.paymentUpdating = true;
+    state.error = null;
     render();
+    try {
+      await ensurePaymentMethod(method);
+      state.paymentUpdating = false;
+      render();
+    } catch (error) {
+      state.optimisticPaymentMethod = previous;
+      state.paymentUpdating = false;
+      state.error = "Could not update payment method. Please try again.";
+      render();
+    }
   }
 
   async function ensurePaymentMethod(method) {
@@ -333,7 +349,8 @@
       await apiFetch(`/express/checkout/intents/${encodeURIComponent(state.intentId)}/payment-method`, { method: "POST", body: { method } });
     }
     await refreshIntent();
-    if (state.intent?.selectedPaymentMethod !== method) throw new Error(`Unable to persist ${method} payment method.`);
+    state.optimisticPaymentMethod = null;
+    if (state.intent?.selectedPaymentMethod !== method) throw new Error("Could not update payment method. Please try again.");
   }
 
   function loadRazorpay() {
@@ -385,6 +402,8 @@
   }
 
   async function placeOrder() {
+    if (state.orderSubmitting) return;
+    state.orderSubmitting = true;
     setBusy("order");
     if (paymentMethod() === "COD") await createOrder();
     else await handlePrepaid();
@@ -406,6 +425,7 @@
       if (form.matches('[data-express-form="discount"]')) await handleDiscountSubmit(form);
     } catch (error) {
       state.busy = null;
+      state.orderSubmitting = false;
       state.error = error instanceof Error ? error.message : "Something went wrong.";
       render();
     }
@@ -418,7 +438,7 @@
       await setPaymentMethod(target.value);
     } catch (error) {
       state.busy = null;
-      state.error = error instanceof Error ? error.message : "Unable to update payment method.";
+      state.error = "Could not update payment method. Please try again.";
       render();
     }
   });
@@ -438,7 +458,8 @@
       if (action === "place-order") await placeOrder();
     } catch (error) {
       state.busy = null;
-      state.error = error instanceof Error ? error.message : "Something went wrong.";
+      state.orderSubmitting = false;
+      state.error = action === "place-order" ? "We could not place your order right now. Please try again." : error instanceof Error ? error.message : "Something went wrong.";
       render();
     }
   });

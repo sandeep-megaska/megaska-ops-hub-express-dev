@@ -57,6 +57,19 @@ function jsonWithCors(req: NextRequest, body: unknown, init?: ResponseInit) {
   return withCors(req, NextResponse.json(body, init));
 }
 
+function checkoutPerfLog(event: string, details: { shopId?: string; intentId?: string; customerProfileId?: string; selectedPaymentMethod?: unknown; durationMs?: number | null }) {
+  console.info(`[CHECKOUT PERF] ${event}`, {
+    shopId: details.shopId || null,
+    intentId: details.intentId || null,
+    customerProfileId: details.customerProfileId || null,
+    selectedPaymentMethod: details.selectedPaymentMethod || null,
+    durationMs: typeof details.durationMs === "number" ? Math.round(details.durationMs) : null,
+  });
+}
+
+function elapsedMs(startedAt: number) {
+  return Date.now() - startedAt;
+}
 
 function paiseToAmount(paise: number) {
   return (Math.max(0, Math.round(Number(paise) || 0)) / 100).toFixed(2);
@@ -175,13 +188,21 @@ export async function OPTIONS(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+  const totalStartedAt = Date.now();
+  let perfContext: { shopId?: string; intentId?: string; customerProfileId?: string; selectedPaymentMethod?: unknown } = {};
+  checkoutPerfLog("order_create_start", perfContext);
+
+  const sessionStartedAt = Date.now();
   const shop = await requireExpressCheckoutShop(req);
 
   if ("error" in shop) {
     return jsonWithCors(req, { ok: false, error: shop.error }, { status: shop.status });
   }
 
+  perfContext.shopId = shop.shopId;
+
   const auth = await requireCustomerSessionForShop(getSessionTokenFromRequest(req), shop.shopId);
+  checkoutPerfLog("session_validation_ms", { ...perfContext, durationMs: elapsedMs(sessionStartedAt) });
 
   if ("error" in auth) {
     return jsonWithCors(req, { ok: false, error: auth.error }, { status: auth.status });
@@ -189,12 +210,14 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
 
   const intentId = String((await context.params).id || "").trim();
   const customerProfileId = String(auth.customer.id || "").trim();
+  perfContext = { ...perfContext, intentId, customerProfileId };
 
   if (!intentId) return jsonWithCors(req, { ok: false, error: "Intent id required" }, { status: 400 });
   if (!customerProfileId) {
     return jsonWithCors(req, { ok: false, error: "Customer profile required" }, { status: 401 });
   }
 
+  const intentLoadStartedAt = Date.now();
   const intent = await prisma.expressCheckoutIntent.findFirst({
     where: { shopId: shop.shopId, id: intentId, customerProfileId },
     include: {
@@ -202,6 +225,9 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
       orderLink: true,
     },
   });
+
+  checkoutPerfLog("intent_load_ms", { ...perfContext, selectedPaymentMethod: intent?.selectedPaymentMethod, durationMs: elapsedMs(intentLoadStartedAt) });
+  perfContext.selectedPaymentMethod = intent?.selectedPaymentMethod;
 
   if (!intent) return jsonWithCors(req, { ok: false, error: "Intent not found" }, { status: 404 });
 
@@ -223,6 +249,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     return jsonWithCors(req, { ok: false, error: "Invalid order amount" }, { status: 400 });
   }
 
+  const paymentMethodStartedAt = Date.now();
   if (intent.selectedPaymentMethod === "PREPAID") {
     if (intent.status !== "PAYMENT_CONFIRMED") {
       return jsonWithCors(req, { ok: false, error: "Payment confirmation required" }, { status: 409 });
@@ -238,6 +265,9 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     }
   }
 
+  checkoutPerfLog("payment_method_ms", { ...perfContext, durationMs: elapsedMs(paymentMethodStartedAt) });
+
+  const addressStartedAt = Date.now();
   let address = await prisma.expressCheckoutAddressSnapshot.findFirst({
     where: { shopId: shop.shopId, intentId, customerProfileId },
     orderBy: { createdAt: "desc" },
@@ -263,6 +293,8 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     }
   }
 
+  checkoutPerfLog("address_snapshot_ms", { ...perfContext, durationMs: elapsedMs(addressStartedAt) });
+
   if (!address) return jsonWithCors(req, { ok: false, error: "Address required" }, { status: 400 });
   const missingAddressFields = [
     ["fullName", address.name],
@@ -285,6 +317,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
   // Keep COD fees in Megaska totals only for now. Shopify draftOrderCreate receives
   // only real product variants so draft creation can succeed reliably.
 
+  const inputBuildStartedAt = Date.now();
   const discountAmount = Math.max(0, Math.min(intent.subtotalAmountPaise, intent.discountAmountPaise));
   const diagnostic = orderDiagnostic({ shopId: shop.shopId, intentId, customerProfileId, intent, lineItemCount: lineItems.length, hasAddressSnapshot: Boolean(address) });
   console.info("[EXPRESS CHECKOUT ORDER] creating draft order", diagnostic);
@@ -338,10 +371,12 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
   if (resolvedCustomerGid) {
     draftOrderInput.customerId = resolvedCustomerGid;
   }
+  checkoutPerfLog("draft_order_input_build_ms", { ...perfContext, durationMs: elapsedMs(inputBuildStartedAt) });
 
   try {
+    const shopifyStartedAt = Date.now();
     console.info("[SHOPIFY CUSTOMER ID]", { rawCustomerId, resolvedCustomerGid });
-    console.info("[SHOPIFY DRAFT ORDER INPUT]", JSON.stringify(draftOrderInput, null, 2));
+    console.info("[SHOPIFY DRAFT ORDER INPUT]", { ...diagnostic, hasCustomerId: Boolean(resolvedCustomerGid), customAttributeCount: customAttributes.length });
 
     const created = await shopifyAdminGraphql<DraftOrderCreatePayload>(
       shop.shopDomain,
@@ -364,7 +399,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
       console.error("[EXPRESS CHECKOUT ORDER] Shopify draftOrderCreate userErrors", { ...diagnostic, shopifyUserErrors: userErrors, errorName: "ShopifyUserError", errorMessage: message });
       return jsonWithCors(
         req,
-        { ok: false, source: "shopify", message: "Draft order creation failed", userErrors },
+        { ok: false, error: "We could not place your order right now. Please try again." },
         { status: 422 }
       );
     }
@@ -384,12 +419,14 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
       { id: createResult.draftOrder.id, paymentPending: intent.selectedPaymentMethod === "COD" }
     );
 
+    checkoutPerfLog("shopify_admin_api_ms", { ...perfContext, durationMs: elapsedMs(shopifyStartedAt) });
+
     const completeResult = completed.draftOrderComplete;
     if (completeResult?.userErrors?.length || !completeResult?.draftOrder?.order?.id) {
       const message = userErrorMessage(completeResult?.userErrors);
       const shopifyUserErrors = normalizeShopifyUserErrors(completeResult?.userErrors);
       console.error("[EXPRESS CHECKOUT ORDER] Shopify draftOrderComplete userErrors", { ...diagnostic, shopifyUserErrors, errorName: "ShopifyUserError", errorMessage: message });
-      return jsonWithCors(req, { ok: false, error: "Unable to complete Shopify draft order.", reason: message, shopifyUserErrors }, { status: 422 });
+      return jsonWithCors(req, { ok: false, error: "We could not place your order right now. Please try again." }, { status: 422 });
     }
 
     const order = completeResult.draftOrder.order;
@@ -397,6 +434,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     let updatedIntent;
 
     try {
+      const persistStartedAt = Date.now();
       const written = await prisma.$transaction(async (tx) => {
         const link = await tx.expressCheckoutOrderLink.create({
           data: {
@@ -422,6 +460,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
       });
       orderLink = written.link;
       updatedIntent = written.refreshedIntent;
+      checkoutPerfLog("order_persist_ms", { ...perfContext, durationMs: elapsedMs(persistStartedAt) });
     } catch (error) {
       const code = typeof error === "object" && error && "code" in error ? String(error.code) : "";
       if (code !== "P2002") throw error;
@@ -431,6 +470,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
       });
     }
 
+    checkoutPerfLog("order_create_total_ms", { ...perfContext, durationMs: elapsedMs(totalStartedAt) });
     return jsonWithCors(req, { ok: true, intent: updatedIntent, orderLink, shopifyOrder: order }, { status: 201 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Order creation failed";
@@ -446,8 +486,8 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     return jsonWithCors(
       req,
       status === 502
-        ? { ok: false, source: "shopify", message: "Draft order creation failed", userErrors: [] }
-        : { ok: false, error: message },
+        ? { ok: false, error: "We could not place your order right now. Please try again." }
+        : { ok: false, error: "We could not place your order right now. Please try again." },
       { status }
     );
   }

@@ -19,6 +19,19 @@ function jsonWithCors(req: NextRequest, body: unknown, init?: ResponseInit) {
   return withCors(req, NextResponse.json(body, init));
 }
 
+function checkoutPerfLog(event: string, details: { shopId?: string; intentId?: string; customerProfileId?: string; selectedPaymentMethod?: unknown; durationMs?: number | null }) {
+  console.info(`[CHECKOUT PERF] ${event}`, {
+    shopId: details.shopId || null,
+    intentId: details.intentId || null,
+    customerProfileId: details.customerProfileId || null,
+    selectedPaymentMethod: details.selectedPaymentMethod || null,
+    durationMs: typeof details.durationMs === "number" ? Math.round(details.durationMs) : null,
+  });
+}
+
+function elapsedMs(startedAt: number) {
+  return Date.now() - startedAt;
+}
 
 function isPaymentMethod(value: unknown): value is PaymentMethod {
   return typeof value === "string" && PAYMENT_METHODS.includes(value as PaymentMethod);
@@ -29,6 +42,7 @@ export async function OPTIONS(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+  const totalStartedAt = Date.now();
   const shop = await requireExpressCheckoutShop(req);
 
   if ("error" in shop) return jsonWithCors(req, { ok: false, error: shop.error }, { status: shop.status });
@@ -48,6 +62,8 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
   if (!body) return jsonWithCors(req, { ok: false, error: "Invalid JSON body" }, { status: 400 });
   if (!isPaymentMethod(body.method)) return jsonWithCors(req, { ok: false, error: "method must be COD or PREPAID" }, { status: 400 });
 
+  checkoutPerfLog("payment_method_switch_start", { shopId: shop.shopId, intentId, customerProfileId, selectedPaymentMethod: body.method });
+
   const intentWhere = { shopId: shop.shopId, id: intentId, customerProfileId };
   const intent = await prisma.expressCheckoutIntent.findFirst({ where: intentWhere });
 
@@ -64,6 +80,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
   const amountPaise = method === "COD" ? 0 : totalAmountPaise;
   const paymentStatus = method === "COD" ? "NOT_REQUIRED" : "PENDING";
 
+  const persistStartedAt = Date.now();
   const result = await prisma.$transaction(async (tx) => {
     await tx.expressCheckoutPayment.deleteMany({ where: { shopId: shop.shopId, intentId, method, status: "PENDING", intent: { customerProfileId } } });
 
@@ -74,6 +91,9 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
 
     return { intent: updatedIntent, payment };
   });
+
+  checkoutPerfLog("payment_method_switch_persist_ms", { shopId: shop.shopId, intentId, customerProfileId, selectedPaymentMethod: method, durationMs: elapsedMs(persistStartedAt) });
+  checkoutPerfLog("payment_method_switch_total_ms", { shopId: shop.shopId, intentId, customerProfileId, selectedPaymentMethod: method, durationMs: elapsedMs(totalStartedAt) });
 
   return jsonWithCors(req, { ok: true, ...result }, { status: 201 });
 }
