@@ -932,7 +932,7 @@
 .megaska-express-scroll-area {
   scrollbar-width: none;
   -ms-overflow-style: none;
-  padding-bottom: 132px;
+  padding-bottom: 210px;
 }
 .megaska-express-scroll-area::-webkit-scrollbar { display: none; }
 .megaska-express-dialog .megaska-otp-close {
@@ -974,7 +974,7 @@
 .megaska-express-payment-copy strong { color:#0f172a; font-size:14px; }
 .megaska-express-payment-copy small { color:#64748b; font-size:12px; line-height:1.35; }
 .megaska-express-info-box { background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; color:#334155 !important; margin-top:5px; padding:8px; }
-.megaska-express-sticky-cta { background:rgba(255,255,255,.96); border:1px solid #dbe3ee; border-radius:18px; bottom:8px; box-shadow:0 -10px 30px rgba(15,23,42,.12); display:grid; gap:10px; left:16px; padding:10px 14px 12px; position:sticky; right:16px; z-index:4; }
+.megaska-express-sticky-cta { background:rgba(255,255,255,.98); border-top:1px solid rgba(15,23,42,.12); border-radius:0 0 18px 18px; bottom:0; box-shadow:0 -12px 32px rgba(15,23,42,.10); display:grid; gap:10px; left:0; padding:12px 24px 14px; position:absolute; right:0; width:100%; z-index:20; }
 .megaska-express-sticky-main { align-items:center; display:grid; gap:10px; grid-template-columns:1fr auto; }
 .megaska-express-sticky-trust { display:grid; gap:8px; grid-template-columns:1fr 1fr; }
 .megaska-express-sticky-trust p { align-items:center; background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; display:flex; gap:7px; margin:0; padding:7px 8px; }
@@ -990,5 +990,4 @@
   .megaska-express-summary { margin-bottom:10px; padding:10px; }
   .megaska-express-line { grid-template-columns:44px 1fr auto; }
   .megaska-express-line span img, .megaska-express-line span i { height:44px; width:44px; }
-  .megaska-express-sticky-cta { left:8px; right:8px; }
 }
