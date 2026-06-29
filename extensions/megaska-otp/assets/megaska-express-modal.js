@@ -30,6 +30,11 @@
     lastCheckedPincode: "",
     pincodeCache: {},
     pincodeTimer: null,
+    savedPincode: "",
+    savedPincodeStatus: "idle",
+    savedPincodeMessage: "",
+    savedPincodeEta: "",
+    lastCheckedSavedPincode: "",
     perf: { openStart: 0, shellPaintLogged: false, checkoutPaintLogged: false, apiCalls: {}, duplicateCallsFound: false },
     hydration: { session: "idle", cart: "idle", intent: "idle", address: "idle", discount: "idle", pincode: "idle", payment: "idle" },
   };
@@ -176,6 +181,11 @@
     try { return new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric" }).format(date); } catch (_error) { return String(value); }
   }
 
+  function pincodeDeliveryMessage(result) {
+    if (!result?.eta) return "Delivery available";
+    return `Delivery available • Estimated delivery: ${formatEta(result.eta)}`;
+  }
+
   function setPincodeState(status, message, details) {
     state.pincodeStatus = status;
     state.pincodeMessage = message;
@@ -192,6 +202,19 @@
     if (etaEl) etaEl.textContent = state.pincodeEta ? `Estimated delivery by ${formatEta(state.pincodeEta)}` : "";
   }
 
+  function setSavedPincodeState(status, message, details) {
+    state.savedPincodeStatus = status;
+    state.savedPincodeMessage = message;
+    state.savedPincodeEta = details?.eta || "";
+    const statusEl = ensureModal().querySelector("[data-express-saved-pincode-message]");
+    if (statusEl) {
+      statusEl.textContent = message;
+      statusEl.setAttribute("data-status", status);
+    } else if (state.open) {
+      render();
+    }
+  }
+
   function applyPincodeResult(result) {
     state.lastCheckedPincode = result.pincode || state.pincode;
     if (result.serviceable) {
@@ -206,6 +229,44 @@
       return;
     }
     setPincodeState("unserviceable", "Delivery is not available for this PIN code.", {});
+  }
+
+
+  function applySavedPincodeResult(result) {
+    state.lastCheckedSavedPincode = result.pincode || state.savedPincode;
+    if (result.serviceable) {
+      setSavedPincodeState("serviceable", `✅ ${pincodeDeliveryMessage(result)}`, result);
+      console.log("[EXPRESS PINCODE] saved_address_check_success");
+      return;
+    }
+    setSavedPincodeState("unserviceable", "⚠ Delivery may not be available for this PIN code", {});
+    console.log("[EXPRESS PINCODE] saved_address_check_success");
+  }
+
+  async function checkSavedAddressPincode(pincode) {
+    if (state.pincodeCache[pincode]) { applySavedPincodeResult(state.pincodeCache[pincode]); return; }
+    if (state.lastCheckedSavedPincode === pincode && ["serviceable", "unserviceable", "error"].includes(state.savedPincodeStatus)) return;
+    state.lastCheckedSavedPincode = pincode;
+    setSavedPincodeState("checking", "Checking delivery availability...", {});
+    console.log("[EXPRESS PINCODE] saved_address_check_start");
+    try {
+      const result = normalizePincodeResponse(await apiFetch(`/delhivery/pincode?pincode=${encodeURIComponent(pincode)}`), pincode);
+      state.pincodeCache[pincode] = result;
+      if (state.savedPincode !== pincode) return;
+      applySavedPincodeResult(result);
+    } catch (_error) {
+      setSavedPincodeState("error", "Could not verify delivery availability right now.", {});
+      console.log("[EXPRESS PINCODE] saved_address_check_failed");
+    }
+  }
+
+  function scheduleSavedAddressPincodeCheck(rawValue) {
+    const pincode = sanitizePincode(rawValue);
+    state.savedPincode = pincode;
+    if (!/^\d{6}$/.test(pincode)) { setSavedPincodeState("idle", "", {}); return; }
+    if (state.pincodeCache[pincode]) { applySavedPincodeResult(state.pincodeCache[pincode]); return; }
+    if (state.lastCheckedSavedPincode === pincode && ["checking", "serviceable", "unserviceable", "error"].includes(state.savedPincodeStatus)) return;
+    window.setTimeout(() => checkSavedAddressPincode(pincode), 0);
   }
 
   async function checkPincode(pincode) {
@@ -387,6 +448,7 @@
     const discountCode = discount?.code || discount?.title || "Discount";
     const discountChip = discount ? `<p class="megaska-express-chip"><strong>${escapeHtml(discountCode)} applied</strong><br>You saved ${money(intent.discountAmountPaise, intent.currency)}</p>` : (state.discountMessage ? `<p class="megaska-express-chip">${escapeHtml(state.discountMessage)}</p>` : "");
     const hasAddress = hasCompleteAddress(currentAddress) && !state.editingAddress;
+    const savedPincodeMarkup = hasAddress && state.savedPincodeMessage ? `<p class="megaska-express-saved-pincode-status" data-express-saved-pincode-message data-status="${escapeHtml(state.savedPincodeStatus)}">${escapeHtml(state.savedPincodeMessage)}</p>` : "";
     const prepaidAmount = priceHydrating ? "Calculating..." : money(payableAmount("PREPAID"), intent.currency);
     const totalAmount = priceHydrating ? "Calculating..." : money(payableAmount(selected), intent.currency);
     const submitLabel = !isReady ? "Preparing..." : state.orderSubmitting && state.paymentStarted ? "Opening secure payment..." : state.orderSubmitting ? "Placing order..." : selected === "COD" ? "Place COD Order" : "Pay Now";
@@ -394,7 +456,7 @@
     const addressMarkup = addressHydrating && !hasAddress
       ? `<section class="megaska-express-stack"><h3>Delivery address</h3><p class="megaska-otp-step-subtitle" aria-live="polite">Loading saved address...</p></section>`
       : hasAddress
-        ? `<section class="megaska-express-stack"><div class="megaska-express-section-head"><h3>Delivery address</h3><button class="megaska-express-link-btn" type="button" data-express-action="change-address">Change Address ›</button></div><div class="megaska-express-address-card"><span class="megaska-express-address-icon" aria-hidden="true">⌖</span><div><strong>${escapeHtml(currentAddress.name)}</strong><p>${escapeHtml(currentAddress.address1)}${currentAddress.address2 ? `, ${escapeHtml(currentAddress.address2)}` : ""}</p><p>${escapeHtml(currentAddress.city)}, ${escapeHtml(currentAddress.province)} ${escapeHtml(currentAddress.zip)}, ${escapeHtml(currentAddress.country)}</p><p>${escapeHtml(intent.phoneSnapshot || currentAddress.phone)}</p></div></div></section>`
+        ? `<section class="megaska-express-stack"><div class="megaska-express-section-head"><h3>Delivery address</h3><button class="megaska-express-link-btn" type="button" data-express-action="change-address">Change Address ›</button></div><div class="megaska-express-address-card"><span class="megaska-express-address-icon" aria-hidden="true">⌖</span><div><strong>${escapeHtml(currentAddress.name)}</strong><p>${escapeHtml(currentAddress.address1)}${currentAddress.address2 ? `, ${escapeHtml(currentAddress.address2)}` : ""}</p><p>${escapeHtml(currentAddress.city)}, ${escapeHtml(currentAddress.province)} ${escapeHtml(currentAddress.zip)}, ${escapeHtml(currentAddress.country)}</p><p>${escapeHtml(intent.phoneSnapshot || currentAddress.phone)}</p>${savedPincodeMarkup}</div></div></section>`
         : `<form data-express-form="address" class="megaska-express-stack" novalidate><h3>Delivery address</h3><input name="name" value="${escapeHtml(currentAddress.name || "")}" placeholder="Full name" required><input name="email" value="${escapeHtml(currentAddress.email || state.customer?.email || "")}" placeholder="Email" type="email"><input value="${escapeHtml(intent.phoneSnapshot || currentAddress.phone || "Verified phone")}" disabled><input name="zip" value="${escapeHtml(currentAddress.zip || state.customer?.postalCode || "")}" placeholder="PIN code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required><p class="megaska-express-pincode-status" data-express-pincode-message data-status="${escapeHtml(state.pincodeStatus)}">${escapeHtml(state.pincodeMessage)}</p><p class="megaska-express-pincode-eta" data-express-pincode-eta>${state.pincodeEta ? `Estimated delivery by ${escapeHtml(formatEta(state.pincodeEta))}` : ""}</p><div class="megaska-express-fields"><input name="city" value="${escapeHtml(currentAddress.city || state.customer?.city || "")}" placeholder="City" required><input name="province" value="${escapeHtml(currentAddress.province || state.customer?.stateProvince || "")}" placeholder="State" required></div><input name="address1" value="${escapeHtml(currentAddress.address1 || state.customer?.addressLine1 || "")}" placeholder="Address line 1" required><input name="address2" value="${escapeHtml(currentAddress.address2 || state.customer?.addressLine2 || "")}" placeholder="Address line 2 / Landmark"><input name="country" value="${escapeHtml(currentAddress.country || "India")}" placeholder="Country" required><button type="submit" ${!state.intent?.id || state.busy ? "disabled" : ""}>Save address</button><p class="megaska-otp-step-subtitle">Address is saved to your checkout and profile.</p></form>`;
     root.innerHTML = `${state.error ? `<p class="megaska-otp-error">${escapeHtml(state.error)}</p>` : ""}<header class="megaska-express-modal-header"><div class="megaska-express-logo">${logoMarkup()}</div><div><p class="megaska-otp-step-subtitle">Secure Checkout</p><h2 id="megaska-express-title" class="megaska-otp-step-title">Express checkout</h2></div></header><div class="megaska-express-progress"><span>Address</span><span>Coupon</span><span>Payment</span></div><section class="megaska-express-summary"><h3>Order summary</h3>${rows || `<p class="megaska-otp-step-subtitle">${state.hydration.cart === "loading" ? "Loading cart summary..." : "Cart details unavailable."}</p>`}${extraCount ? `<p class="megaska-otp-step-subtitle">+ ${extraCount} more item${extraCount > 1 ? "s" : ""}</p>` : ""}<div class="megaska-express-totals"><p><span>Subtotal</span><strong>${priceHydrating ? "Calculating..." : money(intent.subtotalAmountPaise, intent.currency)}</strong></p>${discountSummary(intent)}<p><span>Delivery</span><strong>${Number(intent.shippingAmountPaise || 0) ? money(intent.shippingAmountPaise, intent.currency) : "Free"}</strong></p><p class="megaska-express-total"><span>Total</span><strong>${totalAmount}</strong></p></div></section>${addressMarkup}<form data-express-form="discount" class="megaska-express-stack"><h3>Have a coupon?</h3><div class="megaska-express-inline"><input name="code" value="${escapeHtml(state.discountCode)}" placeholder="Enter coupon code"><button type="submit" ${!state.intent?.id || state.busy ? "disabled" : ""}>Apply</button></div>${discountChip}</form><section class="megaska-express-stack"><h3>Payment method</h3>${paymentHydrating ? `<p class="megaska-otp-step-subtitle" aria-live="polite">Loading payment options...</p>` : ""}<label class="megaska-express-payment-card ${selected === "PREPAID" ? "is-selected" : ""}"><input type="radio" name="paymentMethod" value="PREPAID" ${selected === "PREPAID" ? "checked" : ""} ${paymentHydrating ? "disabled" : ""}><span class="megaska-express-payment-copy"><span class="megaska-express-payment-icons" aria-label="Supported online payment methods">${paymentLogoIcons()}</span><span class="megaska-express-payment-heading"><strong>Secure Online Payment</strong><b>${prepaidAmount}</b></span><small>(Powered by Razorpay)</small></span></label><label class="megaska-express-payment-card ${selected === "COD" ? "is-selected" : ""}"><input type="radio" name="paymentMethod" value="COD" ${selected === "COD" ? "checked" : ""} ${paymentHydrating ? "disabled" : ""}><span class="megaska-express-payment-copy">${codLogoCard()}<span class="megaska-express-payment-heading"><strong>Cash on Delivery</strong><b>${prepaidAmount}</b></span><small>Pay ${prepaidAmount} on delivery</small><small class="megaska-express-info-box">No advance payment. Pay the full amount on delivery.</small></span></label>${state.paymentUpdating ? `<p class="megaska-otp-step-subtitle">Updating payment method...</p>` : ""}${state.orderSubmitting ? `<p class="megaska-otp-step-subtitle">${state.paymentStarted ? "Opening secure payment..." : "Placing your order securely. Please wait..."}</p>` : ""}</section><div class="megaska-express-sticky-cta"><div class="megaska-express-sticky-trust"><p><span>🔒</span><strong>100% Secure Payments</strong></p><p><span>🛡</span><strong>Trusted & Reliable</strong></p></div><div class="megaska-express-sticky-main"><div><span>Total Payable</span><strong>${totalAmount}</strong></div><button class="megaska-otp-primary-btn" data-express-action="place-order" type="button" ${disabledCta}>${submitLabel}</button></div></div>`;
     console.info("[EXPRESS UI] payment chips rendered", {
@@ -432,7 +494,7 @@
 
   async function open(opts) {
     const openStart = Number(opts?.openStart || perfNow());
-    state.open = true; state.step = "checkout"; state.error = ""; state.busy = false; state.paymentStarted = false; state.orderSubmitting = false; state.intent = null; state.customer = null; state.customerDefaultAddress = null; state.addressDraft = {}; state.editingAddress = false; state.discountMessage = ""; state.pincode = ""; state.pincodeStatus = "idle"; state.pincodeMessage = "Enter 6-digit PIN code to check delivery."; state.pincodeEta = ""; state.pincodeCity = ""; state.pincodeState = ""; state.lastCheckedPincode = ""; state.pincodeCache = {}; state.hydration = { session: "loading", cart: "idle", intent: "idle", address: "loading", discount: "loading", pincode: "idle", payment: "loading" }; resetApiCallPerf(openStart);
+    state.open = true; state.step = "checkout"; state.error = ""; state.busy = false; state.paymentStarted = false; state.orderSubmitting = false; state.intent = null; state.customer = null; state.customerDefaultAddress = null; state.addressDraft = {}; state.editingAddress = false; state.discountMessage = ""; state.pincode = ""; state.pincodeStatus = "idle"; state.pincodeMessage = "Enter 6-digit PIN code to check delivery."; state.pincodeEta = ""; state.pincodeCity = ""; state.pincodeState = ""; state.lastCheckedPincode = ""; state.pincodeCache = {}; state.savedPincode = ""; state.savedPincodeStatus = "idle"; state.savedPincodeMessage = ""; state.savedPincodeEta = ""; state.lastCheckedSavedPincode = ""; state.hydration = { session: "loading", cart: "idle", intent: "idle", address: "loading", discount: "loading", pincode: "idle", payment: "loading" }; resetApiCallPerf(openStart);
     const modal = ensureModal(); modal.hidden = false; modal.setAttribute("aria-hidden", "false"); document.documentElement.classList.add("megaska-otp-open"); render();
     try {
       await waitForModalShellPaint(openStart);
@@ -440,7 +502,7 @@
       state.hydration.session = "ready";
       render();
       await createIntent();
-      debugLog("modal ready", { intentId: state.intent?.id }); render(); perfDetails("duplicate_api_calls_found", { shopId: getShopDomain() || null, intentId: state.intent?.id || null, duplicateCallsFound: state.perf.duplicateCallsFound, calls: state.perf.apiCalls }); perfDetails("modal_ready_total_ms", { shopId: getShopDomain() || null, intentId: state.intent?.id || null, duplicateCallsFound: state.perf.duplicateCallsFound, durationMs: Math.round(perfNow() - openStart) }); const initialZip = ensureModal().querySelector('[name="zip"]')?.value || ""; if (initialZip) schedulePincodeCheck(initialZip);
+      debugLog("modal ready", { intentId: state.intent?.id }); render(); perfDetails("duplicate_api_calls_found", { shopId: getShopDomain() || null, intentId: state.intent?.id || null, duplicateCallsFound: state.perf.duplicateCallsFound, calls: state.perf.apiCalls }); perfDetails("modal_ready_total_ms", { shopId: getShopDomain() || null, intentId: state.intent?.id || null, duplicateCallsFound: state.perf.duplicateCallsFound, durationMs: Math.round(perfNow() - openStart) }); const initialZip = ensureModal().querySelector('[name="zip"]')?.value || ""; if (initialZip) schedulePincodeCheck(initialZip); const savedZip = hasCompleteAddress(address()) ? address().zip : ""; if (savedZip) scheduleSavedAddressPincodeCheck(savedZip);
     }
     catch (error) { state.step = "error"; state.error = error instanceof Error ? error.message : "Unable to prepare checkout."; render(); }
   }
