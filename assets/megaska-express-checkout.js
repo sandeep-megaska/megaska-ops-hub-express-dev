@@ -280,7 +280,7 @@
             <label class="megaska-express-radio"><input type="radio" name="paymentMethod" value="PREPAID" ${selectedMethod === "PREPAID" ? "checked" : ""}> <span>PREPAID</span></label>
             <label class="megaska-express-radio"><input type="radio" name="paymentMethod" value="COD" ${selectedMethod === "COD" ? "checked" : ""}> <span>COD</span></label>
             ${selectedMethod === "COD" ? `<p class="megaska-express-note">${COD_FEE_NOTE}</p>` : ""}
-            <button class="megaska-express-btn megaska-express-btn--primary megaska-express-place" data-express-action="place-order" type="button" ${state.busy === "order" ? "disabled" : ""}>${state.busy === "order" ? "Processing..." : selectedMethod === "COD" ? "Place COD order" : "Pay now"}</button>
+            <button class="megaska-express-btn megaska-express-btn--primary megaska-express-place" data-express-action="place-order" type="button" ${state.busy ? "disabled" : ""}>${state.busy ? "Processing..." : selectedMethod === "COD" ? "Place COD order" : "Pay now"}</button>
           </div>
         </section>
       </div>`;
@@ -323,10 +323,17 @@
 
   async function setPaymentMethod(method) {
     setBusy("payment");
-    await apiFetch(`/express/checkout/intents/${encodeURIComponent(state.intentId)}/payment-method`, { method: "POST", body: { method } });
-    await refreshIntent();
+    await ensurePaymentMethod(method);
     state.busy = null;
     render();
+  }
+
+  async function ensurePaymentMethod(method) {
+    if (state.intent?.selectedPaymentMethod !== method) {
+      await apiFetch(`/express/checkout/intents/${encodeURIComponent(state.intentId)}/payment-method`, { method: "POST", body: { method } });
+    }
+    await refreshIntent();
+    if (state.intent?.selectedPaymentMethod !== method) throw new Error(`Unable to persist ${method} payment method.`);
   }
 
   function loadRazorpay() {
@@ -349,6 +356,7 @@
   }
 
   async function handlePrepaid() {
+    await ensurePaymentMethod("PREPAID");
     await loadRazorpay();
     const data = await apiFetch(`/express/checkout/intents/${encodeURIComponent(state.intentId)}/razorpay/order`, { method: "POST", body: {} });
     const order = data.razorpayOrder;

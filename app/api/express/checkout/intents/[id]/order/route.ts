@@ -70,6 +70,11 @@ function paiseToAmount(paise: number) {
   return (Math.max(0, Math.round(Number(paise) || 0)) / 100).toFixed(2);
 }
 
+function paiseToRupeeDisplay(paise: number) {
+  const amount = Math.max(0, Math.round(Number(paise) || 0)) / 100;
+  return `₹${Number.isInteger(amount) ? amount.toFixed(0) : amount.toFixed(2)}`;
+}
+
 function asRecord(value: unknown): JsonRecord | null {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as JsonRecord) : null;
 }
@@ -301,9 +306,8 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     return jsonWithCors(req, { ok: false, error: "Cart line items required", reason: "intent.cartSnapshot must include lineItems/items/lines with variantId or variant_id and quantity" }, { status: 400 });
   }
 
-  if (intent.selectedPaymentMethod === "COD" && intent.codFeeAmountPaise > 0) {
-    lineItems.push({ title: "COD Handling Fee", quantity: 1, originalUnitPrice: paiseToAmount(intent.codFeeAmountPaise) });
-  }
+  // Keep COD fees in Megaska totals only for now. Shopify draftOrderCreate receives
+  // only real product variants so draft creation can succeed reliably.
 
   const discountAmount = Math.max(0, Math.min(intent.subtotalAmountPaise, intent.discountAmountPaise));
   const diagnostic = orderDiagnostic({ shopId: shop.shopId, intentId, customerProfileId, intent, lineItemCount: lineItems.length, hasAddressSnapshot: Boolean(address) });
@@ -325,10 +329,15 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     { key: "megaska_customer_profile_id", value: customerProfileId },
     { key: "megaska_payment_method", value: intent.selectedPaymentMethod },
     { key: "megaska_discount_snapshot", value: JSON.stringify(intent.discounts) },
+    ...(intent.selectedPaymentMethod === "COD" && intent.codFeeAmountPaise > 0
+      ? [
+          { key: "COD fee", value: paiseToRupeeDisplay(intent.codFeeAmountPaise) },
+          { key: "COD payable total", value: paiseToRupeeDisplay(intent.totalAmountPaise) },
+        ]
+      : []),
   ];
   const email = address.email || auth.customer.email || undefined;
   const phone = address.phone || auth.customer.phoneE164 || undefined;
-  const paymentMethod = intent.selectedPaymentMethod;
   const discount =
     discountAmount > 0
       ? { title: "Express checkout discount", value: paiseToAmount(discountAmount), valueType: "FIXED_AMOUNT" }
@@ -340,7 +349,9 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     shippingAddress,
     billingAddress: shippingAddress,
     customerId: auth.customer.shopifyCustomerId || undefined,
-    note: `Megaska Express Checkout intent ${intent.id}`,
+    note: intent.selectedPaymentMethod === "COD" && intent.codFeeAmountPaise > 0
+      ? `Megaska Express Checkout intent ${intent.id} | COD fee: ${paiseToRupeeDisplay(intent.codFeeAmountPaise)} | COD payable total: ${paiseToRupeeDisplay(intent.totalAmountPaise)}`
+      : `Megaska Express Checkout intent ${intent.id}`,
     tags: ["Megaska Express Checkout"],
     customAttributes,
     shippingLine: intent.shippingAmountPaise > 0 ? { title: "Shipping", price: paiseToAmount(intent.shippingAmountPaise) } : undefined,
@@ -348,21 +359,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
   };
 
   try {
-    console.info(
-      "[SHOPIFY DRAFT ORDER INPUT]",
-      JSON.stringify(
-        {
-          lineItems,
-          shippingAddress,
-          email,
-          phone,
-          paymentMethod,
-          discount,
-        },
-        null,
-        2
-      )
-    );
+    console.info("[SHOPIFY DRAFT ORDER INPUT]", JSON.stringify(draftOrderInput, null, 2));
 
     const created = await shopifyAdminGraphql<DraftOrderCreatePayload>(
       shop.shopDomain,
