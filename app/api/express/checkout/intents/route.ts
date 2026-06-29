@@ -16,7 +16,7 @@ import {
 
 export const runtime = "nodejs";
 
-const INTENT_EXPIRES_IN_MS = 30 * 60 * 1000;
+const INTENT_EXPIRES_IN_MS = 24 * 60 * 60 * 1000;
 const ACTIVE_STATUSES = [
   "CREATED",
   "CUSTOMER_AUTHENTICATED",

@@ -3,6 +3,7 @@ import { prisma } from "../db/prisma";
 import { getShopByDomain, normalizeShopDomain, ShopResolutionError } from "../shopify/shop";
 import { ExpressCheckoutOrderFinalizationError, finalizePrepaidExpressCheckoutOrder } from "./order-finalization";
 import { CheckoutStateDb, transitionCheckoutIntent } from "../../lib/express-checkout/state-machine";
+import { CHECKOUT_INTENT_EXPIRY_MESSAGE, markCheckoutIntentExpiredIfNeeded } from "../../lib/express-checkout/expiry";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -150,14 +151,7 @@ async function loadValidatedIntent(params: CreateParams, shopId: string) {
 
   if (!intent) throw new ExpressCheckoutRazorpayError(404, "Could not start secure payment. Please try again.", "Intent not found");
   if (intent.status === "ORDER_COMPLETED") throw new ExpressCheckoutRazorpayError(409, "Could not start secure payment. Please try again.", "Intent already completed", "CHECKOUT_INTENT_COMPLETED");
-  if (intent.status === "EXPIRED") throw new ExpressCheckoutRazorpayError(409, "Checkout session expired. Please start checkout again.", "Intent expired", "CHECKOUT_SESSION_EXPIRED");
-  if (intent.expiresAt && intent.expiresAt <= new Date()) {
-    await prisma.expressCheckoutIntent.updateMany({
-      where: { shopId, id: intent.id, status: { notIn: ["ORDER_COMPLETED", "EXPIRED"] } },
-      data: { status: "EXPIRED" },
-    });
-    throw new ExpressCheckoutRazorpayError(409, "Checkout session expired. Please start checkout again.", "Intent expired", "CHECKOUT_SESSION_EXPIRED");
-  }
+  if (intent.status === "EXPIRED" || await markCheckoutIntentExpiredIfNeeded(intent)) throw new ExpressCheckoutRazorpayError(409, CHECKOUT_INTENT_EXPIRY_MESSAGE, "Intent expired", "CHECKOUT_SESSION_EXPIRED");
   if (intent.selectedPaymentMethod !== "PREPAID") throw new ExpressCheckoutRazorpayError(409, "Could not start secure payment. Please try again.", "PREPAID payment method required");
   if (!Number.isFinite(intent.totalAmountPaise) || intent.totalAmountPaise <= 0) throw new ExpressCheckoutRazorpayError(400, "Could not start secure payment. Please try again.", "Invalid prepaid amount");
   if (!intent.customerProfileId) throw new ExpressCheckoutRazorpayError(409, "Could not start secure payment. Please try again.", "Customer profile required");
@@ -249,7 +243,7 @@ export async function verifyExpressCheckoutRazorpayPayment(params: VerifyParams)
     console.info("[CHECKOUT STATE] payment_duplicate_callback_ignored", { shopId: shop.id, intentId: intent.id, razorpayOrderId: params.razorpay_order_id, razorpayPaymentId: params.razorpay_payment_id, hasOrderLink: Boolean(intent.orderLink) });
     return { ok: true, intentId: intent.id, paymentId: null, orderLink: intent.orderLink, shopifyOrder: null, status: "ORDER_COMPLETED", idempotent: true };
   }
-  if (intent.status === "EXPIRED") throw new ExpressCheckoutRazorpayError(409, "Checkout session expired. Please start checkout again.", "Intent expired", "CHECKOUT_SESSION_EXPIRED", "RAZORPAY_VERIFY");
+  if (intent.status === "EXPIRED" || await markCheckoutIntentExpiredIfNeeded(intent)) throw new ExpressCheckoutRazorpayError(409, CHECKOUT_INTENT_EXPIRY_MESSAGE, "Intent expired", "CHECKOUT_SESSION_EXPIRED", "RAZORPAY_VERIFY");
   if (intent.status !== "PAYMENT_PENDING") throw new ExpressCheckoutRazorpayError(409, "Could not verify payment. Please contact support if money was deducted.", `Intent status ${intent.status} cannot verify payment`, "INVALID_CHECKOUT_STATE", "RAZORPAY_VERIFY");
 
   const payment = await prisma.expressCheckoutPayment.findFirst({ where: { shopId: shop.id, intentId: intent.id, method: "PREPAID", razorpayOrderId: params.razorpay_order_id }, orderBy: { createdAt: "desc" } });

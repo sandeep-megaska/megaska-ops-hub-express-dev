@@ -17,6 +17,7 @@ import {
   shopifyAdminGraphql,
 } from "../../../../../../../services/express-checkout/shopify-admin";
 import { CHECKOUT_INTENT_STATUSES, CheckoutStateDb, transitionCheckoutIntent } from "../../../../../../../lib/express-checkout/state-machine";
+import { CHECKOUT_INTENT_EXPIRY_MESSAGE, markCheckoutIntentExpiredIfNeeded } from "../../../../../../../lib/express-checkout/expiry";
 
 export const runtime = "nodejs";
 
@@ -287,8 +288,8 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     if (intent.orderLink) return jsonWithCors(req, { ok: true, intent, orderLink: intent.orderLink, shopifyOrder: null });
     return jsonWithCors(req, { ok: false, error: `Intent status ${intent.status} cannot create order` }, { status: 409 });
   }
-  if (intent.status === "EXPIRED") {
-    return jsonWithCors(req, { ok: false, error: "Checkout session expired. Please start checkout again." }, { status: 409 });
+  if (intent.status === "EXPIRED" || await markCheckoutIntentExpiredIfNeeded(intent)) {
+    return jsonWithCors(req, { ok: false, error: CHECKOUT_INTENT_EXPIRY_MESSAGE }, { status: 409 });
   }
   if (intent.orderLink?.draftOrderId) {
     console.info("[CHECKOUT STATE] draft_order_idempotent_return", { shopId: shop.shopId, intentId, customerProfileId, draftOrderId: intent.orderLink.draftOrderId, hasShopifyOrder: Boolean(intent.orderLink.shopifyOrderId) });
@@ -300,9 +301,6 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
   }
   if (BLOCKED_STATUSES.includes(intent.status)) {
     return jsonWithCors(req, { ok: false, error: `Intent status ${intent.status} cannot create order` }, { status: 409 });
-  }
-  if (intent.expiresAt && intent.expiresAt <= new Date()) {
-    return jsonWithCors(req, { ok: false, error: "Checkout session expired. Please start checkout again." }, { status: 409 });
   }
 
   if (intent.selectedPaymentMethod !== "COD" && intent.selectedPaymentMethod !== "PREPAID") {
@@ -458,8 +456,8 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
       if (latestIntent.orderLink) return jsonWithCors(req, { ok: true, intent: latestIntent, orderLink: latestIntent.orderLink, shopifyOrder: null });
       return jsonWithCors(req, { ok: false, error: `Intent status ${latestIntent.status} cannot create order` }, { status: 409 });
     }
-    if (latestIntent.status === "EXPIRED") {
-      return jsonWithCors(req, { ok: false, error: "Checkout session expired. Please start checkout again." }, { status: 409 });
+    if (latestIntent.status === "EXPIRED" || await markCheckoutIntentExpiredIfNeeded(latestIntent)) {
+      return jsonWithCors(req, { ok: false, error: CHECKOUT_INTENT_EXPIRY_MESSAGE }, { status: 409 });
     }
     let createResult: NonNullable<DraftOrderCreatePayload["draftOrderCreate"]> | null = null;
     let reusedDraftOrder = false;
