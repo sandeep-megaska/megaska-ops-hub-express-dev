@@ -19,3 +19,6 @@ export function getWhatsAppProvider(): WhatsAppProvider {
 export async function sendTemplateMessage(input: SendTemplateMessageInput): Promise<SendTemplateMessageResult> {
   return getWhatsAppProvider().sendTemplateMessage(input);
 }
+
+export { dispatchRecoveryMessage, RECOVERY_TEMPLATES } from "./recovery-dispatch";
+export type { RecoveryDispatchCandidate } from "./recovery-dispatch";
