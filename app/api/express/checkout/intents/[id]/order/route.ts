@@ -326,10 +326,17 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     { key: "megaska_payment_method", value: intent.selectedPaymentMethod },
     { key: "megaska_discount_snapshot", value: JSON.stringify(intent.discounts) },
   ];
+  const email = address.email || auth.customer.email || undefined;
+  const phone = address.phone || auth.customer.phoneE164 || undefined;
+  const paymentMethod = intent.selectedPaymentMethod;
+  const discount =
+    discountAmount > 0
+      ? { title: "Express checkout discount", value: paiseToAmount(discountAmount), valueType: "FIXED_AMOUNT" }
+      : undefined;
   const draftOrderInput: JsonRecord = {
     lineItems,
-    email: address.email || auth.customer.email || undefined,
-    phone: address.phone || auth.customer.phoneE164 || undefined,
+    email,
+    phone,
     shippingAddress,
     billingAddress: shippingAddress,
     customerId: auth.customer.shopifyCustomerId || undefined,
@@ -337,13 +344,26 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     tags: ["Megaska Express Checkout"],
     customAttributes,
     shippingLine: intent.shippingAmountPaise > 0 ? { title: "Shipping", price: paiseToAmount(intent.shippingAmountPaise) } : undefined,
-    appliedDiscount:
-      discountAmount > 0
-        ? { title: "Express checkout discount", value: paiseToAmount(discountAmount), valueType: "FIXED_AMOUNT" }
-        : undefined,
+    appliedDiscount: discount,
   };
 
   try {
+    console.info(
+      "[SHOPIFY DRAFT ORDER INPUT]",
+      JSON.stringify(
+        {
+          lineItems,
+          shippingAddress,
+          email,
+          phone,
+          paymentMethod,
+          discount,
+        },
+        null,
+        2
+      )
+    );
+
     const created = await shopifyAdminGraphql<DraftOrderCreatePayload>(
       shop.shopDomain,
       `mutation DraftOrderCreate($input: DraftOrderInput!) {
@@ -355,12 +375,19 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
       { input: draftOrderInput }
     );
 
+    console.info("[SHOPIFY DRAFT ORDER RESPONSE]", JSON.stringify(created, null, 2));
+
     const createResult = created.draftOrderCreate;
     if (createResult?.userErrors?.length || !createResult?.draftOrder?.id) {
       const message = userErrorMessage(createResult?.userErrors);
-      const shopifyUserErrors = normalizeShopifyUserErrors(createResult?.userErrors);
-      console.error("[EXPRESS CHECKOUT ORDER] Shopify draftOrderCreate userErrors", { ...diagnostic, shopifyUserErrors, errorName: "ShopifyUserError", errorMessage: message });
-      return jsonWithCors(req, { ok: false, error: "Unable to create Shopify draft order.", reason: message, shopifyUserErrors }, { status: 422 });
+      const userErrors = normalizeShopifyUserErrors(createResult?.userErrors);
+      console.error("[SHOPIFY DRAFT ORDER USER ERRORS]", JSON.stringify(userErrors, null, 2));
+      console.error("[EXPRESS CHECKOUT ORDER] Shopify draftOrderCreate userErrors", { ...diagnostic, shopifyUserErrors: userErrors, errorName: "ShopifyUserError", errorMessage: message });
+      return jsonWithCors(
+        req,
+        { ok: false, source: "shopify", message: "Draft order creation failed", userErrors },
+        { status: 422 }
+      );
     }
 
     const completed = await shopifyAdminGraphql<DraftOrderCompletePayload>(
@@ -429,8 +456,20 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
   } catch (error) {
     const message = error instanceof Error ? error.message : "Order creation failed";
     const name = error instanceof Error ? error.name : "UnknownError";
+    const stack = error instanceof Error ? error.stack : undefined;
     const status = error instanceof ControlledCheckoutError ? error.status : 502;
-    console.error("[EXPRESS CHECKOUT ORDER] draft order failed", { ...diagnostic, errorName: name, errorMessage: message });
-    return jsonWithCors(req, { ok: false, error: status === 502 ? "Unable to create order right now." : message, reason: status === 502 ? message : undefined }, { status });
+    console.error("[SHOPIFY DRAFT ORDER EXCEPTION]", {
+      name,
+      message,
+      stack,
+    });
+    console.error("[EXPRESS CHECKOUT ORDER] draft order failed", { ...diagnostic, errorName: name, errorMessage: message, errorStack: stack });
+    return jsonWithCors(
+      req,
+      status === 502
+        ? { ok: false, source: "shopify", message: "Draft order creation failed", userErrors: [] }
+        : { ok: false, error: message },
+      { status }
+    );
   }
 }
