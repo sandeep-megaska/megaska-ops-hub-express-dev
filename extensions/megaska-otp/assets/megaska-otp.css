@@ -477,6 +477,27 @@
   text-align: left;
 }
 
+.megaska-express-saved-pincode-status {
+  border-top: 1px solid rgba(21, 128, 61, 0.16);
+  font-size: 12.5px !important;
+  font-weight: 800;
+  margin-top: 8px !important;
+  padding-top: 8px;
+}
+
+.megaska-express-saved-pincode-status[data-status="checking"],
+.megaska-express-saved-pincode-status[data-status="error"] {
+  color: #64748b !important;
+}
+
+.megaska-express-saved-pincode-status[data-status="serviceable"] {
+  color: #15803d !important;
+}
+
+.megaska-express-saved-pincode-status[data-status="unserviceable"] {
+  color: #b45309 !important;
+}
+
 .megaska-otp-error {
   min-height: 20px;
   margin-top: 4px;
