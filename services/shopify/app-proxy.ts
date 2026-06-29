@@ -2,7 +2,7 @@ import crypto from "crypto";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { prisma } from "../db/prisma";
-import { normalizeShopDomain } from "./shop-resolver";
+import { getDefaultShopFromConfig, getShopByDomain, normalizeShopDomain } from "./shop";
 
 type AppProxyShop = {
   id: string;
@@ -57,11 +57,33 @@ function buildSignatureMessage(searchParams: URLSearchParams) {
   return pairs.sort().join("");
 }
 
+
+function getRequestedShopDomain(request: NextRequest) {
+  return normalizeShopDomain(
+    new URL(request.url).searchParams.get("shop") || request.headers.get("x-shopify-shop-domain")
+  );
+}
+
+function isAllowedStorefrontFallback(request: NextRequest) {
+  if (process.env.NODE_ENV === "production") return false;
+  if (String(process.env.EXPRESS_CHECKOUT_ENABLED || "").toLowerCase() !== "true") return false;
+
+  const requestedShop = getRequestedShopDomain(request);
+  if (!requestedShop) return false;
+
+  const allowedShops = String(process.env.EXPRESS_CHECKOUT_ALLOWED_SHOPS || "")
+    .split(",")
+    .map((shop) => normalizeShopDomain(shop))
+    .filter(Boolean);
+
+  return allowedShops.includes(requestedShop);
+}
+
 function isAllowedDevProxyBypass(request: NextRequest) {
   if (process.env.NODE_ENV === "production") return false;
   if (String(process.env.EXPRESS_CHECKOUT_ENABLED || "").toLowerCase() !== "true") return false;
 
-  const requestedShop = normalizeShopDomain(new URL(request.url).searchParams.get("shop"));
+  const requestedShop = getRequestedShopDomain(request);
   if (!requestedShop) return false;
 
   const allowedShops = String(process.env.EXPRESS_CHECKOUT_ALLOWED_SHOPS || "")
@@ -90,7 +112,7 @@ export function verifyShopifyAppProxySignature(request: NextRequest) {
 export async function resolveShopFromAppProxyRequest(request: NextRequest): Promise<AppProxyShop | null> {
   if (!verifyShopifyAppProxySignature(request)) return null;
 
-  const requestedShop = normalizeShopDomain(new URL(request.url).searchParams.get("shop"));
+  const requestedShop = getRequestedShopDomain(request);
   if (!requestedShop) return null;
 
   const rows = await prisma.$queryRaw<AppProxyShop[]>`
@@ -106,6 +128,51 @@ export async function resolveShopFromAppProxyRequest(request: NextRequest): Prom
   `;
 
   return rows[0] || null;
+}
+
+export async function resolveStorefrontShopFromAppProxyRequest(request: NextRequest): Promise<AppProxyShop | null> {
+  if (!verifyShopifyAppProxySignature(request)) return null;
+
+  const requestedShop = getRequestedShopDomain(request);
+  if (!requestedShop) return null;
+
+  const shop = await getShopByDomain(requestedShop);
+  if (shop?.isActive && !shop.uninstalledAt) {
+    return {
+      id: shop.id,
+      shopDomain: shop.shopDomain,
+      myshopifyDomain: shop.myshopifyDomain,
+      installationStatus: shop.installationStatus,
+      accessTokenEncrypted: shop.accessTokenEncrypted,
+      accessToken: shop.accessToken,
+    };
+  }
+
+  if (isAllowedStorefrontFallback(request)) {
+    const fallbackShop = await getDefaultShopFromConfig();
+    if (fallbackShop?.isActive && !fallbackShop.uninstalledAt) {
+      return {
+        id: fallbackShop.id,
+        shopDomain: fallbackShop.shopDomain,
+        myshopifyDomain: fallbackShop.myshopifyDomain,
+        installationStatus: fallbackShop.installationStatus,
+        accessTokenEncrypted: fallbackShop.accessTokenEncrypted,
+        accessToken: fallbackShop.accessToken,
+      };
+    }
+  }
+
+  return null;
+}
+
+export async function requireStorefrontShopFromAppProxy(request: NextRequest): Promise<AppProxyShop> {
+  if (!verifyShopifyAppProxySignature(request)) {
+    throw new AppProxyError("Invalid Shopify app proxy signature", 401);
+  }
+
+  const shop = await resolveStorefrontShopFromAppProxyRequest(request);
+  if (!shop) throw new AppProxyError("Shop not available for storefront request", 404);
+  return shop;
 }
 
 export async function requireShopFromAppProxy(request: NextRequest): Promise<AppProxyShop> {
