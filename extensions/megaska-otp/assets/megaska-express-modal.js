@@ -30,7 +30,8 @@
     lastCheckedPincode: "",
     pincodeCache: {},
     pincodeTimer: null,
-    perf: { openStart: 0, shellPaintLogged: false, apiCalls: {}, duplicateCallsFound: false },
+    perf: { openStart: 0, shellPaintLogged: false, checkoutPaintLogged: false, apiCalls: {}, duplicateCallsFound: false },
+    hydration: { session: "idle", cart: "idle", intent: "idle", address: "idle", discount: "idle", pincode: "idle", payment: "idle" },
   };
 
   function debugLog(message, payload) {
@@ -51,7 +52,7 @@
   }
 
   function resetApiCallPerf(openStart) {
-    state.perf = { openStart, shellPaintLogged: false, apiCalls: {}, duplicateCallsFound: false };
+    state.perf = { openStart, shellPaintLogged: false, checkoutPaintLogged: false, apiCalls: {}, duplicateCallsFound: false };
   }
 
   function trackApiCall(method, url) {
@@ -71,9 +72,13 @@
   async function waitForModalShellPaint(openStart) {
     await nextAnimationFrame();
     await nextAnimationFrame();
-    if (!state.perf.shellPaintLogged && state.open && state.step === "loading") {
+    if (!state.perf.shellPaintLogged && state.open) {
       state.perf.shellPaintLogged = true;
       perfLog("modal_shell_open_ms", perfNow() - openStart);
+    }
+    if (!state.perf.checkoutPaintLogged && state.open && state.step === "checkout") {
+      state.perf.checkoutPaintLogged = true;
+      perfLog("first_checkout_layout_paint_ms", perfNow() - openStart);
     }
   }
 
@@ -303,6 +308,7 @@
   function hasCompleteAddress(value) { return Boolean(value?.name && value?.phone && value?.address1 && value?.city && /^\d{6}$/.test(String(value?.zip || "").trim()) && value?.country); }
   function selectedDiscount(intent) { return Array.isArray(intent?.discounts) ? intent.discounts[0] || null : null; }
   function lines() { return Array.isArray(state.intent?.cartSnapshot?.lineItems) ? state.intent.cartSnapshot.lineItems : Array.isArray(state.intent?.cartSnapshot?.items) ? state.intent.cartSnapshot.items : []; }
+  function checkoutReady() { return Boolean(state.intent?.id) && state.hydration.session === "ready" && state.hydration.intent === "ready"; }
   function payMethod() { return state.optimisticPaymentMethod || state.intent?.selectedPaymentMethod || "PREPAID"; }
   function lineTitle(line) { return line?.product_title || line?.productTitle || line?.title || line?.name || "Item"; }
   function lineVariant(line) { const title = line?.variant_title || line?.variantTitle || ""; return title && title !== "Default Title" ? title : ""; }
@@ -315,7 +321,7 @@
 
   function render() {
     const root = ensureModal().querySelector("[data-express-root]");
-    if (state.step === "loading") root.innerHTML = `<h2 id="megaska-express-title" class="megaska-otp-step-title">Preparing checkout...</h2><p class="megaska-otp-step-subtitle">Checking your verified session and cart.</p><div class="megaska-express-spinner" role="status" aria-live="polite">Loading...</div>`;
+    if (state.step === "loading") renderCheckout(root);
     else if (state.step === "success") root.innerHTML = `<section class="megaska-otp-success"><div class="megaska-otp-success-icon">✓</div><h2 id="megaska-express-title">Order placed successfully</h2><p>${escapeHtml(state.error || "Your order is confirmed.")}</p><a class="megaska-otp-primary-btn" href="/">Continue shopping</a></section>`;
     else if (state.step === "error") root.innerHTML = `<h2 id="megaska-express-title" class="megaska-otp-step-title">Checkout needs attention</h2><p class="megaska-otp-error">${escapeHtml(state.error)}</p><button class="megaska-otp-primary-btn" data-express-action="retry" type="button">Retry</button><a class="megaska-otp-link" href="/checkout">Use standard checkout</a>`;
     else renderCheckout(root);
@@ -325,28 +331,42 @@
     const intent = state.intent || {};
     const currentAddress = Object.assign({}, address(), state.addressDraft);
     const selected = payMethod();
+    const isReady = checkoutReady();
+    const priceHydrating = state.hydration.intent !== "ready";
+    const addressHydrating = state.hydration.session !== "ready" || state.hydration.address === "loading" || state.hydration.intent === "loading";
+    const paymentHydrating = state.hydration.payment !== "ready" || state.hydration.intent !== "ready";
     const rows = lines().slice(0, 3).map((line) => `<article class="megaska-express-line"><span>${lineImage(line) ? `<img src="${escapeHtml(lineImage(line))}" alt="${escapeHtml(lineTitle(line))}" loading="lazy">` : `<i></i>`}</span><b>${escapeHtml(lineTitle(line))}</b><em>${lineVariant(line) ? `${escapeHtml(lineVariant(line))} · ` : ""}Qty ${escapeHtml(line.quantity || 1)}</em><strong>${money(linePrice(line), intent.currency)}</strong></article>`).join("");
     const extraCount = Math.max(0, lines().length - 3);
     const discount = selectedDiscount(intent);
     const discountCode = discount?.code || discount?.title || "Discount";
     const discountChip = discount ? `<p class="megaska-express-chip"><strong>${escapeHtml(discountCode)} applied</strong><br>You saved ${money(intent.discountAmountPaise, intent.currency)}</p>` : (state.discountMessage ? `<p class="megaska-express-chip">${escapeHtml(state.discountMessage)}</p>` : "");
     const hasAddress = hasCompleteAddress(currentAddress) && !state.editingAddress;
-    const addressMarkup = hasAddress ? `<section class="megaska-express-stack"><h3>Delivery address</h3><div class="megaska-express-chip"><strong>${escapeHtml(currentAddress.name)}</strong><br>${escapeHtml(currentAddress.address1)}${currentAddress.address2 ? `, ${escapeHtml(currentAddress.address2)}` : ""}<br>${escapeHtml(currentAddress.city)}, ${escapeHtml(currentAddress.province)} ${escapeHtml(currentAddress.zip)}<br>${escapeHtml(currentAddress.country)}<br>Phone: ${escapeHtml(intent.phoneSnapshot || currentAddress.phone)}</div><button type="button" data-express-action="change-address">Change</button></section>` : `<form data-express-form="address" class="megaska-express-stack" novalidate><h3>Delivery address</h3><input name="name" value="${escapeHtml(currentAddress.name || "")}" placeholder="Full name" required><input name="email" value="${escapeHtml(currentAddress.email || state.customer?.email || "")}" placeholder="Email" type="email"><input value="${escapeHtml(intent.phoneSnapshot || currentAddress.phone || "Verified phone")}" disabled><input name="zip" value="${escapeHtml(currentAddress.zip || state.customer?.postalCode || "")}" placeholder="PIN code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required><p class="megaska-express-pincode-status" data-express-pincode-message data-status="${escapeHtml(state.pincodeStatus)}">${escapeHtml(state.pincodeMessage)}</p><p class="megaska-express-pincode-eta" data-express-pincode-eta>${state.pincodeEta ? `Estimated delivery by ${escapeHtml(formatEta(state.pincodeEta))}` : ""}</p><div class="megaska-express-fields"><input name="city" value="${escapeHtml(currentAddress.city || state.customer?.city || "")}" placeholder="City" required><input name="province" value="${escapeHtml(currentAddress.province || state.customer?.stateProvince || "")}" placeholder="State" required></div><input name="address1" value="${escapeHtml(currentAddress.address1 || state.customer?.addressLine1 || "")}" placeholder="Address line 1" required><input name="address2" value="${escapeHtml(currentAddress.address2 || state.customer?.addressLine2 || "")}" placeholder="Address line 2 / Landmark"><input name="country" value="${escapeHtml(currentAddress.country || "India")}" placeholder="Country" required><button type="submit" ${state.busy ? "disabled" : ""}>Save address</button><p class="megaska-otp-step-subtitle">Address is saved to your checkout and profile.</p></form>`;
-    root.innerHTML = `${state.error ? `<p class="megaska-otp-error">${escapeHtml(state.error)}</p>` : ""}<header class="megaska-express-modal-header"><div class="megaska-express-logo">${logoMarkup()}</div><div><p class="megaska-otp-step-subtitle">Secure Checkout</p><h2 id="megaska-express-title" class="megaska-otp-step-title">Express checkout</h2></div></header><div class="megaska-express-progress"><span>Address</span><span>Discount</span><span>Payment</span></div><section class="megaska-express-summary"><h3>Order summary</h3>${rows || `<p class="megaska-otp-step-subtitle">Cart details unavailable.</p>`}${extraCount ? `<p class="megaska-otp-step-subtitle">+ ${extraCount} more item${extraCount > 1 ? "s" : ""}</p>` : ""}<p><span>Subtotal</span><strong>${money(intent.subtotalAmountPaise, intent.currency)}</strong></p>${discountSummary(intent)}<p><span>Delivery</span><strong>${Number(intent.shippingAmountPaise || 0) ? money(intent.shippingAmountPaise, intent.currency) : "Free"}</strong></p>${selected === "COD" && Number(state.settings?.codFeeAmountPaise || 0) ? `<p><span>COD charge</span><strong>${money(state.settings.codFeeAmountPaise, intent.currency)}</strong></p>` : ""}<p class="megaska-express-total"><span>Total</span><strong>${money(payableAmount(selected), intent.currency)}</strong></p></section>${addressMarkup}<form data-express-form="discount" class="megaska-express-stack"><h3>Discount</h3><div class="megaska-express-inline"><input name="code" value="${escapeHtml(state.discountCode)}" placeholder="Discount code"><button type="submit" ${state.busy ? "disabled" : ""}>Apply</button></div>${discountChip}</form><section class="megaska-express-stack"><h3>Payment method</h3><label><input type="radio" name="paymentMethod" value="PREPAID" ${selected === "PREPAID" ? "checked" : ""}> Online Payment — Pay ${money(payableAmount("PREPAID"), intent.currency)}</label><label><input type="radio" name="paymentMethod" value="COD" ${selected === "COD" ? "checked" : ""}> Cash on Delivery — Pay ${money(payableAmount("PREPAID"), intent.currency)} + ${money(state.settings?.codFeeAmountPaise || 0, intent.currency)} COD charge</label>${state.paymentUpdating ? `<p class="megaska-otp-step-subtitle">Updating payment method...</p>` : ""}${selected === "COD" ? `<p class="megaska-otp-step-subtitle">${escapeHtml(state.settings?.codInformationText || "")}</p>` : ""}${state.orderSubmitting ? `<p class="megaska-otp-step-subtitle">Placing your order securely. Please wait...</p>` : ""}<button class="megaska-otp-primary-btn" data-express-action="place-order" type="button" ${state.busy || state.orderSubmitting ? "disabled" : ""}>${state.orderSubmitting ? "Placing order..." : selected === "COD" ? "Place Order" : "Pay Now"}</button></section>`;
+    const addressMarkup = addressHydrating && !hasAddress ? `<section class="megaska-express-stack"><h3>Delivery address</h3><p class="megaska-otp-step-subtitle" aria-live="polite">Loading saved address...</p></section>` : hasAddress ? `<section class="megaska-express-stack"><h3>Delivery address</h3><div class="megaska-express-chip"><strong>${escapeHtml(currentAddress.name)}</strong><br>${escapeHtml(currentAddress.address1)}${currentAddress.address2 ? `, ${escapeHtml(currentAddress.address2)}` : ""}<br>${escapeHtml(currentAddress.city)}, ${escapeHtml(currentAddress.province)} ${escapeHtml(currentAddress.zip)}<br>${escapeHtml(currentAddress.country)}<br>Phone: ${escapeHtml(intent.phoneSnapshot || currentAddress.phone)}</div><button type="button" data-express-action="change-address">Change</button></section>` : `<form data-express-form="address" class="megaska-express-stack" novalidate><h3>Delivery address</h3><input name="name" value="${escapeHtml(currentAddress.name || "")}" placeholder="Full name" required><input name="email" value="${escapeHtml(currentAddress.email || state.customer?.email || "")}" placeholder="Email" type="email"><input value="${escapeHtml(intent.phoneSnapshot || currentAddress.phone || "Verified phone")}" disabled><input name="zip" value="${escapeHtml(currentAddress.zip || state.customer?.postalCode || "")}" placeholder="PIN code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required><p class="megaska-express-pincode-status" data-express-pincode-message data-status="${escapeHtml(state.pincodeStatus)}">${escapeHtml(state.pincodeMessage)}</p><p class="megaska-express-pincode-eta" data-express-pincode-eta>${state.pincodeEta ? `Estimated delivery by ${escapeHtml(formatEta(state.pincodeEta))}` : ""}</p><div class="megaska-express-fields"><input name="city" value="${escapeHtml(currentAddress.city || state.customer?.city || "")}" placeholder="City" required><input name="province" value="${escapeHtml(currentAddress.province || state.customer?.stateProvince || "")}" placeholder="State" required></div><input name="address1" value="${escapeHtml(currentAddress.address1 || state.customer?.addressLine1 || "")}" placeholder="Address line 1" required><input name="address2" value="${escapeHtml(currentAddress.address2 || state.customer?.addressLine2 || "")}" placeholder="Address line 2 / Landmark"><input name="country" value="${escapeHtml(currentAddress.country || "India")}" placeholder="Country" required><button type="submit" ${!state.intent?.id || state.busy ? "disabled" : ""}>Save address</button><p class="megaska-otp-step-subtitle">Address is saved to your checkout and profile.</p></form>`;
+    root.innerHTML = `${state.error ? `<p class="megaska-otp-error">${escapeHtml(state.error)}</p>` : ""}<header class="megaska-express-modal-header"><div class="megaska-express-logo">${logoMarkup()}</div><div><p class="megaska-otp-step-subtitle">Secure Checkout</p><h2 id="megaska-express-title" class="megaska-otp-step-title">Express checkout</h2></div></header><div class="megaska-express-progress"><span>Address</span><span>Discount</span><span>Payment</span></div><section class="megaska-express-summary"><h3>Order summary</h3>${rows || `<p class="megaska-otp-step-subtitle">${state.hydration.cart === "loading" ? "Loading cart summary..." : "Cart details unavailable."}</p>`}${extraCount ? `<p class="megaska-otp-step-subtitle">+ ${extraCount} more item${extraCount > 1 ? "s" : ""}</p>` : ""}<p><span>Subtotal</span><strong>${priceHydrating ? "Calculating..." : money(intent.subtotalAmountPaise, intent.currency)}</strong></p>${discountSummary(intent)}<p><span>Delivery</span><strong>${Number(intent.shippingAmountPaise || 0) ? money(intent.shippingAmountPaise, intent.currency) : "Free"}</strong></p>${selected === "COD" && Number(state.settings?.codFeeAmountPaise || 0) ? `<p><span>COD charge</span><strong>${money(state.settings.codFeeAmountPaise, intent.currency)}</strong></p>` : ""}<p class="megaska-express-total"><span>Total</span><strong>${priceHydrating ? "Calculating..." : money(payableAmount(selected), intent.currency)}</strong></p></section>${addressMarkup}<form data-express-form="discount" class="megaska-express-stack"><h3>Discount</h3><div class="megaska-express-inline"><input name="code" value="${escapeHtml(state.discountCode)}" placeholder="Discount code"><button type="submit" ${!state.intent?.id || state.busy ? "disabled" : ""}>Apply</button></div>${discountChip}</form><section class="megaska-express-stack"><h3>Payment method</h3>${paymentHydrating ? `<p class="megaska-otp-step-subtitle" aria-live="polite">Loading payment options...</p>` : ""}<label><input type="radio" name="paymentMethod" value="PREPAID" ${selected === "PREPAID" ? "checked" : ""} ${paymentHydrating ? "disabled" : ""}> Online Payment — Pay ${priceHydrating ? "Calculating..." : money(payableAmount("PREPAID"), intent.currency)}</label><label><input type="radio" name="paymentMethod" value="COD" ${selected === "COD" ? "checked" : ""} ${paymentHydrating ? "disabled" : ""}> Cash on Delivery — Pay ${priceHydrating ? "Calculating..." : `${money(payableAmount("PREPAID"), intent.currency)} + ${money(state.settings?.codFeeAmountPaise || 0, intent.currency)} COD charge`}</label>${state.paymentUpdating ? `<p class="megaska-otp-step-subtitle">Updating payment method...</p>` : ""}${selected === "COD" ? `<p class="megaska-otp-step-subtitle">${escapeHtml(state.settings?.codInformationText || "")}</p>` : ""}${state.orderSubmitting ? `<p class="megaska-otp-step-subtitle">Placing your order securely. Please wait...</p>` : ""}<button class="megaska-otp-primary-btn" data-express-action="place-order" type="button" ${!isReady || state.busy || state.orderSubmitting ? "disabled" : ""}>${!isReady ? "Preparing..." : state.orderSubmitting ? "Placing order..." : selected === "COD" ? "Place Order" : "Pay Now"}</button></section>`;
   }
 
   async function refreshIntent() { const startedAt = perfNow(); const data = await apiFetch(`/express/checkout/intents/${encodeURIComponent(state.intent.id)}`); state.intent = data.intent; state.customerDefaultAddress = data.customerDefaultAddress || state.customerDefaultAddress; state.settings = Object.assign({}, state.settings, data.settings || {}); state.discountCode = state.intent?.discounts?.[0]?.code || state.discountCode; perfDetails("intent_fetch_ms", { shopId: getShopDomain() || null, intentId: state.intent?.id || null, duplicateCallsFound: state.perf.duplicateCallsFound, durationMs: Math.round(perfNow() - startedAt) }); }
 
   async function createIntent() {
+    state.hydration.cart = "loading";
+    render();
     const cart = await readCart();
     if (!Number(cart?.item_count || 0)) throw new Error("Your cart is empty.");
     const snapshot = cartSnapshot(cart);
+    state.intent = Object.assign({}, state.intent || {}, { cartSnapshot: snapshot, subtotalAmountPaise: Number(cart.items_subtotal_price || cart.total_price || 0), discountAmountPaise: Number(cart.total_discount || 0), shippingAmountPaise: 0, totalAmountPaise: Math.max(Number(cart.total_price || 0), 0), currency: snapshot.currency || "INR" });
+    state.hydration.cart = "ready";
+    state.hydration.intent = "loading";
+    render();
     const startedAt = perfNow();
     const data = await apiFetch("/express/checkout/intents", { method: "POST", body: { cartToken: snapshot.token, cartSnapshot: snapshot, subtotalAmountPaise: Number(cart.items_subtotal_price || cart.total_price || 0), discountAmountPaise: Number(cart.total_discount || 0), shippingAmountPaise: 0, codFeeAmountPaise: 0, totalAmountPaise: Math.max(Number(cart.total_price || 0), 0), currency: "INR" } });
     state.intent = data.intent;
     state.customerDefaultAddress = data.customerDefaultAddress || state.customerDefaultAddress;
     state.settings = Object.assign({}, state.settings, data.settings || {});
     state.discountCode = state.intent?.discounts?.[0]?.code || state.discountCode;
+    state.hydration.intent = "ready";
+    state.hydration.address = state.customerDefaultAddress || state.intent?.addressSnapshots?.length ? "ready" : "ready";
+    state.hydration.discount = "ready";
+    state.hydration.payment = "ready";
     perfDetails("intent_create_ms", { shopId: getShopDomain() || null, intentId: state.intent?.id || null, duplicateCallsFound: state.perf.duplicateCallsFound, durationMs: Math.round(perfNow() - startedAt) });
     state.editingAddress = false;
     state.addressDraft = {};
@@ -354,13 +374,15 @@
 
   async function open(opts) {
     const openStart = Number(opts?.openStart || perfNow());
-    state.open = true; state.step = "loading"; state.error = ""; state.busy = false; state.paymentStarted = false; state.addressDraft = {}; state.editingAddress = false; state.discountMessage = ""; state.pincode = ""; state.pincodeStatus = "idle"; state.pincodeMessage = "Enter 6-digit PIN code to check delivery."; state.pincodeEta = ""; state.pincodeCity = ""; state.pincodeState = ""; state.lastCheckedPincode = ""; state.pincodeCache = {}; resetApiCallPerf(openStart);
+    state.open = true; state.step = "checkout"; state.error = ""; state.busy = false; state.paymentStarted = false; state.orderSubmitting = false; state.intent = null; state.customer = null; state.customerDefaultAddress = null; state.addressDraft = {}; state.editingAddress = false; state.discountMessage = ""; state.pincode = ""; state.pincodeStatus = "idle"; state.pincodeMessage = "Enter 6-digit PIN code to check delivery."; state.pincodeEta = ""; state.pincodeCity = ""; state.pincodeState = ""; state.lastCheckedPincode = ""; state.pincodeCache = {}; state.hydration = { session: "loading", cart: "idle", intent: "idle", address: "loading", discount: "loading", pincode: "idle", payment: "loading" }; resetApiCallPerf(openStart);
     const modal = ensureModal(); modal.hidden = false; modal.setAttribute("aria-hidden", "false"); document.documentElement.classList.add("megaska-otp-open"); render();
     try {
       await waitForModalShellPaint(openStart);
       if (!(await ensureAuthenticated(opts?.triggerEl, opts?.event))) { close(); return; }
+      state.hydration.session = "ready";
+      render();
       await createIntent();
-      state.step = "checkout"; debugLog("modal ready", { intentId: state.intent?.id }); render(); perfDetails("duplicate_api_calls_found", { shopId: getShopDomain() || null, intentId: state.intent?.id || null, duplicateCallsFound: state.perf.duplicateCallsFound, calls: state.perf.apiCalls }); perfDetails("modal_ready_total_ms", { shopId: getShopDomain() || null, intentId: state.intent?.id || null, duplicateCallsFound: state.perf.duplicateCallsFound, durationMs: Math.round(perfNow() - openStart) }); const initialZip = ensureModal().querySelector('[name="zip"]')?.value || ""; if (initialZip) schedulePincodeCheck(initialZip);
+      debugLog("modal ready", { intentId: state.intent?.id }); render(); perfDetails("duplicate_api_calls_found", { shopId: getShopDomain() || null, intentId: state.intent?.id || null, duplicateCallsFound: state.perf.duplicateCallsFound, calls: state.perf.apiCalls }); perfDetails("modal_ready_total_ms", { shopId: getShopDomain() || null, intentId: state.intent?.id || null, duplicateCallsFound: state.perf.duplicateCallsFound, durationMs: Math.round(perfNow() - openStart) }); const initialZip = ensureModal().querySelector('[name="zip"]')?.value || ""; if (initialZip) schedulePincodeCheck(initialZip);
     }
     catch (error) { state.step = "error"; state.error = error instanceof Error ? error.message : "Unable to prepare checkout."; render(); }
   }
