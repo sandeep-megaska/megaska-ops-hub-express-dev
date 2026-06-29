@@ -16,6 +16,7 @@
     optimisticPaymentMethod: null,
     success: null,
     discountCode: "",
+    addressEditing: false,
   };
 
   function escapeHtml(value) {
@@ -213,6 +214,30 @@
     return Number(value || 0);
   }
 
+  function addressIsComplete(address) {
+    return Boolean(address?.name && address?.address1 && address?.city && address?.province && address?.zip && (address?.phone || state.intent?.phoneSnapshot));
+  }
+
+  function addressLine(address) {
+    return [address.city, address.province, address.zip].filter(Boolean).join(", ");
+  }
+
+  function paymentIconChips(labels) {
+    return labels.map((label) => `<span class="megaska-express-pay-chip">${escapeHtml(label)}</span>`).join("");
+  }
+
+  function closeCheckout() {
+    if (window.parent && window.parent !== window) {
+      window.parent.postMessage({ type: "MEGASKA_EXPRESS_CHECKOUT_CLOSE" }, "*");
+    }
+    if (window.MegaskaExpressCheckout && typeof window.MegaskaExpressCheckout.close === "function") {
+      window.MegaskaExpressCheckout.close();
+      return;
+    }
+    if (window.history.length > 1) window.history.back();
+    else window.location.href = "/";
+  }
+
   function paymentMethod() {
     return state.optimisticPaymentMethod || state.intent?.selectedPaymentMethod || "PREPAID";
   }
@@ -228,6 +253,7 @@
     state.intent = data.intent;
     state.discountCode = state.intent?.discounts?.[0]?.code || "";
     state.status = "ready";
+    state.addressEditing = !addressIsComplete(state.intent?.addressSnapshots?.[0]);
   }
 
   function render() {
@@ -252,66 +278,86 @@
     const discounts = Array.isArray(intent.discounts) ? intent.discounts : [];
     const selectedMethod = paymentMethod();
     const lockedPhone = intent.phoneSnapshot || address.phone || "";
+    const addressComplete = addressIsComplete(address);
+    const showAddressForm = state.addressEditing || !addressComplete;
+    const deliveryAmount = Number(intent.shippingAmountPaise || 0) === 0 ? "Free" : formatMoney(intent.shippingAmountPaise, intent.currency);
+    const placeOrderLabel = state.orderSubmitting ? (selectedMethod === "COD" ? "Placing order..." : "Opening secure payment...") : selectedMethod === "COD" ? "Place COD Order" : "Pay Now";
 
     root.innerHTML = `
       ${state.error ? `<div class="megaska-express-alert" role="alert">${escapeHtml(state.error)}</div>` : ""}
-      <header class="megaska-express-modal-header">
-        <div class="megaska-express-logo">${logoMarkup()}</div>
-        <div><p class="megaska-express-eyebrow">Secure Checkout</p><h1>Express Checkout</h1></div>
-      </header>
-      <div class="megaska-express-grid">
-        <section class="megaska-express-card megaska-express-summary">
-          <h2>Order summary</h2>
-          <div class="megaska-express-lines">
-            ${lines.length ? lines.map((line) => `
-              <article class="megaska-express-line">
-                ${lineImage(line) ? `<img src="${escapeHtml(lineImage(line))}" alt="${escapeHtml(lineTitle(line))}" loading="lazy">` : `<div class="megaska-express-line-placeholder"></div>`}
-                <div><h3>${escapeHtml(lineTitle(line))}</h3><p>${lineVariantTitle(line) ? `${escapeHtml(lineVariantTitle(line))} · ` : ""}Qty: ${escapeHtml(line.quantity || 1)}</p></div>
-                <strong>${formatMoney(linePricePaise(line), intent.currency)}</strong>
-              </article>`).join("") : `<p class="megaska-express-muted">Cart details are unavailable for this intent.</p>`}
+      <div class="megaska-express-checkout-frame" role="dialog" aria-modal="true" aria-label="Express checkout">
+        <header class="megaska-express-modal-header">
+          <div class="megaska-express-logo">${logoMarkup()}</div>
+          <div><p class="megaska-express-eyebrow">Secure Checkout</p><h1>Express Checkout</h1></div>
+          <button class="megaska-express-close" data-express-action="close" type="button" aria-label="Close checkout">×</button>
+        </header>
+        <div class="megaska-express-scroll-area checkout-scroll-area">
+          <div class="megaska-express-grid">
+            <section class="megaska-express-card megaska-express-summary">
+              <h2>Order summary</h2>
+              <div class="megaska-express-lines">
+                ${lines.length ? lines.map((line) => `
+                  <article class="megaska-express-line">
+                    ${lineImage(line) ? `<img src="${escapeHtml(lineImage(line))}" alt="${escapeHtml(lineTitle(line))}" loading="lazy">` : `<div class="megaska-express-line-placeholder" aria-hidden="true"></div>`}
+                    <div><h3>${escapeHtml(lineTitle(line))}</h3><p>${lineVariantTitle(line) ? `${escapeHtml(lineVariantTitle(line))} • ` : ""}Qty ${escapeHtml(line.quantity || 1)}</p></div>
+                    <strong>${formatMoney(linePricePaise(line), intent.currency)}</strong>
+                  </article>`).join("") : `<p class="megaska-express-muted">Cart details are unavailable for this intent.</p>`}
+              </div>
+              <div class="megaska-express-totals">
+                <p><span>Subtotal</span><strong>${formatMoney(intent.subtotalAmountPaise, intent.currency)}</strong></p>
+                <p><span>Delivery</span><strong>${deliveryAmount}</strong></p>
+                ${Number(intent.discountAmountPaise || 0) > 0 && discounts.length ? (() => { const discount = discountMeta(discounts[0]); return `<p><span>Discount: ${escapeHtml(discount.code)}<br><small>You saved ${formatMoney(intent.discountAmountPaise, intent.currency)}</small></span><strong>- ${formatMoney(intent.discountAmountPaise, intent.currency)}</strong></p>`; })() : ""}
+                <p class="megaska-express-total"><span>Total</span><strong>${formatMoney(intent.totalAmountPaise, intent.currency)}</strong></p>
+              </div>
+            </section>
+
+            <section class="megaska-express-card megaska-express-details">
+              <div class="megaska-express-section-head"><h2>Delivery address</h2><button type="button" data-express-action="change-address" class="megaska-express-link-btn">Change Address ›</button></div>
+              ${addressComplete ? `<article class="megaska-express-address-card">
+                <div class="megaska-express-address-icon" aria-hidden="true">⌖</div>
+                <div><strong>${escapeHtml(address.name || "")}</strong><p>${escapeHtml(address.address1 || "")}${address.address2 ? `<br>${escapeHtml(address.address2)}` : ""}</p><p>${escapeHtml(addressLine(address))}, ${escapeHtml(address.country || "India")}</p><p>${escapeHtml(lockedPhone)}</p></div>
+              </article>` : `<p class="megaska-express-muted">Add your delivery address to continue.</p>`}
+
+              <form data-express-form="address" class="${showAddressForm ? "" : "megaska-express-hidden"}" novalidate>
+                <label>Full name<input name="name" value="${escapeHtml(address.name || "")}" autocomplete="name" required></label>
+                <label>Email<input name="email" value="${escapeHtml(address.email || "")}" type="email" autocomplete="email"></label>
+                <label>Phone<input value="${escapeHtml(lockedPhone)}" disabled aria-describedby="phone-help"><small id="phone-help">Phone is verified and locked.</small></label>
+                <label>Address line 1<input name="address1" value="${escapeHtml(address.address1 || "")}" autocomplete="address-line1" required></label>
+                <label>Address line 2<input name="address2" value="${escapeHtml(address.address2 || "")}" autocomplete="address-line2"></label>
+                <div class="megaska-express-fields"><label>City<input name="city" value="${escapeHtml(address.city || "")}" required></label><label>State<input name="province" value="${escapeHtml(address.province || "")}" required></label></div>
+                <div class="megaska-express-fields"><label>PIN code<input name="zip" value="${escapeHtml(address.zip || "")}" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required></label><label>Country<input name="country" value="${escapeHtml(address.country || "India")}"></label></div>
+                <button class="megaska-express-btn megaska-express-btn--secondary" type="submit" ${state.busy === "address" ? "disabled" : ""}>${state.busy === "address" ? "Saving..." : "Save address"}</button>
+              </form>
+
+              <div class="megaska-express-divider"></div>
+
+              <form data-express-form="discount">
+                <h2>Have a coupon?</h2>
+                <div class="megaska-express-inline"><input name="code" value="${escapeHtml(state.discountCode)}" placeholder="Enter coupon code"><button class="megaska-express-btn" type="submit" ${state.busy === "discount" ? "disabled" : ""}>Apply</button></div>
+                ${discounts.length ? (() => { const discount = discountMeta(discounts[0]); return `<p class="megaska-express-chip"><strong>${escapeHtml(discount.code)} applied</strong> — You saved ${formatMoney(intent.discountAmountPaise, intent.currency)} <button type="button" data-express-action="remove-discount">Remove</button></p>`; })() : ""}
+              </form>
+
+              <div class="megaska-express-divider"></div>
+
+              <div class="megaska-express-payment">
+                <h2>Choose payment method</h2>
+                <label class="megaska-express-radio ${selectedMethod === "PREPAID" ? "is-selected" : ""}"><input type="radio" name="paymentMethod" value="PREPAID" ${selectedMethod === "PREPAID" ? "checked" : ""}> <span><span class="megaska-express-payment-top"><strong>Secure Online Payment</strong><b>Pay ${formatMoney(intent.totalAmountPaise, intent.currency)}</b></span><span class="megaska-express-payment-icons">${paymentIconChips(["UPI", "VISA", "Mastercard", "RuPay", "Net Banking", "+ More"])}</span><small>UPI • Cards • Net Banking<br>(Powered by Razorpay)</small></span></label>
+                <label class="megaska-express-radio ${selectedMethod === "COD" ? "is-selected" : ""}"><input type="radio" name="paymentMethod" value="COD" ${selectedMethod === "COD" ? "checked" : ""}> <span><span class="megaska-express-payment-top"><strong>Cash on Delivery</strong><b>${formatMoney(intent.totalAmountPaise, intent.currency)}</b></span><small>Pay ${formatMoney(intent.totalAmountPaise, intent.currency)} on delivery<br>No advance payment. Pay the full amount on delivery.</small></span></label>
+                <div class="megaska-express-trust-row"><p><span>🔒</span><strong>100% Secure Payments</strong><small>Your payment details are safe and encrypted.</small></p><p><span>🛡</span><strong>Trusted & Reliable</strong><small>Secured by Razorpay. PCI DSS compliant.</small></p></div>
+                ${state.paymentUpdating ? `<p class="megaska-express-note">Updating payment method...</p>` : ""}
+                ${state.orderSubmitting ? `<p class="megaska-express-note">Placing your order securely. Please wait...</p>` : ""}
+              </div>
+            </section>
           </div>
-          <div class="megaska-express-totals">
-            <p><span>Subtotal</span><strong>${formatMoney(intent.subtotalAmountPaise, intent.currency)}</strong></p>
-            <p><span>Shipping</span><strong>${formatMoney(intent.shippingAmountPaise, intent.currency)}</strong></p>
-            ${Number(intent.discountAmountPaise || 0) > 0 && discounts.length ? (() => { const discount = discountMeta(discounts[0]); return `<p><span>Discount: ${escapeHtml(discount.code)} applied${discount.type === "PERCENTAGE" && discount.value ? ` — ${escapeHtml(discount.value)}% OFF` : ""}<br><small>You saved ${formatMoney(intent.discountAmountPaise, intent.currency)}</small></span><strong>- ${formatMoney(intent.discountAmountPaise, intent.currency)}</strong></p>`; })() : `<p><span>Discount</span><strong>- ${formatMoney(intent.discountAmountPaise, intent.currency)}</strong></p>`}
-            <p class="megaska-express-total"><span>Total</span><strong>${formatMoney(intent.totalAmountPaise, intent.currency)}</strong></p>
-          </div>
-        </section>
-
-        <section class="megaska-express-card">
-          <form data-express-form="address" novalidate>
-            <h2>Delivery details</h2>
-            <label>Full name<input name="name" value="${escapeHtml(address.name || "")}" autocomplete="name" required></label>
-            <label>Email<input name="email" value="${escapeHtml(address.email || "")}" type="email" autocomplete="email"></label>
-            <label>Phone<input value="${escapeHtml(lockedPhone)}" disabled aria-describedby="phone-help"><small id="phone-help">Phone is verified and locked.</small></label>
-            <label>Address line 1<input name="address1" value="${escapeHtml(address.address1 || "")}" autocomplete="address-line1" required></label>
-            <label>Address line 2<input name="address2" value="${escapeHtml(address.address2 || "")}" autocomplete="address-line2"></label>
-            <div class="megaska-express-fields"><label>City<input name="city" value="${escapeHtml(address.city || "")}" required></label><label>State<input name="province" value="${escapeHtml(address.province || "")}" required></label></div>
-            <div class="megaska-express-fields"><label>PIN code<input name="zip" value="${escapeHtml(address.zip || "")}" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required></label><label>Country<input name="country" value="${escapeHtml(address.country || "India")}"></label></div>
-            <button class="megaska-express-btn megaska-express-btn--secondary" type="submit" ${state.busy === "address" ? "disabled" : ""}>${state.busy === "address" ? "Saving..." : "Save address"}</button>
-          </form>
-
-          <div class="megaska-express-divider"></div>
-
-          <form data-express-form="discount">
-            <h2>Have a coupon?</h2>
-            <div class="megaska-express-inline"><input name="code" value="${escapeHtml(state.discountCode)}" placeholder="Enter coupon code"><button class="megaska-express-btn" type="submit" ${state.busy === "discount" ? "disabled" : ""}>Apply</button></div>
-            ${discounts.length ? (() => { const discount = discountMeta(discounts[0]); return `<p class="megaska-express-chip"><strong>${escapeHtml(discount.code)} applied</strong> — You saved ${formatMoney(intent.discountAmountPaise, intent.currency)} <button type="button" data-express-action="remove-discount">Remove</button></p>`; })() : ""}
-          </form>
-
-          <div class="megaska-express-divider"></div>
-
-          <div class="megaska-express-payment">
-            <h2>Payment method</h2>
-            <label class="megaska-express-radio"><input type="radio" name="paymentMethod" value="PREPAID" ${selectedMethod === "PREPAID" ? "checked" : ""}> <span><strong>Secure Online Payment</strong><small>UPI • Cards • Net Banking<br>(Powered by Razorpay)</small><b>Pay ${formatMoney(intent.totalAmountPaise, intent.currency)}</b></span></label>
-            <label class="megaska-express-radio"><input type="radio" name="paymentMethod" value="COD" ${selectedMethod === "COD" ? "checked" : ""}> <span><strong>Cash on Delivery</strong><small>Pay ${formatMoney(intent.totalAmountPaise, intent.currency)} on delivery<br>No advance payment. Pay the full amount on delivery.</small></span></label>
-            ${state.paymentUpdating ? `<p class="megaska-express-note">Updating payment method...</p>` : ""}
-            ${state.orderSubmitting ? `<p class="megaska-express-note">Placing your order securely. Please wait...</p>` : ""}
-            <button class="megaska-express-btn megaska-express-btn--primary megaska-express-place" data-express-action="place-order" type="button" ${state.busy ? "disabled" : ""}>${state.orderSubmitting ? "Placing order..." : selectedMethod === "COD" ? "Place COD order" : "Pay now"}</button>
-          </div>
-        </section>
+        </div>
+        <div class="megaska-express-sticky-bar">
+          <div><span>Total Payable</span><strong>${formatMoney(intent.totalAmountPaise, intent.currency)}</strong><small>You save ${formatMoney(0, intent.currency)} on delivery</small></div>
+          <button class="megaska-express-btn megaska-express-btn--primary megaska-express-place" data-express-action="place-order" type="button" ${state.busy ? "disabled" : ""}>${placeOrderLabel} ›</button>
+        </div>
       </div>`;
   }
+
+
 
   function getAddressPayload(form) {
     const data = new FormData(form);
@@ -334,6 +380,7 @@
     setBusy("address");
     await apiFetch(`/express/checkout/intents/${encodeURIComponent(state.intentId)}/address`, { method: "POST", body: payload });
     await refreshIntent();
+    state.addressEditing = false;
     state.busy = null;
     render();
   }
@@ -473,6 +520,15 @@
     if (!action) return;
 
     try {
+      if (action === "close") {
+        closeCheckout();
+        return;
+      }
+      if (action === "change-address") {
+        state.addressEditing = true;
+        render();
+        return;
+      }
       if (action === "remove-discount") {
         setBusy("discount");
         await apiFetch(`/express/checkout/intents/${encodeURIComponent(state.intentId)}/discount`, { method: "DELETE" });
