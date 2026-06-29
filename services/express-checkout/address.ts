@@ -24,6 +24,8 @@ type AddressSnapshotRecord = {
   province: string;
   country: string;
   zip: string;
+  createdAt: Date;
+  updatedAt: Date;
 };
 
 type PrismaLike = {
