@@ -6,6 +6,12 @@ import {
   requireCustomerSessionForShop,
   requireExpressCheckoutShop,
 } from "../../../../../lib/express-checkout/safety";
+import {
+  attachAddressSnapshotToIntent,
+  customerProfileToExpressAddress,
+  latestCustomerAddressSnapshot,
+  saveCustomerProfileAddress,
+} from "../../../../../services/express-checkout/address";
 
 export const runtime = "nodejs";
 
@@ -24,6 +30,20 @@ const ACTIVE_STATUSES = [
 type ExpressCheckoutIntentWhereInput = {
   cartToken?: string;
   shopifyCartId?: string;
+};
+
+type AuthCustomerAddressShape = {
+  fullName?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  phoneE164?: string | null;
+  email?: string | null;
+  addressLine1?: string | null;
+  addressLine2?: string | null;
+  city?: string | null;
+  stateProvince?: string | null;
+  postalCode?: string | null;
+  countryRegion?: string | null;
 };
 
 function jsonWithCors(req: NextRequest, body: unknown, init?: ResponseInit) {
@@ -108,6 +128,28 @@ function integerPaise(value: unknown, field: string) {
 
   return { ok: true as const, value: Number(value) };
 }
+
+async function hydrateIntentAddress(input: { shopId: string; intentId: string; customerProfileId: string; customer: AuthCustomerAddressShape }) {
+  const current = await prisma.expressCheckoutAddressSnapshot.findFirst({
+    where: { shopId: input.shopId, intentId: input.intentId, customerProfileId: input.customerProfileId },
+  });
+  if (current) return;
+
+  const customerAddress = customerProfileToExpressAddress(input.customer);
+  if (customerAddress) {
+    await attachAddressSnapshotToIntent(prisma, { ...input, address: customerAddress });
+    return;
+  }
+
+  const previousAddress = await latestCustomerAddressSnapshot(prisma, input);
+  if (!previousAddress) return;
+
+  await prisma.$transaction(async (tx) => {
+    await attachAddressSnapshotToIntent(tx, { ...input, address: previousAddress });
+    await saveCustomerProfileAddress(tx, { ...input, address: previousAddress });
+  });
+}
+
 
 export async function OPTIONS(req: NextRequest) {
   return handleOptions(req);
@@ -236,9 +278,19 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    await hydrateIntentAddress({
+      shopId: shop.shopId,
+      intentId: updatedIntent.id,
+      customerProfileId,
+      customer: auth.customer,
+    });
+
     const intent = await prisma.expressCheckoutIntent.findFirst({
       where: { id: updatedIntent.id },
-      include: { discounts: { orderBy: { createdAt: "desc" } } },
+      include: {
+        addressSnapshots: { orderBy: { createdAt: "desc" } },
+        discounts: { orderBy: { createdAt: "desc" } },
+      },
     });
     return jsonWithCors(req, { ok: true, intent: intent || updatedIntent, idempotent: true });
   }
@@ -273,9 +325,20 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  const intentWithDiscounts = capturedDiscount
-    ? await prisma.expressCheckoutIntent.findFirst({ where: { id: intent.id }, include: { discounts: { orderBy: { createdAt: "desc" } } } })
-    : intent;
+  await hydrateIntentAddress({
+    shopId: shop.shopId,
+    intentId: intent.id,
+    customerProfileId,
+    customer: auth.customer,
+  });
+
+  const intentWithDiscounts = await prisma.expressCheckoutIntent.findFirst({
+    where: { id: intent.id },
+    include: {
+      addressSnapshots: { orderBy: { createdAt: "desc" } },
+      discounts: { orderBy: { createdAt: "desc" } },
+    },
+  });
 
   return jsonWithCors(req, { ok: true, intent: intentWithDiscounts, idempotent: false }, { status: 201 });
 }

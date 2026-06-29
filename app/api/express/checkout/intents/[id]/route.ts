@@ -7,6 +7,12 @@ import {
   requireExpressCheckoutShop,
 } from "../../../../../../lib/express-checkout/safety";
 import { getExpressCheckoutSettings } from "../../../../../../services/express-checkout/settings";
+import {
+  attachAddressSnapshotToIntent,
+  customerProfileToExpressAddress,
+  latestCustomerAddressSnapshot,
+  saveCustomerProfileAddress,
+} from "../../../../../../services/express-checkout/address";
 
 export const runtime = "nodejs";
 
@@ -43,7 +49,7 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
     return jsonWithCors(req, { ok: false, error: "Customer profile required" }, { status: 401 });
   }
 
-  const intent = await prisma.expressCheckoutIntent.findFirst({
+  let intent = await prisma.expressCheckoutIntent.findFirst({
     where: {
       shopId: shop.shopId,
       id: intentId,
@@ -61,16 +67,48 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
     return jsonWithCors(req, { ok: false, error: "Intent not found" }, { status: 404 });
   }
 
+  const customerProfile = await prisma.customerProfile.findFirst({
+    where: { id: customerProfileId, shopId: shop.shopId },
+  });
+  const profileAddress = customerProfile ? customerProfileToExpressAddress(customerProfile) : null;
+  let defaultAddress = profileAddress;
+
+  if (!intent.addressSnapshots.length) {
+    const fallbackAddress = profileAddress || await latestCustomerAddressSnapshot(prisma, { shopId: shop.shopId, customerProfileId });
+    if (fallbackAddress) {
+      defaultAddress = fallbackAddress;
+      await prisma.$transaction(async (tx) => {
+        await attachAddressSnapshotToIntent(tx, { shopId: shop.shopId, intentId, customerProfileId, address: fallbackAddress });
+        if (!profileAddress) {
+          await saveCustomerProfileAddress(tx, { shopId: shop.shopId, customerProfileId, address: fallbackAddress });
+        }
+      });
+      intent = await prisma.expressCheckoutIntent.findFirstOrThrow({
+        where: {
+          shopId: shop.shopId,
+          id: intentId,
+          customerProfileId,
+        },
+        include: {
+          addressSnapshots: { orderBy: { createdAt: "desc" } },
+          discounts: { orderBy: { createdAt: "desc" } },
+          payments: { orderBy: { createdAt: "desc" } },
+          orderLink: true,
+        },
+      });
+    }
+  }
+
   const customerAddress = {
-    name: auth.customer.fullName || [auth.customer.firstName, auth.customer.lastName].filter(Boolean).join(" ") || null,
-    phone: auth.customer.phoneE164 || null,
-    email: auth.customer.email || null,
-    address1: auth.customer.addressLine1 || null,
-    address2: auth.customer.addressLine2 || null,
-    city: auth.customer.city || null,
-    province: auth.customer.stateProvince || null,
-    country: auth.customer.countryRegion || "India",
-    zip: auth.customer.postalCode || null,
+    name: defaultAddress?.name || customerProfile?.fullName || [customerProfile?.firstName, customerProfile?.lastName].filter(Boolean).join(" ") || null,
+    phone: defaultAddress?.phone || customerProfile?.phoneE164 || null,
+    email: defaultAddress?.email || customerProfile?.email || null,
+    address1: defaultAddress?.address1 || customerProfile?.addressLine1 || null,
+    address2: defaultAddress?.address2 || customerProfile?.addressLine2 || null,
+    city: defaultAddress?.city || customerProfile?.city || null,
+    province: defaultAddress?.province || customerProfile?.stateProvince || null,
+    country: defaultAddress?.country || customerProfile?.countryRegion || "India",
+    zip: defaultAddress?.zip || customerProfile?.postalCode || null,
   };
   const hasCustomerAddress = Boolean(
     customerAddress.name &&

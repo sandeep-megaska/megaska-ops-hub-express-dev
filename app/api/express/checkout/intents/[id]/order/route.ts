@@ -7,6 +7,12 @@ import {
   requireExpressCheckoutShop,
 } from "../../../../../../../lib/express-checkout/safety";
 import { normalizeShopDomain, resolveShopConfig } from "../../../../../../../services/shopify/shop";
+import {
+  attachAddressSnapshotToIntent,
+  customerProfileToExpressAddress,
+  latestCustomerAddressSnapshot,
+  saveCustomerProfileAddress,
+} from "../../../../../../../services/express-checkout/address";
 
 export const runtime = "nodejs";
 
@@ -191,10 +197,30 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     }
   }
 
-  const address = await prisma.expressCheckoutAddressSnapshot.findFirst({
+  let address = await prisma.expressCheckoutAddressSnapshot.findFirst({
     where: { shopId: shop.shopId, intentId, customerProfileId },
     orderBy: { createdAt: "desc" },
   });
+
+  if (!address) {
+    const customerAddress = customerProfileToExpressAddress(auth.customer);
+    const fallbackAddress = customerAddress || await latestCustomerAddressSnapshot(prisma, { shopId: shop.shopId, customerProfileId });
+
+    if (fallbackAddress) {
+      address = await prisma.$transaction(async (tx) => {
+        const snapshot = await attachAddressSnapshotToIntent(tx, {
+          shopId: shop.shopId,
+          intentId,
+          customerProfileId,
+          address: fallbackAddress,
+        });
+        if (!customerAddress) {
+          await saveCustomerProfileAddress(tx, { shopId: shop.shopId, customerProfileId, address: fallbackAddress });
+        }
+        return snapshot;
+      });
+    }
+  }
 
   if (!address) return jsonWithCors(req, { ok: false, error: "Address required" }, { status: 400 });
   const missingAddressFields = [

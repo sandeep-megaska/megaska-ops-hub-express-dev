@@ -6,6 +6,10 @@ import {
   requireCustomerSessionForShop,
   requireExpressCheckoutShop,
 } from "../../../../../../../lib/express-checkout/safety";
+import {
+  attachAddressSnapshotToIntent,
+  saveCustomerProfileAddress,
+} from "../../../../../../../services/express-checkout/address";
 
 export const runtime = "nodejs";
 
@@ -133,38 +137,30 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     return jsonWithCors(req, { ok: false, error: "Intent expired" }, { status: 409 });
   }
 
-  const addressSnapshot = await prisma.expressCheckoutAddressSnapshot.create({
-    data: {
+  const addressForStorage = {
+    name: address.name,
+    phone: address.phone,
+    email: stringFromAny(body, ["email"]),
+    address1: address.address1,
+    address2: stringFromAny(body, ["address2", "addressLine2", "landmark"]),
+    city: address.city,
+    province: address.province,
+    country: address.country,
+    zip: address.zip,
+  };
+
+  const { addressSnapshot } = await prisma.$transaction(async (tx) => {
+    const snapshot = await attachAddressSnapshotToIntent(tx, {
       shopId: shop.shopId,
       intentId,
       customerProfileId,
-      name: address.name,
-      phone: address.phone,
-      email: stringFromAny(body, ["email"]),
-      address1: address.address1,
-      address2: stringFromAny(body, ["address2", "addressLine2", "landmark"]),
-      city: address.city,
-      province: address.province,
-      country: address.country,
-      zip: address.zip,
-    },
-  });
+      address: addressForStorage,
+    });
 
-  await prisma.$transaction(async (tx) => {
-    await tx.customerProfile.updateMany({
-      where: { id: customerProfileId, shopId: shop.shopId },
-      data: {
-        fullName: address.name,
-        phoneE164: address.phone,
-        email: stringFromAny(body, ["email"]),
-        addressLine1: address.address1,
-        addressLine2: stringFromAny(body, ["address2", "addressLine2", "landmark"]),
-        city: address.city,
-        stateProvince: address.province,
-        postalCode: address.zip,
-        countryRegion: address.country,
-        profileCompletedAt: new Date(),
-      },
+    await saveCustomerProfileAddress(tx, {
+      shopId: shop.shopId,
+      customerProfileId,
+      address: addressForStorage,
     });
 
     await tx.expressCheckoutIntent.updateMany({
@@ -175,6 +171,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
       },
       data: { status: "ADDRESS_CAPTURED" },
     });
+    return { addressSnapshot: snapshot };
   });
 
   const updatedIntent = await prisma.expressCheckoutIntent.findFirst({
