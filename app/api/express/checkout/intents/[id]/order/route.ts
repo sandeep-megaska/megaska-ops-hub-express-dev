@@ -21,6 +21,20 @@ const BLOCKED_STATUSES = ["EXPIRED", "CANCELLED", "FAILED", "ORDER_CREATED"];
 
 type JsonRecord = Record<string, unknown>;
 
+class ControlledCheckoutError extends Error {
+  status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = "ControlledCheckoutError";
+    this.status = status;
+  }
+}
+
+const INDIAN_STATE_CODES: Record<string, string> = {
+  KL: "Kerala",
+};
+
 type DraftOrderCompletePayload = {
   draftOrderComplete?: {
     draftOrder?: {
@@ -84,15 +98,16 @@ function getCartLines(cartSnapshot: unknown) {
 
       if (!rawVariantId || quantity <= 0) return null;
 
+      const numericVariantId = rawVariantId.replace(/\D/g, "");
       const variantId = rawVariantId.startsWith("gid://shopify/ProductVariant/")
         ? rawVariantId
-        : `gid://shopify/ProductVariant/${rawVariantId.replace(/\D/g, "")}`;
+        : numericVariantId
+          ? `gid://shopify/ProductVariant/${numericVariantId}`
+          : "";
 
-      if (!variantId.endsWith(rawVariantId.replace(/\D/g, "")) && !rawVariantId.startsWith("gid://")) {
-        return null;
-      }
+      if (!variantId) return null;
 
-      return { variantId, quantity, title: record.title || record.product_title || undefined, variantTitle: record.variantTitle || record.variant_title || undefined, sku: record.sku || undefined };
+      return { variantId, quantity };
     })
     .filter(Boolean) as Array<{ variantId: string; quantity: number }>;
 }
@@ -131,6 +146,36 @@ async function shopifyAdminGraphql<T>(shopDomain: string, query: string, variabl
 
 function userErrorMessage(errors?: Array<{ field?: string[] | null; message?: string | null }>) {
   return errors?.map((error) => error.message).filter(Boolean).join(", ") || "Shopify draft order error";
+}
+
+function nameParts(fullName: string) {
+  const parts = fullName.trim().split(/\s+/).filter(Boolean);
+  if (parts.length <= 1) return { firstName: parts[0] || fullName.trim(), lastName: undefined };
+  return { firstName: parts.slice(0, -1).join(" "), lastName: parts.at(-1) };
+}
+
+function normalizeProvince(province: string | null | undefined) {
+  const value = String(province || "").trim();
+  return INDIAN_STATE_CODES[value.toUpperCase()] || value;
+}
+
+function orderDiagnostic(input: { shopId: string; intentId: string; customerProfileId: string; intent?: { selectedPaymentMethod?: unknown; cartSnapshot?: unknown; subtotalAmountPaise?: number; discountAmountPaise?: number; shippingAmountPaise?: number; codFeeAmountPaise?: number; totalAmountPaise?: number; currency?: string } | null; lineItemCount?: number; hasAddressSnapshot?: boolean }) {
+  const snapshot = asRecord(input.intent?.cartSnapshot);
+  const fallbackCount = Array.isArray(snapshot?.lineItems) ? snapshot.lineItems.length : Array.isArray(snapshot?.items) ? snapshot.items.length : Array.isArray(snapshot?.lines) ? snapshot.lines.length : Array.isArray(input.intent?.cartSnapshot) ? input.intent.cartSnapshot.length : 0;
+  return {
+    shopId: input.shopId,
+    intentId: input.intentId,
+    customerProfileId: input.customerProfileId,
+    selectedPaymentMethod: input.intent?.selectedPaymentMethod || null,
+    lineItemCount: input.lineItemCount ?? fallbackCount,
+    hasAddressSnapshot: Boolean(input.hasAddressSnapshot),
+    subtotalAmountPaise: input.intent?.subtotalAmountPaise ?? null,
+    discountAmountPaise: input.intent?.discountAmountPaise ?? null,
+    shippingAmountPaise: input.intent?.shippingAmountPaise ?? null,
+    codFeeAmountPaise: input.intent?.codFeeAmountPaise ?? null,
+    totalAmountPaise: input.intent?.totalAmountPaise ?? null,
+    currency: input.intent?.currency || null,
+  };
 }
 
 export async function OPTIONS(req: NextRequest) {
@@ -180,6 +225,10 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
 
   if (intent.selectedPaymentMethod !== "COD" && intent.selectedPaymentMethod !== "PREPAID") {
     return jsonWithCors(req, { ok: false, error: "Payment method required" }, { status: 400 });
+  }
+
+  if (!Number.isFinite(intent.totalAmountPaise) || intent.totalAmountPaise < 0) {
+    return jsonWithCors(req, { ok: false, error: "Invalid order amount" }, { status: 400 });
   }
 
   if (intent.selectedPaymentMethod === "PREPAID") {
@@ -245,23 +294,17 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     lineItems.push({ title: "COD Handling Charge", quantity: 1, originalUnitPrice: paiseToAmount(intent.codFeeAmountPaise) });
   }
 
-  const discountAmount = Math.max(0, intent.discounts.reduce((sum, discount) => sum + discount.discountAmountPaise, 0));
-  const diagnostic = {
-    shopId: shop.shopId,
-    checkoutIntentId: intentId,
-    lineItemCount: lineItems.length,
-    paymentMethod: intent.selectedPaymentMethod,
-    hasAddress: Boolean(address),
-    hasDiscount: discountAmount > 0,
-    totalAmount: intent.totalAmountPaise,
-  };
+  const discountAmount = Math.max(0, Math.min(intent.subtotalAmountPaise, intent.discountAmountPaise));
+  const diagnostic = orderDiagnostic({ shopId: shop.shopId, intentId, customerProfileId, intent, lineItemCount: lineItems.length, hasAddressSnapshot: Boolean(address) });
   console.info("[EXPRESS CHECKOUT ORDER] creating draft order", diagnostic);
+  const { firstName, lastName } = nameParts(address.name);
   const shippingAddress = {
-    firstName: address.name,
+    firstName,
+    lastName,
     address1: address.address1,
     address2: address.address2,
     city: address.city,
-    province: address.province,
+    province: normalizeProvince(address.province),
     country: address.country,
     zip: address.zip,
     phone: address.phone,
@@ -303,7 +346,9 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
 
     const createResult = created.draftOrderCreate;
     if (createResult?.userErrors?.length || !createResult?.draftOrder?.id) {
-      return jsonWithCors(req, { ok: false, error: userErrorMessage(createResult?.userErrors) }, { status: 502 });
+      const message = userErrorMessage(createResult?.userErrors);
+      console.error("[EXPRESS CHECKOUT ORDER] Shopify draftOrderCreate userErrors", { ...diagnostic, shopifyUserErrors: createResult?.userErrors, errorName: "ShopifyUserError", errorMessage: message });
+      return jsonWithCors(req, { ok: false, error: "Unable to create Shopify draft order.", reason: message }, { status: 502 });
     }
 
     const completed = await shopifyAdminGraphql<DraftOrderCompletePayload>(
@@ -323,7 +368,9 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
 
     const completeResult = completed.draftOrderComplete;
     if (completeResult?.userErrors?.length || !completeResult?.draftOrder?.order?.id) {
-      return jsonWithCors(req, { ok: false, error: userErrorMessage(completeResult?.userErrors) }, { status: 502 });
+      const message = userErrorMessage(completeResult?.userErrors);
+      console.error("[EXPRESS CHECKOUT ORDER] Shopify draftOrderComplete userErrors", { ...diagnostic, shopifyUserErrors: completeResult?.userErrors, errorName: "ShopifyUserError", errorMessage: message });
+      return jsonWithCors(req, { ok: false, error: "Unable to complete Shopify draft order.", reason: message }, { status: 502 });
     }
 
     const order = completeResult.draftOrder.order;
@@ -368,7 +415,9 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     return jsonWithCors(req, { ok: true, intent: updatedIntent, orderLink, shopifyOrder: order }, { status: 201 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Order creation failed";
-    console.error("[EXPRESS CHECKOUT ORDER] draft order failed", { ...diagnostic, error: message });
-    return jsonWithCors(req, { ok: false, error: message }, { status: 502 });
+    const name = error instanceof Error ? error.name : "UnknownError";
+    const status = error instanceof ControlledCheckoutError ? error.status : 502;
+    console.error("[EXPRESS CHECKOUT ORDER] draft order failed", { ...diagnostic, errorName: name, errorMessage: message });
+    return jsonWithCors(req, { ok: false, error: status === 502 ? "Unable to create order right now." : message, reason: status === 502 ? message : undefined }, { status });
   }
 }

@@ -229,8 +229,8 @@
     modal.hidden = true;
     modal.setAttribute("aria-hidden", "true");
     modal.setAttribute("data-megaska-express-modal", "1");
-    modal.innerHTML = `<div class="megaska-otp-backdrop" data-express-close></div><div class="megaska-otp-dialog megaska-express-dialog" role="dialog" aria-modal="true" aria-labelledby="megaska-express-title"><button class="megaska-otp-close" type="button" data-express-close aria-label="Close">&times;</button><div class="megaska-otp-flow"><div data-express-root></div></div></div>`;
-    modal.addEventListener("click", (event) => { if (event.target.closest("[data-express-close]")) close(); });
+    modal.innerHTML = `<div class="megaska-otp-backdrop"></div><div class="megaska-otp-dialog megaska-express-dialog" role="dialog" aria-modal="true" aria-labelledby="megaska-express-title"><button class="megaska-otp-close" type="button" data-express-close aria-label="Close">&times;</button><div class="megaska-otp-flow"><div data-express-root></div></div></div>`;
+    modal.addEventListener("click", (event) => { if (event.target.closest("button[data-express-close]")) close(); });
     modal.addEventListener("submit", onSubmit);
     modal.addEventListener("change", onChange);
     modal.addEventListener("input", onInput);
