@@ -25,6 +25,10 @@
       .replace(/'/g, "&#039;");
   }
 
+  function sanitizePincode(value) {
+    return String(value || "").replace(/\D/g, "").slice(0, 6);
+  }
+
   function normalizeShopDomain(input) {
     return String(input || "")
       .trim()
@@ -249,7 +253,7 @@
         </section>
 
         <section class="megaska-express-card">
-          <form data-express-form="address">
+          <form data-express-form="address" novalidate>
             <h2>Delivery details</h2>
             <label>Full name<input name="name" value="${escapeHtml(address.name || "")}" autocomplete="name" required></label>
             <label>Email<input name="email" value="${escapeHtml(address.email || "")}" type="email" autocomplete="email"></label>
@@ -257,7 +261,7 @@
             <label>Address line 1<input name="address1" value="${escapeHtml(address.address1 || "")}" autocomplete="address-line1" required></label>
             <label>Address line 2<input name="address2" value="${escapeHtml(address.address2 || "")}" autocomplete="address-line2"></label>
             <div class="megaska-express-fields"><label>City<input name="city" value="${escapeHtml(address.city || "")}" required></label><label>State<input name="province" value="${escapeHtml(address.province || "")}" required></label></div>
-            <div class="megaska-express-fields"><label>PIN code<input name="zip" value="${escapeHtml(address.zip || "")}" required></label><label>Country<input name="country" value="${escapeHtml(address.country || "India")}"></label></div>
+            <div class="megaska-express-fields"><label>PIN code<input name="zip" value="${escapeHtml(address.zip || "")}" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required></label><label>Country<input name="country" value="${escapeHtml(address.country || "India")}"></label></div>
             <button class="megaska-express-btn megaska-express-btn--secondary" type="submit" ${state.busy === "address" ? "disabled" : ""}>${state.busy === "address" ? "Saving..." : "Save address"}</button>
           </form>
 
@@ -293,13 +297,15 @@
       city: String(data.get("city") || "").trim(),
       province: String(data.get("province") || "").trim(),
       country: String(data.get("country") || "India").trim() || "India",
-      zip: String(data.get("zip") || "").trim(),
+      zip: sanitizePincode(data.get("zip")),
     };
   }
 
   async function handleAddressSubmit(form) {
+    const payload = getAddressPayload(form);
+    if (!/^\d{6}$/.test(payload.zip)) throw new Error("Enter a valid 6-digit PIN code.");
     setBusy("address");
-    await apiFetch(`/express/checkout/intents/${encodeURIComponent(state.intentId)}/address`, { method: "POST", body: getAddressPayload(form) });
+    await apiFetch(`/express/checkout/intents/${encodeURIComponent(state.intentId)}/address`, { method: "POST", body: payload });
     await refreshIntent();
     state.busy = null;
     render();
@@ -375,6 +381,14 @@
     if (paymentMethod() === "COD") await createOrder();
     else await handlePrepaid();
   }
+
+  root.addEventListener("input", (event) => {
+    const target = event.target;
+    if (!target.matches('input[name="zip"]')) return;
+    const sanitized = sanitizePincode(target.value);
+    if (target.value !== sanitized) target.value = sanitized;
+    target.setCustomValidity("");
+  });
 
   root.addEventListener("submit", async (event) => {
     event.preventDefault();

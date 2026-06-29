@@ -37,6 +37,10 @@ function requiredString(body: Record<string, unknown>, fields: string[], label: 
   return { ok: true as const, value };
 }
 
+function normalizeIndianPin(value: string) {
+  return value.replace(/\D/g, "").slice(0, 6);
+}
+
 export async function OPTIONS(req: NextRequest) {
   return handleOptions(req);
 }
@@ -103,13 +107,19 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     return jsonWithCors(req, { ok: false, error: requiredAddress.country.error }, { status: 400 });
   }
 
+  const zip = normalizeIndianPin(requiredAddress.zip.value);
+
+  if (!/^\d{6}$/.test(zip)) {
+    return jsonWithCors(req, { ok: false, error: "Enter a valid 6-digit PIN code." }, { status: 400 });
+  }
+
   const address = {
     name: requiredAddress.name.value,
     phone: requiredAddress.phone.value,
     address1: requiredAddress.address1.value,
     city: requiredAddress.city.value,
     province: requiredAddress.province.value,
-    zip: requiredAddress.zip.value,
+    zip,
     country: requiredAddress.country.value,
   };
 
