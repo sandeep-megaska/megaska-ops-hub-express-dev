@@ -106,6 +106,22 @@ function normalizeVariantId(value: unknown) {
   return numericVariantId ? `gid://shopify/ProductVariant/${numericVariantId}` : "";
 }
 
+function toShopifyCustomerGid(customerId?: string | null) {
+  if (!customerId) {
+    return undefined;
+  }
+
+  if (customerId.startsWith("gid://shopify/Customer/")) {
+    return customerId;
+  }
+
+  if (/^\d+$/.test(customerId)) {
+    return `gid://shopify/Customer/${customerId}`;
+  }
+
+  return undefined;
+}
+
 function getCartLines(cartSnapshot: unknown) {
   const dedupedByVariantId = new Map<string, { variantId: string; quantity: number }>();
 
@@ -392,13 +408,14 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     discountAmount > 0
       ? { title: "Express checkout discount", value: paiseToAmount(discountAmount), valueType: "FIXED_AMOUNT" }
       : undefined;
+  const rawCustomerId = auth.customer.shopifyCustomerId || undefined;
+  const resolvedCustomerGid = toShopifyCustomerGid(rawCustomerId);
   const draftOrderInput: JsonRecord = {
     lineItems,
     email,
     phone,
     shippingAddress,
     billingAddress: shippingAddress,
-    customerId: auth.customer.shopifyCustomerId || undefined,
     note: intent.selectedPaymentMethod === "COD" && intent.codFeeAmountPaise > 0
       ? `Megaska Express Checkout intent ${intent.id} | COD fee: ${paiseToRupeeDisplay(intent.codFeeAmountPaise)} | COD payable total: ${paiseToRupeeDisplay(intent.totalAmountPaise)}`
       : `Megaska Express Checkout intent ${intent.id}`,
@@ -408,7 +425,12 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     appliedDiscount: discount,
   };
 
+  if (resolvedCustomerGid) {
+    draftOrderInput.customerId = resolvedCustomerGid;
+  }
+
   try {
+    console.info("[SHOPIFY CUSTOMER ID]", { rawCustomerId, resolvedCustomerGid });
     console.info("[SHOPIFY DRAFT ORDER INPUT]", JSON.stringify(draftOrderInput, null, 2));
 
     const created = await shopifyAdminGraphql<DraftOrderCreatePayload>(
