@@ -16,10 +16,11 @@ import {
   ShopifyAdminConfigError,
   shopifyAdminGraphql,
 } from "../../../../../../../services/express-checkout/shopify-admin";
+import { CHECKOUT_INTENT_STATUSES, CheckoutStateDb, transitionCheckoutIntent } from "../../../../../../../lib/express-checkout/state-machine";
 
 export const runtime = "nodejs";
 
-const BLOCKED_STATUSES = ["EXPIRED", "CANCELLED", "FAILED", "ORDER_CREATED"];
+const BLOCKED_STATUSES = ["EXPIRED", "CANCELLED", "FAILED", "ORDER_CREATED", "ORDER_COMPLETED"];
 
 type JsonRecord = Record<string, unknown>;
 
@@ -52,6 +53,56 @@ type DraftOrderCreatePayload = {
     userErrors?: Array<{ field?: string[] | null; message?: string | null }>;
   } | null;
 };
+
+
+const COD_STATE_ORDER = [
+  "INITIATED",
+  "SESSION_VERIFIED",
+  "ADDRESS_COMPLETED",
+  "DELIVERY_VALIDATED",
+  "PAYMENT_SELECTED",
+  "DRAFT_ORDER_CREATED",
+  "ORDER_COMPLETED",
+] as const;
+const COD_LEGACY_STATUS_EQUIVALENTS: Record<string, (typeof COD_STATE_ORDER)[number]> = {
+  CREATED: "INITIATED",
+  CUSTOMER_AUTHENTICATED: "SESSION_VERIFIED",
+  CART_SNAPSHOT_LOCKED: "SESSION_VERIFIED",
+  ADDRESS_CAPTURED: "ADDRESS_COMPLETED",
+  DISCOUNT_APPLIED: "ADDRESS_COMPLETED",
+  PAYMENT_METHOD_SELECTED: "PAYMENT_SELECTED",
+  ORDER_CREATED: "ORDER_COMPLETED",
+};
+
+async function transitionCodIntent(input: { intent: { id: string; shopId: string; status: string }; toStatus: (typeof COD_STATE_ORDER)[number]; reason: string; metadata?: Record<string, unknown> }) {
+  const effectiveStatus = COD_LEGACY_STATUS_EQUIVALENTS[input.intent.status] || input.intent.status;
+  const fromIndex = COD_STATE_ORDER.indexOf(effectiveStatus as (typeof COD_STATE_ORDER)[number]);
+  const toIndex = COD_STATE_ORDER.indexOf(input.toStatus);
+
+  if (input.intent.status === "EXPIRED") {
+    return { ok: false as const, fromStatus: input.intent.status, toStatus: input.toStatus, reason: "terminal_state" as const };
+  }
+
+  if (fromIndex >= toIndex && fromIndex >= 0) {
+    console.info("[CHECKOUT STATE] cod_transition_already_satisfied", { shopId: input.intent.shopId, intentId: input.intent.id, fromStatus: input.intent.status, effectiveStatus, toStatus: input.toStatus, reason: input.reason, metadata: input.metadata || {} });
+    return { ok: true as const, fromStatus: input.intent.status, toStatus: input.toStatus, changed: false };
+  }
+
+  if (!CHECKOUT_INTENT_STATUSES.includes(input.intent.status as (typeof CHECKOUT_INTENT_STATUSES)[number])) {
+    return { ok: false as const, fromStatus: input.intent.status, toStatus: input.toStatus, reason: "invalid_transition" as const };
+  }
+
+  if (effectiveStatus !== input.intent.status) {
+    console.info("[CHECKOUT STATE] cod_legacy_status_normalized", { shopId: input.intent.shopId, intentId: input.intent.id, fromStatus: input.intent.status, effectiveStatus, toStatus: input.toStatus, reason: input.reason, metadata: input.metadata || {} });
+    await (prisma as unknown as CheckoutStateDb).expressCheckoutIntent.updateMany({
+      where: { id: input.intent.id, shopId: input.intent.shopId, status: input.intent.status },
+      data: { status: effectiveStatus },
+    });
+    return transitionCheckoutIntent({ db: prisma as unknown as CheckoutStateDb, intent: { ...input.intent, status: effectiveStatus }, toStatus: input.toStatus, reason: input.reason, metadata: input.metadata });
+  }
+
+  return transitionCheckoutIntent({ db: prisma as unknown as CheckoutStateDb, intent: input.intent, toStatus: input.toStatus, reason: input.reason, metadata: input.metadata });
+}
 
 function jsonWithCors(req: NextRequest, body: unknown, init?: ResponseInit) {
   return withCors(req, NextResponse.json(body, init));
@@ -232,13 +283,18 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
   if (!intent) return jsonWithCors(req, { ok: false, error: "Intent not found" }, { status: 404 });
 
   if (intent.orderLink) {
+    if (intent.selectedPaymentMethod === "COD") console.info("[CHECKOUT STATE] cod_duplicate_completion_ignored", { shopId: shop.shopId, intentId, customerProfileId, status: intent.status });
     return jsonWithCors(req, { ok: true, intent, orderLink: intent.orderLink, shopifyOrder: null });
   }
   if (BLOCKED_STATUSES.includes(intent.status)) {
     return jsonWithCors(req, { ok: false, error: `Intent status ${intent.status} cannot create order` }, { status: 409 });
   }
   if (intent.expiresAt && intent.expiresAt <= new Date()) {
-    return jsonWithCors(req, { ok: false, error: "Intent expired" }, { status: 409 });
+    return jsonWithCors(req, { ok: false, error: "Checkout session expired. Please start checkout again." }, { status: 409 });
+  }
+
+  if (intent.selectedPaymentMethod === "COD" && intent.status === "EXPIRED") {
+    return jsonWithCors(req, { ok: false, error: "Checkout session expired. Please start checkout again." }, { status: 409 });
   }
 
   if (intent.selectedPaymentMethod !== "COD" && intent.selectedPaymentMethod !== "PREPAID") {
@@ -247,6 +303,15 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
 
   if (!Number.isFinite(intent.totalAmountPaise) || intent.totalAmountPaise < 0) {
     return jsonWithCors(req, { ok: false, error: "Invalid order amount" }, { status: 400 });
+  }
+
+  if (intent.selectedPaymentMethod === "COD") {
+    let status = intent.status;
+    for (const [toStatus, reason] of [["SESSION_VERIFIED", "cod_session_verified"], ["ADDRESS_COMPLETED", "cod_address_completed"], ["DELIVERY_VALIDATED", "cod_delivery_validated"], ["PAYMENT_SELECTED", "cod_payment_selected"]] as const) {
+      const transition = await transitionCodIntent({ intent: { id: intent.id, shopId: intent.shopId, status }, toStatus, reason, metadata: { source: "order_create" } });
+      if (!transition.ok) return jsonWithCors(req, { ok: false, error: transition.reason === "terminal_state" ? "Checkout session expired. Please start checkout again." : `Intent status ${transition.fromStatus} cannot create order` }, { status: 409 });
+      if (COD_STATE_ORDER.indexOf(status as (typeof COD_STATE_ORDER)[number]) < COD_STATE_ORDER.indexOf(toStatus)) status = toStatus;
+    }
   }
 
   const paymentMethodStartedAt = Date.now();
@@ -404,6 +469,16 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
       );
     }
 
+    if (intent.selectedPaymentMethod === "COD") {
+      const draftTransition = await transitionCodIntent({
+        intent: { id: intent.id, shopId: intent.shopId, status: "PAYMENT_SELECTED" },
+        toStatus: "DRAFT_ORDER_CREATED",
+        reason: "cod_draft_order_created",
+        metadata: { draftOrderId: createResult.draftOrder.id, draftOrderName: createResult.draftOrder.name || null },
+      });
+      if (!draftTransition.ok) return jsonWithCors(req, { ok: false, error: `Intent status ${draftTransition.fromStatus} cannot create order` }, { status: 409 });
+    }
+
     const completed = await shopifyAdminGraphql<DraftOrderCompletePayload>(
       shop.shopDomain,
       `mutation DraftOrderComplete($id: ID!, $paymentPending: Boolean) {
@@ -450,7 +525,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
         });
         await tx.expressCheckoutIntent.updateMany({
           where: { shopId: shop.shopId, id: intentId, customerProfileId },
-          data: { status: "ORDER_CREATED" },
+          data: intent.selectedPaymentMethod === "COD" ? {} : { status: "ORDER_CREATED" },
         });
         const refreshedIntent = await tx.expressCheckoutIntent.findFirst({
           where: { shopId: shop.shopId, id: intentId, customerProfileId },
@@ -459,7 +534,18 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
         return { link, refreshedIntent };
       });
       orderLink = written.link;
-      updatedIntent = written.refreshedIntent;
+      if (intent.selectedPaymentMethod === "COD") {
+        const completeTransition = await transitionCodIntent({
+          intent: { id: intent.id, shopId: intent.shopId, status: "DRAFT_ORDER_CREATED" },
+          toStatus: "ORDER_COMPLETED",
+          reason: "cod_order_completed",
+          metadata: { shopifyOrderId: order.id || null, shopifyOrderName: order.name || null, draftOrderId: completeResult.draftOrder?.id || createResult.draftOrder?.id || null },
+        });
+        if (!completeTransition.ok) return jsonWithCors(req, { ok: false, error: `Intent status ${completeTransition.fromStatus} cannot complete order` }, { status: 409 });
+        updatedIntent = await prisma.expressCheckoutIntent.findFirst({ where: { shopId: shop.shopId, id: intentId, customerProfileId } });
+      } else {
+        updatedIntent = written.refreshedIntent;
+      }
       checkoutPerfLog("order_persist_ms", { ...perfContext, durationMs: elapsedMs(persistStartedAt) });
     } catch (error) {
       const code = typeof error === "object" && error && "code" in error ? String(error.code) : "";
