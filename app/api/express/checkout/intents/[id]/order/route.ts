@@ -74,48 +74,49 @@ function asRecord(value: unknown): JsonRecord | null {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as JsonRecord) : null;
 }
 
-function getCartLines(cartSnapshot: unknown) {
+function cartSnapshotLines(cartSnapshot: unknown) {
   const snapshot = asRecord(cartSnapshot);
-  const candidates = Array.isArray(cartSnapshot)
-    ? cartSnapshot
-    : Array.isArray(snapshot?.lineItems)
-      ? snapshot.lineItems
-      : Array.isArray(snapshot?.items)
-        ? snapshot.items
-        : Array.isArray(snapshot?.lines)
-          ? snapshot.lines
-          : [];
+  if (Array.isArray(cartSnapshot)) return cartSnapshot;
+  if (Array.isArray(snapshot?.lineItems) && snapshot.lineItems.length > 0) return snapshot.lineItems;
+  if (Array.isArray(snapshot?.items) && snapshot.items.length > 0) return snapshot.items;
+  if (Array.isArray(snapshot?.lines) && snapshot.lines.length > 0) return snapshot.lines;
+  return [];
+}
 
-  return candidates
-    .map((item) => {
-      const record = asRecord(item);
-      if (!record) return null;
+function normalizeVariantId(value: unknown) {
+  const rawVariantId = String(value || "").trim();
+  if (!rawVariantId) return "";
 
-      const rawVariantId = String(
-        record.variantId || record.shopifyVariantId || record.merchandiseId || record.variant_id || ""
-      ).trim();
-      const quantity = Math.max(0, Math.floor(Number(record.quantity || 0)));
+  const numericVariantId = rawVariantId.replace(/\D/g, "");
+  if (rawVariantId.startsWith("gid://shopify/ProductVariant/")) return rawVariantId;
+  return numericVariantId ? `gid://shopify/ProductVariant/${numericVariantId}` : "";
+}
 
-      if (!rawVariantId || quantity <= 0) return null;
+function getCartLines(cartSnapshot: unknown) {
+  const dedupedByVariantId = new Map<string, { variantId: string; quantity: number }>();
 
-      const numericVariantId = rawVariantId.replace(/\D/g, "");
-      const variantId = rawVariantId.startsWith("gid://shopify/ProductVariant/")
-        ? rawVariantId
-        : numericVariantId
-          ? `gid://shopify/ProductVariant/${numericVariantId}`
-          : "";
+  for (const item of cartSnapshotLines(cartSnapshot)) {
+    const record = asRecord(item);
+    if (!record) continue;
 
-      if (!variantId) return null;
+    const variantId = normalizeVariantId(
+      record.variantId || record.shopifyVariantId || record.merchandiseId || record.variant_id
+    );
+    const quantity = Math.max(0, Math.floor(Number(record.quantity || 0)));
 
-      return { variantId, quantity };
-    })
-    .filter(Boolean) as Array<{ variantId: string; quantity: number }>;
+    if (!variantId || quantity <= 0) continue;
+
+    const existing = dedupedByVariantId.get(variantId);
+    dedupedByVariantId.set(variantId, { variantId, quantity: (existing?.quantity || 0) + quantity });
+  }
+
+  return Array.from(dedupedByVariantId.values());
 }
 
 async function shopifyAdminGraphql<T>(shopDomain: string, query: string, variables: JsonRecord) {
   const shopConfig = await resolveShopConfig(shopDomain);
   const normalizedShopDomain = normalizeShopDomain(shopConfig.shopDomain || shopDomain);
- const accessToken = shopConfig.accessToken;
+  const accessToken = shopConfig.accessToken;
 
   if (!normalizedShopDomain || !accessToken) {
     throw new Error("Shopify Admin API is not configured");
@@ -144,8 +145,18 @@ async function shopifyAdminGraphql<T>(shopDomain: string, query: string, variabl
   return payload.data;
 }
 
+function normalizeShopifyUserErrors(errors?: Array<{ field?: string[] | null; message?: string | null }>) {
+  return (errors || [])
+    .map((error) => ({
+      field: Array.isArray(error.field) ? error.field : undefined,
+      message: String(error.message || "").trim(),
+    }))
+    .filter((error) => error.message);
+}
+
 function userErrorMessage(errors?: Array<{ field?: string[] | null; message?: string | null }>) {
-  return errors?.map((error) => error.message).filter(Boolean).join(", ") || "Shopify draft order error";
+  const normalized = normalizeShopifyUserErrors(errors);
+  return normalized.map((error) => error.message).join(", ") || "Shopify draft order error";
 }
 
 function nameParts(fullName: string) {
@@ -291,7 +302,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
   }
 
   if (intent.selectedPaymentMethod === "COD" && intent.codFeeAmountPaise > 0) {
-    lineItems.push({ title: "COD Handling Charge", quantity: 1, originalUnitPrice: paiseToAmount(intent.codFeeAmountPaise) });
+    lineItems.push({ title: "COD Handling Fee", quantity: 1, originalUnitPrice: paiseToAmount(intent.codFeeAmountPaise) });
   }
 
   const discountAmount = Math.max(0, Math.min(intent.subtotalAmountPaise, intent.discountAmountPaise));
@@ -347,8 +358,9 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     const createResult = created.draftOrderCreate;
     if (createResult?.userErrors?.length || !createResult?.draftOrder?.id) {
       const message = userErrorMessage(createResult?.userErrors);
-      console.error("[EXPRESS CHECKOUT ORDER] Shopify draftOrderCreate userErrors", { ...diagnostic, shopifyUserErrors: createResult?.userErrors, errorName: "ShopifyUserError", errorMessage: message });
-      return jsonWithCors(req, { ok: false, error: "Unable to create Shopify draft order.", reason: message }, { status: 502 });
+      const shopifyUserErrors = normalizeShopifyUserErrors(createResult?.userErrors);
+      console.error("[EXPRESS CHECKOUT ORDER] Shopify draftOrderCreate userErrors", { ...diagnostic, shopifyUserErrors, errorName: "ShopifyUserError", errorMessage: message });
+      return jsonWithCors(req, { ok: false, error: "Unable to create Shopify draft order.", reason: message, shopifyUserErrors }, { status: 422 });
     }
 
     const completed = await shopifyAdminGraphql<DraftOrderCompletePayload>(
@@ -369,8 +381,9 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     const completeResult = completed.draftOrderComplete;
     if (completeResult?.userErrors?.length || !completeResult?.draftOrder?.order?.id) {
       const message = userErrorMessage(completeResult?.userErrors);
-      console.error("[EXPRESS CHECKOUT ORDER] Shopify draftOrderComplete userErrors", { ...diagnostic, shopifyUserErrors: completeResult?.userErrors, errorName: "ShopifyUserError", errorMessage: message });
-      return jsonWithCors(req, { ok: false, error: "Unable to complete Shopify draft order.", reason: message }, { status: 502 });
+      const shopifyUserErrors = normalizeShopifyUserErrors(completeResult?.userErrors);
+      console.error("[EXPRESS CHECKOUT ORDER] Shopify draftOrderComplete userErrors", { ...diagnostic, shopifyUserErrors, errorName: "ShopifyUserError", errorMessage: message });
+      return jsonWithCors(req, { ok: false, error: "Unable to complete Shopify draft order.", reason: message, shopifyUserErrors }, { status: 422 });
     }
 
     const order = completeResult.draftOrder.order;
