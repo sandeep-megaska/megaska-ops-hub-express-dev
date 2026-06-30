@@ -32,6 +32,7 @@
     editingAddress: false,
     customerDefaultAddress: null,
     settings: { codFeeAmountPaise: 10000, codInformationText: "You need to pay to the delivery agent at the time of delivery. In case of any refund, the refund amount will be issued as Megaska store credit which you can utilize for future purchases. However, for card and UPI payments, the refund amount will be directly transferred to your original payment method." },
+    delivery: { serviceable: true, codAvailable: true },
     pincode: "",
     pincodeStatus: "idle",
     pincodeMessage: "Enter 6-digit PIN code to check delivery.",
@@ -174,9 +175,14 @@
     const province = String(body.state || body.stateName || body.province || body.stateCode || "").trim();
     const eta = body.estimatedDeliveryDate || body.eta || body.edd || body.deliveryDate || body.estimatedDate || "";
     const serviceable = body.serviceable === true || body.isServiceable === true || body.ok === true && body.serviceable !== false && body.isServiceable !== false;
+    const codFlag = body.codAvailable ?? body.isCod ?? body.cod ?? body.cash ?? body.cod_available ?? body.cash_on_delivery;
+    const codAvailable = codFlag === undefined || codFlag === null || codFlag === ""
+      ? serviceable
+      : codFlag === true || String(codFlag).trim().toUpperCase() === "Y" || String(codFlag).trim().toLowerCase() === "true" || String(codFlag).trim() === "1";
     return {
       ok: body.ok !== false,
       serviceable,
+      codAvailable,
       pincode: String(body.pincode || body.postalCode || body.pin || pincode || "").trim(),
       city,
       province,
@@ -226,8 +232,31 @@
     }
   }
 
+  function enforceDeliveryServiceability(result) {
+    state.delivery = {
+      serviceable: result?.serviceable === true,
+      codAvailable: result?.codAvailable !== false,
+    };
+    if (!state.delivery.codAvailable && state.selectedDisplayPaymentMethod === "COD") {
+      state.selectedDisplayPaymentMethod = "UPI";
+      state.inlinePaymentMode = true;
+      state.inlinePaymentError = "";
+    }
+    if (state.open) renderPaymentSectionOnly();
+  }
+
+  function resetDeliveryServiceability() {
+    state.delivery = { serviceable: true, codAvailable: true };
+    if (state.open) renderPaymentSectionOnly();
+  }
+
+  function isCodUnavailable() {
+    return state.delivery?.codAvailable === false;
+  }
+
   function applyPincodeResult(result) {
     state.lastCheckedPincode = result.pincode || state.pincode;
+    enforceDeliveryServiceability(result);
     if (result.serviceable) {
       if (result.city) state.addressDraft.city = result.city;
       if (result.province) state.addressDraft.province = result.province;
@@ -245,6 +274,7 @@
 
   function applySavedPincodeResult(result) {
     state.lastCheckedSavedPincode = result.pincode || state.savedPincode;
+    enforceDeliveryServiceability(result);
     if (result.serviceable) {
       setSavedPincodeState("serviceable", `✅ ${pincodeDeliveryMessage(result)}`, result);
       console.log("[EXPRESS PINCODE] saved_address_check_success");
@@ -300,9 +330,9 @@
     state.pincode = pincode;
     state.addressDraft.zip = pincode;
     if (state.pincodeTimer) clearTimeout(state.pincodeTimer);
-    if (!pincode) { state.lastCheckedPincode = ""; setPincodeState("idle", "Enter 6-digit PIN code to check delivery.", {}); return; }
-    if (pincode.length < 6) { state.lastCheckedPincode = ""; setPincodeState("idle", "Enter 6-digit PIN code to check delivery.", {}); return; }
-    if (!/^\d{6}$/.test(pincode)) { state.lastCheckedPincode = ""; setPincodeState("idle", "Enter a valid 6-digit PIN code.", {}); return; }
+    if (!pincode) { state.lastCheckedPincode = ""; resetDeliveryServiceability(); setPincodeState("idle", "Enter 6-digit PIN code to check delivery.", {}); return; }
+    if (pincode.length < 6) { state.lastCheckedPincode = ""; resetDeliveryServiceability(); setPincodeState("idle", "Enter 6-digit PIN code to check delivery.", {}); return; }
+    if (!/^\d{6}$/.test(pincode)) { state.lastCheckedPincode = ""; resetDeliveryServiceability(); setPincodeState("idle", "Enter a valid 6-digit PIN code.", {}); return; }
     if (state.pincodeCache[pincode]) { applyPincodeResult(state.pincodeCache[pincode]); return; }
     state.pincodeTimer = setTimeout(() => checkPincode(pincode), 300);
   }
@@ -478,6 +508,7 @@
 
   function selectedDisplayPaymentMethod() {
     const selected = state.selectedDisplayPaymentMethod || displayMethodForBackend(payMethod());
+    if (selected === "COD" && isCodUnavailable()) return "UPI";
     return DISPLAY_PAYMENT_METHODS.some((method) => method.key === selected) ? selected : "UPI";
   }
 
@@ -540,12 +571,16 @@
 
   function paymentMethodRows(selectedMethod, disabled) {
     return DISPLAY_PAYMENT_METHODS.map((method) => {
-      const selected = method.key === selectedMethod;
+      const codDisabled = method.key === "COD" && isCodUnavailable();
+      const rowDisabled = disabled || codDisabled;
+      const selected = method.key === selectedMethod && !codDisabled;
+      const subtitle = codDisabled ? "COD unavailable for this pincode" : method.subtitle;
       const totalLabel = state.hydration.intent !== "ready" ? "Calculating..." : money(payableAmount(method.backendMethod), state.intent?.currency);
-      return `<label class="megaska-express-payment-option ${selected ? "is-selected" : ""} ${method.key === "UPI" ? "megaska-express-payment-option--upi" : "megaska-express-payment-option--compact"}" data-express-payment-method="${escapeHtml(method.key)}">
-        <input type="radio" name="paymentMethod" value="${escapeHtml(method.key)}" ${selected ? "checked" : ""} ${disabled ? "disabled" : ""}>
+      const disabledStyle = codDisabled ? ' style="opacity:0.5;pointer-events:none;cursor:not-allowed;" aria-disabled="true"' : "";
+      return `<label class="megaska-express-payment-option ${selected ? "is-selected" : ""} ${method.key === "UPI" ? "megaska-express-payment-option--upi" : "megaska-express-payment-option--compact"}" data-express-payment-method="${escapeHtml(method.key)}"${disabledStyle}>
+        <input type="radio" name="paymentMethod" value="${escapeHtml(method.key)}" ${selected ? "checked" : ""} ${rowDisabled ? "disabled" : ""}>
         <span class="megaska-express-payment-icon">${paymentMethodIcon(method.icon)}</span>
-        <span class="megaska-express-payment-copy"><span class="megaska-express-payment-title"><strong>${escapeHtml(method.label)}</strong>${method.badge ? `<em>${escapeHtml(method.badge)}</em>` : ""}</span><small>${escapeHtml(method.subtitle)}</small></span>
+        <span class="megaska-express-payment-copy"><span class="megaska-express-payment-title"><strong>${escapeHtml(method.label)}</strong>${method.badge ? `<em>${escapeHtml(method.badge)}</em>` : ""}</span><small>${escapeHtml(subtitle)}</small></span>
         <span class="megaska-express-payment-amount">${escapeHtml(totalLabel)}</span>
         <span class="megaska-express-payment-status" aria-hidden="true">${selected ? "✓" : "›"}</span>
         ${method.key === "UPI" ? upiExpandedPanel(totalLabel) : ""}
@@ -618,7 +653,7 @@
 
   async function open(opts) {
     const openStart = Number(opts?.openStart || perfNow());
-    state.open = true; state.step = "checkout"; state.error = ""; state.busy = false; state.paymentStarted = false; state.orderSubmitting = false; state.intent = null; state.customer = null; state.customerDefaultAddress = null; state.addressDraft = {}; state.editingAddress = false; state.discountMessage = ""; state.inlinePaymentMode = false; state.inlinePaymentError = ""; state.activeRazorpayOrder = null; state.activeRazorpayInstance = null; state.addressSavedForIntentId = null; state.paymentInProgress = false; state.pincode = ""; state.pincodeStatus = "idle"; state.pincodeMessage = "Enter 6-digit PIN code to check delivery."; state.pincodeEta = ""; state.pincodeCity = ""; state.pincodeState = ""; state.lastCheckedPincode = ""; state.pincodeCache = {}; state.savedPincode = ""; state.savedPincodeStatus = "idle"; state.savedPincodeMessage = ""; state.savedPincodeEta = ""; state.lastCheckedSavedPincode = ""; state.hydration = { session: "loading", cart: "idle", intent: "idle", address: "loading", discount: "loading", pincode: "idle", payment: "loading" }; resetApiCallPerf(openStart);
+    state.open = true; state.step = "checkout"; state.error = ""; state.busy = false; state.paymentStarted = false; state.orderSubmitting = false; state.intent = null; state.customer = null; state.customerDefaultAddress = null; state.addressDraft = {}; state.editingAddress = false; state.discountMessage = ""; state.inlinePaymentMode = false; state.inlinePaymentError = ""; state.activeRazorpayOrder = null; state.activeRazorpayInstance = null; state.addressSavedForIntentId = null; state.paymentInProgress = false; resetDeliveryServiceability(); state.pincode = ""; state.pincodeStatus = "idle"; state.pincodeMessage = "Enter 6-digit PIN code to check delivery."; state.pincodeEta = ""; state.pincodeCity = ""; state.pincodeState = ""; state.lastCheckedPincode = ""; state.pincodeCache = {}; state.savedPincode = ""; state.savedPincodeStatus = "idle"; state.savedPincodeMessage = ""; state.savedPincodeEta = ""; state.lastCheckedSavedPincode = ""; state.hydration = { session: "loading", cart: "idle", intent: "idle", address: "loading", discount: "loading", pincode: "idle", payment: "loading" }; resetApiCallPerf(openStart);
     const modal = ensureModal(); modal.hidden = false; modal.setAttribute("aria-hidden", "false"); document.documentElement.classList.add("megaska-otp-open"); render();
     try {
       await waitForModalShellPaint(openStart);
@@ -712,6 +747,7 @@
   async function ensurePaymentMethod(method) { return ensureBackendPaymentMethod(method); }
 
   function setSelectedDisplayPaymentMethod(method) {
+    if (method === "COD" && isCodUnavailable()) return;
     if (!DISPLAY_PAYMENT_METHODS.some((item) => item.key === method)) return;
     state.selectedDisplayPaymentMethod = method;
     state.inlinePaymentMode = true;
@@ -728,6 +764,7 @@
   }
 
   function renderInlinePaymentPanel(method) {
+    if (method === "COD" && isCodUnavailable()) method = "UPI";
     const totalLabel = money(payableAmount(backendPaymentMethodForDisplay(method)), state.intent?.currency);
     const title = method === "UPI" ? "Enter your UPI ID" : (DISPLAY_PAYMENT_METHODS.find((item) => item.key === method)?.label || method);
     const submitTitle = method === "UPI" ? "UPI" : title.replace("Debit/Credit Cards", "Card");
@@ -959,6 +996,11 @@
   }
 
   async function submitInlinePayment(method, formData) {
+    if (method === "COD" && isCodUnavailable()) {
+      state.selectedDisplayPaymentMethod = "UPI";
+      state.inlinePaymentMode = true;
+      throw new Error("COD unavailable for this pincode");
+    }
     if (state.paymentInProgress) return;
     validateInlinePayment(method, formData);
     state.paymentInProgress = true; state.orderSubmitting = true; state.busy = true; state.paymentStarted = method !== "COD"; state.inlinePaymentError = ""; renderPaymentSectionOnly();
