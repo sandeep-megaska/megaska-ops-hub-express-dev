@@ -992,6 +992,18 @@
 .megaska-express-payment-amount { color:#111827; font-size:.88rem; font-weight:900; white-space:nowrap; }
 .megaska-express-payment-status { align-items:center; background:#f8fafc; border-radius:999px; color:#64748b; display:inline-flex; font-size:1rem; font-weight:900; height:26px; justify-content:center; line-height:1; width:26px; }
 .megaska-express-payment-option.is-selected .megaska-express-payment-status { background:#1d4ed8; color:#fff; }
+.megaska-express-payment-option--upi { align-items:start; grid-template-rows:auto auto; }
+.megaska-express-payment-option--upi .megaska-express-upi-panel { grid-column:1 / -1; }
+.megaska-express-payment-option--compact { padding-bottom:10px; padding-top:10px; }
+.megaska-express-upi-panel { background:#fff; border:1px dashed rgba(29,78,216,.28); border-radius:15px; display:grid; gap:12px; grid-template-columns:auto minmax(0,1fr); margin-top:2px; padding:12px; }
+.megaska-express-upi-qr { align-items:center; background:linear-gradient(135deg,#f8fafc,#e0f2fe); border:1px solid #dbeafe; border-radius:14px; display:inline-flex; height:86px; justify-content:center; width:86px; }
+.megaska-express-upi-qr span { background:repeating-linear-gradient(90deg,#0f172a 0 5px,transparent 5px 10px),repeating-linear-gradient(0deg,rgba(15,23,42,.82) 0 5px,transparent 5px 10px); border:6px solid #fff; box-shadow:inset 0 0 0 8px rgba(255,255,255,.78); display:block; height:58px; width:58px; }
+.megaska-express-upi-details { display:grid; gap:6px; min-width:0; }
+.megaska-express-upi-details strong { color:#0f172a; font-size:.92rem; line-height:1.2; }
+.megaska-express-upi-details p { color:#1e40af; font-size:.82rem; font-weight:900; margin:0; }
+.megaska-express-upi-details small { color:#15803d; font-size:.76rem; line-height:1.25; }
+.megaska-express-upi-apps { display:flex; flex-wrap:wrap; gap:6px; }
+.megaska-express-upi-apps span { background:#eff6ff; border:1px solid #bfdbfe; border-radius:999px; color:#1e40af; font-size:.72rem; font-weight:900; padding:5px 8px; }
 .megaska-express-payment-icons { display:none !important; }
 .megaska-express-payment-card { display:none !important; }
 @media (max-width:420px) { .megaska-express-payment-option { grid-template-columns:auto minmax(0,1fr) auto; } .megaska-express-payment-amount { display:none; } }
