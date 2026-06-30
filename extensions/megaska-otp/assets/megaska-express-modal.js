@@ -728,7 +728,10 @@
     if (method === "NETBANKING") fields = `<select name="bank" required><option value="">Select bank</option><option value="HDFC">HDFC Bank</option><option value="ICIC">ICICI Bank</option><option value="SBIN">State Bank of India</option><option value="UTIB">Axis Bank</option><option value="KKBK">Kotak Mahindra Bank</option></select>`;
     if (method === "WALLET") fields = `<div class="megaska-express-choice-grid"><label><input type="radio" name="wallet" value="paytm" required> Paytm</label><label><input type="radio" name="wallet" value="amazonpay" required> Amazon Pay</label><label><input type="radio" name="wallet" value="phonepe" required> PhonePe</label><label><input type="radio" name="wallet" value="freecharge" required> Freecharge</label></div>`;
     if (method === "COD") fields = `<div class="megaska-express-cod-confirm"><strong>Confirm Cash on Delivery</strong><p>${escapeHtml(state.settings?.codInformationText || "Pay to the delivery agent at delivery.")}</p><p>Total payable on delivery: <b>${escapeHtml(totalLabel)}</b></p></div>`;
-    return `<form data-express-form="inline-payment" data-inline-method="${escapeHtml(method)}" class="megaska-express-inline-panel"><div class="megaska-express-inline-panel-head"><div><span>Selected method</span><h4>${escapeHtml(title)}</h4></div><button type="button" data-express-action="change-payment-method">Change payment method</button></div>${error}<div class="megaska-express-inline-fields">${fields}</div><button class="megaska-otp-primary-btn" type="submit" ${busy ? "disabled" : ""}>${busy ? "Processing..." : escapeHtml(submit)}</button>${method !== "COD" ? `<button class="megaska-express-fallback-btn" type="button" data-express-action="standard-razorpay" hidden>Open standard Razorpay Checkout</button>` : ""}</form>`;
+    if (method !== "COD" && isInlinePaymentUnavailableMessage(state.inlinePaymentError)) {
+      return `<div class="megaska-express-inline-panel"><div class="megaska-express-inline-panel-head"><div><span>Selected method</span><h4>${escapeHtml(title)}</h4></div><button type="button" data-express-action="change-payment-method">Change payment method</button></div><div class="megaska-express-inline-fields"><p class="megaska-express-inline-error" data-express-inline-error>Inline payment is not available right now.</p><p class="megaska-express-secure-note">Continue with Razorpay’s secure hosted checkout to complete this payment.</p></div><button class="megaska-otp-primary-btn" type="button" data-express-action="standard-razorpay" ${busy ? "disabled" : ""}>${busy ? "Opening..." : "Continue with secure Razorpay Checkout"}</button></div>`;
+    }
+    return `<form data-express-form="inline-payment" data-inline-method="${escapeHtml(method)}" class="megaska-express-inline-panel"><div class="megaska-express-inline-panel-head"><div><span>Selected method</span><h4>${escapeHtml(title)}</h4></div><button type="button" data-express-action="change-payment-method">Change payment method</button></div>${error}<div class="megaska-express-inline-fields">${fields}</div><button class="megaska-otp-primary-btn" type="submit" ${busy ? "disabled" : ""}>${busy ? "Processing..." : escapeHtml(submit)}</button>${method !== "COD" ? `<button class="megaska-express-fallback-btn" type="button" data-express-action="standard-razorpay" hidden>Continue with secure Razorpay Checkout</button>` : ""}</form>`;
   }
 
   function renderPaymentSectionOnly() {
@@ -808,17 +811,41 @@
     return instance;
   }
 
+  function razorpayScriptSrc() {
+    const scripts = Array.from(document.querySelectorAll('script[src*="razorpay"]'));
+    const checkoutScript = scripts.find((script) => /checkout\.razorpay\.com\/v1\/checkout\.js/i.test(script.src));
+    return (checkoutScript || scripts[0])?.src || null;
+  }
+
+  function logRazorpayRuntimeDiagnostics(rzp, checkout, displayMethod) {
+    const diagnostics = {
+      windowRazorpayType: typeof window.Razorpay,
+      razorpayScriptSrc: razorpayScriptSrc(),
+      razorpayOrderIdPresent: Boolean(checkout?.razorpayOrderId),
+      keyPresent: Boolean(checkout?.key),
+      instanceKeys: rzp && typeof rzp === "object" ? Object.keys(rzp) : [],
+      createPaymentType: typeof rzp?.createPayment,
+      selectedDisplayPaymentMethod: displayMethod,
+    };
+    if (typeof rzp?.createPayment === "function") {
+      if (window.console && typeof window.console.debug === "function") window.console.debug("[Megaska Express] Razorpay runtime diagnostics", diagnostics);
+    } else if (window.console && typeof window.console.warn === "function") {
+      window.console.warn("[Megaska Express] Razorpay inline createPayment unavailable", diagnostics);
+    }
+  }
+
   function createRazorpayInstance(checkout, displayMethod) {
     const options = buildStandardRazorpayOptions(checkout, displayMethod);
     const instance = new window.Razorpay(options);
     state.activeRazorpayInstance = attachRazorpayListeners(instance);
+    logRazorpayRuntimeDiagnostics(state.activeRazorpayInstance, checkout, displayMethod);
     return state.activeRazorpayInstance;
   }
 
   function buildStandardRazorpayOptions(checkout, displayMethod) {
     const display = buildRazorpayDisplayConfig(displayMethod);
     const options = {
-      key: checkout.key, amount: checkout.amountPaise, currency: checkout.currency || "INR", name: shopLabel(), description: "Express Checkout", order_id: checkout.razorpayOrderId, prefill: checkout.customer || {}, notes: checkout.notes || {},
+      key: checkout.key, amount: checkout.amountPaise, currency: checkout.currency || "INR", name: shopLabel(), description: "Express Checkout", order_id: checkout.razorpayOrderId, checkout_config_id: "config_T7vYfjdxuFvAQM", prefill: checkout.customer || {}, notes: checkout.notes || {},
       handler: paymentSuccess,
       modal: { ondismiss: () => { state.busy = false; state.orderSubmitting = false; state.paymentStarted = false; state.paymentInProgress = false; showInlinePaymentError("Payment was not completed. You can try again."); } },
     };
@@ -826,12 +853,15 @@
     return options;
   }
 
+  function isInlinePaymentUnavailableMessage(message) { return /createPayment|standard Razorpay|unavailable|Inline payment is not available/i.test(String(message || "")); }
+
   function showInlinePaymentError(message) {
     state.inlinePaymentError = message || "Payment failed. Please try again.";
+    renderPaymentSectionOnly();
     const el = ensureModal().querySelector("[data-express-inline-error]");
     if (el) { el.hidden = false; el.textContent = state.inlinePaymentError; }
     const fallback = ensureModal().querySelector('[data-express-action="standard-razorpay"]');
-    if (fallback && /createPayment|standard Razorpay|unavailable/i.test(state.inlinePaymentError)) fallback.hidden = false;
+    if (fallback && isInlinePaymentUnavailableMessage(state.inlinePaymentError)) fallback.hidden = false;
   }
 
   function resetInlinePaymentState() { state.activeRazorpayInstance = null; state.activeRazorpayOrder = null; state.paymentInProgress = false; state.paymentStarted = false; state.orderSubmitting = false; state.inlinePaymentError = ""; state.inlinePaymentMode = false; }
@@ -839,14 +869,14 @@
   async function createOrder() { const data = await apiFetch(`/express/checkout/intents/${encodeURIComponent(state.intent.id)}/order`, { method: "POST", body: {} }); state.step = "success"; state.error = `${data.orderLink?.shopifyOrderName || data.shopifyOrder?.name || "Your order"} has been created.`; state.busy = false; state.paymentStarted = false; state.paymentInProgress = false; render(); }
 
   function inlinePayload(method, data, checkout) {
-    const common = { order_id: checkout.razorpayOrderId, amount: checkout.amountPaise, currency: checkout.currency || "INR", email: checkout.customer?.email || state.customer?.email || "", contact: checkout.customer?.contact || state.intent?.phoneSnapshot || "" };
+    const basePayload = { order_id: checkout.razorpayOrderId, amount: checkout.amountPaise, currency: checkout.currency || "INR", email: checkout.customer?.email || state.customer?.email || "", contact: checkout.customer?.contact || state.intent?.phoneSnapshot || "" };
     const card = () => ({ "card[number]": String(data.get("cardNumber") || "").replace(/\s+/g, ""), "card[expiry]": String(data.get("cardExpiry") || "").trim(), "card[cvv]": String(data.get("cardCvv") || "").trim(), "card[name]": String(data.get("cardName") || "").trim() });
-    if (method === "UPI") return Object.assign(common, { method: "upi", vpa: String(data.get("vpa") || "").trim() });
-    if (method === "CARD") return Object.assign(common, { method: "card" }, card());
-    if (method === "EMI") return Object.assign(common, { method: "emi", bank: String(data.get("bank") || ""), emi_duration: String(data.get("emi_duration") || "") }, card());
-    if (method === "NETBANKING") return Object.assign(common, { method: "netbanking", bank: String(data.get("bank") || "") });
-    if (method === "WALLET") return Object.assign(common, { method: "wallet", wallet: String(data.get("wallet") || "") });
-    return common;
+    if (method === "UPI") return Object.assign(basePayload, { method: "upi", vpa: String(data.get("vpa") || "").trim() });
+    if (method === "CARD") return Object.assign(basePayload, { method: "card" }, card());
+    if (method === "EMI") return Object.assign(basePayload, { method: "emi", bank: String(data.get("bank") || ""), emi_duration: String(data.get("emi_duration") || "") }, card());
+    if (method === "NETBANKING") return Object.assign(basePayload, { method: "netbanking", bank: String(data.get("bank") || "") });
+    if (method === "WALLET") return Object.assign(basePayload, { method: "wallet", wallet: String(data.get("wallet") || "") });
+    return basePayload;
   }
 
   function validateInlinePayment(method, data) {
@@ -875,7 +905,7 @@
       const rzp = createRazorpayInstance(checkout, method);
       if (typeof rzp.createPayment !== "function") {
         state.paymentInProgress = false; state.orderSubmitting = false; state.busy = false; state.paymentStarted = false; renderPaymentSectionOnly();
-        showInlinePaymentError("Inline Razorpay createPayment is unavailable. You can open standard Razorpay Checkout instead."); return;
+        showInlinePaymentError("Inline payment is not available right now."); return;
       }
       rzp.createPayment(inlinePayload(method, formData, checkout));
     } catch (error) {
