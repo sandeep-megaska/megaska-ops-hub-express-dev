@@ -224,10 +224,11 @@
   }
 
   const DISPLAY_PAYMENT_METHODS = [
-    { key: "UPI", backendMethod: "PREPAID", label: "UPI", subtitle: "Pay using any UPI app", badge: "Popular", cta: "Pay with UPI", icon: "upi" },
-    { key: "CARD", backendMethod: "PREPAID", label: "Debit/Credit Cards", subtitle: "Visa, Mastercard, RuPay & more", cta: "Pay with Card", icon: "card" },
-    { key: "WALLET", backendMethod: "PREPAID", label: "Wallets", subtitle: "Amazon Pay, Paytm Wallet & more", cta: "Pay with Wallet", icon: "wallet" },
-    { key: "EMI", backendMethod: "PREPAID", label: "EMI", subtitle: "Available on UPI & Cards", cta: "Pay with EMI", icon: "emi" },
+    { key: "UPI", backendMethod: "PREPAID", label: "UPI", subtitle: "Scan & pay with any UPI app", badge: "Popular", cta: "Pay with UPI", icon: "upi" },
+    { key: "CARD", backendMethod: "PREPAID", label: "Debit/Credit Cards", subtitle: "Visa, Mastercard, RuPay", cta: "Pay with Card", icon: "card" },
+    { key: "WALLET", backendMethod: "PREPAID", label: "Wallets", subtitle: "Amazon Pay, Paytm Wallet etc.", cta: "Pay with Wallet", icon: "wallet" },
+    { key: "EMI", backendMethod: "PREPAID", label: "0% EMI on UPI & Cards", subtitle: "0% EMI on UPI • by Snapmint", badge: "KYC and Approval Required - via Snapmint", cta: "Pay with EMI", icon: "emi" },
+    { key: "NETBANKING", backendMethod: "PREPAID", label: "Netbanking", subtitle: "All major banks supported", cta: "Pay with Netbanking", icon: "bank" },
     { key: "COD", backendMethod: "COD", label: "Cash on Delivery", subtitle: "Pay when your order is delivered", cta: "Place COD Order", icon: "cod" },
   ];
 
@@ -254,18 +255,43 @@
     if (name === "card") return `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="5" width="18" height="14" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3 10h18M7 15h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`;
     if (name === "wallet") return `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H18a2 2 0 0 1 2 2v11H6.5A2.5 2.5 0 0 1 4 15.5v-8Z" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M16 12h5v4h-5a2 2 0 0 1 0-4Z" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="17" cy="14" r=".7" fill="currentColor"/></svg>`;
     if (name === "emi") return `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="4" y="5" width="16" height="14" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 9h8M8 13h3m3 0h2M8 17h8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`;
+    if (name === "bank") return `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 10h16L12 5 4 10Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M6 10v7m4-7v7m4-7v7m4-7v7M4 19h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`;
     return `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="4" y="6" width="14" height="12" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M16 10h4v5h-4a2.5 2.5 0 0 1 0-5Z" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 10h5M8 14h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`;
+  }
+
+  function codUnavailableReason() {
+    const intent = state.intent || {};
+    const candidates = [intent.codUnavailableReason, intent.codBlockingReason, intent.codDisabledReason, intent.codReason, intent.deliveryBlockReason];
+    return candidates.map((value) => String(value || "").trim()).find(Boolean) || "Available at delivery";
+  }
+
+  function codIsUnavailable() {
+    const intent = state.intent || {};
+    return intent.codAvailable === false || intent.isCodAvailable === false || intent.codEnabled === false || intent.codServiceable === false || Boolean(intent.codUnavailableReason || intent.codBlockingReason || intent.codDisabledReason);
+  }
+
+  function upiExpandedBody() {
+    return `<span class="megaska-express-upi-body">
+      <span class="megaska-express-upi-qr" aria-hidden="true"><span></span><span></span><span></span><span></span></span>
+      <span class="megaska-express-upi-copy"><strong>Scan the QR using any UPI App</strong><small>QR opens securely in Razorpay</small><span class="megaska-express-upi-chips"><em>Paytm</em><em>PhonePe</em><em>GPay</em><em>Amazon Pay</em><em>BHIM</em></span></span>
+    </span>`;
   }
 
   function paymentMethodRows(selectedMethod, totalLabel) {
     return DISPLAY_PAYMENT_METHODS.map((method) => {
       const selected = method.key === selectedMethod;
-      return `<label class="megaska-express-payment-option ${selected ? "is-selected" : ""}">
-        <input type="radio" name="paymentMethod" value="${escapeHtml(method.key)}" ${selected ? "checked" : ""}>
-        <span class="megaska-express-payment-icon">${paymentMethodIcon(method.icon)}</span>
-        <span class="megaska-express-payment-copy"><span class="megaska-express-payment-title"><strong>${escapeHtml(method.label)}</strong>${method.badge ? `<em>${escapeHtml(method.badge)}</em>` : ""}</span><small>${escapeHtml(method.subtitle)}</small></span>
-        <span class="megaska-express-payment-amount">${escapeHtml(totalLabel)}</span>
-        <span class="megaska-express-payment-status" aria-hidden="true">${selected ? "✓" : "›"}</span>
+      const disabled = method.key === "COD" && codIsUnavailable();
+      const subtitle = method.key === "COD" && disabled ? codUnavailableReason() : method.subtitle;
+      const expanded = method.key === "UPI" && selected;
+      return `<label class="megaska-express-payment-option ${selected ? "is-selected" : ""} ${expanded ? "is-expanded" : ""} ${disabled ? "is-disabled" : ""}" ${disabled ? `aria-disabled="true" title="${escapeHtml(subtitle)}"` : ""}>
+        <input type="radio" name="paymentMethod" value="${escapeHtml(method.key)}" ${selected ? "checked" : ""} ${disabled ? "disabled" : ""}>
+        <span class="megaska-express-payment-head">
+          <span class="megaska-express-payment-icon">${paymentMethodIcon(method.icon)}</span>
+          <span class="megaska-express-payment-copy"><span class="megaska-express-payment-title"><strong>${escapeHtml(method.label)}</strong>${method.badge ? `<em>${escapeHtml(method.badge)}</em>` : ""}</span><small>${escapeHtml(subtitle)}</small></span>
+          <span class="megaska-express-payment-amount">${escapeHtml(totalLabel)}</span>
+          <span class="megaska-express-payment-status" aria-hidden="true">${selected ? "✓" : "›"}</span>
+        </span>
+        ${expanded ? upiExpandedBody() : ""}
       </label>`;
     }).join("");
   }
