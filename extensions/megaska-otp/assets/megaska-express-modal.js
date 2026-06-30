@@ -327,6 +327,9 @@
       variantTitle: item?.variant_title || item?.variantTitle || "",
       sku: item?.sku || "",
       price: Number(item?.price || item?.final_price || 0),
+      line_price: Number(item?.original_line_price || item?.line_price || item?.final_line_price || 0),
+      original_line_price: Number(item?.original_line_price || item?.line_price || item?.final_line_price || 0),
+      final_line_price: Number(item?.final_line_price || item?.line_price || 0),
       image: item?.image || item?.featured_image?.url || "",
     };
   }
@@ -334,7 +337,7 @@
   function cartSnapshot(cart) {
     const items = Array.isArray(cart?.items) ? cart.items : [];
     const lineItems = items.map(cartLineItem).filter(Boolean);
-    return { token: cart?.token || "", items, lineItems, item_count: Number(cart?.item_count || 0), total_price: Number(cart?.total_price || 0), total_discount: Number(cart?.total_discount || 0), currency: cart?.currency || "INR" };
+    return { token: cart?.token || "", items, lineItems, item_count: Number(cart?.item_count || 0), total_price: Number(cart?.total_price || 0), original_total_price: Number(cart?.original_total_price || 0), items_subtotal_price: Number(cart?.items_subtotal_price || 0), total_discount: Number(cart?.total_discount || 0), cart_level_discount_applications: cart?.cart_level_discount_applications || [], discount_codes: cart?.discount_codes || [], currency: cart?.currency || "INR" };
   }
 
   async function ensureAuthenticated(triggerEl, event) {
@@ -401,11 +404,14 @@
   function lineTitle(line) { return line?.product_title || line?.productTitle || line?.title || line?.name || "Item"; }
   function lineVariant(line) { const title = line?.variant_title || line?.variantTitle || ""; return title && title !== "Default Title" ? title : ""; }
   function lineImage(line) { return line?.image || line?.featured_image?.url || line?.featuredImage?.url || ""; }
-  function linePrice(line) { return line?.line_price ?? line?.linePrice ?? line?.final_line_price ?? line?.price ?? 0; }
+  function linePrice(line) { return line?.original_line_price ?? line?.originalLinePrice ?? line?.line_price ?? line?.linePrice ?? line?.final_line_price ?? line?.price ?? 0; }
+  function cartSubtotalPaise(cart) { return Number(cart?.original_total_price || cart?.items_subtotal_price || cart?.total_price || 0); }
+  function cartDiscountPaise(cart) { return Number(cart?.total_discount || 0); }
+  function cartTotalPaise(cart) { return Math.max(Number(cart?.total_price || 0), 0); }
   function shopLabel() { const shop = String(window.MEGASKA_SHOP_DOMAIN || window.Shopify?.shop || location.hostname || "").replace(/\.myshopify\.com$/, ""); return shop ? shop.split(/[.-]/).filter(Boolean).map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ") : "Megaska"; }
   function logoMarkup() { const src = window.MEGASKA_SHOP_LOGO_URL || window.MEGASKA_STORE_LOGO_URL || window.MEGASKA_LOGO_URL || ""; return src ? `<img class="megaska-express-logo-img" src="${escapeHtml(src)}" alt="${escapeHtml(shopLabel())}" loading="lazy">` : `<span class="megaska-express-logo-text">${escapeHtml(shopLabel())}</span>`; }
   function discountSummary(intent) { const discount = selectedDiscount(intent); if (!discount || !Number(intent?.discountAmountPaise || 0)) return ""; const raw = discount.rawShopifyPayload || {}; const code = discount.code || raw.discountCode || discount.title || "Discount"; return `<p><span>Discount<br><small>${escapeHtml(code)} applied</small></span><strong>- ${money(intent.discountAmountPaise, intent.currency)}</strong></p>`; }
-  function payableAmount(method) { const base = Number(state.intent?.subtotalAmountPaise || 0) + Number(state.intent?.shippingAmountPaise || 0) - Number(state.intent?.discountAmountPaise || 0); const codFee = method === "COD" ? Number(state.settings?.codFeeAmountPaise || 0) : 0; return Math.max(0, base + codFee); }
+  function payableAmount(method) { const total = Number(state.intent?.totalAmountPaise || 0); const codFee = method === "COD" ? Number(state.settings?.codFeeAmountPaise || state.intent?.codFeeAmountPaise || 0) : 0; return Math.max(0, total + codFee); }
 
   const PAYMENT_LOGO_MARKS = [
     { key: "upi", label: "UPI", markup: `<svg viewBox="0 0 54 20" aria-hidden="true" focusable="false"><path d="M4 2h12l5 8-5 8H4l5-8-5-8Z" fill="#0f9d58"/><path d="M15 2h12l5 8-5 8H15l5-8-5-8Z" fill="#f57c00"/><text x="32" y="14" fill="#17324d" font-size="11" font-weight="900" font-family="Arial, sans-serif">UPI</text></svg>` },
@@ -524,12 +530,12 @@
     const cart = await readCart();
     if (!Number(cart?.item_count || 0)) throw new Error("Your cart is empty.");
     const snapshot = cartSnapshot(cart);
-    state.intent = Object.assign({}, state.intent || {}, { cartSnapshot: snapshot, subtotalAmountPaise: Number(cart.items_subtotal_price || cart.total_price || 0), discountAmountPaise: Number(cart.total_discount || 0), shippingAmountPaise: 0, totalAmountPaise: Math.max(Number(cart.total_price || 0), 0), currency: snapshot.currency || "INR" });
+    state.intent = Object.assign({}, state.intent || {}, { cartSnapshot: snapshot, subtotalAmountPaise: cartSubtotalPaise(cart), discountAmountPaise: cartDiscountPaise(cart), shippingAmountPaise: 0, totalAmountPaise: cartTotalPaise(cart), currency: snapshot.currency || "INR" });
     state.hydration.cart = "ready";
     state.hydration.intent = "loading";
     render();
     const startedAt = perfNow();
-    const data = await apiFetch("/express/checkout/intents", { method: "POST", body: { cartToken: snapshot.token, cartSnapshot: snapshot, subtotalAmountPaise: Number(cart.items_subtotal_price || cart.total_price || 0), discountAmountPaise: Number(cart.total_discount || 0), shippingAmountPaise: 0, codFeeAmountPaise: 0, totalAmountPaise: Math.max(Number(cart.total_price || 0), 0), currency: "INR" } });
+    const data = await apiFetch("/express/checkout/intents", { method: "POST", body: { cartToken: snapshot.token, cartSnapshot: snapshot, subtotalAmountPaise: cartSubtotalPaise(cart), discountAmountPaise: cartDiscountPaise(cart), shippingAmountPaise: 0, codFeeAmountPaise: 0, totalAmountPaise: cartTotalPaise(cart), currency: snapshot.currency || "INR" } });
     state.intent = data.intent;
     state.customerDefaultAddress = data.customerDefaultAddress || state.customerDefaultAddress;
     state.settings = Object.assign({}, state.settings, data.settings || {});
