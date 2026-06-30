@@ -79,6 +79,13 @@ function extractDiscountCode(cartSnapshot: unknown, body: Record<string, unknown
     if (code) return code.toUpperCase();
   }
 
+  const cartLevelDiscounts = Array.isArray(snapshot?.cart_level_discount_applications) ? snapshot.cart_level_discount_applications : [];
+  for (const entry of cartLevelDiscounts) {
+    const record = asRecord(entry);
+    const code = stringOrNull(record?.code) || stringOrNull(record?.title);
+    if (code) return code.toUpperCase();
+  }
+
   return null;
 }
 
@@ -101,11 +108,6 @@ function firstIntentAddress(intent: { addressSnapshots?: Array<Record<string, un
 function calculateKnownDiscount(code: string | null, subtotalAmountPaise: number, fallbackDiscountAmountPaise: number) {
   if (!code) return null;
   const normalizedCode = code.trim().toUpperCase();
-
-  if (normalizedCode === "MEGA15") {
-    const discountAmountPaise = Math.min(subtotalAmountPaise, Math.round(subtotalAmountPaise * 0.15));
-    return { code: normalizedCode, title: "15% OFF", discountAmountPaise, rawShopifyPayload: { discountCode: normalizedCode, discountType: "PERCENTAGE", discountValue: 15, discountAmountPaise, source: "megaska_known_coupon" } };
-  }
 
   if (fallbackDiscountAmountPaise > 0) {
     const discountAmountPaise = Math.min(subtotalAmountPaise, fallbackDiscountAmountPaise);
@@ -242,10 +244,6 @@ export async function POST(req: NextRequest) {
 
   if (capturedDiscount) {
     paiseValues.discountAmountPaise = capturedDiscount.discountAmountPaise;
-    paiseValues.totalAmountPaise = Math.max(
-      0,
-      paiseValues.subtotalAmountPaise + paiseValues.shippingAmountPaise + paiseValues.codFeeAmountPaise - capturedDiscount.discountAmountPaise
-    );
   }
 
   if (cartSnapshot !== undefined && !hasCartLineItems(cartSnapshot)) {

@@ -187,9 +187,9 @@
   }
 
   function getComputedTotals() {
-    const subtotalMinor = Number(state.cart?.items_subtotal_price || 0);
+    const subtotalMinor = Number(state.cart?.original_total_price || state.cart?.items_subtotal_price || 0);
     const cartDiscountMinor = Number(state.cart?.total_discount || 0);
-    const estimatedTotalMinor = Math.max(subtotalMinor - cartDiscountMinor, 0);
+    const estimatedTotalMinor = Math.max(Number(state.cart?.total_price || 0), 0);
 
     return {
       subtotalMinor,
