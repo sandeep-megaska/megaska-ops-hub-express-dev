@@ -2,6 +2,8 @@
   const SESSION_KEY = "megaska_session_token";
   const APP_PROXY_API_BASE = "/apps/megaska/api";
   const PAGE_FALLBACK_URL = "/apps/megaska/checkout";
+  const RAZORPAY_INLINE_SCRIPT_SRC = "https://checkout.razorpay.com/v1/razorpay.js";
+  const RAZORPAY_CHECKOUT_SCRIPT_SRC = "https://checkout.razorpay.com/v1/checkout.js";
   const TRIGGER_SELECTOR = "[data-megaska-express-checkout], [data-bag-action='checkout']";
   const DEBUG = /(?:^|[?&])megaska_debug=1(?:&|$)/.test(window.location.search) || window.MEGASKA_DEBUG === true;
 
@@ -16,7 +18,8 @@
     paymentUpdating: false,
     selectedDisplayPaymentMethod: "UPI",
     inlinePaymentMode: false,
-    razorpayScriptPromise: null,
+    razorpayInlineScriptPromise: null,
+    razorpayCheckoutScriptPromise: null,
     activeRazorpayInstance: null,
     activeRazorpayOrder: null,
     addressSavedForIntentId: null,
@@ -763,18 +766,71 @@
     setSelectedDisplayPaymentMethod(event.target.value);
   }
 
-  function ensureRazorpayScript() {
-    if (window.Razorpay) return Promise.resolve(window.Razorpay);
-    if (state.razorpayScriptPromise) return state.razorpayScriptPromise;
-    const existing = document.querySelector('script[src="https://checkout.razorpay.com/v1/checkout.js"]');
-    state.razorpayScriptPromise = new Promise((resolve, reject) => {
-      const script = existing || document.createElement("script");
-      const done = () => window.Razorpay ? resolve(window.Razorpay) : reject(new Error("Razorpay Checkout loaded but is unavailable."));
-      script.addEventListener("load", done, { once: true });
-      script.addEventListener("error", () => reject(new Error("Unable to load Razorpay Checkout.")), { once: true });
-      if (!existing) { script.src = "https://checkout.razorpay.com/v1/checkout.js"; script.async = true; document.head.appendChild(script); }
+  function findRazorpayScript(src) {
+    return Array.from(document.querySelectorAll("script[src]")).find((script) => script.src === src);
+  }
+
+  function logRazorpayScriptLoaded(label, src) {
+    if (window.console && typeof window.console.debug === "function") {
+      window.console.debug(`[Megaska Express] Razorpay ${label} script loaded`, { src });
+    }
+  }
+
+  function restoreRazorpayGlobal(previousConstructor, preferredConstructor) {
+    if (preferredConstructor) window.Razorpay = preferredConstructor;
+    else if (previousConstructor) window.Razorpay = previousConstructor;
+  }
+
+  function loadRazorpayConstructor(src, cacheKey, unavailableMessage, preferredRestoreKey) {
+    if (window[cacheKey]) return Promise.resolve(window[cacheKey]);
+    const previousConstructor = window.Razorpay;
+    const existing = findRazorpayScript(src);
+    return new Promise((resolve, reject) => {
+      const finish = () => {
+        const constructor = window.Razorpay;
+        if (typeof constructor !== "function") {
+          restoreRazorpayGlobal(previousConstructor, window[preferredRestoreKey]);
+          reject(new Error(unavailableMessage));
+          return;
+        }
+        window[cacheKey] = constructor;
+        logRazorpayScriptLoaded(cacheKey === "MegaskaRazorpayInline" ? "inline" : "checkout", src);
+        restoreRazorpayGlobal(previousConstructor, window[preferredRestoreKey]);
+        resolve(constructor);
+      };
+      const fail = () => {
+        restoreRazorpayGlobal(previousConstructor, window[preferredRestoreKey]);
+        reject(new Error(unavailableMessage));
+      };
+      if (existing) {
+        if (window.Razorpay && !window[cacheKey]) finish();
+        else { existing.addEventListener("load", finish, { once: true }); existing.addEventListener("error", fail, { once: true }); }
+        return;
+      }
+      const script = document.createElement("script");
+      window.Razorpay = undefined;
+      script.src = src;
+      script.async = true;
+      script.addEventListener("load", finish, { once: true });
+      script.addEventListener("error", fail, { once: true });
+      document.head.appendChild(script);
     });
-    return state.razorpayScriptPromise;
+  }
+
+  function ensureRazorpayScript() {
+    if (window.MegaskaRazorpayInline) return Promise.resolve(window.MegaskaRazorpayInline);
+    if (!state.razorpayInlineScriptPromise) {
+      state.razorpayInlineScriptPromise = loadRazorpayConstructor(RAZORPAY_INLINE_SCRIPT_SRC, "MegaskaRazorpayInline", "Razorpay inline script loaded but is unavailable.", "MegaskaRazorpayCheckout").catch((error) => { state.razorpayInlineScriptPromise = null; throw error; });
+    }
+    return state.razorpayInlineScriptPromise;
+  }
+
+  function ensureRazorpayCheckoutScript() {
+    if (window.MegaskaRazorpayCheckout) return Promise.resolve(window.MegaskaRazorpayCheckout);
+    if (!state.razorpayCheckoutScriptPromise) {
+      state.razorpayCheckoutScriptPromise = loadRazorpayConstructor(RAZORPAY_CHECKOUT_SCRIPT_SRC, "MegaskaRazorpayCheckout", "Unable to load Razorpay Checkout.", "MegaskaRazorpayInline").catch((error) => { state.razorpayCheckoutScriptPromise = null; throw error; });
+    }
+    return state.razorpayCheckoutScriptPromise;
   }
 
   function loadRazorpay() { return ensureRazorpayScript(); }
@@ -802,7 +858,7 @@
       instance.on("payment.success", paymentSuccess);
       instance.on("payment.error", (error) => {
         const message = error?.error?.description || error?.description || "Payment failed. Please check details and try again.";
-        state.busy = false; state.orderSubmitting = false; state.paymentStarted = false; state.paymentInProgress = false; renderPaymentSectionOnly();
+        state.busy = false; state.orderSubmitting = false; state.paymentStarted = false; state.paymentInProgress = false; state.activeRazorpayInstance = null; renderPaymentSectionOnly();
         if (selectedDisplayPaymentMethod() === "EMI") showInlinePaymentError(`${message} If EMI is not available for this card, try Card payment instead.`);
         else showInlinePaymentError(message);
       });
@@ -811,21 +867,20 @@
     return instance;
   }
 
-  function razorpayScriptSrc() {
-    const scripts = Array.from(document.querySelectorAll('script[src*="razorpay"]'));
-    const checkoutScript = scripts.find((script) => /checkout\.razorpay\.com\/v1\/checkout\.js/i.test(script.src));
-    return (checkoutScript || scripts[0])?.src || null;
+  function razorpayScriptSrc(src) {
+    return findRazorpayScript(src)?.src || null;
   }
 
   function logRazorpayRuntimeDiagnostics(rzp, checkout, displayMethod) {
     const diagnostics = {
       windowRazorpayType: typeof window.Razorpay,
-      razorpayScriptSrc: razorpayScriptSrc(),
+      inlineScriptSrc: razorpayScriptSrc(RAZORPAY_INLINE_SCRIPT_SRC),
+      checkoutScriptSrc: razorpayScriptSrc(RAZORPAY_CHECKOUT_SCRIPT_SRC),
       razorpayOrderIdPresent: Boolean(checkout?.razorpayOrderId),
       keyPresent: Boolean(checkout?.key),
       instanceKeys: rzp && typeof rzp === "object" ? Object.keys(rzp) : [],
-      createPaymentType: typeof rzp?.createPayment,
-      selectedDisplayPaymentMethod: displayMethod,
+      inlineCreatePaymentType: typeof rzp?.createPayment,
+      selectedPaymentMethod: displayMethod,
     };
     if (typeof rzp?.createPayment === "function") {
       if (window.console && typeof window.console.debug === "function") window.console.debug("[Megaska Express] Razorpay runtime diagnostics", diagnostics);
@@ -834,9 +889,9 @@
     }
   }
 
-  function createRazorpayInstance(checkout, displayMethod) {
+  function createRazorpayInstance(RazorpayInline, checkout, displayMethod) {
     const options = buildStandardRazorpayOptions(checkout, displayMethod);
-    const instance = new window.Razorpay(options);
+    const instance = new RazorpayInline(options);
     state.activeRazorpayInstance = attachRazorpayListeners(instance);
     logRazorpayRuntimeDiagnostics(state.activeRazorpayInstance, checkout, displayMethod);
     return state.activeRazorpayInstance;
@@ -847,7 +902,7 @@
     const options = {
       key: checkout.key, amount: checkout.amountPaise, currency: checkout.currency || "INR", name: shopLabel(), description: "Express Checkout", order_id: checkout.razorpayOrderId, checkout_config_id: "config_T7vYfjdxuFvAQM", prefill: checkout.customer || {}, notes: checkout.notes || {},
       handler: paymentSuccess,
-      modal: { ondismiss: () => { state.busy = false; state.orderSubmitting = false; state.paymentStarted = false; state.paymentInProgress = false; showInlinePaymentError("Payment was not completed. You can try again."); } },
+      modal: { ondismiss: () => { state.busy = false; state.orderSubmitting = false; state.paymentStarted = false; state.paymentInProgress = false; state.activeRazorpayInstance = null; showInlinePaymentError("Payment was not completed. You can try again."); } },
     };
     if (display) options.display = display;
     return options;
@@ -900,16 +955,16 @@
       await ensureAddressSavedOnce();
       await ensureBackendPaymentMethod(backendPaymentMethodForDisplay(method));
       if (method === "COD") return createOrder();
-      await ensureRazorpayScript();
+      const RazorpayInline = await ensureRazorpayScript();
       const checkout = await ensureRazorpayOrder();
-      const rzp = createRazorpayInstance(checkout, method);
+      const rzp = createRazorpayInstance(RazorpayInline, checkout, method);
       if (typeof rzp.createPayment !== "function") {
-        state.paymentInProgress = false; state.orderSubmitting = false; state.busy = false; state.paymentStarted = false; renderPaymentSectionOnly();
+        state.paymentInProgress = false; state.orderSubmitting = false; state.busy = false; state.paymentStarted = false; state.activeRazorpayInstance = null; renderPaymentSectionOnly();
         showInlinePaymentError("Inline payment is not available right now."); return;
       }
       rzp.createPayment(inlinePayload(method, formData, checkout));
     } catch (error) {
-      state.paymentInProgress = false; state.orderSubmitting = false; state.busy = false; state.paymentStarted = false;
+      state.paymentInProgress = false; state.orderSubmitting = false; state.busy = false; state.paymentStarted = false; state.activeRazorpayInstance = null;
       renderPaymentSectionOnly();
       showInlinePaymentError(method === "COD" ? (error instanceof Error ? error.message : "We could not place your COD order.") : prepaidPlaceOrderMessage(error));
     }
@@ -918,12 +973,14 @@
   async function openStandardRazorpayFallback() {
     try {
       state.inlinePaymentError = ""; state.paymentInProgress = true; state.orderSubmitting = true; state.busy = true; renderPaymentSectionOnly();
-      await ensureAddressSavedOnce(); await ensureBackendPaymentMethod("PREPAID"); await ensureRazorpayScript();
+      await ensureAddressSavedOnce(); await ensureBackendPaymentMethod("PREPAID");
+      const RazorpayCheckout = await ensureRazorpayCheckoutScript();
       const checkout = await ensureRazorpayOrder();
       const options = buildStandardRazorpayOptions(checkout, selectedDisplayPaymentMethod());
       logRazorpayDisplayConfig(selectedDisplayPaymentMethod(), options.display?.blocks?.selected_method?.instruments?.[0]?.method || null, options);
-      new window.Razorpay(options).open();
-    } catch (error) { state.paymentInProgress = false; state.orderSubmitting = false; state.busy = false; showInlinePaymentError(prepaidPlaceOrderMessage(error)); renderPaymentSectionOnly(); }
+      state.activeRazorpayInstance = new RazorpayCheckout(options);
+      state.activeRazorpayInstance.open();
+    } catch (error) { state.paymentInProgress = false; state.orderSubmitting = false; state.busy = false; state.activeRazorpayInstance = null; showInlinePaymentError(prepaidPlaceOrderMessage(error)); renderPaymentSectionOnly(); }
   }
 
   async function placeOrder() {
