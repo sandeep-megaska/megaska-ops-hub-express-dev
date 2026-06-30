@@ -420,7 +420,18 @@
   function cartTotalPaise(cart) { return Math.max(Number(cart?.total_price || 0), 0); }
   function shopLabel() { return "Megaska"; }
   function logoUrl() {
-    return String(window.MEGASKA_SHOP_LOGO_URL || window.MEGASKA_STORE_LOGO_URL || window.MEGASKA_LOGO_URL || "").trim();
+    const sources = [
+      window.MEGASKA_SHOP_LOGO_URL,
+      window.MEGASKA_STORE_LOGO_URL,
+      window.MEGASKA_LOGO_URL,
+      document.querySelector("header img")?.src,
+      document.querySelector('link[rel="icon"]')?.href,
+    ];
+    for (const source of sources) {
+      const url = String(source || "").trim();
+      if (url) return url;
+    }
+    return "";
   }
   function logoMarkup() {
     const src = logoUrl();
