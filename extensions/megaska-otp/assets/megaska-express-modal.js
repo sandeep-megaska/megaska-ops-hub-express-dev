@@ -513,8 +513,7 @@
   function upiExpandedPanel(totalLabel) {
     const apps = ["Paytm", "PhonePe", "GPay", "Amazon Pay", "BHIM"];
     return `<div class="megaska-express-upi-panel">
-      <div class="megaska-express-upi-qr" aria-hidden="true"><span></span></div>
-      <div class="megaska-express-upi-details"><strong>Scan the QR using any UPI App</strong><p>Payable amount: ${escapeHtml(totalLabel)}</p><div class="megaska-express-upi-apps">${apps.map((app) => `<span>${escapeHtml(app)}</span>`).join("")}</div><small>🔒 Razorpay-secure payment. Your UPI details stay protected.</small></div>
+      <div class="megaska-express-upi-details"><strong>Enter your UPI ID</strong><p>Payable amount: ${escapeHtml(totalLabel)}</p><small>We’ll send a secure collect request to your UPI app.</small><div class="megaska-express-upi-apps">${apps.map((app) => `<span>${escapeHtml(app)}</span>`).join("")}</div><small>🔒 Secure UPI payment powered by Razorpay.</small></div>
     </div>`;
   }
 
@@ -709,13 +708,14 @@
 
   function renderInlinePaymentPanel(method) {
     const totalLabel = money(payableAmount(backendPaymentMethodForDisplay(method)), state.intent?.currency);
-    const title = DISPLAY_PAYMENT_METHODS.find((item) => item.key === method)?.label || method;
+    const title = method === "UPI" ? "Enter your UPI ID" : (DISPLAY_PAYMENT_METHODS.find((item) => item.key === method)?.label || method);
+    const submitTitle = method === "UPI" ? "UPI" : title.replace("Debit/Credit Cards", "Card");
     const error = state.inlinePaymentError ? `<p class="megaska-express-inline-error" data-express-inline-error>${escapeHtml(state.inlinePaymentError)}</p>` : `<p class="megaska-express-inline-error" data-express-inline-error hidden></p>`;
     const busy = state.paymentInProgress || state.orderSubmitting;
-    const submit = method === "COD" ? "Place COD Order" : (method === "NETBANKING" ? "Continue to Netbanking" : `Pay ${totalLabel} via ${title.replace("Debit/Credit Cards", "Card")}`);
+    const submit = method === "COD" ? "Place COD Order" : (method === "NETBANKING" ? "Continue to Netbanking" : `Pay ${totalLabel} via ${submitTitle}`);
     const cardFields = `<div class="megaska-express-card-grid"><input name="cardNumber" inputmode="numeric" autocomplete="cc-number" placeholder="Card number" required><input name="cardExpiry" inputmode="numeric" autocomplete="cc-exp" placeholder="MM/YY" required><input name="cardCvv" inputmode="numeric" autocomplete="cc-csc" placeholder="CVV" required><input name="cardName" autocomplete="cc-name" placeholder="Name on card" required></div>`;
     let fields = "";
-    if (method === "UPI") fields = `<input name="vpa" inputmode="email" autocomplete="off" placeholder="yourname@bank" required><p class="megaska-express-secure-note">Your UPI ID is sent only to Razorpay.</p>`;
+    if (method === "UPI") fields = `<p class="megaska-otp-step-subtitle">We’ll send a secure collect request to your UPI app.</p><input name="vpa" inputmode="email" autocomplete="off" placeholder="yourname@upi" required><p class="megaska-express-secure-note">Secure UPI payment powered by Razorpay.</p>`;
     if (method === "CARD") fields = cardFields;
     if (method === "EMI") fields = `${cardFields}<div class="megaska-express-card-grid"><select name="bank" required><option value="">Select EMI bank</option><option value="HDFC">HDFC Bank</option><option value="ICIC">ICICI Bank</option><option value="SBIN">State Bank of India</option><option value="UTIB">Axis Bank</option><option value="KKBK">Kotak Bank</option></select><select name="emi_duration" required><option value="">Select tenure</option><option value="3">3 months</option><option value="6">6 months</option><option value="9">9 months</option><option value="12">12 months</option></select></div>`;
     if (method === "NETBANKING") fields = `<select name="bank" required><option value="">Select bank</option><option value="HDFC">HDFC Bank</option><option value="ICIC">ICICI Bank</option><option value="SBIN">State Bank of India</option><option value="UTIB">Axis Bank</option><option value="KKBK">Kotak Mahindra Bank</option></select>`;
