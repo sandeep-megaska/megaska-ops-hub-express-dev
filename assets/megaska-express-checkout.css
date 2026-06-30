@@ -143,7 +143,8 @@
 .megaska-express-card input:focus-visible,
 .megaska-express-btn:focus-visible,
 .megaska-express-close:focus-visible,
-.megaska-express-link-btn:focus-visible { outline: 3px solid rgba(30, 64, 175, 0.35); outline-offset: 2px; }
+.megaska-express-link-btn:focus-visible,
+.megaska-express-payment-option:focus-within { outline: 3px solid rgba(30, 64, 175, 0.35); outline-offset: 2px; }
 
 .megaska-express-fields,
 .megaska-express-inline { display: grid; gap: 10px; grid-template-columns: 1fr; }
@@ -209,39 +210,37 @@
 .megaska-express-address-card p { color: #31523b; font-size: 0.86rem; line-height: 1.35; margin: 3px 0 0; }
 .megaska-express-address-icon { align-items: center; background: #dcfce7; border-radius: 999px; color: #15803d; display: inline-flex; font-weight: 900; height: 34px; justify-content: center; width: 34px; }
 
-.megaska-express-radio {
-  align-items: flex-start;
+.megaska-express-payment-intro { color: #76685c; font-size: 0.86rem; line-height: 1.35; margin: -4px 0 0; }
+.megaska-express-payment-options { display: grid; gap: 10px; min-width: 0; }
+
+.megaska-express-payment-option {
+  align-items: center;
   background: linear-gradient(180deg, #ffffff 0%, #fffaf4 100%);
   border: 1px solid rgba(32, 26, 22, 0.14);
-  border-radius: 18px;
-  box-shadow: 0 10px 24px rgba(58, 42, 28, 0.06);
+  border-radius: 17px;
+  box-shadow: 0 8px 20px rgba(58, 42, 28, 0.055);
   cursor: pointer;
-  display: flex !important;
-  gap: 12px !important;
-  padding: 15px;
+  display: grid !important;
+  gap: 10px !important;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  padding: 12px;
   transition: border-color .16s ease, box-shadow .16s ease, background .16s ease, transform .16s ease;
 }
 
-.megaska-express-radio:hover { border-color: rgba(30, 58, 138, 0.35); transform: translateY(-1px); }
-.megaska-express-radio.is-selected { background: linear-gradient(180deg, #f8fbff 0%, #eff6ff 100%); border-color: #1d4ed8; box-shadow: 0 0 0 2px rgba(29, 78, 216, 0.12), 0 16px 34px rgba(30, 58, 138, 0.13); }
-.megaska-express-radio input { accent-color: #1d4ed8; flex: 0 0 auto; margin-top: 4px; min-height: auto; width: auto; }
-.megaska-express-radio > span,
-.megaska-express-payment-body { display: grid; gap: 8px; min-width: 0; width: 100%; }
-.megaska-express-payment-top { align-items: start; display: flex; gap: 10px; justify-content: space-between; }
-.megaska-express-payment-top strong { color: #111827; font-size: 0.98rem; }
-.megaska-express-payment-top b { color: #111827; font-size: 0.98rem; white-space: nowrap; }
-.megaska-express-payment-icons { display: flex; flex-wrap: wrap; gap: 7px; }
-.megaska-express-pay-card,
-.megaska-express-cod-card { align-items: center; background: #fff; border: 1px solid rgba(15, 23, 42, 0.14); border-radius: 9px; box-shadow: inset 0 1px 0 rgba(255,255,255,.92), 0 2px 7px rgba(15, 23, 42, 0.06); color: #0f172a; display: inline-flex; font-size: 0.68rem; font-weight: 900; height: 32px; justify-content: center; line-height: 1; padding: 4px 8px; white-space: nowrap; }
-.megaska-express-pay-card svg { display: block; height: 20px; max-width: 86px; width: auto; }
-.megaska-express-pay-card--upi svg { width: 54px; }
-.megaska-express-pay-card--visa svg { width: 58px; }
-.megaska-express-pay-card--mastercard svg { width: 58px; }
-.megaska-express-pay-card--rupay svg { width: 62px; }
-.megaska-express-pay-card--netbanking svg { width: 86px; }
-.megaska-express-pay-card--more { background: #f8fafc; color: #334155; padding-inline: 10px; }
-.megaska-express-cod-card { background: #f0fdf4; border-color: #86efac; color: #166534; gap: 6px; letter-spacing: .06em; padding: 4px 10px 4px 7px; width: fit-content; }
-.megaska-express-cod-card svg { display: block; height: 24px; width: 36px; }
+.megaska-express-payment-option:hover { border-color: rgba(30, 58, 138, 0.35); transform: translateY(-1px); }
+.megaska-express-payment-option.is-selected { background: linear-gradient(180deg, #f8fbff 0%, #eff6ff 100%); border-color: #1d4ed8; box-shadow: 0 0 0 2px rgba(29, 78, 216, 0.12), 0 14px 30px rgba(30, 58, 138, 0.12); }
+.megaska-express-payment-option input { height: 1px; margin: 0; opacity: 0; position: absolute; width: 1px; }
+.megaska-express-payment-icon { align-items: center; background: #fff; border: 1px solid rgba(15, 23, 42, 0.12); border-radius: 13px; color: #1d4ed8; display: inline-flex; height: 42px; justify-content: center; width: 42px; }
+.megaska-express-payment-option.is-selected .megaska-express-payment-icon { background: #dbeafe; border-color: #bfdbfe; color: #1e40af; }
+.megaska-express-payment-icon svg { display: block; height: 24px; width: 24px; }
+.megaska-express-payment-copy { display: grid; gap: 3px; min-width: 0; }
+.megaska-express-payment-title { align-items: center; display: flex; flex-wrap: wrap; gap: 7px; min-width: 0; }
+.megaska-express-payment-title strong { color: #111827; font-size: 0.95rem; line-height: 1.15; }
+.megaska-express-payment-title em { background: #dcfce7; border: 1px solid #bbf7d0; border-radius: 999px; color: #166534; font-size: 0.66rem; font-style: normal; font-weight: 900; letter-spacing: .03em; padding: 3px 7px; text-transform: uppercase; }
+.megaska-express-payment-copy small { color: #76685c; font-size: 0.79rem; line-height: 1.25; }
+.megaska-express-payment-amount { color: #111827; font-size: 0.88rem; font-weight: 900; white-space: nowrap; }
+.megaska-express-payment-status { align-items: center; background: #f8fafc; border-radius: 999px; color: #64748b; display: inline-flex; font-size: 1rem; font-weight: 900; height: 26px; justify-content: center; line-height: 1; width: 26px; }
+.megaska-express-payment-option.is-selected .megaska-express-payment-status { background: #1d4ed8; color: #fff; }
 
 .megaska-express-note { background: #fff3cd; border-radius: 12px; font-size: 0.9rem; margin: 0; padding: 10px 12px; }
 .megaska-express-place { font-size: 0.94rem; min-height: 50px; min-width: 190px; padding-left: 22px; padding-right: 22px; }
@@ -310,5 +309,7 @@
   .megaska-express-scroll-area { max-height: calc(100vh - 144px); padding: 14px 10px 220px; }
   .megaska-express-sticky-bar { border-radius: 0 0 20px 20px; gap: 8px; padding: 10px; }
   .megaska-express-sticky-main { grid-template-columns: 1fr; }
+  .megaska-express-payment-option { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .megaska-express-payment-amount { display: none; }
   .megaska-express-place { min-width: 100%; width: 100%; }
 }

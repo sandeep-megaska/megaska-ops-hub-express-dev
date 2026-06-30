@@ -14,6 +14,7 @@
     orderSubmitting: false,
     paymentUpdating: false,
     optimisticPaymentMethod: null,
+    selectedDisplayPaymentMethod: null,
     success: null,
     discountCode: "",
     addressEditing: false,
@@ -222,21 +223,51 @@
     return [address.city, address.province, address.zip].filter(Boolean).join(", ");
   }
 
-  const PAYMENT_MARKS = [
-    { key: "upi", label: "UPI", markup: `<svg viewBox="0 0 54 20" aria-hidden="true" focusable="false"><path d="M4 2h12l5 8-5 8H4l5-8-5-8Z" fill="#0f9d58"/><path d="M15 2h12l5 8-5 8H15l5-8-5-8Z" fill="#f57c00"/><text x="32" y="14" fill="#17324d" font-size="11" font-weight="900" font-family="Arial, sans-serif">UPI</text></svg>` },
-    { key: "visa", label: "Visa", markup: `<svg viewBox="0 0 58 20" aria-hidden="true" focusable="false"><text x="4" y="15" fill="#1a1f71" font-size="17" font-weight="900" font-style="italic" font-family="Arial Black, Arial, sans-serif">VISA</text></svg>` },
-    { key: "mastercard", label: "Mastercard", markup: `<svg viewBox="0 0 58 20" aria-hidden="true" focusable="false"><circle cx="23" cy="10" r="8" fill="#eb001b"/><circle cx="35" cy="10" r="8" fill="#f79e1b" fill-opacity=".92"/><path d="M29 3.9a8 8 0 0 1 0 12.2 8 8 0 0 1 0-12.2Z" fill="#ff5f00"/></svg>` },
-    { key: "rupay", label: "RuPay", markup: `<svg viewBox="0 0 62 20" aria-hidden="true" focusable="false"><text x="4" y="14" fill="#123c7c" font-size="13" font-weight="900" font-family="Arial, sans-serif">RuPay</text><path d="M49 3h6l-4 14h-6l4-14Z" fill="#f58220"/><path d="M43 3h6l-4 14h-6l4-14Z" fill="#00a859"/></svg>` },
-    { key: "netbanking", label: "Net Banking", markup: `<svg viewBox="0 0 86 20" aria-hidden="true" focusable="false"><path d="M7 8h18L16 3 7 8Zm2 2h14v7H9v-7Zm-2 7h18" fill="none" stroke="#1e40af" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><text x="31" y="14" fill="#0f172a" font-size="10" font-weight="800" font-family="Arial, sans-serif">Net Banking</text></svg>` },
-    { key: "more", label: "More payment methods", markup: `<span aria-hidden="true">+ More</span>` },
+  const DISPLAY_PAYMENT_METHODS = [
+    { key: "UPI", backendMethod: "PREPAID", label: "UPI", subtitle: "Pay using any UPI app", badge: "Popular", cta: "Pay with UPI", icon: "upi" },
+    { key: "CARD", backendMethod: "PREPAID", label: "Debit/Credit Cards", subtitle: "Visa, Mastercard, RuPay & more", cta: "Pay with Card", icon: "card" },
+    { key: "WALLET", backendMethod: "PREPAID", label: "Wallets", subtitle: "Amazon Pay, Paytm Wallet & more", cta: "Pay with Wallet", icon: "wallet" },
+    { key: "EMI", backendMethod: "PREPAID", label: "EMI", subtitle: "Available on UPI & Cards", cta: "Pay with EMI", icon: "emi" },
+    { key: "COD", backendMethod: "COD", label: "Cash on Delivery", subtitle: "Pay when your order is delivered", cta: "Place COD Order", icon: "cod" },
   ];
 
-  function paymentIconCards() {
-    return PAYMENT_MARKS.map((item) => `<span class="megaska-express-pay-card megaska-express-pay-card--${item.key}" title="${escapeHtml(item.label)}" aria-label="${escapeHtml(item.label)}">${item.markup}</span>`).join("");
+  function displayMethodForBackend(method) {
+    if (method === "COD") return "COD";
+    return "UPI";
   }
 
-  function codIconCard() {
-    return `<span class="megaska-express-cod-card" aria-hidden="true"><svg viewBox="0 0 36 24" focusable="false"><rect x="3" y="5" width="26" height="16" rx="4" fill="#dcfce7" stroke="#22c55e" stroke-width="2"/><path d="M24 10h8v6h-8a3 3 0 0 1 0-6Z" fill="#16a34a"/><circle cx="25" cy="13" r="1.6" fill="#fff"/><path d="M10 12h8m-6-3h8m-10 6h7" stroke="#15803d" stroke-width="1.7" stroke-linecap="round"/></svg><strong>COD</strong></span>`;
+  function selectedDisplayPaymentMethod() {
+    const selected = state.selectedDisplayPaymentMethod || displayMethodForBackend(paymentMethod());
+    return DISPLAY_PAYMENT_METHODS.some((method) => method.key === selected) ? selected : "UPI";
+  }
+
+  function backendPaymentMethodForDisplay(displayMethod) {
+    return DISPLAY_PAYMENT_METHODS.find((method) => method.key === displayMethod)?.backendMethod || "PREPAID";
+  }
+
+  function displayPaymentMethodConfig(displayMethod) {
+    return DISPLAY_PAYMENT_METHODS.find((method) => method.key === displayMethod) || DISPLAY_PAYMENT_METHODS[0];
+  }
+
+  function paymentMethodIcon(name) {
+    if (name === "upi") return `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 4h7l4 8-4 8H5l4-8-4-8Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M15 6l4 6-4 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+    if (name === "card") return `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="5" width="18" height="14" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3 10h18M7 15h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`;
+    if (name === "wallet") return `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H18a2 2 0 0 1 2 2v11H6.5A2.5 2.5 0 0 1 4 15.5v-8Z" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M16 12h5v4h-5a2 2 0 0 1 0-4Z" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="17" cy="14" r=".7" fill="currentColor"/></svg>`;
+    if (name === "emi") return `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="4" y="5" width="16" height="14" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 9h8M8 13h3m3 0h2M8 17h8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`;
+    return `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="4" y="6" width="14" height="12" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M16 10h4v5h-4a2.5 2.5 0 0 1 0-5Z" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 10h5M8 14h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`;
+  }
+
+  function paymentMethodRows(selectedMethod, totalLabel) {
+    return DISPLAY_PAYMENT_METHODS.map((method) => {
+      const selected = method.key === selectedMethod;
+      return `<label class="megaska-express-payment-option ${selected ? "is-selected" : ""}">
+        <input type="radio" name="paymentMethod" value="${escapeHtml(method.key)}" ${selected ? "checked" : ""}>
+        <span class="megaska-express-payment-icon">${paymentMethodIcon(method.icon)}</span>
+        <span class="megaska-express-payment-copy"><span class="megaska-express-payment-title"><strong>${escapeHtml(method.label)}</strong>${method.badge ? `<em>${escapeHtml(method.badge)}</em>` : ""}</span><small>${escapeHtml(method.subtitle)}</small></span>
+        <span class="megaska-express-payment-amount">${escapeHtml(totalLabel)}</span>
+        <span class="megaska-express-payment-status" aria-hidden="true">${selected ? "✓" : "›"}</span>
+      </label>`;
+    }).join("");
   }
 
   function closeCheckout() {
@@ -290,11 +321,14 @@
     const lines = cartLines();
     const discounts = Array.isArray(intent.discounts) ? intent.discounts : [];
     const selectedMethod = paymentMethod();
+    const selectedDisplayMethod = selectedDisplayPaymentMethod();
+    const selectedDisplayConfig = displayPaymentMethodConfig(selectedDisplayMethod);
+    const totalLabel = formatMoney(intent.totalAmountPaise, intent.currency);
     const lockedPhone = intent.phoneSnapshot || address.phone || "";
     const addressComplete = addressIsComplete(address);
     const showAddressForm = state.addressEditing || !addressComplete;
     const deliveryAmount = Number(intent.shippingAmountPaise || 0) === 0 ? "Free" : formatMoney(intent.shippingAmountPaise, intent.currency);
-    const placeOrderLabel = state.orderSubmitting ? (selectedMethod === "COD" ? "Placing order..." : "Opening secure payment...") : selectedMethod === "COD" ? "Place COD Order" : "Pay Now";
+    const placeOrderLabel = state.orderSubmitting ? (selectedMethod === "COD" ? "Placing order..." : "Opening secure payment...") : selectedDisplayConfig.cta;
 
     root.innerHTML = `
       ${state.error ? `<div class="megaska-express-alert" role="alert">${escapeHtml(state.error)}</div>` : ""}
@@ -354,8 +388,8 @@
 
               <div class="megaska-express-payment">
                 <h2>Choose payment method</h2>
-                <label class="megaska-express-radio ${selectedMethod === "PREPAID" ? "is-selected" : ""}"><input type="radio" name="paymentMethod" value="PREPAID" ${selectedMethod === "PREPAID" ? "checked" : ""}> <span class="megaska-express-payment-body"><span class="megaska-express-payment-icons" aria-label="Supported online payment methods">${paymentIconCards()}</span><span class="megaska-express-payment-top"><strong>Secure Online Payment</strong><b>${formatMoney(intent.totalAmountPaise, intent.currency)}</b></span><small>UPI • Cards • Net Banking<br>(Powered by Razorpay)</small></span></label>
-                <label class="megaska-express-radio ${selectedMethod === "COD" ? "is-selected" : ""}"><input type="radio" name="paymentMethod" value="COD" ${selectedMethod === "COD" ? "checked" : ""}> <span class="megaska-express-payment-body">${codIconCard()}<span class="megaska-express-payment-top"><strong>Cash on Delivery</strong><b>${formatMoney(intent.totalAmountPaise, intent.currency)}</b></span><small>Pay ${formatMoney(intent.totalAmountPaise, intent.currency)} on delivery<br>No advance payment. Pay the full amount on delivery.</small></span></label>
+                <p class="megaska-express-payment-intro">Select how you want to pay. Online options open Razorpay securely after you tap Pay.</p>
+                <div class="megaska-express-payment-options">${paymentMethodRows(selectedDisplayMethod, totalLabel)}</div>
                 ${state.paymentUpdating ? `<p class="megaska-express-note">Updating payment method...</p>` : ""}
                 ${state.orderSubmitting ? `<p class="megaska-express-note">Placing your order securely. Please wait...</p>` : ""}
               </div>
@@ -410,8 +444,11 @@
     render();
   }
 
-  async function setPaymentMethod(method) {
+  async function setPaymentMethod(displayMethod) {
+    const method = backendPaymentMethodForDisplay(displayMethod);
     const previous = paymentMethod();
+    const previousDisplay = selectedDisplayPaymentMethod();
+    state.selectedDisplayPaymentMethod = displayMethod;
     state.optimisticPaymentMethod = method;
     state.paymentUpdating = true;
     state.error = null;
@@ -421,6 +458,7 @@
       state.paymentUpdating = false;
       render();
     } catch (error) {
+      state.selectedDisplayPaymentMethod = previousDisplay;
       state.optimisticPaymentMethod = previous;
       state.paymentUpdating = false;
       state.error = "Could not update payment method. Please try again.";
