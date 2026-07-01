@@ -17,11 +17,8 @@ const PAYMENT_METHOD_MUTABLE_STATUSES = [
   "CART_SNAPSHOT_LOCKED",
   "ADDRESS_SELECTED",
   "ADDRESS_SAVED",
-  "ADDRESS_CAPTURED",
-  "ADDRESS_COMPLETED",
   "DELIVERY_VALIDATED",
   "DISCOUNT_APPLIED",
-  "COUPON_APPLIED",
   "PAYMENT_METHOD_SELECTED",
   "PAYMENT_SELECTED",
   "PAYMENT_PENDING",
@@ -171,7 +168,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     return jsonWithCors(req, { ok: false, error: `Intent status ${latestIntent?.status || intent.status} cannot be updated` }, { status: 409 });
   }
 
-  if (["DELIVERY_VALIDATED", "DISCOUNT_APPLIED", "COUPON_APPLIED"].includes(result.intent.status)) {
+  if (["DELIVERY_VALIDATED", "DISCOUNT_APPLIED"].includes(result.intent.status)) {
     const paymentTransition = await transitionCodIntent({
       intent: { id: result.intent.id, shopId: result.intent.shopId, status: result.intent.status },
       toStatus: "PAYMENT_SELECTED",
