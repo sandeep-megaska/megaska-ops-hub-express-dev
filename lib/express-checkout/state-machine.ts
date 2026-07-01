@@ -46,7 +46,7 @@ type CheckoutIntentRecord = {
 
 type CheckoutIntentUpdateDelegate = {
   updateMany(args: {
-    where: { id: string; shopId: string; status: string };
+    where: { id: string; shopId: string; status?: string };
     data: { status: CheckoutIntentStatus };
   }): Promise<{ count: number }>;
 };
