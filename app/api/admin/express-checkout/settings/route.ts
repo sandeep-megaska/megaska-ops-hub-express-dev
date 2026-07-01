@@ -22,12 +22,6 @@ async function shop(req: NextRequest) {
   return resolveShopConfig(getShopDomainFromRequest(req));
 }
 
-function rupeesToPaise(value: unknown) {
-  const amount = Number(value);
-  if (!Number.isFinite(amount) || amount < 0) return null;
-  return Math.round(amount * 100);
-}
-
 export async function GET(req: NextRequest) {
   const resolved = await shop(req);
   if (!resolved.id) return NextResponse.json({ ok: false, error: "Unable to resolve shop" }, { status: 400 });
@@ -41,10 +35,7 @@ export async function POST(req: NextRequest) {
   const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
   if (!body) return NextResponse.json({ ok: false, error: "Invalid JSON payload" }, { status: 400 });
 
-  const codFeeAmountPaise = body.codFeeAmountRupees === "" || body.codFeeAmountRupees == null
-    ? DEFAULT_COD_FEE_AMOUNT_PAISE
-    : rupeesToPaise(body.codFeeAmountRupees);
-  if (codFeeAmountPaise === null) return NextResponse.json({ ok: false, error: "COD charge must be zero or greater" }, { status: 400 });
+  const codFeeAmountPaise = DEFAULT_COD_FEE_AMOUNT_PAISE;
 
   const codInformationText = String(body.codInformationText || "").trim() || DEFAULT_COD_INFORMATION_TEXT;
   const config = { codFeeAmountPaise, codInformationText };

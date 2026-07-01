@@ -309,9 +309,10 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     return jsonWithCors(req, { ok: false, error: `Intent status ${intent.status} cannot create order` }, { status: 409 });
   }
 
+  const orderTotalPaise = Math.max(0, Number(intent.subtotalAmountPaise || 0) + Number(intent.shippingAmountPaise || 0) - Number(intent.discountAmountPaise || 0));
   const storeCreditReservation = await getActiveStoreCreditReservation({ shopId: shop.shopId, customerProfileId, checkoutIntentId: intentId });
-  const storeCreditAmountPaise = Math.min(Number(storeCreditReservation?.reservedAmount || 0), Math.max(0, Number(intent.totalAmountPaise || 0)));
-  const remainingPayablePaise = Math.max(0, Number(intent.totalAmountPaise || 0) - storeCreditAmountPaise);
+  const storeCreditAmountPaise = Math.min(Number(storeCreditReservation?.reservedAmount || 0), orderTotalPaise);
+  const remainingPayablePaise = Math.max(0, orderTotalPaise - storeCreditAmountPaise);
   const isStoreCreditFullCoverage = storeCreditAmountPaise > 0 && remainingPayablePaise === 0;
 
   if (intent.selectedPaymentMethod === "COD" && !isStoreCreditFullCoverage) {
@@ -419,9 +420,6 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     });
   }
 
-  // Keep COD fees in Megaska totals only for now. Shopify draftOrderCreate receives
-  // only real product variants so draft creation can succeed reliably.
-
   const inputBuildStartedAt = Date.now();
   const discountAmount = Math.max(0, Math.min(intent.subtotalAmountPaise + intent.shippingAmountPaise, intent.discountAmountPaise + storeCreditAmountPaise));
   const diagnostic = orderDiagnostic({ shopId: shop.shopId, intentId, customerProfileId, intent, lineItemCount: lineItems.length, hasAddressSnapshot: Boolean(address) });
@@ -449,12 +447,6 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
       { key: "wallet_reservation_id", value: storeCreditReservation?.id || "" },
       { key: "checkout_intent_id", value: intent.id },
     ] : []),
-    ...(intent.selectedPaymentMethod === "COD" && !isStoreCreditFullCoverage && intent.codFeeAmountPaise > 0
-      ? [
-          { key: "COD fee", value: paiseToRupeeDisplay(intent.codFeeAmountPaise) },
-          { key: "COD payable total", value: paiseToRupeeDisplay(intent.totalAmountPaise) },
-        ]
-      : []),
   ];
   const email = address.email || auth.customer.email || undefined;
   const phone = address.phone || auth.customer.phoneE164 || undefined;
@@ -472,9 +464,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     billingAddress: shippingAddress,
     note: storeCreditAmountPaise > 0
       ? `Megaska Express Checkout intent ${intent.id} | Megaska Store Credit: ${paiseToRupeeDisplay(storeCreditAmountPaise)} | Remaining payable: ${paiseToRupeeDisplay(remainingPayablePaise)}`
-      : intent.selectedPaymentMethod === "COD" && !isStoreCreditFullCoverage && intent.codFeeAmountPaise > 0
-        ? `Megaska Express Checkout intent ${intent.id} | COD fee: ${paiseToRupeeDisplay(intent.codFeeAmountPaise)} | COD payable total: ${paiseToRupeeDisplay(intent.totalAmountPaise)}`
-        : `Megaska Express Checkout intent ${intent.id}`,
+      : `Megaska Express Checkout intent ${intent.id}`,
     tags: ["Megaska Express Checkout"],
     customAttributes,
     shippingLine: intent.shippingAmountPaise > 0 ? { title: "Shipping", price: paiseToAmount(intent.shippingAmountPaise) } : undefined,

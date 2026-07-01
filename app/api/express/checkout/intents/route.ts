@@ -246,6 +246,12 @@ export async function POST(req: NextRequest) {
     paiseValues.discountAmountPaise = capturedDiscount.discountAmountPaise;
   }
 
+  paiseValues.codFeeAmountPaise = 0;
+  paiseValues.totalAmountPaise = Math.max(
+    0,
+    paiseValues.subtotalAmountPaise + paiseValues.shippingAmountPaise - paiseValues.discountAmountPaise
+  );
+
   if (cartSnapshot !== undefined && !hasCartLineItems(cartSnapshot)) {
     return jsonWithCors(req, { ok: false, error: "Cart line items required", reason: "cartSnapshot must include lineItems/items/lines with variantId or variant_id and quantity" }, { status: 400 });
   }

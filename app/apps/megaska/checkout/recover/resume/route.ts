@@ -150,6 +150,8 @@ export async function POST(request: NextRequest) {
       expiresAt: recovery.expiresAt,
     });
 
+    const totalAmountPaise = Math.max(0, checkoutIntent.subtotalAmountPaise + checkoutIntent.shippingAmountPaise - checkoutIntent.discountAmountPaise);
+
     return NextResponse.json({
       recoverable: true,
       recoveryType: recovery.recoveryType,
@@ -162,8 +164,8 @@ export async function POST(request: NextRequest) {
         subtotalAmountPaise: checkoutIntent.subtotalAmountPaise,
         discountAmountPaise: checkoutIntent.discountAmountPaise,
         shippingAmountPaise: checkoutIntent.shippingAmountPaise,
-        codFeeAmountPaise: checkoutIntent.codFeeAmountPaise,
-        totalAmountPaise: checkoutIntent.totalAmountPaise,
+        codFeeAmountPaise: 0,
+        totalAmountPaise,
       },
       deliverySummary: latestAddress
         ? {
