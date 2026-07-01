@@ -542,10 +542,17 @@
     if (state.orderSubmitting) return;
     state.orderSubmitting = true;
     setBusy("order");
-    const branch = paymentMethod() === "COD" ? "COD" : "RAZORPAY";
+    const selectedPaymentMethod = paymentMethod();
+    const remainingPayable = Number(state.intent?.totalAmountPaise || 0);
+    const branch = remainingPayable <= 0 ? "STORE_CREDIT_ONLY" : (selectedPaymentMethod === "COD" ? "COD" : "RAZORPAY");
     logCheckoutSubmitBranch(branch);
-    if (branch === "COD") await createOrder();
-    else await handlePrepaid();
+    if (branch === "STORE_CREDIT_ONLY") await createOrder();
+    else if (branch === "COD") {
+      await ensurePaymentMethod("COD");
+      await createOrder();
+    } else {
+      await handlePrepaid();
+    }
   }
 
   root.addEventListener("input", (event) => {

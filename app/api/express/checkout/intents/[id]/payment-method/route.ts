@@ -14,6 +14,8 @@ export const runtime = "nodejs";
 
 const PAYMENT_METHOD_MUTABLE_STATUSES = new Set<ExpressCheckoutIntentStatus>([
   "SESSION_VERIFIED",
+  "CART_SNAPSHOT_LOCKED",
+  "ADDRESS_CAPTURED",
   "ADDRESS_COMPLETED",
   "DELIVERY_VALIDATED",
   "PAYMENT_METHOD_SELECTED",
