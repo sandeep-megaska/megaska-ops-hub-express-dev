@@ -485,6 +485,7 @@
   function storeCreditAppliedPaise() { return Math.round(Number(state.storeCredit?.appliedAmount || 0) * 100); }
   function remainingBasePayablePaise() { return Math.max(0, Number(state.intent?.totalAmountPaise || 0) - storeCreditAppliedPaise()); }
   function payableAmount() { return Math.max(0, remainingBasePayablePaise()); }
+  function isStoreCreditFullyCoveringCheckout() { return state.hydration.intent === "ready" && storeCreditAppliedPaise() > 0 && remainingBasePayablePaise() <= 0; }
 
   const PAYMENT_LOGO_MARKS = [
     { key: "upi", label: "UPI", markup: `<svg viewBox="0 0 54 20" aria-hidden="true" focusable="false"><path d="M4 2h12l5 8-5 8H4l5-8-5-8Z" fill="#0f9d58"/><path d="M15 2h12l5 8-5 8H15l5-8-5-8Z" fill="#f57c00"/><text x="32" y="14" fill="#17324d" font-size="11" font-weight="900" font-family="Arial, sans-serif">UPI</text></svg>` },
@@ -618,7 +619,7 @@
     const selectedDisplayMethod = selectedDisplayPaymentMethod();
     const priceHydrating = state.hydration.intent !== "ready";
     const addressHydrating = state.hydration.session !== "ready" || state.hydration.address === "loading" || state.hydration.intent === "loading";
-    const storeCreditFullyCovers = !priceHydrating && storeCreditAppliedPaise() > 0 && remainingBasePayablePaise() <= 0;
+    const storeCreditFullyCovers = isStoreCreditFullyCoveringCheckout();
     const rows = lines().slice(0, 3).map((line) => `<article class="megaska-express-line"><span>${lineImage(line) ? `<img src="${escapeHtml(lineImage(line))}" alt="${escapeHtml(lineTitle(line))}" loading="lazy">` : `<i></i>`}</span><div class="megaska-express-line-copy"><b>${escapeHtml(lineTitle(line))}</b><em>${lineVariant(line) ? `${escapeHtml(lineVariant(line))} · ` : ""}Qty ${escapeHtml(line.quantity || 1)}</em></div><strong>${money(linePrice(line), intent.currency)}</strong></article>`).join("");
     const extraCount = Math.max(0, lines().length - 3);
     const discount = selectedDiscount(intent);
@@ -633,7 +634,7 @@
       : hasAddress
         ? `<section class="megaska-express-stack"><div class="megaska-express-section-head"><h3>Delivery address</h3><button class="megaska-express-link-btn" type="button" data-express-action="change-address">Change Address ›</button></div><div class="megaska-express-address-card"><span class="megaska-express-address-icon" aria-hidden="true">⌖</span><div><strong>${escapeHtml(currentAddress.name)}</strong><p>${escapeHtml(currentAddress.address1)}${currentAddress.address2 ? `, ${escapeHtml(currentAddress.address2)}` : ""}</p><p>${escapeHtml(currentAddress.city)}, ${escapeHtml(currentAddress.province)} ${escapeHtml(currentAddress.zip)}, ${escapeHtml(currentAddress.country)}</p><p>${escapeHtml(intent.phoneSnapshot || currentAddress.phone)}</p>${savedPincodeMarkup}</div></div></section>`
         : `<form data-express-form="address" class="megaska-express-stack" novalidate><h3>Delivery address</h3><input name="name" value="${escapeHtml(currentAddress.name || "")}" placeholder="Full name" required><input name="email" value="${escapeHtml(currentAddress.email || state.customer?.email || "")}" placeholder="Email" type="email"><input value="${escapeHtml(intent.phoneSnapshot || currentAddress.phone || "Verified phone")}" disabled><input name="zip" value="${escapeHtml(currentAddress.zip || state.customer?.postalCode || "")}" placeholder="PIN code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required><p class="megaska-express-pincode-status" data-express-pincode-message data-status="${escapeHtml(state.pincodeStatus)}">${escapeHtml(state.pincodeMessage)}</p><p class="megaska-express-pincode-eta" data-express-pincode-eta>${state.pincodeEta ? `Estimated delivery by ${escapeHtml(formatEta(state.pincodeEta))}` : ""}</p><div class="megaska-express-fields"><input name="city" value="${escapeHtml(currentAddress.city || state.customer?.city || "")}" placeholder="City" required><input name="province" value="${escapeHtml(currentAddress.province || state.customer?.stateProvince || "")}" placeholder="State" required></div><input name="address1" value="${escapeHtml(currentAddress.address1 || state.customer?.addressLine1 || "")}" placeholder="Address line 1" required><input name="address2" value="${escapeHtml(currentAddress.address2 || state.customer?.addressLine2 || "")}" placeholder="Address line 2 / Landmark"><input name="country" value="${escapeHtml(currentAddress.country || "India")}" placeholder="Country" required><button type="submit" ${!state.intent?.id || state.busy ? "disabled" : ""}>Save address</button><p class="megaska-otp-step-subtitle">Address is saved to your checkout and profile.</p></form>`;
-    root.innerHTML = `${state.error ? `<p class="megaska-otp-error">${escapeHtml(state.error)}</p>` : ""}<header class="megaska-express-modal-header"><div class="megaska-express-logo">${logoMarkup()}</div><div class="megaska-express-heading"><p class="megaska-otp-step-subtitle">Secure Checkout</p><h2 id="megaska-express-title" class="megaska-otp-step-title">Express checkout</h2></div></header><div class="megaska-express-progress"><span>Address</span><span>Coupon</span><span>Payment</span></div><section class="megaska-express-summary"><h3>Order summary</h3>${rows || `<p class="megaska-otp-step-subtitle">${state.hydration.cart === "loading" ? "Loading cart summary..." : "Cart details unavailable."}</p>`}${extraCount ? `<p class="megaska-otp-step-subtitle">+ ${extraCount} more item${extraCount > 1 ? "s" : ""}</p>` : ""}<div class="megaska-express-totals"><p><span>Subtotal</span><strong>${priceHydrating ? "Calculating..." : money(intent.subtotalAmountPaise, intent.currency)}</strong></p>${discountSummary(intent)}<p><span>Delivery</span><strong>${Number(intent.shippingAmountPaise || 0) ? money(intent.shippingAmountPaise, intent.currency) : "Free"}</strong></p><p class="megaska-express-total"><span>Total</span><strong>${totalAmount}</strong></p></div></section>${addressMarkup}<form data-express-form="discount" class="megaska-express-stack"><h3>Have a coupon?</h3><div class="megaska-express-inline"><input name="code" value="${escapeHtml(state.discountCode)}" placeholder="Enter coupon code"><button type="submit" ${!state.intent?.id || state.busy ? "disabled" : ""}>Apply</button></div>${discountChip}</form>${storeCreditBlock}<section class="megaska-express-stack megaska-express-payment${storeCreditFullyCovers ? " megaska-express-payment--store-credit-only" : ""}" data-express-payment-section>${storeCreditFullyCovers ? renderStoreCreditOrderPanel() : (state.inlinePaymentMode ? renderInlinePaymentPanel(selectedDisplayMethod) : renderPaymentMethodList())}</section><div class="megaska-express-sticky-cta"><div class="megaska-express-sticky-trust"><p><span>🔒</span><strong>100% Secure Payments</strong></p><p><span>🛡</span><strong>Trusted & Reliable</strong></p></div><div class="megaska-express-sticky-main"><div><span>Total Payable</span><strong>${totalAmount}</strong></div></div></div>`;
+    root.innerHTML = `${state.error ? `<p class="megaska-otp-error">${escapeHtml(state.error)}</p>` : ""}<header class="megaska-express-modal-header"><div class="megaska-express-logo">${logoMarkup()}</div><div class="megaska-express-heading"><p class="megaska-otp-step-subtitle">Secure Checkout</p><h2 id="megaska-express-title" class="megaska-otp-step-title">Express checkout</h2></div></header><div class="megaska-express-progress"><span>Address</span><span>Coupon</span><span>Payment</span></div><section class="megaska-express-summary"><h3>Order summary</h3>${rows || `<p class="megaska-otp-step-subtitle">${state.hydration.cart === "loading" ? "Loading cart summary..." : "Cart details unavailable."}</p>`}${extraCount ? `<p class="megaska-otp-step-subtitle">+ ${extraCount} more item${extraCount > 1 ? "s" : ""}</p>` : ""}<div class="megaska-express-totals"><p><span>Subtotal</span><strong>${priceHydrating ? "Calculating..." : money(intent.subtotalAmountPaise, intent.currency)}</strong></p>${discountSummary(intent)}<p><span>Delivery</span><strong>${Number(intent.shippingAmountPaise || 0) ? money(intent.shippingAmountPaise, intent.currency) : "Free"}</strong></p><p class="megaska-express-total"><span>Total</span><strong data-express-summary-total>${totalAmount}</strong></p></div></section>${addressMarkup}<form data-express-form="discount" class="megaska-express-stack"><h3>Have a coupon?</h3><div class="megaska-express-inline"><input name="code" value="${escapeHtml(state.discountCode)}" placeholder="Enter coupon code"><button type="submit" ${!state.intent?.id || state.busy ? "disabled" : ""}>Apply</button></div>${discountChip}</form>${storeCreditBlock}<section class="megaska-express-stack megaska-express-payment${storeCreditFullyCovers ? " megaska-express-payment--store-credit-only" : ""}" data-express-payment-section>${storeCreditFullyCovers ? renderStoreCreditOrderPanel() : (state.inlinePaymentMode ? renderInlinePaymentPanel(selectedDisplayMethod) : renderPaymentMethodList())}</section><div class="megaska-express-sticky-cta"><div class="megaska-express-sticky-trust"><p><span>🔒</span><strong>100% Secure Payments</strong></p><p><span>🛡</span><strong>Trusted & Reliable</strong></p></div><div class="megaska-express-sticky-main"><div><span>Total Payable</span><strong data-express-sticky-total>${totalAmount}</strong></div></div></div>`;
     console.info("[EXPRESS UI] payment chips rendered", {
       paymentOptionCount: document.querySelectorAll(".megaska-express-payment-option").length,
       selectedDisplayMethod,
@@ -659,26 +660,66 @@
     }
   }
 
+  function updateCheckoutAmountLabels() {
+    const totalLabel = state.hydration.intent !== "ready" ? "Calculating..." : money(payableAmount(), state.intent?.currency);
+    ensureModal().querySelectorAll("[data-express-summary-total], [data-express-sticky-total]").forEach((el) => {
+      el.textContent = totalLabel;
+    });
+  }
+
+  function renderStoreCreditSectionOnly() {
+    const modal = ensureModal();
+    const existing = modal.querySelector(".megaska-express-store-credit");
+    const paymentSection = getInlinePaymentContainer();
+    const markup = renderStoreCreditBlock(state.intent || {}, state.hydration.intent !== "ready");
+    if (existing) {
+      if (markup) existing.outerHTML = markup;
+      else existing.remove();
+      return;
+    }
+    if (markup && paymentSection) paymentSection.insertAdjacentHTML("beforebegin", markup);
+  }
+
+  function refreshStoreCreditCheckoutUi() {
+    updateCheckoutAmountLabels();
+    renderStoreCreditSectionOnly();
+    renderPaymentSectionOnly();
+  }
+
   async function applyStoreCredit() {
     if (!state.intent?.id || state.busy) return;
     try {
-      state.busy = true; state.storeCredit.error = ""; render();
+      state.busy = true;
+      state.storeCredit.error = "";
+      refreshStoreCreditCheckoutUi();
       const data = await apiFetch(`/express/checkout/store-credit/apply`, { method: "POST", body: { checkoutIntentId: state.intent.id } });
       state.storeCredit = { loading: false, availableAmount: Number(data.availableAmount || 0), appliedAmount: Number(data.appliedAmount || 0), remainingPayable: Number(data.remainingPayable || 0), currency: data.currency || "INR", enabled: true, error: "" };
       resetInlinePaymentState();
-      state.busy = false; render();
+      state.busy = false;
+      refreshStoreCreditCheckoutUi();
     } catch (_error) {
-      state.busy = false; state.storeCredit = Object.assign({}, state.storeCredit, { error: "Unable to apply Store Credit right now. You can continue checkout without it." }); render();
+      state.busy = false;
+      state.storeCredit = Object.assign({}, state.storeCredit, { error: "Unable to apply Store Credit right now. You can continue checkout without it." });
+      refreshStoreCreditCheckoutUi();
     }
   }
 
   async function releaseStoreCredit() {
     if (!state.intent?.id || state.busy) return;
-    state.busy = true; render();
-    const data = await apiFetch(`/express/checkout/store-credit/release`, { method: "POST", body: { checkoutIntentId: state.intent.id } }).catch(() => null);
-    state.storeCredit = Object.assign({}, state.storeCredit, { appliedAmount: 0, remainingPayable: data?.remainingPayable ?? null, enabled: false, error: "" });
-    resetInlinePaymentState();
-    state.busy = false; render();
+    try {
+      state.busy = true;
+      state.storeCredit.error = "";
+      refreshStoreCreditCheckoutUi();
+      const data = await apiFetch(`/express/checkout/store-credit/release`, { method: "POST", body: { checkoutIntentId: state.intent.id } }).catch(() => null);
+      state.storeCredit = Object.assign({}, state.storeCredit, { appliedAmount: 0, remainingPayable: data?.remainingPayable ?? null, enabled: false, error: "" });
+      resetInlinePaymentState();
+      state.busy = false;
+      refreshStoreCreditCheckoutUi();
+    } catch (_error) {
+      state.busy = false;
+      state.storeCredit = Object.assign({}, state.storeCredit, { error: "Unable to remove Store Credit right now. Please try again." });
+      refreshStoreCreditCheckoutUi();
+    }
   }
 
   async function refreshIntent() { const startedAt = perfNow(); const data = await apiFetch(`/express/checkout/intents/${encodeURIComponent(state.intent.id)}`); state.intent = data.intent; state.customerDefaultAddress = data.customerDefaultAddress || state.customerDefaultAddress; state.settings = Object.assign({}, state.settings, data.settings || {}); state.discountCode = state.intent?.discounts?.[0]?.code || state.discountCode; await loadStoreCredit(); perfDetails("intent_fetch_ms", { shopId: getShopDomain() || null, intentId: state.intent?.id || null, duplicateCallsFound: state.perf.duplicateCallsFound, durationMs: Math.round(perfNow() - startedAt) }); }
@@ -853,7 +894,9 @@
   function renderPaymentSectionOnly() {
     const section = getInlinePaymentContainer();
     if (!section) return;
-    section.innerHTML = state.inlinePaymentMode ? renderInlinePaymentPanel(selectedDisplayPaymentMethod()) : renderPaymentMethodList();
+    const storeCreditFullyCovers = isStoreCreditFullyCoveringCheckout();
+    section.className = `megaska-express-stack megaska-express-payment${storeCreditFullyCovers ? " megaska-express-payment--store-credit-only" : ""}`;
+    section.innerHTML = storeCreditFullyCovers ? renderStoreCreditOrderPanel() : (state.inlinePaymentMode ? renderInlinePaymentPanel(selectedDisplayPaymentMethod()) : renderPaymentMethodList());
   }
 
   async function ensureBackendPaymentMethod(method) {
