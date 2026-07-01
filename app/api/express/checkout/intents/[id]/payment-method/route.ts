@@ -23,6 +23,18 @@ const PAYMENT_METHOD_MUTABLE_STATUSES = new Set<ExpressCheckoutIntentStatus>([
   "COUPON_APPLIED",
 ]);
 const PAYMENT_METHODS = ["COD", "PREPAID"] as const;
+const COD_PAYMENT_PENDING_BLOCKED_STATUSES = new Set([
+  "PAYMENT_VERIFIED",
+  "PAYMENT_CONFIRMED",
+  "PAYMENT_SUCCESS",
+  "PAID",
+  "SHOPIFY_ORDER_CREATED",
+  "ORDER_CREATED",
+  "ORDER_COMPLETED",
+  "CANCELLED",
+  "FAILED",
+  "EXPIRED",
+]);
 
 type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 
@@ -99,15 +111,28 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
   checkoutPerfLog("payment_method_switch_start", { shopId: shop.shopId, intentId, customerProfileId, selectedPaymentMethod: body.method });
 
   const intentWhere = { shopId: shop.shopId, id: intentId, customerProfileId };
-  const intent = await prisma.expressCheckoutIntent.findFirst({ where: intentWhere });
+  const intent = await prisma.expressCheckoutIntent.findFirst({
+    where: intentWhere,
+    include: { orderLink: true, payments: { orderBy: { createdAt: "desc" } } },
+  });
 
   if (!intent) return jsonWithCors(req, { ok: false, error: "Intent not found" }, { status: 404 });
-  if (!PAYMENT_METHOD_MUTABLE_STATUSES.has(intent.status)) {
-    return jsonWithCors(req, { ok: false, error: `Intent status ${intent.status} cannot be updated` }, { status: 409 });
-  }
   if (intent.expiresAt && intent.expiresAt <= new Date()) return jsonWithCors(req, { ok: false, error: "Intent expired" }, { status: 409 });
 
   const method = body.method;
+  const hasVerifiedPayment = intent.payments.some((payment) => payment.status === "CONFIRMED" || Boolean(payment.razorpayPaymentId));
+  const hasShopifyOrder = Boolean(intent.orderLink?.shopifyOrderId);
+  const codAllowedFromPaymentPending = method === "COD" && intent.status === "PAYMENT_PENDING" && !hasVerifiedPayment && !hasShopifyOrder;
+
+  if (COD_PAYMENT_PENDING_BLOCKED_STATUSES.has(intent.status) || hasVerifiedPayment || hasShopifyOrder) {
+    return jsonWithCors(req, { ok: false, error: `Intent status ${intent.status} cannot be updated` }, { status: 409 });
+  }
+  if (!PAYMENT_METHOD_MUTABLE_STATUSES.has(intent.status) && !codAllowedFromPaymentPending) {
+    return jsonWithCors(req, { ok: false, error: `Intent status ${intent.status} cannot be updated` }, { status: 409 });
+  }
+  if (codAllowedFromPaymentPending) {
+    console.info("[CHECKOUT STATE] payment_method_switch_allowed_from_payment_pending", { shopId: shop.shopId, intentId, customerProfileId, fromMethod: intent.selectedPaymentMethod, toMethod: method });
+  }
   const settings = await getExpressCheckoutSettings(shop.shopId);
   const codFeeAmountPaise = method === "COD" ? settings.codFeeAmountPaise : 0;
   const totalAmountPaise = Math.max(0, intent.subtotalAmountPaise + intent.shippingAmountPaise + codFeeAmountPaise - intent.discountAmountPaise);
@@ -116,15 +141,24 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
 
   const persistStartedAt = Date.now();
   let intentWasMutable = true;
+  const mutableStatuses = codAllowedFromPaymentPending ? [...Array.from(PAYMENT_METHOD_MUTABLE_STATUSES), "PAYMENT_PENDING" as ExpressCheckoutIntentStatus] : Array.from(PAYMENT_METHOD_MUTABLE_STATUSES);
+  const nextStatus = codAllowedFromPaymentPending ? "PAYMENT_SELECTED" : intent.status;
   const result = await prisma.$transaction(async (tx) => {
     const updateResult = await tx.expressCheckoutIntent.updateMany({
-      where: { ...intentWhere, status: { in: Array.from(PAYMENT_METHOD_MUTABLE_STATUSES) } },
-      data: { selectedPaymentMethod: method, codFeeAmountPaise, totalAmountPaise },
+      where: { ...intentWhere, status: { in: mutableStatuses } },
+      data: { selectedPaymentMethod: method, codFeeAmountPaise, totalAmountPaise, status: nextStatus },
     });
 
     if (updateResult.count === 0) {
       intentWasMutable = false;
       return { intent, payment: null };
+    }
+
+    if (codAllowedFromPaymentPending) {
+      await tx.expressCheckoutPayment.updateMany({
+        where: { shopId: shop.shopId, intentId, method: "PREPAID", status: "PENDING", intent: { customerProfileId } },
+        data: { status: "FAILED", failureReason: "Customer switched to COD before Razorpay payment verification" },
+      });
     }
 
     await tx.expressCheckoutPayment.deleteMany({ where: { shopId: shop.shopId, intentId, method, status: "PENDING", intent: { customerProfileId } } });
