@@ -859,6 +859,10 @@
     }
     const previousIntent = state.intent;
     await apiFetch(`/express/checkout/intents/${encodeURIComponent(state.intent.id)}/payment-method`, { method: "POST", body: { method } });
+    if (method === "COD") {
+      state.activeRazorpayOrder = null;
+      state.activeRazorpayOrderPromise = null;
+    }
     state.intent = Object.assign({}, previousIntent, state.intent || {}, { selectedPaymentMethod: method });
     state.optimisticPaymentMethod = null;
     if (state.intent?.selectedPaymentMethod !== method) await refreshIntent();
