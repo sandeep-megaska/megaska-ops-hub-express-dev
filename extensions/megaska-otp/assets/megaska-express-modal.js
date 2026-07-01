@@ -892,11 +892,61 @@
     return checkout;
   }
 
+  function sanitizedRazorpaySuccessShape(response) {
+    const body = response && typeof response === "object" ? response : {};
+    const payment = body.payment && typeof body.payment === "object" ? body.payment : null;
+    const order = body.order && typeof body.order === "object" ? body.order : null;
+    return {
+      topLevelKeys: Object.keys(body),
+      paymentKeys: payment ? Object.keys(payment) : [],
+      orderKeys: order ? Object.keys(order) : [],
+      hasRazorpayOrderId: Boolean(body.razorpay_order_id),
+      hasRazorpayPaymentId: Boolean(body.razorpay_payment_id),
+      hasRazorpaySignature: Boolean(body.razorpay_signature),
+      hasOrderId: Boolean(body.order_id || order?.id),
+      hasPaymentId: Boolean(body.payment_id || payment?.id),
+      hasSignature: Boolean(body.signature),
+      intentId: state.intent?.id || null,
+      activeRazorpayOrderId: state.activeRazorpayOrder?.checkout?.razorpayOrderId || null,
+      normalizedOrderId: body.razorpay_order_id || body.order_id || order?.id || null,
+      normalizedPaymentId: body.razorpay_payment_id || body.payment_id || payment?.id || null,
+    };
+  }
+
+  function normalizeRazorpaySuccessPayload(response) {
+    const body = response && typeof response === "object" ? response : {};
+    const payment = body.payment && typeof body.payment === "object" ? body.payment : null;
+    const order = body.order && typeof body.order === "object" ? body.order : null;
+    return {
+      razorpay_order_id: String(body.razorpay_order_id || body.order_id || order?.id || state.activeRazorpayOrder?.checkout?.razorpayOrderId || "").trim(),
+      razorpay_payment_id: String(body.razorpay_payment_id || body.payment_id || payment?.id || "").trim(),
+      razorpay_signature: String(body.razorpay_signature || body.signature || "").trim(),
+    };
+  }
+
   function paymentSuccess(response) {
-    return apiFetch(`/express/checkout/intents/${encodeURIComponent(state.intent.id)}/razorpay-verify`, { method: "POST", body: response }).then(async (verified) => {
+    const payload = normalizeRazorpaySuccessPayload(response);
+    console.info("[Megaska Express] Razorpay payment.success payload shape", sanitizedRazorpaySuccessShape(response));
+    if (!payload.razorpay_order_id || !payload.razorpay_payment_id || !payload.razorpay_signature) {
+      console.error("[Megaska Express] Razorpay payment.success missing verification fields", { intentId: state.intent?.id || null, activeRazorpayOrder: state.activeRazorpayOrder || null, normalizedPayload: payload, rawResponse: response });
+      state.inlinePaymentError = "Payment received but order confirmation is pending. Please contact support.";
+      state.error = state.inlinePaymentError;
+      state.busy = false; state.orderSubmitting = false; state.paymentInProgress = false; state.activeRazorpayInstance = null;
+      renderPaymentSectionOnly();
+      showInlinePaymentError(state.inlinePaymentError);
+      return Promise.resolve();
+    }
+    return apiFetch(`/express/checkout/intents/${encodeURIComponent(state.intent.id)}/razorpay-verify`, { method: "POST", body: payload }).then(async (verified) => {
       state.step = "success"; state.error = `${verified.orderLink?.shopifyOrderName || verified.shopifyOrder?.name || "Your order"} has been created.`;
       state.busy = false; state.orderSubmitting = false; state.paymentStarted = false; state.paymentInProgress = false; state.activeRazorpayInstance = null;
       await refreshIntent(); render();
+    }).catch((error) => {
+      console.error("[Megaska Express] Razorpay payment verified by gateway but order confirmation is pending", { intentId: state.intent?.id || null, payload, error });
+      state.inlinePaymentError = error instanceof Error ? error.message : "Payment received but order confirmation is pending. Please contact support.";
+      state.error = state.inlinePaymentError;
+      state.busy = false; state.orderSubmitting = false; state.paymentInProgress = false; state.activeRazorpayInstance = null;
+      renderPaymentSectionOnly();
+      showInlinePaymentError(state.inlinePaymentError);
     });
   }
 
