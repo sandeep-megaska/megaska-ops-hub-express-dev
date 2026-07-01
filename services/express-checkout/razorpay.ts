@@ -4,6 +4,7 @@ import { getShopByDomain, normalizeShopDomain, ShopResolutionError } from "../sh
 import { ExpressCheckoutOrderFinalizationError, finalizePrepaidExpressCheckoutOrder } from "./order-finalization";
 import { CheckoutStateDb, transitionCheckoutIntent } from "../../lib/express-checkout/state-machine";
 import { CHECKOUT_INTENT_EXPIRY_MESSAGE, markCheckoutIntentExpiredIfNeeded } from "../../lib/express-checkout/expiry";
+import { getActiveStoreCreditReservation, releaseStoreCreditReservation } from "./store-credit";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -167,6 +168,10 @@ export async function createExpressCheckoutRazorpayOrder(params: CreateParams) {
   const shop = await resolveActiveShop(params.shopDomain);
   const intent = await loadValidatedIntent(params, shop.id);
   const address = intent.addressSnapshots[0];
+  const storeCreditReservation = await getActiveStoreCreditReservation({ shopId: shop.id, customerProfileId: String(intent.customerProfileId || ""), checkoutIntentId: intent.id });
+  const storeCreditAmountPaise = Math.min(Number(storeCreditReservation?.reservedAmount || 0), Math.max(0, intent.totalAmountPaise));
+  const remainingAmountPaise = Math.max(0, intent.totalAmountPaise - storeCreditAmountPaise);
+  if (remainingAmountPaise <= 0) throw new ExpressCheckoutRazorpayError(409, "No online payment is required after Megaska Store Credit.", "Store Credit covers checkout", "STORE_CREDIT_FULL_COVERAGE");
   const { keyId } = getRazorpayCredentials();
 
   try {
@@ -179,7 +184,7 @@ export async function createExpressCheckoutRazorpayOrder(params: CreateParams) {
           intentId: intent.id,
           method: "PREPAID",
           razorpayOrderId: { not: null },
-          amountPaise: intent.totalAmountPaise,
+          amountPaise: remainingAmountPaise,
           currency: intent.currency,
         },
         orderBy: { createdAt: "desc" },
@@ -201,10 +206,10 @@ export async function createExpressCheckoutRazorpayOrder(params: CreateParams) {
       }
 
       const payment = await tx.expressCheckoutPayment.create({
-        data: { shopId: shop.id, intentId: intent.id, method: "PREPAID", status: "PENDING", amountPaise: intent.totalAmountPaise, currency: intent.currency },
+        data: { shopId: shop.id, intentId: intent.id, method: "PREPAID", status: "PENDING", amountPaise: remainingAmountPaise, currency: intent.currency },
       });
       const notes = { intentId: intent.id, shopId: shop.id, paymentId: payment.id };
-      const razorpayOrder = await createGatewayOrder({ amountPaise: intent.totalAmountPaise, currency: intent.currency, receipt: `megaska_express_${intent.id}`.slice(0, 40), notes });
+      const razorpayOrder = await createGatewayOrder({ amountPaise: remainingAmountPaise, currency: intent.currency, receipt: `megaska_express_${intent.id}`.slice(0, 40), notes: { ...notes, storeCreditAmountPaise, walletReservationId: storeCreditReservation?.id || null } });
       const updatedPayment = await tx.expressCheckoutPayment.update({
         where: { id: payment.id },
         data: { razorpayOrderId: razorpayOrder.id, rawGatewayPayload: safeJson(razorpayOrder) },
@@ -330,13 +335,15 @@ export async function verifyExpressCheckoutRazorpayPayment(params: VerifyParams)
       await tx.expressCheckoutPayment.update({ where: { id: payment.id }, data: { status: "FAILED", failureReason: "Invalid Razorpay signature", rawGatewayPayload: safeJson(safePaymentPayload(params, false)) } });
       await transitionCheckoutIntent({ db: tx as unknown as CheckoutStateDb, intent: { id: intent.id, shopId: intent.shopId, status: intent.status }, toStatus: "PAYMENT_FAILED", reason: "razorpay_signature_failed", metadata: { paymentId: payment.id } });
     });
+    await releaseStoreCreditReservation({ shopId: shop.id, customerProfileId: String(intent.customerProfileId || ""), checkoutIntentId: intent.id, reason: "razorpay-signature-failed" });
     console.error("[EXPRESS RAZORPAY] verify_failed", { shopId: shop.id, intentId: intent.id, paymentId: payment.id, reason: "invalid_signature" });
     throw new ExpressCheckoutRazorpayError(400, "Payment verification failed. Please retry or contact support if money was deducted.", "Invalid Razorpay signature", "RAZORPAY_SIGNATURE_INVALID", "RAZORPAY_VERIFY");
   }
 
   const paidAmountPaise = await fetchGatewayPaymentAmountPaise(params.razorpay_payment_id);
-  if (paidAmountPaise !== null && paidAmountPaise !== intent.totalAmountPaise) {
-    console.error("[EXPRESS RAZORPAY] verify_failed", { shopId: shop.id, intentId: intent.id, paymentId: payment.id, reason: "amount_mismatch", expectedAmountPaise: intent.totalAmountPaise, paidAmountPaise });
+  if (paidAmountPaise !== null && paidAmountPaise !== payment.amountPaise) {
+    await releaseStoreCreditReservation({ shopId: shop.id, customerProfileId: String(intent.customerProfileId || ""), checkoutIntentId: intent.id, reason: "razorpay-amount-mismatch" });
+    console.error("[EXPRESS RAZORPAY] verify_failed", { shopId: shop.id, intentId: intent.id, paymentId: payment.id, reason: "amount_mismatch", expectedAmountPaise: payment.amountPaise, paidAmountPaise });
     throw new ExpressCheckoutRazorpayError(400, "Payment verification failed. Please contact support if money was deducted.", "Razorpay amount mismatch", "RAZORPAY_AMOUNT_MISMATCH", "RAZORPAY_VERIFY");
   }
 

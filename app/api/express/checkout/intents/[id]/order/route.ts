@@ -18,6 +18,7 @@ import {
 } from "../../../../../../../services/express-checkout/shopify-admin";
 import { CHECKOUT_INTENT_STATUSES, CheckoutStateDb, transitionCheckoutIntent } from "../../../../../../../lib/express-checkout/state-machine";
 import { CHECKOUT_INTENT_EXPIRY_MESSAGE, markCheckoutIntentExpiredIfNeeded } from "../../../../../../../lib/express-checkout/expiry";
+import { consumeStoreCreditReservationForOrder, getActiveStoreCreditReservation, releaseStoreCreditReservation } from "../../../../../../../services/express-checkout/store-credit";
 
 export const runtime = "nodejs";
 
@@ -307,7 +308,12 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     return jsonWithCors(req, { ok: false, error: `Intent status ${intent.status} cannot create order` }, { status: 409 });
   }
 
-  if (intent.selectedPaymentMethod !== "COD" && intent.selectedPaymentMethod !== "PREPAID") {
+  const storeCreditReservation = await getActiveStoreCreditReservation({ shopId: shop.shopId, customerProfileId, checkoutIntentId: intentId });
+  const storeCreditAmountPaise = Math.min(Number(storeCreditReservation?.reservedAmount || 0), Math.max(0, Number(intent.totalAmountPaise || 0)));
+  const remainingPayablePaise = Math.max(0, Number(intent.totalAmountPaise || 0) - storeCreditAmountPaise);
+  const isStoreCreditFullCoverage = storeCreditAmountPaise > 0 && remainingPayablePaise === 0;
+
+  if (!isStoreCreditFullCoverage && intent.selectedPaymentMethod !== "COD" && intent.selectedPaymentMethod !== "PREPAID") {
     return jsonWithCors(req, { ok: false, error: "Payment method required" }, { status: 400 });
   }
 
@@ -393,7 +399,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
   // only real product variants so draft creation can succeed reliably.
 
   const inputBuildStartedAt = Date.now();
-  const discountAmount = Math.max(0, Math.min(intent.subtotalAmountPaise, intent.discountAmountPaise));
+  const discountAmount = Math.max(0, Math.min(intent.subtotalAmountPaise + intent.shippingAmountPaise, intent.discountAmountPaise + storeCreditAmountPaise));
   const diagnostic = orderDiagnostic({ shopId: shop.shopId, intentId, customerProfileId, intent, lineItemCount: lineItems.length, hasAddressSnapshot: Boolean(address) });
   console.info("[EXPRESS CHECKOUT ORDER] creating draft order", diagnostic);
   const { firstName, lastName } = nameParts(address.name);
@@ -411,8 +417,14 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
   const customAttributes = [
     { key: "megaska_express_intent_id", value: intent.id },
     { key: "megaska_customer_profile_id", value: customerProfileId },
-    { key: "megaska_payment_method", value: intent.selectedPaymentMethod },
+    { key: "megaska_payment_method", value: isStoreCreditFullCoverage ? "STORE_CREDIT" : intent.selectedPaymentMethod },
     { key: "megaska_discount_snapshot", value: JSON.stringify(intent.discounts) },
+    ...(storeCreditAmountPaise > 0 ? [
+      { key: "store_credit_applied", value: "true" },
+      { key: "store_credit_amount", value: String(storeCreditAmountPaise) },
+      { key: "wallet_reservation_id", value: storeCreditReservation?.id || "" },
+      { key: "checkout_intent_id", value: intent.id },
+    ] : []),
     ...(intent.selectedPaymentMethod === "COD" && intent.codFeeAmountPaise > 0
       ? [
           { key: "COD fee", value: paiseToRupeeDisplay(intent.codFeeAmountPaise) },
@@ -434,9 +446,11 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     phone,
     shippingAddress,
     billingAddress: shippingAddress,
-    note: intent.selectedPaymentMethod === "COD" && intent.codFeeAmountPaise > 0
-      ? `Megaska Express Checkout intent ${intent.id} | COD fee: ${paiseToRupeeDisplay(intent.codFeeAmountPaise)} | COD payable total: ${paiseToRupeeDisplay(intent.totalAmountPaise)}`
-      : `Megaska Express Checkout intent ${intent.id}`,
+    note: storeCreditAmountPaise > 0
+      ? `Megaska Express Checkout intent ${intent.id} | Megaska Store Credit: ${paiseToRupeeDisplay(storeCreditAmountPaise)} | Remaining payable: ${paiseToRupeeDisplay(remainingPayablePaise)}`
+      : intent.selectedPaymentMethod === "COD" && intent.codFeeAmountPaise > 0
+        ? `Megaska Express Checkout intent ${intent.id} | COD fee: ${paiseToRupeeDisplay(intent.codFeeAmountPaise)} | COD payable total: ${paiseToRupeeDisplay(intent.totalAmountPaise)}`
+        : `Megaska Express Checkout intent ${intent.id}`,
     tags: ["Megaska Express Checkout"],
     customAttributes,
     shippingLine: intent.shippingAmountPaise > 0 ? { title: "Shipping", price: paiseToAmount(intent.shippingAmountPaise) } : undefined,
@@ -506,6 +520,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
       const userErrors = normalizeShopifyUserErrors(createResult?.userErrors);
       console.error("[SHOPIFY DRAFT ORDER USER ERRORS]", JSON.stringify(userErrors, null, 2));
       console.error("[EXPRESS CHECKOUT ORDER] Shopify draftOrderCreate userErrors", { ...diagnostic, shopifyUserErrors: userErrors, errorName: "ShopifyUserError", errorMessage: message });
+      if (storeCreditAmountPaise > 0) await releaseStoreCreditReservation({ shopId: shop.shopId, customerProfileId, checkoutIntentId: intentId, reason: "shopify-draft-order-create-failed" });
       return jsonWithCors(
         req,
         { ok: false, error: "We could not place your order right now. Please try again." },
@@ -559,7 +574,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
           userErrors { field message }
         }
       }`,
-      { id: createResult.draftOrder.id, paymentPending: intent.selectedPaymentMethod === "COD" }
+      { id: createResult.draftOrder.id, paymentPending: intent.selectedPaymentMethod === "COD" && remainingPayablePaise > 0 }
     );
 
     checkoutPerfLog("shopify_admin_api_ms", { ...perfContext, durationMs: elapsedMs(shopifyStartedAt) });
@@ -569,6 +584,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
       const message = userErrorMessage(completeResult?.userErrors);
       const shopifyUserErrors = normalizeShopifyUserErrors(completeResult?.userErrors);
       console.error("[EXPRESS CHECKOUT ORDER] Shopify draftOrderComplete userErrors", { ...diagnostic, shopifyUserErrors, errorName: "ShopifyUserError", errorMessage: message });
+      if (storeCreditAmountPaise > 0) await releaseStoreCreditReservation({ shopId: shop.shopId, customerProfileId, checkoutIntentId: intentId, reason: "shopify-draft-order-complete-failed" });
       return jsonWithCors(req, { ok: false, error: "We could not place your order right now. Please try again." }, { status: 422 });
     }
 
@@ -588,7 +604,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
             draftOrderName: completeResult.draftOrder?.name || createResult.draftOrder?.name || null,
             shopifyOrderId: order.id || null,
             shopifyOrderName: order.name || null,
-            financialStatus: order.displayFinancialStatus || (intent.selectedPaymentMethod === "COD" ? "PENDING" : "PAID"),
+            financialStatus: order.displayFinancialStatus || (intent.selectedPaymentMethod === "COD" && remainingPayablePaise > 0 ? "PENDING" : "PAID"),
             fulfillmentStatus: order.displayFulfillmentStatus || null,
           },
           update: {
@@ -596,7 +612,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
             draftOrderName: completeResult.draftOrder?.name || createResult.draftOrder?.name || null,
             shopifyOrderId: order.id || null,
             shopifyOrderName: order.name || null,
-            financialStatus: order.displayFinancialStatus || (intent.selectedPaymentMethod === "COD" ? "PENDING" : "PAID"),
+            financialStatus: order.displayFinancialStatus || (intent.selectedPaymentMethod === "COD" && remainingPayablePaise > 0 ? "PENDING" : "PAID"),
             fulfillmentStatus: order.displayFulfillmentStatus || null,
           },
         });
@@ -611,6 +627,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
         return { link, refreshedIntent };
       });
       orderLink = written.link;
+      if (storeCreditAmountPaise > 0) await consumeStoreCreditReservationForOrder({ shopId: shop.shopId, customerProfileId, checkoutIntentId: intentId, shopifyOrderId: order.id || "", orderNumber: order.name || null });
       if (intent.selectedPaymentMethod === "COD") {
         const completeTransition = await transitionCodIntent({
           intent: { id: intent.id, shopId: intent.shopId, status: "DRAFT_ORDER_CREATED" },
