@@ -26,46 +26,198 @@ export class ShopifyAdminConfigError extends Error {
 
 type ShopifyAdminConfigRow = ShopifyAdminShopDiagnostic & {
   shopDomain: string | null;
+  primaryDomain: string | null;
+  isActive: boolean | null;
+  uninstalledAt: Date | null;
+  accessToken: string | null;
   accessTokenEncrypted: string | null;
+  updatedAt: Date | null;
 };
 
-async function getShopifyAdminConfig(shopDomain: string) {
-  const requestShop = normalizeShopDomain(shopDomain);
-  const rows = await prisma.$queryRaw<Array<ShopifyAdminConfigRow>>`
-    SELECT
-      "id" AS "resolvedShopId",
-      ${requestShop} AS "requestShop",
-      "shopDomain",
-      "myshopifyDomain",
-      "installationStatus",
-      "accessTokenEncrypted",
-      ("accessTokenEncrypted" IS NOT NULL) AS "hasAccessToken"
-    FROM "Shop"
-    WHERE ("shopDomain" = ${requestShop} OR "myshopifyDomain" = ${requestShop})
-      AND "installationStatus" = 'ACTIVE'
-      AND "isActive" = true
-      AND "uninstalledAt" IS NULL
-      AND "accessTokenEncrypted" IS NOT NULL
-    ORDER BY "updatedAt" DESC
-    LIMIT 1
-  `;
-  const row = rows[0] || null;
-  const accessToken = decryptShopifyToken(row?.accessTokenEncrypted || null);
-  const diagnostic: ShopifyAdminShopDiagnostic = {
+type ShopifyAdminConfigOptions = {
+  shopId?: string | null;
+};
+
+function hasStoredAdminToken(row: Pick<ShopifyAdminConfigRow, "accessToken" | "accessTokenEncrypted"> | null | undefined) {
+  return Boolean(String(row?.accessToken || "").trim() || row?.accessTokenEncrypted);
+}
+
+function isActiveTokenBearingInstallation(row: ShopifyAdminConfigRow | null | undefined) {
+  return Boolean(
+    row &&
+      row.installationStatus === "ACTIVE" &&
+      row.isActive === true &&
+      !row.uninstalledAt &&
+      hasStoredAdminToken(row)
+  );
+}
+
+function decryptAdminAccessToken(row: Pick<ShopifyAdminConfigRow, "accessToken" | "accessTokenEncrypted"> | null | undefined) {
+  return String(row?.accessToken || "").trim() || decryptShopifyToken(row?.accessTokenEncrypted || null);
+}
+
+function domainFamily(domain: string | null | undefined) {
+  return normalizeShopDomain(domain)
+    .replace(/^www\./, "")
+    .replace(/\.myshopify\.com$/, "");
+}
+
+function rowDomains(row: ShopifyAdminConfigRow) {
+  return [row.myshopifyDomain, row.shopDomain, row.primaryDomain]
+    .map((domain) => normalizeShopDomain(domain))
+    .filter(Boolean);
+}
+
+function candidateScore(row: ShopifyAdminConfigRow, requestShop: string) {
+  if (normalizeShopDomain(row.myshopifyDomain) === requestShop) return 0;
+  if (normalizeShopDomain(row.shopDomain) === requestShop) return 1;
+  if (normalizeShopDomain(row.primaryDomain) === requestShop) return 2;
+
+  const requestedFamily = domainFamily(requestShop);
+  if (requestedFamily && rowDomains(row).some((domain) => domainFamily(domain) === requestedFamily)) return 3;
+
+  return 4;
+}
+
+function safeCandidateDiagnostic(row: ShopifyAdminConfigRow | null | undefined, requestShop: string): ShopifyAdminShopDiagnostic & {
+  shopDomain: string | null;
+  primaryDomain: string | null;
+  isActive: boolean | null;
+  uninstalledAt: boolean;
+} {
+  return {
     resolvedShopId: row?.resolvedShopId || null,
     requestShop,
+    shopDomain: row?.shopDomain || null,
     myshopifyDomain: row?.myshopifyDomain || null,
+    primaryDomain: row?.primaryDomain || null,
     installationStatus: row?.installationStatus || null,
-    hasAccessToken: Boolean(row?.hasAccessToken && accessToken),
+    isActive: row?.isActive ?? null,
+    uninstalledAt: Boolean(row?.uninstalledAt),
+    hasAccessToken: hasStoredAdminToken(row),
   };
+}
 
-  if (!row || !accessToken) {
-    console.warn("[SHOPIFY ADMIN CONFIG] missing active installation", diagnostic);
+async function getShopifyAdminConfig(shopDomain: string, options: ShopifyAdminConfigOptions = {}) {
+  const requestShop = normalizeShopDomain(shopDomain);
+  const requestedShopId = String(options.shopId || "").trim() || null;
+
+  console.info("[SHOPIFY ADMIN CONFIG] resolve_start", {
+    requestShop,
+    requestedShopId,
+  });
+
+  if (!requestShop && !requestedShopId) {
+    console.warn("[SHOPIFY ADMIN CONFIG] missing_active_installation", { requestShop, requestedShopId });
     throw new ShopifyAdminConfigError(409, "No active Shopify installation found. Please reinstall the app.");
   }
 
+  const shopIdRows = requestedShopId
+    ? await prisma.$queryRaw<Array<ShopifyAdminConfigRow>>`
+        SELECT
+          "id" AS "resolvedShopId",
+          ${requestShop} AS "requestShop",
+          "shopDomain",
+          "myshopifyDomain",
+          "primaryDomain",
+          "installationStatus",
+          "isActive",
+          "uninstalledAt",
+          "accessToken",
+          "accessTokenEncrypted",
+          "updatedAt",
+          (("accessToken" IS NOT NULL AND "accessToken" <> '') OR "accessTokenEncrypted" IS NOT NULL) AS "hasAccessToken"
+        FROM "Shop"
+        WHERE "id" = ${requestedShopId}
+        LIMIT 1
+      `
+    : [];
+
+  const shopIdRow = shopIdRows[0] || null;
+  if (shopIdRow) {
+    console.info("[SHOPIFY ADMIN CONFIG] candidate_found", safeCandidateDiagnostic(shopIdRow, requestShop));
+    if (isActiveTokenBearingInstallation(shopIdRow)) {
+      const accessToken = decryptAdminAccessToken(shopIdRow);
+      if (accessToken) {
+        const diagnostic: ShopifyAdminShopDiagnostic = {
+          resolvedShopId: shopIdRow.resolvedShopId || null,
+          requestShop,
+          myshopifyDomain: shopIdRow.myshopifyDomain || null,
+          installationStatus: shopIdRow.installationStatus || null,
+          hasAccessToken: true,
+        };
+        console.info("[SHOPIFY ADMIN CONFIG] active_installation_selected", diagnostic);
+        return {
+          shopDomain: normalizeShopDomain(shopIdRow.myshopifyDomain || shopIdRow.shopDomain || requestShop),
+          accessToken,
+          diagnostic,
+        };
+      }
+    }
+  }
+
+  const rows = requestShop
+    ? await prisma.$queryRaw<Array<ShopifyAdminConfigRow>>`
+        SELECT
+          "id" AS "resolvedShopId",
+          ${requestShop} AS "requestShop",
+          "shopDomain",
+          "myshopifyDomain",
+          "primaryDomain",
+          "installationStatus",
+          "isActive",
+          "uninstalledAt",
+          "accessToken",
+          "accessTokenEncrypted",
+          "updatedAt",
+          (("accessToken" IS NOT NULL AND "accessToken" <> '') OR "accessTokenEncrypted" IS NOT NULL) AS "hasAccessToken"
+        FROM "Shop"
+        WHERE "shopDomain" = ${requestShop}
+          OR "myshopifyDomain" = ${requestShop}
+          OR "primaryDomain" = ${requestShop}
+          OR replace(regexp_replace(COALESCE("shopDomain", ''), '^www\\.', ''), '.myshopify.com', '') = ${domainFamily(requestShop)}
+          OR replace(regexp_replace(COALESCE("myshopifyDomain", ''), '^www\\.', ''), '.myshopify.com', '') = ${domainFamily(requestShop)}
+          OR replace(regexp_replace(COALESCE("primaryDomain", ''), '^www\\.', ''), '.myshopify.com', '') = ${domainFamily(requestShop)}
+        ORDER BY
+          CASE WHEN "installationStatus" = 'ACTIVE' AND "isActive" = true AND "uninstalledAt" IS NULL AND (("accessToken" IS NOT NULL AND "accessToken" <> '') OR "accessTokenEncrypted" IS NOT NULL) THEN 0 ELSE 1 END,
+          "updatedAt" DESC
+      `
+    : [];
+
+  for (const candidate of rows) {
+    console.info("[SHOPIFY ADMIN CONFIG] candidate_found", safeCandidateDiagnostic(candidate, requestShop));
+  }
+
+  const selected = rows
+    .filter(isActiveTokenBearingInstallation)
+    .sort((left, right) => {
+      const scoreDelta = candidateScore(left, requestShop) - candidateScore(right, requestShop);
+      if (scoreDelta !== 0) return scoreDelta;
+      return Number(right.updatedAt || 0) - Number(left.updatedAt || 0);
+    })[0] || null;
+
+  const accessToken = decryptAdminAccessToken(selected);
+  const diagnostic: ShopifyAdminShopDiagnostic = {
+    resolvedShopId: selected?.resolvedShopId || null,
+    requestShop,
+    myshopifyDomain: selected?.myshopifyDomain || null,
+    installationStatus: selected?.installationStatus || null,
+    hasAccessToken: Boolean(selected && accessToken),
+  };
+
+  if (!selected || !accessToken) {
+    console.warn("[SHOPIFY ADMIN CONFIG] missing_active_installation", {
+      ...diagnostic,
+      requestedShopId,
+      candidatesChecked: rows.length + shopIdRows.length,
+    });
+    throw new ShopifyAdminConfigError(409, "No active Shopify installation found. Please reinstall the app.");
+  }
+
+  console.info("[SHOPIFY ADMIN CONFIG] active_installation_selected", diagnostic);
+
   return {
-    shopDomain: normalizeShopDomain(row.myshopifyDomain || row.shopDomain || requestShop),
+    shopDomain: normalizeShopDomain(selected.myshopifyDomain || selected.shopDomain || requestShop),
     accessToken,
     diagnostic,
   };
@@ -81,8 +233,8 @@ function parseShopifyAdminResponseBody(rawText: string) {
   }
 }
 
-export async function shopifyAdminGraphql<T>(shopDomain: string, query: string, variables: JsonRecord = {}) {
-  const adminConfig = await getShopifyAdminConfig(shopDomain);
+export async function shopifyAdminGraphql<T>(shopDomain: string, query: string, variables: JsonRecord = {}, options: ShopifyAdminConfigOptions = {}) {
+  const adminConfig = await getShopifyAdminConfig(shopDomain, options);
   const normalizedShopDomain = adminConfig.shopDomain;
   const accessToken = adminConfig.accessToken;
   const adminApiUrl = `https://${normalizedShopDomain}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`;
