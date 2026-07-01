@@ -55,6 +55,19 @@ type DraftOrderCreatePayload = {
   } | null;
 };
 
+type DraftOrderLookupPayload = {
+  draftOrder?: {
+    id?: string | null;
+    name?: string | null;
+    order?: {
+      id?: string | null;
+      name?: string | null;
+      displayFinancialStatus?: string | null;
+      displayFulfillmentStatus?: string | null;
+    } | null;
+  } | null;
+};
+
 
 function jsonWithCors(req: NextRequest, body: unknown, init?: ResponseInit) {
   return withCors(req, NextResponse.json(body, init));
@@ -158,6 +171,10 @@ function normalizeShopifyUserErrors(errors?: Array<{ field?: string[] | null; me
 function userErrorMessage(errors?: Array<{ field?: string[] | null; message?: string | null }>) {
   const normalized = normalizeShopifyUserErrors(errors);
   return normalized.map((error) => error.message).join(", ") || "Shopify draft order error";
+}
+
+function hasAlreadyPaidUserError(errors?: Array<{ field?: string[] | null; message?: string | null }>) {
+  return normalizeShopifyUserErrors(errors).some((error) => /order has been paid/i.test(error.message));
 }
 
 function nameParts(fullName: string) {
@@ -539,6 +556,20 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     }
     if (!reusedDraftOrder) console.info("[CHECKOUT STATE] draft_order_created", { shopId: shop.shopId, intentId, customerProfileId, draftOrderId: createResult.draftOrder.id, draftOrderName: createResult.draftOrder.name || null });
 
+    const paymentPending = intent.selectedPaymentMethod === "COD";
+    const markAsPaid = !paymentPending;
+    console.info("[EXPRESS CHECKOUT ORDER] draft_order_complete_start", {
+      shopId: shop.shopId,
+      intentId,
+      customerProfileId,
+      paymentMethod: intent.selectedPaymentMethod,
+      selectedPaymentMethod: intent.selectedPaymentMethod,
+      paymentPending,
+      markAsPaid,
+      paid: markAsPaid,
+      draftOrderId: createResult.draftOrder.id,
+    });
+
     const completed = await shopifyAdminGraphql<DraftOrderCompletePayload>(
       shop.shopDomain,
       `mutation DraftOrderComplete($id: ID!, $paymentPending: Boolean) {
@@ -551,21 +582,42 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
           userErrors { field message }
         }
       }`,
-      { id: createResult.draftOrder.id, paymentPending: intent.selectedPaymentMethod === "COD" && remainingPayablePaise > 0 }
+      { id: createResult.draftOrder.id, paymentPending }
     );
 
     checkoutPerfLog("shopify_admin_api_ms", { ...perfContext, durationMs: elapsedMs(shopifyStartedAt) });
 
     const completeResult = completed.draftOrderComplete;
-    if (completeResult?.userErrors?.length || !completeResult?.draftOrder?.order?.id) {
+    let completedDraftOrder = completeResult?.draftOrder || null;
+    let completedOrder = completedDraftOrder?.order || null;
+    if ((completeResult?.userErrors?.length || !completedOrder?.id) && hasAlreadyPaidUserError(completeResult?.userErrors)) {
+      console.info("[EXPRESS CHECKOUT ORDER] draft_order_complete_already_paid_recovery_start", { shopId: shop.shopId, intentId, customerProfileId, draftOrderId: createResult.draftOrder.id, paymentMethod: intent.selectedPaymentMethod, paymentPending, markAsPaid });
+      const existing = await shopifyAdminGraphql<DraftOrderLookupPayload>(
+        shop.shopDomain,
+        `query DraftOrderExistingOrder($id: ID!) {
+          draftOrder(id: $id) {
+            id
+            name
+            order { id name displayFinancialStatus displayFulfillmentStatus }
+          }
+        }`,
+        { id: createResult.draftOrder.id }
+      );
+      if (existing.draftOrder?.order?.id) {
+        completedDraftOrder = existing.draftOrder;
+        completedOrder = existing.draftOrder.order;
+        console.info("[EXPRESS CHECKOUT ORDER] draft_order_complete_already_paid_recovered", { shopId: shop.shopId, intentId, customerProfileId, draftOrderId: existing.draftOrder.id || createResult.draftOrder.id, shopifyOrderId: completedOrder.id || null, shopifyOrderName: completedOrder.name || null, financialStatus: completedOrder.displayFinancialStatus || null });
+      }
+    }
+    if ((completeResult?.userErrors?.length && !completedOrder?.id) || !completedDraftOrder || !completedOrder?.id) {
       const message = userErrorMessage(completeResult?.userErrors);
       const shopifyUserErrors = normalizeShopifyUserErrors(completeResult?.userErrors);
-      console.error("[EXPRESS CHECKOUT ORDER] Shopify draftOrderComplete userErrors", { ...diagnostic, shopifyUserErrors, errorName: "ShopifyUserError", errorMessage: message });
+      console.error("[EXPRESS CHECKOUT ORDER] Shopify draftOrderComplete userErrors", { ...diagnostic, shopifyUserErrors, errorName: "ShopifyUserError", errorMessage: message, paymentMethod: intent.selectedPaymentMethod, paymentPending, markAsPaid, draftOrderId: createResult.draftOrder.id });
       if (storeCreditAmountPaise > 0) await releaseStoreCreditReservation({ shopId: shop.shopId, customerProfileId, checkoutIntentId: intentId, reason: "shopify-draft-order-complete-failed" });
       return jsonWithCors(req, { ok: false, error: "We could not place your order right now. Please try again." }, { status: 422 });
     }
 
-    const order = completeResult.draftOrder.order;
+    const order = completedOrder;
     let orderLink;
     let updatedIntent;
 
@@ -577,19 +629,19 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
           create: {
             shopId: shop.shopId,
             intentId,
-            draftOrderId: completeResult.draftOrder?.id || createResult.draftOrder?.id || null,
-            draftOrderName: completeResult.draftOrder?.name || createResult.draftOrder?.name || null,
+            draftOrderId: completedDraftOrder?.id || createResult.draftOrder?.id || null,
+            draftOrderName: completedDraftOrder?.name || createResult.draftOrder?.name || null,
             shopifyOrderId: order.id || null,
             shopifyOrderName: order.name || null,
-            financialStatus: order.displayFinancialStatus || (intent.selectedPaymentMethod === "COD" && remainingPayablePaise > 0 ? "PENDING" : "PAID"),
+            financialStatus: order.displayFinancialStatus || (intent.selectedPaymentMethod === "COD" ? "PENDING" : "PAID"),
             fulfillmentStatus: order.displayFulfillmentStatus || null,
           },
           update: {
-            draftOrderId: completeResult.draftOrder?.id || createResult.draftOrder?.id || null,
-            draftOrderName: completeResult.draftOrder?.name || createResult.draftOrder?.name || null,
+            draftOrderId: completedDraftOrder?.id || createResult.draftOrder?.id || null,
+            draftOrderName: completedDraftOrder?.name || createResult.draftOrder?.name || null,
             shopifyOrderId: order.id || null,
             shopifyOrderName: order.name || null,
-            financialStatus: order.displayFinancialStatus || (intent.selectedPaymentMethod === "COD" && remainingPayablePaise > 0 ? "PENDING" : "PAID"),
+            financialStatus: order.displayFinancialStatus || (intent.selectedPaymentMethod === "COD" ? "PENDING" : "PAID"),
             fulfillmentStatus: order.displayFulfillmentStatus || null,
           },
         });
