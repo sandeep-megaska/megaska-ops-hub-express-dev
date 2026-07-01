@@ -1,4 +1,3 @@
-import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionTokenFromRequest } from "../../../../../../../services/auth/session";
 import { withCors, handleOptions } from "../../../../../_lib/cors";
@@ -106,40 +105,6 @@ async function writeExpressCheckoutOrderLink(client: ExpressOrderLinkWriteClient
     }
     throw error;
   }
-}
-
-function databaseUrlFingerprint() {
-  const value = process.env.DATABASE_URL || "";
-  if (!value) return null;
-  return crypto.createHash("sha256").update(value).digest("hex").slice(0, 12);
-}
-
-async function logCheckoutConflictDiagnostics(context: { shopId: string; intentId: string; customerProfileId: string; phase: string }) {
-  const deployment = {
-    vercelEnv: process.env.VERCEL_ENV || null,
-    vercelGitCommitSha: process.env.VERCEL_GIT_COMMIT_SHA || null,
-    vercelDeploymentId: process.env.VERCEL_DEPLOYMENT_ID || null,
-    nodeEnv: process.env.NODE_ENV || null,
-  };
-  try {
-    const dbRows = await prisma.$queryRaw<Array<{ database: string; schema: string; serverAddress: string | null; serverPort: number | null; userName: string; dbUrlFingerprint: string | null }>>`
-      SELECT current_database() AS "database", current_schema() AS "schema", inet_server_addr()::text AS "serverAddress", inet_server_port() AS "serverPort", current_user AS "userName", ${databaseUrlFingerprint()} AS "dbUrlFingerprint"
-    `;
-    const indexRows = await prisma.$queryRaw<Array<{ tableName: string; indexName: string; indexDefinition: string }>>`
-      SELECT tablename AS "tableName", indexname AS "indexName", indexdef AS "indexDefinition"
-      FROM pg_indexes
-      WHERE schemaname = current_schema()
-        AND tablename IN ('ExpressCheckoutOrderLink', 'WalletTransaction', 'WalletAccount')
-      ORDER BY tablename, indexname
-    `;
-    console.info("[ORDER LINK WRITE] runtime_database_and_indexes", { ...context, deployment, database: dbRows[0] || null, indexes: indexRows });
-  } catch (error) {
-    console.error("[ORDER LINK WRITE] runtime_database_and_indexes_failed", { ...context, deployment, dbUrlFingerprint: databaseUrlFingerprint(), error: error instanceof Error ? error.message : String(error) });
-  }
-}
-
-function logOrderLinkWriteAttempt(context: { shopId: string; intentId: string; customerProfileId: string; table: string; conflictTarget: string[]; operation: string; phase: string }) {
-  console.info("[ORDER LINK WRITE] explicit_find_update_create", context);
 }
 
 function checkoutPerfLog(event: string, details: { shopId?: string; intentId?: string; customerProfileId?: string; selectedPaymentMethod?: unknown; durationMs?: number | null }) {
@@ -652,9 +617,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     console.info("[EXPRESS CHECKOUT ORDER] post_order_side_effect_start", { shopId: shop.shopId, intentId, customerProfileId, shopifyOrderId: order.id || null, shopifyOrderName: order.name || null });
     try {
       const persistStartedAt = Date.now();
-      await logCheckoutConflictDiagnostics({ shopId: shop.shopId, intentId, customerProfileId, phase: "after_draft_order_complete_before_persist" });
       const written = await prisma.$transaction(async (tx) => {
-        logOrderLinkWriteAttempt({ shopId: shop.shopId, intentId, customerProfileId, table: "ExpressCheckoutOrderLink", conflictTarget: ["shopId", "intentId"], operation: "explicit find/update/create", phase: "after_draft_order_complete" });
         const link = await writeExpressCheckoutOrderLink(tx as unknown as ExpressOrderLinkWriteClient, {
           shopId: shop.shopId,
           intentId,
