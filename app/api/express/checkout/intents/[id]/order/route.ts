@@ -673,22 +673,25 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
         });
         const refreshedIntent = await tx.expressCheckoutIntent.findFirst({
           where: { shopId: shop.shopId, id: intentId, customerProfileId },
+          include: { orderLink: true },
         });
 
         return { link, refreshedIntent };
       });
       orderLink = written.link;
       if (storeCreditAmountPaise > 0) await consumeStoreCreditReservationForOrder({ shopId: shop.shopId, customerProfileId, checkoutIntentId: intentId, shopifyOrderId: order.id || "", orderNumber: order.name || null });
-      updatedIntent = written.refreshedIntent;
+      updatedIntent = written.refreshedIntent ?? updatedIntent;
       checkoutPerfLog("order_persist_ms", { ...perfContext, durationMs: elapsedMs(persistStartedAt) });
     } catch (error) {
       console.error("[ORDER LINK WRITE] persist_failed", { shopId: shop.shopId, intentId, customerProfileId, table: "ExpressCheckoutOrderLink", conflictTarget: ["shopId", "intentId"], operation: "explicit find/update/create", errorName: error instanceof Error ? error.name : "UnknownError", errorMessage: error instanceof Error ? error.message : String(error), errorCode: typeof error === "object" && error && "code" in error ? String(error.code) : null });
       const code = typeof error === "object" && error && "code" in error ? String(error.code) : "";
       if (code === "P2002") {
         orderLink = await prisma.expressCheckoutOrderLink.findFirst({ where: { shopId: shop.shopId, intentId } });
-        updatedIntent = await prisma.expressCheckoutIntent.findFirst({
+        const recoveredIntent = await prisma.expressCheckoutIntent.findFirst({
           where: { shopId: shop.shopId, id: intentId, customerProfileId },
+          include: { orderLink: true },
         });
+        updatedIntent = recoveredIntent ?? updatedIntent;
       } else {
         console.error("[EXPRESS CHECKOUT ORDER] post_order_side_effect_failed", { shopId: shop.shopId, intentId, customerProfileId, shopifyOrderId: order.id || null, shopifyOrderName: order.name || null, errorName: error instanceof Error ? error.name : "UnknownError", errorMessage: error instanceof Error ? error.message : String(error), errorCode: code || null });
       }
