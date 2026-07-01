@@ -314,7 +314,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
   const remainingPayablePaise = Math.max(0, Number(intent.totalAmountPaise || 0) - storeCreditAmountPaise);
   const isStoreCreditFullCoverage = storeCreditAmountPaise > 0 && remainingPayablePaise === 0;
 
-  if (intent.selectedPaymentMethod === "COD") {
+  if (intent.selectedPaymentMethod === "COD" && !isStoreCreditFullCoverage) {
     console.info("[EXPRESS CHECKOUT ORDER] cod_order_create_start", { shopId: shop.shopId, intentId, customerProfileId, intentStatus: intent.status, selectedPaymentMethod: intent.selectedPaymentMethod, remainingPayablePaise });
   }
 
@@ -327,7 +327,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
   }
 
   const paymentMethodStartedAt = Date.now();
-  if (intent.selectedPaymentMethod === "PREPAID") {
+  if (intent.selectedPaymentMethod === "PREPAID" && !isStoreCreditFullCoverage) {
     if (intent.status !== "PAYMENT_CONFIRMED") {
       return jsonWithCors(req, { ok: false, error: "Payment confirmation required" }, { status: 409 });
     }
@@ -396,7 +396,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     return jsonWithCors(req, intent.selectedPaymentMethod === "COD" ? { ok: false, error: "Cart line items required", code: "missing_cart_snapshot", reason: "intent.cartSnapshot must include lineItems/items/lines with variantId or variant_id and quantity" } : { ok: false, error: "Cart line items required", reason: "intent.cartSnapshot must include lineItems/items/lines with variantId or variant_id and quantity" }, { status: intent.selectedPaymentMethod === "COD" ? 409 : 400 });
   }
 
-  if (intent.selectedPaymentMethod === "COD") {
+  if (intent.selectedPaymentMethod === "COD" && !isStoreCreditFullCoverage) {
     const confirmedPayment = await prisma.expressCheckoutPayment.findFirst({
       where: { shopId: shop.shopId, intentId, status: "CONFIRMED" },
       orderBy: { createdAt: "desc" },
@@ -449,7 +449,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
       { key: "wallet_reservation_id", value: storeCreditReservation?.id || "" },
       { key: "checkout_intent_id", value: intent.id },
     ] : []),
-    ...(intent.selectedPaymentMethod === "COD" && intent.codFeeAmountPaise > 0
+    ...(intent.selectedPaymentMethod === "COD" && !isStoreCreditFullCoverage && intent.codFeeAmountPaise > 0
       ? [
           { key: "COD fee", value: paiseToRupeeDisplay(intent.codFeeAmountPaise) },
           { key: "COD payable total", value: paiseToRupeeDisplay(intent.totalAmountPaise) },
@@ -472,7 +472,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     billingAddress: shippingAddress,
     note: storeCreditAmountPaise > 0
       ? `Megaska Express Checkout intent ${intent.id} | Megaska Store Credit: ${paiseToRupeeDisplay(storeCreditAmountPaise)} | Remaining payable: ${paiseToRupeeDisplay(remainingPayablePaise)}`
-      : intent.selectedPaymentMethod === "COD" && intent.codFeeAmountPaise > 0
+      : intent.selectedPaymentMethod === "COD" && !isStoreCreditFullCoverage && intent.codFeeAmountPaise > 0
         ? `Megaska Express Checkout intent ${intent.id} | COD fee: ${paiseToRupeeDisplay(intent.codFeeAmountPaise)} | COD payable total: ${paiseToRupeeDisplay(intent.totalAmountPaise)}`
         : `Megaska Express Checkout intent ${intent.id}`,
     tags: ["Megaska Express Checkout"],
@@ -501,7 +501,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     if (latestIntent.status === "EXPIRED" || await markCheckoutIntentExpiredIfNeeded(latestIntent)) {
       return jsonWithCors(req, { ok: false, error: CHECKOUT_INTENT_EXPIRY_MESSAGE }, { status: 409 });
     }
-    if (intent.selectedPaymentMethod === "COD") {
+    if (intent.selectedPaymentMethod === "COD" && !isStoreCreditFullCoverage) {
       if (latestIntent.selectedPaymentMethod !== "COD") {
         console.info("[EXPRESS CHECKOUT ORDER] cod_order_create_blocked_missing_readiness", { shopId: shop.shopId, intentId, customerProfileId, missing: "payment_method_not_cod", intentStatus: latestIntent.status, selectedPaymentMethod: latestIntent.selectedPaymentMethod });
         return jsonWithCors(req, { ok: false, error: "COD payment method required", code: "payment_method_not_cod" }, { status: 409 });
@@ -563,13 +563,14 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
       );
     }
 
-    const paymentPending = intent.selectedPaymentMethod === "COD";
+    const effectivePaymentMethod = isStoreCreditFullCoverage ? "STORE_CREDIT" : intent.selectedPaymentMethod;
+    const paymentPending = effectivePaymentMethod === "COD";
     const markAsPaid = !paymentPending;
     console.info("[EXPRESS CHECKOUT ORDER] draft_order_complete_start", {
       shopId: shop.shopId,
       intentId,
       customerProfileId,
-      paymentMethod: intent.selectedPaymentMethod,
+      paymentMethod: effectivePaymentMethod,
       selectedPaymentMethod: intent.selectedPaymentMethod,
       paymentPending,
       markAsPaid,
@@ -626,13 +627,13 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
             draftOrderName: completedDraftOrder?.name || createResult.draftOrder?.name || null,
             shopifyOrderId: order.id || null,
             shopifyOrderName: order.name || null,
-            financialStatus: order.displayFinancialStatus || (intent.selectedPaymentMethod === "COD" ? "PENDING" : "PAID"),
+            financialStatus: order.displayFinancialStatus || (effectivePaymentMethod === "COD" ? "PENDING" : "PAID"),
             fulfillmentStatus: order.displayFulfillmentStatus || null,
           },
         });
         await tx.expressCheckoutIntent.updateMany({
           where: { shopId: shop.shopId, id: intentId, customerProfileId },
-          data: { status: intent.selectedPaymentMethod === "COD" ? "ORDER_COMPLETED" : "ORDER_CREATED" },
+          data: { status: effectivePaymentMethod === "COD" ? "ORDER_COMPLETED" : "ORDER_CREATED" },
         });
         const refreshedIntent = await tx.expressCheckoutIntent.findFirst({
           where: { shopId: shop.shopId, id: intentId, customerProfileId },
@@ -663,13 +664,13 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     const persistedOrderId = typeof orderLink === "object" && orderLink && "shopifyOrderId" in orderLink ? String(orderLink.shopifyOrderId || "") : "";
     const persistedOrderName = typeof orderLink === "object" && orderLink && "shopifyOrderName" in orderLink ? String(orderLink.shopifyOrderName || "") : "";
     if ((persistedOrderId && persistedOrderId !== order.id) || (persistedOrderName && persistedOrderName !== order.name)) {
-      console.error("[EXPRESS CHECKOUT ORDER] post_order_side_effect_failed", { shopId: shop.shopId, intentId, customerProfileId, reason: "stale_order_link_after_completion", completedOrderId: order.id || null, completedOrderName: order.name || null, persistedOrderId: persistedOrderId || null, persistedOrderName: persistedOrderName || null, paymentMethod: intent.selectedPaymentMethod, freshCompletion: true, recovery: false });
+      console.error("[EXPRESS CHECKOUT ORDER] post_order_side_effect_failed", { shopId: shop.shopId, intentId, customerProfileId, reason: "stale_order_link_after_completion", completedOrderId: order.id || null, completedOrderName: order.name || null, persistedOrderId: persistedOrderId || null, persistedOrderName: persistedOrderName || null, paymentMethod: effectivePaymentMethod, freshCompletion: true, recovery: false });
       orderLink = null;
     }
 
-    if (intent.selectedPaymentMethod === "COD") console.info("[EXPRESS CHECKOUT ORDER] cod_order_create_success", { shopId: shop.shopId, intentId, returnedIntentId: intentId, customerProfileId, shopifyOrderId: order.id || null, shopifyOrderName: order.name || null, freshCompletion: true, recovery: false, paymentMethod: "COD", completedAt, completionSource: "draft_order_complete" });
+    if (effectivePaymentMethod === "COD") console.info("[EXPRESS CHECKOUT ORDER] cod_order_create_success", { shopId: shop.shopId, intentId, returnedIntentId: intentId, customerProfileId, shopifyOrderId: order.id || null, shopifyOrderName: order.name || null, freshCompletion: true, recovery: false, paymentMethod: "COD", completedAt, completionSource: "draft_order_complete" });
     checkoutPerfLog("order_create_total_ms", { ...perfContext, durationMs: elapsedMs(totalStartedAt) });
-    return jsonWithCors(req, { ok: true, success: true, intentId, intent: updatedIntent, orderLink, shopifyOrder: order, shopifyOrderId: order.id || null, shopifyOrderName: order.name || null, completedAt, freshCompletion: true, recovery: false, completionSource: "draft_order_complete", paymentMethod: intent.selectedPaymentMethod }, { status: 201 });
+    return jsonWithCors(req, { ok: true, success: true, intentId, intent: updatedIntent, orderLink, shopifyOrder: order, shopifyOrderId: order.id || null, shopifyOrderName: order.name || null, completedAt, freshCompletion: true, recovery: false, completionSource: "draft_order_complete", paymentMethod: effectivePaymentMethod }, { status: 201 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Order creation failed";
     const name = error instanceof Error ? error.name : "UnknownError";
