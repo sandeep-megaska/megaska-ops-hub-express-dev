@@ -127,6 +127,10 @@ function paiseToAmount(paise: number) {
   return (Math.max(0, Math.round(Number(paise) || 0)) / 100).toFixed(2);
 }
 
+function paiseToAmountNumber(paise: number) {
+  return Math.max(0, Math.round(Number(paise) || 0)) / 100;
+}
+
 function paiseToRupeeDisplay(paise: number) {
   const amount = Math.max(0, Math.round(Number(paise) || 0)) / 100;
   return `₹${Number.isInteger(amount) ? amount.toFixed(0) : amount.toFixed(2)}`;
@@ -418,10 +422,10 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
   ];
   const email = address.email || auth.customer.email || undefined;
   const phone = address.phone || auth.customer.phoneE164 || undefined;
-  const discount =
-    discountAmount > 0
-      ? { title: "Express checkout discount", value: paiseToAmount(discountAmount), valueType: "FIXED_AMOUNT" }
-      : undefined;
+  const discountValue = Number(paiseToAmountNumber(discountAmount));
+  const discount = Number.isFinite(discountValue) && discountValue > 0
+    ? { title: "Express checkout discount", value: discountValue, valueType: "FIXED_AMOUNT" }
+    : undefined;
   const rawCustomerId = auth.customer.shopifyCustomerId || undefined;
   const resolvedCustomerGid = toShopifyCustomerGid(rawCustomerId);
   const draftOrderInput: JsonRecord = {
@@ -473,6 +477,13 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
 
     if (!createResult) {
       console.info("[SHOPIFY CUSTOMER ID]", { rawCustomerId, resolvedCustomerGid });
+      if (discount) {
+        console.info("[EXPRESS PREPAID FINALIZATION] draft_order_discount", {
+          valueType: typeof discount.value,
+          value: discount.value,
+          valueTypeField: discount.valueType,
+        });
+      }
       console.info("[SHOPIFY DRAFT ORDER INPUT]", { ...diagnostic, hasCustomerId: Boolean(resolvedCustomerGid), customAttributeCount: customAttributes.length });
 
       const created = await shopifyAdminGraphql<DraftOrderCreatePayload>(
