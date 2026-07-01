@@ -22,6 +22,10 @@
     razorpayCheckoutScriptPromise: null,
     activeRazorpayInstance: null,
     activeRazorpayOrder: null,
+    activeRazorpayOrderPromise: null,
+    prepaidWarmupKey: "",
+    prepaidWarmupCompletedKey: "",
+    prepaidWarmupPromise: null,
     addressSavedForIntentId: null,
     paymentInProgress: false,
     inlinePaymentError: "",
@@ -66,6 +70,14 @@
 
   function perfDetails(label, details) {
     console.log(`[EXPRESS MODAL PERF] ${label}`, details || {});
+  }
+
+  function paymentPerfLog(label, startedAt, details) {
+    console.info(`[EXPRESS PAYMENT PERF] ${label}`, Object.assign({
+      intentId: state.intent?.id || null,
+      selectedDisplayMethod: selectedDisplayPaymentMethod(),
+      elapsedMs: Math.round(perfNow() - startedAt),
+    }, details || {}));
   }
 
   function resetApiCallPerf(openStart) {
@@ -653,7 +665,7 @@
 
   async function open(opts) {
     const openStart = Number(opts?.openStart || perfNow());
-    state.open = true; state.step = "checkout"; state.error = ""; state.busy = false; state.paymentStarted = false; state.orderSubmitting = false; state.intent = null; state.customer = null; state.customerDefaultAddress = null; state.addressDraft = {}; state.editingAddress = false; state.discountMessage = ""; state.inlinePaymentMode = false; state.inlinePaymentError = ""; state.activeRazorpayOrder = null; state.activeRazorpayInstance = null; state.addressSavedForIntentId = null; state.paymentInProgress = false; resetDeliveryServiceability(); state.pincode = ""; state.pincodeStatus = "idle"; state.pincodeMessage = "Enter 6-digit PIN code to check delivery."; state.pincodeEta = ""; state.pincodeCity = ""; state.pincodeState = ""; state.lastCheckedPincode = ""; state.pincodeCache = {}; state.savedPincode = ""; state.savedPincodeStatus = "idle"; state.savedPincodeMessage = ""; state.savedPincodeEta = ""; state.lastCheckedSavedPincode = ""; state.hydration = { session: "loading", cart: "idle", intent: "idle", address: "loading", discount: "loading", pincode: "idle", payment: "loading" }; resetApiCallPerf(openStart);
+    state.open = true; state.step = "checkout"; state.error = ""; state.busy = false; state.paymentStarted = false; state.orderSubmitting = false; state.intent = null; state.customer = null; state.customerDefaultAddress = null; state.addressDraft = {}; state.editingAddress = false; state.discountMessage = ""; state.inlinePaymentMode = false; state.inlinePaymentError = ""; state.activeRazorpayOrder = null; state.activeRazorpayOrderPromise = null; state.activeRazorpayInstance = null; state.prepaidWarmupKey = ""; state.prepaidWarmupCompletedKey = ""; state.prepaidWarmupPromise = null; state.addressSavedForIntentId = null; state.paymentInProgress = false; resetDeliveryServiceability(); state.pincode = ""; state.pincodeStatus = "idle"; state.pincodeMessage = "Enter 6-digit PIN code to check delivery."; state.pincodeEta = ""; state.pincodeCity = ""; state.pincodeState = ""; state.lastCheckedPincode = ""; state.pincodeCache = {}; state.savedPincode = ""; state.savedPincodeStatus = "idle"; state.savedPincodeMessage = ""; state.savedPincodeEta = ""; state.lastCheckedSavedPincode = ""; state.hydration = { session: "loading", cart: "idle", intent: "idle", address: "loading", discount: "loading", pincode: "idle", payment: "loading" }; resetApiCallPerf(openStart);
     const modal = ensureModal(); modal.hidden = false; modal.setAttribute("aria-hidden", "false"); document.documentElement.classList.add("megaska-otp-open"); render();
     try {
       await waitForModalShellPaint(openStart);
@@ -661,7 +673,7 @@
       state.hydration.session = "ready";
       render();
       await createIntent();
-      debugLog("modal ready", { intentId: state.intent?.id }); render(); perfDetails("duplicate_api_calls_found", { shopId: getShopDomain() || null, intentId: state.intent?.id || null, duplicateCallsFound: state.perf.duplicateCallsFound, calls: state.perf.apiCalls }); perfDetails("modal_ready_total_ms", { shopId: getShopDomain() || null, intentId: state.intent?.id || null, duplicateCallsFound: state.perf.duplicateCallsFound, durationMs: Math.round(perfNow() - openStart) }); const initialZip = ensureModal().querySelector('[name="zip"]')?.value || ""; if (initialZip) schedulePincodeCheck(initialZip); const savedZip = hasCompleteAddress(address()) ? address().zip : ""; if (savedZip) scheduleSavedAddressPincodeCheck(savedZip);
+      debugLog("modal ready", { intentId: state.intent?.id }); render(); perfDetails("duplicate_api_calls_found", { shopId: getShopDomain() || null, intentId: state.intent?.id || null, duplicateCallsFound: state.perf.duplicateCallsFound, calls: state.perf.apiCalls }); perfDetails("modal_ready_total_ms", { shopId: getShopDomain() || null, intentId: state.intent?.id || null, duplicateCallsFound: state.perf.duplicateCallsFound, durationMs: Math.round(perfNow() - openStart) }); const initialZip = ensureModal().querySelector('[name="zip"]')?.value || ""; if (initialZip) schedulePincodeCheck(initialZip); const savedAddress = address(); const savedZip = hasCompleteAddress(savedAddress) ? savedAddress.zip : ""; if (savedZip) { state.addressSavedForIntentId = state.intent?.id || null; scheduleSavedAddressPincodeCheck(savedZip); if (backendPaymentMethodForDisplay(selectedDisplayPaymentMethod()) !== "COD") warmupPrepaidPayment(selectedDisplayPaymentMethod()); }
     }
     catch (error) { state.step = "error"; state.error = error instanceof Error ? error.message : "Unable to prepare checkout."; render(); }
   }
@@ -753,6 +765,7 @@
     state.inlinePaymentMode = true;
     state.inlinePaymentError = "";
     renderPaymentSectionOnly();
+    if (backendPaymentMethodForDisplay(method) !== "COD") warmupPrepaidPayment(method);
   }
 
   function getInlinePaymentContainer() { return ensureModal().querySelector("[data-express-payment-section]"); }
@@ -792,10 +805,47 @@
   }
 
   async function ensureBackendPaymentMethod(method) {
-    if (state.intent?.selectedPaymentMethod !== method) await apiFetch(`/express/checkout/intents/${encodeURIComponent(state.intent.id)}/payment-method`, { method: "POST", body: { method } });
-    await refreshIntent();
+    if (!state.intent?.id) throw new Error("Checkout is not ready yet.");
+    if (state.intent?.selectedPaymentMethod === method && state.optimisticPaymentMethod !== method) {
+      state.optimisticPaymentMethod = null;
+      return;
+    }
+    const previousIntent = state.intent;
+    await apiFetch(`/express/checkout/intents/${encodeURIComponent(state.intent.id)}/payment-method`, { method: "POST", body: { method } });
+    state.intent = Object.assign({}, previousIntent, state.intent || {}, { selectedPaymentMethod: method });
     state.optimisticPaymentMethod = null;
+    if (state.intent?.selectedPaymentMethod !== method) await refreshIntent();
     if (state.intent?.selectedPaymentMethod !== method) throw new Error("Could not update payment method. Please try again.");
+  }
+
+
+  async function warmupPrepaidPayment(displayMethod) {
+    const method = backendPaymentMethodForDisplay(displayMethod);
+    const intentId = state.intent?.id;
+    if (method === "COD" || !intentId) return null;
+    const warmupKey = `${intentId}:${displayMethod || selectedDisplayPaymentMethod()}`;
+    if (state.prepaidWarmupCompletedKey === warmupKey && state.activeRazorpayOrder?.intentId === intentId && state.intent?.selectedPaymentMethod === "PREPAID") return state.prepaidWarmupPromise;
+    if (state.prepaidWarmupKey === warmupKey && state.prepaidWarmupPromise) return state.prepaidWarmupPromise;
+    state.prepaidWarmupKey = warmupKey;
+    state.prepaidWarmupPromise = (async () => {
+      try {
+        const scriptPromise = ensureRazorpayScript();
+        await ensureBackendPaymentMethod("PREPAID");
+        await Promise.all([scriptPromise, ensureRazorpayOrder()]);
+        state.prepaidWarmupCompletedKey = warmupKey;
+      } catch (error) {
+        if (window.console && typeof window.console.info === "function") {
+          console.info("[EXPRESS PAYMENT PERF] prepaid_warmup_non_fatal", {
+            intentId,
+            selectedDisplayMethod: displayMethod || selectedDisplayPaymentMethod(),
+            message: error instanceof Error ? error.message : "Payment warmup failed",
+          });
+        }
+      }
+    })().finally(() => {
+      if (state.prepaidWarmupKey === warmupKey) state.prepaidWarmupPromise = null;
+    });
+    return state.prepaidWarmupPromise;
   }
 
   async function ensureAddressSavedOnce() {
@@ -900,12 +950,20 @@
   function loadRazorpay() { return ensureRazorpayScript(); }
 
   async function ensureRazorpayOrder() {
-    if (state.activeRazorpayOrder?.intentId === state.intent?.id) return state.activeRazorpayOrder.checkout;
-    const data = await apiFetch(`/express/checkout/intents/${encodeURIComponent(state.intent.id)}/razorpay-order`, { method: "POST", body: {} });
-    const checkout = data.checkout || {};
-    if (!checkout.razorpayOrderId || !checkout.key) throw new MegaskaApiError("Could not start secure payment. Please try again.", { stage: "RAZORPAY_ORDER_CREATE", code: "RAZORPAY_ORDER_DETAILS_MISSING" });
-    state.activeRazorpayOrder = { intentId: state.intent.id, checkout };
-    return checkout;
+    const intentId = state.intent?.id;
+    if (state.activeRazorpayOrder?.intentId === intentId) return state.activeRazorpayOrder.checkout;
+    if (state.activeRazorpayOrderPromise?.intentId === intentId) return state.activeRazorpayOrderPromise.promise;
+    const promise = (async () => {
+      const data = await apiFetch(`/express/checkout/intents/${encodeURIComponent(intentId)}/razorpay-order`, { method: "POST", body: {} });
+      const checkout = data.checkout || {};
+      if (!checkout.razorpayOrderId || !checkout.key) throw new MegaskaApiError("Could not start secure payment. Please try again.", { stage: "RAZORPAY_ORDER_CREATE", code: "RAZORPAY_ORDER_DETAILS_MISSING" });
+      state.activeRazorpayOrder = { intentId, checkout };
+      return checkout;
+    })().finally(() => {
+      if (state.activeRazorpayOrderPromise?.intentId === intentId) state.activeRazorpayOrderPromise = null;
+    });
+    state.activeRazorpayOrderPromise = { intentId, promise };
+    return promise;
   }
 
   function sanitizedRazorpaySuccessShape(response) {
@@ -1044,7 +1102,7 @@
     if (fallback && isInlinePaymentUnavailableMessage(state.inlinePaymentError)) fallback.hidden = false;
   }
 
-  function resetInlinePaymentState() { state.activeRazorpayInstance = null; state.activeRazorpayOrder = null; state.paymentInProgress = false; state.paymentStarted = false; state.orderSubmitting = false; state.inlinePaymentError = ""; state.inlinePaymentMode = false; }
+  function resetInlinePaymentState() { state.activeRazorpayInstance = null; state.activeRazorpayOrder = null; state.activeRazorpayOrderPromise = null; state.prepaidWarmupKey = ""; state.prepaidWarmupCompletedKey = ""; state.prepaidWarmupPromise = null; state.paymentInProgress = false; state.paymentStarted = false; state.orderSubmitting = false; state.inlinePaymentError = ""; state.inlinePaymentMode = false; }
 
   async function createOrder() { const data = await apiFetch(`/express/checkout/intents/${encodeURIComponent(state.intent.id)}/order`, { method: "POST", body: {} }); state.step = "success"; state.error = `${data.orderLink?.shopifyOrderName || data.shopifyOrder?.name || "Your order"} has been created.`; state.busy = false; state.paymentStarted = false; state.paymentInProgress = false; render(); }
 
@@ -1080,18 +1138,34 @@
     }
     if (state.paymentInProgress) return;
     validateInlinePayment(method, formData);
+    const submitStartedAt = perfNow();
+    if (method !== "COD") {
+      console.info("[EXPRESS PAYMENT PERF] prepaid_submit_start", {
+        intentId: state.intent?.id || null,
+        selectedDisplayMethod: method,
+        backendPaymentMethod: backendPaymentMethodForDisplay(method),
+      });
+    }
     state.paymentInProgress = true; state.orderSubmitting = true; state.busy = true; state.paymentStarted = method !== "COD"; state.inlinePaymentError = ""; renderPaymentSectionOnly();
     try {
-      await ensureAddressSavedOnce();
+      if (state.addressSavedForIntentId !== state.intent?.id || !hasCompleteAddress(address()) || state.editingAddress) await ensureAddressSavedOnce();
+      paymentPerfLog("address_ready_ms", submitStartedAt, { alreadySaved: state.addressSavedForIntentId === state.intent?.id });
       await ensureBackendPaymentMethod(backendPaymentMethodForDisplay(method));
+      paymentPerfLog("payment_method_ready_ms", submitStartedAt, { backendPaymentMethod: backendPaymentMethodForDisplay(method) });
       if (method === "COD") return createOrder();
-      const RazorpayInline = await ensureRazorpayScript();
-      const checkout = await ensureRazorpayOrder();
+      const scriptPromise = ensureRazorpayScript();
+      const hadCachedOrder = state.activeRazorpayOrder?.intentId === state.intent?.id;
+      const orderPromise = hadCachedOrder ? Promise.resolve(state.activeRazorpayOrder.checkout) : ensureRazorpayOrder();
+      const RazorpayInline = await scriptPromise;
+      paymentPerfLog("razorpay_script_ready_ms", submitStartedAt);
+      const checkout = await orderPromise;
+      paymentPerfLog("razorpay_order_ready_ms", submitStartedAt, { cached: hadCachedOrder });
       const rzp = createRazorpayInstance(RazorpayInline, checkout, method);
       if (typeof rzp.createPayment !== "function") {
         state.paymentInProgress = false; state.orderSubmitting = false; state.busy = false; state.paymentStarted = false; state.activeRazorpayInstance = null; renderPaymentSectionOnly();
         showInlinePaymentError("Inline payment is unavailable right now. Please use secure payment popup."); return;
       }
+      paymentPerfLog("create_payment_called_ms", submitStartedAt);
       rzp.createPayment(inlinePayload(method, formData, checkout));
     } catch (error) {
       state.paymentInProgress = false; state.orderSubmitting = false; state.busy = false; state.paymentStarted = false; state.activeRazorpayInstance = null;
