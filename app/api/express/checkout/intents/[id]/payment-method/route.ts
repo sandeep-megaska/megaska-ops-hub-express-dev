@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import type { ExpressCheckoutIntentStatus } from "../../../../../../../generated/prisma";
 import { getSessionTokenFromRequest } from "../../../../../../../services/auth/session";
 import { withCors, handleOptions } from "../../../../../_lib/cors";
 import { prisma } from "../../../../../../../services/db/prisma";
@@ -11,12 +12,10 @@ import { CheckoutStateDb, transitionCheckoutIntent } from "../../../../../../../
 
 export const runtime = "nodejs";
 
-const PAYMENT_METHOD_MUTABLE_STATUSES = new Set<string>([
+const PAYMENT_METHOD_MUTABLE_STATUSES = new Set<ExpressCheckoutIntentStatus>([
   "SESSION_VERIFIED",
   "CART_SNAPSHOT_LOCKED",
   "ADDRESS_CAPTURED",
-  "ADDRESS_SELECTED",
-  "ADDRESS_SAVED",
   "ADDRESS_COMPLETED",
   "DELIVERY_VALIDATED",
   "PAYMENT_METHOD_SELECTED",
@@ -28,10 +27,10 @@ const PAYMENT_METHODS = ["COD", "PREPAID"] as const;
 type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 
 const COD_STATE_ORDER = ["INITIATED", "SESSION_VERIFIED", "ADDRESS_COMPLETED", "DELIVERY_VALIDATED", "PAYMENT_SELECTED", "DRAFT_ORDER_CREATED", "ORDER_COMPLETED"] as const;
-const COD_LEGACY_STATUS_EQUIVALENTS: Record<string, (typeof COD_STATE_ORDER)[number]> = { CREATED: "INITIATED", CUSTOMER_AUTHENTICATED: "SESSION_VERIFIED", CART_SNAPSHOT_LOCKED: "SESSION_VERIFIED", ADDRESS_CAPTURED: "ADDRESS_COMPLETED", DISCOUNT_APPLIED: "ADDRESS_COMPLETED", PAYMENT_METHOD_SELECTED: "PAYMENT_SELECTED", ORDER_CREATED: "ORDER_COMPLETED" };
+const COD_LEGACY_STATUS_EQUIVALENTS: Partial<Record<ExpressCheckoutIntentStatus, (typeof COD_STATE_ORDER)[number]>> = { CREATED: "INITIATED", CUSTOMER_AUTHENTICATED: "SESSION_VERIFIED", CART_SNAPSHOT_LOCKED: "SESSION_VERIFIED", ADDRESS_CAPTURED: "ADDRESS_COMPLETED", DISCOUNT_APPLIED: "ADDRESS_COMPLETED", PAYMENT_METHOD_SELECTED: "PAYMENT_SELECTED", ORDER_CREATED: "ORDER_COMPLETED" };
 
 async function transitionCodIntent(input: { intent: { id: string; shopId: string; status: string }; toStatus: (typeof COD_STATE_ORDER)[number]; reason: string; metadata?: Record<string, unknown> }) {
-  const legacyStatus = COD_LEGACY_STATUS_EQUIVALENTS[input.intent.status];
+  const legacyStatus = COD_LEGACY_STATUS_EQUIVALENTS[input.intent.status as ExpressCheckoutIntentStatus];
   const effectiveStatus = legacyStatus || input.intent.status;
   const fromIndex = COD_STATE_ORDER.indexOf(effectiveStatus as (typeof COD_STATE_ORDER)[number]);
   const toIndex = COD_STATE_ORDER.indexOf(input.toStatus);
