@@ -11,7 +11,7 @@ import { CheckoutStateDb, transitionCheckoutIntent } from "../../../../../../../
 
 export const runtime = "nodejs";
 
-const BLOCKED_STATUSES = ["EXPIRED", "CANCELLED", "FAILED", "ORDER_CREATED", "ORDER_COMPLETED"];
+const BLOCKED_STATUSES = ["EXPIRED", "CANCELLED", "FAILED", "ORDER_CREATED", "ORDER_COMPLETED", "ORDER_CREATING", "PAYMENT_CONFIRMED", "PAYMENT_SUCCESS", "PAYMENT_PENDING", "PAYMENT_FAILED", "PAYMENT_CANCELLED", "DRAFT_ORDER_CREATED"] as const;
 const PAYMENT_METHODS = ["COD", "PREPAID"] as const;
 
 type PaymentMethod = (typeof PAYMENT_METHODS)[number];
@@ -109,7 +109,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
 
     const payment = await tx.expressCheckoutPayment.create({ data: { shopId: shop.shopId, intentId, method, status: paymentStatus, amountPaise, currency: intent.currency } });
 
-    await tx.expressCheckoutIntent.updateMany({ where: intentWhere, data: { selectedPaymentMethod: method, codFeeAmountPaise, totalAmountPaise, ...(method === "PREPAID" ? { status: "PAYMENT_METHOD_SELECTED" } : {}) } });
+    await tx.expressCheckoutIntent.updateMany({ where: intentWhere, data: { selectedPaymentMethod: method, codFeeAmountPaise, totalAmountPaise } });
     const updatedIntent = await tx.expressCheckoutIntent.findFirstOrThrow({ where: intentWhere });
 
     return { intent: updatedIntent, payment };
