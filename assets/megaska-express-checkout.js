@@ -548,6 +548,13 @@
     logCheckoutSubmitBranch(branch);
     if (branch === "STORE_CREDIT_ONLY") await createOrder();
     else if (branch === "COD") {
+      if (window.console && typeof window.console.info === "function") {
+        window.console.info("[Megaska Express] razorpay_branch_skipped_for_cod", {
+          intentStatus: state.intent?.status || null,
+          selectedPaymentMethod,
+          remainingPayable,
+        });
+      }
       await ensurePaymentMethod("COD");
       await createOrder();
     } else {
