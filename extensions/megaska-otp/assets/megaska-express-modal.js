@@ -829,14 +829,30 @@
     else if (previousConstructor) window.Razorpay = previousConstructor;
   }
 
-  function loadRazorpayConstructor(src, cacheKey, unavailableMessage, preferredRestoreKey) {
-    if (window[cacheKey]) return Promise.resolve(window[cacheKey]);
+  function hasInlineCreatePayment(RazorpayCtor) {
+    try {
+      if (typeof RazorpayCtor !== "function") return false;
+      const prototype = RazorpayCtor.prototype || {};
+      if (typeof prototype.createPayment === "function") return true;
+
+      try {
+        const probe = Object.create(prototype);
+        return typeof probe.createPayment === "function";
+      } catch {
+        return false;
+      }
+    } catch {
+      return false;
+    }
+  }
+
+  function loadRazorpayConstructor(src, cacheKey, unavailableMessage, preferredRestoreKey, isSupported) {
+    if (window[cacheKey] && (!isSupported || isSupported(window[cacheKey]))) return Promise.resolve(window[cacheKey]);
     const previousConstructor = window.Razorpay;
-    const existing = findRazorpayScript(src);
     return new Promise((resolve, reject) => {
       const finish = () => {
         const constructor = window.Razorpay;
-        if (typeof constructor !== "function") {
+        if (typeof constructor !== "function" || (isSupported && !isSupported(constructor))) {
           restoreRazorpayGlobal(previousConstructor, window[preferredRestoreKey]);
           reject(new Error(unavailableMessage));
           return;
@@ -850,9 +866,9 @@
         restoreRazorpayGlobal(previousConstructor, window[preferredRestoreKey]);
         reject(new Error(unavailableMessage));
       };
-      if (existing) {
-        if (window.Razorpay && !window[cacheKey]) finish();
-        else { existing.addEventListener("load", finish, { once: true }); existing.addEventListener("error", fail, { once: true }); }
+      const existing = findRazorpayScript(src);
+      if (existing && window.Razorpay && !window[cacheKey] && (!isSupported || isSupported(window.Razorpay))) {
+        finish();
         return;
       }
       const script = document.createElement("script");
@@ -866,9 +882,9 @@
   }
 
   function ensureRazorpayScript() {
-    if (window.MegaskaRazorpayInline) return Promise.resolve(window.MegaskaRazorpayInline);
+    if (hasInlineCreatePayment(window.MegaskaRazorpayInline)) return Promise.resolve(window.MegaskaRazorpayInline);
     if (!state.razorpayInlineScriptPromise) {
-      state.razorpayInlineScriptPromise = loadRazorpayConstructor(RAZORPAY_INLINE_SCRIPT_SRC, "MegaskaRazorpayInline", "Razorpay inline script loaded but is unavailable.", "MegaskaRazorpayCheckout").catch((error) => { state.razorpayInlineScriptPromise = null; throw error; });
+      state.razorpayInlineScriptPromise = loadRazorpayConstructor(RAZORPAY_INLINE_SCRIPT_SRC, "MegaskaRazorpayInline", "Razorpay inline script loaded but is unavailable.", "MegaskaRazorpayCheckout", hasInlineCreatePayment).catch((error) => { state.razorpayInlineScriptPromise = null; throw error; });
     }
     return state.razorpayInlineScriptPromise;
   }
@@ -969,7 +985,7 @@
     return findRazorpayScript(src)?.src || null;
   }
 
-  function logRazorpayRuntimeDiagnostics(rzp, checkout, displayMethod) {
+  function logRazorpayRuntimeDiagnostics(rzp, checkout, displayMethod, RazorpayInline) {
     const diagnostics = {
       windowRazorpayType: typeof window.Razorpay,
       inlineScriptSrc: razorpayScriptSrc(RAZORPAY_INLINE_SCRIPT_SRC),
@@ -985,13 +1001,24 @@
     } else if (window.console && typeof window.console.warn === "function") {
       window.console.warn("[Megaska Express] Razorpay inline createPayment unavailable", diagnostics);
     }
+    if (window.console && typeof window.console.info === "function") {
+      window.console.info("[Megaska Express] inline payment runtime", {
+        selectedPaymentMethod: displayMethod,
+        inlineConstructorAvailable: typeof RazorpayInline === "function",
+        createPaymentType: typeof rzp?.createPayment,
+        inlineScriptSrc: razorpayScriptSrc(RAZORPAY_INLINE_SCRIPT_SRC),
+        checkoutScriptSrc: razorpayScriptSrc(RAZORPAY_CHECKOUT_SCRIPT_SRC),
+        hasMegaskaInline: Boolean(window.MegaskaRazorpayInline),
+        hasMegaskaCheckout: Boolean(window.MegaskaRazorpayCheckout),
+      });
+    }
   }
 
   function createRazorpayInstance(RazorpayInline, checkout, displayMethod) {
     const options = buildStandardRazorpayOptions(checkout, displayMethod);
     const instance = new RazorpayInline(options);
     state.activeRazorpayInstance = attachRazorpayListeners(instance);
-    logRazorpayRuntimeDiagnostics(state.activeRazorpayInstance, checkout, displayMethod);
+    logRazorpayRuntimeDiagnostics(state.activeRazorpayInstance, checkout, displayMethod, RazorpayInline);
     return state.activeRazorpayInstance;
   }
 
@@ -1063,7 +1090,7 @@
       const rzp = createRazorpayInstance(RazorpayInline, checkout, method);
       if (typeof rzp.createPayment !== "function") {
         state.paymentInProgress = false; state.orderSubmitting = false; state.busy = false; state.paymentStarted = false; state.activeRazorpayInstance = null; renderPaymentSectionOnly();
-        showInlinePaymentError("Inline payment is not available right now."); return;
+        showInlinePaymentError("Inline payment is unavailable right now. Please use secure payment popup."); return;
       }
       rzp.createPayment(inlinePayload(method, formData, checkout));
     } catch (error) {
