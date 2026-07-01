@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import type { ExpressCheckoutIntentStatus } from "../../../../../../../generated/prisma";
 import { getSessionTokenFromRequest } from "../../../../../../../services/auth/session";
 import { withCors, handleOptions } from "../../../../../_lib/cors";
 import { prisma } from "../../../../../../../services/db/prisma";
@@ -12,10 +11,12 @@ import { CheckoutStateDb, transitionCheckoutIntent } from "../../../../../../../
 
 export const runtime = "nodejs";
 
-const PAYMENT_METHOD_MUTABLE_STATUSES = new Set<ExpressCheckoutIntentStatus>([
+const PAYMENT_METHOD_MUTABLE_STATUSES = new Set<string>([
   "SESSION_VERIFIED",
   "CART_SNAPSHOT_LOCKED",
   "ADDRESS_CAPTURED",
+  "ADDRESS_SELECTED",
+  "ADDRESS_SAVED",
   "ADDRESS_COMPLETED",
   "DELIVERY_VALIDATED",
   "PAYMENT_METHOD_SELECTED",

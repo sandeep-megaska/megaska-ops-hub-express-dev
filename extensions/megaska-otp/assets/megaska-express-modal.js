@@ -1212,7 +1212,10 @@
       if (branch === "STORE_CREDIT_ONLY") return createOrder();
       await ensureBackendPaymentMethod(backendPaymentMethodForDisplay(method));
       paymentPerfLog("payment_method_ready_ms", submitStartedAt, { backendPaymentMethod: backendPaymentMethodForDisplay(method) });
-      if (branch === "COD") return createOrder();
+      if (branch === "COD") {
+        console.info("[Megaska Express] razorpay_branch_skipped_for_cod", { intentId: state.intent?.id || null, intentStatus: state.intent?.status || null, selectedPaymentMethod: method, remainingPayable });
+        return createOrder();
+      }
       console.info("[EXPRESS PAYMENT PERF] prepaid_submit_start", {
         intentId: state.intent?.id || null,
         selectedDisplayMethod: method,
