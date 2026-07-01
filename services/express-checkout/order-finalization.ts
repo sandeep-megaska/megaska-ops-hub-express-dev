@@ -185,11 +185,11 @@ export async function finalizePrepaidExpressCheckoutOrder(params: FinalizeParams
   if (resolvedCustomerGid) draftOrderInput.customerId = resolvedCustomerGid;
 
   try {
-    const created = await shopifyAdminGraphql<DraftOrderCreatePayload>(params.shopDomain, `mutation DraftOrderCreate($input: DraftOrderInput!) { draftOrderCreate(input: $input) { draftOrder { id name } userErrors { field message } } }`, { input: draftOrderInput });
+    const created = await shopifyAdminGraphql<DraftOrderCreatePayload>(params.shopDomain, `mutation DraftOrderCreate($input: DraftOrderInput!) { draftOrderCreate(input: $input) { draftOrder { id name } userErrors { field message } } }`, { input: draftOrderInput }, { shopId: params.shopId });
     const createResult = created.draftOrderCreate;
     if (createResult?.userErrors?.length || !createResult?.draftOrder?.id) throw new ExpressCheckoutOrderFinalizationError(422, "Payment received, but we could not create your order automatically. Please contact support.", userErrorMessage(createResult?.userErrors));
 
-    const completed = await shopifyAdminGraphql<DraftOrderCompletePayload>(params.shopDomain, `mutation DraftOrderComplete($id: ID!, $paymentPending: Boolean) { draftOrderComplete(id: $id, paymentPending: $paymentPending) { draftOrder { id name order { id name displayFinancialStatus displayFulfillmentStatus } } userErrors { field message } } }`, { id: createResult.draftOrder.id, paymentPending: false });
+    const completed = await shopifyAdminGraphql<DraftOrderCompletePayload>(params.shopDomain, `mutation DraftOrderComplete($id: ID!, $paymentPending: Boolean) { draftOrderComplete(id: $id, paymentPending: $paymentPending) { draftOrder { id name order { id name displayFinancialStatus displayFulfillmentStatus } } userErrors { field message } } }`, { id: createResult.draftOrder.id, paymentPending: false }, { shopId: params.shopId });
     const completeResult = completed.draftOrderComplete;
     if (completeResult?.userErrors?.length || !completeResult?.draftOrder?.order?.id) throw new ExpressCheckoutOrderFinalizationError(422, "Payment received, but we could not create your order automatically. Please contact support.", userErrorMessage(completeResult?.userErrors));
 
