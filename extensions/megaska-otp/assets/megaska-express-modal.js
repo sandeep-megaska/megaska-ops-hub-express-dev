@@ -1058,11 +1058,11 @@
   }
 
   function checkoutResponseOrderName(payload) {
-    return String(payload?.shopifyOrder?.name || payload?.orderLink?.shopifyOrderName || "").trim();
+    return String(payload?.shopifyOrder?.name || payload?.shopifyOrderName || payload?.orderName || "").trim();
   }
 
   function checkoutResponseOrderId(payload) {
-    return String(payload?.shopifyOrder?.id || payload?.orderLink?.shopifyOrderId || "").trim();
+    return String(payload?.shopifyOrder?.id || payload?.shopifyOrderId || "").trim();
   }
 
   function assertFreshCheckoutSuccess(payload, paymentMethod) {
@@ -1070,8 +1070,9 @@
     const returnedIntentId = checkoutResponseIntentId(payload);
     const orderName = checkoutResponseOrderName(payload);
     const orderId = checkoutResponseOrderId(payload);
-    const freshCompletion = payload?.freshCompletion === true || payload?.completionSource === "fresh_completion";
-    const recovery = payload?.recovery === true || payload?.idempotent === true || (payload?.completionSource && payload.completionSource !== "fresh_completion");
+    const acceptedCompletionSource = payload?.completionSource === "draft_order_complete" || (paymentMethod === "PREPAID" && payload?.completionSource === "fresh_completion");
+    const freshCompletion = payload?.freshCompletion === true && acceptedCompletionSource;
+    const recovery = payload?.recovery === true || payload?.idempotent === true || payload?.code === "stale_order_link" || !acceptedCompletionSource;
     console.info("[Megaska Express] checkout_success_validation", {
       currentIntentId,
       returnedIntentId,
@@ -1080,10 +1081,25 @@
       freshCompletion,
       recovery,
       paymentMethod,
+      successAccepted: Boolean(payload?.ok === true && payload?.success === true && currentIntentId && returnedIntentId === currentIntentId && orderId && orderName && freshCompletion && !recovery),
     });
-    if (!currentIntentId || returnedIntentId !== currentIntentId) throw new Error("Order confirmation did not match this checkout attempt. Please try again.");
-    if (!orderId || !orderName) throw new Error("Order confirmation was incomplete. Please contact support if the order was created.");
-    if (paymentMethod === "COD" && !freshCompletion) throw new Error("We could not confirm a new COD order for this checkout attempt. Please try again.");
+    if (payload?.ok !== true || payload?.success !== true) {
+      console.info("[Megaska Express] checkout_success_rejected", { currentIntentId, returnedIntentId, returnedOrderName: orderName || null, returnedOrderId: orderId || null, paymentMethod, reason: "not_success_response" });
+      throw new Error("Order confirmation was not successful. Please try again.");
+    }
+    if (!currentIntentId || returnedIntentId !== currentIntentId) {
+      console.info("[Megaska Express] checkout_success_rejected", { currentIntentId, returnedIntentId, returnedOrderName: orderName || null, returnedOrderId: orderId || null, paymentMethod, reason: "intent_mismatch" });
+      throw new Error("Order confirmation did not match this checkout attempt. Please try again.");
+    }
+    if (!orderId || !orderName) {
+      console.info("[Megaska Express] checkout_success_rejected", { currentIntentId, returnedIntentId, returnedOrderName: orderName || null, returnedOrderId: orderId || null, paymentMethod, reason: "missing_current_order" });
+      throw new Error("Order confirmation was incomplete. Please contact support if the order was created.");
+    }
+    if (!freshCompletion || recovery) {
+      console.info("[Megaska Express] checkout_success_rejected", { currentIntentId, returnedIntentId, returnedOrderName: orderName || null, returnedOrderId: orderId || null, paymentMethod, reason: recovery ? "recovery_or_stale_source" : "not_fresh_draft_order_complete" });
+      throw new Error("We could not confirm a new order for this checkout attempt. Please try again.");
+    }
+    console.info("[Megaska Express] checkout_success_accepted", { currentIntentId, returnedIntentId, returnedOrderName: orderName, returnedOrderId: orderId, paymentMethod, reason: "fresh_draft_order_complete" });
     return { orderName, orderId, freshCompletion, recovery };
   }
 
@@ -1199,7 +1215,15 @@
 
   function resetInlinePaymentState() { state.activeRazorpayInstance = null; state.activeRazorpayOrder = null; state.activeRazorpayOrderPromise = null; state.prepaidWarmupKey = ""; state.prepaidWarmupCompletedKey = ""; state.prepaidWarmupPromise = null; state.paymentInProgress = false; state.paymentStarted = false; state.orderSubmitting = false; state.inlinePaymentError = ""; state.inlinePaymentMode = false; }
 
-  async function createOrder() { const paymentMethod = backendPaymentMethodForDisplay(selectedDisplayPaymentMethod()) === "COD" || state.intent?.selectedPaymentMethod === "COD" ? "COD" : "PREPAID"; const data = await apiFetch(`/express/checkout/intents/${encodeURIComponent(state.intent.id)}/order`, { method: "POST", body: {} }); showCheckoutSuccess(data, paymentMethod); render(); }
+  async function createOrder() {
+    const paymentMethod = backendPaymentMethodForDisplay(selectedDisplayPaymentMethod()) === "COD" || state.intent?.selectedPaymentMethod === "COD" ? "COD" : "PREPAID";
+    const currentIntentId = String(state.intent?.id || "").trim();
+    console.info("[Megaska Express] checkout_submit_branch", { branch: "create_order", currentIntentId, selectedPaymentMethod: paymentMethod });
+    const data = await apiFetch(`/express/checkout/intents/${encodeURIComponent(currentIntentId)}/order`, { method: "POST", body: {} });
+    console.info("[Megaska Express] checkout_order_response", { currentIntentId, returnedIntentId: checkoutResponseIntentId(data), returnedOrderName: checkoutResponseOrderName(data) || null, returnedOrderId: checkoutResponseOrderId(data) || null, selectedPaymentMethod: paymentMethod, freshCompletion: data?.freshCompletion === true, completionSource: data?.completionSource || null });
+    showCheckoutSuccess(data, paymentMethod);
+    render();
+  }
 
   function inlinePayload(method, data, checkout) {
     const basePayload = { order_id: checkout.razorpayOrderId, amount: checkout.amountPaise, currency: checkout.currency || "INR", email: checkout.customer?.email || state.customer?.email || "", contact: checkout.customer?.contact || state.intent?.phoneSnapshot || "" };
