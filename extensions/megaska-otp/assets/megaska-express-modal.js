@@ -1052,6 +1052,48 @@
     };
   }
 
+
+  function checkoutResponseIntentId(payload) {
+    return String(payload?.intentId || payload?.intent?.id || payload?.orderLink?.intentId || "").trim();
+  }
+
+  function checkoutResponseOrderName(payload) {
+    return String(payload?.shopifyOrder?.name || payload?.orderLink?.shopifyOrderName || "").trim();
+  }
+
+  function checkoutResponseOrderId(payload) {
+    return String(payload?.shopifyOrder?.id || payload?.orderLink?.shopifyOrderId || "").trim();
+  }
+
+  function assertFreshCheckoutSuccess(payload, paymentMethod) {
+    const currentIntentId = String(state.intent?.id || "").trim();
+    const returnedIntentId = checkoutResponseIntentId(payload);
+    const orderName = checkoutResponseOrderName(payload);
+    const orderId = checkoutResponseOrderId(payload);
+    const freshCompletion = payload?.freshCompletion === true || payload?.completionSource === "fresh_completion";
+    const recovery = payload?.recovery === true || payload?.idempotent === true || (payload?.completionSource && payload.completionSource !== "fresh_completion");
+    console.info("[Megaska Express] checkout_success_validation", {
+      currentIntentId,
+      returnedIntentId,
+      returnedOrderName: orderName || null,
+      returnedOrderId: orderId || null,
+      freshCompletion,
+      recovery,
+      paymentMethod,
+    });
+    if (!currentIntentId || returnedIntentId !== currentIntentId) throw new Error("Order confirmation did not match this checkout attempt. Please try again.");
+    if (!orderId || !orderName) throw new Error("Order confirmation was incomplete. Please contact support if the order was created.");
+    if (paymentMethod === "COD" && !freshCompletion) throw new Error("We could not confirm a new COD order for this checkout attempt. Please try again.");
+    return { orderName, orderId, freshCompletion, recovery };
+  }
+
+  function showCheckoutSuccess(payload, paymentMethod) {
+    const confirmation = assertFreshCheckoutSuccess(payload, paymentMethod);
+    state.step = "success";
+    state.error = `${confirmation.orderName} has been created.`;
+    state.busy = false; state.orderSubmitting = false; state.paymentStarted = false; state.paymentInProgress = false; state.activeRazorpayInstance = null;
+  }
+
   function paymentSuccess(response) {
     const payload = normalizeRazorpaySuccessPayload(response);
     console.info("[Megaska Express] Razorpay payment.success payload shape", sanitizedRazorpaySuccessShape(response));
@@ -1065,8 +1107,7 @@
       return Promise.resolve();
     }
     return apiFetch(`/express/checkout/intents/${encodeURIComponent(state.intent.id)}/razorpay-verify`, { method: "POST", body: payload }).then(async (verified) => {
-      state.step = "success"; state.error = `${verified.orderLink?.shopifyOrderName || verified.shopifyOrder?.name || "Your order"} has been created.`;
-      state.busy = false; state.orderSubmitting = false; state.paymentStarted = false; state.paymentInProgress = false; state.activeRazorpayInstance = null;
+      showCheckoutSuccess(verified, "PREPAID");
       await refreshIntent(); render();
     }).catch((error) => {
       console.error("[Megaska Express] Razorpay payment verified by gateway but order confirmation is pending", { intentId: state.intent?.id || null, payload, error });
@@ -1158,7 +1199,7 @@
 
   function resetInlinePaymentState() { state.activeRazorpayInstance = null; state.activeRazorpayOrder = null; state.activeRazorpayOrderPromise = null; state.prepaidWarmupKey = ""; state.prepaidWarmupCompletedKey = ""; state.prepaidWarmupPromise = null; state.paymentInProgress = false; state.paymentStarted = false; state.orderSubmitting = false; state.inlinePaymentError = ""; state.inlinePaymentMode = false; }
 
-  async function createOrder() { const data = await apiFetch(`/express/checkout/intents/${encodeURIComponent(state.intent.id)}/order`, { method: "POST", body: {} }); state.step = "success"; state.error = `${data.orderLink?.shopifyOrderName || data.shopifyOrder?.name || "Your order"} has been created.`; state.busy = false; state.paymentStarted = false; state.paymentInProgress = false; render(); }
+  async function createOrder() { const paymentMethod = backendPaymentMethodForDisplay(selectedDisplayPaymentMethod()) === "COD" || state.intent?.selectedPaymentMethod === "COD" ? "COD" : "PREPAID"; const data = await apiFetch(`/express/checkout/intents/${encodeURIComponent(state.intent.id)}/order`, { method: "POST", body: {} }); showCheckoutSuccess(data, paymentMethod); render(); }
 
   function inlinePayload(method, data, checkout) {
     const basePayload = { order_id: checkout.razorpayOrderId, amount: checkout.amountPaise, currency: checkout.currency || "INR", email: checkout.customer?.email || state.customer?.email || "", contact: checkout.customer?.contact || state.intent?.phoneSnapshot || "" };

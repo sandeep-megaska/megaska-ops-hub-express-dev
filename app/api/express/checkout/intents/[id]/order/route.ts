@@ -340,7 +340,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
 
   if (intent.status === "ORDER_COMPLETED") {
     console.info("[CHECKOUT STATE] draft_order_blocked_completed_intent", { shopId: shop.shopId, intentId, customerProfileId, hasOrderLink: Boolean(intent.orderLink) });
-    if (intent.orderLink) return jsonWithCors(req, { ok: true, intent, orderLink: intent.orderLink, shopifyOrder: null });
+    if (intent.orderLink) return jsonWithCors(req, { ok: false, intentId, error: "Order already completed for this checkout intent; a fresh completion was not performed.", code: "stale_order_link", freshCompletion: false, recovery: true }, { status: 409 });
     return jsonWithCors(req, { ok: false, error: `Intent status ${intent.status} cannot create order` }, { status: 409 });
   }
   if (intent.status === "EXPIRED" || await markCheckoutIntentExpiredIfNeeded(intent)) {
@@ -348,11 +348,11 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
   }
   if (intent.orderLink?.draftOrderId) {
     console.info("[CHECKOUT STATE] draft_order_idempotent_return", { shopId: shop.shopId, intentId, customerProfileId, draftOrderId: intent.orderLink.draftOrderId, hasShopifyOrder: Boolean(intent.orderLink.shopifyOrderId) });
-    if (intent.orderLink.shopifyOrderId) return jsonWithCors(req, { ok: true, intent, orderLink: intent.orderLink, shopifyOrder: null });
+    if (intent.orderLink.shopifyOrderId) return jsonWithCors(req, { ok: false, intentId, error: "Order already exists for this checkout intent; a fresh completion was not performed.", code: "stale_order_link", freshCompletion: false, recovery: true }, { status: 409 });
   }
   if (intent.orderLink && !intent.orderLink.draftOrderId) {
     if (intent.selectedPaymentMethod === "COD") console.info("[CHECKOUT STATE] cod_duplicate_completion_ignored", { shopId: shop.shopId, intentId, customerProfileId, status: intent.status });
-    return jsonWithCors(req, { ok: true, intent, orderLink: intent.orderLink, shopifyOrder: null });
+    return jsonWithCors(req, { ok: false, intentId, error: "Order link exists without a fresh completion; please retry checkout.", code: "stale_order_link", freshCompletion: false, recovery: true }, { status: 409 });
   }
   if (BLOCKED_STATUSES.includes(intent.status)) {
     return jsonWithCors(req, { ok: false, error: `Intent status ${intent.status} cannot create order` }, { status: 409 });
@@ -544,7 +544,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     if (!latestIntent) return jsonWithCors(req, { ok: false, error: "Intent not found" }, { status: 404 });
     if (latestIntent.status === "ORDER_COMPLETED") {
       console.info("[CHECKOUT STATE] draft_order_blocked_completed_intent", { shopId: shop.shopId, intentId, customerProfileId, hasOrderLink: Boolean(latestIntent.orderLink) });
-      if (latestIntent.orderLink) return jsonWithCors(req, { ok: true, intent: latestIntent, orderLink: latestIntent.orderLink, shopifyOrder: null });
+      if (latestIntent.orderLink) return jsonWithCors(req, { ok: false, intentId, error: "Order already completed for this checkout intent; a fresh completion was not performed.", code: "stale_order_link", freshCompletion: false, recovery: true }, { status: 409 });
       return jsonWithCors(req, { ok: false, error: `Intent status ${latestIntent.status} cannot create order` }, { status: 409 });
     }
     if (latestIntent.status === "EXPIRED" || await markCheckoutIntentExpiredIfNeeded(latestIntent)) {
@@ -568,7 +568,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     let reusedDraftOrder = false;
     if (latestIntent.orderLink?.draftOrderId && latestIntent.orderLink.shopifyOrderId) {
       console.info("[CHECKOUT STATE] draft_order_idempotent_return", { shopId: shop.shopId, intentId, customerProfileId, draftOrderId: latestIntent.orderLink.draftOrderId, hasShopifyOrder: Boolean(latestIntent.orderLink.shopifyOrderId) });
-      return jsonWithCors(req, { ok: true, intent: latestIntent, orderLink: latestIntent.orderLink, shopifyOrder: null });
+      return jsonWithCors(req, { ok: false, intentId, error: "Order already exists for this checkout intent; a fresh completion was not performed.", code: "stale_order_link", freshCompletion: false, recovery: true }, { status: 409 });
     }
     if (latestIntent.orderLink?.draftOrderId) {
       console.info("[CHECKOUT STATE] draft_order_idempotent_return", { shopId: shop.shopId, intentId, customerProfileId, draftOrderId: latestIntent.orderLink.draftOrderId, hasShopifyOrder: false });
@@ -634,8 +634,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     }
     if (draftOrderLink?.draftOrderId !== createResult.draftOrder.id) {
       console.info("[CHECKOUT STATE] draft_order_idempotent_return", { shopId: shop.shopId, intentId, customerProfileId, draftOrderId: draftOrderLink?.draftOrderId || null, hasShopifyOrder: Boolean(draftOrderLink?.shopifyOrderId) });
-      const refreshedIntent = await prisma.expressCheckoutIntent.findFirst({ where: { shopId: shop.shopId, id: intentId, customerProfileId } });
-      return jsonWithCors(req, { ok: true, intent: refreshedIntent, orderLink: draftOrderLink, shopifyOrder: null });
+      return jsonWithCors(req, { ok: false, intentId, error: "Existing draft/order link did not match the current completion operation.", code: "stale_order_link", freshCompletion: false, recovery: true }, { status: 409 });
     }
     if (!reusedDraftOrder) console.info("[CHECKOUT STATE] draft_order_created", { shopId: shop.shopId, intentId, customerProfileId, draftOrderId: createResult.draftOrder.id, draftOrderName: createResult.draftOrder.name || null });
 
@@ -701,6 +700,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     }
 
     const order = completedOrder;
+    const completedAt = new Date().toISOString();
     let orderLink;
     let updatedIntent;
 
@@ -745,9 +745,16 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
       });
     }
 
-    if (intent.selectedPaymentMethod === "COD") console.info("[EXPRESS CHECKOUT ORDER] cod_order_create_success", { shopId: shop.shopId, intentId, customerProfileId, shopifyOrderId: order.id || null, shopifyOrderName: order.name || null });
+    const persistedOrderId = typeof orderLink === "object" && orderLink && "shopifyOrderId" in orderLink ? String(orderLink.shopifyOrderId || "") : "";
+    const persistedOrderName = typeof orderLink === "object" && orderLink && "shopifyOrderName" in orderLink ? String(orderLink.shopifyOrderName || "") : "";
+    if (persistedOrderId !== order.id || persistedOrderName !== order.name) {
+      console.error("[EXPRESS CHECKOUT ORDER] stale_order_link_after_completion", { shopId: shop.shopId, intentId, customerProfileId, completedOrderId: order.id || null, completedOrderName: order.name || null, persistedOrderId: persistedOrderId || null, persistedOrderName: persistedOrderName || null, paymentMethod: intent.selectedPaymentMethod, freshCompletion: true, recovery: true });
+      return jsonWithCors(req, { ok: false, intentId, error: "Order completion could not be safely confirmed. Please contact support before retrying.", code: "stale_order_link", freshCompletion: false, recovery: true }, { status: 409 });
+    }
+
+    if (intent.selectedPaymentMethod === "COD") console.info("[EXPRESS CHECKOUT ORDER] cod_order_create_success", { shopId: shop.shopId, intentId, returnedIntentId: intentId, customerProfileId, shopifyOrderId: order.id || null, shopifyOrderName: order.name || null, freshCompletion: true, recovery: false, paymentMethod: "COD", completedAt });
     checkoutPerfLog("order_create_total_ms", { ...perfContext, durationMs: elapsedMs(totalStartedAt) });
-    return jsonWithCors(req, { ok: true, intent: updatedIntent, orderLink, shopifyOrder: order }, { status: 201 });
+    return jsonWithCors(req, { ok: true, success: true, intentId, intent: updatedIntent, orderLink, shopifyOrder: order, shopifyOrderId: order.id || null, shopifyOrderName: order.name || null, completedAt, freshCompletion: true, recovery: false, completionSource: "fresh_completion", paymentMethod: intent.selectedPaymentMethod }, { status: 201 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Order creation failed";
     const name = error instanceof Error ? error.name : "UnknownError";
