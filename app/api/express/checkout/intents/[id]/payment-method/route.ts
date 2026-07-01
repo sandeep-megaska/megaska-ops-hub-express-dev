@@ -12,28 +12,30 @@ import { CheckoutStateDb, transitionCheckoutIntent } from "../../../../../../../
 
 export const runtime = "nodejs";
 
-const PAYMENT_METHOD_MUTABLE_STATUSES = [
+const PRISMA_SAFE_PAYMENT_METHOD_MUTABLE_STATUSES = [
   "SESSION_VERIFIED",
   "CART_SNAPSHOT_LOCKED",
   "ADDRESS_SELECTED",
   "ADDRESS_SAVED",
   "DELIVERY_VALIDATED",
-  "DISCOUNT_APPLIED",
   "PAYMENT_METHOD_SELECTED",
   "PAYMENT_SELECTED",
   "PAYMENT_PENDING",
-] as const satisfies readonly string[];
-const PAYMENT_METHOD_MUTABLE_STATUS_SET = new Set<string>(PAYMENT_METHOD_MUTABLE_STATUSES);
+] as const satisfies readonly ExpressCheckoutIntentStatus[];
+const PAYMENT_METHOD_MUTABLE_STATUS_SET = new Set<string>([
+  ...PRISMA_SAFE_PAYMENT_METHOD_MUTABLE_STATUSES,
+  "DISCOUNT_APPLIED",
+]);
 const PAYMENT_METHOD_PAYMENT_PENDING_STATUS = "PAYMENT_PENDING" satisfies ExpressCheckoutIntentStatus;
 const PAYMENT_METHODS = ["COD", "PREPAID"] as const;
 
 type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 
 const COD_STATE_ORDER = ["INITIATED", "SESSION_VERIFIED", "ADDRESS_COMPLETED", "DELIVERY_VALIDATED", "PAYMENT_SELECTED", "DRAFT_ORDER_CREATED", "ORDER_COMPLETED"] as const;
-const COD_LEGACY_STATUS_EQUIVALENTS: Partial<Record<ExpressCheckoutIntentStatus, (typeof COD_STATE_ORDER)[number]>> = { CREATED: "INITIATED", CUSTOMER_AUTHENTICATED: "SESSION_VERIFIED", CART_SNAPSHOT_LOCKED: "SESSION_VERIFIED", ADDRESS_CAPTURED: "ADDRESS_COMPLETED", DISCOUNT_APPLIED: "ADDRESS_COMPLETED", PAYMENT_METHOD_SELECTED: "PAYMENT_SELECTED", ORDER_CREATED: "ORDER_COMPLETED" };
+const COD_LEGACY_STATUS_EQUIVALENTS: Partial<Record<string, (typeof COD_STATE_ORDER)[number]>> = { CREATED: "INITIATED", CUSTOMER_AUTHENTICATED: "SESSION_VERIFIED", CART_SNAPSHOT_LOCKED: "SESSION_VERIFIED", ADDRESS_CAPTURED: "ADDRESS_COMPLETED", DISCOUNT_APPLIED: "ADDRESS_COMPLETED", PAYMENT_METHOD_SELECTED: "PAYMENT_SELECTED", ORDER_CREATED: "ORDER_COMPLETED" };
 
 async function transitionCodIntent(input: { intent: { id: string; shopId: string; status: string }; toStatus: (typeof COD_STATE_ORDER)[number]; reason: string; metadata?: Record<string, unknown> }) {
-  const legacyStatus = COD_LEGACY_STATUS_EQUIVALENTS[input.intent.status as ExpressCheckoutIntentStatus];
+  const legacyStatus = COD_LEGACY_STATUS_EQUIVALENTS[input.intent.status];
   const effectiveStatus = legacyStatus || input.intent.status;
   const fromIndex = COD_STATE_ORDER.indexOf(effectiveStatus as (typeof COD_STATE_ORDER)[number]);
   const toIndex = COD_STATE_ORDER.indexOf(input.toStatus);
@@ -45,7 +47,12 @@ async function transitionCodIntent(input: { intent: { id: string; shopId: string
 
   if (legacyStatus) {
     console.info("[CHECKOUT STATE] cod_legacy_status_normalized", { shopId: input.intent.shopId, intentId: input.intent.id, fromStatus: input.intent.status, effectiveStatus, toStatus: input.toStatus, reason: input.reason, metadata: input.metadata || {} });
-    await (prisma as unknown as CheckoutStateDb).expressCheckoutIntent.updateMany({ where: { id: input.intent.id, shopId: input.intent.shopId, status: input.intent.status }, data: { status: legacyStatus } });
+    await (prisma as unknown as CheckoutStateDb).expressCheckoutIntent.updateMany({
+      where: input.intent.status === "DISCOUNT_APPLIED"
+        ? { id: input.intent.id, shopId: input.intent.shopId }
+        : { id: input.intent.id, shopId: input.intent.shopId, status: input.intent.status },
+      data: { status: legacyStatus },
+    });
     return transitionCheckoutIntent({ db: prisma as unknown as CheckoutStateDb, intent: { ...input.intent, status: legacyStatus }, toStatus: input.toStatus, reason: input.reason, metadata: input.metadata });
   }
 
@@ -83,7 +90,7 @@ async function hasConfirmedPayment(input: { shopId: string; intentId: string; cu
 }
 
 function paymentMethodMutableStatusesForPrisma() {
-  return Array.from(PAYMENT_METHOD_MUTABLE_STATUSES) as ExpressCheckoutIntentStatus[];
+  return Array.from(PRISMA_SAFE_PAYMENT_METHOD_MUTABLE_STATUSES);
 }
 
 export async function OPTIONS(req: NextRequest) {
@@ -145,9 +152,17 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
       return { intent, payment: null };
     }
 
+    const isUnsupportedDiscountAppliedStatus = latestIntent.status === "DISCOUNT_APPLIED";
     const updateResult = await tx.expressCheckoutIntent.updateMany({
-      where: { ...intentWhere, status: { in: paymentMethodMutableStatusesForPrisma() } },
-      data: { selectedPaymentMethod: method, codFeeAmountPaise, totalAmountPaise },
+      where: isUnsupportedDiscountAppliedStatus
+        ? intentWhere
+        : { ...intentWhere, status: { in: paymentMethodMutableStatusesForPrisma() } },
+      data: {
+        selectedPaymentMethod: method,
+        codFeeAmountPaise,
+        totalAmountPaise,
+        ...(isUnsupportedDiscountAppliedStatus ? { status: "PAYMENT_SELECTED" as const } : {}),
+      },
     });
 
     if (updateResult.count === 0) {
