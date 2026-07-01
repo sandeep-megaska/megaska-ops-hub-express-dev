@@ -939,7 +939,7 @@
 .megaska-express-inline button { border: 1px solid #0f172a; border-radius: 12px; background: #0f172a; color: #fff; padding: 0 14px; cursor: pointer; }
 @media (max-width: 520px) { .megaska-express-dialog { max-width: 100%; min-width: 0; } .megaska-express-fields { grid-template-columns: 1fr; } }
 
-.megaska-express-modal-header { align-items:center; display:grid; gap:14px; grid-template-columns:minmax(96px,auto) minmax(0,1fr); margin:0 0 14px; padding-right:42px; }
+.megaska-express-modal-header { align-items:center; display:grid; flex:0 0 auto; gap:14px; grid-template-columns:minmax(96px,auto) minmax(0,1fr); margin:0; padding:18px 64px 0 22px; }
 .megaska-express-logo { align-items:center; background:transparent; border-radius:0; color:#0f172a; display:inline-flex; justify-content:flex-start; min-height:48px; min-width:0; overflow:visible; padding:0 8px; }
 .megaska-express-logo-img { display:block; height:auto; max-height:48px; max-width:160px; object-fit:contain; object-position:left center; width:auto; }
 .megaska-express-logo-text { color:#0f172a; display:grid; gap:2px; letter-spacing:.08em; line-height:1; text-transform:uppercase; white-space:normal; }
@@ -1039,7 +1039,7 @@
 .megaska-express-sticky-cta .megaska-otp-primary-btn { margin:0; min-width:148px; }
 @media (max-width: 420px) { .megaska-express-scroll-area { padding-bottom: 118px; } .megaska-express-sticky-cta { gap:8px; grid-template-columns:1fr; height:96px; max-height:96px; min-height:96px; padding:9px 14px; } .megaska-express-sticky-trust { gap:6px; grid-template-columns:1fr 1fr; } .megaska-express-sticky-trust p { padding:6px 7px; } .megaska-express-sticky-trust p > strong { font-size:11px; } .megaska-express-sticky-main { justify-content:space-between; } .megaska-express-sticky-cta .megaska-otp-primary-btn { width:100%; } }
 @media (max-width: 520px) {
-  .megaska-express-modal-header { gap:10px; grid-template-columns:minmax(76px,auto) minmax(0,1fr); padding-right:42px; }
+  .megaska-express-modal-header { gap:10px; grid-template-columns:minmax(76px,auto) minmax(0,1fr); padding:18px 58px 0 18px; }
   .megaska-express-logo { min-height:40px; padding:0 6px; }
   .megaska-express-logo-img { max-height:40px; max-width:122px; }
   .megaska-express-logo-text strong { font-size:15px; }
