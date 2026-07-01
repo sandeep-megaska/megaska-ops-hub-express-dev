@@ -312,6 +312,24 @@ if (isShopifyAdminConfigured()) {
       };
     });
 
+    const walletTransactions = storeCreditTransactions.slice(0, 15).map((transaction) => ({
+      type: transaction.type,
+      customerLabel: transaction.customerLabel,
+      amount: transaction.amount,
+      direction: transaction.direction,
+      reason: transaction.reason,
+      orderName: transaction.orderName,
+      createdAt: transaction.createdAt,
+    }));
+
+    const wallet = {
+      balance: storeCredit.balance,
+      availableBalance: storeCredit.balance,
+      currency: storeCredit.currency,
+      transactions: walletTransactions,
+      detailsUrl: "/customer/store-credit",
+    };
+
     const response = {
       customer: {
         firstName: customer.firstName,
@@ -320,12 +338,8 @@ if (isShopifyAdminConfigured()) {
         email: shopifyDashboard?.email || customer.email || null,
         verified: Boolean(customer.phoneVerifiedAt),
       },
-      storeCredit: {
-        balance: storeCredit.balance,
-        currency: storeCredit.currency,
-        transactions: storeCreditTransactions.slice(0, 15),
-        detailsUrl: "/customer/store-credit",
-      },
+      storeCredit: wallet,
+      wallet,
       stats,
       address: shopifyDashboard?.defaultAddress
         ? shopifyDashboard.defaultAddress
