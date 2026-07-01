@@ -6,6 +6,8 @@ type ResolvedShopConfig = {
   id: string | null;
   shopDomain: string;
   accessToken: string | null;
+  accessTokenEncrypted: string | null;
+  accessTokenDirect: string | null;
   storefrontAccessToken: string | null;
 };
 
@@ -26,10 +28,6 @@ type ShopRow = {
 
 function trimEnv(name: string) {
   return String(process.env[name] || "").trim();
-}
-
-function getCanonicalShopId() {
-  return trimEnv("MEGASKA_CANONICAL_SHOP_ID") || trimEnv("SHOPIFY_PRIMARY_SHOP_ID") || null;
 }
 
 export function normalizeShopDomain(input: string | null | undefined) {
@@ -67,21 +65,6 @@ export async function getShopByDomain(shopDomain: string) {
   return rows[0] || null;
 }
 
-export async function getShopById(shopId: string | null | undefined) {
-  const normalized = String(shopId || "").trim();
-  if (!normalized) return null;
-
-  const rows = await prisma.$queryRawUnsafe<ShopRow[]>(
-    `SELECT "id", "shopDomain", "accessToken", "accessTokenEncrypted", "storefrontAccessToken", "storefrontTokenEncrypted", "scopes", "isActive", "installedAt", "uninstalledAt", "myshopifyDomain", "installationStatus"
-     FROM "Shop"
-     WHERE "id" = $1
-     LIMIT 1`,
-    normalized
-  );
-
-  return rows[0] || null;
-}
-
 export async function getDefaultShopFromConfig() {
   const envDomain = normalizeShopDomain(trimEnv("SHOPIFY_STORE_DOMAIN"));
   if (!envDomain) return null;
@@ -112,26 +95,6 @@ export async function getDefaultShopFromConfig() {
 }
 
 export async function resolveShopConfig(preferredShopDomain?: string | null): Promise<ResolvedShopConfig> {
-  const canonicalShopId = getCanonicalShopId();
-  if (canonicalShopId) {
-    const canonicalShop = await getShopById(canonicalShopId);
-    if (canonicalShop?.isActive && !canonicalShop.uninstalledAt) {
-      console.info("[SHOPIFY ADMIN CONFIG] canonical_shop_preferred", {
-        resolvedShopId: canonicalShop.id,
-        shopDomain: canonicalShop.shopDomain,
-        myshopifyDomain: canonicalShop.myshopifyDomain,
-        installationStatus: canonicalShop.installationStatus,
-        hasAccessToken: Boolean(canonicalShop.accessToken || canonicalShop.accessTokenEncrypted),
-      });
-      return {
-        id: canonicalShop.id,
-        shopDomain: canonicalShop.shopDomain,
-        accessToken: canonicalShop.accessToken || decryptShopifyToken(canonicalShop.accessTokenEncrypted),
-        storefrontAccessToken: canonicalShop.storefrontAccessToken || decryptShopifyToken(canonicalShop.storefrontTokenEncrypted),
-      };
-    }
-  }
-
   const normalizedPreferred = normalizeShopDomain(preferredShopDomain);
   if (normalizedPreferred) {
     const shop = await getShopByDomain(normalizedPreferred);
@@ -140,6 +103,8 @@ export async function resolveShopConfig(preferredShopDomain?: string | null): Pr
         id: shop.id,
         shopDomain: shop.shopDomain,
         accessToken: shop.accessToken || decryptShopifyToken(shop.accessTokenEncrypted),
+        accessTokenEncrypted: shop.accessTokenEncrypted,
+        accessTokenDirect: shop.accessToken,
         storefrontAccessToken: shop.storefrontAccessToken || decryptShopifyToken(shop.storefrontTokenEncrypted),
       };
     }
@@ -151,6 +116,8 @@ export async function resolveShopConfig(preferredShopDomain?: string | null): Pr
       id: defaultShop.id,
       shopDomain: defaultShop.shopDomain,
       accessToken: defaultShop.accessToken || decryptShopifyToken(defaultShop.accessTokenEncrypted),
+      accessTokenEncrypted: defaultShop.accessTokenEncrypted,
+      accessTokenDirect: defaultShop.accessToken,
       storefrontAccessToken: defaultShop.storefrontAccessToken || decryptShopifyToken(defaultShop.storefrontTokenEncrypted),
     };
   }
@@ -159,6 +126,8 @@ export async function resolveShopConfig(preferredShopDomain?: string | null): Pr
     id: null,
     shopDomain: normalizeShopDomain(trimEnv("SHOPIFY_STORE_DOMAIN")),
     accessToken: trimEnv("SHOPIFY_ADMIN_ACCESS_TOKEN") || null,
+    accessTokenEncrypted: null,
+    accessTokenDirect: trimEnv("SHOPIFY_ADMIN_ACCESS_TOKEN") || null,
     storefrontAccessToken: trimEnv("SHOPIFY_STOREFRONT_ACCESS_TOKEN") || null,
   };
 }
