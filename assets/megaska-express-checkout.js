@@ -461,7 +461,7 @@
       state.selectedDisplayPaymentMethod = previousDisplay;
       state.optimisticPaymentMethod = previous;
       state.paymentUpdating = false;
-      state.error = "Could not update payment method. Please try again.";
+      state.error = error instanceof Error ? error.message : "Could not update payment method. Please try again.";
       render();
     }
   }
@@ -526,11 +526,25 @@
     });
   }
 
+  function logCheckoutSubmitBranch(branch) {
+    if (window.console && typeof window.console.info === "function") {
+      window.console.info("[Megaska Express] checkout_submit_branch", {
+        paymentMethod: paymentMethod(),
+        intentStatus: state.intent?.status || null,
+        remainingPayable: Number(state.intent?.totalAmountPaise || 0),
+        storeCreditApplied: 0,
+        branch,
+      });
+    }
+  }
+
   async function placeOrder() {
     if (state.orderSubmitting) return;
     state.orderSubmitting = true;
     setBusy("order");
-    if (paymentMethod() === "COD") await createOrder();
+    const branch = paymentMethod() === "COD" ? "COD" : "RAZORPAY";
+    logCheckoutSubmitBranch(branch);
+    if (branch === "COD") await createOrder();
     else await handlePrepaid();
   }
 

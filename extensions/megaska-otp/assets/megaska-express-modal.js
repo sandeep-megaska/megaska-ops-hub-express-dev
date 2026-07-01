@@ -1177,6 +1177,18 @@
     if (method === "WALLET" && !data.get("wallet")) throw new Error("Select your wallet.");
   }
 
+  function logCheckoutSubmitBranch(method, branch) {
+    if (window.console && typeof window.console.info === "function") {
+      window.console.info("[Megaska Express] checkout_submit_branch", {
+        paymentMethod: method,
+        intentStatus: state.intent?.status || null,
+        remainingPayable: remainingBasePayablePaise(),
+        storeCreditApplied: storeCreditAppliedPaise(),
+        branch,
+      });
+    }
+  }
+
   async function submitInlinePayment(method, formData) {
     if (method === "COD" && isCodUnavailable()) {
       state.selectedDisplayPaymentMethod = "UPI";
@@ -1184,23 +1196,24 @@
       throw new Error("COD unavailable for this pincode");
     }
     if (state.paymentInProgress) return;
-    if (remainingBasePayablePaise() <= 0) return createOrder();
-    validateInlinePayment(method, formData);
     const submitStartedAt = perfNow();
-    if (method !== "COD") {
+    const remainingPayable = remainingBasePayablePaise();
+    const branch = remainingPayable <= 0 ? "STORE_CREDIT_ONLY" : (method === "COD" ? "COD" : "RAZORPAY");
+    logCheckoutSubmitBranch(method, branch);
+    if (branch === "RAZORPAY") validateInlinePayment(method, formData);
+    state.paymentInProgress = true; state.orderSubmitting = true; state.busy = true; state.paymentStarted = branch === "RAZORPAY"; state.inlinePaymentError = ""; renderPaymentSectionOnly();
+    try {
+      if (state.addressSavedForIntentId !== state.intent?.id || !hasCompleteAddress(address()) || state.editingAddress) await ensureAddressSavedOnce();
+      paymentPerfLog("address_ready_ms", submitStartedAt, { alreadySaved: state.addressSavedForIntentId === state.intent?.id });
+      if (branch === "STORE_CREDIT_ONLY") return createOrder();
+      await ensureBackendPaymentMethod(backendPaymentMethodForDisplay(method));
+      paymentPerfLog("payment_method_ready_ms", submitStartedAt, { backendPaymentMethod: backendPaymentMethodForDisplay(method) });
+      if (branch === "COD") return createOrder();
       console.info("[EXPRESS PAYMENT PERF] prepaid_submit_start", {
         intentId: state.intent?.id || null,
         selectedDisplayMethod: method,
         backendPaymentMethod: backendPaymentMethodForDisplay(method),
       });
-    }
-    state.paymentInProgress = true; state.orderSubmitting = true; state.busy = true; state.paymentStarted = method !== "COD"; state.inlinePaymentError = ""; renderPaymentSectionOnly();
-    try {
-      if (state.addressSavedForIntentId !== state.intent?.id || !hasCompleteAddress(address()) || state.editingAddress) await ensureAddressSavedOnce();
-      paymentPerfLog("address_ready_ms", submitStartedAt, { alreadySaved: state.addressSavedForIntentId === state.intent?.id });
-      await ensureBackendPaymentMethod(backendPaymentMethodForDisplay(method));
-      paymentPerfLog("payment_method_ready_ms", submitStartedAt, { backendPaymentMethod: backendPaymentMethodForDisplay(method) });
-      if (method === "COD") return createOrder();
       const scriptPromise = ensureRazorpayScript();
       const hadCachedOrder = state.activeRazorpayOrder?.intentId === state.intent?.id;
       const orderPromise = hadCachedOrder ? Promise.resolve(state.activeRazorpayOrder.checkout) : ensureRazorpayOrder();
@@ -1218,7 +1231,7 @@
     } catch (error) {
       state.paymentInProgress = false; state.orderSubmitting = false; state.busy = false; state.paymentStarted = false; state.activeRazorpayInstance = null;
       renderPaymentSectionOnly();
-      showInlinePaymentError(method === "COD" ? (error instanceof Error ? error.message : "We could not place your COD order.") : prepaidPlaceOrderMessage(error));
+      showInlinePaymentError(error instanceof Error ? error.message : (branch === "COD" ? "We could not place your COD order." : "Payment was not completed. You can try again."));
     }
   }
 
@@ -1258,7 +1271,7 @@
       if (action === "standard-razorpay") await openStandardRazorpayFallback();
       if (action === "apply-store-credit") await applyStoreCredit();
       if (action === "release-store-credit") await releaseStoreCredit();
-      if (action === "store-credit-order") { state.orderSubmitting = true; state.busy = true; renderPaymentSectionOnly(); await ensureAddressSavedOnce(); await createOrder(); }
+      if (action === "store-credit-order") { logCheckoutSubmitBranch(selectedDisplayPaymentMethod(), "STORE_CREDIT_ONLY"); state.orderSubmitting = true; state.busy = true; renderPaymentSectionOnly(); await ensureAddressSavedOnce(); await createOrder(); }
     } catch (error) { state.busy = false; state.orderSubmitting = false; state.paymentStarted = false; state.paymentInProgress = false; state.error = error instanceof Error ? error.message : "Something went wrong."; render(); }
   }
 
