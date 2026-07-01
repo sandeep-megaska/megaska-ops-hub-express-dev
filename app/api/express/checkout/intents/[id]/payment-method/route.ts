@@ -12,16 +12,22 @@ import { CheckoutStateDb, transitionCheckoutIntent } from "../../../../../../../
 
 export const runtime = "nodejs";
 
-const PAYMENT_METHOD_MUTABLE_STATUSES = new Set<ExpressCheckoutIntentStatus>([
+const PAYMENT_METHOD_MUTABLE_STATUSES = [
   "SESSION_VERIFIED",
   "CART_SNAPSHOT_LOCKED",
+  "ADDRESS_SELECTED",
+  "ADDRESS_SAVED",
   "ADDRESS_CAPTURED",
   "ADDRESS_COMPLETED",
   "DELIVERY_VALIDATED",
+  "DISCOUNT_APPLIED",
+  "COUPON_APPLIED",
   "PAYMENT_METHOD_SELECTED",
   "PAYMENT_SELECTED",
-  "COUPON_APPLIED",
-]);
+  "PAYMENT_PENDING",
+] as const satisfies readonly string[];
+const PAYMENT_METHOD_MUTABLE_STATUS_SET = new Set<string>(PAYMENT_METHOD_MUTABLE_STATUSES);
+const PAYMENT_METHOD_PAYMENT_PENDING_STATUS = "PAYMENT_PENDING" satisfies ExpressCheckoutIntentStatus;
 const PAYMENT_METHODS = ["COD", "PREPAID"] as const;
 
 type PaymentMethod = (typeof PAYMENT_METHODS)[number];
@@ -71,6 +77,18 @@ function isPaymentMethod(value: unknown): value is PaymentMethod {
   return typeof value === "string" && PAYMENT_METHODS.includes(value as PaymentMethod);
 }
 
+async function hasConfirmedPayment(input: { shopId: string; intentId: string; customerProfileId: string }) {
+  const count = await prisma.expressCheckoutPayment.count({
+    where: { shopId: input.shopId, intentId: input.intentId, status: "CONFIRMED", intent: { customerProfileId: input.customerProfileId } },
+  });
+
+  return count > 0;
+}
+
+function paymentMethodMutableStatusesForPrisma() {
+  return Array.from(PAYMENT_METHOD_MUTABLE_STATUSES) as ExpressCheckoutIntentStatus[];
+}
+
 export async function OPTIONS(req: NextRequest) {
   return handleOptions(req);
 }
@@ -102,7 +120,10 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
   const intent = await prisma.expressCheckoutIntent.findFirst({ where: intentWhere });
 
   if (!intent) return jsonWithCors(req, { ok: false, error: "Intent not found" }, { status: 404 });
-  if (!PAYMENT_METHOD_MUTABLE_STATUSES.has(intent.status)) {
+  if (!PAYMENT_METHOD_MUTABLE_STATUS_SET.has(intent.status)) {
+    return jsonWithCors(req, { ok: false, error: `Intent status ${intent.status} cannot be updated` }, { status: 409 });
+  }
+  if (intent.status === PAYMENT_METHOD_PAYMENT_PENDING_STATUS && (await hasConfirmedPayment({ shopId: shop.shopId, intentId, customerProfileId }))) {
     return jsonWithCors(req, { ok: false, error: `Intent status ${intent.status} cannot be updated` }, { status: 409 });
   }
   if (intent.expiresAt && intent.expiresAt <= new Date()) return jsonWithCors(req, { ok: false, error: "Intent expired" }, { status: 409 });
@@ -117,8 +138,18 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
   const persistStartedAt = Date.now();
   let intentWasMutable = true;
   const result = await prisma.$transaction(async (tx) => {
+    const latestIntent = await tx.expressCheckoutIntent.findFirst({ where: intentWhere });
+    const confirmedPaymentCount = latestIntent?.status === PAYMENT_METHOD_PAYMENT_PENDING_STATUS
+      ? await tx.expressCheckoutPayment.count({ where: { shopId: shop.shopId, intentId, status: "CONFIRMED", intent: { customerProfileId } } })
+      : 0;
+
+    if (!latestIntent || !PAYMENT_METHOD_MUTABLE_STATUS_SET.has(latestIntent.status) || confirmedPaymentCount > 0) {
+      intentWasMutable = false;
+      return { intent, payment: null };
+    }
+
     const updateResult = await tx.expressCheckoutIntent.updateMany({
-      where: { ...intentWhere, status: { in: Array.from(PAYMENT_METHOD_MUTABLE_STATUSES) } },
+      where: { ...intentWhere, status: { in: paymentMethodMutableStatusesForPrisma() } },
       data: { selectedPaymentMethod: method, codFeeAmountPaise, totalAmountPaise },
     });
 
@@ -140,7 +171,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     return jsonWithCors(req, { ok: false, error: `Intent status ${latestIntent?.status || intent.status} cannot be updated` }, { status: 409 });
   }
 
-  if (["DELIVERY_VALIDATED", "COUPON_APPLIED"].includes(result.intent.status)) {
+  if (["DELIVERY_VALIDATED", "DISCOUNT_APPLIED", "COUPON_APPLIED"].includes(result.intent.status)) {
     const paymentTransition = await transitionCodIntent({
       intent: { id: result.intent.id, shopId: result.intent.shopId, status: result.intent.status },
       toStatus: "PAYMENT_SELECTED",
