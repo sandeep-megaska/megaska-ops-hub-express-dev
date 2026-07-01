@@ -76,6 +76,10 @@ function paiseToAmount(paise: number) {
   return (Math.max(0, Math.round(Number(paise) || 0)) / 100).toFixed(2);
 }
 
+function paiseToAmountNumber(paise: number) {
+  return Math.max(0, Math.round(Number(paise) || 0)) / 100;
+}
+
 function cartSnapshotLines(cartSnapshot: unknown) {
   const snapshot = asRecord(cartSnapshot);
   if (Array.isArray(cartSnapshot)) return cartSnapshot;
@@ -161,6 +165,10 @@ export async function finalizePrepaidExpressCheckoutOrder(params: FinalizeParams
   const { firstName, lastName } = nameParts(address.name);
   const shippingAddress = { firstName, lastName, address1: address.address1, address2: address.address2, city: address.city, province: normalizeProvince(address.province), country: address.country, zip: address.zip, phone: address.phone };
   const discountAmount = Math.max(0, Math.min(intent.subtotalAmountPaise, intent.discountAmountPaise));
+  const discountValue = Number(paiseToAmountNumber(discountAmount));
+  const appliedDiscount = Number.isFinite(discountValue) && discountValue > 0
+    ? { title: "Express checkout discount", value: discountValue, valueType: "FIXED_AMOUNT" }
+    : undefined;
   const customAttributes = [
     { key: "megaska_express_intent_id", value: intent.id },
     { key: "megaska_customer_profile_id", value: params.customerProfileId },
@@ -179,12 +187,20 @@ export async function finalizePrepaidExpressCheckoutOrder(params: FinalizeParams
     tags: ["Megaska Express Checkout"],
     customAttributes,
     shippingLine: intent.shippingAmountPaise > 0 ? { title: "Shipping", price: paiseToAmount(intent.shippingAmountPaise) } : undefined,
-    appliedDiscount: discountAmount > 0 ? { title: "Express checkout discount", value: paiseToAmount(discountAmount), valueType: "FIXED_AMOUNT" } : undefined,
+    appliedDiscount,
   };
   const resolvedCustomerGid = toShopifyCustomerGid(customer?.shopifyCustomerId);
   if (resolvedCustomerGid) draftOrderInput.customerId = resolvedCustomerGid;
 
   try {
+    if (appliedDiscount) {
+      console.info("[EXPRESS PREPAID FINALIZATION] draft_order_discount", {
+        valueType: typeof appliedDiscount.value,
+        value: appliedDiscount.value,
+        valueTypeField: appliedDiscount.valueType,
+      });
+    }
+
     const created = await shopifyAdminGraphql<DraftOrderCreatePayload>(params.shopDomain, `mutation DraftOrderCreate($input: DraftOrderInput!) { draftOrderCreate(input: $input) { draftOrder { id name } userErrors { field message } } }`, { input: draftOrderInput }, { shopId: params.shopId });
     const createResult = created.draftOrderCreate;
     if (createResult?.userErrors?.length || !createResult?.draftOrder?.id) throw new ExpressCheckoutOrderFinalizationError(422, "Payment received, but we could not create your order automatically. Please contact support.", userErrorMessage(createResult?.userErrors));
