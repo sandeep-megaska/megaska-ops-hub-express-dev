@@ -164,6 +164,8 @@ export async function settleCodRefundAsStoreCredit(input: SettleCodRefundAsStore
   const actor = normalizeActor(input.actor);
   const now = new Date();
 
+  console.info("[STORE CREDIT] settlement_start", { refundRequestId });
+
   try {
     const result = await (prisma as any).$transaction(async (tx: StoreCreditTx) => {
       const refund = await tx.refundRequest.findUnique({ where: { id: refundRequestId } });
@@ -270,7 +272,7 @@ export async function settleCodRefundAsStoreCredit(input: SettleCodRefundAsStore
       };
     });
 
-    console.info(`[store-credit] ${result.logStatus}`, {
+    console.info(result.alreadySettled ? "[STORE CREDIT] already_settled" : "[STORE CREDIT] settlement_success", {
       refundRequestId: result.refundRequest.id,
       walletTransactionId: result.walletTransaction.id,
       walletAccountId: result.walletAccount.id,
@@ -279,10 +281,16 @@ export async function settleCodRefundAsStoreCredit(input: SettleCodRefundAsStore
     const { logStatus: _logStatus, ...settlement } = result;
     return settlement;
   } catch (error) {
-    if (!isUniqueConstraintError(error)) throw error;
+    if (!isUniqueConstraintError(error)) {
+      console.error("[STORE CREDIT] settlement_failed", {
+        refundRequestId,
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+      throw error;
+    }
 
     const recovered = await (prisma as any).$transaction((tx: StoreCreditTx) => recoverDuplicateSettlement(tx, { refundRequestId, actor, now }));
-    console.info("[store-credit] duplicate-recovered", {
+    console.info("[STORE CREDIT] already_settled", {
       refundRequestId: recovered.refundRequest.id,
       walletTransactionId: recovered.walletTransaction.id,
       walletAccountId: recovered.walletAccount.id,

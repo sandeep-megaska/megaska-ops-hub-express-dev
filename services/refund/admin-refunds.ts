@@ -1,7 +1,7 @@
 import { prisma } from "../db/prisma";
 import type { RefundRequest } from "../../generated/prisma/index.js";
 
-function toAdminSummary(refund: RefundRequest & { payoutDetails?: any | null }) {
+function toAdminSummary(refund: RefundRequest & { payoutDetails?: any | null; walletTransaction?: any | null }) {
   return {
     id: refund.id,
     source: refund.source,
@@ -20,6 +20,16 @@ function toAdminSummary(refund: RefundRequest & { payoutDetails?: any | null }) 
     paidAt: refund.paidAt,
     createdAt: refund.createdAt,
     updatedAt: refund.updatedAt,
+    walletTransactionId: refund.walletTransactionId,
+    walletTransaction: refund.walletTransaction
+      ? {
+          id: refund.walletTransaction.id,
+          amount: refund.walletTransaction.amount,
+          currency: refund.walletTransaction.currency,
+          transactionType: refund.walletTransaction.transactionType,
+          createdAt: refund.walletTransaction.createdAt,
+        }
+      : null,
     payoutDetails: refund.payoutDetails
       ? {
           rail: refund.payoutDetails.rail,
@@ -41,7 +51,7 @@ function toAdminSummary(refund: RefundRequest & { payoutDetails?: any | null }) 
 export async function listAdminRefunds(shopId: string) {
   const refunds = await prisma.refundRequest.findMany({
     where: { shopId },
-    include: { payoutDetails: true },
+    include: { payoutDetails: true, walletTransaction: true },
     orderBy: { createdAt: "desc" },
     take: 300,
   });
@@ -51,7 +61,7 @@ export async function listAdminRefunds(shopId: string) {
 export async function getAdminRefundById(shopId: string, id: string) {
   const refund = await prisma.refundRequest.findFirst({
     where: { id, shopId },
-    include: { payoutDetails: true },
+    include: { payoutDetails: true, walletTransaction: true },
   });
   if (!refund) return null;
   return toAdminSummary(refund as never);
