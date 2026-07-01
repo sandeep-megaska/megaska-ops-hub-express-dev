@@ -895,6 +895,16 @@ if (token) {
     });
   }
 
+
+  function formatInrMajor(value) {
+    const amount = Number(value || 0);
+    try {
+      return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(amount);
+    } catch {
+      return `₹${amount.toFixed(2)}`;
+    }
+  }
+
   function normalizeStatus(value) {
     return String(value || "").trim().toLowerCase();
   }
@@ -1090,6 +1100,11 @@ const sku = order?.firstLineItemSku || order?.sku || "";
         <article class="megaska-dashboard-card"><h3>Total orders</h3><p>${totalOrders}</p></article>
         <article class="megaska-dashboard-card"><h3>Open requests</h3><p>${openRequests}</p></article>
         <article class="megaska-dashboard-card"><h3>Saved addresses</h3><p>${savedAddresses}</p></article>
+        <article class="megaska-dashboard-card">
+          <h3>Available Store Credit</h3>
+          <p>${escHtml(formatInrMajor(summary?.storeCredit?.balance || 0))}</p>
+          <div class="megaska-dashboard-actions"><a href="/customer/store-credit" class="megaska-dashboard-btn">Megaska Store Credit</a></div>
+        </article>
       </section>
       <section class="megaska-dashboard-card">
         <h3>Recent orders</h3>

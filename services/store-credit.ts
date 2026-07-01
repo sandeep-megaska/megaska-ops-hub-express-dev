@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { Prisma } from "../generated/prisma";
 import { prisma } from "./db/prisma";
 
@@ -300,3 +301,112 @@ export async function settleCodRefundAsStoreCredit(input: SettleCodRefundAsStore
 }
 
 export const __private__ = { getOrCreateStoreCreditAccount };
+
+export type CustomerStoreCreditParams = {
+  shopId: string;
+  customerProfileId: string;
+  currency?: string;
+};
+
+export type CustomerStoreCreditTransaction = {
+  id: string;
+  type: string;
+  customerLabel: string;
+  amount: number;
+  direction: "credit" | "debit" | "neutral";
+  reason: string | null;
+  refundRequestId?: string | null;
+  orderName?: string | null;
+  createdAt: string;
+};
+
+const TRANSACTION_LABELS: Record<string, string> = {
+  COD_REFUND_CREDIT: "Refund Credit",
+  MANUAL_CREDIT: "Refund Credit",
+  GOODWILL_CREDIT: "Refund Credit",
+  MANUAL_DEBIT: "Store Credit Used",
+  CHECKOUT_REDEMPTION: "Applied to Order",
+  ADJUSTMENT: "Store Credit Adjustment",
+};
+
+function toCurrencyAmount(minorUnits: number | null | undefined) {
+  return Number(((Number(minorUnits || 0)) / 100).toFixed(2));
+}
+
+function toCustomerDirection(direction: string): "credit" | "debit" | "neutral" {
+  if (direction === "CREDIT") return "credit";
+  if (direction === "DEBIT") return "debit";
+  return "neutral";
+}
+
+function labelForTransaction(type: string, direction: string) {
+  return TRANSACTION_LABELS[type] || (direction === "CREDIT" ? "Refund Credit" : direction === "DEBIT" ? "Store Credit Used" : "Store Credit Activity");
+}
+
+export async function getCustomerStoreCreditBalance(input: CustomerStoreCreditParams) {
+  const currency = String(input.currency || "INR").trim() || "INR";
+  const rows = await prisma.$queryRaw<Array<{ currentBalance: number; currency: string }>>`
+    SELECT "currentBalance", "currency"
+    FROM "WalletAccount"
+    WHERE "shopId" = ${input.shopId}
+      AND "customerProfileId" = ${input.customerProfileId}
+      AND "currency" = ${currency}
+    LIMIT 1
+  `;
+  const account = rows[0] || null;
+
+  return {
+    balance: toCurrencyAmount(account?.currentBalance || 0),
+    currency: account?.currency || currency,
+  };
+}
+
+export async function listCustomerStoreCreditTransactions(input: CustomerStoreCreditParams): Promise<CustomerStoreCreditTransaction[]> {
+  const currency = String(input.currency || "INR").trim() || "INR";
+  const transactions = await prisma.$queryRaw<Array<{
+    id: string;
+    direction: string;
+    transactionType: string;
+    amount: number;
+    reason: string | null;
+    sourceType: string;
+    sourceId: string | null;
+    sourceReference: string | null;
+    orderNumber: string | null;
+    createdAt: Date;
+    refundRequestId: string | null;
+    refundShopifyOrderId: string | null;
+  }>>`
+    SELECT wt."id", wt."direction"::text AS "direction", wt."transactionType"::text AS "transactionType",
+      wt."amount", wt."reason", wt."sourceType"::text AS "sourceType", wt."sourceId", wt."sourceReference",
+      wt."orderNumber", wt."createdAt", rr."id" AS "refundRequestId", rr."shopifyOrderId" AS "refundShopifyOrderId"
+    FROM "WalletTransaction" wt
+    LEFT JOIN "RefundRequest" rr
+      ON rr."walletTransactionId" = wt."id"
+      AND rr."shopId" = ${input.shopId}
+      AND rr."customerProfileId" = ${input.customerProfileId}
+    WHERE wt."shopId" = ${input.shopId}
+      AND wt."customerProfileId" = ${input.customerProfileId}
+      AND wt."currency" = ${currency}
+    ORDER BY wt."createdAt" DESC
+    LIMIT 50
+  `;
+
+  return transactions.map((transaction) => {
+    const refundRequestId = transaction.sourceType === "REFUND_REQUEST"
+      ? transaction.sourceId || transaction.refundRequestId || null
+      : transaction.refundRequestId || null;
+
+    return {
+      id: transaction.id,
+      type: transaction.transactionType,
+      customerLabel: labelForTransaction(transaction.transactionType, transaction.direction),
+      amount: toCurrencyAmount(transaction.amount),
+      direction: toCustomerDirection(transaction.direction),
+      reason: transaction.reason || null,
+      refundRequestId,
+      orderName: transaction.orderNumber || transaction.refundShopifyOrderId || transaction.sourceReference || null,
+      createdAt: transaction.createdAt.toISOString(),
+    };
+  });
+}

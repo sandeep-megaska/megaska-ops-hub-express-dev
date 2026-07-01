@@ -15,7 +15,7 @@ import {
 } from "../../../../services/shopify/shop";
 import { isCancellationStatusBlocking } from "../../../../services/exchange/cancellation";
 import { ACTIVE_EXCHANGE_STATUSES } from "../../../../services/exchange/lifecycle";
-import { getOrCreateWalletAccount, listWalletTransactions } from "../../../../services/wallet";
+import { getCustomerStoreCreditBalance, listCustomerStoreCreditTransactions } from "../../../../services/store-credit";
 
 export const runtime = "nodejs";
 
@@ -216,17 +216,16 @@ if (isShopifyAdminConfigured()) {
       isCancellationStatusBlocking(request.status)
     ).length;
 
-    const walletAccount = await getOrCreateWalletAccount(customer.id, "INR");
-    const walletTransactions = await listWalletTransactions(customer.id, "INR", 15);
-
-    const walletReservedRows = await prisma.$queryRaw<Array<{ total: number }>>`
-      SELECT COALESCE(SUM("reservedAmount"), 0)::int AS total
-      FROM "WalletReservation"
-      WHERE "customerProfileId" = ${customer.id}
-        AND "status" = 'ACTIVE'::"WalletReservationStatus"
-        AND "expiresAt" > NOW()
-    `;
-    const activeWalletReserved = Number(walletReservedRows[0]?.total || 0);
+    const storeCredit = await getCustomerStoreCreditBalance({
+      shopId: shop.id,
+      customerProfileId: customer.id,
+      currency: "INR",
+    });
+    const storeCreditTransactions = await listCustomerStoreCreditTransactions({
+      shopId: shop.id,
+      customerProfileId: customer.id,
+      currency: "INR",
+    });
 
     const stats = {
       totalOrders,
@@ -321,13 +320,11 @@ if (isShopifyAdminConfigured()) {
         email: shopifyDashboard?.email || customer.email || null,
         verified: Boolean(customer.phoneVerifiedAt),
       },
-      wallet: {
-        balance: walletAccount?.currentBalance || 0,
-        currency: walletAccount?.currency || "INR",
-        pendingRefund: 0,
-        reserved: activeWalletReserved,
-        availableToRedeem: Math.max((walletAccount?.currentBalance || 0) - activeWalletReserved, 0),
-        transactions: walletTransactions,
+      storeCredit: {
+        balance: storeCredit.balance,
+        currency: storeCredit.currency,
+        transactions: storeCreditTransactions.slice(0, 15),
+        detailsUrl: "/customer/store-credit",
       },
       stats,
       address: shopifyDashboard?.defaultAddress
