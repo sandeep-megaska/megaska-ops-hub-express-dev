@@ -1203,3 +1203,15 @@
   height: 16px;
   accent-color: #16a34a;
 }
+.megaska-express-store-credit {
+  background: #f4fbf6;
+  border: 1px solid #b8e8c5;
+}
+.megaska-express-store-credit {
+  padding: 16px 18px;
+}
+.megaska-express-store-credit .available-credit {
+  color: #2f7a4a;
+  font-size: 14px;
+  font-weight: 600;
+}
