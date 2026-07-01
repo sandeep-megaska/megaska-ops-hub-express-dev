@@ -983,6 +983,7 @@
   }
 
   function ensureRazorpayScript() {
+    if (backendPaymentMethodForDisplay(selectedDisplayPaymentMethod()) === "COD" || state.intent?.selectedPaymentMethod === "COD") return Promise.reject(new Error("COD orders do not use Razorpay."));
     if (hasInlineCreatePayment(window.MegaskaRazorpayInline)) return Promise.resolve(window.MegaskaRazorpayInline);
     if (!state.razorpayInlineScriptPromise) {
       state.razorpayInlineScriptPromise = loadRazorpayConstructor(RAZORPAY_INLINE_SCRIPT_SRC, "MegaskaRazorpayInline", "Razorpay inline script loaded but is unavailable.", "MegaskaRazorpayCheckout", hasInlineCreatePayment).catch((error) => { state.razorpayInlineScriptPromise = null; throw error; });
@@ -991,6 +992,7 @@
   }
 
   function ensureRazorpayCheckoutScript() {
+    if (backendPaymentMethodForDisplay(selectedDisplayPaymentMethod()) === "COD" || state.intent?.selectedPaymentMethod === "COD") return Promise.reject(new Error("COD orders do not use Razorpay."));
     if (window.MegaskaRazorpayCheckout) return Promise.resolve(window.MegaskaRazorpayCheckout);
     if (!state.razorpayCheckoutScriptPromise) {
       state.razorpayCheckoutScriptPromise = loadRazorpayConstructor(RAZORPAY_CHECKOUT_SCRIPT_SRC, "MegaskaRazorpayCheckout", "Unable to load Razorpay Checkout.", "MegaskaRazorpayInline").catch((error) => { state.razorpayCheckoutScriptPromise = null; throw error; });
@@ -1001,6 +1003,7 @@
   function loadRazorpay() { return ensureRazorpayScript(); }
 
   async function ensureRazorpayOrder() {
+    if (backendPaymentMethodForDisplay(selectedDisplayPaymentMethod()) === "COD" || state.intent?.selectedPaymentMethod === "COD") throw new Error("COD orders do not use Razorpay.");
     const intentId = state.intent?.id;
     if (state.activeRazorpayOrder?.intentId === intentId) return state.activeRazorpayOrder.checkout;
     if (state.activeRazorpayOrderPromise?.intentId === intentId) return state.activeRazorpayOrderPromise.promise;
@@ -1243,6 +1246,10 @@
   }
 
   async function openStandardRazorpayFallback() {
+    if (backendPaymentMethodForDisplay(selectedDisplayPaymentMethod()) === "COD") {
+      await submitInlinePayment("COD", new FormData(ensureModal().querySelector('[data-express-form="inline-payment"]') || document.createElement("form")));
+      return;
+    }
     try {
       state.inlinePaymentError = ""; state.paymentInProgress = true; state.orderSubmitting = true; state.busy = true; renderPaymentSectionOnly();
       await ensureAddressSavedOnce(); await ensureBackendPaymentMethod("PREPAID");
