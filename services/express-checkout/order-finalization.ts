@@ -2,12 +2,12 @@ import { prisma } from "../db/prisma";
 import { ShopifyAdminConfigError, shopifyAdminGraphql } from "./shopify-admin";
 import { consumeStoreCreditReservationForOrder, getActiveStoreCreditReservation, releaseStoreCreditReservation } from "./store-credit";
 
-type OrderLink = { shopifyOrderId?: string | null; shopifyOrderName?: string | null; financialStatus?: string | null; fulfillmentStatus?: string | null; draftOrderId?: string | null; draftOrderName?: string | null };
+type OrderLink = { id?: string; shopifyOrderId?: string | null; shopifyOrderName?: string | null; financialStatus?: string | null; fulfillmentStatus?: string | null; draftOrderId?: string | null; draftOrderName?: string | null };
 type IntentRecord = { id: string; selectedPaymentMethod?: string | null; customerProfileId?: string | null; cartSnapshot?: unknown; subtotalAmountPaise: number; discountAmountPaise: number; shippingAmountPaise: number; totalAmountPaise: number; discounts?: unknown[] };
 type AddressRecord = { name: string; phone: string; email?: string | null; address1: string; address2?: string | null; city: string; province: string; country: string; zip: string };
 type CustomerRecord = { email?: string | null; phoneE164?: string | null; shopifyCustomerId?: string | null };
 type TxClient = {
-  expressCheckoutOrderLink: { create(args: unknown): Promise<OrderLink> };
+  expressCheckoutOrderLink: { findFirst(args: unknown): Promise<OrderLink | null>; create(args: unknown): Promise<OrderLink>; update(args: unknown): Promise<OrderLink> };
   expressCheckoutIntent: { update(args: unknown): Promise<IntentRecord> };
 };
 type ExpressCheckoutDb = {
@@ -21,6 +21,25 @@ type ExpressCheckoutDb = {
 const db = prisma as unknown as ExpressCheckoutDb;
 
 type JsonRecord = Record<string, unknown>;
+
+async function writeExpressCheckoutOrderLink(client: TxClient, input: { shopId: string; intentId: string; data: Record<string, unknown> }) {
+  const where = { shopId: input.shopId, intentId: input.intentId };
+  const existing = await client.expressCheckoutOrderLink.findFirst({ where });
+  if (existing?.shopifyOrderId) return existing;
+  if (existing?.id) return client.expressCheckoutOrderLink.update({ where: { id: existing.id }, data: input.data });
+
+  try {
+    return await client.expressCheckoutOrderLink.create({ data: { shopId: input.shopId, intentId: input.intentId, ...input.data } });
+  } catch (error) {
+    const code = typeof error === "object" && error && "code" in error ? String(error.code) : "";
+    if (code !== "P2002") throw error;
+    const raced = await client.expressCheckoutOrderLink.findFirst({ where });
+    if (raced?.shopifyOrderId) return raced;
+    if (raced?.id) return client.expressCheckoutOrderLink.update({ where: { id: raced.id }, data: input.data });
+    throw error;
+  }
+}
+
 
 type FinalizeParams = {
   shopId: string;
@@ -221,7 +240,11 @@ export async function finalizePrepaidExpressCheckoutOrder(params: FinalizeParams
 
     const order = completeResult.draftOrder.order;
     const written = await db.$transaction(async (tx) => {
-      const link = await tx.expressCheckoutOrderLink.create({ data: { shopId: params.shopId, intentId: params.intentId, draftOrderId: completeResult.draftOrder?.id || createResult.draftOrder?.id || null, draftOrderName: completeResult.draftOrder?.name || createResult.draftOrder?.name || null, shopifyOrderId: order.id || null, shopifyOrderName: order.name || null, financialStatus: order.displayFinancialStatus || "PAID", fulfillmentStatus: order.displayFulfillmentStatus || null } });
+      const link = await writeExpressCheckoutOrderLink(tx, {
+        shopId: params.shopId,
+        intentId: params.intentId,
+        data: { draftOrderId: completeResult.draftOrder?.id || createResult.draftOrder?.id || null, draftOrderName: completeResult.draftOrder?.name || createResult.draftOrder?.name || null, shopifyOrderId: order.id || null, shopifyOrderName: order.name || null, financialStatus: order.displayFinancialStatus || "PAID", fulfillmentStatus: order.displayFulfillmentStatus || null },
+      });
       const updatedIntent = await tx.expressCheckoutIntent.update({ where: { id: params.intentId }, data: { status: "ORDER_COMPLETED" } });
       return { link, updatedIntent };
     });
