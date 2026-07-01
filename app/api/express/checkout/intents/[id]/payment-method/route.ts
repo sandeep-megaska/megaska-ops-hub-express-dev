@@ -7,7 +7,6 @@ import {
   requireCustomerSessionForShop,
   requireExpressCheckoutShop,
 } from "../../../../../../../lib/express-checkout/safety";
-import { getExpressCheckoutSettings } from "../../../../../../../services/express-checkout/settings";
 import { CheckoutStateDb, transitionCheckoutIntent } from "../../../../../../../lib/express-checkout/state-machine";
 
 export const runtime = "nodejs";
@@ -133,8 +132,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
   if (intent.expiresAt && intent.expiresAt <= new Date()) return jsonWithCors(req, { ok: false, error: "Intent expired" }, { status: 409 });
 
   const method = body.method;
-  const settings = await getExpressCheckoutSettings(shop.shopId);
-  const codFeeAmountPaise = method === "COD" ? settings.codFeeAmountPaise : 0;
+  const codFeeAmountPaise = 0;
   const totalAmountPaise = Math.max(0, intent.subtotalAmountPaise + intent.shippingAmountPaise + codFeeAmountPaise - intent.discountAmountPaise);
   const amountPaise = method === "COD" ? 0 : totalAmountPaise;
   const paymentStatus = method === "COD" ? "NOT_REQUIRED" : "PENDING";

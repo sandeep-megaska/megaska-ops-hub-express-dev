@@ -88,11 +88,10 @@ function calculateKnownDiscount(input: { code: string; subtotalAmountPaise: numb
 function recalculateTotal(intent: {
   subtotalAmountPaise: number;
   shippingAmountPaise: number;
-  codFeeAmountPaise: number;
 }, discountAmountPaise: number) {
   return Math.max(
     0,
-    intent.subtotalAmountPaise + intent.shippingAmountPaise + intent.codFeeAmountPaise - discountAmountPaise
+    intent.subtotalAmountPaise + intent.shippingAmountPaise - discountAmountPaise
   );
 }
 
