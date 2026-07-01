@@ -11,7 +11,16 @@ import { CheckoutStateDb, transitionCheckoutIntent } from "../../../../../../../
 
 export const runtime = "nodejs";
 
-const BLOCKED_STATUSES: readonly string[] = ["EXPIRED", "CANCELLED", "FAILED", "ORDER_CREATED", "ORDER_COMPLETED", "ORDER_CREATING", "PAYMENT_CONFIRMED", "PAYMENT_SUCCESS", "PAYMENT_PENDING", "PAYMENT_FAILED", "PAYMENT_CANCELLED", "DRAFT_ORDER_CREATED"];
+const PAYMENT_METHOD_MUTABLE_STATUSES = new Set([
+  "SESSION_VERIFIED",
+  "ADDRESS_SELECTED",
+  "ADDRESS_SAVED",
+  "ADDRESS_COMPLETED",
+  "DELIVERY_VALIDATED",
+  "PAYMENT_METHOD_SELECTED",
+  "PAYMENT_SELECTED",
+  "COUPON_APPLIED",
+]);
 const PAYMENT_METHODS = ["COD", "PREPAID"] as const;
 
 type PaymentMethod = (typeof PAYMENT_METHODS)[number];
@@ -91,7 +100,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
   const intent = await prisma.expressCheckoutIntent.findFirst({ where: intentWhere });
 
   if (!intent) return jsonWithCors(req, { ok: false, error: "Intent not found" }, { status: 404 });
-  if (BLOCKED_STATUSES.includes(intent.status)) {
+  if (!PAYMENT_METHOD_MUTABLE_STATUSES.has(intent.status)) {
     return jsonWithCors(req, { ok: false, error: `Intent status ${intent.status} cannot be updated` }, { status: 409 });
   }
   if (intent.expiresAt && intent.expiresAt <= new Date()) return jsonWithCors(req, { ok: false, error: "Intent expired" }, { status: 409 });
@@ -104,32 +113,38 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
   const paymentStatus = method === "COD" ? "NOT_REQUIRED" : "PENDING";
 
   const persistStartedAt = Date.now();
+  let intentWasMutable = true;
   const result = await prisma.$transaction(async (tx) => {
+    const updateResult = await tx.expressCheckoutIntent.updateMany({
+      where: { ...intentWhere, status: { in: Array.from(PAYMENT_METHOD_MUTABLE_STATUSES) } },
+      data: { selectedPaymentMethod: method, codFeeAmountPaise, totalAmountPaise },
+    });
+
+    if (updateResult.count === 0) {
+      intentWasMutable = false;
+      return { intent, payment: null };
+    }
+
     await tx.expressCheckoutPayment.deleteMany({ where: { shopId: shop.shopId, intentId, method, status: "PENDING", intent: { customerProfileId } } });
 
     const payment = await tx.expressCheckoutPayment.create({ data: { shopId: shop.shopId, intentId, method, status: paymentStatus, amountPaise, currency: intent.currency } });
-
-    await tx.expressCheckoutIntent.updateMany({ where: intentWhere, data: { selectedPaymentMethod: method, codFeeAmountPaise, totalAmountPaise } });
     const updatedIntent = await tx.expressCheckoutIntent.findFirstOrThrow({ where: intentWhere });
 
     return { intent: updatedIntent, payment };
   });
 
-  if (method === "COD") {
-    const deliveryTransition = await transitionCodIntent({
+  if (!intentWasMutable) {
+    const latestIntent = await prisma.expressCheckoutIntent.findFirst({ where: intentWhere });
+    return jsonWithCors(req, { ok: false, error: `Intent status ${latestIntent?.status || intent.status} cannot be updated` }, { status: 409 });
+  }
+
+  if (["DELIVERY_VALIDATED", "COUPON_APPLIED"].includes(result.intent.status)) {
+    const paymentTransition = await transitionCodIntent({
       intent: { id: result.intent.id, shopId: result.intent.shopId, status: result.intent.status },
-      toStatus: "DELIVERY_VALIDATED",
-      reason: "cod_delivery_validated",
-      metadata: { source: "payment_method_selection" },
+      toStatus: "PAYMENT_SELECTED",
+      reason: "payment_method_selected",
+      metadata: { method },
     });
-    const paymentTransition = deliveryTransition.ok
-      ? await transitionCodIntent({
-          intent: { id: result.intent.id, shopId: result.intent.shopId, status: COD_STATE_ORDER.indexOf(result.intent.status as (typeof COD_STATE_ORDER)[number]) > COD_STATE_ORDER.indexOf("DELIVERY_VALIDATED") ? result.intent.status : "DELIVERY_VALIDATED" },
-          toStatus: "PAYMENT_SELECTED",
-          reason: "cod_payment_selected",
-          metadata: { method },
-        })
-      : deliveryTransition;
     if (!paymentTransition.ok) {
       return jsonWithCors(req, { ok: false, error: `Intent status ${paymentTransition.fromStatus} cannot be updated` }, { status: 409 });
     }
