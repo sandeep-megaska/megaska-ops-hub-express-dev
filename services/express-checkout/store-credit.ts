@@ -53,8 +53,13 @@ export async function releaseExpiredStoreCreditReservations(params: { shopId: st
   `;
 }
 
+function logRawOnConflictAttempt(context: { table: string; conflictTarget: string[]; operation: string; shopId?: string; customerProfileId?: string; checkoutIntentId?: string; sourceId?: string | null }) {
+  console.info("[ON CONFLICT DIAGNOSTIC] attempting_raw_on_conflict", context);
+}
+
 async function getOrCreateShopScopedWallet(tx: Pick<typeof prisma, "$queryRaw" | "$executeRaw">, shopId: string, customerProfileId: string) {
   const walletId = randomUUID();
+  logRawOnConflictAttempt({ table: "WalletAccount", conflictTarget: ["shopId", "customerProfileId", "currency"], operation: "INSERT ... ON CONFLICT DO NOTHING", shopId, customerProfileId });
   await tx.$executeRaw`
     INSERT INTO "WalletAccount" ("id", "shopId", "customerProfileId", "currency", "currentBalance", "createdAt", "updatedAt")
     VALUES (${walletId}, ${shopId}, ${customerProfileId}, ${CURRENCY}, 0, NOW(), NOW())
@@ -171,11 +176,18 @@ export async function consumeStoreCreditReservationForOrder(params: Params & { s
     if (nextBalance < 0) throw new Error("Insufficient Store Credit balance during consumption");
     await tx.$executeRaw`UPDATE "WalletAccount" SET "currentBalance" = ${nextBalance}, "updatedAt" = NOW() WHERE "id" = ${wallet.id}`;
     await tx.$executeRaw`UPDATE "WalletReservation" SET "status" = 'CONSUMED'::"WalletReservationStatus", "shopifyOrderId" = ${params.shopifyOrderId}, "orderNumber" = ${params.orderNumber || null}, "updatedAt" = NOW() WHERE "id" = ${reservation.id}`;
-    const transactionRows = await tx.$queryRaw<Array<{ id: string }>>`
-      INSERT INTO "WalletTransaction" ("id", "shopId", "walletAccountId", "customerProfileId", "direction", "transactionType", "amount", "currency", "sourceType", "sourceId", "sourceReference", "orderNumber", "reason", "adminNote", "createdByType", "createdById", "createdAt")
-      VALUES (${randomUUID()}, ${params.shopId}, ${wallet.id}, ${params.customerProfileId}, 'DEBIT'::"WalletDirection", 'CHECKOUT_REDEMPTION'::"WalletTransactionType", ${reservation.reservedAmount}, ${reservation.currency}, 'WALLET_RESERVATION'::"WalletSourceType", ${reservation.id}, ${params.checkoutIntentId}, ${params.orderNumber || null}, 'Megaska Store Credit redeemed at checkout', ${`Store Credit reservation ${reservation.id} consumed after Shopify order creation`}, 'SYSTEM'::"WalletActorType", 'express-checkout-store-credit', NOW())
-      ON CONFLICT ("sourceType", "sourceId", "transactionType") DO NOTHING RETURNING "id"
-    `;
+    logRawOnConflictAttempt({ table: "WalletTransaction", conflictTarget: ["sourceType", "sourceId", "transactionType"], operation: "INSERT ... ON CONFLICT DO NOTHING RETURNING id", shopId: params.shopId, customerProfileId: params.customerProfileId, checkoutIntentId: params.checkoutIntentId, sourceId: reservation.id });
+    let transactionRows: Array<{ id: string }>;
+    try {
+      transactionRows = await tx.$queryRaw<Array<{ id: string }>>`
+        INSERT INTO "WalletTransaction" ("id", "shopId", "walletAccountId", "customerProfileId", "direction", "transactionType", "amount", "currency", "sourceType", "sourceId", "sourceReference", "orderNumber", "reason", "adminNote", "createdByType", "createdById", "createdAt")
+        VALUES (${randomUUID()}, ${params.shopId}, ${wallet.id}, ${params.customerProfileId}, 'DEBIT'::"WalletDirection", 'CHECKOUT_REDEMPTION'::"WalletTransactionType", ${reservation.reservedAmount}, ${reservation.currency}, 'WALLET_RESERVATION'::"WalletSourceType", ${reservation.id}, ${params.checkoutIntentId}, ${params.orderNumber || null}, 'Megaska Store Credit redeemed at checkout', ${`Store Credit reservation ${reservation.id} consumed after Shopify order creation`}, 'SYSTEM'::"WalletActorType", 'express-checkout-store-credit', NOW())
+        ON CONFLICT ("sourceType", "sourceId", "transactionType") DO NOTHING RETURNING "id"
+      `;
+    } catch (error) {
+      console.error("[ON CONFLICT DIAGNOSTIC] raw_on_conflict_failed", { table: "WalletTransaction", conflictTarget: ["sourceType", "sourceId", "transactionType"], operation: "INSERT ... ON CONFLICT DO NOTHING RETURNING id", shopId: params.shopId, customerProfileId: params.customerProfileId, checkoutIntentId: params.checkoutIntentId, sourceId: reservation.id, errorName: error instanceof Error ? error.name : "UnknownError", errorMessage: error instanceof Error ? error.message : String(error) });
+      throw error;
+    }
     console.info("[STORE CREDIT CHECKOUT] store_credit_checkout_consumed", { ...params, reservationId: reservation.id, consumedAmountPaise: reservation.reservedAmount, walletTransactionId: transactionRows[0]?.id || null });
     return { ok: true, reservationId: reservation.id, consumedAmountPaise: reservation.reservedAmount, walletTransactionId: transactionRows[0]?.id || null };
   });

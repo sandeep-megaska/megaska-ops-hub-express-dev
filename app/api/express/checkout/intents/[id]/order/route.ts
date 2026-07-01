@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionTokenFromRequest } from "../../../../../../../services/auth/session";
 import { withCors, handleOptions } from "../../../../../_lib/cors";
@@ -71,6 +72,40 @@ type DraftOrderLookupPayload = {
 
 function jsonWithCors(req: NextRequest, body: unknown, init?: ResponseInit) {
   return withCors(req, NextResponse.json(body, init));
+}
+
+function databaseUrlFingerprint() {
+  const value = process.env.DATABASE_URL || "";
+  if (!value) return null;
+  return crypto.createHash("sha256").update(value).digest("hex").slice(0, 12);
+}
+
+async function logCheckoutConflictDiagnostics(context: { shopId: string; intentId: string; customerProfileId: string; phase: string }) {
+  const deployment = {
+    vercelEnv: process.env.VERCEL_ENV || null,
+    vercelGitCommitSha: process.env.VERCEL_GIT_COMMIT_SHA || null,
+    vercelDeploymentId: process.env.VERCEL_DEPLOYMENT_ID || null,
+    nodeEnv: process.env.NODE_ENV || null,
+  };
+  try {
+    const dbRows = await prisma.$queryRaw<Array<{ database: string; schema: string; serverAddress: string | null; serverPort: number | null; userName: string; dbUrlFingerprint: string | null }>>`
+      SELECT current_database() AS "database", current_schema() AS "schema", inet_server_addr()::text AS "serverAddress", inet_server_port() AS "serverPort", current_user AS "userName", ${databaseUrlFingerprint()} AS "dbUrlFingerprint"
+    `;
+    const indexRows = await prisma.$queryRaw<Array<{ tableName: string; indexName: string; indexDefinition: string }>>`
+      SELECT tablename AS "tableName", indexname AS "indexName", indexdef AS "indexDefinition"
+      FROM pg_indexes
+      WHERE schemaname = current_schema()
+        AND tablename IN ('ExpressCheckoutOrderLink', 'WalletTransaction', 'WalletAccount')
+      ORDER BY tablename, indexname
+    `;
+    console.info("[ON CONFLICT DIAGNOSTIC] runtime_database_and_indexes", { ...context, deployment, database: dbRows[0] || null, indexes: indexRows });
+  } catch (error) {
+    console.error("[ON CONFLICT DIAGNOSTIC] runtime_database_and_indexes_failed", { ...context, deployment, dbUrlFingerprint: databaseUrlFingerprint(), error: error instanceof Error ? error.message : String(error) });
+  }
+}
+
+function logOnConflictAttempt(context: { shopId: string; intentId: string; customerProfileId: string; table: string; conflictTarget: string[]; operation: string; phase: string }) {
+  console.info("[ON CONFLICT DIAGNOSTIC] attempting_upsert", context);
 }
 
 function checkoutPerfLog(event: string, details: { shopId?: string; intentId?: string; customerProfileId?: string; selectedPaymentMethod?: unknown; durationMs?: number | null }) {
@@ -623,7 +658,9 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
 
     try {
       const persistStartedAt = Date.now();
+      await logCheckoutConflictDiagnostics({ shopId: shop.shopId, intentId, customerProfileId, phase: "after_draft_order_complete_before_persist" });
       const written = await prisma.$transaction(async (tx) => {
+        logOnConflictAttempt({ shopId: shop.shopId, intentId, customerProfileId, table: "ExpressCheckoutOrderLink", conflictTarget: ["shopId", "intentId"], operation: "prisma.expressCheckoutOrderLink.upsert", phase: "after_draft_order_complete" });
         const link = await tx.expressCheckoutOrderLink.upsert({
           where: { shopId_intentId: { shopId: shop.shopId, intentId } },
           create: {
@@ -660,6 +697,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
       updatedIntent = written.refreshedIntent;
       checkoutPerfLog("order_persist_ms", { ...perfContext, durationMs: elapsedMs(persistStartedAt) });
     } catch (error) {
+      console.error("[ON CONFLICT DIAGNOSTIC] persist_failed", { shopId: shop.shopId, intentId, customerProfileId, table: "ExpressCheckoutOrderLink", conflictTarget: ["shopId", "intentId"], operation: "prisma.expressCheckoutOrderLink.upsert", errorName: error instanceof Error ? error.name : "UnknownError", errorMessage: error instanceof Error ? error.message : String(error), errorCode: typeof error === "object" && error && "code" in error ? String(error.code) : null });
       const code = typeof error === "object" && error && "code" in error ? String(error.code) : "";
       if (code !== "P2002") throw error;
       orderLink = await prisma.expressCheckoutOrderLink.findFirst({ where: { shopId: shop.shopId, intentId } });
