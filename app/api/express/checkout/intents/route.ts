@@ -251,7 +251,7 @@ export async function POST(req: NextRequest) {
   }
 
   const now = new Date();
-  const reusableIntent = reuseConditions.length > 0
+  let reusableIntent = reuseConditions.length > 0
     ? await prisma.expressCheckoutIntent.findFirst({
         where: {
           shopId: shop.shopId,
@@ -260,9 +260,18 @@ export async function POST(req: NextRequest) {
           expiresAt: { gt: now },
           OR: reuseConditions,
         },
+        include: { orderLink: true },
         orderBy: { createdAt: "desc" },
       })
     : null;
+
+  if (reusableIntent?.orderLink?.shopifyOrderId) {
+    await prisma.expressCheckoutIntent.updateMany({
+      where: { shopId: shop.shopId, id: reusableIntent.id, customerProfileId },
+      data: { status: "ORDER_COMPLETED" },
+    });
+    reusableIntent = null;
+  }
 
   if (reusableIntent) {
     const updatedIntent = cartSnapshot !== undefined || capturedDiscount

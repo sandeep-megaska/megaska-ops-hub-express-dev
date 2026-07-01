@@ -74,6 +74,54 @@ function jsonWithCors(req: NextRequest, body: unknown, init?: ResponseInit) {
   return withCors(req, NextResponse.json(body, init));
 }
 
+
+type ExpressOrderLinkWriteClient = {
+  expressCheckoutOrderLink: {
+    findFirst(args: unknown): Promise<{ id: string; shopifyOrderId?: string | null } | null>;
+    update(args: unknown): Promise<unknown>;
+    create(args: unknown): Promise<unknown>;
+  };
+};
+
+async function writeExpressCheckoutOrderLink(client: ExpressOrderLinkWriteClient, input: {
+  shopId: string;
+  intentId: string;
+  data: Record<string, unknown>;
+}) {
+  const where = { shopId: input.shopId, intentId: input.intentId };
+  const existing = await client.expressCheckoutOrderLink.findFirst({ where });
+  if (existing?.shopifyOrderId) return existing;
+  if (existing) {
+    return client.expressCheckoutOrderLink.update({
+      where: { id: existing.id },
+      data: input.data,
+    });
+  }
+
+  try {
+    return await client.expressCheckoutOrderLink.create({
+      data: {
+        shopId: input.shopId,
+        intentId: input.intentId,
+        ...input.data,
+      },
+    });
+  } catch (error) {
+    const code = typeof error === "object" && error && "code" in error ? String(error.code) : "";
+    if (code !== "P2002") throw error;
+
+    const raced = await client.expressCheckoutOrderLink.findFirst({ where });
+    if (raced?.shopifyOrderId) return raced;
+    if (raced) {
+      return client.expressCheckoutOrderLink.update({
+        where: { id: raced.id },
+        data: input.data,
+      });
+    }
+    throw error;
+  }
+}
+
 function databaseUrlFingerprint() {
   const value = process.env.DATABASE_URL || "";
   if (!value) return null;
@@ -98,14 +146,14 @@ async function logCheckoutConflictDiagnostics(context: { shopId: string; intentI
         AND tablename IN ('ExpressCheckoutOrderLink', 'WalletTransaction', 'WalletAccount')
       ORDER BY tablename, indexname
     `;
-    console.info("[ON CONFLICT DIAGNOSTIC] runtime_database_and_indexes", { ...context, deployment, database: dbRows[0] || null, indexes: indexRows });
+    console.info("[ORDER LINK WRITE] runtime_database_and_indexes", { ...context, deployment, database: dbRows[0] || null, indexes: indexRows });
   } catch (error) {
-    console.error("[ON CONFLICT DIAGNOSTIC] runtime_database_and_indexes_failed", { ...context, deployment, dbUrlFingerprint: databaseUrlFingerprint(), error: error instanceof Error ? error.message : String(error) });
+    console.error("[ORDER LINK WRITE] runtime_database_and_indexes_failed", { ...context, deployment, dbUrlFingerprint: databaseUrlFingerprint(), error: error instanceof Error ? error.message : String(error) });
   }
 }
 
-function logOnConflictAttempt(context: { shopId: string; intentId: string; customerProfileId: string; table: string; conflictTarget: string[]; operation: string; phase: string }) {
-  console.info("[ON CONFLICT DIAGNOSTIC] attempting_upsert", context);
+function logOrderLinkWriteAttempt(context: { shopId: string; intentId: string; customerProfileId: string; table: string; conflictTarget: string[]; operation: string; phase: string }) {
+  console.info("[ORDER LINK WRITE] explicit_find_update_create", context);
 }
 
 function checkoutPerfLog(event: string, details: { shopId?: string; intentId?: string; customerProfileId?: string; selectedPaymentMethod?: unknown; durationMs?: number | null }) {
@@ -660,20 +708,11 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
       const persistStartedAt = Date.now();
       await logCheckoutConflictDiagnostics({ shopId: shop.shopId, intentId, customerProfileId, phase: "after_draft_order_complete_before_persist" });
       const written = await prisma.$transaction(async (tx) => {
-        logOnConflictAttempt({ shopId: shop.shopId, intentId, customerProfileId, table: "ExpressCheckoutOrderLink", conflictTarget: ["shopId", "intentId"], operation: "prisma.expressCheckoutOrderLink.upsert", phase: "after_draft_order_complete" });
-        const link = await tx.expressCheckoutOrderLink.upsert({
-          where: { shopId_intentId: { shopId: shop.shopId, intentId } },
-          create: {
-            shopId: shop.shopId,
-            intentId,
-            draftOrderId: completedDraftOrder?.id || createResult.draftOrder?.id || null,
-            draftOrderName: completedDraftOrder?.name || createResult.draftOrder?.name || null,
-            shopifyOrderId: order.id || null,
-            shopifyOrderName: order.name || null,
-            financialStatus: order.displayFinancialStatus || (intent.selectedPaymentMethod === "COD" ? "PENDING" : "PAID"),
-            fulfillmentStatus: order.displayFulfillmentStatus || null,
-          },
-          update: {
+        logOrderLinkWriteAttempt({ shopId: shop.shopId, intentId, customerProfileId, table: "ExpressCheckoutOrderLink", conflictTarget: ["shopId", "intentId"], operation: "explicit find/update/create", phase: "after_draft_order_complete" });
+        const link = await writeExpressCheckoutOrderLink(tx as unknown as ExpressOrderLinkWriteClient, {
+          shopId: shop.shopId,
+          intentId,
+          data: {
             draftOrderId: completedDraftOrder?.id || createResult.draftOrder?.id || null,
             draftOrderName: completedDraftOrder?.name || createResult.draftOrder?.name || null,
             shopifyOrderId: order.id || null,
@@ -697,7 +736,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
       updatedIntent = written.refreshedIntent;
       checkoutPerfLog("order_persist_ms", { ...perfContext, durationMs: elapsedMs(persistStartedAt) });
     } catch (error) {
-      console.error("[ON CONFLICT DIAGNOSTIC] persist_failed", { shopId: shop.shopId, intentId, customerProfileId, table: "ExpressCheckoutOrderLink", conflictTarget: ["shopId", "intentId"], operation: "prisma.expressCheckoutOrderLink.upsert", errorName: error instanceof Error ? error.name : "UnknownError", errorMessage: error instanceof Error ? error.message : String(error), errorCode: typeof error === "object" && error && "code" in error ? String(error.code) : null });
+      console.error("[ORDER LINK WRITE] persist_failed", { shopId: shop.shopId, intentId, customerProfileId, table: "ExpressCheckoutOrderLink", conflictTarget: ["shopId", "intentId"], operation: "explicit find/update/create", errorName: error instanceof Error ? error.name : "UnknownError", errorMessage: error instanceof Error ? error.message : String(error), errorCode: typeof error === "object" && error && "code" in error ? String(error.code) : null });
       const code = typeof error === "object" && error && "code" in error ? String(error.code) : "";
       if (code !== "P2002") throw error;
       orderLink = await prisma.expressCheckoutOrderLink.findFirst({ where: { shopId: shop.shopId, intentId } });
