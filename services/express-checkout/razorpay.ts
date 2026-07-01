@@ -245,11 +245,7 @@ async function finalizeConfirmedRazorpayPayment(input: {
 }) {
   const existingLink = await prisma.expressCheckoutOrderLink.findFirst({ where: { shopId: input.shopId, intentId: input.intent.id } });
   if (existingLink?.shopifyOrderId || existingLink?.shopifyOrderName) {
-    if (input.intent.status !== "ORDER_COMPLETED") {
-      await transitionCheckoutIntent({ db: prisma as unknown as CheckoutStateDb, intent: { id: input.intent.id, shopId: input.intent.shopId, status: input.intent.status }, toStatus: "ORDER_COMPLETED", reason: `${input.reason}_existing_order_completed`, metadata: { paymentId: input.payment.id, shopifyOrderId: existingLink.shopifyOrderId || null } });
-    }
     console.info("[EXPRESS PREPAID FINALIZATION] existing_order_link_returned", { shopId: input.shopId, intentId: input.intent.id, paymentId: input.payment.id, razorpayOrderId: input.razorpayOrderId || input.payment.razorpayOrderId || null, razorpayPaymentId: input.razorpayPaymentId || input.payment.razorpayPaymentId || null, reason: input.reason });
-    return { ok: true, intentId: input.intent.id, paymentId: input.payment.id, orderLink: existingLink, shopifyOrder: null, status: "ORDER_COMPLETED", idempotent: true };
   }
 
   console.info("[EXPRESS PREPAID FINALIZATION] confirmed_payment_recovery_start", { shopId: input.shopId, intentId: input.intent.id, paymentId: input.payment.id, razorpayOrderId: input.razorpayOrderId || input.payment.razorpayOrderId || null, razorpayPaymentId: input.razorpayPaymentId || input.payment.razorpayPaymentId || null, intentStatus: input.intent.status, reason: input.reason });
@@ -304,7 +300,9 @@ export async function verifyExpressCheckoutRazorpayPayment(params: VerifyParams)
   if (intent.status === "ORDER_COMPLETED") {
     console.info("[CHECKOUT STATE] payment_duplicate_callback_ignored", { shopId: shop.id, intentId: intent.id, razorpayOrderId: params.razorpay_order_id, razorpayPaymentId: params.razorpay_payment_id, hasOrderLink: Boolean(intent.orderLink), paymentId: payment?.id || null });
     if (!intent.orderLink && payment?.status === "CONFIRMED") return finalizeConfirmedRazorpayPayment({ shopId: shop.id, shopDomain: shop.shopDomain, intent, payment, razorpayOrderId: params.razorpay_order_id, razorpayPaymentId: params.razorpay_payment_id, reason: "order_completed_missing_link" });
-    return { ok: true, intentId: intent.id, paymentId: payment?.id || null, orderLink: intent.orderLink, shopifyOrder: null, status: "ORDER_COMPLETED", idempotent: true };
+    if (!intent.orderLink) return { ok: true, intentId: intent.id, paymentId: payment?.id || null, orderLink: null, shopifyOrder: null, status: "ORDER_COMPLETED", idempotent: true };
+    const finalization = await finalizePrepaidExpressCheckoutOrder({ shopId: shop.id, shopDomain: shop.shopDomain, intentId: intent.id, customerProfileId: String(intent.customerProfileId || ""), paymentId: payment?.id || null, razorpayOrderId: params.razorpay_order_id, razorpayPaymentId: params.razorpay_payment_id });
+    return { ...finalization, intentId: intent.id, paymentId: payment?.id || null, status: "ORDER_COMPLETED", idempotent: finalization.idempotent };
   }
   if (intent.status === "EXPIRED" || await markCheckoutIntentExpiredIfNeeded(intent)) throw new ExpressCheckoutRazorpayError(409, CHECKOUT_INTENT_EXPIRY_MESSAGE, "Intent expired", "CHECKOUT_SESSION_EXPIRED", "RAZORPAY_VERIFY");
   if (payment?.status === "CONFIRMED" || intent.status === "PAYMENT_SUCCESS") {
@@ -362,7 +360,8 @@ export async function verifyExpressCheckoutRazorpayPayment(params: VerifyParams)
   if (existingLink?.shopifyOrderId || existingLink?.shopifyOrderName) {
     await transitionCheckoutIntent({ db: prisma as unknown as CheckoutStateDb, intent: { id: intent.id, shopId: intent.shopId, status: "PAYMENT_SUCCESS" }, toStatus: "ORDER_COMPLETED", reason: "razorpay_existing_order_completed", metadata: { paymentId: updated.id, shopifyOrderId: existingLink.shopifyOrderId || null } });
     console.info("[EXPRESS PREPAID FINALIZATION] existing_order_link_returned", { shopId: shop.id, intentId: intent.id, paymentId: updated.id, razorpayOrderId: params.razorpay_order_id, razorpayPaymentId: params.razorpay_payment_id });
-    return { ok: true, intentId: intent.id, paymentId: updated.id, orderLink: existingLink, shopifyOrder: null, status: "ORDER_COMPLETED", idempotent: true };
+    const finalization = await finalizePrepaidExpressCheckoutOrder({ shopId: shop.id, shopDomain: shop.shopDomain, intentId: intent.id, customerProfileId: String(intent.customerProfileId || ""), paymentId: updated.id, razorpayOrderId: params.razorpay_order_id, razorpayPaymentId: params.razorpay_payment_id });
+    return { ...finalization, intentId: intent.id, paymentId: updated.id, status: "ORDER_COMPLETED", idempotent: finalization.idempotent };
   }
 
   console.info("[EXPRESS PREPAID FINALIZATION] payment_confirmed", { shopId: shop.id, intentId: intent.id, paymentId: updated.id, razorpayOrderId: params.razorpay_order_id, razorpayPaymentId: params.razorpay_payment_id, idempotent: false });
