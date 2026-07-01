@@ -1,3 +1,4 @@
+import { resolveShopifyAdminAccessToken } from "./admin-token";
 import { normalizeShopDomain, resolveShopConfig } from "./shop-resolver";
 
 const SHOPIFY_API_VERSION = "2026-01";
@@ -309,99 +310,12 @@ function maskToken(token: string) {
   return `${trimmed.slice(0, 4)}...${trimmed.slice(-4)}`;
 }
 
-let cachedRuntimeToken: string | null = null;
-let cachedRuntimeTokenExpiresAt = 0;
-
-type RuntimeAdminTokenResult = {
-  accessToken: string;
-  expiresAt: number;
-};
-
 function getEnvTrimmed(name: string) {
   return String(process.env[name] || "").trim();
 }
 
 function hasRuntimeCredentialConfig() {
   return Boolean(getEnvTrimmed("SHOPIFY_API_KEY") && getEnvTrimmed("SHOPIFY_API_SECRET"));
-}
-
-async function getRuntimeAdminAccessToken(shopDomain: string): Promise<RuntimeAdminTokenResult> {
-  const apiKey = getEnvTrimmed("SHOPIFY_API_KEY");
-  const apiSecret = getEnvTrimmed("SHOPIFY_API_SECRET");
-
-  if (!shopDomain || !apiKey || !apiSecret) {
-    throw new Error("Shopify runtime admin authentication is not configured");
-  }
-
-  const now = Date.now();
-  if (cachedRuntimeToken && cachedRuntimeTokenExpiresAt > now) {
-    console.log("[SHOPIFY AUTH SERVER] reusing cached runtime admin access token", {
-      shopDomain,
-      expiresInSecApprox: Math.max(0, Math.floor((cachedRuntimeTokenExpiresAt - now) / 1000)),
-    });
-
-    return {
-      accessToken: cachedRuntimeToken,
-      expiresAt: cachedRuntimeTokenExpiresAt,
-    };
-  }
-
-  console.log("[SHOPIFY AUTH SERVER] fetching runtime admin access token", {
-    shopDomain,
-    hasApiKey: Boolean(apiKey),
-    hasApiSecret: Boolean(apiSecret),
-  });
-
-  let response: Response;
-  try {
-    response = await fetch(`https://${shopDomain}/admin/oauth/access_token`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        Accept: "application/json",
-      },
-      body: new URLSearchParams({
-        client_id: apiKey,
-        client_secret: apiSecret,
-        grant_type: "client_credentials",
-      }),
-    });
-  } catch {
-    throw new Error("Failed to obtain Shopify Admin access token");
-  }
-
-  const rawText = await response.text().catch(() => "");
-  let payload: { access_token?: string; expires_in?: number | string } | null = null;
-  try {
-    payload = rawText ? (JSON.parse(rawText) as { access_token?: string; expires_in?: number | string }) : null;
-  } catch {
-    payload = null;
-  }
-
-  if (!response.ok) {
-    console.error("[SHOPIFY AUTH SERVER] runtime admin token fetch failed", {
-      shopDomain,
-      status: response.status,
-      responsePreview: rawText.slice(0, 200),
-    });
-    throw new Error(`Failed to obtain Shopify Admin access token (${response.status})`);
-  }
-
-  const accessToken = String(payload?.access_token || "").trim();
-  if (!accessToken) {
-    throw new Error("Failed to obtain Shopify Admin access token");
-  }
-
-  const expiresInSecondsRaw = Number(payload?.expires_in);
-  const expiresInSeconds = Number.isFinite(expiresInSecondsRaw) && expiresInSecondsRaw > 0 ? expiresInSecondsRaw : 300;
-  const refreshEarlySeconds = 60;
-  const cacheTtlSeconds = Math.max(30, expiresInSeconds - refreshEarlySeconds);
-  const expiresAt = Date.now() + cacheTtlSeconds * 1000;
-
-  cachedRuntimeToken = accessToken;
-  cachedRuntimeTokenExpiresAt = expiresAt;
-
-  return { accessToken, expiresAt };
 }
 
 type AdminRequestOptions = {
@@ -434,40 +348,28 @@ async function adminGraphql<T>(
   const preferredShopDomain = normalizeShopDomain(options?.shopDomain);
   const shopConfig = await resolveShopConfig(preferredShopDomain);
   const shopDomain = shopConfig.shopDomain;
-  const staticFallbackToken =
-    shopConfig.accessToken || getEnvTrimmed("SHOPIFY_ADMIN_ACCESS_TOKEN");
-  const runtimeConfigured = hasRuntimeCredentialConfig();
 
-  let token = "";
-  let tokenSource:
-    | "shop_stored_token"
-    | "runtime_client_credentials"
-    | "env_fallback" = "env_fallback";
-
-  if (runtimeConfigured) {
-    const runtimeToken = await getRuntimeAdminAccessToken(shopDomain);
-    token = runtimeToken.accessToken;
-    tokenSource = "runtime_client_credentials";
-  } else if (shopConfig.accessToken) {
-    token = shopConfig.accessToken;
-    tokenSource = "shop_stored_token";
-  } else {
-    token = staticFallbackToken;
-    tokenSource = "env_fallback";
-  }
-
-  if (!shopDomain || !token) {
+  if (!shopDomain) {
     throw new Error(
-      "Shopify admin sync is not configured (missing store domain or admin access token)"
+      "Shopify admin sync is not configured (missing store domain)"
     );
   }
+
+  const resolvedToken = await resolveShopifyAdminAccessToken({
+    shopDomain,
+    storedAccessToken: shopConfig.accessTokenDirect,
+    storedAccessTokenEncrypted: shopConfig.accessTokenEncrypted,
+    preferRuntime: true,
+  });
+  const token = resolvedToken.accessToken;
+  const tokenSource = resolvedToken.tokenSource;
 
   console.log("[SHOPIFY AUTH SERVER] calling admin graphql", {
     shopDomain,
     apiVersion: SHOPIFY_API_VERSION,
     tokenSource,
     tokenMasked: maskToken(token),
-    tokenPrefix: String(token || "").slice(0, 6),
+    expiresAt: resolvedToken.expiresAt || null,
     queryKind: query.includes("mutation") ? "mutation" : "query",
   });
 
@@ -502,6 +404,15 @@ async function adminGraphql<T>(
   }
 
   if (!response.ok) {
+    console.error("[SHOPIFY ADMIN API ERROR]", {
+      status: response.status,
+      shopDomain,
+      resolvedShopId: shopConfig.id,
+      installationStatus: null,
+      tokenSource,
+      shopifyRequestId: response.headers.get("x-request-id"),
+      responseBody: payload || rawText || null,
+    });
     throw new Error(
       `Shopify admin request failed (${response.status}) ${rawText || ""}`.trim()
     );
