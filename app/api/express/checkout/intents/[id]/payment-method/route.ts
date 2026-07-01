@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import type { ExpressCheckoutIntentStatus } from "../../../../../../../generated/prisma";
 import { getSessionTokenFromRequest } from "../../../../../../../services/auth/session";
 import { withCors, handleOptions } from "../../../../../_lib/cors";
 import { prisma } from "../../../../../../../services/db/prisma";
@@ -11,10 +12,8 @@ import { CheckoutStateDb, transitionCheckoutIntent } from "../../../../../../../
 
 export const runtime = "nodejs";
 
-const PAYMENT_METHOD_MUTABLE_STATUSES = new Set([
+const PAYMENT_METHOD_MUTABLE_STATUSES = new Set<ExpressCheckoutIntentStatus>([
   "SESSION_VERIFIED",
-  "ADDRESS_SELECTED",
-  "ADDRESS_SAVED",
   "ADDRESS_COMPLETED",
   "DELIVERY_VALIDATED",
   "PAYMENT_METHOD_SELECTED",
@@ -29,7 +28,8 @@ const COD_STATE_ORDER = ["INITIATED", "SESSION_VERIFIED", "ADDRESS_COMPLETED", "
 const COD_LEGACY_STATUS_EQUIVALENTS: Record<string, (typeof COD_STATE_ORDER)[number]> = { CREATED: "INITIATED", CUSTOMER_AUTHENTICATED: "SESSION_VERIFIED", CART_SNAPSHOT_LOCKED: "SESSION_VERIFIED", ADDRESS_CAPTURED: "ADDRESS_COMPLETED", DISCOUNT_APPLIED: "ADDRESS_COMPLETED", PAYMENT_METHOD_SELECTED: "PAYMENT_SELECTED", ORDER_CREATED: "ORDER_COMPLETED" };
 
 async function transitionCodIntent(input: { intent: { id: string; shopId: string; status: string }; toStatus: (typeof COD_STATE_ORDER)[number]; reason: string; metadata?: Record<string, unknown> }) {
-  const effectiveStatus = COD_LEGACY_STATUS_EQUIVALENTS[input.intent.status] || input.intent.status;
+  const legacyStatus = COD_LEGACY_STATUS_EQUIVALENTS[input.intent.status];
+  const effectiveStatus = legacyStatus || input.intent.status;
   const fromIndex = COD_STATE_ORDER.indexOf(effectiveStatus as (typeof COD_STATE_ORDER)[number]);
   const toIndex = COD_STATE_ORDER.indexOf(input.toStatus);
 
@@ -38,10 +38,10 @@ async function transitionCodIntent(input: { intent: { id: string; shopId: string
     return { ok: true as const, fromStatus: input.intent.status, toStatus: input.toStatus, changed: false };
   }
 
-  if (effectiveStatus !== input.intent.status) {
+  if (legacyStatus) {
     console.info("[CHECKOUT STATE] cod_legacy_status_normalized", { shopId: input.intent.shopId, intentId: input.intent.id, fromStatus: input.intent.status, effectiveStatus, toStatus: input.toStatus, reason: input.reason, metadata: input.metadata || {} });
-    await (prisma as unknown as CheckoutStateDb).expressCheckoutIntent.updateMany({ where: { id: input.intent.id, shopId: input.intent.shopId, status: input.intent.status }, data: { status: effectiveStatus } });
-    return transitionCheckoutIntent({ db: prisma as unknown as CheckoutStateDb, intent: { ...input.intent, status: effectiveStatus }, toStatus: input.toStatus, reason: input.reason, metadata: input.metadata });
+    await (prisma as unknown as CheckoutStateDb).expressCheckoutIntent.updateMany({ where: { id: input.intent.id, shopId: input.intent.shopId, status: input.intent.status }, data: { status: legacyStatus } });
+    return transitionCheckoutIntent({ db: prisma as unknown as CheckoutStateDb, intent: { ...input.intent, status: legacyStatus }, toStatus: input.toStatus, reason: input.reason, metadata: input.metadata });
   }
 
   return transitionCheckoutIntent({ db: prisma as unknown as CheckoutStateDb, intent: input.intent, toStatus: input.toStatus, reason: input.reason, metadata: input.metadata });
