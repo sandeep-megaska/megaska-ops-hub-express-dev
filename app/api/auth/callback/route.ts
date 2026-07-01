@@ -87,7 +87,9 @@ export async function GET(request: NextRequest) {
 
   const tokenData = await tokenRes.json();
   const accessToken = String(tokenData.access_token || "").trim();
-  const scopes = String(tokenData.scope || tokenData.scopes || "").trim() || null;
+  const oauthScopes = String(tokenData.scope || tokenData.scopes || "").trim();
+  const appIdentity = String(process.env.SHOPIFY_EXPECTED_APP_KEY || process.env.SHOPIFY_APP_IDENTITY || "").trim();
+  const scopes = [oauthScopes, appIdentity ? `app_identity:${appIdentity}` : ""].filter(Boolean).join(" ") || null;
 
   if (!accessToken) return NextResponse.json({ error: "No access token returned" }, { status: 500 });
 
