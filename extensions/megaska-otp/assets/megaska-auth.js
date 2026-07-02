@@ -1027,12 +1027,13 @@ if (token) {
     const totalOrders = Number(summary?.stats?.totalOrders || 0);
     const openRequests = Number(summary?.stats?.openRequests || 0);
     const savedAddresses = Number(summary?.stats?.savedAddresses || 0);
-    const storeCreditMinor =
-  Number(summary?.storeCredit?.currentBalance ??
+    const storeCreditMinor = Number(
+  summary?.storeCredit?.currentBalance ??
   summary?.wallet?.currentBalance ??
   summary?.storeCredit?.balanceMinor ??
   summary?.wallet?.balanceMinor ??
-  0);
+  0
+);
     const addressHtml = formatAddress(summary?.address);
     const orders = Array.isArray(summary?.orders) ? summary.orders : [];
 
@@ -1105,17 +1106,13 @@ const sku = order?.firstLineItemSku || order?.sku || "";
       <section class="megaska-dashboard-grid">
         <article class="megaska-dashboard-card"><h3>Total orders</h3><p>${totalOrders}</p></article>
         <article class="megaska-dashboard-card"><h3>Open requests</h3><p>${openRequests}</p></article>
-        <article class="megaska-dashboard-stat-card">
+       
+        <article class="megaska-dashboard-card"><h3>Saved addresses</h3><p>${savedAddresses}</p></article>
+       <article class="megaska-dashboard-stat-card">
   <span>Store Credit</span>
   <strong>${escHtml(formatInrFromMinor(storeCreditMinor))}</strong>
   <small>Available balance</small>
 </article>
-        <article class="megaska-dashboard-card"><h3>Saved addresses</h3><p>${savedAddresses}</p></article>
-        <article class="megaska-dashboard-card">
-          <h3>Available Store Credit</h3>
-          <p>${escHtml(formatInrMajor(summary?.storeCredit?.balance || summary?.wallet?.balance || 0))}</p>
-          <div class="megaska-dashboard-actions"><a href="/customer/store-credit" class="megaska-dashboard-btn">Megaska Store Credit</a></div>
-        </article>
       </section>
       <section class="megaska-dashboard-card">
         <h3>Recent orders</h3>
