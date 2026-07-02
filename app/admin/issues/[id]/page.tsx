@@ -27,6 +27,11 @@ export default async function AdminIssueDetailPage({ params }: { params: Promise
     include: {
       items: true,
       payments: { orderBy: { createdAt: "desc" } },
+      refundRequests: {
+        where: { source: "ISSUE_REQUEST" },
+        orderBy: { createdAt: "desc" },
+        include: { walletTransaction: true },
+      },
     },
   });
 
@@ -37,6 +42,7 @@ export default async function AdminIssueDetailPage({ params }: { params: Promise
   const nextTransitions = ISSUE_ALLOWED_STATUS_TRANSITIONS[request.status] || [];
   const issueMeta = getIssueMeta(request.items[0]?.eligibilitySnapshot);
   const refundMode = getIssueRefundMode(issueMeta?.paymentGatewayName);
+  const linkedRefund = request.refundRequests[0] || null;
 
   return (
     <main style={{ padding: 24, display: "grid", gap: 16 }}>
@@ -70,6 +76,18 @@ export default async function AdminIssueDetailPage({ params }: { params: Promise
         <p>Declaration - Unused: {issueMeta?.declarations?.declaredUnused ? "Yes" : "No"}</p>
         <p>Declaration - Unwashed: {issueMeta?.declarations?.declaredUnwashed ? "Yes" : "No"}</p>
         <p>Declaration - Tags Intact: {issueMeta?.declarations?.declaredTagsIntact ? "Yes" : "No"}</p>
+      </section>
+
+
+      <section>
+        <h3>Issue Lifecycle / Store Credit</h3>
+        <p>Issue Approved: {["APPROVED", "RETURN_RECEIVED", "CLOSED"].includes(request.status) ? "Yes" : "No"}</p>
+        <p>Return Received: {["RETURN_RECEIVED", "CLOSED"].includes(request.status) ? "Yes" : "No"}</p>
+        <p>Linked Refund Request: {linkedRefund?.id || "-"}</p>
+        <p>Refund Method: {linkedRefund?.method || "-"}</p>
+        <p>Refund / Store Credit Status: {linkedRefund?.status || "-"}</p>
+        <p>Store Credit Issued: {linkedRefund?.walletTransactionId ? "Yes" : "No"}</p>
+        <p>Wallet Transaction: {linkedRefund?.walletTransactionId || "-"}</p>
       </section>
 
       <section>

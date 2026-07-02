@@ -2,8 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "../../../../../../services/db/prisma";
 import { ISSUE_ALLOWED_STATUS_TRANSITIONS } from "../../../../../../services/exchange/issue";
 import { createRefundRequest } from "../../../../../../services/refund-request";
+import { settleCodRefundAsStoreCredit } from "../../../../../../services/store-credit";
 
 export const runtime = "nodejs";
+
+const COD_STORE_CREDIT_ELIGIBLE_STATUSES = new Set(["MANUAL_PENDING", "APPROVED", "PAYOUT_PENDING"]);
 
 function isAdmin(req: NextRequest) {
   const key = req.headers.get("x-admin-key") || "";
@@ -41,6 +44,8 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       return NextResponse.json({ error: "Invalid status transition" }, { status: 400 });
     }
 
+    let storeCreditSettlement: { walletTransactionId: string; alreadySettled: boolean } | null = null;
+
     const updated = await prisma.orderActionRequest.update({
       where: { id: existing.id },
       data: {
@@ -49,6 +54,34 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       },
       include: { items: { take: 1 }, customerProfile: { select: { id: true } } },
     });
+
+    if (nextStatus.toUpperCase() === "RETURN_RECEIVED") {
+      if (updated.requestType !== "ISSUE") {
+        return NextResponse.json({ error: "Store credit settlement is only available for issue requests" }, { status: 400 });
+      }
+
+      const refund = await prisma.refundRequest.findFirst({
+        where: {
+          source: "ISSUE_REQUEST",
+          orderActionRequestId: updated.id,
+        },
+      });
+
+      if (
+        refund?.method === "COD" &&
+        !refund.walletTransactionId &&
+        COD_STORE_CREDIT_ELIGIBLE_STATUSES.has(refund.status)
+      ) {
+        const settlement = await settleCodRefundAsStoreCredit({
+          refundRequestId: refund.id,
+          actor: { type: "ADMIN", id: adminId },
+        });
+        storeCreditSettlement = {
+          walletTransactionId: settlement.walletTransaction.id,
+          alreadySettled: settlement.alreadySettled,
+        };
+      }
+    }
 
     if (nextStatus.toUpperCase() === "APPROVED") {
       const refundAmountMinor = Number(updated.orderAmountSnapshot || 0);
@@ -65,7 +98,7 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       }
     }
 
-    return NextResponse.json({ request: updated });
+    return NextResponse.json({ request: updated, storeCreditSettlement });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Failed" }, { status: 500 });
   }
