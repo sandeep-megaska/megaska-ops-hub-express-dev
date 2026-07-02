@@ -81,3 +81,31 @@ test("sets COD refunds to MANUAL_PENDING initially", async () => {
   assert.equal(eventCalls[0]?.eventType, "REFUND_REQUEST_CREATED");
   assert.equal(eventCalls[0]?.toStatus, "MANUAL_PENDING");
 });
+
+
+test("detects decorated Shopify COD gateway names", async () => {
+  prisma.orderActionRequest.findFirst = async () => ({
+    id: "oar-3",
+    shopId: "shop-1",
+    shopifyOrderId: "gid://shopify/Order/3",
+    orderNumber: "#1003",
+    customerProfileId: "cust-1",
+    items: [{ eligibilitySnapshot: { paymentGatewayName: "Cash on Delivery (COD)" } }],
+  } as never);
+
+  prisma.refundRequest.create = async ({ data }) => ({ id: "refund-3", ...data } as never);
+  prisma.refundEvent.create = async ({ data }) => ({ id: "evt-3", ...data } as never);
+
+  const created = await createRefundRequest({
+    shop: { id: "shop-1" },
+    orderId: "gid://shopify/Order/3",
+    amount: 1500,
+    reason: "Issue approved",
+    source: "ISSUE_REQUEST",
+    sourceId: "src-3",
+    customer: { id: "cust-1" },
+  });
+
+  assert.equal(created.method, "COD");
+  assert.equal(created.status, "MANUAL_PENDING");
+});
