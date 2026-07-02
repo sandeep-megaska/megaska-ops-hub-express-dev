@@ -48,7 +48,20 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
     const needsRefundResolution = nextStatus.toUpperCase() === "APPROVED" || nextStatus.toUpperCase() === "RETURN_RECEIVED";
     const resolved = needsRefundResolution ? await resolveIssueRefundSnapshot(existing.id) : null;
     if (resolved && !resolved.ok) {
-      return NextResponse.json({ request: existing, storeCreditSettlement, error: resolved.error }, { status: 422 });
+      return NextResponse.json(
+        {
+          request: existing,
+          storeCreditSettlement,
+          error: resolved.error,
+          serverError: resolved.error,
+          validation: {
+            missingShopContext: resolved.error?.includes("shop context") || false,
+            missingRefundAmount: resolved.error?.includes("refund amount") || false,
+            paymentMethodUndetermined: resolved.error?.includes("payment method") || false,
+          },
+        },
+        { status: 422 }
+      );
     }
 
     const updated = await prisma.orderActionRequest.update({
@@ -86,6 +99,8 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
 
     return NextResponse.json({ request: updated, storeCreditSettlement });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Failed" }, { status: 500 });
+    const serverError = error instanceof Error ? error.message : "Failed";
+    console.error("[admin issue status] failed", { error });
+    return NextResponse.json({ error: serverError, serverError }, { status: 500 });
   }
 }
