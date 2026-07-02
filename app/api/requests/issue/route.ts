@@ -89,6 +89,7 @@ export async function POST(req: NextRequest) {
       data: {
         requestType: "ISSUE",
         customerProfileId: session.customer.id,
+        shopId: session.customer.shopId || null,
         shopifyCustomerId: session.customer.shopifyCustomerId || null,
         shopifyOrderId,
         orderNumber,

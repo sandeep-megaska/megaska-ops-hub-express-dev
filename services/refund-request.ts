@@ -14,7 +14,7 @@ type CreateRefundRequestInput = {
   createdBy?: { type: "SYSTEM" | "ADMIN"; id?: string | null };
 };
 
-function detectRefundMethodFromGateway(paymentGatewayName: string | null | undefined): RefundMethod {
+export function detectRefundMethodFromGateway(paymentGatewayName: string | null | undefined): RefundMethod {
   const normalized = String(paymentGatewayName || "").trim().toLowerCase();
   if (normalized.includes("cod") || normalized.includes("cash on delivery")) return "COD";
   return "PREPAID";
@@ -102,8 +102,20 @@ export async function createRefundRequest(input: CreateRefundRequestInput) {
       },
     });
     if (!existing) throw error;
-    console.info("[refund-request] duplicate-skip", { id: existing.id, source: input.source, sourceId: input.sourceId });
-    return existing;
+    const updated = await prisma.refundRequest.update({
+      where: { id: existing.id },
+      data: {
+        method: existing.method || method,
+        status: existing.status || status,
+        amount: existing.amount || Math.trunc(input.amount),
+        customerProfileId: existing.customerProfileId || input.customer?.id || order.customerProfileId || null,
+        orderActionRequestId: existing.orderActionRequestId || order.id,
+        shopifyOrderId: existing.shopifyOrderId || order.shopifyOrderId || null,
+        reason: existing.reason || input.reason || null,
+      },
+    });
+    console.info("[refund-request] duplicate-update", { id: updated.id, source: input.source, sourceId: input.sourceId, method: updated.method, status: updated.status });
+    return updated;
   }
 }
 
