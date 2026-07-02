@@ -16,7 +16,7 @@ type CreateRefundRequestInput = {
 
 function detectRefundMethodFromGateway(paymentGatewayName: string | null | undefined): RefundMethod {
   const normalized = String(paymentGatewayName || "").trim().toLowerCase();
-  if (normalized === "cod" || normalized === "cash on delivery") return "COD";
+  if (normalized.includes("cod") || normalized.includes("cash on delivery")) return "COD";
   return "PREPAID";
 }
 
