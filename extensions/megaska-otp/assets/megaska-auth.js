@@ -1065,21 +1065,9 @@ if (token) {
   }
 
   function getStoreCreditCurrentBalance(summary) {
-    const storeCredit = summary?.storeCredit || summary?.wallet || {};
+    const wallet = summary?.wallet || summary?.storeCredit || {};
 
-    if (storeCredit?.currentBalance !== undefined && storeCredit?.currentBalance !== null) {
-      return Number(storeCredit.currentBalance || 0);
-    }
-
-    if (storeCredit?.ledgerBalance !== undefined && storeCredit?.ledgerBalance !== null) {
-      return Math.round(Number(storeCredit.ledgerBalance || 0) * 100);
-    }
-
-    if (storeCredit?.balance !== undefined && storeCredit?.balance !== null) {
-      return Math.round(Number(storeCredit.balance || 0) * 100);
-    }
-
-    return 0;
+    return Number(wallet?.currentBalance || 0);
   }
 
   function normalizeStatus(value) {
