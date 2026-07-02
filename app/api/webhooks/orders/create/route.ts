@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { compareMegaskaPhoneIdentity, normalizeIndianPhone } from "../../../../../services/phone";
 import { prisma } from "../../../../../services/db/prisma";
 import { consumeWalletReservationOnOrder } from "../../../../../services/wallet-reservation";
+import { notifyCheckoutStoreCreditRedeemed } from "../../../../../services/notifications/store-credit";
 import {
   isShopifyAdminConfigured,
   normalizeIndianPhoneToE164,
@@ -458,6 +459,11 @@ export async function POST(req: NextRequest) {
       customerProfileId,
       shopifyOrderId: orderId,
       orderNumber: String(payload.name || "").trim() || undefined,
+    });
+    notifyCheckoutStoreCreditRedeemed({
+      walletTransactionId: "walletTransactionId" in walletResult ? walletResult.walletTransactionId : null,
+      skipped: "skipped" in walletResult ? walletResult.skipped : false,
+      reason: "reason" in walletResult ? walletResult.reason : null,
     });
 
     return NextResponse.json({

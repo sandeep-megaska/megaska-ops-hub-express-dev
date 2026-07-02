@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { Prisma } from "../generated/prisma";
 import { prisma } from "./db/prisma";
+import { notifyCodRefundStoreCreditSettled } from "./notifications/store-credit";
 
 type StoreCreditActor = {
   type: "SYSTEM" | "ADMIN";
@@ -280,6 +281,10 @@ export async function settleCodRefundAsStoreCredit(input: SettleCodRefundAsStore
     });
 
     const { logStatus: _logStatus, ...settlement } = result;
+    notifyCodRefundStoreCreditSettled({
+      walletTransactionId: settlement.walletTransaction.id,
+      alreadySettled: settlement.alreadySettled,
+    });
     return settlement;
   } catch (error) {
     if (!isUniqueConstraintError(error)) {
@@ -295,6 +300,10 @@ export async function settleCodRefundAsStoreCredit(input: SettleCodRefundAsStore
       refundRequestId: recovered.refundRequest.id,
       walletTransactionId: recovered.walletTransaction.id,
       walletAccountId: recovered.walletAccount.id,
+    });
+    notifyCodRefundStoreCreditSettled({
+      walletTransactionId: recovered.walletTransaction.id,
+      alreadySettled: recovered.alreadySettled,
     });
     return recovered;
   }
