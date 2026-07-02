@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "../../../../../../services/db/prisma";
 import { ISSUE_ALLOWED_STATUS_TRANSITIONS } from "../../../../../../services/exchange/issue";
-import { createRefundRequest } from "../../../../../../services/refund-request";
 import { settleCodRefundAsStoreCredit } from "../../../../../../services/store-credit";
+import { resolveIssueRefundSnapshot } from "../../../../../../services/issue-refund-recovery";
 
 export const runtime = "nodejs";
 
@@ -45,6 +45,11 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
     }
 
     let storeCreditSettlement: { walletTransactionId: string; alreadySettled: boolean } | null = null;
+    const needsRefundResolution = nextStatus.toUpperCase() === "APPROVED" || nextStatus.toUpperCase() === "RETURN_RECEIVED";
+    const resolved = needsRefundResolution ? await resolveIssueRefundSnapshot(existing.id) : null;
+    if (resolved && !resolved.ok) {
+      return NextResponse.json({ request: existing, storeCreditSettlement, error: resolved.error }, { status: 422 });
+    }
 
     const updated = await prisma.orderActionRequest.update({
       where: { id: existing.id },
@@ -55,46 +60,27 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       include: { items: { take: 1 }, customerProfile: { select: { id: true } } },
     });
 
-    if (nextStatus.toUpperCase() === "RETURN_RECEIVED") {
-      if (updated.requestType !== "ISSUE") {
-        return NextResponse.json({ error: "Store credit settlement is only available for issue requests" }, { status: 400 });
-      }
-
-      const refund = await prisma.refundRequest.findFirst({
-        where: {
-          source: "ISSUE_REQUEST",
-          orderActionRequestId: updated.id,
-        },
-      });
-
-      if (
-        refund?.method === "COD" &&
-        !refund.walletTransactionId &&
-        COD_STORE_CREDIT_ELIGIBLE_STATUSES.has(refund.status)
-      ) {
-        const settlement = await settleCodRefundAsStoreCredit({
-          refundRequestId: refund.id,
-          actor: { type: "ADMIN", id: adminId },
+    if (resolved?.ok) {
+      if (nextStatus.toUpperCase() === "RETURN_RECEIVED" && resolved.refundRequestId) {
+        const refund = await prisma.refundRequest.findFirst({
+          where: { id: resolved.refundRequestId, source: "ISSUE_REQUEST", orderActionRequestId: updated.id },
         });
-        storeCreditSettlement = {
-          walletTransactionId: settlement.walletTransaction.id,
-          alreadySettled: settlement.alreadySettled,
-        };
-      }
-    }
 
-    if (nextStatus.toUpperCase() === "APPROVED") {
-      const refundAmountMinor = Number(updated.orderAmountSnapshot || 0);
-      if (Number.isFinite(refundAmountMinor) && refundAmountMinor > 0 && updated.shopId) {
-        await createRefundRequest({
-          shop: { id: updated.shopId },
-          orderId: updated.id,
-          amount: Math.trunc(refundAmountMinor),
-          reason: "Issue approved",
-          source: "ISSUE_REQUEST",
-          sourceId: updated.id,
-          customer: { id: updated.customerProfile.id },
-        });
+        if (
+          refund?.method === "COD" &&
+          !refund.walletTransactionId &&
+          COD_STORE_CREDIT_ELIGIBLE_STATUSES.has(refund.status)
+        ) {
+          const settlement = await settleCodRefundAsStoreCredit({
+            refundRequestId: refund.id,
+            actor: { type: "ADMIN", id: adminId },
+          });
+          storeCreditSettlement = {
+            walletTransactionId: settlement.walletTransaction.id,
+            alreadySettled: settlement.alreadySettled,
+          };
+          console.info("[ISSUE REFUND RECOVERY] settled", { issueId: updated.id, resolvedShopId: resolved.resolvedShopId || null, resolvedOrderId: resolved.resolvedOrderId || null, resolvedAmount: resolved.resolvedAmount || null, resolvedPaymentMethod: resolved.resolvedPaymentMethod || null, refundRequestId: refund.id, walletTransactionId: settlement.walletTransaction.id, skipReason: null });
+        }
       }
     }
 
