@@ -25,6 +25,14 @@ function firstName(name?: string | null) {
   return String(name || "").trim().split(/\s+/)[0] || "there";
 }
 
+
+function storeCreditNotificationLog(event: StoreCreditEvent, outcome: "skipped" | "sent" | "failed") {
+  if (event === "COD_REFUND_CREDIT") {
+    return `[STORE CREDIT NOTIFICATION] credited_${outcome}`;
+  }
+  return `[STORE CREDIT NOTIFY] ${outcome}`;
+}
+
 function subjectForEvent(event: StoreCreditEvent) {
   if (event === "CHECKOUT_REDEMPTION") return "Megaska Store Credit used on your order";
   return "Megaska Store Credit added to your account";
@@ -61,23 +69,23 @@ async function logAndSend(payload: StoreCreditEmailPayload) {
   };
 
   if (!payload.customerEmail) {
-    console.info("[STORE CREDIT NOTIFY] skipped", { ...context, reason: "missing-customer-email" });
+    console.info(storeCreditNotificationLog(payload.event, "skipped"), { ...context, reason: "missing-customer-email" });
     return;
   }
 
   const result = await sendCustomerEmail(payload.customerEmail, subjectForEvent(payload.event), buildStoreCreditText(payload));
 
   if (result.skipped) {
-    console.info("[STORE CREDIT NOTIFY] skipped", { ...context, reason: "email-provider-config-or-recipient", providerMessageId: result.messageId || null });
+    console.info(storeCreditNotificationLog(payload.event, "skipped"), { ...context, reason: "email-provider-config-or-recipient", providerMessageId: result.messageId || null });
     return;
   }
 
   if (result.success) {
-    console.info("[STORE CREDIT NOTIFY] sent", { ...context, providerMessageId: result.messageId || null });
+    console.info(storeCreditNotificationLog(payload.event, "sent"), { ...context, providerMessageId: result.messageId || null });
     return;
   }
 
-  console.error("[STORE CREDIT NOTIFY] failed", { ...context, providerMessageId: result.messageId || null });
+  console.error(storeCreditNotificationLog(payload.event, "failed"), { ...context, providerMessageId: result.messageId || null });
 }
 
 async function notifyFromWalletTransactionId(walletTransactionId: string, expectedType: StoreCreditEvent) {
@@ -106,12 +114,12 @@ async function notifyFromWalletTransactionId(walletTransactionId: string, expect
   const transaction = rows[0];
 
   if (!transaction) {
-    console.info("[STORE CREDIT NOTIFY] skipped", { event: expectedType, walletTransactionId, reason: "wallet-transaction-not-found" });
+    console.info(storeCreditNotificationLog(expectedType, "skipped"), { event: expectedType, walletTransactionId, reason: "wallet-transaction-not-found" });
     return;
   }
 
   if (transaction.transactionType !== expectedType) {
-    console.info("[STORE CREDIT NOTIFY] skipped", { event: expectedType, walletTransactionId, reason: "transaction-type-mismatch", actualType: transaction.transactionType });
+    console.info(storeCreditNotificationLog(expectedType, "skipped"), { event: expectedType, walletTransactionId, reason: "transaction-type-mismatch", actualType: transaction.transactionType });
     return;
   }
 
@@ -130,13 +138,19 @@ async function notifyFromWalletTransactionId(walletTransactionId: string, expect
 }
 
 export function notifyCodRefundStoreCreditSettled(input: { walletTransactionId: string; alreadySettled?: boolean }) {
+  console.info("[STORE CREDIT NOTIFICATION] credited_start", {
+    event: "COD_REFUND_CREDIT",
+    walletTransactionId: input.walletTransactionId,
+    alreadySettled: Boolean(input.alreadySettled),
+  });
+
   if (input.alreadySettled) {
-    console.info("[STORE CREDIT NOTIFY] skipped", { event: "COD_REFUND_CREDIT", walletTransactionId: input.walletTransactionId, reason: "already-settled" });
+    console.info("[STORE CREDIT NOTIFICATION] credited_skipped", { event: "COD_REFUND_CREDIT", walletTransactionId: input.walletTransactionId, reason: "already-settled" });
     return;
   }
 
   void notifyFromWalletTransactionId(input.walletTransactionId, "COD_REFUND_CREDIT").catch((error) => {
-    console.error("[STORE CREDIT NOTIFY] failed", { event: "COD_REFUND_CREDIT", walletTransactionId: input.walletTransactionId, error: error instanceof Error ? error.message : "Unknown error" });
+    console.error("[STORE CREDIT NOTIFICATION] credited_failed", { event: "COD_REFUND_CREDIT", walletTransactionId: input.walletTransactionId, error: error instanceof Error ? error.message : "Unknown error" });
   });
 }
 
