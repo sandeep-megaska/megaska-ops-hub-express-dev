@@ -15,6 +15,7 @@ const ACTION_LABELS: Record<string, string> = {
   APPROVED: "APPROVE_FOR_REFUND",
   REJECTED: "REJECT",
   CLOSED: "CLOSED",
+  RETURN_RECEIVED: "Mark Return Received",
   AWAITING_PAYMENT: "UNDER_REVIEW",
   OPEN: "OPEN",
 };
@@ -97,7 +98,7 @@ export default function IssueLifecycleControls({ requestId, currentStatus, allow
             ))}
           </select>
         </label>
-        <button type="button" onClick={updateStatus} disabled={!allowedTransitions.length}>Apply Status</button>
+        <button type="button" onClick={updateStatus} disabled={!allowedTransitions.length}>{ACTION_LABELS[nextStatus] || "Apply Status"}</button>
       </div>
 
       <hr style={{ margin: "16px 0" }} />

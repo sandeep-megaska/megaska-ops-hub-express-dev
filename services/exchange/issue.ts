@@ -1,11 +1,12 @@
-const ISSUE_ACTIVE_STATUSES = ["OPEN", "AWAITING_PAYMENT", "PICKUP_PENDING", "PAYMENT_RECEIVED", "APPROVED"] as const;
+const ISSUE_ACTIVE_STATUSES = ["OPEN", "AWAITING_PAYMENT", "PICKUP_PENDING", "PAYMENT_RECEIVED", "APPROVED", "RETURN_RECEIVED"] as const;
 
 export const ISSUE_ALLOWED_STATUS_TRANSITIONS: Record<string, string[]> = {
   OPEN: ["AWAITING_PAYMENT", "PICKUP_PENDING", "PAYMENT_RECEIVED", "APPROVED", "REJECTED", "CLOSED"],
   AWAITING_PAYMENT: ["PICKUP_PENDING", "PAYMENT_RECEIVED", "APPROVED", "REJECTED", "CLOSED"],
   PICKUP_PENDING: ["AWAITING_PAYMENT", "PAYMENT_RECEIVED", "APPROVED", "REJECTED", "CLOSED"],
   PAYMENT_RECEIVED: ["APPROVED", "REJECTED", "CLOSED"],
-  APPROVED: ["CLOSED"],
+  APPROVED: ["RETURN_RECEIVED"],
+  RETURN_RECEIVED: ["CLOSED"],
 };
 
 export const ISSUE_STATUS_DESCRIPTIONS: Record<string, string> = {
@@ -13,7 +14,8 @@ export const ISSUE_STATUS_DESCRIPTIONS: Record<string, string> = {
   AWAITING_PAYMENT: "Under review",
   PICKUP_PENDING: "Need more information",
   PAYMENT_RECEIVED: "Approved for exchange",
-  APPROVED: "Approved for refund",
+  APPROVED: "Issue approved; awaiting returned goods",
+  RETURN_RECEIVED: "Returned goods received at warehouse",
   REJECTED: "Issue request rejected",
   CLOSED: "Issue request closed",
 };
