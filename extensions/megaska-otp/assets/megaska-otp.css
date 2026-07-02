@@ -783,28 +783,13 @@
 }
 
 .megaska-dashboard-list-item {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 12px 14px;
-  border: 1px solid rgba(12, 35, 64, 0.12);
-  border-radius: 12px;
-  background: #ffffff;
-  box-shadow: 0 1px 2px rgba(12, 35, 64, 0.04);
-  transition: background-color 0.2s ease, border-color 0.2s ease,
-    box-shadow 0.2s ease, transform 0.2s ease;
-}
-
-.megaska-dashboard-list-item:hover,
-.megaska-dashboard-list-item:focus-within {
-  background: #f8fafc;
-  border-color: rgba(26, 63, 112, 0.24);
-  box-shadow: 0 8px 18px rgba(12, 35, 64, 0.08);
-  transform: translateY(-1px);
+  padding-bottom: 10px;
+  border-bottom: 1px dashed rgba(12, 35, 64, 0.15);
 }
 
 .megaska-dashboard-list-item:last-child {
-  margin-bottom: 0;
+  border-bottom: 0;
+  padding-bottom: 0;
 }
 
 .megaska-dashboard-subtle {
@@ -860,6 +845,183 @@
   text-align: right;
 }
 
+
+.megaska-dashboard-order-card {
+  width: 100%;
+  border: 0;
+  background: #f7f9fc;
+  border-radius: 12px;
+  padding: 12px;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+
+.megaska-dashboard-order-card:hover,
+.megaska-dashboard-order-card:focus-visible {
+  background: #eef3ff;
+  box-shadow: 0 8px 22px rgba(12, 35, 64, 0.1);
+  transform: translateY(-1px);
+}
+
+.megaska-dashboard-order-link {
+  color: #0c2340;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.megaska-order-detail-layer[hidden] {
+  display: none !important;
+}
+
+.megaska-order-detail-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+}
+
+.megaska-order-detail-overlay {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgba(8, 23, 42, 0.52);
+}
+
+.megaska-order-detail-panel {
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: min(460px, 100%);
+  height: 100%;
+  background: #fff;
+  box-shadow: -14px 0 45px rgba(12, 35, 64, 0.2);
+  display: flex;
+  flex-direction: column;
+}
+
+.megaska-order-detail-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 18px 12px;
+  border-bottom: 1px solid rgba(12, 35, 64, 0.1);
+}
+
+.megaska-order-detail-kicker {
+  margin: 0 0 5px;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #617083;
+}
+
+.megaska-order-detail-close {
+  border: 1px solid rgba(12, 35, 64, 0.2);
+  background: #fff;
+  border-radius: 10px;
+  width: 34px;
+  height: 34px;
+  cursor: pointer;
+}
+
+.megaska-order-detail-body {
+  padding: 16px 18px 20px;
+  overflow-y: auto;
+  display: grid;
+  gap: 18px;
+}
+
+.megaska-order-detail-top {
+  display: grid;
+  grid-template-columns: 84px 1fr;
+  gap: 12px;
+  align-items: start;
+}
+
+.megaska-order-detail-image {
+  width: 84px;
+  height: 84px;
+  border-radius: 12px;
+  border: 1px solid rgba(12, 35, 64, 0.12);
+  object-fit: cover;
+}
+
+.megaska-order-detail-product {
+  margin: 0 0 6px;
+  font-weight: 600;
+  color: #0c2340;
+}
+
+.megaska-order-detail-meta {
+  margin: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.megaska-order-detail-meta div {
+  padding: 10px 12px;
+  border-radius: 11px;
+  background: #f7f9fc;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.megaska-order-detail-meta dt {
+  margin: 0;
+  color: #617083;
+  font-size: 13px;
+}
+
+.megaska-order-detail-meta dd {
+  margin: 0;
+  color: #0c2340;
+  font-weight: 600;
+}
+
+.megaska-order-detail-actions h4 {
+  margin: 0 0 10px;
+  color: #0c2340;
+}
+
+.megaska-order-detail-actions-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.megaska-dashboard-action-btn {
+  border: 1px solid rgba(12, 35, 64, 0.22);
+  background: #fff;
+  color: #0c2340;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 10px;
+  cursor: pointer;
+}
+
+.megaska-dashboard-action-btn:hover,
+.megaska-dashboard-action-btn:focus-visible {
+  background: #f0f5ff;
+}
+
+.megaska-order-action-hint {
+  margin: 12px 0 0;
+  padding: 11px 12px;
+  border-radius: 10px;
+  background: #f7f9fc;
+  color: #617083;
+  font-size: 13px;
+}
+
+body.megaska-order-detail-open {
+  overflow: hidden;
+}
+
 .megaska-dashboard-address {
   line-height: 1.5;
 }
@@ -908,11 +1070,27 @@
   }
 
   .megaska-dashboard-list-item {
-    flex-direction: column;
+    padding-bottom: 10px;
   }
 
   .megaska-dashboard-order-right {
     text-align: left;
+  }
+
+  .megaska-dashboard-order-card {
+    flex-direction: column;
+  }
+
+  .megaska-order-detail-panel {
+    inset: auto 0 0 0;
+    width: 100%;
+    max-height: 100%;
+    border-radius: 16px 16px 0 0;
+    box-shadow: 0 -16px 40px rgba(12, 35, 64, 0.2);
+  }
+
+  .megaska-order-detail-actions-grid {
+    grid-template-columns: 1fr;
   }
 }
 .megaska-otp-status {
