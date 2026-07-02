@@ -703,12 +703,11 @@ if (token) {
     return session;
   }
 
-  const DASHBOARD_ORDER_ACTIONS = [
-    { key: "cancel", label: "Cancel Order", hint: "Cancellation request options will be available here." },
-    { key: "issue", label: "Issue Request", hint: "Choose this for order, product, delivery, or payment issues." },
-    { key: "exchange", label: "Exchange", hint: "Exchange request options will be available here." },
-    { key: "return", label: "Return", hint: "Return request options will be available here." },
-    { key: "refund", label: "Refund Status", hint: "Refund status tracking will be available here." },
+  const DASHBOARD_SUPPORT_ACTIONS = [
+    { key: "cancel", title: "Cancel Order", text: "Available before shipment is packed or fulfilled." },
+    { key: "exchange", title: "Exchange", text: "Start an exchange request for eligible delivered items." },
+    { key: "issue", title: "Report Issue", text: "Tell support about order, product, delivery, or payment issues." },
+    { key: "refund", title: "Refund Status", text: "Check refund progress and store credit updates." },
   ];
 
   function escHtml(value) {
@@ -908,13 +907,55 @@ if (token) {
     return `${escHtml(order.currencyCode)} ${escHtml(order.totalAmount)}`;
   }
 
-  function renderOrderActions() {
-    return DASHBOARD_ORDER_ACTIONS.map(
-      (action) =>
-        `<button type="button" class="megaska-dashboard-action-btn" data-megaska-order-action="${escHtml(
-          action.key
-        )}">${escHtml(action.label)}</button>`
-    ).join("");
+  function getOrderProductTitle(order) {
+    return order?.firstLineItemTitle || order?.displayTitle || order?.itemTitle || "Product details unavailable";
+  }
+
+  function getOrderProductImage(order) {
+    return String(order?.displayImage || order?.firstLineItemImage || "").trim();
+  }
+
+  function getOrderCancellationAction(order) {
+    const state = getOrderCancellationDisplayState(order);
+    const locked = String(state || "").toLowerCase().includes("not possible");
+
+    if (locked) {
+      return {
+        title: "Cancellation Locked",
+        text: state,
+        tone: "locked",
+      };
+    }
+
+    return {
+      title: state || "Cancel Order",
+      text:
+        state === "Cancel Order"
+          ? "Available before shipment is packed or fulfilled."
+          : "Cancellation request status for this order.",
+      tone: state === "Cancel Order" ? "danger" : "neutral",
+    };
+  }
+
+  function renderSupportActionCards(order) {
+    const cancellationAction = getOrderCancellationAction(order);
+    const actions = [
+      { key: "cancel", ...cancellationAction },
+      ...DASHBOARD_SUPPORT_ACTIONS.filter((action) => action.key !== "cancel"),
+    ];
+
+    return actions
+      .map(
+        (action) => `
+          <article class="megaska-order-support-card megaska-order-support-card--${escHtml(action.tone || action.key)}">
+            <div>
+              <h5>${escHtml(action.title)}</h5>
+              <p>${escHtml(action.text)}</p>
+            </div>
+            <span aria-hidden="true">›</span>
+          </article>`
+      )
+      .join("");
   }
 
   function renderOrderDetailsPanel() {
@@ -944,11 +985,8 @@ if (token) {
               <div><dt>Fulfillment status</dt><dd data-megaska-order-fulfillment>-</dd></div>
             </dl>
             <section class="megaska-order-detail-actions">
-              <h4>Actions</h4>
-              <div class="megaska-order-detail-actions-grid">
-                ${renderOrderActions()}
-              </div>
-              <p class="megaska-order-action-hint" data-megaska-order-action-hint>Choose an action to continue.</p>
+              <h4>Need help with this order?</h4>
+              <div class="megaska-order-support-grid" data-megaska-order-support-cards></div>
             </section>
           </div>
         </aside>
@@ -969,7 +1007,7 @@ if (token) {
     const totalEl = layer.querySelector("[data-megaska-order-total]");
     const paymentEl = layer.querySelector("[data-megaska-order-payment]");
     const fulfillmentEl = layer.querySelector("[data-megaska-order-fulfillment]");
-    const actionHint = layer.querySelector("[data-megaska-order-action-hint]");
+    const supportCardsEl = layer.querySelector("[data-megaska-order-support-cards]");
 
     function closePanel() {
       layer.setAttribute("hidden", "hidden");
@@ -979,10 +1017,9 @@ if (token) {
     function openPanel(order) {
       if (!order) return;
       const displayName = order?.name || "Order";
-      const productTitle =
-        order?.firstLineItemTitle || order?.displayTitle || order?.itemTitle || "Product details unavailable";
+      const productTitle = getOrderProductTitle(order);
       const orderDate = formatDate(order?.processedAt) || "-";
-      const orderImage = String(order?.displayImage || order?.firstLineItemImage || "").trim();
+      const orderImage = getOrderProductImage(order);
 
       if (titleEl) titleEl.textContent = order?.name || "Order";
       if (numberEl) numberEl.textContent = order?.name || "-";
@@ -991,7 +1028,7 @@ if (token) {
       if (totalEl) totalEl.innerHTML = formatOrderTotal(order);
       if (paymentEl) paymentEl.textContent = order?.financialStatus || "Pending";
       if (fulfillmentEl) fulfillmentEl.textContent = order?.fulfillmentStatus || "Unfulfilled";
-      if (actionHint) actionHint.textContent = `Choose an action for ${order?.name || "this order"}.`;
+      if (supportCardsEl) supportCardsEl.innerHTML = renderSupportActionCards(order);
 
       if (imageEl) {
         if (orderImage) {
@@ -1017,14 +1054,6 @@ if (token) {
       button.addEventListener("click", function () {
         const index = Number.parseInt(this.getAttribute("data-megaska-order-index") || "-1", 10);
         openPanel(orders[index]);
-      });
-    });
-
-    layer.querySelectorAll("[data-megaska-order-action]").forEach((button) => {
-      button.addEventListener("click", function () {
-        const actionKey = this.getAttribute("data-megaska-order-action");
-        const action = DASHBOARD_ORDER_ACTIONS.find((item) => item.key === actionKey);
-        if (actionHint) actionHint.textContent = action?.hint || "This action will be available soon.";
       });
     });
 
@@ -1170,6 +1199,12 @@ if (token) {
       summary?.customer?.fullName ||
       [summary?.customer?.firstName, summary?.customer?.lastName].filter(Boolean).join(" ") ||
       "Megaska Customer";
+    const initials = profileName
+      .split(" ")
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part.charAt(0).toUpperCase())
+      .join("") || "M";
     const verifiedPhone = summary?.customer?.phone || "-";
     const email = summary?.customer?.email || "-";
     const verified = Boolean(summary?.customer?.verified);
@@ -1184,16 +1219,45 @@ if (token) {
       ? orders
           .map((order, index) => {
             const orderTotal = formatOrderTotal(order);
+            const productTitle = getOrderProductTitle(order);
+            const productImage = getOrderProductImage(order);
+            const actionStatePills = getOrderActionStatePills(order);
+            const actionStateStrip = actionStatePills.length
+              ? `<div class="megaska-order-state-strip">${actionStatePills
+                  .map(
+                    (pill) =>
+                      `<span class="megaska-order-state-pill megaska-order-state-pill--${escHtml(
+                        pill.tone
+                      )}">${escHtml(pill.label)}</span>`
+                  )
+                  .join("")}</div>`
+              : "";
+            const supportLink = order?.statusPageUrl
+              ? `<a class="megaska-dashboard-order-support" href="${escHtml(
+                  order.statusPageUrl
+                )}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">Support</a>`
+              : `<span class="megaska-dashboard-order-support">Support</span>`;
 
             return `<li class="megaska-dashboard-list-item">
               <button type="button" class="megaska-dashboard-order-card" data-megaska-order-index="${index}">
-                <div>
-                  <strong>${escHtml(order?.name || "Order")}</strong>
-                  <div class="megaska-dashboard-subtle">${escHtml(formatDate(order?.processedAt) || "")}</div>
+                <div class="megaska-dashboard-order-main">
+                  <div class="megaska-dashboard-order-image-wrap">
+                    ${
+                      productImage
+                        ? `<img src="${escHtml(productImage)}" alt="${escHtml(productTitle)}" class="megaska-dashboard-order-image" loading="lazy" />`
+                        : `<span class="megaska-dashboard-order-image-placeholder" aria-hidden="true">MG</span>`
+                    }
+                  </div>
+                  <div class="megaska-dashboard-order-copy">
+                    <strong>${escHtml(order?.name || "Order")}</strong>
+                    <p>${escHtml(productTitle)}</p>
+                    <div class="megaska-dashboard-subtle">${escHtml(formatDate(order?.processedAt) || "")}</div>
+                    ${actionStateStrip}
+                    ${supportLink}
+                  </div>
                 </div>
                 <div class="megaska-dashboard-order-right">
-                  <div>${orderTotal}</div>
-                  <div class="megaska-dashboard-subtle">${escHtml(order?.financialStatus || "")}</div>
+                  <div class="megaska-dashboard-order-amount">${orderTotal}</div>
                   <span class="megaska-dashboard-order-link">View details</span>
                 </div>
               </button>
@@ -1203,11 +1267,15 @@ if (token) {
       : '<li class="megaska-dashboard-empty">No recent orders yet.</li>';
 
     container.innerHTML = `
-      <section class="megaska-dashboard-card">
-        <h2>${escHtml(profileName)}</h2>
-        <p class="megaska-dashboard-subtle">Verified phone: ${escHtml(verifiedPhone)}</p>
-        <p class="megaska-dashboard-subtle">Email: ${escHtml(email)}</p>
-        <p class="megaska-dashboard-subtle">Verification status: ${verified ? "Verified" : "Pending"}</p>
+      <section class="megaska-dashboard-profile megaska-dashboard-card">
+        <div class="megaska-dashboard-avatar" aria-hidden="true">${escHtml(initials)}</div>
+        <div>
+          <p class="megaska-dashboard-eyebrow">Welcome back</p>
+          <h2>${escHtml(profileName)}</h2>
+          <p class="megaska-dashboard-subtle">Verified phone: ${escHtml(verifiedPhone)}</p>
+          <p class="megaska-dashboard-subtle">Email: ${escHtml(email)}</p>
+          <p class="megaska-dashboard-subtle">Verification status: ${verified ? "Verified" : "Pending"}</p>
+        </div>
       </section>
       <section class="megaska-dashboard-grid">
         <article class="megaska-dashboard-card"><h3>Total orders</h3><p>${totalOrders}</p></article>
@@ -1219,25 +1287,31 @@ if (token) {
           <div class="megaska-dashboard-subtle">Available balance</div>
         </article>
       </section>
-      <section class="megaska-dashboard-card">
-        <h3>Recent orders</h3>
-        <ul class="megaska-dashboard-list">${ordersHtml}</ul>
-      </section>
-      <section class="megaska-dashboard-card">
-        <h3>Saved address</h3>
-        ${
-          addressHtml
-            ? `<p class="megaska-dashboard-address">${addressHtml}</p>`
-            : '<p class="megaska-dashboard-empty">No default address saved yet.</p>'
-        }
-      </section>
-      <section class="megaska-dashboard-card">
-        <h3>Quick actions</h3>
-        <div class="megaska-dashboard-actions">
-          <a href="/collections/all" class="megaska-dashboard-btn">Continue Shopping</a>
-          <a href="/pages/contact" class="megaska-dashboard-btn megaska-dashboard-btn--secondary">Contact Support</a>
-          <button type="button" data-megaska-logout class="megaska-dashboard-btn megaska-dashboard-btn--danger">Logout</button>
+      <section class="megaska-dashboard-layout">
+        <div class="megaska-dashboard-main-column">
+          <section class="megaska-dashboard-card">
+            <h3>Recent orders</h3>
+            <ul class="megaska-dashboard-list megaska-dashboard-orders-list">${ordersHtml}</ul>
+          </section>
         </div>
+        <aside class="megaska-dashboard-side-column">
+          <section class="megaska-dashboard-card megaska-dashboard-address-card">
+            <h3>Saved address</h3>
+            ${
+              addressHtml
+                ? `<p class="megaska-dashboard-address">${addressHtml}</p>`
+                : '<p class="megaska-dashboard-empty">No default address saved yet.</p>'
+            }
+          </section>
+          <section class="megaska-dashboard-card">
+            <h3>Quick actions</h3>
+            <div class="megaska-dashboard-actions">
+              <a href="/collections/all" class="megaska-dashboard-btn">Continue Shopping</a>
+              <a href="/pages/contact" class="megaska-dashboard-btn megaska-dashboard-btn--secondary">Contact Support</a>
+              <button type="button" data-megaska-logout class="megaska-dashboard-btn megaska-dashboard-btn--danger">Logout</button>
+            </div>
+          </section>
+        </aside>
       </section>
       ${renderOrderDetailsPanel()}
     `;

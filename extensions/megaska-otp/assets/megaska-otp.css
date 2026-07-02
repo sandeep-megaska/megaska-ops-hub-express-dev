@@ -987,37 +987,6 @@
   color: #0c2340;
 }
 
-.megaska-order-detail-actions-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.megaska-dashboard-action-btn {
-  border: 1px solid rgba(12, 35, 64, 0.22);
-  background: #fff;
-  color: #0c2340;
-  border-radius: 10px;
-  font-size: 13px;
-  font-weight: 600;
-  padding: 10px;
-  cursor: pointer;
-}
-
-.megaska-dashboard-action-btn:hover,
-.megaska-dashboard-action-btn:focus-visible {
-  background: #f0f5ff;
-}
-
-.megaska-order-action-hint {
-  margin: 12px 0 0;
-  padding: 11px 12px;
-  border-radius: 10px;
-  background: #f7f9fc;
-  color: #617083;
-  font-size: 13px;
-}
-
 body.megaska-order-detail-open {
   overflow: hidden;
 }
@@ -1087,10 +1056,6 @@ body.megaska-order-detail-open {
     max-height: 100%;
     border-radius: 16px 16px 0 0;
     box-shadow: 0 -16px 40px rgba(12, 35, 64, 0.2);
-  }
-
-  .megaska-order-detail-actions-grid {
-    grid-template-columns: 1fr;
   }
 }
 .megaska-otp-status {
@@ -1392,4 +1357,186 @@ body.megaska-order-detail-open {
   color: #2f7a4a;
   font-size: 14px;
   font-weight: 600;
+}
+
+/* Restored rich dashboard architecture with minimal Store Credit stat card. */
+.megaska-dashboard-root {
+  max-width: 1120px;
+  gap: 18px;
+}
+
+.megaska-dashboard-profile {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 18px;
+  background: linear-gradient(135deg, #ffffff 0%, #f5f8ff 100%);
+}
+
+.megaska-dashboard-avatar {
+  width: 72px;
+  height: 72px;
+  border-radius: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  background: #0c2340;
+  color: #fff;
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  box-shadow: 0 12px 26px rgba(12, 35, 64, 0.18);
+}
+
+.megaska-dashboard-eyebrow {
+  margin: 0 0 4px;
+  color: #cb1b45;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.megaska-dashboard-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.megaska-dashboard-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.65fr) minmax(280px, 0.85fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.megaska-dashboard-main-column,
+.megaska-dashboard-side-column {
+  display: grid;
+  gap: 18px;
+}
+
+.megaska-dashboard-order-card {
+  align-items: stretch;
+  background: #fff;
+  border: 1px solid rgba(12, 35, 64, 0.1);
+  box-shadow: 0 8px 24px rgba(12, 35, 64, 0.06);
+}
+
+.megaska-dashboard-order-main {
+  min-width: 0;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.megaska-dashboard-order-image-wrap {
+  width: 72px;
+  height: 72px;
+  flex: 0 0 72px;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #eef3f8;
+  border: 1px solid rgba(12, 35, 64, 0.1);
+}
+
+.megaska-dashboard-order-image,
+.megaska-dashboard-order-image-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  object-fit: cover;
+  color: #617083;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.megaska-dashboard-order-copy {
+  min-width: 0;
+}
+
+.megaska-dashboard-order-copy p {
+  margin: 4px 0 5px;
+  color: #1f3654;
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.megaska-dashboard-order-support {
+  display: inline-flex;
+  margin-top: 10px;
+  color: #cb1b45;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.megaska-dashboard-order-amount {
+  color: #0c2340;
+  font-weight: 800;
+}
+
+.megaska-dashboard-address-card {
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+}
+
+.megaska-order-support-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.megaska-order-support-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid rgba(12, 35, 64, 0.12);
+  border-radius: 14px;
+  padding: 13px 14px;
+  background: #fff;
+}
+
+.megaska-order-support-card h5 {
+  margin: 0 0 4px;
+  color: #0c2340;
+  font-size: 14px;
+}
+
+.megaska-order-support-card p {
+  margin: 0;
+  color: #617083;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.megaska-order-support-card > span {
+  color: #617083;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.megaska-order-support-card--danger {
+  border-color: rgba(203, 27, 69, 0.28);
+  background: #fff7fa;
+}
+
+.megaska-order-support-card--locked {
+  border-color: rgba(97, 112, 131, 0.25);
+  background: #f7f9fc;
+}
+
+@media (max-width: 799px) {
+  .megaska-dashboard-grid,
+  .megaska-dashboard-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .megaska-dashboard-profile {
+    align-items: flex-start;
+  }
+
+  .megaska-dashboard-order-main {
+    width: 100%;
+  }
 }
