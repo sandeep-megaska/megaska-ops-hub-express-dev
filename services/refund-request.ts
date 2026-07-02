@@ -6,6 +6,7 @@ type CreateRefundRequestInput = {
   orderId: string;
   amount: number;
   reason?: string | null;
+  adminNote?: string | null;
   source: RefundSource;
   sourceId: string;
   customer?: { id?: string | null } | null;
@@ -63,6 +64,7 @@ export async function createRefundRequest(input: CreateRefundRequestInput) {
     status,
     amount: Math.trunc(input.amount),
     reason: input.reason || null,
+    adminNote: input.adminNote || null,
     customerProfileId: input.customer?.id || order.customerProfileId || null,
     orderActionRequestId: order.id,
     shopifyOrderId: order.shopifyOrderId || null,
@@ -112,6 +114,7 @@ export async function createRefundRequest(input: CreateRefundRequestInput) {
         orderActionRequestId: existing.orderActionRequestId || order.id,
         shopifyOrderId: existing.shopifyOrderId || order.shopifyOrderId || null,
         reason: existing.reason || input.reason || null,
+        adminNote: existing.adminNote || input.adminNote || null,
       },
     });
     console.info("[refund-request] duplicate-update", { id: updated.id, source: input.source, sourceId: input.sourceId, method: updated.method, status: updated.status });
