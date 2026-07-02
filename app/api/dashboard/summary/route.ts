@@ -18,6 +18,17 @@ import { getCustomerStoreCreditBalance, listCustomerStoreCreditTransactions } fr
 
 export const runtime = "nodejs";
 
+function logDashboardSummaryDeployment(shopDomain: string, resolvedShopId: string | null) {
+  console.info("[DASHBOARD SUMMARY DEPLOYMENT DIAGNOSTIC] request_commit", {
+    marker: "app/api/dashboard/summary/route.ts:GET",
+    shopDomain,
+    resolvedShopId,
+    vercelGitCommitSha: process.env.VERCEL_GIT_COMMIT_SHA || null,
+    vercelGitCommitRef: process.env.VERCEL_GIT_COMMIT_REF || null,
+    vercelEnv: process.env.VERCEL_ENV || null,
+  });
+}
+
 function formatShipmentTimelineStatus(status: MegaskaOrderStatus) {
   return status.replace(/_/g, " ");
 }
@@ -70,6 +81,7 @@ export async function OPTIONS(req: NextRequest) {
 export async function GET(req: NextRequest) {
   try {
     const shop = await requireShopFromRequest(req);
+    logDashboardSummaryDeployment(shop.shopDomain, shop.id);
 
     const sessionToken = getSessionTokenFromRequest(req);
     if (!sessionToken) {

@@ -30,6 +30,31 @@ function trimEnv(name: string) {
   return String(process.env[name] || "").trim();
 }
 
+function rawOnConflictErrorDetails(error: unknown) {
+  const candidate = error as { code?: unknown; message?: unknown; meta?: { code?: unknown; message?: unknown } } | null;
+  return {
+    errorCode: typeof candidate?.code === "string" ? candidate.code : typeof candidate?.meta?.code === "string" ? candidate.meta.code : null,
+    errorMessage: error instanceof Error ? error.message : typeof candidate?.message === "string" ? candidate.message : String(error),
+  };
+}
+
+function logDashboardSummaryShopOnConflict(
+  phase: "attempt" | "success" | "failure",
+  details: { shopDomain: string; resolvedShopId?: string | null; error?: unknown }
+) {
+  const errorDetails = details.error ? rawOnConflictErrorDetails(details.error) : { errorCode: null, errorMessage: null };
+  console.info("[DASHBOARD SUMMARY ON CONFLICT DIAGNOSTIC] shop_resolver_default_shop", {
+    phase,
+    marker: "services/shopify/shop-resolver.ts:getDefaultShopFromConfig",
+    tableName: "Shop",
+    conflictTarget: "shopDomain",
+    shopDomain: details.shopDomain,
+    resolvedShopId: details.resolvedShopId || null,
+    errorCode: errorDetails.errorCode,
+    errorMessage: errorDetails.errorMessage,
+  });
+}
+
 export function normalizeShopDomain(input: string | null | undefined) {
   return String(input || "")
     .trim()
@@ -76,22 +101,31 @@ export async function getDefaultShopFromConfig() {
   const envStorefrontToken = trimEnv("SHOPIFY_STOREFRONT_ACCESS_TOKEN") || null;
 
   // TODO(multistore): remove env bootstrap fallback once install flow persists shop tokens for every store.
-  const rows = await prisma.$queryRawUnsafe<ShopRow[]>(
-    `INSERT INTO "Shop" ("id", "shopDomain", "accessToken", "storefrontAccessToken", "isActive", "installedAt", "createdAt", "updatedAt")
-     VALUES (gen_random_uuid()::text, $1, $2, $3, true, NOW(), NOW(), NOW())
-     ON CONFLICT ("shopDomain")
-     DO UPDATE SET
-       "accessToken" = COALESCE(EXCLUDED."accessToken", "Shop"."accessToken"),
-       "storefrontAccessToken" = COALESCE(EXCLUDED."storefrontAccessToken", "Shop"."storefrontAccessToken"),
-       "isActive" = true,
-       "updatedAt" = NOW()
-     RETURNING "id", "shopDomain", "accessToken", "accessTokenEncrypted", "storefrontAccessToken", "storefrontTokenEncrypted", "scopes", "isActive", "installedAt", "uninstalledAt", "myshopifyDomain", "installationStatus"`,
-    envDomain,
-    envAdminToken,
-    envStorefrontToken
-  );
+  logDashboardSummaryShopOnConflict("attempt", { shopDomain: envDomain, resolvedShopId: null });
 
-  return rows[0] || null;
+  try {
+    const rows = await prisma.$queryRawUnsafe<ShopRow[]>(
+      `INSERT INTO "Shop" ("id", "shopDomain", "accessToken", "storefrontAccessToken", "isActive", "installedAt", "createdAt", "updatedAt")
+       VALUES (gen_random_uuid()::text, $1, $2, $3, true, NOW(), NOW(), NOW())
+       ON CONFLICT ("shopDomain")
+       DO UPDATE SET
+         "accessToken" = COALESCE(EXCLUDED."accessToken", "Shop"."accessToken"),
+         "storefrontAccessToken" = COALESCE(EXCLUDED."storefrontAccessToken", "Shop"."storefrontAccessToken"),
+         "isActive" = true,
+         "updatedAt" = NOW()
+       RETURNING "id", "shopDomain", "accessToken", "accessTokenEncrypted", "storefrontAccessToken", "storefrontTokenEncrypted", "scopes", "isActive", "installedAt", "uninstalledAt", "myshopifyDomain", "installationStatus"`,
+      envDomain,
+      envAdminToken,
+      envStorefrontToken
+    );
+
+    const resolvedShop = rows[0] || null;
+    logDashboardSummaryShopOnConflict("success", { shopDomain: envDomain, resolvedShopId: resolvedShop?.id || null });
+    return resolvedShop;
+  } catch (error) {
+    logDashboardSummaryShopOnConflict("failure", { shopDomain: envDomain, resolvedShopId: null, error });
+    throw error;
+  }
 }
 
 export async function resolveShopConfig(preferredShopDomain?: string | null): Promise<ResolvedShopConfig> {
