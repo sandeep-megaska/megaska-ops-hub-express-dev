@@ -726,10 +726,9 @@ if (token) {
   function formatAddress(address) {
     if (!address) return "";
     return [
-      address.line1 || address.address1,
-      address.line2 || address.address2,
-      [address.city, address.state || address.province].filter(Boolean).join(", "),
-      [address.country, address.postalCode || address.zip].filter(Boolean).join(" "),
+      [address.line1 || address.address1, address.line2 || address.address2].filter(Boolean).join(", "),
+      [address.city, address.state || address.province, address.postalCode || address.zip].filter(Boolean).join(" "),
+      address.country || address.countryRegion,
     ]
       .filter(Boolean)
       .join("<br/>");
@@ -1019,6 +1018,7 @@ if (token) {
 
   function renderDashboardSummary(container, summary) {
     const profileName =
+      summary?.customer?.fullName ||
       [summary?.customer?.firstName, summary?.customer?.lastName].filter(Boolean).join(" ") ||
       "Megaska Customer";
     const verifiedPhone = summary?.customer?.phone || "-";
@@ -1102,7 +1102,7 @@ const sku = order?.firstLineItemSku || order?.sku || "";
         <article class="megaska-dashboard-card"><h3>Saved addresses</h3><p>${savedAddresses}</p></article>
         <article class="megaska-dashboard-card">
           <h3>Available Store Credit</h3>
-          <p>${escHtml(formatInrMajor(summary?.storeCredit?.balance || 0))}</p>
+          <p>${escHtml(formatInrMajor(summary?.storeCredit?.balance || summary?.wallet?.balance || 0))}</p>
           <div class="megaska-dashboard-actions"><a href="/customer/store-credit" class="megaska-dashboard-btn">Megaska Store Credit</a></div>
         </article>
       </section>

@@ -4,7 +4,6 @@ import { withCors, handleOptions } from "../../_lib/cors";
 import { prisma } from "../../../../services/db/prisma";
 import { hashSessionToken, getSessionTokenFromRequest } from "../../../../services/auth/session";
 import {
-  debugShopifyAdminAuth,
   findShopifyCustomerIdByIdentity,
   isShopifyAdminConfigured,
 } from "../../../../services/shopify/admin";
@@ -21,6 +20,45 @@ export const runtime = "nodejs";
 
 function formatShipmentTimelineStatus(status: MegaskaOrderStatus) {
   return status.replace(/_/g, " ");
+}
+
+function hasCustomerProfileAddress(customer: {
+  addressLine1?: string | null;
+  city?: string | null;
+  stateProvince?: string | null;
+  postalCode?: string | null;
+  countryRegion?: string | null;
+}) {
+  return Boolean(
+    customer.addressLine1?.trim() &&
+      customer.city?.trim() &&
+      customer.stateProvince?.trim() &&
+      customer.postalCode?.trim() &&
+      customer.countryRegion?.trim()
+  );
+}
+
+function customerProfileAddress(customer: {
+  fullName?: string | null;
+  addressLine1?: string | null;
+  addressLine2?: string | null;
+  city?: string | null;
+  stateProvince?: string | null;
+  postalCode?: string | null;
+  countryRegion?: string | null;
+}) {
+  if (!hasCustomerProfileAddress(customer)) return null;
+
+  return {
+    name: customer.fullName || null,
+    line1: customer.addressLine1 || null,
+    line2: customer.addressLine2 || null,
+    city: customer.city || null,
+    state: customer.stateProvince || null,
+    postalCode: customer.postalCode || null,
+    country: customer.countryRegion || null,
+    source: "customer_profile" as const,
+  };
 }
 
 
@@ -43,11 +81,14 @@ export async function GET(req: NextRequest) {
 
     const now = new Date();
     const session = await prisma.authSession.findFirst({
-  where: {
-    sessionTokenHash: hashSessionToken(sessionToken),
-    revokedAt: null,
-    expiresAt: { gt: now },
-  },
+      where: {
+        sessionTokenHash: hashSessionToken(sessionToken),
+        revokedAt: null,
+        expiresAt: { gt: now },
+        customer: {
+          shopId: shop.id,
+        },
+      },
       include: {
         customer: true,
       },
@@ -123,9 +164,10 @@ if (isShopifyAdminConfigured()) {
   }
 }
 
-    const savedAddressCount = shopifyDashboard?.defaultAddress
+    const profileAddress = customerProfileAddress(customer);
+    const savedAddressCount = profileAddress
       ? 1
-      : customer.addressLine1
+      : shopifyDashboard?.defaultAddress
         ? 1
         : 0;
 
@@ -323,7 +365,7 @@ if (isShopifyAdminConfigured()) {
     }));
 
     const wallet = {
-      balance: storeCredit.balance,
+      balance: storeCredit.ledgerBalance,
       availableBalance: storeCredit.availableBalance ?? storeCredit.balance,
       ledgerBalance: storeCredit.ledgerBalance,
       reservedAmount: storeCredit.reservedAmount,
@@ -334,6 +376,7 @@ if (isShopifyAdminConfigured()) {
 
     const response = {
       customer: {
+        fullName: customer.fullName,
         firstName: customer.firstName,
         lastName: customer.lastName,
         phone: customer.phoneE164,
@@ -343,18 +386,7 @@ if (isShopifyAdminConfigured()) {
       storeCredit: wallet,
       wallet,
       stats,
-      address: shopifyDashboard?.defaultAddress
-        ? shopifyDashboard.defaultAddress
-        : customer.addressLine1
-          ? {
-              line1: customer.addressLine1 || null,
-              line2: customer.addressLine2 || null,
-              city: customer.city || null,
-              state: customer.stateProvince || null,
-              postalCode: customer.postalCode || null,
-              country: customer.countryRegion || null,
-            }
-          : null,
+      address: profileAddress || shopifyDashboard?.defaultAddress || null,
       orders,
     };
 
