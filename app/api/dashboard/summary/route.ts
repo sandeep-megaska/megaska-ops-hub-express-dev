@@ -364,7 +364,9 @@ if (isShopifyAdminConfigured()) {
       createdAt: transaction.createdAt,
     }));
 
+    const storeCreditCurrentBalance = Math.round(Number(storeCredit.ledgerBalance || 0) * 100);
     const wallet = {
+      currentBalance: storeCreditCurrentBalance,
       balance: storeCredit.ledgerBalance,
       availableBalance: storeCredit.availableBalance ?? storeCredit.balance,
       ledgerBalance: storeCredit.ledgerBalance,

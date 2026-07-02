@@ -895,13 +895,22 @@ if (token) {
   }
 
 
-  function formatInrMajor(value) {
-    const amount = Number(value || 0);
-    try {
-      return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(amount);
-    } catch {
-      return `₹${amount.toFixed(2)}`;
+  function getStoreCreditCurrentBalance(summary) {
+    const storeCredit = summary?.storeCredit || summary?.wallet || {};
+
+    if (storeCredit?.currentBalance !== undefined && storeCredit?.currentBalance !== null) {
+      return Number(storeCredit.currentBalance || 0);
     }
+
+    if (storeCredit?.ledgerBalance !== undefined && storeCredit?.ledgerBalance !== null) {
+      return Math.round(Number(storeCredit.ledgerBalance || 0) * 100);
+    }
+
+    if (storeCredit?.balance !== undefined && storeCredit?.balance !== null) {
+      return Math.round(Number(storeCredit.balance || 0) * 100);
+    }
+
+    return 0;
   }
 
   function normalizeStatus(value) {
@@ -1029,6 +1038,7 @@ if (token) {
     const savedAddresses = Number(summary?.stats?.savedAddresses || 0);
     const addressHtml = formatAddress(summary?.address);
     const orders = Array.isArray(summary?.orders) ? summary.orders : [];
+    const storeCreditCurrentBalance = getStoreCreditCurrentBalance(summary);
 
     const ordersHtml = orders.length
       ? orders
@@ -1101,9 +1111,9 @@ const sku = order?.firstLineItemSku || order?.sku || "";
         <article class="megaska-dashboard-card"><h3>Open requests</h3><p>${openRequests}</p></article>
         <article class="megaska-dashboard-card"><h3>Saved addresses</h3><p>${savedAddresses}</p></article>
         <article class="megaska-dashboard-card">
-          <h3>Available Store Credit</h3>
-          <p>${escHtml(formatInrMajor(summary?.storeCredit?.balance || summary?.wallet?.balance || 0))}</p>
-          <div class="megaska-dashboard-actions"><a href="/customer/store-credit" class="megaska-dashboard-btn">Megaska Store Credit</a></div>
+          <h3>Store Credit</h3>
+          <p>${escHtml(formatInrFromMinor(storeCreditCurrentBalance))}</p>
+          <div class="megaska-dashboard-subtle">Available balance</div>
         </article>
       </section>
       <section class="megaska-dashboard-card">
@@ -1207,7 +1217,7 @@ const sku = order?.firstLineItemSku || order?.sku || "";
   async function init() {
     bindLogoutButtons();
     await bootstrapAuth();
-    // await initDashboardPage();
+    await initDashboardPage();
   }
 
   window.MegaskaAuth = {
