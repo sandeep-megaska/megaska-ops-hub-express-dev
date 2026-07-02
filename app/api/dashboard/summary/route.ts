@@ -324,7 +324,9 @@ if (isShopifyAdminConfigured()) {
 
     const wallet = {
       balance: storeCredit.balance,
-      availableBalance: storeCredit.balance,
+      availableBalance: storeCredit.availableBalance ?? storeCredit.balance,
+      ledgerBalance: storeCredit.ledgerBalance,
+      reservedAmount: storeCredit.reservedAmount,
       currency: storeCredit.currency,
       transactions: walletTransactions,
       detailsUrl: "/customer/store-credit",

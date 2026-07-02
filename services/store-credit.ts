@@ -345,8 +345,8 @@ function labelForTransaction(type: string, direction: string) {
 
 export async function getCustomerStoreCreditBalance(input: CustomerStoreCreditParams) {
   const currency = String(input.currency || "INR").trim() || "INR";
-  const rows = await prisma.$queryRaw<Array<{ currentBalance: number; currency: string }>>`
-    SELECT "currentBalance", "currency"
+  const rows = await prisma.$queryRaw<Array<{ id: string; currentBalance: number; currency: string }>>`
+    SELECT "id", "currentBalance", "currency"
     FROM "WalletAccount"
     WHERE "shopId" = ${input.shopId}
       AND "customerProfileId" = ${input.customerProfileId}
@@ -355,8 +355,24 @@ export async function getCustomerStoreCreditBalance(input: CustomerStoreCreditPa
   `;
   const account = rows[0] || null;
 
+  const reservedRows = account
+    ? await prisma.$queryRaw<Array<{ reservedAmount: number }>>`
+        SELECT COALESCE(SUM("reservedAmount"), 0)::int AS "reservedAmount"
+        FROM "WalletReservation"
+        WHERE "walletAccountId" = ${account.id}
+          AND "status" = 'ACTIVE'::"WalletReservationStatus"
+          AND "expiresAt" > NOW()
+      `
+    : [];
+  const ledgerBalance = Number(account?.currentBalance || 0);
+  const reservedAmount = Number(reservedRows[0]?.reservedAmount || 0);
+  const availableBalance = Math.max(0, ledgerBalance - reservedAmount);
+
   return {
-    balance: toCurrencyAmount(account?.currentBalance || 0),
+    balance: toCurrencyAmount(availableBalance),
+    availableBalance: toCurrencyAmount(availableBalance),
+    ledgerBalance: toCurrencyAmount(ledgerBalance),
+    reservedAmount: toCurrencyAmount(reservedAmount),
     currency: account?.currency || currency,
   };
 }

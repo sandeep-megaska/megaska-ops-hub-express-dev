@@ -53,8 +53,41 @@ export async function releaseExpiredStoreCreditReservations(params: { shopId: st
   `;
 }
 
+function storeCreditDiagnosticsEnabled() {
+  return process.env.NODE_ENV !== "production" || process.env.STORE_CREDIT_DIAGNOSTICS === "true";
+}
+
 function logRawOnConflictAttempt(context: { table: string; conflictTarget: string[]; operation: string; shopId?: string; customerProfileId?: string; checkoutIntentId?: string; sourceId?: string | null }) {
+  if (!storeCreditDiagnosticsEnabled()) return;
   console.info("[ON CONFLICT DIAGNOSTIC] attempting_raw_on_conflict", context);
+}
+
+async function keepSingleActiveCheckoutReservation(params: Params, tx: Pick<typeof prisma, "$queryRaw" | "$executeRaw">) {
+  const rows = await tx.$queryRaw<Array<{ id: string }>>`
+    SELECT "id"
+    FROM "WalletReservation"
+    WHERE "shopId" = ${params.shopId}
+      AND "customerProfileId" = ${params.customerProfileId}
+      AND "checkoutReference" = ${params.checkoutIntentId}
+      AND "status" = 'ACTIVE'::"WalletReservationStatus"
+      AND "expiresAt" > NOW()
+    ORDER BY "updatedAt" DESC, "createdAt" DESC
+    FOR UPDATE
+  `;
+  const [keeper, ...duplicates] = rows;
+  if (duplicates.length) {
+    for (const duplicate of duplicates) {
+      await tx.$executeRaw`
+        UPDATE "WalletReservation"
+        SET "status" = 'RELEASED'::"WalletReservationStatus",
+            "releaseReason" = COALESCE("releaseReason", 'duplicate-checkout-store-credit-reservation-released'),
+            "updatedAt" = NOW()
+        WHERE "id" = ${duplicate.id}
+      `;
+    }
+    console.warn("[STORE CREDIT CHECKOUT] duplicate_active_reservations_released", { ...params, keptReservationId: keeper?.id || null, releasedReservationIds: duplicates.map((row) => row.id) });
+  }
+  return keeper || null;
 }
 
 async function getOrCreateShopScopedWallet(tx: Pick<typeof prisma, "$queryRaw" | "$executeRaw">, shopId: string, customerProfileId: string) {
@@ -117,6 +150,7 @@ export async function applyStoreCreditToCheckout(params: Params) {
       SET "status" = 'EXPIRED'::"WalletReservationStatus", "releaseReason" = COALESCE("releaseReason", 'checkout-store-credit-expired'), "updatedAt" = NOW()
       WHERE "shopId" = ${params.shopId} AND "customerProfileId" = ${params.customerProfileId} AND "status" = 'ACTIVE'::"WalletReservationStatus" AND "expiresAt" <= NOW()
     `;
+    await keepSingleActiveCheckoutReservation(params, tx);
     const reservedRows = await tx.$queryRaw<Array<{ total: number }>>`
       SELECT COALESCE(SUM("reservedAmount"), 0)::int AS total FROM "WalletReservation"
       WHERE "walletAccountId" = ${wallet.id} AND "status" = 'ACTIVE'::"WalletReservationStatus" AND "expiresAt" > NOW() AND COALESCE("checkoutReference", '') <> ${params.checkoutIntentId}
@@ -160,11 +194,13 @@ export async function releaseStoreCreditReservation(params: Params & { reason?: 
 export async function consumeStoreCreditReservationForOrder(params: Params & { shopifyOrderId: string; orderNumber?: string | null }) {
   return prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`${params.shopId}:${params.customerProfileId}:${params.checkoutIntentId}:store_credit`}))`;
+    await keepSingleActiveCheckoutReservation(params, tx);
     const rows = await tx.$queryRaw<Array<{ id: string; walletAccountId: string; customerProfileId: string; reservedAmount: number; currency: string; status: string }>>`
       SELECT "id", "walletAccountId", "customerProfileId", "reservedAmount", "currency", "status"
       FROM "WalletReservation"
       WHERE "shopId" = ${params.shopId} AND "customerProfileId" = ${params.customerProfileId} AND "checkoutReference" = ${params.checkoutIntentId}
-      ORDER BY "createdAt" DESC LIMIT 1 FOR UPDATE
+      ORDER BY CASE WHEN "status" = 'ACTIVE'::"WalletReservationStatus" THEN 0 WHEN "status" = 'CONSUMED'::"WalletReservationStatus" THEN 1 ELSE 2 END, "updatedAt" DESC, "createdAt" DESC
+      LIMIT 1 FOR UPDATE
     `;
     const reservation = rows[0];
     if (!reservation || reservation.status === "RELEASED" || reservation.status === "EXPIRED") return { ok: true, skipped: true, reason: "no-active-reservation" };
