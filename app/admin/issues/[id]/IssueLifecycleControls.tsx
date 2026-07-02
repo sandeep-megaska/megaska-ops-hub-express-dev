@@ -24,12 +24,38 @@ export default function IssueLifecycleControls({ requestId, currentStatus, allow
   const [adminKey, setAdminKey] = useState("");
   const [nextStatus, setNextStatus] = useState(allowedTransitions[0] || currentStatus);
   const [adminNote, setAdminNote] = useState(currentAdminNote);
+  const [refundAmount, setRefundAmount] = useState("");
+  const [refundMethod, setRefundMethod] = useState("");
   const [message, setMessage] = useState("");
+
+  const approvingRefund = nextStatus === "APPROVED";
+
+  function parseRefundAmountPaise() {
+    const trimmed = refundAmount.trim();
+    if (!trimmed) return { refundAmountPaise: null, error: "Refund amount is required" };
+    if (!/^\d+(?:\.\d{1,2})?$/.test(trimmed)) return { refundAmountPaise: null, error: "Refund amount must be numeric with max 2 decimal places" };
+    const numeric = Number(trimmed);
+    if (!Number.isFinite(numeric) || numeric <= 0) return { refundAmountPaise: null, error: "Refund amount must be greater than 0" };
+    return { refundAmountPaise: Math.round(numeric * 100), error: null };
+  }
 
   async function updateStatus() {
     if (!adminKey) {
       setMessage("Admin key is required");
       return;
+    }
+
+    const refundAmountResult = approvingRefund ? parseRefundAmountPaise() : { refundAmountPaise: null, error: null };
+    if (refundAmountResult.error) {
+      setMessage(refundAmountResult.error);
+      return;
+    }
+
+    const payload: Record<string, string | number | null> = { nextStatus, adminNote };
+    if (approvingRefund) {
+      payload.refundAmountPaise = refundAmountResult.refundAmountPaise;
+      payload.refundAmountMinor = refundAmountResult.refundAmountPaise;
+      if (refundMethod) payload.refundMethod = refundMethod;
     }
 
     const response = await fetch(`/api/admin/issue-requests/${requestId}/status`, {
@@ -38,7 +64,7 @@ export default function IssueLifecycleControls({ requestId, currentStatus, allow
         "Content-Type": "application/json",
         "x-admin-key": adminKey,
       },
-      body: JSON.stringify({ nextStatus, adminNote }),
+      body: JSON.stringify(payload),
     });
 
     const data = await response.json().catch(() => ({}));
@@ -48,7 +74,9 @@ export default function IssueLifecycleControls({ requestId, currentStatus, allow
         ? [
             data.validation.missingShopContext ? "Missing shop context." : null,
             data.validation.missingRefundAmount ? "Missing refund amount." : null,
-            data.validation.paymentMethodUndetermined ? "Payment method could not be determined." : null,
+            data.validation.paymentMethodUndetermined ? "Payment method could not be determined. Select COD or PREPAID and retry." : null,
+            data.validation.missingCustomerProfile ? "Missing customer profile." : null,
+            data.validation.invalidRefundAmount ? "Invalid refund amount." : null,
           ]
             .filter(Boolean)
             .join(" ")
@@ -108,6 +136,29 @@ export default function IssueLifecycleControls({ requestId, currentStatus, allow
             ))}
           </select>
         </label>
+        {approvingRefund ? (
+          <>
+            <label>
+              Refund amount ₹ <span aria-hidden="true">*</span>
+              <input
+                inputMode="decimal"
+                required
+                placeholder="500 or 785.95"
+                value={refundAmount}
+                onChange={(event) => setRefundAmount(event.target.value)}
+                style={{ display: "block", width: "100%" }}
+              />
+            </label>
+            <label>
+              Refund method override
+              <select value={refundMethod} onChange={(event) => setRefundMethod(event.target.value)} style={{ display: "block", width: "100%" }}>
+                <option value="">Auto-detect from payment gateway</option>
+                <option value="COD">COD</option>
+                <option value="PREPAID">PREPAID</option>
+              </select>
+            </label>
+          </>
+        ) : null}
         <button type="button" onClick={updateStatus} disabled={!allowedTransitions.length}>{ACTION_LABELS[nextStatus] || "Apply Status"}</button>
       </div>
 

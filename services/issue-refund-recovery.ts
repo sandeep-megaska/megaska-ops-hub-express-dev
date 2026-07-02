@@ -8,6 +8,13 @@ const PAYMENT_METHOD_ERROR = "Cannot approve for refund because payment method c
 
 type IssueForRefundRecovery = Awaited<ReturnType<typeof loadIssueForRefundRecovery>>;
 
+type ResolveIssueRefundSnapshotInput = {
+  refundAmountMinor?: number | null;
+  refundMethod?: RefundMethod | null;
+  adminNote?: string | null;
+  adminId?: string | null;
+};
+
 type RecoveryResult = {
   ok: boolean;
   error?: string;
@@ -28,21 +35,6 @@ function firstString(...values: unknown[]) {
     if (normalized) return normalized;
   }
   return null;
-}
-
-function parseAmountMinor(value: unknown): number | null {
-  const raw = String(value ?? "").trim();
-  if (!raw) return null;
-  const normalized = raw.replace(/[₹,\s]/g, "");
-  const numeric = Number(normalized);
-  if (!Number.isFinite(numeric) || numeric <= 0) return null;
-  return normalized.includes(".") ? Math.round(numeric * 100) : Math.trunc(numeric);
-}
-
-function decimalMajorToMinor(value: unknown): number | null {
-  const numeric = Number(String(value ?? "").trim());
-  if (!Number.isFinite(numeric) || numeric <= 0) return null;
-  return Math.round(numeric * 100);
 }
 
 function snapshotValue(snapshot: unknown, paths: string[][]): string | null {
@@ -80,39 +72,48 @@ async function findDashboardOrder(issue: NonNullable<IssueForRefundRecovery>, sh
   });
 }
 
-export async function resolveIssueRefundSnapshot(issueId: string): Promise<RecoveryResult> {
+export async function resolveIssueRefundSnapshot(issueId: string, input: ResolveIssueRefundSnapshotInput = {}): Promise<RecoveryResult> {
   const issue = await loadIssueForRefundRecovery(issueId);
   if (!issue) return { ok: false, error: "Issue request not found." };
+
+  if (issue.refundRequests[0]) {
+    const refund = issue.refundRequests[0];
+    return {
+      ok: true,
+      refundRequestId: refund.id,
+      resolvedShopId: refund.shopId || issue.shopId || null,
+      resolvedOrderId: refund.shopifyOrderId || issue.shopifyOrderId || null,
+      resolvedAmount: refund.amount,
+      resolvedPaymentMethod: refund.method,
+    };
+  }
 
   const itemSnapshot = jsonObject(issue.items[0]?.eligibilitySnapshot);
   const resolvedShopId = firstString(issue.shopId, issue.customerProfile?.shopId, issue.megaskaOrder?.shopId);
   if (!resolvedShopId) return logSkip(issue.id, { error: SHOP_CONTEXT_ERROR });
+  if (!issue.customerProfileId) return logSkip(issue.id, { resolvedShopId, error: "Cannot approve for refund because customer profile is missing." });
 
   const dashboardOrder = await findDashboardOrder(issue, resolvedShopId);
   const dashboardSnapshot = dashboardOrder?.snapshot ?? null;
   const resolvedOrderId = firstString(issue.shopifyOrderId, issue.megaskaOrder?.shopifyOrderId, dashboardOrder?.shopifyOrderId);
-  const resolvedAmount =
-    parseAmountMinor(issue.orderAmountSnapshot) ??
-    decimalMajorToMinor(dashboardOrder?.orderGrandTotal) ??
-    parseAmountMinor(snapshotValue(dashboardSnapshot, [["totalPrice"], ["total_price"], ["order", "totalPrice"], ["source", "totalPrice"]]));
+  const resolvedAmount = input.refundAmountMinor ?? null;
   if (!resolvedAmount) return logSkip(issue.id, { resolvedShopId, resolvedOrderId, error: AMOUNT_ERROR });
 
   const paymentGatewayName = firstString(
     itemSnapshot.paymentGatewayName,
     snapshotValue(dashboardSnapshot, [["paymentGateway"], ["payment_gateway"], ["order", "paymentGateway"], ["source", "paymentGateway"]])
   );
-  const resolvedPaymentMethod = paymentGatewayName ? detectRefundMethodFromGateway(paymentGatewayName) : null;
+  const resolvedPaymentMethod = input.refundMethod || (paymentGatewayName ? detectRefundMethodFromGateway(paymentGatewayName) : null);
   if (!resolvedPaymentMethod) {
     return logSkip(issue.id, { resolvedShopId, resolvedOrderId, resolvedAmount, resolvedPaymentMethod, error: PAYMENT_METHOD_ERROR });
   }
 
-  if (!issue.shopId || !issue.shopifyOrderId || !issue.orderAmountSnapshot) {
+  if (!issue.shopId || !issue.shopifyOrderId) {
     await prisma.orderActionRequest.update({
       where: { id: issue.id },
       data: {
         shopId: issue.shopId || resolvedShopId,
         shopifyOrderId: issue.shopifyOrderId || resolvedOrderId,
-        orderAmountSnapshot: issue.orderAmountSnapshot || String(resolvedAmount),
       },
     });
   }
@@ -121,11 +122,13 @@ export async function resolveIssueRefundSnapshot(issueId: string): Promise<Recov
     shop: { id: resolvedShopId },
     orderId: issue.id,
     amount: resolvedAmount,
-    reason: "Issue approved",
+    reason: input.adminNote || issue.adminNote || "Issue approved",
+    adminNote: input.adminNote || issue.adminNote || null,
     source: "ISSUE_REQUEST",
     sourceId: issue.id,
     customer: { id: issue.customerProfileId },
     method: resolvedPaymentMethod,
+    createdBy: { type: "ADMIN", id: input.adminId },
   });
 
   console.info("[ISSUE REFUND RECOVERY] resolved", { issueId: issue.id, resolvedShopId, resolvedOrderId, resolvedAmount, resolvedPaymentMethod, refundRequestId: refund.id, walletTransactionId: refund.walletTransactionId || null });
