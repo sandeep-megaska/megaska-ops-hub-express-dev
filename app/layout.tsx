@@ -32,6 +32,9 @@ export default function RootLayout({
               <Link href="/admin/cancellations" className="mk-nav-link">
                 Cancellations
               </Link>
+              <Link href="/admin/wallets" className="mk-nav-link">
+                Store Credit / Wallets
+              </Link>
               <Link href="/admin/issues" className="mk-nav-link">
                 Issues
               </Link>
