@@ -2,9 +2,9 @@ import type { RefundMethod } from "../generated/prisma/index.js";
 import { prisma } from "./db/prisma";
 import { createRefundRequest, detectRefundMethodFromGateway } from "./refund-request";
 
-const SHOP_CONTEXT_ERROR = "Cannot issue Store Credit because shop context is missing.";
-const AMOUNT_ERROR = "Cannot issue Store Credit because refund amount could not be determined.";
-const PAYMENT_METHOD_ERROR = "Cannot issue Store Credit because payment method could not be verified as COD.";
+const SHOP_CONTEXT_ERROR = "Cannot approve for refund because shop context is missing.";
+const AMOUNT_ERROR = "Cannot approve for refund because refund amount is missing.";
+const PAYMENT_METHOD_ERROR = "Cannot approve for refund because payment method could not be determined.";
 
 type IssueForRefundRecovery = Awaited<ReturnType<typeof loadIssueForRefundRecovery>>;
 
@@ -102,7 +102,7 @@ export async function resolveIssueRefundSnapshot(issueId: string): Promise<Recov
     snapshotValue(dashboardSnapshot, [["paymentGateway"], ["payment_gateway"], ["order", "paymentGateway"], ["source", "paymentGateway"]])
   );
   const resolvedPaymentMethod = paymentGatewayName ? detectRefundMethodFromGateway(paymentGatewayName) : null;
-  if (resolvedPaymentMethod !== "COD") {
+  if (!resolvedPaymentMethod) {
     return logSkip(issue.id, { resolvedShopId, resolvedOrderId, resolvedAmount, resolvedPaymentMethod, error: PAYMENT_METHOD_ERROR });
   }
 
@@ -125,7 +125,7 @@ export async function resolveIssueRefundSnapshot(issueId: string): Promise<Recov
     source: "ISSUE_REQUEST",
     sourceId: issue.id,
     customer: { id: issue.customerProfileId },
-    method: "COD",
+    method: resolvedPaymentMethod,
   });
 
   console.info("[ISSUE REFUND RECOVERY] resolved", { issueId: issue.id, resolvedShopId, resolvedOrderId, resolvedAmount, resolvedPaymentMethod, refundRequestId: refund.id, walletTransactionId: refund.walletTransactionId || null });

@@ -43,7 +43,17 @@ export default function IssueLifecycleControls({ requestId, currentStatus, allow
 
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      setMessage(data?.error || "Failed to update status");
+      const serverError = data?.serverError || data?.error || "Failed to update status";
+      const validation = data?.validation
+        ? [
+            data.validation.missingShopContext ? "Missing shop context." : null,
+            data.validation.missingRefundAmount ? "Missing refund amount." : null,
+            data.validation.paymentMethodUndetermined ? "Payment method could not be determined." : null,
+          ]
+            .filter(Boolean)
+            .join(" ")
+        : "";
+      setMessage(validation ? `${serverError} ${validation}` : serverError);
       return;
     }
 
