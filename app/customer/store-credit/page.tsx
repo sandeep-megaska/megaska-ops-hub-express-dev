@@ -5,6 +5,9 @@ import { useEffect, useState } from "react";
 
 type StoreCreditBalance = {
   balance: number;
+  availableBalance: number;
+  reservedAmount: number;
+  ledgerBalance: number;
   currency: "INR";
 };
 
@@ -33,8 +36,30 @@ function formatSignedAmount(transaction: StoreCreditTransaction) {
   return `${prefix}${formatInr(transaction.amount)}`;
 }
 
+const CUSTOMER_TRANSACTION_LABELS: Record<string, string> = {
+  COD_REFUND_CREDIT: "Issue Resolution Credit",
+  GOODWILL_CREDIT: "Goodwill Credit",
+  MANUAL_CREDIT: "Customer Support Credit",
+  CHECKOUT_REDEMPTION: "Used During Checkout",
+  MANUAL_DEBIT: "Administrative Adjustment",
+  ADJUSTMENT: "Store Credit Adjustment",
+};
+
+function getCustomerTransactionLabel(transaction: StoreCreditTransaction) {
+  return CUSTOMER_TRANSACTION_LABELS[transaction.type] || transaction.customerLabel || "Store Credit Activity";
+}
+
+function getTransactionReference(transaction: StoreCreditTransaction) {
+  const references = [
+    transaction.orderName ? `Reference/order: ${transaction.orderName}` : null,
+    transaction.refundRequestId ? `Refund: ${transaction.refundRequestId}` : null,
+  ].filter(Boolean);
+
+  return references.length ? references.join(" · ") : "Reference/order: -";
+}
+
 export default function CustomerStoreCreditPage() {
-  const [balance, setBalance] = useState<StoreCreditBalance>({ balance: 0, currency: "INR" });
+  const [balance, setBalance] = useState<StoreCreditBalance>({ balance: 0, availableBalance: 0, reservedAmount: 0, ledgerBalance: 0, currency: "INR" });
   const [transactions, setTransactions] = useState<StoreCreditTransaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -62,6 +87,9 @@ export default function CustomerStoreCreditPage() {
 
         setBalance({
           balance: Number(balanceData?.balance || 0),
+          availableBalance: Number(balanceData?.availableBalance ?? balanceData?.balance ?? 0),
+          reservedAmount: Number(balanceData?.reservedAmount || 0),
+          ledgerBalance: Number(balanceData?.ledgerBalance ?? balanceData?.balance ?? 0),
           currency: balanceData?.currency === "INR" ? "INR" : "INR",
         });
         setTransactions(Array.isArray(transactionsData) ? transactionsData : []);
@@ -87,32 +115,40 @@ export default function CustomerStoreCreditPage() {
       {!loading && !error ? (
         <>
           <section style={{ border: "1px solid #ddd", borderRadius: 12, padding: 20, background: "#fafafa" }}>
-            <h2 style={{ marginTop: 0 }}>Available Store Credit</h2>
-            <p style={{ fontSize: 34, fontWeight: 700, margin: 0 }}>{formatInr(balance.balance)}</p>
+            <h2 style={{ marginTop: 0 }}>Store Credit Balance</h2>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
+              <div>
+                <p style={{ color: "#555", margin: "0 0 4px" }}>Available Balance</p>
+                <p style={{ fontSize: 34, fontWeight: 700, margin: 0 }}>{formatInr(balance.availableBalance)}</p>
+              </div>
+              <div>
+                <p style={{ color: "#555", margin: "0 0 4px" }}>Reserved Amount</p>
+                <p style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>{formatInr(balance.reservedAmount)}</p>
+              </div>
+              <div>
+                <p style={{ color: "#555", margin: "0 0 4px" }}>Total Ledger Balance</p>
+                <p style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>{formatInr(balance.ledgerBalance)}</p>
+              </div>
+            </div>
           </section>
 
           <section style={{ border: "1px solid #ddd", borderRadius: 12, padding: 20 }}>
             <h2 style={{ marginTop: 0 }}>Store Credit History</h2>
+            <p style={{ color: "#555", marginTop: -8 }}>Showing latest 50 Store Credit activities.</p>
             {transactions.length === 0 ? <p>You do not have any Store Credit yet.</p> : null}
             {transactions.length > 0 ? (
               <div style={{ display: "grid", gap: 12 }}>
                 {transactions.map((transaction) => (
                   <article key={transaction.id} style={{ borderTop: "1px solid #eee", paddingTop: 12, display: "grid", gap: 4 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-                      <strong>{transaction.customerLabel}</strong>
+                      <strong>{getCustomerTransactionLabel(transaction)}</strong>
                       <strong style={{ color: transaction.direction === "credit" ? "#087f23" : transaction.direction === "debit" ? "#b00020" : "#333" }}>
                         {formatSignedAmount(transaction)}
                       </strong>
                     </div>
-                    {transaction.reason ? <span>{transaction.reason}</span> : null}
-                    {transaction.orderName || transaction.refundRequestId ? (
-                      <span style={{ color: "#555" }}>
-                        {transaction.orderName ? `Order/reference: ${transaction.orderName}` : ""}
-                        {transaction.orderName && transaction.refundRequestId ? " · " : ""}
-                        {transaction.refundRequestId ? `Refund: ${transaction.refundRequestId}` : ""}
-                      </span>
-                    ) : null}
-                    <time style={{ color: "#666" }}>{new Date(transaction.createdAt).toLocaleString()}</time>
+                    <span>Reason: {transaction.reason || "-"}</span>
+                    <span style={{ color: "#555" }}>{getTransactionReference(transaction)}</span>
+                    <time style={{ color: "#666" }}>Timestamp: {new Date(transaction.createdAt).toLocaleString()}</time>
                   </article>
                 ))}
               </div>

@@ -82,10 +82,11 @@ export default async function AdminWalletDetailPage({ params }: { params: Promis
 
       <section>
         <h3>Wallet Ledger</h3>
+        <p style={{ color: "#555", marginTop: -6 }}>Showing latest 200 wallet transactions.</p>
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr>
-              {["Date", "Direction", "Type", "Amount", "Reason", "Source", "Order", "Created By"].map((head) => (
+              {["Date", "Direction", "Type", "Amount", "Reason", "Admin Note", "Source", "Order", "Created By"].map((head) => (
                 <th key={head} style={{ textAlign: "left", borderBottom: "1px solid #ccc", padding: 8 }}>
                   {head}
                 </th>
@@ -101,15 +102,20 @@ export default async function AdminWalletDetailPage({ params }: { params: Promis
                 <td style={{ padding: 8 }}>
                   {txn.currency} {(txn.amount / 100).toFixed(2)}
                 </td>
-                <td style={{ padding: 8 }}>{txn.reason || txn.adminNote || "-"}</td>
-                <td style={{ padding: 8 }}>{txn.sourceType}{txn.sourceReference ? ` (${txn.sourceReference})` : ""}</td>
+                <td style={{ padding: 8 }}>{txn.reason || "-"}</td>
+                <td style={{ padding: 8 }}>{txn.adminNote || "-"}</td>
+                <td style={{ padding: 8 }}>
+                  <div>Type: {txn.sourceType || "-"}</div>
+                  <div>Reference: {txn.sourceReference || "-"}</div>
+                  <div>ID: {txn.sourceId || "-"}</div>
+                </td>
                 <td style={{ padding: 8 }}>{txn.orderNumber || "-"}</td>
                 <td style={{ padding: 8 }}>{txn.createdByType}{txn.createdById ? ` (${txn.createdById})` : ""}</td>
               </tr>
             ))}
             {!transactions.length ? (
               <tr>
-                <td style={{ padding: 8 }} colSpan={8}>
+                <td style={{ padding: 8 }} colSpan={9}>
                   No wallet transactions yet.
                 </td>
               </tr>
