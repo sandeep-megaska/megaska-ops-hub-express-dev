@@ -187,7 +187,18 @@
     "[data-customer-logout]",
   ];
 
-  const CART_DRAWER_SELECTORS = [".cart-drawer", ".drawer", ".mini-cart", "[data-cart-drawer]"];
+  const CART_DRAWER_SELECTORS = [
+    "cart-drawer",
+    "#CartDrawer",
+    "#cart-drawer",
+    ".cart-drawer",
+    ".drawer--cart",
+    "[data-cart-drawer]",
+    "[data-drawer='cart']",
+    "[id*='cart'][id*='drawer' i]",
+    "[class*='cart'][class*='drawer' i]",
+    "[role='dialog'][aria-label*='cart' i]",
+  ];
 
   const CART_DRAWER_OPEN_CLASSES = [
     "active",
@@ -1584,7 +1595,7 @@ setTimeout(() => closeModal("success", { force: true }), SUCCESS_CLOSE_DELAY_MS)
     if (triggerEl && typeof triggerEl.closest === "function") {
       return (
         triggerEl.closest("form") ||
-        triggerEl.closest("[data-cart-drawer], .cart-drawer, .drawer, .cart__footer, .cart, .sticky-cart") ||
+        triggerEl.closest(CART_DRAWER_SELECTORS.join(",")) ||
         document
       );
     }
@@ -2167,9 +2178,35 @@ function consumePendingAccountRedirect() {
     removeAccountMenu();
   }
 
+  function isLoopdeskCartDrawerSuppressionActive() {
+    return (
+      window.LOOPDESK_CART_DRAWER_CONFIG?.enabled === true &&
+      document.documentElement.classList.contains("loopdesk-cart-drawer-is-open")
+    );
+  }
+
+  function logCartDrawerDebug(message, payload) {
+    if (window.LOOPDESK_CART_DRAWER_DEBUG !== true) return;
+    if (!window.console || typeof window.console.debug !== "function") return;
+    window.console.debug("[Megaska OTP] cart drawer", message, payload || {});
+  }
+
   function closeCartDrawerBeforeModal() {
+    if (!isLoopdeskCartDrawerSuppressionActive()) {
+      logCartDrawerDebug("suppression skipped", {
+        enabled: window.LOOPDESK_CART_DRAWER_CONFIG?.enabled === true,
+        openClass: document.documentElement.classList.contains("loopdesk-cart-drawer-is-open"),
+      });
+      return;
+    }
+
     const drawers = Array.from(document.querySelectorAll(CART_DRAWER_SELECTORS.join(",")));
-    if (!drawers.length) return;
+    if (!drawers.length) {
+      logCartDrawerDebug("no matching cart drawer owners found");
+      return;
+    }
+
+    logCartDrawerDebug("closing matching cart drawer owners", { count: drawers.length });
 
     drawers.forEach((drawer) => {
       try {
@@ -2183,7 +2220,7 @@ function consumePendingAccountRedirect() {
         }
 
         const closeTrigger = drawer.querySelector(
-          "[data-close], [data-cart-close], [data-drawer-close], .drawer__close, .cart-drawer__close, [aria-label='Close cart'], [aria-label='Close']"
+          "[data-close], [data-cart-close], [data-drawer-close], .cart-drawer__close, [aria-label='Close cart']"
         );
 
         if (closeTrigger && typeof closeTrigger.click === "function") {
@@ -2197,12 +2234,12 @@ function consumePendingAccountRedirect() {
           drawer.setAttribute("aria-hidden", "true");
         }
       } catch (error) {
-        console.warn("[Megaska OTP] cart drawer close skipped", error);
+        logCartDrawerDebug("close skipped", { error });
       }
     });
 
-    document.documentElement.classList.remove("drawer-open", "cart-open", "mini-cart-open", "js-drawer-open");
-    document.body.classList.remove("drawer-open", "cart-open", "mini-cart-open", "js-drawer-open");
+    document.documentElement.classList.remove("cart-open", "mini-cart-open");
+    document.body.classList.remove("cart-open", "mini-cart-open");
   }
 
   function hideAccountMenu() {
