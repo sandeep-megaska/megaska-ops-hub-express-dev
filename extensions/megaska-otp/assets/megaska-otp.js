@@ -1474,6 +1474,89 @@ setTimeout(() => closeModal("success", { force: true }), SUCCESS_CLOSE_DELAY_MS)
     return null;
   }
 
+
+  function getElementUrlPath(value) {
+    const rawValue = String(value || "").trim();
+    if (!rawValue) return "";
+    try {
+      return new URL(rawValue, window.location.origin).pathname.replace(/\/+$/, "") || "/";
+    } catch {
+      return rawValue.split("?")[0].split("#")[0].replace(/\/+$/, "") || "/";
+    }
+  }
+
+  function isCartAddPath(value) {
+    const path = getElementUrlPath(value);
+    return path === "/cart/add" || path === "/cart/add.js";
+  }
+
+  function hasAddToCartIntentText(value) {
+    return /(add[\s_-]*(to[\s_-]*)?cart|cart[\s_-]*add|add-to-cart)/i.test(String(value || ""));
+  }
+
+  function isAddToCartIntent(target) {
+    if (!target) return false;
+
+    const element = target.target || target;
+    const form =
+      element && typeof element.closest === "function"
+        ? element.closest("form")
+        : element && typeof element.matches === "function" && element.matches("form")
+          ? element
+          : null;
+
+    if (form && isCartAddPath(form.getAttribute("action"))) return true;
+
+    const actionable =
+      element && typeof element.closest === "function"
+        ? element.closest("button,input,a,[role='button'],[data-add-to-cart],[data-cart-add],[data-action]")
+        : element;
+
+    if (!actionable || typeof actionable.getAttribute !== "function") return false;
+
+    if (isCartAddPath(actionable.getAttribute("href"))) return true;
+    if (isCartAddPath(actionable.getAttribute("formaction"))) return true;
+
+    const name = String(actionable.getAttribute("name") || "").trim().toLowerCase();
+    if (name === "add" || name === "add-to-cart" || name === "add_to_cart") return true;
+
+    if (
+      actionable.matches?.("[data-add-to-cart], [data-cart-add], [data-action='add-to-cart'], [data-action='cart-add'], .add-to-cart, .product-form__submit")
+    ) {
+      return true;
+    }
+
+    return (
+      hasAddToCartIntentText(actionable.getAttribute("id")) ||
+      hasAddToCartIntentText(actionable.getAttribute("class")) ||
+      hasAddToCartIntentText(actionable.getAttribute("aria-label")) ||
+      hasAddToCartIntentText(actionable.textContent)
+    );
+  }
+
+  function isExpressCheckoutIntent(target) {
+    const element = target?.target || target;
+    if (!element || typeof element.closest !== "function") return false;
+    return Boolean(
+      element.closest("[data-megaska-express-checkout], [data-loopdesk-express-checkout], [data-bag-action='checkout'], .loopdesk-cart-drawer__express")
+    );
+  }
+
+  function isCheckoutIntent(target) {
+    if (isAddToCartIntent(target)) return false;
+    if (isExpressCheckoutIntent(target)) return true;
+
+    const element = target?.target || target;
+    if (!element) return false;
+    if (isCheckoutTarget(element)) return true;
+
+    const form = typeof element.closest === "function" ? element.closest("form") : null;
+    if (form && isCartAddPath(form.getAttribute("action"))) return false;
+    if (form && String(form.getAttribute("action") || "").includes("/checkout")) return true;
+
+    return false;
+  }
+
   function extractVerifiedPhoneFromSession(session) {
     const phoneCandidates = [
       session?.phoneE164,
@@ -2460,8 +2543,12 @@ function consumePendingAccountRedirect() {
           return;
         }
 
+        if (isAddToCartIntent(event.target)) {
+          return;
+        }
+
         const checkoutTrigger = inferCheckoutTriggerFromEvent(event);
-        if (checkoutTrigger && isCheckoutTarget(checkoutTrigger)) {
+        if (checkoutTrigger && isCheckoutIntent(checkoutTrigger)) {
           await handleCheckoutTriggerClick(event, checkoutTrigger);
           return;
         }
@@ -2496,6 +2583,8 @@ function consumePendingAccountRedirect() {
       if (!form || !form.matches || !form.matches("form")) return;
 
       const action = form.getAttribute("action") || "";
+      if (isCartAddPath(action) || isAddToCartIntent(form)) return;
+
       const submitter = event.submitter;
       const fallbackSubmitter =
         form.querySelector(
@@ -2840,6 +2929,8 @@ function bindAccountFallbackObserver() {
       if (!form || !form.matches || !form.matches("form")) return;
 
       const action = form.getAttribute("action") || "";
+      if (isCartAddPath(action) || isAddToCartIntent(form)) return;
+
       const submitter = event.submitter;
       const fallbackSubmitter =
         form.querySelector("button[name='checkout'], button[name='goto_pp'], input[name='checkout'], input[name='goto_pp'], [data-checkout-button], .shopify-payment-button__button, .checkout-button, .btn-checkout, .mini-cart__checkout, .cart__checkout") ||
@@ -2966,6 +3057,17 @@ function hasVisibleNativeDesktopAccountEntry() {
     const formId = String(form?.id || "");
     const formDataAttrNames = form?.getAttributeNames?.() || [];
 
+    if (
+      submitter &&
+      (String(submitterName).trim().toLowerCase() === "add" ||
+        hasAddToCartIntentText(submitterText) ||
+        hasAddToCartIntentText(submitterClassName) ||
+        hasAddToCartIntentText(submitterId) ||
+        hasAddToCartIntentText(submitterDataAction))
+    ) {
+      return { intent: false, submitter };
+    }
+
     if (submitter && submitter.matches(".pbar-buy, .shopify-payment-button__button")) {
       return { intent: true, submitter };
     }
@@ -3016,7 +3118,7 @@ function hasVisibleNativeDesktopAccountEntry() {
       if (resumingCartAddForms.has(form)) return;
 
       const action = String(form.getAttribute("action") || "");
-      if (!action.includes("/cart/add")) return;
+      if (!isCartAddPath(action)) return;
 
       const buyNowIntent = isBuyNowCartAddSubmitIntent(event, form);
       if (!buyNowIntent.intent) return;

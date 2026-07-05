@@ -121,7 +121,7 @@
       '<aside class="loopdesk-cart-drawer" aria-hidden="true" aria-label="Cart" role="dialog">',
       '<header class="loopdesk-cart-drawer__header"><div><h2>Your bag <span data-loopdesk-cart-count></span></h2><p>Cart</p></div><button type="button" class="loopdesk-cart-drawer__close" aria-label="Close cart">×</button></header>',
       '<div class="loopdesk-cart-drawer__body"></div>',
-      '<footer class="loopdesk-cart-drawer__footer"><div class="loopdesk-cart-drawer__subtotal"><span>Subtotal</span><strong data-loopdesk-cart-subtotal></strong></div><button type="button" class="loopdesk-cart-drawer__express">Express Checkout</button><a class="loopdesk-cart-drawer__view-cart" href="/cart">View cart</a></footer>',
+      '<footer class="loopdesk-cart-drawer__footer"><div class="loopdesk-cart-drawer__subtotal"><span>Subtotal</span><strong data-loopdesk-cart-subtotal></strong></div><button type="button" class="loopdesk-cart-drawer__express" data-loopdesk-express-checkout>Express Checkout</button><a class="loopdesk-cart-drawer__view-cart" href="/cart">View cart</a></footer>',
       '</aside>',
     ].join("");
     document.body.appendChild(root);
