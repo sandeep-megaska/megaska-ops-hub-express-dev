@@ -9,6 +9,43 @@
   var ROOT_ID = "loopdesk-cart-drawer-root";
   var FETCH_MARKER = "__loopdeskCartDrawerPatched";
 
+  var NATIVE_CART_DRAWER_SELECTORS = [
+    "cart-drawer",
+    "#CartDrawer",
+    "#cart-drawer",
+    ".cart-drawer",
+    ".drawer--cart",
+    "[data-cart-drawer]",
+    "[data-drawer='cart']",
+    "[id*='cart'][id*='drawer' i]",
+    "[class*='cart'][class*='drawer' i]",
+    "[role='dialog'][aria-label*='cart' i]",
+  ];
+  var NATIVE_CART_DRAWER_OPEN_CLASSES = [
+    "active",
+    "open",
+    "is-open",
+    "drawer--open",
+    "menu-opening",
+    "animate",
+  ];
+  var NATIVE_CART_DRAWER_CLOSE_SELECTORS = [
+    "button[name='close']",
+    ".drawer__close",
+    ".cart-drawer__close",
+    "[aria-label*='close' i]",
+  ];
+  var CART_BODY_LOCK_CLASSES = [
+    "cart-open",
+    "cart-drawer-open",
+    "drawer-open",
+    "js-drawer-open",
+    "js-drawer-open-cart",
+    "mini-cart-open",
+    "no-scroll",
+    "overflow-hidden",
+  ];
+
   if (!config.enabled || window.__LOOPDESK_CART_DRAWER_LOADED__) return;
   window.__LOOPDESK_CART_DRAWER_LOADED__ = true;
 
@@ -48,6 +85,61 @@
 
   function isInsideLoopDeskDrawer(element) {
     return Boolean(element && element.closest && element.closest("#" + ROOT_ID));
+  }
+
+  function isNativeCartDrawerActive(drawer) {
+    if (!drawer || isInsideLoopDeskDrawer(drawer)) return false;
+    return drawer.hasAttribute("open") ||
+      drawer.getAttribute("aria-hidden") === "false" ||
+      NATIVE_CART_DRAWER_OPEN_CLASSES.some(function (className) { return drawer.classList.contains(className); });
+  }
+
+  function releaseNativeCartDrawerPageLocks() {
+    [document.documentElement, document.body].forEach(function (owner) {
+      if (!owner) return;
+      CART_BODY_LOCK_CLASSES.forEach(function (className) { owner.classList.remove(className); });
+      if (owner.hasAttribute("inert")) owner.removeAttribute("inert");
+      if (owner.style && owner.style.overflow === "hidden") owner.style.overflow = "";
+    });
+  }
+
+  function closeNativeCartDrawers() {
+    var nativeDrawerWasActive = false;
+    var drawers = Array.prototype.slice.call(document.querySelectorAll(NATIVE_CART_DRAWER_SELECTORS.join(",")))
+      .filter(function (drawer, index, list) {
+        return drawer && !isInsideLoopDeskDrawer(drawer) && list.indexOf(drawer) === index;
+      });
+
+    drawers.forEach(function (drawer) {
+      var wasActive = isNativeCartDrawerActive(drawer);
+      nativeDrawerWasActive = nativeDrawerWasActive || wasActive;
+
+      NATIVE_CART_DRAWER_CLOSE_SELECTORS.forEach(function (selector) {
+        var closeButton = drawer.querySelector(selector);
+        if (closeButton && typeof closeButton.click === "function") closeButton.click();
+      });
+
+      NATIVE_CART_DRAWER_OPEN_CLASSES.forEach(function (className) { drawer.classList.remove(className); });
+      drawer.removeAttribute("open");
+      drawer.setAttribute("aria-hidden", "true");
+    });
+
+    if (nativeDrawerWasActive) {
+      releaseNativeCartDrawerPageLocks();
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", keyCode: 27, which: 27, bubbles: true, cancelable: true }));
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", keyCode: 27, which: 27, bubbles: true, cancelable: true }));
+      releaseNativeCartDrawerPageLocks();
+    }
+  }
+
+  function scheduleNativeCartDrawerClosure() {
+    closeNativeCartDrawers();
+    if (window.requestAnimationFrame) {
+      window.requestAnimationFrame(closeNativeCartDrawers);
+    } else {
+      window.setTimeout(closeNativeCartDrawers, 0);
+    }
+    window.setTimeout(closeNativeCartDrawers, 100);
   }
 
   function hasCartPath(href) {
@@ -185,8 +277,10 @@
   }
 
   function setOpen(open) {
+    if (open) closeNativeCartDrawers();
     state.open = open;
     render();
+    if (open) scheduleNativeCartDrawerClosure();
   }
 
   function fetchCart() {
