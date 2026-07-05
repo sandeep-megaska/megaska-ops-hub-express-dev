@@ -1,18 +1,63 @@
+{% liquid
+  assign loopdesk_cart_drawer_enabled = block.settings.cart_drawer_enabled | default: true, allow_false: true
+  assign loopdesk_open_after_add_to_cart = block.settings.open_after_add_to_cart | default: true, allow_false: true
+  assign loopdesk_express_checkout_enabled = block.settings.express_checkout_button_enabled | default: true, allow_false: true
+  assign loopdesk_view_cart_enabled = block.settings.view_cart_button_enabled | default: true, allow_false: true
+%}
+
 {{ 'megaska-otp.css' | asset_url | stylesheet_tag }}
+{% if loopdesk_cart_drawer_enabled %}
+  {{ 'loopdesk-cart-drawer.css' | asset_url | stylesheet_tag }}
+{% endif %}
 
 <script>
   window.MEGASKA_SHOP_DOMAIN = {{ shop.permanent_domain | json }};
+  window.LOOPDESK_CART_DRAWER_CONFIG = Object.assign({}, window.LOOPDESK_CART_DRAWER_CONFIG || {}, {
+    enabled: {{ loopdesk_cart_drawer_enabled | json }},
+    openAfterAddToCart: {{ loopdesk_open_after_add_to_cart | json }},
+    expressCheckoutButtonEnabled: {{ loopdesk_express_checkout_enabled | json }},
+    viewCartButtonEnabled: {{ loopdesk_view_cart_enabled | json }},
+    shopDomain: {{ shop.permanent_domain | json }}
+  });
 </script>
 
 <script src="{{ 'megaska-auth.js' | asset_url }}" defer></script>
 <script src="{{ 'megaska-otp.js' | asset_url }}" defer></script>
 <script src="{{ 'megaska-express-modal.js' | asset_url }}" defer></script>
+{% if loopdesk_cart_drawer_enabled %}
+  <script src="{{ 'loopdesk-cart-drawer.js' | asset_url }}" defer></script>
+{% endif %}
 <script src="/apps/megaska/megaska-exchange-hook.js" defer></script>
 
 {% schema %}
 {
   "name": "Megaska OTP Embed",
   "target": "body",
-  "settings": []
+  "settings": [
+    {
+      "type": "checkbox",
+      "id": "cart_drawer_enabled",
+      "label": "Enable LoopDesk cart drawer",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "open_after_add_to_cart",
+      "label": "Open drawer after add to cart",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "express_checkout_button_enabled",
+      "label": "Show Express Checkout button",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "view_cart_button_enabled",
+      "label": "Show View cart fallback",
+      "default": true
+    }
+  ]
 }
 {% endschema %}
