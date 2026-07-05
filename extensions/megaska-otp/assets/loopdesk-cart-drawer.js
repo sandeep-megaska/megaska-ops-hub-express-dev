@@ -9,11 +9,43 @@
   var ROOT_ID = "loopdesk-cart-drawer-root";
   var FETCH_MARKER = "__loopdeskCartDrawerPatched";
 
+  var THEME_CART_DRAWER_SELECTORS = [
+    "cart-drawer",
+    ".cart-drawer",
+    "#CartDrawer",
+    ".drawer",
+    ".drawer--cart",
+    "[data-cart-drawer]",
+    "[aria-label*='Cart']",
+  ];
+  var THEME_CART_DRAWER_OPEN_CLASSES = [
+    "active",
+    "animate",
+    "is-active",
+    "is-open",
+    "open",
+    "drawer--active",
+    "drawer--open",
+    "cart-drawer--active",
+    "cart-drawer--open",
+  ];
+  var THEME_DOCUMENT_DRAWER_OPEN_CLASSES = [
+    "cart-drawer-open",
+    "cart-drawer--open",
+    "drawer-open",
+    "drawer--open",
+    "js-drawer-open",
+    "js-drawer-open-cart",
+    "menu-drawer-open",
+    "overflow-hidden",
+  ];
+
   if (!config.enabled || window.__LOOPDESK_CART_DRAWER_LOADED__) return;
   window.__LOOPDESK_CART_DRAWER_LOADED__ = true;
 
   var state = { open: false, loading: false, cart: null, error: "" };
   var elements = {};
+  var themeDrawerObserver = null;
 
   function money(cents, currency) {
     var amount = Number(cents || 0) / 100;
@@ -164,6 +196,72 @@
     }).join("");
   }
 
+  function isThemeCartDrawer(element) {
+    if (!element || !element.matches || isInsideLoopDeskDrawer(element)) return false;
+    if (element.matches("cart-drawer, .cart-drawer, #CartDrawer, .drawer--cart, [data-cart-drawer]")) return true;
+    if (element.matches(".drawer")) return /cart|bag|mini-cart/.test(elementText(element));
+    if (element.matches("[aria-label*='Cart']")) {
+      return element.matches("dialog, aside, section, div, cart-drawer, [role='dialog'], [role='complementary']") && /drawer|cart|bag|mini-cart/.test(elementText(element));
+    }
+    return false;
+  }
+
+  function setAttributeIfChanged(element, attribute, value) {
+    if (element.getAttribute(attribute) === value) return;
+    element.setAttribute(attribute, value);
+  }
+
+  function setBooleanAttributeFalse(element, attribute) {
+    if (!element.hasAttribute(attribute)) return;
+    setAttributeIfChanged(element, attribute, "false");
+  }
+
+  function suppressThemeCartDrawers() {
+    if (!state.open) return;
+
+    document.querySelectorAll(THEME_CART_DRAWER_SELECTORS.join(",")).forEach(function (drawer) {
+      if (!isThemeCartDrawer(drawer)) return;
+
+      drawer.removeAttribute("open");
+      drawer.removeAttribute("opened");
+      drawer.removeAttribute("data-open");
+      drawer.removeAttribute("data-opened");
+      drawer.removeAttribute("data-active");
+      drawer.removeAttribute("data-visible");
+      drawer.removeAttribute("aria-modal");
+      setAttributeIfChanged(drawer, "aria-hidden", "true");
+      setBooleanAttributeFalse(drawer, "aria-expanded");
+      setBooleanAttributeFalse(drawer, "data-expanded");
+
+      if (typeof drawer.open === "boolean") drawer.open = false;
+      THEME_CART_DRAWER_OPEN_CLASSES.forEach(function (className) { drawer.classList.remove(className); });
+    });
+
+    [document.documentElement, document.body].forEach(function (element) {
+      if (!element || !element.classList) return;
+      THEME_DOCUMENT_DRAWER_OPEN_CLASSES.forEach(function (className) { element.classList.remove(className); });
+    });
+  }
+
+  function observeThemeCartDrawerChanges() {
+    if (themeDrawerObserver || typeof MutationObserver === "undefined") return;
+    themeDrawerObserver = new MutationObserver(function () {
+      if (state.open) window.setTimeout(suppressThemeCartDrawers, 0);
+    });
+    themeDrawerObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["aria-hidden", "aria-modal", "class", "data-active", "data-expanded", "data-open", "data-opened", "data-visible", "open", "opened"],
+      childList: true,
+      subtree: true,
+    });
+  }
+
+  function stopObservingThemeCartDrawerChanges() {
+    if (!themeDrawerObserver) return;
+    themeDrawerObserver.disconnect();
+    themeDrawerObserver = null;
+  }
+
   function render() {
     if (!elements.panel) return;
     var cart = state.cart;
@@ -171,6 +269,7 @@
     elements.panel.setAttribute("aria-hidden", state.open ? "false" : "true");
     elements.overlay.hidden = !state.open;
     document.documentElement.classList.toggle("loopdesk-cart-drawer-is-open", state.open);
+    suppressThemeCartDrawers();
 
     elements.body.innerHTML = state.loading
       ? '<div class="loopdesk-cart-drawer__loading">Loading your cart…</div>'
@@ -187,6 +286,12 @@
   function setOpen(open) {
     state.open = open;
     render();
+    if (open) {
+      observeThemeCartDrawerChanges();
+      window.setTimeout(suppressThemeCartDrawers, 0);
+    } else {
+      stopObservingThemeCartDrawerChanges();
+    }
   }
 
   function fetchCart() {
