@@ -46,16 +46,16 @@ async function createMockChallenge(
   console.info("[OTP REQUEST SEND SUCCESS]", {
     challengeId: challenge.id,
     shopId,
-    phoneE164,
+    phonePresent: Boolean(phoneE164),
     provider: "mock",
   });
 
   console.log("[OTP REQUEST CREATED MOCK OTP]", {
     challengeId: challenge.id,
     shopId,
-    phoneE164,
+    phonePresent: Boolean(phoneE164),
     provider: "mock",
-    otp,
+    otpPresent: Boolean(otp),
   });
 
   return NextResponse.json(
@@ -65,7 +65,6 @@ async function createMockChallenge(
       success: true,
       otpSent: true,
       challengeId: challenge.id,
-      phone: phoneE164,
       mock: true,
       provider: "mock",
     },
@@ -106,7 +105,7 @@ async function createProviderChallenge(
     console.info("[OTP REQUEST SEND SUCCESS]", {
       challengeId: challenge.id,
       shopId,
-      phoneE164,
+      phonePresent: Boolean(phoneE164),
       provider,
       providerStatus: twilioVerification.status,
     });
@@ -118,7 +117,6 @@ async function createProviderChallenge(
         success: true,
         otpSent: true,
         challengeId: challenge.id,
-        phone: phoneE164,
         provider,
       },
       {
@@ -151,7 +149,7 @@ async function createProviderChallenge(
   console.info("[OTP REQUEST SEND SUCCESS]", {
     challengeId: challenge.id,
     shopId,
-    phoneE164,
+    phonePresent: Boolean(phoneE164),
     provider,
     providerStatus: msg91Verification.status,
   });
@@ -163,7 +161,6 @@ async function createProviderChallenge(
       success: true,
       otpSent: true,
       challengeId: challenge.id,
-      phone: phoneE164,
       provider,
     },
     {
@@ -181,6 +178,9 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json();
     const phoneRaw = String(body?.phone ?? "").trim();
+    const source = String(body?.source ?? "").trim();
+    const authHeader = req.headers.get("authorization") || "";
+    const tokenParam = req.nextUrl.searchParams.get("token") || "";
 
     if (!phoneRaw) {
       return withCors(
@@ -204,7 +204,11 @@ export async function POST(req: NextRequest) {
     console.info("[OTP REQUEST PROVIDER ORDER]", {
       shopId: shop.id,
       shopDomain: shop.shopDomain,
-      phoneE164,
+      endpointUrl: req.nextUrl.pathname,
+      source: source || null,
+      hasSessionToken: Boolean(authHeader || tokenParam),
+      hasCustomerToken: Boolean(authHeader || tokenParam),
+      phonePresent: Boolean(phoneE164),
       providerOrder,
     });
 
@@ -215,7 +219,11 @@ export async function POST(req: NextRequest) {
         shopId: shop.id,
         shopDomain: shop.shopDomain,
         provider,
-        phoneE164,
+        endpointUrl: req.nextUrl.pathname,
+        source: source || null,
+        hasSessionToken: Boolean(authHeader || tokenParam),
+        hasCustomerToken: Boolean(authHeader || tokenParam),
+        phonePresent: Boolean(phoneE164),
       });
 
       try {
@@ -242,8 +250,11 @@ export async function POST(req: NextRequest) {
           shopId: shop.id,
           shopDomain: shop.shopDomain,
           provider,
-          phoneE164,
-          message,
+          endpointUrl: req.nextUrl.pathname,
+          source: source || null,
+          status: 503,
+          phonePresent: Boolean(phoneE164),
+          errorMessage: message,
         });
       }
     }
@@ -251,7 +262,10 @@ export async function POST(req: NextRequest) {
     console.error("[OTP REQUEST ALL PROVIDERS FAILED]", {
       shopId: shop.id,
       shopDomain: shop.shopDomain,
-      phoneE164,
+      endpointUrl: req.nextUrl.pathname,
+      source: source || null,
+      status: 503,
+      phonePresent: Boolean(phoneE164),
       failures,
     });
 

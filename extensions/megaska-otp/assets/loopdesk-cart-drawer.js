@@ -8,6 +8,16 @@
   var config = Object.assign({}, DEFAULT_CONFIG, window.LOOPDESK_CART_DRAWER_CONFIG || {});
   var ROOT_ID = "loopdesk-cart-drawer-root";
   var FETCH_MARKER = "__loopdeskCartDrawerPatched";
+  var CHECKOUT_SOURCE = "loopdesk-cart-drawer";
+  var NATIVE_CHECKOUT_SELECTOR = [
+    'button[name="checkout"]',
+    'input[name="checkout"]',
+    'a[href="/checkout"]',
+    'a[href^="/checkout"]',
+    '.cart__checkout-button',
+    '.checkout-button',
+    'form[action="/cart"] [type="submit"][name="checkout"]'
+  ].join(",");
 
   var THEME_CART_HOST_SELECTORS = [
     "cart-drawer",
@@ -45,8 +55,45 @@
   if (!config.enabled || window.__LOOPDESK_CART_DRAWER_LOADED__) return;
   window.__LOOPDESK_CART_DRAWER_LOADED__ = true;
 
-  var state = { open: false, loading: false, cart: null, error: "", hostMode: "LOOPDESK_HOST", themeHost: null, fallbackReason: "" };
+  var state = { open: false, loading: false, cart: null, error: "", hostMode: "LOOPDESK_HOST", themeHost: null, fallbackReason: "", checkoutOpening: false };
   var elements = {};
+
+
+  function isLoopDeskExpressCheckoutControl(element) {
+    return Boolean(element && element.closest && element.closest("[data-loopdesk-express-checkout], .loopdesk-cart-drawer__express"));
+  }
+
+  function clearLoopDeskPageLocks() {
+    [document.documentElement, document.body].forEach(function (owner) {
+      if (!owner) return;
+      if (owner.hasAttribute("inert")) owner.removeAttribute("inert");
+      if (owner.style) {
+        if (owner.style.pointerEvents === "none") owner.style.pointerEvents = "";
+        if (owner.style.overflow === "hidden") owner.style.overflow = "";
+      }
+    });
+    var root = getLoopDeskRoot();
+    if (root && root.style && root.style.pointerEvents === "none") root.style.pointerEvents = "";
+    releaseNativeCartDrawerPageLocks();
+  }
+
+  function markNativeCheckoutControlHidden(control) {
+    if (!control || isLoopDeskExpressCheckoutControl(control)) return;
+    control.setAttribute("data-loopdesk-native-checkout-hidden", "true");
+    control.setAttribute("aria-hidden", "true");
+    if ("disabled" in control) control.disabled = true;
+    if (control.style) control.style.display = "none";
+  }
+
+  function hideNativeCheckoutControls(host) {
+    if (!host || isLoopDeskOwned(host)) return;
+    Array.prototype.slice.call(host.querySelectorAll(NATIVE_CHECKOUT_SELECTOR)).forEach(markNativeCheckoutControlHidden);
+  }
+
+  function getActiveCartHost() {
+    if (state.hostMode === "THEME_HOST" && state.themeHost) return state.themeHost;
+    return getLoopDeskRoot();
+  }
 
   function money(cents, currency) {
     var amount = Number(cents || 0) / 100;
@@ -295,6 +342,7 @@
     if (open && state.hostMode === "LOOPDESK_HOST") closeNativeCartDrawers();
     state.open = open;
     render();
+    if (open) hideNativeCheckoutControls(getActiveCartHost());
     if (open && state.hostMode === "LOOPDESK_HOST") scheduleNativeCartDrawerClosure();
     if (!open) closeThemeHost();
   }
@@ -452,18 +500,36 @@
     state.hostMode = "THEME_HOST";
     state.themeHost = host;
     bindElements(container);
+    hideNativeCheckoutControls(host);
     openThemeHost(host);
     debugLog("detected host mode", { mode: state.hostMode });
     debugLog("selected host element", { element: host });
     if (!elements.body || !elements.express || !elements.viewCart) fallbackToLoopDeskHost("theme host produced empty LoopDesk content");
   }
 
-  function openExpressCheckout() {
-    if (window.MegaskaExpressCheckout && typeof window.MegaskaExpressCheckout.open === "function") {
-      window.MegaskaExpressCheckout.open({ source: "cart-drawer" });
-    } else {
+  function openLoopDeskExpressCheckout(options) {
+    var source = CHECKOUT_SOURCE;
+    if (state.checkoutOpening) return;
+    state.checkoutOpening = true;
+    state.error = "";
+    clearLoopDeskPageLocks();
+    debugLog("express checkout launcher", { source: source, requestedSource: options && options.source });
+    try {
+      if (window.MegaskaExpressCheckout && typeof window.MegaskaExpressCheckout.open === "function") {
+        var result = window.MegaskaExpressCheckout.open({ source: source });
+        if (result && typeof result.finally === "function") result.finally(function () { state.checkoutOpening = false; clearLoopDeskPageLocks(); });
+        return result;
+      }
       window.location.href = "/apps/megaska/checkout";
+    } catch (error) {
+      state.checkoutOpening = false;
+      clearLoopDeskPageLocks();
+      throw error;
     }
+  }
+
+  function openExpressCheckout() {
+    return openLoopDeskExpressCheckout({ source: CHECKOUT_SOURCE });
   }
 
   function interceptCheckout(event) {
@@ -472,17 +538,18 @@
       event.stopPropagation();
       if (event.stopImmediatePropagation) event.stopImmediatePropagation();
     }
-    debugLog("checkout interception", { source: "cart-drawer" });
+    debugLog("checkout interception", { source: CHECKOUT_SOURCE });
     openExpressCheckout();
   }
 
   function listenForCheckoutIntent() {
-    var checkoutSelector = 'a[href="/checkout"], a[href^="/checkout"], button[name="checkout"], input[name="checkout"], .cart__checkout-button, .checkout-button';
+    var checkoutSelector = NATIVE_CHECKOUT_SELECTOR;
     document.addEventListener("click", function (event) {
       var target = event.target;
       if (!target || !target.closest) return;
       var control = target.closest(checkoutSelector);
-      if (!control) return;
+      if (!control || isLoopDeskExpressCheckoutControl(control)) return;
+      if (!getActiveCartHost() || !getActiveCartHost().contains(control)) return;
       interceptCheckout(event);
     }, true);
     document.addEventListener("submit", function (event) {
@@ -491,6 +558,7 @@
       var action = form.getAttribute("action") || "";
       var submitter = event.submitter;
       if (action.indexOf("/checkout") !== 0 && !(submitter && submitter.matches && submitter.matches(checkoutSelector))) return;
+      if (submitter && getActiveCartHost() && !getActiveCartHost().contains(submitter)) return;
       interceptCheckout(event);
     }, true);
   }
@@ -533,6 +601,8 @@
     refresh: function () { return refreshAndMaybeOpen(false); },
     acquireHost: acquireHost,
     getState: function () { return Object.assign({}, state); },
+    openLoopDeskExpressCheckout: openLoopDeskExpressCheckout,
+    clearCheckoutRecoveryLocks: function () { state.checkoutOpening = false; clearLoopDeskPageLocks(); },
   };
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", mount);
@@ -540,5 +610,7 @@
   patchFetch();
   listenForForms();
   listenForCartLinks();
+  document.addEventListener("megaska:express-checkout:closed", function () { state.checkoutOpening = false; clearLoopDeskPageLocks(); });
+  document.addEventListener("megaska:otp-modal:closed", function () { state.checkoutOpening = false; clearLoopDeskPageLocks(); });
   listenForCheckoutIntent();
 })();
