@@ -144,3 +144,19 @@
   line-height: 48px;
   text-decoration: none;
 }
+
+
+/* Last-resort safety layer only; JS closes/deactivates native cart drawers first. */
+.loopdesk-cart-drawer-is-open cart-drawer,
+.loopdesk-cart-drawer-is-open #CartDrawer,
+.loopdesk-cart-drawer-is-open #cart-drawer,
+.loopdesk-cart-drawer-is-open .cart-drawer:not(.loopdesk-cart-drawer),
+.loopdesk-cart-drawer-is-open .drawer--cart,
+.loopdesk-cart-drawer-is-open [data-cart-drawer],
+.loopdesk-cart-drawer-is-open [data-drawer="cart"],
+.loopdesk-cart-drawer-is-open [id*="cart" i][id*="drawer" i]:not(#loopdesk-cart-drawer-root):not(.loopdesk-cart-drawer),
+.loopdesk-cart-drawer-is-open [class*="cart" i][class*="drawer" i]:not(.loopdesk-cart-drawer),
+.loopdesk-cart-drawer-is-open [role="dialog"][aria-label*="cart" i]:not(.loopdesk-cart-drawer) {
+  pointer-events: none !important;
+  visibility: hidden !important;
+}
