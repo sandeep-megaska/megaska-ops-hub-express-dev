@@ -1,5 +1,8 @@
 {
   "general": {
     "name": "Megaska OTP"
+  },
+  "loopdesk_cart_drawer": {
+    "name": "LoopDesk Cart Drawer"
   }
 }
