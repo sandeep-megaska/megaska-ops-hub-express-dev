@@ -1,5 +1,0 @@
-ALTER TABLE "ShipmentTracking"
-ADD COLUMN "pickupAt" TIMESTAMP(3),
-ADD COLUMN "shippedAt" TIMESTAMP(3),
-ADD COLUMN "deliveredAt" TIMESTAMP(3),
-ADD COLUMN "remarks" TEXT;
