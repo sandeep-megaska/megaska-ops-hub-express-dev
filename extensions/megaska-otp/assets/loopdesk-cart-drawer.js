@@ -209,6 +209,31 @@
     return fetchCart().then(function () { if (open) setOpen(true); });
   }
 
+  function isDrawerAvailable() {
+    return Boolean(config.enabled && elements.root && elements.panel);
+  }
+
+  function handleCartIconClick(event) {
+    if (!isDrawerAvailable()) return;
+
+    var trigger = findCartTrigger(event.target);
+    if (!trigger) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+
+    fetchCart().then(function () {
+      if (state.error) {
+        fallbackToCartPage(trigger);
+        return;
+      }
+      setOpen(true);
+    }).catch(function () {
+      fallbackToCartPage(trigger);
+    });
+  }
+
   function mount() {
     if (document.getElementById(ROOT_ID)) return;
     var root = document.createElement("div");
@@ -264,24 +289,7 @@
 
 
   function listenForCartLinks() {
-    document.addEventListener("click", function (event) {
-      var trigger = findCartTrigger(event.target);
-      if (!trigger) return;
-
-      event.preventDefault();
-      event.stopPropagation();
-      if (event.stopImmediatePropagation) event.stopImmediatePropagation();
-
-      fetchCart().then(function () {
-        if (state.error) {
-          fallbackToCartPage(trigger);
-          return;
-        }
-        setOpen(true);
-      }).catch(function () {
-        fallbackToCartPage(trigger);
-      });
-    }, true);
+    document.addEventListener("click", handleCartIconClick, true);
   }
 
   function listenForForms() {
