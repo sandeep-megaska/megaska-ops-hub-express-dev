@@ -9,17 +9,13 @@
   var ROOT_ID = "loopdesk-cart-drawer-root";
   var FETCH_MARKER = "__loopdeskCartDrawerPatched";
 
-  var NATIVE_CART_DRAWER_SELECTORS = [
+  var THEME_CART_HOST_SELECTORS = [
     "cart-drawer",
     "#CartDrawer",
     "#cart-drawer",
     ".cart-drawer",
-    ".drawer--cart",
     "[data-cart-drawer]",
     "[data-drawer='cart']",
-    "[id*='cart'][id*='drawer' i]",
-    "[class*='cart'][class*='drawer' i]",
-    "[role='dialog'][aria-label*='cart' i]",
   ];
   var NATIVE_CART_DRAWER_OPEN_CLASSES = [
     "active",
@@ -49,7 +45,7 @@
   if (!config.enabled || window.__LOOPDESK_CART_DRAWER_LOADED__) return;
   window.__LOOPDESK_CART_DRAWER_LOADED__ = true;
 
-  var state = { open: false, loading: false, cart: null, error: "" };
+  var state = { open: false, loading: false, cart: null, error: "", hostMode: "LOOPDESK_HOST", themeHost: null, fallbackReason: "" };
   var elements = {};
 
   function money(cents, currency) {
@@ -83,12 +79,29 @@
   }
 
 
+  function debugLog(message, payload) {
+    if (window.LOOPDESK_CART_DRAWER_DEBUG !== true || !window.console) return;
+    window.console.debug("[LoopDesk Cart Drawer] " + message, payload || {});
+  }
+
+  function getLoopDeskRoot() {
+    return document.getElementById(ROOT_ID);
+  }
+
+  function isLoopDeskOwned(element) {
+    var root = getLoopDeskRoot();
+    if (!element || !root) return false;
+    var owned = element === root || (element.closest && element.closest("#" + ROOT_ID)) || (element.contains && element.contains(root));
+    if (owned) debugLog("skipped LoopDesk-owned element", { element: element });
+    return Boolean(owned);
+  }
+
   function isInsideLoopDeskDrawer(element) {
     return Boolean(element && element.closest && element.closest("#" + ROOT_ID));
   }
 
   function isNativeCartDrawerActive(drawer) {
-    if (!drawer || isInsideLoopDeskDrawer(drawer)) return false;
+    if (!drawer || isLoopDeskOwned(drawer)) return false;
     return drawer.hasAttribute("open") ||
       drawer.getAttribute("aria-hidden") === "false" ||
       NATIVE_CART_DRAWER_OPEN_CLASSES.some(function (className) { return drawer.classList.contains(className); });
@@ -105,9 +118,9 @@
 
   function closeNativeCartDrawers() {
     var nativeDrawerWasActive = false;
-    var drawers = Array.prototype.slice.call(document.querySelectorAll(NATIVE_CART_DRAWER_SELECTORS.join(",")))
+    var drawers = Array.prototype.slice.call(document.querySelectorAll(THEME_CART_HOST_SELECTORS.join(",")))
       .filter(function (drawer, index, list) {
-        return drawer && !isInsideLoopDeskDrawer(drawer) && list.indexOf(drawer) === index;
+        return drawer && !isLoopDeskOwned(drawer) && list.indexOf(drawer) === index;
       });
 
     drawers.forEach(function (drawer) {
@@ -258,6 +271,7 @@
 
   function render() {
     if (!elements.panel) return;
+    ensureActiveHostElements();
     var cart = state.cart;
     var itemCount = cart && typeof cart.item_count === "number" ? cart.item_count : 0;
     elements.panel.setAttribute("aria-hidden", state.open ? "false" : "true");
@@ -277,10 +291,12 @@
   }
 
   function setOpen(open) {
-    if (open) closeNativeCartDrawers();
+    if (open) acquireHost();
+    if (open && state.hostMode === "LOOPDESK_HOST") closeNativeCartDrawers();
     state.open = open;
     render();
-    if (open) scheduleNativeCartDrawerClosure();
+    if (open && state.hostMode === "LOOPDESK_HOST") scheduleNativeCartDrawerClosure();
+    if (!open) closeThemeHost();
   }
 
   function fetchCart() {
@@ -328,11 +344,8 @@
     });
   }
 
-  function mount() {
-    if (document.getElementById(ROOT_ID)) return;
-    var root = document.createElement("div");
-    root.id = ROOT_ID;
-    root.innerHTML = [
+  function shellHtml() {
+    return [
       '<div class="loopdesk-cart-drawer__overlay" hidden></div>',
       '<aside class="loopdesk-cart-drawer" aria-hidden="true" aria-label="Cart" role="dialog">',
       '<header class="loopdesk-cart-drawer__header"><div><h2>Your bag <span data-loopdesk-cart-count></span></h2><p>Cart</p></div><button type="button" class="loopdesk-cart-drawer__close" aria-label="Close cart">×</button></header>',
@@ -340,29 +353,146 @@
       '<footer class="loopdesk-cart-drawer__footer"><div class="loopdesk-cart-drawer__subtotal"><span>Subtotal</span><strong data-loopdesk-cart-subtotal></strong></div><button type="button" class="loopdesk-cart-drawer__express" data-loopdesk-express-checkout>Express Checkout</button><a class="loopdesk-cart-drawer__view-cart" href="/cart">View cart</a></footer>',
       '</aside>',
     ].join("");
-    document.body.appendChild(root);
+  }
 
+  function bindElements(hostRoot) {
     elements = {
-      root: root,
-      overlay: root.querySelector(".loopdesk-cart-drawer__overlay"),
-      panel: root.querySelector(".loopdesk-cart-drawer"),
-      body: root.querySelector(".loopdesk-cart-drawer__body"),
-      close: root.querySelector(".loopdesk-cart-drawer__close"),
-      subtotal: root.querySelector("[data-loopdesk-cart-subtotal]"),
-      count: root.querySelector("[data-loopdesk-cart-count]"),
-      express: root.querySelector(".loopdesk-cart-drawer__express"),
-      viewCart: root.querySelector(".loopdesk-cart-drawer__view-cart"),
+      root: getLoopDeskRoot(),
+      overlay: hostRoot.querySelector(".loopdesk-cart-drawer__overlay"),
+      panel: hostRoot.querySelector(".loopdesk-cart-drawer"),
+      body: hostRoot.querySelector(".loopdesk-cart-drawer__body"),
+      close: hostRoot.querySelector(".loopdesk-cart-drawer__close"),
+      subtotal: hostRoot.querySelector("[data-loopdesk-cart-subtotal]"),
+      count: hostRoot.querySelector("[data-loopdesk-cart-count]"),
+      express: hostRoot.querySelector(".loopdesk-cart-drawer__express"),
+      viewCart: hostRoot.querySelector(".loopdesk-cart-drawer__view-cart"),
     };
 
-    elements.close.addEventListener("click", function () { setOpen(false); });
-    elements.overlay.addEventListener("click", function () { setOpen(false); });
-    elements.express.addEventListener("click", function () {
-      // TODO: Replace this placeholder with the LoopDesk/Megaska express checkout bridge in the next phase.
-      document.dispatchEvent(new CustomEvent("loopdesk:express-checkout:placeholder", { detail: { cart: state.cart } }));
-    });
+    if (elements.close) elements.close.addEventListener("click", function () { setOpen(false); });
+    if (elements.overlay) elements.overlay.addEventListener("click", function () { setOpen(false); });
+    if (elements.express) elements.express.addEventListener("click", function (event) { interceptCheckout(event); });
+  }
+
+  function mount() {
+    if (document.getElementById(ROOT_ID)) return;
+    var root = document.createElement("div");
+    root.id = ROOT_ID;
+    root.innerHTML = shellHtml();
+    document.body.appendChild(root);
+    bindElements(root);
     document.addEventListener("keydown", function (event) { if (event.key === "Escape") setOpen(false); });
     document.addEventListener("loopdesk:cart-drawer:open", function () { refreshAndMaybeOpen(true); });
     refreshAndMaybeOpen(false);
+  }
+
+  function findThemeHost() {
+    var hosts = Array.prototype.slice.call(document.querySelectorAll(THEME_CART_HOST_SELECTORS.join(",")))
+      .filter(function (host, index, list) { return host && !isLoopDeskOwned(host) && list.indexOf(host) === index; });
+    return hosts[0] || null;
+  }
+
+  function findThemeBody(host) {
+    if (!host || isLoopDeskOwned(host)) return null;
+    return host.querySelector("[data-loopdesk-cart-host='theme']") ||
+      host.querySelector(".cart-drawer__body, .drawer__contents, .drawer__content, .drawer__inner, form[action*='/cart'], [data-cart-drawer-content]") ||
+      host;
+  }
+
+  function openThemeHost(host) {
+    if (!host) return;
+    host.setAttribute("open", "");
+    host.setAttribute("aria-hidden", "false");
+    NATIVE_CART_DRAWER_OPEN_CLASSES.forEach(function (className) { host.classList.add(className); });
+  }
+
+  function closeThemeHost() {
+    var host = state.themeHost;
+    if (!host) return;
+    host.removeAttribute("open");
+    host.setAttribute("aria-hidden", "true");
+    NATIVE_CART_DRAWER_OPEN_CLASSES.forEach(function (className) { host.classList.remove(className); });
+  }
+
+  function ensureActiveHostElements() {
+    if (state.hostMode !== "THEME_HOST") return;
+    var host = state.themeHost;
+    if (!host || !document.documentElement.contains(host) || isLoopDeskOwned(host)) {
+      fallbackToLoopDeskHost("theme host disappeared or is LoopDesk-owned");
+      return;
+    }
+    openThemeHost(host);
+  }
+
+  function fallbackToLoopDeskHost(reason) {
+    state.hostMode = "LOOPDESK_HOST";
+    state.themeHost = null;
+    state.fallbackReason = reason || "theme host unavailable";
+    debugLog("fallback reason", { reason: state.fallbackReason });
+    var root = getLoopDeskRoot();
+    if (root && !root.querySelector(".loopdesk-cart-drawer")) root.innerHTML = shellHtml();
+    if (root) bindElements(root);
+  }
+
+  function acquireHost() {
+    var host = findThemeHost();
+    if (!host) {
+      fallbackToLoopDeskHost("no compatible theme host detected");
+      debugLog("detected host mode", { mode: state.hostMode });
+      return;
+    }
+    var body = findThemeBody(host);
+    if (!body) {
+      fallbackToLoopDeskHost("no safe theme body area");
+      return;
+    }
+    var container = host.querySelector("[data-loopdesk-cart-host='theme']") || document.createElement("div");
+    container.setAttribute("data-loopdesk-cart-host", "theme");
+    container.innerHTML = shellHtml();
+    if (!container.parentNode) body.appendChild(container);
+    state.hostMode = "THEME_HOST";
+    state.themeHost = host;
+    bindElements(container);
+    openThemeHost(host);
+    debugLog("detected host mode", { mode: state.hostMode });
+    debugLog("selected host element", { element: host });
+    if (!elements.body || !elements.express || !elements.viewCart) fallbackToLoopDeskHost("theme host produced empty LoopDesk content");
+  }
+
+  function openExpressCheckout() {
+    if (window.MegaskaExpressCheckout && typeof window.MegaskaExpressCheckout.open === "function") {
+      window.MegaskaExpressCheckout.open({ source: "cart-drawer" });
+    } else {
+      window.location.href = "/apps/megaska/checkout";
+    }
+  }
+
+  function interceptCheckout(event) {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+    }
+    debugLog("checkout interception", { source: "cart-drawer" });
+    openExpressCheckout();
+  }
+
+  function listenForCheckoutIntent() {
+    var checkoutSelector = 'a[href="/checkout"], a[href^="/checkout"], button[name="checkout"], input[name="checkout"], .cart__checkout-button, .checkout-button';
+    document.addEventListener("click", function (event) {
+      var target = event.target;
+      if (!target || !target.closest) return;
+      var control = target.closest(checkoutSelector);
+      if (!control) return;
+      interceptCheckout(event);
+    }, true);
+    document.addEventListener("submit", function (event) {
+      var form = event.target;
+      if (!form || form.nodeName !== "FORM") return;
+      var action = form.getAttribute("action") || "";
+      var submitter = event.submitter;
+      if (action.indexOf("/checkout") !== 0 && !(submitter && submitter.matches && submitter.matches(checkoutSelector))) return;
+      interceptCheckout(event);
+    }, true);
   }
 
   function patchFetch() {
@@ -396,9 +526,19 @@
     }, true);
   }
 
+  window.LoopDeskCartController = {
+    open: function () { return refreshAndMaybeOpen(true); },
+    close: function () { setOpen(false); },
+    render: render,
+    refresh: function () { return refreshAndMaybeOpen(false); },
+    acquireHost: acquireHost,
+    getState: function () { return Object.assign({}, state); },
+  };
+
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", mount);
   else mount();
   patchFetch();
   listenForForms();
   listenForCartLinks();
+  listenForCheckoutIntent();
 })();

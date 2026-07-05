@@ -146,17 +146,27 @@
 }
 
 
-/* Last-resort safety layer only; JS closes/deactivates native cart drawers first. */
-.loopdesk-cart-drawer-is-open cart-drawer,
-.loopdesk-cart-drawer-is-open #CartDrawer,
-.loopdesk-cart-drawer-is-open #cart-drawer,
-.loopdesk-cart-drawer-is-open .cart-drawer:not(.loopdesk-cart-drawer),
-.loopdesk-cart-drawer-is-open .drawer--cart,
-.loopdesk-cart-drawer-is-open [data-cart-drawer],
-.loopdesk-cart-drawer-is-open [data-drawer="cart"],
-.loopdesk-cart-drawer-is-open [id*="cart" i][id*="drawer" i]:not(#loopdesk-cart-drawer-root):not(.loopdesk-cart-drawer),
-.loopdesk-cart-drawer-is-open [class*="cart" i][class*="drawer" i]:not(.loopdesk-cart-drawer),
-.loopdesk-cart-drawer-is-open [role="dialog"][aria-label*="cart" i]:not(.loopdesk-cart-drawer) {
-  pointer-events: none !important;
-  visibility: hidden !important;
+[data-loopdesk-cart-host="theme"] {
+  display: block;
+  width: 100%;
 }
+
+[data-loopdesk-cart-host="theme"] .loopdesk-cart-drawer__overlay {
+  display: none;
+}
+
+[data-loopdesk-cart-host="theme"] .loopdesk-cart-drawer {
+  position: static;
+  z-index: auto;
+  width: 100%;
+  height: auto;
+  min-height: 100%;
+  box-shadow: none;
+  transform: none;
+  transition: none;
+}
+
+[data-loopdesk-cart-host="theme"] .loopdesk-cart-drawer[aria-hidden="true"] {
+  display: none;
+}
+
