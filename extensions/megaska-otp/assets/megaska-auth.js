@@ -136,7 +136,12 @@
     try {
       console.log("[Megaska Runtime Fetch]", {
         endpoint: details.endpoint,
+        source: details.source || null,
+        hasSessionToken: Boolean(details.hasSessionToken),
+        hasCustomerToken: Boolean(details.hasCustomerToken),
         status: details.status,
+        errorCode: details.errorCode || null,
+        errorMessage: details.errorMessage || null,
         hasBody: details.hasBody,
         contentType: details.contentType,
         jsonOk: details.jsonOk,
@@ -162,10 +167,15 @@
   opts.headers = buildHeaders(opts.headers);
 
   const endpointUrl = buildApiUrl(path);
+  const requestSource = String(options?.source || options?.bodySource || "").trim();
+  const sessionToken = getSessionToken();
 
   if (path === "/otp/request") {
     console.log("[Megaska OTP] send OTP fetch start", {
       endpointUrl,
+      source: requestSource || null,
+      hasSessionToken: Boolean(sessionToken),
+      hasCustomerToken: Boolean(sessionToken),
     });
   }
 
@@ -198,7 +208,12 @@
 
   logRuntimeFetch(path, {
     endpoint: endpointUrl,
+    source: requestSource || null,
+    hasSessionToken: Boolean(sessionToken),
+    hasCustomerToken: Boolean(sessionToken),
     status: response.status,
+    errorCode: data?.code || data?.errorCode || null,
+    errorMessage: !response.ok ? parseApiError(data, `Request failed (${response.status})`) : null,
     hasBody,
     contentType,
     jsonOk,
@@ -207,7 +222,13 @@
 
   if (path === "/otp/request") {
     console.log("[Megaska OTP] send OTP response", {
+      endpointUrl,
+      source: requestSource || null,
+      hasSessionToken: Boolean(sessionToken),
+      hasCustomerToken: Boolean(sessionToken),
       status: response.status,
+      errorCode: data?.code || data?.errorCode || null,
+      errorMessage: !response.ok ? parseApiError(data, `Request failed (${response.status})`) : null,
       contentType,
       bodyPresent: hasBody,
     });
@@ -257,11 +278,13 @@
     );
   }
 
-  async function requestOtp(phone) {
-    console.log("[Megaska Auth] OTP request triggered", { endpoint: `${API_BASE}/otp/request` });
+  async function requestOtp(phone, options) {
+    const source = String(options?.source || "").trim();
+    console.log("[Megaska Auth] OTP request triggered", { endpoint: `${API_BASE}/otp/request`, source: source || null });
     return apiFetch("/otp/request", {
       method: "POST",
-      body: JSON.stringify({ phone }),
+      source,
+      body: JSON.stringify({ phone, source: source || undefined }),
     });
   }
 

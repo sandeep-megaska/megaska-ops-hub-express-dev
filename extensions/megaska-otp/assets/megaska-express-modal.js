@@ -54,6 +54,24 @@
     lastCheckedSavedPincode: "",
     perf: { openStart: 0, shellPaintLogged: false, checkoutPaintLogged: false, apiCalls: {}, duplicateCallsFound: false },
     hydration: { session: "idle", cart: "idle", intent: "idle", address: "idle", discount: "idle", pincode: "idle", payment: "idle" },
+    openSource: "",
+  };
+
+  function dispatchModalLifecycleEvent(name, detail) {
+    try { document.dispatchEvent(new CustomEvent(name, { detail: detail || {} })); } catch (_error) {}
+  }
+
+  function clearModalPageLocks() {
+    [document.documentElement, document.body].forEach((owner) => {
+      if (!owner) return;
+      owner.classList.remove("megaska-otp-open", "cart-open", "cart-drawer-open", "drawer-open", "js-drawer-open", "js-drawer-open-cart", "mini-cart-open", "no-scroll", "overflow-hidden");
+      if (owner.hasAttribute("inert")) owner.removeAttribute("inert");
+      if (owner.style) {
+        if (owner.style.pointerEvents === "none") owner.style.pointerEvents = "";
+        if (owner.style.overflow === "hidden") owner.style.overflow = "";
+      }
+    });
+    if (window.LoopDeskCartController?.clearCheckoutRecoveryLocks) window.LoopDeskCartController.clearCheckoutRecoveryLocks();
   };
 
   function debugLog(message, payload) {
@@ -461,7 +479,7 @@ function buildBufferedEta(rawEta) {
     return { token: cart?.token || "", items, lineItems, item_count: Number(cart?.item_count || 0), total_price: Number(cart?.total_price || 0), original_total_price: Number(cart?.original_total_price || 0), items_subtotal_price: Number(cart?.items_subtotal_price || 0), total_discount: Number(cart?.total_discount || 0), cart_level_discount_applications: cart?.cart_level_discount_applications || [], discount_codes: cart?.discount_codes || [], currency: cart?.currency || "INR" };
   }
 
-  async function ensureAuthenticated(triggerEl, event) {
+  async function ensureAuthenticated(triggerEl, event, source) {
     const startedAt = perfNow();
     const session = window.MegaskaAuth?.fetchSession ? await window.MegaskaAuth.fetchSession() : { authenticated: Boolean(await getToken()) };
     perfDetails("session_init_ms", { shopId: getShopDomain() || null, intentId: state.intent?.id || null, duplicateCallsFound: state.perf.duplicateCallsFound, durationMs: Math.round(perfNow() - startedAt) });
@@ -473,10 +491,10 @@ function buildBufferedEta(rawEta) {
       return window.MegaskaOtp.ensureMegaskaAuthenticatedBeforeCheckout({
         event,
         triggerEl,
-        pendingAction: { type: "callback", callback: () => open({ triggerEl }) },
+        pendingAction: { type: "callback", callback: () => open({ triggerEl, source }) },
       });
     }
-    if (window.MegaskaOtp?.openModal) window.MegaskaOtp.openModal("express-checkout");
+    if (window.MegaskaOtp?.openModal) window.MegaskaOtp.openModal(source || "express-checkout");
     return false;
   }
 
@@ -513,7 +531,8 @@ function buildBufferedEta(rawEta) {
     state.open = false;
     modal.hidden = true;
     modal.setAttribute("aria-hidden", "true");
-    document.documentElement.classList.remove("megaska-otp-open");
+    clearModalPageLocks();
+    dispatchModalLifecycleEvent("megaska:express-checkout:closed", { source: state.openSource || "" });
   }
 
   function address() { return Array.isArray(state.intent?.addressSnapshots) ? state.intent.addressSnapshots[0] || {} : state.customerDefaultAddress || {}; }
@@ -791,18 +810,21 @@ function buildBufferedEta(rawEta) {
   }
 
   async function open(opts) {
+    if (state.open || state.busy) { debugLog("duplicate open suppressed", { source: opts?.source || "" }); return false; }
     const openStart = Number(opts?.openStart || perfNow());
+    state.openSource = String(opts?.source || "");
     state.open = true; state.step = "checkout"; state.error = ""; state.busy = false; state.paymentStarted = false; state.orderSubmitting = false; state.intent = null; state.customer = null; state.customerDefaultAddress = null; state.addressDraft = {}; state.editingAddress = false; state.discountMessage = ""; state.storeCredit = { loading: false, availableAmount: 0, appliedAmount: 0, remainingPayable: null, currency: "INR", enabled: false, error: "" }; state.inlinePaymentMode = false; state.inlinePaymentError = ""; state.activeRazorpayOrder = null; state.activeRazorpayOrderPromise = null; state.activeRazorpayInstance = null; state.prepaidWarmupKey = ""; state.prepaidWarmupCompletedKey = ""; state.prepaidWarmupPromise = null; state.addressSavedForIntentId = null; state.paymentInProgress = false; resetDeliveryServiceability(); state.pincode = ""; state.pincodeStatus = "idle"; state.pincodeMessage = "Enter 6-digit PIN code to check delivery."; state.pincodeEta = ""; state.pincodeCity = ""; state.pincodeState = ""; state.lastCheckedPincode = ""; state.pincodeCache = {}; state.savedPincode = ""; state.savedPincodeStatus = "idle"; state.savedPincodeMessage = ""; state.savedPincodeEta = ""; state.lastCheckedSavedPincode = ""; state.hydration = { session: "loading", cart: "idle", intent: "idle", address: "loading", discount: "loading", pincode: "idle", payment: "loading" }; resetApiCallPerf(openStart);
     const modal = ensureModal(); modal.hidden = false; modal.setAttribute("aria-hidden", "false"); document.documentElement.classList.add("megaska-otp-open"); render();
     try {
       await waitForModalShellPaint(openStart);
-      if (!(await ensureAuthenticated(opts?.triggerEl, opts?.event))) { close(); return; }
+      if (!(await ensureAuthenticated(opts?.triggerEl, opts?.event, opts?.source))) { close(); return false; }
       state.hydration.session = "ready";
       render();
       await createIntent();
       debugLog("modal ready", { intentId: state.intent?.id }); render(); perfDetails("duplicate_api_calls_found", { shopId: getShopDomain() || null, intentId: state.intent?.id || null, duplicateCallsFound: state.perf.duplicateCallsFound, calls: state.perf.apiCalls }); perfDetails("modal_ready_total_ms", { shopId: getShopDomain() || null, intentId: state.intent?.id || null, duplicateCallsFound: state.perf.duplicateCallsFound, durationMs: Math.round(perfNow() - openStart) }); const initialZip = ensureModal().querySelector('[name="zip"]')?.value || ""; if (initialZip) schedulePincodeCheck(initialZip); const savedAddress = address(); const savedZip = hasCompleteAddress(savedAddress) ? savedAddress.zip : ""; if (savedZip) { state.addressSavedForIntentId = state.intent?.id || null; scheduleSavedAddressPincodeCheck(savedZip); if (backendPaymentMethodForDisplay(selectedDisplayPaymentMethod()) !== "COD") warmupPrepaidPayment(selectedDisplayPaymentMethod()); }
     }
     catch (error) { state.step = "error"; state.error = error instanceof Error ? error.message : "Unable to prepare checkout."; render(); }
+    return true;
   }
 
 

@@ -58,6 +58,7 @@
   errorMessage: "",
   statusMessage: "",
   successMessage: "Welcome back to Megaska",
+  modalTriggerSource: "",
   profileFirstName: "",
   profileLastName: "",
   profileEmail: "",
@@ -882,6 +883,7 @@
     const { modal } = getModalParts();
     state.isOpen = true;
     resetModalState();
+    state.modalTriggerSource = String(triggerSource || "");
     modal.hidden = false;
     modal.setAttribute("aria-hidden", "false");
     document.documentElement.classList.add("megaska-otp-open");
@@ -891,6 +893,23 @@
     if (triggerSource) {
       console.log("[Megaska OTP] modal opened", { triggerSource });
     }
+  }
+
+  function clearOtpPageLocks() {
+    [document.documentElement, document.body].forEach((owner) => {
+      if (!owner) return;
+      owner.classList.remove("megaska-otp-open", "cart-open", "cart-drawer-open", "drawer-open", "js-drawer-open", "js-drawer-open-cart", "mini-cart-open", "no-scroll", "overflow-hidden");
+      if (owner.hasAttribute("inert")) owner.removeAttribute("inert");
+      if (owner.style) {
+        if (owner.style.pointerEvents === "none") owner.style.pointerEvents = "";
+        if (owner.style.overflow === "hidden") owner.style.overflow = "";
+      }
+    });
+    if (window.LoopDeskCartController?.clearCheckoutRecoveryLocks) window.LoopDeskCartController.clearCheckoutRecoveryLocks();
+  }
+
+  function dispatchOtpClosed(reason) {
+    try { document.dispatchEvent(new CustomEvent("megaska:otp-modal:closed", { detail: { reason: reason || "" } })); } catch (_error) {}
   }
 
   function closeModal(reason, options) {
@@ -903,13 +922,15 @@
     state.isOpen = false;
     modal.hidden = true;
     modal.setAttribute("aria-hidden", "true");
-    document.documentElement.classList.remove("megaska-otp-open");
+    clearOtpPageLocks();
     resetModalState();
+    state.modalTriggerSource = "";
     renderStep();
 
     if (reason) {
       console.log("[Megaska OTP] modal closed", { reason });
     }
+    dispatchOtpClosed(reason);
 
     return true;
   }
@@ -1063,7 +1084,7 @@ function needsProfileCompletion() {
   startResendTimer();
 
   try {
-    const otpRequestResponse = await window.MegaskaAuth.requestOtp(normalizedPhone);
+    const otpRequestResponse = await window.MegaskaAuth.requestOtp(normalizedPhone, { source: state.modalTriggerSource || undefined });
     if (!isModalOpen()) return;
 
     if (!didOtpRequestSucceed(otpRequestResponse)) {
@@ -1367,7 +1388,7 @@ setTimeout(() => closeModal("success", { force: true }), SUCCESS_CLOSE_DELAY_MS)
     renderStep();
 
     try {
-      const otpRequestResponse = await window.MegaskaAuth.requestOtp(state.normalizedPhone);
+      const otpRequestResponse = await window.MegaskaAuth.requestOtp(state.normalizedPhone, { source: state.modalTriggerSource || undefined });
       if (!didOtpRequestSucceed(otpRequestResponse)) {
         throw new Error(getOtpRequestErrorMessage(otpRequestResponse));
       }
