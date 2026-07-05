@@ -144,3 +144,11 @@
   line-height: 48px;
   text-decoration: none;
 }
+
+html.loopdesk-cart-drawer-is-open cart-drawer,
+html.loopdesk-cart-drawer-is-open .cart-drawer,
+html.loopdesk-cart-drawer-is-open #CartDrawer {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
