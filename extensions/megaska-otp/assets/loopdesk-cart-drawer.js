@@ -45,6 +45,103 @@
     }
   }
 
+
+  function isInsideLoopDeskDrawer(element) {
+    return Boolean(element && element.closest && element.closest("#" + ROOT_ID));
+  }
+
+  function hasCartPath(href) {
+    if (!href) return false;
+    try {
+      var url = new URL(href, window.location.origin);
+      return url.origin === window.location.origin && url.pathname.indexOf("/cart") !== -1;
+    } catch (_error) {
+      return String(href).indexOf("/cart") !== -1;
+    }
+  }
+
+  function elementText(element) {
+    return [
+      element.getAttribute && element.getAttribute("aria-label"),
+      element.getAttribute && element.getAttribute("title"),
+      element.getAttribute && element.getAttribute("data-action"),
+      element.getAttribute && element.getAttribute("name"),
+      element.id,
+      element.className,
+      element.textContent,
+    ].filter(Boolean).join(" ").toLowerCase();
+  }
+
+  function isExcludedCartControl(element) {
+    if (!element || !element.closest) return true;
+    var excluded = element.closest([
+      "[href*='checkout']",
+      "[action*='checkout']",
+      "[name*='checkout' i]",
+      "[aria-label*='checkout' i]",
+      "[class*='checkout' i]",
+      "[id*='checkout' i]",
+      "[name='plus']",
+      "[name='minus']",
+      "[name='updates[]']",
+      "[data-quantity]",
+      "[data-quantity-selector]",
+      "[aria-label*='quantity' i]",
+      "[aria-label*='increase' i]",
+      "[aria-label*='decrease' i]",
+      "[class*='quantity' i]",
+      "[id*='quantity' i]",
+      "[href*='change']",
+      "[name*='remove' i]",
+      "[aria-label*='remove' i]",
+      "[class*='remove' i]",
+      "[id*='remove' i]",
+      "[class*='discount' i]",
+      "[id*='discount' i]",
+      "[name*='discount' i]",
+      "[aria-label*='discount' i]",
+      "[data-discount]",
+      "form[action*='/cart/add'] button",
+      "form[action*='/cart/add'] [role='button']",
+      "[name='add']",
+      "[type='submit'][formaction*='/cart/add']",
+    ].join(","));
+    if (excluded) return true;
+    var text = elementText(element);
+    return /\b(checkout|quantity|qty|increase|decrease|remove|discount|coupon|promo)\b/.test(text) || /\badd(?:\s|-|_)to(?:\s|-|_)cart\b/.test(text);
+  }
+
+  function findCartTrigger(target) {
+    if (!target || !target.closest || isInsideLoopDeskDrawer(target)) return null;
+    var link = target.closest("a[href]");
+    if (link && hasCartPath(link.getAttribute("href")) && !isExcludedCartControl(link)) return link;
+
+    var trigger = target.closest([
+      "a[aria-label*='cart' i]",
+      "a[aria-label*='bag' i]",
+      "button[aria-label*='cart' i]",
+      "button[aria-label*='bag' i]",
+      "[role='button'][aria-label*='cart' i]",
+      "[role='button'][aria-label*='bag' i]",
+      "[class*='cart-icon' i]",
+      "[id*='cart-icon' i]",
+      "[class*='cart' i]",
+      "[id*='cart' i]",
+      "[class*='bag' i]",
+      "[id*='bag' i]",
+    ].join(","));
+    if (!trigger || isInsideLoopDeskDrawer(trigger) || isExcludedCartControl(trigger)) return null;
+
+    var text = elementText(trigger);
+    if (!/\b(cart|bag)\b|cart-icon/.test(text)) return null;
+    return trigger;
+  }
+
+  function fallbackToCartPage(trigger) {
+    var href = trigger && trigger.getAttribute && trigger.getAttribute("href");
+    window.location.href = href && hasCartPath(href) ? href : "/cart";
+  }
+
   function renderLines(cart) {
     if (!cart || !cart.items || cart.items.length === 0) {
       return '<div class="loopdesk-cart-drawer__empty">Your cart is empty.</div>';
@@ -165,6 +262,28 @@
     window.fetch[FETCH_MARKER] = true;
   }
 
+
+  function listenForCartLinks() {
+    document.addEventListener("click", function (event) {
+      var trigger = findCartTrigger(event.target);
+      if (!trigger) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+
+      fetchCart().then(function () {
+        if (state.error) {
+          fallbackToCartPage(trigger);
+          return;
+        }
+        setOpen(true);
+      }).catch(function () {
+        fallbackToCartPage(trigger);
+      });
+    }, true);
+  }
+
   function listenForForms() {
     document.addEventListener("submit", function (event) {
       var form = event.target;
@@ -179,4 +298,5 @@
   else mount();
   patchFetch();
   listenForForms();
+  listenForCartLinks();
 })();
