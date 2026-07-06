@@ -480,8 +480,22 @@
     branding.hidden = itemCount === 0;
   }
 
+  function clearOtpCheckoutErrors() {
+    if (window.MegaskaOtp && typeof window.MegaskaOtp.clearCheckoutErrors === "function") {
+      window.MegaskaOtp.clearCheckoutErrors();
+    }
+    document.querySelectorAll("[data-megaska-checkout-guard-error]").forEach(function (element) {
+      element.remove();
+    });
+  }
+
   function openExpressCheckout(source) {
+    clearOtpCheckoutErrors();
     if (window.MegaskaExpressCheckout && typeof window.MegaskaExpressCheckout.open === "function") {
+      if (source === "theme-cart-drawer") {
+        window.MegaskaExpressCheckout.open({ source: "theme-cart-drawer" });
+        return;
+      }
       window.MegaskaExpressCheckout.open({ source: source || "cart-drawer" });
     } else {
       window.location.href = "/apps/megaska/checkout";
