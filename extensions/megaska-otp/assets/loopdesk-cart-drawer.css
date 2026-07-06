@@ -170,3 +170,14 @@
   display: none;
 }
 
+
+.loopdesk-cart-drawer__theme-branding {
+  margin: 12px 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(17, 24, 39, 0.12);
+  border-radius: 12px;
+  color: #374151;
+  background: rgba(249, 250, 251, 0.92);
+  font-size: 12px;
+  line-height: 1.4;
+}
