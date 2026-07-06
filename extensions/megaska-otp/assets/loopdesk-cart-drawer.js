@@ -24,6 +24,7 @@
     "#CartDrawer",
     "#cart-drawer",
     ".cart-drawer",
+    ".drawer",
     "[data-cart-drawer]",
     "[data-drawer='cart']",
     "#mini-cart",
@@ -31,16 +32,20 @@
     ".ajax-cart",
     "#ajax-cart-container",
     "[data-section-type='cart-drawer']",
+    "[aria-label*='cart' i]",
+    "[id*='cart-drawer' i]",
+    "[class*='cart-drawer' i]",
     "#cart-sidebar",
     ".cart-sidebar",
     ".drawer--cart",
   ];
-  var THEME_CART_DRAWER_OPEN_CLASSES = ["active", "open", "is-open", "menu-opening", "drawer--open"];
+  var THEME_CART_DRAWER_OPEN_CLASSES = ["open", "active", "animate", "menu-opening", "drawer--is-open", "is-open", "cart-drawer--active", "drawer--open"];
+  var LOOPDESK_BODY_LOCK_CLASSES = ["loopdesk-cart-drawer-is-open"];
 
   if (!config.enabled || window.__LOOPDESK_CART_DRAWER_LOADED__) return;
   window.__LOOPDESK_CART_DRAWER_LOADED__ = true;
 
-  var state = { open: false, loading: false, cart: null, error: "", hostMode: LOOPDESK_HOST_MODE, themeDrawer: null, fallbackReason: "", expressCheckoutLock: false, capability: null, drawerModeActive: false };
+  var state = { open: false, loading: false, cart: null, error: "", hostMode: LOOPDESK_HOST_MODE, themeDrawer: null, fallbackReason: "", expressCheckoutLock: false, capability: null, drawerModeActive: false, neutralizedThemeDrawers: [], bodyLockSnapshot: null };
   var elements = {};
 
   function money(cents, currency) {
@@ -181,6 +186,78 @@
     state.themeDrawer = drawer;
     debugLog("theme drawer detected " + (drawer ? "yes" : "no"), { element: drawer, visible: drawer ? isThemeDrawerVisible(drawer) : false });
     return drawer;
+  }
+
+  function rememberBodyLockState() {
+    if (state.bodyLockSnapshot || !document.documentElement || !document.body) return;
+    state.bodyLockSnapshot = {
+      htmlOverflow: document.documentElement.style.overflow || "",
+      bodyOverflow: document.body.style.overflow || "",
+      htmlHadLoopDeskClass: document.documentElement.classList.contains("loopdesk-cart-drawer-is-open"),
+      bodyHadLoopDeskClass: document.body.classList.contains("loopdesk-cart-drawer-is-open")
+    };
+  }
+
+  function restoreLoopDeskBodyLock() {
+    var snapshot = state.bodyLockSnapshot;
+    if (document.documentElement) {
+      if (snapshot) document.documentElement.style.overflow = snapshot.htmlOverflow;
+      LOOPDESK_BODY_LOCK_CLASSES.forEach(function (className) {
+        if (!snapshot || !snapshot.htmlHadLoopDeskClass) document.documentElement.classList.remove(className);
+      });
+    }
+    if (document.body) {
+      if (snapshot) document.body.style.overflow = snapshot.bodyOverflow;
+      LOOPDESK_BODY_LOCK_CLASSES.forEach(function (className) {
+        if (!snapshot || !snapshot.bodyHadLoopDeskClass) document.body.classList.remove(className);
+      });
+    }
+    state.bodyLockSnapshot = null;
+  }
+
+  function neutralizeThemeDrawers() {
+    if (!isLoopDeskDrawerActive()) return;
+    restoreNeutralizedThemeDrawers();
+    var drawers = Array.prototype.slice.call(document.querySelectorAll(THEME_CART_DRAWER_SELECTORS.join(",")))
+      .filter(function (drawer, index, list) { return drawer && !isLoopDeskOwned(drawer) && list.indexOf(drawer) === index; });
+
+    drawers.forEach(function (drawer) {
+      var visible = isThemeDrawerVisible(drawer);
+      var hasOpenState = drawer.hasAttribute("open") || drawer.getAttribute("aria-hidden") === "false" || THEME_CART_DRAWER_OPEN_CLASSES.some(function (className) {
+        return drawer.classList && drawer.classList.contains(className);
+      });
+      if (!visible && !hasOpenState) return;
+
+      var record = {
+        element: drawer,
+        open: drawer.hasAttribute("open"),
+        ariaHidden: drawer.getAttribute("aria-hidden"),
+        classes: {}
+      };
+      THEME_CART_DRAWER_OPEN_CLASSES.forEach(function (className) {
+        record.classes[className] = drawer.classList && drawer.classList.contains(className);
+        if (drawer.classList) drawer.classList.remove(className);
+      });
+      drawer.removeAttribute("open");
+      drawer.setAttribute("aria-hidden", "true");
+      state.neutralizedThemeDrawers.push(record);
+      debugLog("theme drawer neutralized", { element: getElementDescriptor(drawer) }, true);
+    });
+  }
+
+  function restoreNeutralizedThemeDrawers() {
+    if (!state.neutralizedThemeDrawers || !state.neutralizedThemeDrawers.length) return;
+    state.neutralizedThemeDrawers.forEach(function (record) {
+      var drawer = record.element;
+      if (!drawer || !drawer.isConnected) return;
+      THEME_CART_DRAWER_OPEN_CLASSES.forEach(function (className) {
+        if (!record.classes[className] && drawer.classList) drawer.classList.remove(className);
+      });
+      drawer.removeAttribute("open");
+      if (record.ariaHidden === null) drawer.removeAttribute("aria-hidden");
+      else drawer.setAttribute("aria-hidden", record.ariaHidden === "false" ? "true" : record.ariaHidden);
+    });
+    state.neutralizedThemeDrawers = [];
   }
 
   function isThemeDrawerVisible(element) {
@@ -345,11 +422,27 @@
 
   function setOpen(open) {
     state.hostMode = LOOPDESK_HOST_MODE;
+    if (open) rememberBodyLockState();
     state.open = open;
     render();
-    if (!open && document.body) document.body.classList.remove("loopdesk-cart-drawer-is-open");
-    if (!open) document.documentElement.classList.remove("loopdesk-cart-drawer-is-open");
+    if (open) neutralizeThemeDrawers();
+    if (!open) {
+      restoreNeutralizedThemeDrawers();
+      restoreLoopDeskBodyLock();
+    }
     if (open) debugLog("drawer opened", { source: "loopdesk", mode: config.drawerMode }, true);
+  }
+
+  function closeDrawerForCheckoutHandoff() {
+    if (state.open) debugLog("LoopDesk drawer closed before checkout", {}, true);
+    state.open = false;
+    if (elements.panel) elements.panel.setAttribute("aria-hidden", "true");
+    if (elements.overlay) {
+      elements.overlay.hidden = true;
+      elements.overlay.classList.remove("active", "is-active", "open");
+    }
+    restoreNeutralizedThemeDrawers();
+    restoreLoopDeskBodyLock();
   }
 
   function fetchCart() {
@@ -420,7 +513,7 @@
       return;
     }
 
-    debugLog("LoopDesk intercepted cart click", { trigger: getElementDescriptor(trigger), mode: config.drawerMode }, true);
+    debugLog("cart click intercepted", { trigger: getElementDescriptor(trigger), mode: config.drawerMode }, true);
     event.preventDefault();
     event.stopPropagation();
     if (event.stopImmediatePropagation) event.stopImmediatePropagation();
@@ -431,6 +524,7 @@
         return;
       }
       setOpen(true);
+      window.setTimeout(neutralizeThemeDrawers, 0);
     }).catch(function () {
       fallbackToCartPage(trigger);
     });
@@ -504,13 +598,17 @@
     var checkoutSource = source || "checkout-intent";
     var releaseLock = function () { state.expressCheckoutLock = false; };
     clearLocalCartDrawerErrors();
+    closeDrawerForCheckoutHandoff();
+    debugLog("OTP/checkout handoff started", { source: checkoutSource }, true);
     if (window.MegaskaExpressCheckout && typeof window.MegaskaExpressCheckout.open === "function") {
       debugLog("Express modal API present", { source: checkoutSource });
-      try {
-        window.MegaskaExpressCheckout.open({ source: checkoutSource });
-      } finally {
-        window.setTimeout(releaseLock, 900);
-      }
+      window.setTimeout(function () {
+        try {
+          window.MegaskaExpressCheckout.open({ source: checkoutSource });
+        } finally {
+          window.setTimeout(releaseLock, 900);
+        }
+      }, 32);
     } else {
       debugLog("Express modal API missing", { source: checkoutSource });
       window.setTimeout(releaseLock, 900);
