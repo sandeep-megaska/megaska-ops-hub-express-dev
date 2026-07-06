@@ -8,6 +8,8 @@
   var config = Object.assign({}, DEFAULT_CONFIG, window.LOOPDESK_CART_DRAWER_CONFIG || {});
   var ROOT_ID = "loopdesk-cart-drawer-root";
   var FETCH_MARKER = "__loopdeskCartDrawerPatched";
+  var THEME_HOST_MODE = "THEME_DRAWER_PRESENT";
+  var LOOPDESK_HOST_MODE = "NO_THEME_DRAWER";
 
   var THEME_CART_HOST_SELECTORS = [
     "cart-drawer",
@@ -45,7 +47,7 @@
   if (!config.enabled || window.__LOOPDESK_CART_DRAWER_LOADED__) return;
   window.__LOOPDESK_CART_DRAWER_LOADED__ = true;
 
-  var state = { open: false, loading: false, cart: null, error: "", hostMode: "LOOPDESK_HOST", themeHost: null, fallbackReason: "" };
+  var state = { open: false, loading: false, cart: null, error: "", hostMode: LOOPDESK_HOST_MODE, themeHost: null, fallbackReason: "" };
   var elements = {};
 
   function money(cents, currency) {
@@ -270,10 +272,19 @@
   }
 
   function render() {
-    if (!elements.panel) return;
     ensureActiveHostElements();
     var cart = state.cart;
     var itemCount = cart && typeof cart.item_count === "number" ? cart.item_count : 0;
+
+    if (state.hostMode === THEME_HOST_MODE) {
+      if (elements.panel) elements.panel.setAttribute("aria-hidden", "true");
+      if (elements.overlay) elements.overlay.hidden = true;
+      document.documentElement.classList.remove("loopdesk-cart-drawer-is-open");
+      updateThemeBranding(cart);
+      return;
+    }
+
+    if (!elements.panel) return;
     elements.panel.setAttribute("aria-hidden", state.open ? "false" : "true");
     elements.overlay.hidden = !state.open;
     document.documentElement.classList.toggle("loopdesk-cart-drawer-is-open", state.open);
@@ -292,10 +303,10 @@
 
   function setOpen(open) {
     if (open) acquireHost();
-    if (open && state.hostMode === "LOOPDESK_HOST") closeNativeCartDrawers();
+    if (open && state.hostMode === LOOPDESK_HOST_MODE) closeNativeCartDrawers();
     state.open = open;
     render();
-    if (open && state.hostMode === "LOOPDESK_HOST") scheduleNativeCartDrawerClosure();
+    if (open && state.hostMode === LOOPDESK_HOST_MODE) scheduleNativeCartDrawerClosure();
     if (!open) closeThemeHost();
   }
 
@@ -370,7 +381,7 @@
 
     if (elements.close) elements.close.addEventListener("click", function () { setOpen(false); });
     if (elements.overlay) elements.overlay.addEventListener("click", function () { setOpen(false); });
-    if (elements.express) elements.express.addEventListener("click", function (event) { interceptCheckout(event); });
+    if (elements.express) elements.express.addEventListener("click", function (event) { interceptCheckout(event, "cart-drawer"); });
   }
 
   function mount() {
@@ -414,7 +425,7 @@
   }
 
   function ensureActiveHostElements() {
-    if (state.hostMode !== "THEME_HOST") return;
+    if (state.hostMode !== THEME_HOST_MODE) return;
     var host = state.themeHost;
     if (!host || !document.documentElement.contains(host) || isLoopDeskOwned(host)) {
       fallbackToLoopDeskHost("theme host disappeared or is LoopDesk-owned");
@@ -424,7 +435,7 @@
   }
 
   function fallbackToLoopDeskHost(reason) {
-    state.hostMode = "LOOPDESK_HOST";
+    state.hostMode = LOOPDESK_HOST_MODE;
     state.themeHost = null;
     state.fallbackReason = reason || "theme host unavailable";
     debugLog("fallback reason", { reason: state.fallbackReason });
@@ -440,40 +451,58 @@
       debugLog("detected host mode", { mode: state.hostMode });
       return;
     }
-    var body = findThemeBody(host);
-    if (!body) {
-      fallbackToLoopDeskHost("no safe theme body area");
-      return;
-    }
-    var container = host.querySelector("[data-loopdesk-cart-host='theme']") || document.createElement("div");
-    container.setAttribute("data-loopdesk-cart-host", "theme");
-    container.innerHTML = shellHtml();
-    if (!container.parentNode) body.appendChild(container);
-    state.hostMode = "THEME_HOST";
+    state.hostMode = THEME_HOST_MODE;
     state.themeHost = host;
-    bindElements(container);
     openThemeHost(host);
+    injectThemeBranding(host);
     debugLog("detected host mode", { mode: state.hostMode });
     debugLog("selected host element", { element: host });
-    if (!elements.body || !elements.express || !elements.viewCart) fallbackToLoopDeskHost("theme host produced empty LoopDesk content");
   }
 
-  function openExpressCheckout() {
+  function injectThemeBranding(host) {
+    var body = findThemeBody(host);
+    if (!body) return;
+    var existing = host.querySelector("[data-loopdesk-theme-branding]");
+    if (!existing) {
+      existing = document.createElement("div");
+      existing.setAttribute("data-loopdesk-theme-branding", "");
+      existing.className = "loopdesk-cart-drawer__theme-branding";
+      existing.textContent = "Secure express checkout available with LoopDesk.";
+      body.appendChild(existing);
+    }
+  }
+
+  function updateThemeBranding(cart) {
+    var host = state.themeHost;
+    var branding = host && host.querySelector("[data-loopdesk-theme-branding]");
+    if (!branding) return;
+    var itemCount = cart && typeof cart.item_count === "number" ? cart.item_count : 0;
+    branding.hidden = itemCount === 0;
+  }
+
+  function openExpressCheckout(source) {
     if (window.MegaskaExpressCheckout && typeof window.MegaskaExpressCheckout.open === "function") {
-      window.MegaskaExpressCheckout.open({ source: "cart-drawer" });
+      window.MegaskaExpressCheckout.open({ source: source || "cart-drawer" });
     } else {
       window.location.href = "/apps/megaska/checkout";
     }
   }
 
-  function interceptCheckout(event) {
+  function interceptCheckout(event, source) {
     if (event) {
       event.preventDefault();
       event.stopPropagation();
       if (event.stopImmediatePropagation) event.stopImmediatePropagation();
     }
-    debugLog("checkout interception", { source: "cart-drawer" });
-    openExpressCheckout();
+    debugLog("checkout interception", { source: source || "cart-drawer" });
+    openExpressCheckout(source);
+  }
+
+  function activeThemeHostFor(element) {
+    if (!element || !element.closest) return null;
+    var host = element.closest(THEME_CART_HOST_SELECTORS.join(","));
+    if (!host || isLoopDeskOwned(host)) return null;
+    return isNativeCartDrawerActive(host) || host === state.themeHost ? host : null;
   }
 
   function listenForCheckoutIntent() {
@@ -483,15 +512,26 @@
       if (!target || !target.closest) return;
       var control = target.closest(checkoutSelector);
       if (!control) return;
-      interceptCheckout(event);
+      if (isInsideLoopDeskDrawer(control)) return interceptCheckout(event, "cart-drawer");
+      var themeHost = activeThemeHostFor(control);
+      if (!themeHost) return;
+      state.hostMode = THEME_HOST_MODE;
+      state.themeHost = themeHost;
+      interceptCheckout(event, "theme-cart-drawer");
     }, true);
     document.addEventListener("submit", function (event) {
       var form = event.target;
       if (!form || form.nodeName !== "FORM") return;
       var action = form.getAttribute("action") || "";
       var submitter = event.submitter;
-      if (action.indexOf("/checkout") !== 0 && !(submitter && submitter.matches && submitter.matches(checkoutSelector))) return;
-      interceptCheckout(event);
+      var isNotCheckoutSubmit = action.indexOf("/checkout") !== 0 && !(submitter && submitter.matches && submitter.matches(checkoutSelector));
+      if (isNotCheckoutSubmit) return;
+      if (isInsideLoopDeskDrawer(form)) return interceptCheckout(event, "cart-drawer");
+      var themeHost = activeThemeHostFor(form);
+      if (!themeHost) return;
+      state.hostMode = THEME_HOST_MODE;
+      state.themeHost = themeHost;
+      interceptCheckout(event, "theme-cart-drawer");
     }, true);
   }
 
