@@ -1,12 +1,17 @@
 (function () {
   var DEFAULT_CONFIG = {
     enabled: true,
-    openAfterAddToCart: true,
+    primaryColor: "#111827",
+    buttonText: "Express Checkout",
+    checkoutButtonText: "",
+    showPoweredBy: true,
+    drawerMode: "auto",
+    openAfterAddToCart: false,
     expressCheckoutButtonEnabled: true,
     viewCartButtonEnabled: true,
     cartOwnershipMode: "fallback",
   };
-  var config = Object.assign({}, DEFAULT_CONFIG, window.LOOPDESK_CART_DRAWER_CONFIG || {});
+  var config = normalizeConfig(Object.assign({}, DEFAULT_CONFIG, window.LOOPDESK_CART_DRAWER_CONFIG || window.LoopDeskCartDrawerConfig || {}));
   var ROOT_ID = "loopdesk-cart-drawer-root";
   var FETCH_MARKER = "__loopdeskCartDrawerPatched";
   var XHR_MARKER = "__loopdeskCartDrawerXhrPatched";
@@ -35,7 +40,7 @@
   if (!config.enabled || window.__LOOPDESK_CART_DRAWER_LOADED__) return;
   window.__LOOPDESK_CART_DRAWER_LOADED__ = true;
 
-  var state = { open: false, loading: false, cart: null, error: "", hostMode: LOOPDESK_HOST_MODE, themeDrawer: null, fallbackReason: "", expressCheckoutLock: false };
+  var state = { open: false, loading: false, cart: null, error: "", hostMode: LOOPDESK_HOST_MODE, themeDrawer: null, fallbackReason: "", expressCheckoutLock: false, capability: null, drawerModeActive: false };
   var elements = {};
 
   function money(cents, currency) {
@@ -89,12 +94,23 @@
   }
 
 
-  debugLog("script loaded", { cartOwnershipMode: config.cartOwnershipMode });
-
-  function debugLog(message, payload) {
-    if (window.LOOPDESK_CART_DRAWER_DEBUG !== true || !window.console) return;
-    window.console.debug("[LoopDesk Cart Drawer] " + message, payload || {});
+  function normalizeConfig(rawConfig) {
+    var mode = rawConfig.drawerMode || rawConfig.cartDrawerMode;
+    if (!mode && rawConfig.cartOwnershipMode === "theme") mode = "theme";
+    if (!mode && rawConfig.cartOwnershipMode === "app") mode = "loopdesk";
+    if (!mode || ["theme", "loopdesk", "auto"].indexOf(mode) === -1) mode = "auto";
+    rawConfig.drawerMode = mode;
+    rawConfig.checkoutButtonText = rawConfig.buttonText || rawConfig.checkoutButtonText || DEFAULT_CONFIG.buttonText;
+    rawConfig.primaryColor = rawConfig.primaryColor || DEFAULT_CONFIG.primaryColor;
+    return rawConfig;
   }
+
+  function debugLog(message, payload, force) {
+    if (!window.console || (window.LOOPDESK_CART_DRAWER_DEBUG !== true && !force)) return;
+    window.console.debug("[LoopDesk Cart] " + message, payload || {});
+  }
+
+  debugLog("config loaded", { drawerMode: config.drawerMode, openAfterAddToCart: config.openAfterAddToCart, expressCheckoutButtonEnabled: config.expressCheckoutButtonEnabled, viewCartButtonEnabled: config.viewCartButtonEnabled }, true);
 
   function getLoopDeskRoot() {
     return document.getElementById(ROOT_ID);
@@ -112,20 +128,45 @@
     return Boolean(element && element.closest && element.closest("#" + ROOT_ID));
   }
 
-  function getCartOwnershipMode() {
-    return config.cartOwnershipMode === "theme" || config.cartOwnershipMode === "app" || config.cartOwnershipMode === "fallback"
-      ? config.cartOwnershipMode
-      : "fallback";
+  function isAppOwnedCartMode() {
+    return isLoopDeskDrawerActive();
   }
 
-  function isAppOwnedCartMode() {
-    return getCartOwnershipMode() === "app";
+  function canUseCartAjax() {
+    return typeof window.fetch === "function";
+  }
+
+  function canUseExpressCheckoutBridge() {
+    return Boolean(window.MegaskaExpressCheckout && typeof window.MegaskaExpressCheckout.open === "function") || true;
+  }
+
+  function getCapabilityResult() {
+    var root = getLoopDeskRoot();
+    var result = {
+      assetsLoaded: Boolean(window.__LOOPDESK_CART_DRAWER_LOADED__),
+      cartAjaxAvailable: canUseCartAjax(),
+      rootAvailable: Boolean(root || document.body),
+      expressCheckoutBridgeAvailable: canUseExpressCheckoutBridge(),
+      unsupportedState: Boolean(window.location && /^\/(?:checkout|account)(?:\/|$)/.test(window.location.pathname || "")),
+      reason: "safe"
+    };
+    result.safe = result.assetsLoaded && result.cartAjaxAvailable && result.rootAvailable && result.expressCheckoutBridgeAvailable && !result.unsupportedState;
+    if (!result.safe) {
+      result.reason = !result.assetsLoaded ? "assets-not-loaded" : !result.cartAjaxAvailable ? "cart-ajax-unavailable" : !result.rootAvailable ? "root-unavailable" : !result.expressCheckoutBridgeAvailable ? "express-bridge-unavailable" : "unsupported-state";
+    }
+    state.capability = result;
+    return result;
+  }
+
+  function isLoopDeskDrawerActive() {
+    var capability = getCapabilityResult();
+    if (config.drawerMode === "theme") return false;
+    if (config.drawerMode === "loopdesk") return capability.safe;
+    return capability.safe;
   }
 
   function shouldOpenLoopDeskAfterCartAdd() {
-    if (!config.openAfterAddToCart) return false;
-    if (isAppOwnedCartMode()) return true;
-    return !detectThemeDrawer();
+    return Boolean(config.openAfterAddToCart && isLoopDeskDrawerActive());
   }
 
   function refreshAfterCartMutation(wasAdd) {
@@ -247,24 +288,35 @@
     window.location.href = href && hasCartPath(href) ? href : "/cart";
   }
 
+  function getItemImage(item) {
+    var image = item && (item.image || item.featured_image && (item.featured_image.url || item.featured_image.src));
+    return image ? String(image).replace(/(\.(?:jpg|jpeg|png|webp))(?:\?.*)?$/i, "_160x$1") : "";
+  }
+
+  function lineSavingsHtml(item, cart) {
+    var original = Number(item.original_line_price || 0);
+    var finalPrice = Number(item.final_line_price || 0);
+    if (original > finalPrice) return '<div class="loopdesk-cart-drawer__savings">You save ' + money(original - finalPrice, cart.currency) + '</div>';
+    return "";
+  }
+
   function renderLines(cart) {
+    if (state.loading) return '<div class="loopdesk-cart-drawer__loading"><span></span>Loading your cart…</div>';
     if (!cart || !cart.items || cart.items.length === 0) {
-      return '<div class="loopdesk-cart-drawer__empty">Your cart is empty.</div>';
+      return '<div class="loopdesk-cart-drawer__empty"><strong>Your cart is empty</strong><span>Add something you love and come back for express checkout.</span></div>';
     }
 
-    return cart.items.map(function (item) {
-      var variant = item.variant_title && item.variant_title !== "Default Title"
-        ? '<div class="loopdesk-cart-drawer__variant">' + escapeHtml(item.variant_title) + "</div>"
-        : "";
+    return cart.items.map(function (item, index) {
+      var variant = item.variant_title && item.variant_title !== "Default Title" ? '<div class="loopdesk-cart-drawer__variant">' + escapeHtml(item.variant_title) + "</div>" : "";
+      var image = getItemImage(item);
       return [
-        '<div class="loopdesk-cart-drawer__line">',
+        '<article class="loopdesk-cart-drawer__line" data-loopdesk-line-key="' + escapeHtml(item.key) + '">',
+        '<div class="loopdesk-cart-drawer__image-wrap">' + (image ? '<img class="loopdesk-cart-drawer__image" src="' + escapeHtml(image) + '" alt="' + escapeHtml(item.product_title || item.title) + '" loading="lazy">' : '<div class="loopdesk-cart-drawer__image loopdesk-cart-drawer__image--placeholder"></div>') + '</div>',
         '<div class="loopdesk-cart-drawer__line-main">',
-        '<div class="loopdesk-cart-drawer__title">' + escapeHtml(item.product_title || item.title) + "</div>",
-        variant,
-        '<div class="loopdesk-cart-drawer__quantity">Qty ' + escapeHtml(item.quantity) + "</div>",
+        '<div class="loopdesk-cart-drawer__line-top"><div><div class="loopdesk-cart-drawer__title">' + escapeHtml(item.product_title || item.title) + "</div>" + variant + '</div><div class="loopdesk-cart-drawer__price">' + money(item.final_line_price, cart.currency) + lineSavingsHtml(item, cart) + '</div></div>',
+        '<div class="loopdesk-cart-drawer__line-actions"><div class="loopdesk-cart-drawer__qty" aria-label="Quantity controls"><button type="button" data-loopdesk-qty="decrease" data-loopdesk-line="' + index + '">−</button><span>' + escapeHtml(item.quantity) + '</span><button type="button" data-loopdesk-qty="increase" data-loopdesk-line="' + index + '">+</button></div><button type="button" class="loopdesk-cart-drawer__remove" data-loopdesk-remove data-loopdesk-line="' + index + '">Remove</button></div>',
         "</div>",
-        '<div class="loopdesk-cart-drawer__price">' + money(item.final_line_price, cart.currency) + "</div>",
-        "</div>",
+        "</article>",
       ].join("");
     }).join("");
   }
@@ -278,24 +330,26 @@
     elements.panel.setAttribute("aria-hidden", state.open ? "false" : "true");
     elements.overlay.hidden = !state.open;
     document.documentElement.classList.toggle("loopdesk-cart-drawer-is-open", state.open);
+    if (document.body) document.body.classList.toggle("loopdesk-cart-drawer-is-open", state.open);
 
-    elements.body.innerHTML = state.loading
-      ? '<div class="loopdesk-cart-drawer__loading">Loading your cart…</div>'
-      : state.error
-        ? '<div class="loopdesk-cart-drawer__error">We could not load your cart. You can still use the cart page.</div>'
-        : renderLines(cart);
+    elements.body.innerHTML = state.error
+      ? '<div class="loopdesk-cart-drawer__error">We could not load your cart. You can still use the cart page.</div>'
+      : renderLines(cart);
 
     elements.subtotal.textContent = money(cart ? cart.total_price : 0, cart && cart.currency);
     elements.count.textContent = itemCount ? "(" + itemCount + ")" : "";
     elements.express.hidden = !config.expressCheckoutButtonEnabled || itemCount === 0;
     elements.viewCart.hidden = !config.viewCartButtonEnabled;
+    if (elements.poweredBy) elements.poweredBy.hidden = config.showPoweredBy === false;
   }
 
   function setOpen(open) {
     state.hostMode = LOOPDESK_HOST_MODE;
     state.open = open;
     render();
-    if (open) debugLog("fallback drawer open", { source: "loopdesk-fallback" });
+    if (!open && document.body) document.body.classList.remove("loopdesk-cart-drawer-is-open");
+    if (!open) document.documentElement.classList.remove("loopdesk-cart-drawer-is-open");
+    if (open) debugLog("drawer opened", { source: "loopdesk", mode: config.drawerMode }, true);
   }
 
   function fetchCart() {
@@ -322,19 +376,51 @@
     return Boolean(config.enabled && elements.root && elements.panel);
   }
 
+  function changeLine(index, quantity) {
+    state.loading = true;
+    render();
+    return fetch("/cart/change.js", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ line: Number(index) + 1, quantity: Math.max(0, Number(quantity) || 0) })
+    }).then(function (response) {
+      if (!response.ok) throw new Error("Cart update failed");
+      return response.json();
+    }).then(function (cart) { state.cart = cart; state.error = ""; })
+      .catch(function (error) { state.error = error && error.message ? error.message : "Cart update failed"; })
+      .finally(function () { state.loading = false; render(); });
+  }
+
+  function handleDrawerAction(event) {
+    var qtyButton = event.target && event.target.closest && event.target.closest("[data-loopdesk-qty]");
+    var removeButton = event.target && event.target.closest && event.target.closest("[data-loopdesk-remove]");
+    var button = qtyButton || removeButton;
+    if (!button || !state.cart || !state.cart.items) return;
+    event.preventDefault();
+    var index = Number(button.getAttribute("data-loopdesk-line"));
+    var item = state.cart.items[index];
+    if (!item) return;
+    var nextQty = removeButton ? 0 : item.quantity + (button.getAttribute("data-loopdesk-qty") === "increase" ? 1 : -1);
+    changeLine(index, nextQty);
+  }
+
   function handleCartIconClick(event) {
     if (!isDrawerAvailable()) return;
-    if (getCartOwnershipMode() === "theme") return;
 
     var trigger = findCartTrigger(event.target);
     if (!trigger) return;
 
-    if (getCartOwnershipMode() === "fallback" && detectThemeDrawer()) {
-      debugLog("cart icon mode: theme-pass-through", { trigger: trigger });
+    var capability = getCapabilityResult();
+    var active = isLoopDeskDrawerActive();
+    debugLog("selected drawer mode", { mode: config.drawerMode, active: active }, true);
+    debugLog("capability result", capability, true);
+    if (!active) {
+      debugLog("fallback theme behavior allowed", { trigger: getElementDescriptor(trigger), reason: capability.reason || "theme-mode" }, true);
       return;
     }
 
-    debugLog("cart icon mode: loopdesk-fallback", { trigger: trigger });
+    debugLog("LoopDesk intercepted cart click", { trigger: getElementDescriptor(trigger), mode: config.drawerMode }, true);
     event.preventDefault();
     event.stopPropagation();
     if (event.stopImmediatePropagation) event.stopImmediatePropagation();
@@ -356,7 +442,7 @@
       '<aside class="loopdesk-cart-drawer" aria-hidden="true" aria-label="Cart" role="dialog">',
       '<header class="loopdesk-cart-drawer__header"><div><h2>Your bag <span data-loopdesk-cart-count></span></h2><p>Cart</p></div><button type="button" class="loopdesk-cart-drawer__close" aria-label="Close cart">×</button></header>',
       '<div class="loopdesk-cart-drawer__body"></div>',
-      '<footer class="loopdesk-cart-drawer__footer"><div class="loopdesk-cart-drawer__subtotal"><span>Subtotal</span><strong data-loopdesk-cart-subtotal></strong></div><button type="button" class="loopdesk-cart-drawer__express" data-loopdesk-express-checkout>' + escapeHtml(config.checkoutButtonText || 'Express Checkout') + '</button><a class="loopdesk-cart-drawer__view-cart" href="/cart">View cart</a></footer>',
+      '<footer class="loopdesk-cart-drawer__footer"><div class="loopdesk-cart-drawer__subtotal"><span>Subtotal</span><strong data-loopdesk-cart-subtotal></strong></div><button type="button" class="loopdesk-cart-drawer__express" data-loopdesk-express-checkout>' + escapeHtml(config.checkoutButtonText || config.buttonText || 'Express Checkout') + '</button><a class="loopdesk-cart-drawer__view-cart" href="/cart">View cart</a><p class="loopdesk-cart-drawer__microcopy">Secure checkout • UPI, cards, net banking & COD</p><p class="loopdesk-cart-drawer__powered">Powered by LoopDesk</p></footer>',
       '</aside>',
     ].join("");
   }
@@ -372,11 +458,14 @@
       count: hostRoot.querySelector("[data-loopdesk-cart-count]"),
       express: hostRoot.querySelector(".loopdesk-cart-drawer__express"),
       viewCart: hostRoot.querySelector(".loopdesk-cart-drawer__view-cart"),
+      poweredBy: hostRoot.querySelector(".loopdesk-cart-drawer__powered"),
     };
 
     if (elements.close) elements.close.addEventListener("click", function () { setOpen(false); });
     if (elements.overlay) elements.overlay.addEventListener("click", function () { setOpen(false); });
     if (elements.express) elements.express.addEventListener("click", function (event) { interceptCheckout(event, "loopdesk-cart-drawer"); });
+    if (elements.body) elements.body.addEventListener("click", handleDrawerAction);
+    if (elements.root) elements.root.style.setProperty("--ld-primary", config.primaryColor);
   }
 
   function mount() {
@@ -388,6 +477,8 @@
     bindElements(root);
     document.addEventListener("keydown", function (event) { if (event.key === "Escape") setOpen(false); });
     document.addEventListener("loopdesk:cart-drawer:open", function () { refreshAndMaybeOpen(true); });
+    debugLog("selected drawer mode", { mode: config.drawerMode, active: isLoopDeskDrawerActive() }, true);
+    debugLog("capability result", getCapabilityResult(), true);
     refreshAndMaybeOpen(false);
   }
 
@@ -927,7 +1018,7 @@
       document.addEventListener(eventName, function (event) {
         debugLog('custom cart event observed', { eventName: eventName, detail: event.detail });
         window.setTimeout(function () { refreshAndMaybeOpen(false); }, 0);
-        if (!isAppOwnedCartMode()) return;
+        if (!isAppOwnedCartMode()) { debugLog("fallback theme behavior allowed", { eventName: eventName, reason: "inactive-drawer-mode" }, true); return; }
         event.preventDefault();
         event.stopPropagation();
         if (event.stopImmediatePropagation) event.stopImmediatePropagation();
