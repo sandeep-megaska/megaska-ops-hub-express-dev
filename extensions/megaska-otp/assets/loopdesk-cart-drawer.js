@@ -22,6 +22,9 @@
   var THEME_CART_DRAWER_SELECTORS = [
     "cart-drawer",
     "cart-notification",
+    "details[open][aria-controls*='cart' i]",
+    "details[open][class*='cart' i]",
+    "details[open][id*='cart' i]",
     "#CartDrawer",
     "#cart-drawer",
     ".cart-drawer",
@@ -64,7 +67,9 @@
   if (!config.enabled || window.__LOOPDESK_CART_DRAWER_LOADED__) return;
   window.__LOOPDESK_CART_DRAWER_LOADED__ = true;
 
-  var state = { open: false, loading: false, cart: null, error: "", hostMode: LOOPDESK_HOST_MODE, themeDrawer: null, fallbackReason: "", expressCheckoutLock: false, capability: null, drawerModeActive: false, neutralizedThemeDrawers: [], bodyLockSnapshot: null, removedThemeBodyClasses: [] };
+  var state = { open: false, loading: false, cart: null, error: "", hostMode: LOOPDESK_HOST_MODE, themeDrawer: null, fallbackReason: "", expressCheckoutLock: false, capability: null, drawerModeActive: false, neutralizedThemeDrawers: [], bodyLockSnapshot: null, removedThemeBodyClasses: [], cartTriggerTakeovers: [] };
+  var cartTriggerObserver = null;
+  var cartTriggerTakeoverTimer = null;
   var suppressNextCartClickUntil = 0;
   var suppressedCartTrigger = null;
   var diagnosticActions = {};
@@ -202,6 +207,24 @@
     return Boolean(config.openAfterAddToCart && isLoopDeskDrawerActive());
   }
 
+  function scheduleNativeCartPanelCleanup() {
+    [0, 50, 150, 300].forEach(function (delay) {
+      window.setTimeout(function () {
+        neutralizeThemeDrawers();
+        debugLog("delayed cleanup ran", { delay: delay }, true);
+        var remaining = Array.prototype.slice.call(document.querySelectorAll(THEME_CART_DRAWER_SELECTORS.join(",")))
+          .filter(function (drawer, index, list) { return drawer && !isLoopDeskOwned(drawer) && list.indexOf(drawer) === index && isThemeDrawerVisible(drawer); });
+        if (remaining.length) debugLog("remaining native cart drawer detected after cleanup", { count: remaining.length, drawers: remaining.map(getElementDescriptor) }, true);
+      }, delay);
+    });
+    if (window.requestAnimationFrame) {
+      window.requestAnimationFrame(function () {
+        neutralizeThemeDrawers();
+        debugLog("delayed cleanup ran", { delay: "requestAnimationFrame" }, true);
+      });
+    }
+  }
+
   function refreshAfterCartMutation(wasAdd) {
     if (wasAdd && shouldOpenLoopDeskAfterCartAdd()) return refreshAndMaybeOpen(true);
     return refreshAndMaybeOpen(false);
@@ -293,7 +316,7 @@
       drawer.style.display = "none";
       drawer.style.visibility = "hidden";
       state.neutralizedThemeDrawers.push(record);
-      debugLogOnce("native-split-panel-cleanup", "native split panel cleanup applied", { element: getElementDescriptor(drawer) }, true);
+      debugLog("native cart panel suppressed", { element: getElementDescriptor(drawer) }, true);
     });
   }
 
@@ -409,6 +432,94 @@
     return trigger;
   }
 
+
+  function getConnectedTakeoverRecord(element) {
+    return state.cartTriggerTakeovers.filter(function (record) { return record && (record.clone === element || record.original === element); })[0] || null;
+  }
+
+  function handleOwnedCartTriggerEvent(event) {
+    if (event.type === "keydown" && event.key !== "Enter" && event.key !== " ") return;
+    return ownCartTriggerEvent(event, this, event.type);
+  }
+
+  function prepareLoopDeskCartTrigger(trigger) {
+    if (!trigger || trigger.getAttribute("data-loopdesk-cart-trigger") === "true") return trigger;
+    var clone = trigger.cloneNode(true);
+    clone.setAttribute("data-loopdesk-cart-trigger", "true");
+    clone.setAttribute("data-loopdesk-original-trigger", "true");
+    if (clone.tagName && clone.tagName.toLowerCase() === "a") clone.setAttribute("href", "javascript:void(0)");
+    if (!/^(a|button|summary)$/i.test(clone.tagName || "")) {
+      clone.setAttribute("role", clone.getAttribute("role") || "button");
+      clone.setAttribute("tabindex", clone.getAttribute("tabindex") || "0");
+    }
+    if (!clone.getAttribute("aria-label") && !clone.textContent.trim()) clone.setAttribute("aria-label", "Open cart");
+    ["pointerdown", "mousedown", "touchstart", "click", "keydown"].forEach(function (eventName) {
+      clone.addEventListener(eventName, handleOwnedCartTriggerEvent, true);
+      clone.addEventListener(eventName, handleOwnedCartTriggerEvent, false);
+    });
+    return clone;
+  }
+
+  function applyCartTriggerTakeover() {
+    if (!isDrawerAvailable() || !isLoopDeskDrawerActive()) {
+      restoreCartTriggerTakeover();
+      return;
+    }
+    var applied = 0;
+    var triggers = Array.prototype.slice.call(document.querySelectorAll(CART_TRIGGER_SELECTOR))
+      .filter(function (trigger, index, list) {
+        return trigger && list.indexOf(trigger) === index && !isInsideLoopDeskDrawer(trigger) && trigger.getAttribute("data-loopdesk-cart-trigger") !== "true" && findCartTrigger(trigger) === trigger && !getConnectedTakeoverRecord(trigger);
+      });
+    triggers.forEach(function (trigger) {
+      if (!trigger.parentNode) return;
+      var clone = prepareLoopDeskCartTrigger(trigger);
+      var record = { original: trigger, clone: clone, parent: trigger.parentNode, nextSibling: trigger.nextSibling };
+      trigger.parentNode.replaceChild(clone, trigger);
+      state.cartTriggerTakeovers.push(record);
+      applied += 1;
+      debugLog("trigger cloned", { trigger: getElementDescriptor(clone) }, true);
+    });
+    if (applied) debugLog("trigger takeover applied", { count: applied }, true);
+  }
+
+  function restoreCartTriggerTakeover() {
+    if (!state.cartTriggerTakeovers.length) return;
+    state.cartTriggerTakeovers.forEach(function (record) {
+      if (record.clone && record.clone.parentNode) {
+        record.clone.parentNode.replaceChild(record.original, record.clone);
+        debugLog("trigger restored", { trigger: getElementDescriptor(record.original) }, true);
+      }
+    });
+    state.cartTriggerTakeovers = [];
+  }
+
+  function scheduleCartTriggerTakeover(reason) {
+    if (cartTriggerTakeoverTimer) window.clearTimeout(cartTriggerTakeoverTimer);
+    cartTriggerTakeoverTimer = window.setTimeout(function () {
+      cartTriggerTakeoverTimer = null;
+      applyCartTriggerTakeover();
+      if (reason === "mutation") debugLog("mutation observer reapplied takeover", {}, true);
+    }, 80);
+  }
+
+  function observeCartTriggerTakeoverTargets() {
+    if (!window.MutationObserver || cartTriggerObserver) return;
+    cartTriggerObserver = new MutationObserver(function (mutations) {
+      var shouldReapply = mutations.some(function (mutation) {
+        if (!mutation.target || isInsideLoopDeskDrawer(mutation.target)) return false;
+        if (mutation.target.getAttribute && mutation.target.getAttribute("data-loopdesk-cart-trigger") === "true") return false;
+        return mutation.type === "childList" || mutation.type === "attributes";
+      });
+      if (shouldReapply) scheduleCartTriggerTakeover("mutation");
+    });
+    cartTriggerObserver.observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["class", "href", "aria-label", "aria-controls", "data-cart", "data-cart-drawer"]
+    });
+  }
+
   function fallbackToCartPage(trigger) {
     var href = trigger && trigger.getAttribute && trigger.getAttribute("href");
     window.location.href = href && hasCartPath(href) ? href : "/cart";
@@ -474,7 +585,10 @@
     if (open) rememberBodyLockState();
     state.open = open;
     render();
-    if (open) neutralizeThemeDrawers();
+    if (open) {
+      neutralizeThemeDrawers();
+      scheduleNativeCartPanelCleanup();
+    }
     if (!open) {
       restoreNeutralizedThemeDrawers();
       restoreLoopDeskBodyLock();
@@ -567,8 +681,7 @@
       }
       setOpen(true);
       debugLogOnce("loopdesk-drawer-opened-from-trigger", "LoopDesk drawer opened", { trigger: getElementDescriptor(trigger), action: action }, true);
-      window.setTimeout(neutralizeThemeDrawers, 0);
-      window.setTimeout(neutralizeThemeDrawers, 60);
+      scheduleNativeCartPanelCleanup();
     }).catch(function () {
       fallbackToCartPage(trigger);
     });
@@ -647,6 +760,8 @@
     debugLog("selected drawer mode", { mode: config.drawerMode, active: isLoopDeskDrawerActive() }, true);
     debugLog("capability result", getCapabilityResult(), true);
     refreshAndMaybeOpen(false);
+    scheduleCartTriggerTakeover("mount");
+    observeCartTriggerTakeoverTargets();
   }
 
   function acquireHost() {
@@ -1237,4 +1352,6 @@
   listenForCheckoutIntent();
   scheduleCheckoutCtaScan();
   observeCheckoutCtaTargets();
+  scheduleCartTriggerTakeover("init");
+  observeCartTriggerTakeoverTargets();
 })();
