@@ -17,7 +17,7 @@
 .megaska-otp-modal {
   position: fixed;
   inset: 0;
-  z-index: 9999;
+  z-index: 2147483500;
   display: grid;
   place-items: center;
   padding: 16px;
@@ -508,7 +508,7 @@
 
 .megaska-account-menu-popover {
   position: absolute;
-  z-index: 9999;
+  z-index: 2147483500;
   width: 180px;
 }
 
