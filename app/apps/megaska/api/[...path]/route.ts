@@ -61,6 +61,7 @@ const STOREFRONT_API_PREFIXES = [
   "delhivery/pincode",
   "express/checkout/",
   "profile/",
+  "runtime/config",
 ];
 
 function isStorefrontApiPath(path: string) {
@@ -97,11 +98,11 @@ async function proxyInternalApi(request: NextRequest, context: { params: Promise
       : await requireShopFromAppProxy(request);
     const moduleKey = resolveModuleKey(proxyPath);
 
-    if (!moduleKey) {
+    if (!moduleKey && proxyPath !== "runtime/config") {
       return NextResponse.json({ ok: false, error: "API route is not available through the Megaska app proxy" }, { status: 404 });
     }
 
-    await requireEnabledModule(shop.id, moduleKey);
+    if (moduleKey) await requireEnabledModule(shop.id, moduleKey);
 
     const targetUrl = new URL(request.url);
     targetUrl.pathname = `/api/${proxyPath}`;
