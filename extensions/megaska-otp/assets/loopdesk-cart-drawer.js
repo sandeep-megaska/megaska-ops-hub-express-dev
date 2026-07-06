@@ -378,26 +378,224 @@
     openExpressCheckout(source);
   }
 
+  var CHECKOUT_INTENT_SELECTOR = [
+    'a[href="/checkout"]',
+    'a[href^="/checkout"]',
+    'a[href*="/checkout"]',
+    'button[name="checkout"]',
+    'input[name="checkout"]',
+    'button[type="submit"][name="checkout"]',
+    'input[type="submit"][name="checkout"]',
+    '.cart__checkout-button',
+    '.checkout-button',
+    '[class*="checkout" i]',
+    '[id*="checkout" i]',
+    '[data-checkout]',
+    '[data-testid*="checkout" i]',
+    '[aria-label*="checkout" i]'
+  ].join(',');
+
+  var CHECKOUT_SUBMIT_SELECTOR = [
+    'button[name="checkout"]',
+    'input[name="checkout"]',
+    'button[type="submit"][name="checkout"]',
+    'input[type="submit"][name="checkout"]',
+    'button[type="submit"]',
+    'input[type="submit"]',
+    '.cart__checkout-button',
+    '.checkout-button',
+    '[class*="checkout" i]',
+    '[id*="checkout" i]',
+    '[data-checkout]',
+    '[data-testid*="checkout" i]',
+    '[aria-label*="checkout" i]'
+  ].join(',');
+
+  var CART_CONTEXT_SELECTOR = [
+    'body.template-cart',
+    'body.cart',
+    'main[data-cart-page]',
+    '[data-cart-page]',
+    'form[action="/cart"]',
+    'form[action^="/cart"]',
+    'form[action*="/cart"]',
+    '[data-cart-drawer]',
+    '[data-drawer="cart"]',
+    '[data-section-type="cart-drawer"]',
+    '[data-section-id*="cart" i]',
+    'cart-drawer',
+    'cart-items',
+    'cart-notification',
+    'mini-cart',
+    '#CartDrawer',
+    '#cart-drawer',
+    '.cart-drawer',
+    '#mini-cart',
+    '.mini-cart',
+    '.ajax-cart',
+    '#ajax-cart-container',
+    '#cart-sidebar',
+    '.cart-sidebar',
+    '.side-cart',
+    '.drawer--cart',
+    '.cart',
+    '.cart-page',
+    '.cart-section',
+    '.cart__contents',
+    '.cart__footer',
+    '.cart__blocks',
+    '.cart-items',
+    '.cart-form',
+    '#' + ROOT_ID
+  ].join(',');
+
+  var lastCheckoutSubmitter = null;
+
+  function getElementDescriptor(element) {
+    if (!element) return {};
+    return {
+      tag: element.tagName ? element.tagName.toLowerCase() : '',
+      id: element.id || '',
+      className: typeof element.className === 'string' ? element.className : '',
+      text: (element.innerText || element.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 80)
+    };
+  }
+
+  function getCheckoutText(element) {
+    return (element && (element.innerText || element.textContent || '') || '').replace(/\s+/g, ' ').trim().toLowerCase();
+  }
+
+  function matchesSelector(element, selector) {
+    try { return Boolean(element && element.matches && element.matches(selector)); } catch { return false; }
+  }
+
+  function closestSelector(element, selector) {
+    try { return element && element.closest ? element.closest(selector) : null; } catch { return null; }
+  }
+
+  function hasSameOriginPath(value, pathPrefix) {
+    if (!value) return false;
+    try {
+      var url = new URL(value, window.location.origin);
+      return url.origin === window.location.origin && url.pathname.indexOf(pathPrefix) === 0;
+    } catch {
+      return String(value).indexOf(pathPrefix) === 0;
+    }
+  }
+
+  function getCartContext(element) {
+    if (isInsideLoopDeskDrawer(element)) return { sourcePage: 'theme-drawer', element: getLoopDeskRoot() };
+    if (window.location && window.location.pathname === '/cart') return { sourcePage: 'cart-page', element: document.body };
+
+    var context = closestSelector(element, CART_CONTEXT_SELECTOR);
+    if (!context) return null;
+
+    var sourcePage = 'unknown-cart-context';
+    if (matchesSelector(context, 'body.template-cart, body.cart, main[data-cart-page], [data-cart-page], .cart-page')) sourcePage = 'cart-page';
+    else if (matchesSelector(context, THEME_CART_DRAWER_SELECTORS.join(',')) || matchesSelector(context, '.mini-cart, mini-cart, .side-cart, #' + ROOT_ID)) sourcePage = 'theme-drawer';
+    return { sourcePage: sourcePage, element: context };
+  }
+
+  function isCheckoutExcludedControl(element) {
+    if (!element || !element.closest) return true;
+    return Boolean(closestSelector(element, [
+      'form[action*="/cart/add"] button',
+      'form[action*="/cart/add"] input',
+      '[name="add"]',
+      '[type="submit"][formaction*="/cart/add"]',
+      '[name="plus"]',
+      '[name="minus"]',
+      '[name="updates[]"]',
+      '[data-quantity]',
+      '[data-quantity-selector]',
+      '[href*="change"]',
+      '[name*="remove" i]',
+      '[class*="remove" i]',
+      '[id*="remove" i]',
+      '[class*="discount" i]',
+      '[id*="discount" i]',
+      '[name*="discount" i]',
+      '[aria-label*="discount" i]',
+      '[data-discount]',
+      '[class*="coupon" i]',
+      '[id*="coupon" i]',
+      '[name*="coupon" i]',
+      '[type="search"]',
+      '[role="search"] button',
+      '[class*="search" i]',
+      '[id*="search" i]',
+      '[aria-label*="search" i]',
+      '[aria-haspopup="menu"]',
+      '[aria-controls*="menu" i]'
+    ].join(',')) || /\b(add to cart|add-to-cart|quantity|qty|increase|decrease|remove|discount|coupon|promo|search|menu)\b/i.test(elementText(element)));
+  }
+
+  function findCheckoutIntentControl(target) {
+    if (!target || !target.closest) return null;
+    var control = closestSelector(target, CHECKOUT_INTENT_SELECTOR);
+    if (control) return { control: control, reason: 'selector:' + CHECKOUT_INTENT_SELECTOR };
+
+    control = closestSelector(target, 'a, button, input[type="button"], input[type="submit"], [role="button"]');
+    if (!control) return null;
+    var text = getCheckoutText(control);
+    if (/^(checkout|check out|proceed to checkout|continue to checkout|secure checkout|buy now)$/.test(text)) {
+      return { control: control, reason: 'visible-text:' + text };
+    }
+    if (text === 'place order') return { control: control, reason: 'visible-text:place order' };
+    return null;
+  }
+
+  function logCheckoutIntent(reason, control, context, modalApiExists) {
+    debugLog('checkout intent intercepted', {
+      reason: reason,
+      element: getElementDescriptor(control),
+      sourcePage: context ? context.sourcePage : 'unknown-cart-context',
+      modalApiExists: modalApiExists
+    });
+  }
+
+  function openExpressCheckoutFromIntent(reason, control, context) {
+    var modalApiExists = Boolean(window.MegaskaExpressCheckout && typeof window.MegaskaExpressCheckout.open === 'function');
+    logCheckoutIntent(reason, control, context, modalApiExists);
+    openExpressCheckout('checkout-intent-intercept');
+  }
+
+  function interceptCheckoutIntentEvent(event, reason, control, context) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+    openExpressCheckoutFromIntent(reason, control, context);
+  }
+
+  function isCartCheckoutForm(form) {
+    if (!form || form.nodeName !== 'FORM') return false;
+    var action = form.getAttribute('action') || '';
+    return hasSameOriginPath(action, '/cart') || hasSameOriginPath(action, '/checkout');
+  }
+
   function listenForCheckoutIntent() {
-    var checkoutSelector = 'a[href="/checkout"], a[href^="/checkout"], button[name="checkout"], input[name="checkout"], .cart__checkout-button, .checkout-button';
-    document.addEventListener("click", function (event) {
-      var target = event.target;
-      if (!target || !target.closest) return;
-      var control = target.closest(checkoutSelector);
-      if (!control) return;
-      interceptCheckout(event, "cart-checkout-intercept");
+    document.addEventListener('click', function (event) {
+      var match = findCheckoutIntentControl(event.target);
+      if (!match || isCheckoutExcludedControl(match.control)) return;
+      var context = getCartContext(match.control);
+      if (!context) return;
+
+      if (matchesSelector(match.control, CHECKOUT_SUBMIT_SELECTOR)) lastCheckoutSubmitter = match.control;
+      interceptCheckoutIntentEvent(event, match.reason, match.control, context);
     }, true);
-    document.addEventListener("submit", function (event) {
+
+    document.addEventListener('submit', function (event) {
       var form = event.target;
-      if (!form || form.nodeName !== "FORM") return;
-      var action = form.getAttribute("action") || "";
-      var submitter = event.submitter;
-      var actionUrl;
-      try { actionUrl = new URL(action, window.location.origin); } catch (_error) { actionUrl = null; }
-      var actionIsCheckout = actionUrl ? actionUrl.origin === window.location.origin && actionUrl.pathname.indexOf("/checkout") === 0 : action.indexOf("/checkout") === 0;
-      var submitterIsCheckout = Boolean(submitter && submitter.matches && submitter.matches(checkoutSelector));
-      if (!actionIsCheckout && !submitterIsCheckout) return;
-      interceptCheckout(event, "cart-checkout-intercept");
+      if (!isCartCheckoutForm(form)) return;
+      var submitter = event.submitter || (lastCheckoutSubmitter && form.contains(lastCheckoutSubmitter) ? lastCheckoutSubmitter : null);
+      var submitterMatch = submitter ? findCheckoutIntentControl(submitter) : null;
+      var formActionIsCheckout = hasSameOriginPath(form.getAttribute('action') || '', '/checkout');
+      var context = getCartContext(form) || getCartContext(submitter);
+
+      if (!context) return;
+      if (!formActionIsCheckout && (!submitterMatch || isCheckoutExcludedControl(submitterMatch.control))) return;
+
+      interceptCheckoutIntentEvent(event, submitterMatch ? submitterMatch.reason : 'form-action:checkout', submitter || form, context);
     }, true);
   }
 
