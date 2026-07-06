@@ -308,7 +308,7 @@
       '<aside class="loopdesk-cart-drawer" aria-hidden="true" aria-label="Cart" role="dialog">',
       '<header class="loopdesk-cart-drawer__header"><div><h2>Your bag <span data-loopdesk-cart-count></span></h2><p>Cart</p></div><button type="button" class="loopdesk-cart-drawer__close" aria-label="Close cart">×</button></header>',
       '<div class="loopdesk-cart-drawer__body"></div>',
-      '<footer class="loopdesk-cart-drawer__footer"><div class="loopdesk-cart-drawer__subtotal"><span>Subtotal</span><strong data-loopdesk-cart-subtotal></strong></div><button type="button" class="loopdesk-cart-drawer__express" data-loopdesk-express-checkout>Express Checkout</button><a class="loopdesk-cart-drawer__view-cart" href="/cart">View cart</a></footer>',
+      '<footer class="loopdesk-cart-drawer__footer"><div class="loopdesk-cart-drawer__subtotal"><span>Subtotal</span><strong data-loopdesk-cart-subtotal></strong></div><button type="button" class="loopdesk-cart-drawer__express" data-loopdesk-express-checkout>' + escapeHtml(config.checkoutButtonText || 'Express Checkout') + '</button><a class="loopdesk-cart-drawer__view-cart" href="/cart">View cart</a></footer>',
       '</aside>',
     ].join("");
   }
@@ -364,6 +364,7 @@
     if (window.MegaskaExpressCheckout && typeof window.MegaskaExpressCheckout.open === "function") {
       window.MegaskaExpressCheckout.open({ source: source || "cart-checkout-intercept" });
     } else {
+      debugLog("modal API missing fallback", { source: source || "cart-checkout-intercept" });
       window.location.href = "/apps/megaska/checkout";
     }
   }
@@ -374,7 +375,7 @@
       event.stopPropagation();
       if (event.stopImmediatePropagation) event.stopImmediatePropagation();
     }
-    debugLog("checkout interception", { source: source || "cart-drawer" });
+    debugLog("click routed to Express Checkout", { source: source || "cart-drawer" });
     openExpressCheckout(source);
   }
 
@@ -410,6 +411,12 @@
     '[data-testid*="checkout" i]',
     '[aria-label*="checkout" i]'
   ].join(',');
+
+  var LOOPDESK_CHECKOUT_CTA_SELECTOR = '[data-loopdesk-checkout-cta="true"]';
+  var HIDDEN_NATIVE_CHECKOUT_ATTRIBUTE = 'data-loopdesk-native-checkout-hidden';
+  var CHECKOUT_SCAN_DEBOUNCE_MS = 160;
+  var checkoutScanTimer = null;
+  var checkoutObserver = null;
 
   var CART_CONTEXT_SELECTOR = [
     'body.template-cart',
@@ -450,6 +457,135 @@
   ].join(',');
 
   var lastCheckoutSubmitter = null;
+
+  function isUnsafeCheckoutInjectionArea(element) {
+    if (!element || !element.closest) return true;
+    if (window.location && /^\/(?:checkout|account)(?:\/|$)/.test(window.location.pathname || '')) return true;
+    return Boolean(closestSelector(element, [
+      '#' + ROOT_ID,
+      'form[action*="/cart/add"]',
+      'product-form',
+      '[data-product-form]',
+      '[class*="product-form" i]',
+      '[id*="product-form" i]',
+      '[role="search"]',
+      '[type="search"]',
+      '[class*="search" i]',
+      '[id*="search" i]',
+      '[aria-label*="search" i]',
+      '[aria-haspopup="menu"]',
+      '[aria-controls*="menu" i]',
+      'nav',
+      '[role="navigation"]',
+      '[class*="account" i]',
+      '[id*="account" i]'
+    ].join(',')));
+  }
+
+  function getCheckoutCtaInsertParent(control) {
+    if (!control || !control.parentNode) return null;
+    var parent = control.parentNode;
+    if (parent.nodeType !== 1) return null;
+    return parent;
+  }
+
+  function hasInjectedCheckoutCtaNear(control) {
+    var parent = getCheckoutCtaInsertParent(control);
+    if (!parent) return false;
+    if (control.nextElementSibling && matchesSelector(control.nextElementSibling, LOOPDESK_CHECKOUT_CTA_SELECTOR)) return true;
+    if (control.previousElementSibling && matchesSelector(control.previousElementSibling, LOOPDESK_CHECKOUT_CTA_SELECTOR)) return true;
+    return Boolean(parent.querySelector(LOOPDESK_CHECKOUT_CTA_SELECTOR));
+  }
+
+  function preserveNativeCheckoutState(control) {
+    if (!control || control.hasAttribute(HIDDEN_NATIVE_CHECKOUT_ATTRIBUTE)) return;
+    control.setAttribute(HIDDEN_NATIVE_CHECKOUT_ATTRIBUTE, 'true');
+    control.setAttribute('data-loopdesk-original-display', control.style.display || '');
+    control.setAttribute('data-loopdesk-original-visibility', control.style.visibility || '');
+    control.setAttribute('data-loopdesk-original-aria-hidden', control.getAttribute('aria-hidden') || '');
+  }
+
+  function hideNativeCheckoutControl(control) {
+    if (control.hasAttribute(HIDDEN_NATIVE_CHECKOUT_ATTRIBUTE) && control.style.display === 'none' && control.style.visibility === 'hidden') return;
+    preserveNativeCheckoutState(control);
+    control.style.display = 'none';
+    control.style.visibility = 'hidden';
+    control.setAttribute('aria-hidden', 'true');
+  }
+
+  function createLoopDeskCheckoutCta() {
+    var button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'loopdesk-checkout-cta';
+    button.setAttribute('data-loopdesk-checkout-cta', 'true');
+    button.innerHTML = [
+      '<span class="loopdesk-checkout-cta__label">' + escapeHtml(config.checkoutButtonText || 'Express Checkout') + '</span>',
+      '<span class="loopdesk-checkout-cta__subtext">UPI • Cards • Net Banking • COD</span>',
+      '<span class="loopdesk-checkout-cta__trust">Secure checkout powered by LoopDesk</span>'
+    ].join('');
+    button.addEventListener('click', function (event) {
+      interceptCheckout(event, 'loopdesk-checkout-cta');
+    });
+    return button;
+  }
+
+  function shouldInjectCheckoutCta(control) {
+    if (!control || !control.closest || matchesSelector(control, LOOPDESK_CHECKOUT_CTA_SELECTOR)) return false;
+    if (isUnsafeCheckoutInjectionArea(control)) return false;
+    if (isCheckoutExcludedControl(control)) return false;
+    if (!getCartContext(control)) return false;
+    return true;
+  }
+
+  function injectCheckoutCtaForControl(control) {
+    if (!shouldInjectCheckoutCta(control)) return false;
+    if (hasInjectedCheckoutCtaNear(control)) {
+      debugLog('duplicate skipped', { element: getElementDescriptor(control) });
+      hideNativeCheckoutControl(control);
+      return false;
+    }
+
+    var parent = getCheckoutCtaInsertParent(control);
+    if (!parent) return false;
+    hideNativeCheckoutControl(control);
+    parent.insertBefore(createLoopDeskCheckoutCta(), control.nextSibling);
+    debugLog('CTA injected', { element: getElementDescriptor(control) });
+    return true;
+  }
+
+  function scanForCheckoutCtas() {
+    var controls = Array.prototype.slice.call(document.querySelectorAll(CHECKOUT_INTENT_SELECTOR))
+      .filter(function (control, index, list) {
+        return control && list.indexOf(control) === index && shouldInjectCheckoutCta(control);
+      });
+    if (controls.length) debugLog('native checkout controls found', { count: controls.length });
+    controls.forEach(injectCheckoutCtaForControl);
+  }
+
+  function scheduleCheckoutCtaScan() {
+    if (checkoutScanTimer) window.clearTimeout(checkoutScanTimer);
+    checkoutScanTimer = window.setTimeout(function () {
+      checkoutScanTimer = null;
+      scanForCheckoutCtas();
+    }, CHECKOUT_SCAN_DEBOUNCE_MS);
+  }
+
+  function observeCheckoutCtaTargets() {
+    if (!window.MutationObserver || checkoutObserver) return;
+    checkoutObserver = new MutationObserver(function (mutations) {
+      var shouldScan = mutations.some(function (mutation) {
+        if (!mutation.target || isInsideLoopDeskDrawer(mutation.target)) return false;
+        return mutation.type === 'childList' || mutation.type === 'attributes';
+      });
+      if (shouldScan) scheduleCheckoutCtaScan();
+    });
+    checkoutObserver.observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['class', 'open', 'aria-hidden', 'style']
+    });
+  }
 
   function getElementDescriptor(element) {
     if (!element) return {};
@@ -557,7 +693,7 @@
   function openExpressCheckoutFromIntent(reason, control, context) {
     var modalApiExists = Boolean(window.MegaskaExpressCheckout && typeof window.MegaskaExpressCheckout.open === 'function');
     logCheckoutIntent(reason, control, context, modalApiExists);
-    openExpressCheckout('checkout-intent-intercept');
+    openExpressCheckout('checkout-intercept-fallback');
   }
 
   function interceptCheckoutIntentEvent(event, reason, control, context) {
@@ -576,6 +712,7 @@
   function listenForCheckoutIntent() {
     document.addEventListener('click', function (event) {
       var match = findCheckoutIntentControl(event.target);
+      if (match && matchesSelector(match.control, LOOPDESK_CHECKOUT_CTA_SELECTOR)) return;
       if (!match || isCheckoutExcludedControl(match.control)) return;
       var context = getCartContext(match.control);
       if (!context) return;
@@ -646,4 +783,6 @@
   listenForForms();
   listenForCartLinks();
   listenForCheckoutIntent();
+  scheduleCheckoutCtaScan();
+  observeCheckoutCtaTargets();
 })();
