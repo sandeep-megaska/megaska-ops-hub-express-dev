@@ -8,46 +8,30 @@
   var config = Object.assign({}, DEFAULT_CONFIG, window.LOOPDESK_CART_DRAWER_CONFIG || {});
   var ROOT_ID = "loopdesk-cart-drawer-root";
   var FETCH_MARKER = "__loopdeskCartDrawerPatched";
-  var THEME_HOST_MODE = "THEME_DRAWER_PRESENT";
   var LOOPDESK_HOST_MODE = "NO_THEME_DRAWER";
 
-  var THEME_CART_HOST_SELECTORS = [
+  var THEME_CART_DRAWER_SELECTORS = [
     "cart-drawer",
     "#CartDrawer",
     "#cart-drawer",
     ".cart-drawer",
     "[data-cart-drawer]",
     "[data-drawer='cart']",
+    "#mini-cart",
+    ".mini-cart",
+    ".ajax-cart",
+    "#ajax-cart-container",
+    "[data-section-type='cart-drawer']",
+    "#cart-sidebar",
+    ".cart-sidebar",
+    ".drawer--cart",
   ];
-  var NATIVE_CART_DRAWER_OPEN_CLASSES = [
-    "active",
-    "open",
-    "is-open",
-    "drawer--open",
-    "menu-opening",
-    "animate",
-  ];
-  var NATIVE_CART_DRAWER_CLOSE_SELECTORS = [
-    "button[name='close']",
-    ".drawer__close",
-    ".cart-drawer__close",
-    "[aria-label*='close' i]",
-  ];
-  var CART_BODY_LOCK_CLASSES = [
-    "cart-open",
-    "cart-drawer-open",
-    "drawer-open",
-    "js-drawer-open",
-    "js-drawer-open-cart",
-    "mini-cart-open",
-    "no-scroll",
-    "overflow-hidden",
-  ];
+  var THEME_CART_DRAWER_OPEN_CLASSES = ["active", "open", "is-open", "menu-opening", "drawer--open"];
 
   if (!config.enabled || window.__LOOPDESK_CART_DRAWER_LOADED__) return;
   window.__LOOPDESK_CART_DRAWER_LOADED__ = true;
 
-  var state = { open: false, loading: false, cart: null, error: "", hostMode: LOOPDESK_HOST_MODE, themeHost: null, fallbackReason: "" };
+  var state = { open: false, loading: false, cart: null, error: "", hostMode: LOOPDESK_HOST_MODE, themeDrawer: null, fallbackReason: "" };
   var elements = {};
 
   function money(cents, currency) {
@@ -102,59 +86,26 @@
     return Boolean(element && element.closest && element.closest("#" + ROOT_ID));
   }
 
-  function isNativeCartDrawerActive(drawer) {
-    if (!drawer || isLoopDeskOwned(drawer)) return false;
-    return drawer.hasAttribute("open") ||
-      drawer.getAttribute("aria-hidden") === "false" ||
-      NATIVE_CART_DRAWER_OPEN_CLASSES.some(function (className) { return drawer.classList.contains(className); });
+  function detectThemeDrawer() {
+    var drawers = Array.prototype.slice.call(document.querySelectorAll(THEME_CART_DRAWER_SELECTORS.join(",")))
+      .filter(function (drawer, index, list) { return drawer && !isLoopDeskOwned(drawer) && list.indexOf(drawer) === index; });
+    var drawer = drawers[0] || null;
+    state.themeDrawer = drawer;
+    debugLog("theme drawer detected " + (drawer ? "yes" : "no"), { element: drawer, visible: drawer ? isThemeDrawerVisible(drawer) : false });
+    return drawer;
   }
 
-  function releaseNativeCartDrawerPageLocks() {
-    [document.documentElement, document.body].forEach(function (owner) {
-      if (!owner) return;
-      CART_BODY_LOCK_CLASSES.forEach(function (className) { owner.classList.remove(className); });
-      if (owner.hasAttribute("inert")) owner.removeAttribute("inert");
-      if (owner.style && owner.style.overflow === "hidden") owner.style.overflow = "";
-    });
-  }
+  function isThemeDrawerVisible(element) {
+    if (!element || isLoopDeskOwned(element)) return false;
+    if (element.hasAttribute("open")) return true;
+    if (element.getAttribute("aria-hidden") === "false") return true;
+    if (THEME_CART_DRAWER_OPEN_CLASSES.some(function (className) { return element.classList && element.classList.contains(className); })) return true;
 
-  function closeNativeCartDrawers() {
-    var nativeDrawerWasActive = false;
-    var drawers = Array.prototype.slice.call(document.querySelectorAll(THEME_CART_HOST_SELECTORS.join(",")))
-      .filter(function (drawer, index, list) {
-        return drawer && !isLoopDeskOwned(drawer) && list.indexOf(drawer) === index;
-      });
+    var style = window.getComputedStyle ? window.getComputedStyle(element) : null;
+    if (!style || style.display === "none" || style.visibility === "hidden") return false;
 
-    drawers.forEach(function (drawer) {
-      var wasActive = isNativeCartDrawerActive(drawer);
-      nativeDrawerWasActive = nativeDrawerWasActive || wasActive;
-
-      NATIVE_CART_DRAWER_CLOSE_SELECTORS.forEach(function (selector) {
-        var closeButton = drawer.querySelector(selector);
-        if (closeButton && typeof closeButton.click === "function") closeButton.click();
-      });
-
-      NATIVE_CART_DRAWER_OPEN_CLASSES.forEach(function (className) { drawer.classList.remove(className); });
-      drawer.removeAttribute("open");
-      drawer.setAttribute("aria-hidden", "true");
-    });
-
-    if (nativeDrawerWasActive) {
-      releaseNativeCartDrawerPageLocks();
-      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", keyCode: 27, which: 27, bubbles: true, cancelable: true }));
-      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", keyCode: 27, which: 27, bubbles: true, cancelable: true }));
-      releaseNativeCartDrawerPageLocks();
-    }
-  }
-
-  function scheduleNativeCartDrawerClosure() {
-    closeNativeCartDrawers();
-    if (window.requestAnimationFrame) {
-      window.requestAnimationFrame(closeNativeCartDrawers);
-    } else {
-      window.setTimeout(closeNativeCartDrawers, 0);
-    }
-    window.setTimeout(closeNativeCartDrawers, 100);
+    var rect = element.getBoundingClientRect ? element.getBoundingClientRect() : null;
+    return Boolean(rect && rect.width > 0 && rect.height > 0);
   }
 
   function hasCartPath(href) {
@@ -272,17 +223,9 @@
   }
 
   function render() {
-    ensureActiveHostElements();
     var cart = state.cart;
     var itemCount = cart && typeof cart.item_count === "number" ? cart.item_count : 0;
 
-    if (state.hostMode === THEME_HOST_MODE) {
-      if (elements.panel) elements.panel.setAttribute("aria-hidden", "true");
-      if (elements.overlay) elements.overlay.hidden = true;
-      document.documentElement.classList.remove("loopdesk-cart-drawer-is-open");
-      updateThemeBranding(cart);
-      return;
-    }
 
     if (!elements.panel) return;
     elements.panel.setAttribute("aria-hidden", state.open ? "false" : "true");
@@ -302,12 +245,10 @@
   }
 
   function setOpen(open) {
-    if (open) acquireHost();
-    if (open && state.hostMode === LOOPDESK_HOST_MODE) closeNativeCartDrawers();
+    state.hostMode = LOOPDESK_HOST_MODE;
     state.open = open;
     render();
-    if (open && state.hostMode === LOOPDESK_HOST_MODE) scheduleNativeCartDrawerClosure();
-    if (!open) closeThemeHost();
+    if (open) debugLog("fallback drawer open", { source: "loopdesk-fallback" });
   }
 
   function fetchCart() {
@@ -340,6 +281,12 @@
     var trigger = findCartTrigger(event.target);
     if (!trigger) return;
 
+    if (detectThemeDrawer()) {
+      debugLog("cart icon mode: theme-pass-through", { trigger: trigger });
+      return;
+    }
+
+    debugLog("cart icon mode: loopdesk-fallback", { trigger: trigger });
     event.preventDefault();
     event.stopPropagation();
     if (event.stopImmediatePropagation) event.stopImmediatePropagation();
@@ -381,7 +328,7 @@
 
     if (elements.close) elements.close.addEventListener("click", function () { setOpen(false); });
     if (elements.overlay) elements.overlay.addEventListener("click", function () { setOpen(false); });
-    if (elements.express) elements.express.addEventListener("click", function (event) { interceptCheckout(event, "cart-drawer"); });
+    if (elements.express) elements.express.addEventListener("click", function (event) { interceptCheckout(event, "loopdesk-cart-drawer"); });
   }
 
   function mount() {
@@ -396,107 +343,26 @@
     refreshAndMaybeOpen(false);
   }
 
-  function findThemeHost() {
-    var hosts = Array.prototype.slice.call(document.querySelectorAll(THEME_CART_HOST_SELECTORS.join(",")))
-      .filter(function (host, index, list) { return host && !isLoopDeskOwned(host) && list.indexOf(host) === index; });
-    return hosts[0] || null;
-  }
-
-  function findThemeBody(host) {
-    if (!host || isLoopDeskOwned(host)) return null;
-    return host.querySelector("[data-loopdesk-cart-host='theme']") ||
-      host.querySelector(".cart-drawer__body, .drawer__contents, .drawer__content, .drawer__inner, form[action*='/cart'], [data-cart-drawer-content]") ||
-      host;
-  }
-
-  function openThemeHost(host) {
-    if (!host) return;
-    host.setAttribute("open", "");
-    host.setAttribute("aria-hidden", "false");
-    NATIVE_CART_DRAWER_OPEN_CLASSES.forEach(function (className) { host.classList.add(className); });
-  }
-
-  function closeThemeHost() {
-    var host = state.themeHost;
-    if (!host) return;
-    host.removeAttribute("open");
-    host.setAttribute("aria-hidden", "true");
-    NATIVE_CART_DRAWER_OPEN_CLASSES.forEach(function (className) { host.classList.remove(className); });
-  }
-
-  function ensureActiveHostElements() {
-    if (state.hostMode !== THEME_HOST_MODE) return;
-    var host = state.themeHost;
-    if (!host || !document.documentElement.contains(host) || isLoopDeskOwned(host)) {
-      fallbackToLoopDeskHost("theme host disappeared or is LoopDesk-owned");
-      return;
-    }
-    openThemeHost(host);
-  }
-
-  function fallbackToLoopDeskHost(reason) {
-    state.hostMode = LOOPDESK_HOST_MODE;
-    state.themeHost = null;
-    state.fallbackReason = reason || "theme host unavailable";
-    debugLog("fallback reason", { reason: state.fallbackReason });
-    var root = getLoopDeskRoot();
-    if (root && !root.querySelector(".loopdesk-cart-drawer")) root.innerHTML = shellHtml();
-    if (root) bindElements(root);
-  }
-
   function acquireHost() {
-    var host = findThemeHost();
-    if (!host) {
-      fallbackToLoopDeskHost("no compatible theme host detected");
-      debugLog("detected host mode", { mode: state.hostMode });
-      return;
-    }
-    state.hostMode = THEME_HOST_MODE;
-    state.themeHost = host;
-    openThemeHost(host);
-    injectThemeBranding(host);
-    debugLog("detected host mode", { mode: state.hostMode });
-    debugLog("selected host element", { element: host });
+    state.themeDrawer = detectThemeDrawer();
+    state.hostMode = LOOPDESK_HOST_MODE;
+    return state.themeDrawer;
   }
 
-  function injectThemeBranding(host) {
-    var body = findThemeBody(host);
-    if (!body) return;
-    var existing = host.querySelector("[data-loopdesk-theme-branding]");
-    if (!existing) {
-      existing = document.createElement("div");
-      existing.setAttribute("data-loopdesk-theme-branding", "");
-      existing.className = "loopdesk-cart-drawer__theme-branding";
-      existing.textContent = "Secure express checkout available with LoopDesk.";
-      body.appendChild(existing);
+  function clearLocalCartDrawerErrors() {
+    if (elements && elements.body && state.error) {
+      state.error = "";
+      render();
     }
-  }
-
-  function updateThemeBranding(cart) {
-    var host = state.themeHost;
-    var branding = host && host.querySelector("[data-loopdesk-theme-branding]");
-    if (!branding) return;
-    var itemCount = cart && typeof cart.item_count === "number" ? cart.item_count : 0;
-    branding.hidden = itemCount === 0;
-  }
-
-  function clearOtpCheckoutErrors() {
-    if (window.MegaskaOtp && typeof window.MegaskaOtp.clearCheckoutErrors === "function") {
-      window.MegaskaOtp.clearCheckoutErrors();
-    }
-    document.querySelectorAll("[data-megaska-checkout-guard-error]").forEach(function (element) {
+    document.querySelectorAll("#" + ROOT_ID + " [data-megaska-checkout-guard-error]").forEach(function (element) {
       element.remove();
     });
   }
 
   function openExpressCheckout(source) {
-    clearOtpCheckoutErrors();
+    clearLocalCartDrawerErrors();
     if (window.MegaskaExpressCheckout && typeof window.MegaskaExpressCheckout.open === "function") {
-      if (source === "theme-cart-drawer") {
-        window.MegaskaExpressCheckout.open({ source: "theme-cart-drawer" });
-        return;
-      }
-      window.MegaskaExpressCheckout.open({ source: source || "cart-drawer" });
+      window.MegaskaExpressCheckout.open({ source: source || "cart-checkout-intercept" });
     } else {
       window.location.href = "/apps/megaska/checkout";
     }
@@ -512,13 +378,6 @@
     openExpressCheckout(source);
   }
 
-  function activeThemeHostFor(element) {
-    if (!element || !element.closest) return null;
-    var host = element.closest(THEME_CART_HOST_SELECTORS.join(","));
-    if (!host || isLoopDeskOwned(host)) return null;
-    return isNativeCartDrawerActive(host) || host === state.themeHost ? host : null;
-  }
-
   function listenForCheckoutIntent() {
     var checkoutSelector = 'a[href="/checkout"], a[href^="/checkout"], button[name="checkout"], input[name="checkout"], .cart__checkout-button, .checkout-button';
     document.addEventListener("click", function (event) {
@@ -526,26 +385,19 @@
       if (!target || !target.closest) return;
       var control = target.closest(checkoutSelector);
       if (!control) return;
-      if (isInsideLoopDeskDrawer(control)) return interceptCheckout(event, "cart-drawer");
-      var themeHost = activeThemeHostFor(control);
-      if (!themeHost) return;
-      state.hostMode = THEME_HOST_MODE;
-      state.themeHost = themeHost;
-      interceptCheckout(event, "theme-cart-drawer");
+      interceptCheckout(event, "cart-checkout-intercept");
     }, true);
     document.addEventListener("submit", function (event) {
       var form = event.target;
       if (!form || form.nodeName !== "FORM") return;
       var action = form.getAttribute("action") || "";
       var submitter = event.submitter;
-      var isNotCheckoutSubmit = action.indexOf("/checkout") !== 0 && !(submitter && submitter.matches && submitter.matches(checkoutSelector));
-      if (isNotCheckoutSubmit) return;
-      if (isInsideLoopDeskDrawer(form)) return interceptCheckout(event, "cart-drawer");
-      var themeHost = activeThemeHostFor(form);
-      if (!themeHost) return;
-      state.hostMode = THEME_HOST_MODE;
-      state.themeHost = themeHost;
-      interceptCheckout(event, "theme-cart-drawer");
+      var actionUrl;
+      try { actionUrl = new URL(action, window.location.origin); } catch (_error) { actionUrl = null; }
+      var actionIsCheckout = actionUrl ? actionUrl.origin === window.location.origin && actionUrl.pathname.indexOf("/checkout") === 0 : action.indexOf("/checkout") === 0;
+      var submitterIsCheckout = Boolean(submitter && submitter.matches && submitter.matches(checkoutSelector));
+      if (!actionIsCheckout && !submitterIsCheckout) return;
+      interceptCheckout(event, "cart-checkout-intercept");
     }, true);
   }
 
@@ -556,7 +408,7 @@
       var args = arguments;
       var cartAdd = isCartAddUrl(args[0]);
       return originalFetch.apply(this, args).then(function (response) {
-        if (cartAdd && response && response.ok && config.openAfterAddToCart) {
+        if (cartAdd && response && response.ok && config.openAfterAddToCart && !detectThemeDrawer()) {
           window.setTimeout(function () { refreshAndMaybeOpen(true); }, 0);
         }
         return response;
@@ -573,9 +425,10 @@
   function listenForForms() {
     document.addEventListener("submit", function (event) {
       var form = event.target;
+      if (!form || form.nodeName !== "FORM") return;
       var action = form.getAttribute("action");
-      if (!form || form.nodeName !== "FORM" || !action || !isCartAddUrl(action)) return;
-      if (!config.openAfterAddToCart) return;
+      if (!action || !isCartAddUrl(action)) return;
+      if (!config.openAfterAddToCart || detectThemeDrawer()) return;
       window.setTimeout(function () { refreshAndMaybeOpen(true); }, 900);
     }, true);
   }
