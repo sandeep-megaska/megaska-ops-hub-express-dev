@@ -1,13 +1,15 @@
 {{ 'megaska-otp.css' | asset_url | stylesheet_tag }}
-{{ 'loopdesk-cart-drawer.css' | asset_url | stylesheet_tag }}
+{% if block.settings.cart_drawer_enabled %}
+  {{ 'loopdesk-cart-drawer.css' | asset_url | stylesheet_tag }}
+{% endif %}
 
 <script>
   window.MEGASKA_SHOP_DOMAIN = {{ shop.permanent_domain | json }};
   window.LOOPDESK_CART_DRAWER_CONFIG = Object.assign({}, window.LOOPDESK_CART_DRAWER_CONFIG || {}, {
-    enabled: true,
-    openAfterAddToCart: true,
-    expressCheckoutButtonEnabled: true,
-    viewCartButtonEnabled: true,
+    enabled: {{ block.settings.cart_drawer_enabled | json }},
+    openAfterAddToCart: {{ block.settings.open_after_add_to_cart | json }},
+    expressCheckoutButtonEnabled: {{ block.settings.express_checkout_button_enabled | json }},
+    viewCartButtonEnabled: {{ block.settings.view_cart_button_enabled | json }},
     shopDomain: {{ shop.permanent_domain | json }}
   });
 </script>
@@ -15,7 +17,10 @@
 <script src="{{ 'megaska-auth.js' | asset_url }}" defer></script>
 <script src="{{ 'megaska-otp.js' | asset_url }}" defer></script>
 <script src="{{ 'megaska-express-modal.js' | asset_url }}" defer></script>
-<script src="{{ 'loopdesk-cart-drawer.js' | asset_url }}" defer></script>
+<script src="{{ 'loopdesk-checkout-bridge.js' | asset_url }}" defer></script>
+{% if block.settings.cart_drawer_enabled %}
+  <script src="{{ 'loopdesk-cart-drawer.js' | asset_url }}" defer></script>
+{% endif %}
 <script src="/apps/megaska/megaska-exchange-hook.js" defer></script>
 
 {% schema %}
@@ -23,7 +28,7 @@
   "name": "Megaska OTP Embed",
   "target": "body",
   "stylesheet": "loopdesk-cart-drawer.css",
-  "javascript": "loopdesk-cart-drawer.js",
+  "javascript": "loopdesk-checkout-bridge.js",
   "settings": [
     {
       "type": "checkbox",

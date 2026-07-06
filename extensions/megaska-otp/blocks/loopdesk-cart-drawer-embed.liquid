@@ -5,6 +5,8 @@
   assign loopdesk_view_cart_enabled = block.settings.view_cart_button_enabled
 %}
 
+<script src="{{ 'loopdesk-checkout-bridge.js' | asset_url }}" defer></script>
+
 {% if loopdesk_cart_drawer_enabled %}
   {{ 'loopdesk-cart-drawer.css' | asset_url | stylesheet_tag }}
 
@@ -25,7 +27,7 @@
   "name": "LoopDesk Cart Drawer",
   "target": "body",
   "stylesheet": "loopdesk-cart-drawer.css",
-  "javascript": "loopdesk-cart-drawer.js",
+  "javascript": "loopdesk-checkout-bridge.js",
   "settings": [
     {
       "type": "checkbox",
