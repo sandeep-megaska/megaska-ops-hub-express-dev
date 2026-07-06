@@ -4,10 +4,14 @@
     openAfterAddToCart: true,
     expressCheckoutButtonEnabled: true,
     viewCartButtonEnabled: true,
+    cartOwnershipMode: "fallback",
   };
   var config = Object.assign({}, DEFAULT_CONFIG, window.LOOPDESK_CART_DRAWER_CONFIG || {});
   var ROOT_ID = "loopdesk-cart-drawer-root";
   var FETCH_MARKER = "__loopdeskCartDrawerPatched";
+  var XHR_MARKER = "__loopdeskCartDrawerXhrPatched";
+  var FORM_MARKER = "__loopdeskCartDrawerFormPatched";
+  var LOCATION_MARKER = "__loopdeskCartDrawerLocationPatched";
   var LOOPDESK_HOST_MODE = "NO_THEME_DRAWER";
 
   var THEME_CART_DRAWER_SELECTORS = [
@@ -31,7 +35,7 @@
   if (!config.enabled || window.__LOOPDESK_CART_DRAWER_LOADED__) return;
   window.__LOOPDESK_CART_DRAWER_LOADED__ = true;
 
-  var state = { open: false, loading: false, cart: null, error: "", hostMode: LOOPDESK_HOST_MODE, themeDrawer: null, fallbackReason: "" };
+  var state = { open: false, loading: false, cart: null, error: "", hostMode: LOOPDESK_HOST_MODE, themeDrawer: null, fallbackReason: "", expressCheckoutLock: false };
   var elements = {};
 
   function money(cents, currency) {
@@ -55,15 +59,37 @@
       .replace(/'/g, "&#039;");
   }
 
-  function isCartAddUrl(input) {
+  function getSameOriginUrl(input) {
     try {
-      var url = new URL(typeof input === "string" ? input : input.url, window.location.origin);
-      return url.origin === window.location.origin && (url.pathname === "/cart/add" || url.pathname === "/cart/add.js");
+      if (!input) return null;
+      var raw = typeof input === "string" ? input : input.url;
+      var url = new URL(raw, window.location.origin);
+      return url.origin === window.location.origin ? url : null;
     } catch (_error) {
-      return false;
+      return null;
     }
   }
 
+  function isCartMutationUrl(input) {
+    var url = getSameOriginUrl(input);
+    if (!url) return false;
+    return [
+      "/cart/add",
+      "/cart/add.js",
+      "/cart/change",
+      "/cart/change.js",
+      "/cart/update",
+      "/cart/update.js"
+    ].indexOf(url.pathname) !== -1;
+  }
+
+  function isCartAddUrl(input) {
+    var url = getSameOriginUrl(input);
+    return Boolean(url && (url.pathname === "/cart/add" || url.pathname === "/cart/add.js"));
+  }
+
+
+  debugLog("script loaded", { cartOwnershipMode: config.cartOwnershipMode });
 
   function debugLog(message, payload) {
     if (window.LOOPDESK_CART_DRAWER_DEBUG !== true || !window.console) return;
@@ -84,6 +110,27 @@
 
   function isInsideLoopDeskDrawer(element) {
     return Boolean(element && element.closest && element.closest("#" + ROOT_ID));
+  }
+
+  function getCartOwnershipMode() {
+    return config.cartOwnershipMode === "theme" || config.cartOwnershipMode === "app" || config.cartOwnershipMode === "fallback"
+      ? config.cartOwnershipMode
+      : "fallback";
+  }
+
+  function isAppOwnedCartMode() {
+    return getCartOwnershipMode() === "app";
+  }
+
+  function shouldOpenLoopDeskAfterCartAdd() {
+    if (!config.openAfterAddToCart) return false;
+    if (isAppOwnedCartMode()) return true;
+    return !detectThemeDrawer();
+  }
+
+  function refreshAfterCartMutation(wasAdd) {
+    if (wasAdd && shouldOpenLoopDeskAfterCartAdd()) return refreshAndMaybeOpen(true);
+    return refreshAndMaybeOpen(false);
   }
 
   function detectThemeDrawer() {
@@ -277,11 +324,12 @@
 
   function handleCartIconClick(event) {
     if (!isDrawerAvailable()) return;
+    if (getCartOwnershipMode() === "theme") return;
 
     var trigger = findCartTrigger(event.target);
     if (!trigger) return;
 
-    if (detectThemeDrawer()) {
+    if (getCartOwnershipMode() === "fallback" && detectThemeDrawer()) {
       debugLog("cart icon mode: theme-pass-through", { trigger: trigger });
       return;
     }
@@ -359,14 +407,28 @@
     });
   }
 
-  function openExpressCheckout(source) {
+  function openLoopDeskExpressCheckout(source) {
+    if (state.expressCheckoutLock) return;
+    state.expressCheckoutLock = true;
+    var checkoutSource = source || "checkout-intent";
+    var releaseLock = function () { state.expressCheckoutLock = false; };
     clearLocalCartDrawerErrors();
     if (window.MegaskaExpressCheckout && typeof window.MegaskaExpressCheckout.open === "function") {
-      window.MegaskaExpressCheckout.open({ source: source || "cart-checkout-intercept" });
+      debugLog("Express modal API present", { source: checkoutSource });
+      try {
+        window.MegaskaExpressCheckout.open({ source: checkoutSource });
+      } finally {
+        window.setTimeout(releaseLock, 900);
+      }
     } else {
-      debugLog("modal API missing fallback", { source: source || "cart-checkout-intercept" });
+      debugLog("Express modal API missing", { source: checkoutSource });
+      window.setTimeout(releaseLock, 900);
       window.location.href = "/apps/megaska/checkout";
     }
+  }
+
+  function openExpressCheckout(source) {
+    openLoopDeskExpressCheckout(source || "checkout-intent");
   }
 
   function interceptCheckout(event, source) {
@@ -375,7 +437,7 @@
       event.stopPropagation();
       if (event.stopImmediatePropagation) event.stopImmediatePropagation();
     }
-    debugLog("click routed to Express Checkout", { source: source || "cart-drawer" });
+    debugLog("checkout click intercepted with reason", { source: source || "cart-drawer" });
     openExpressCheckout(source);
   }
 
@@ -674,7 +736,7 @@
     control = closestSelector(target, 'a, button, input[type="button"], input[type="submit"], [role="button"]');
     if (!control) return null;
     var text = getCheckoutText(control);
-    if (/^(checkout|check out|proceed to checkout|continue to checkout|secure checkout|buy now)$/.test(text)) {
+    if (/^(checkout|check out|proceed to checkout|continue to checkout|secure checkout)$/.test(text)) {
       return { control: control, reason: 'visible-text:' + text };
     }
     if (text === 'place order') return { control: control, reason: 'visible-text:place order' };
@@ -727,13 +789,104 @@
       var submitter = event.submitter || (lastCheckoutSubmitter && form.contains(lastCheckoutSubmitter) ? lastCheckoutSubmitter : null);
       var submitterMatch = submitter ? findCheckoutIntentControl(submitter) : null;
       var formActionIsCheckout = hasSameOriginPath(form.getAttribute('action') || '', '/checkout');
+      var submitterActionIsCheckout = submitter && hasSameOriginPath(submitter.getAttribute && submitter.getAttribute('formaction') || '', '/checkout');
       var context = getCartContext(form) || getCartContext(submitter);
 
-      if (!context) return;
-      if (!formActionIsCheckout && (!submitterMatch || isCheckoutExcludedControl(submitterMatch.control))) return;
+      if (!context && !formActionIsCheckout && !submitterActionIsCheckout) return;
+      if (!formActionIsCheckout && !submitterActionIsCheckout && (!submitterMatch || isCheckoutExcludedControl(submitterMatch.control))) return;
 
-      interceptCheckoutIntentEvent(event, submitterMatch ? submitterMatch.reason : 'form-action:checkout', submitter || form, context);
+      debugLog('submit intercepted with reason', { reason: submitterActionIsCheckout ? 'submitter-formaction:checkout' : formActionIsCheckout ? 'form-action:checkout' : submitterMatch.reason });
+      interceptCheckoutIntentEvent(event, submitterActionIsCheckout ? 'submitter-formaction:checkout' : submitterMatch ? submitterMatch.reason : 'form-action:checkout', submitter || form, context || { sourcePage: 'checkout-form' });
     }, true);
+  }
+
+  function patchFormSubmission() {
+    if (!window.HTMLFormElement || window.HTMLFormElement.prototype[FORM_MARKER]) return;
+    var proto = window.HTMLFormElement.prototype;
+    var originalSubmit = proto.submit;
+    var originalRequestSubmit = proto.requestSubmit;
+
+    function shouldInterceptProgrammaticSubmit(form, submitter) {
+      if (!form || form.nodeName !== 'FORM') return false;
+      var formActionIsCheckout = hasSameOriginPath(form.getAttribute('action') || '', '/checkout');
+      var submitterActionIsCheckout = submitter && hasSameOriginPath(submitter.getAttribute && submitter.getAttribute('formaction') || '', '/checkout');
+      if (formActionIsCheckout || submitterActionIsCheckout) return true;
+      if (!isCartCheckoutForm(form)) return false;
+      var submitterMatch = submitter ? findCheckoutIntentControl(submitter) : null;
+      if (submitterMatch && !isCheckoutExcludedControl(submitterMatch.control)) return true;
+      return Boolean(lastCheckoutSubmitter && form.contains(lastCheckoutSubmitter) && findCheckoutIntentControl(lastCheckoutSubmitter));
+    }
+
+    proto.submit = function () {
+      if (shouldInterceptProgrammaticSubmit(this, null)) {
+        debugLog('programmatic submit intercepted', { method: 'submit' });
+        openLoopDeskExpressCheckout('programmatic-form-submit');
+        return;
+      }
+      return originalSubmit.apply(this, arguments);
+    };
+
+    if (originalRequestSubmit) {
+      proto.requestSubmit = function (submitter) {
+        if (shouldInterceptProgrammaticSubmit(this, submitter)) {
+          debugLog('programmatic submit intercepted', { method: 'requestSubmit' });
+          openLoopDeskExpressCheckout('programmatic-request-submit');
+          return;
+        }
+        return originalRequestSubmit.apply(this, arguments);
+      };
+    }
+
+    proto[FORM_MARKER] = true;
+  }
+
+  function patchLocationNavigation() {
+    if (!window.location || window.location[LOCATION_MARKER]) return;
+    ['assign', 'replace'].forEach(function (method) {
+      try {
+        var original = window.location[method];
+        if (typeof original !== 'function') return;
+        window.location[method] = function (target) {
+          var url = getSameOriginUrl(target);
+          if (url && url.pathname === '/checkout') {
+            debugLog('navigation assign/replace intercepted', { method: method, target: String(target) });
+            openLoopDeskExpressCheckout('navigation-' + method);
+            return;
+          }
+          return original.apply(window.location, arguments);
+        };
+      } catch (_error) {}
+    });
+    try { window.location[LOCATION_MARKER] = true; } catch (_error) {}
+  }
+
+  function patchXMLHttpRequest() {
+    if (!window.XMLHttpRequest || window.XMLHttpRequest.prototype[XHR_MARKER]) return;
+    var proto = window.XMLHttpRequest.prototype;
+    var originalOpen = proto.open;
+    var originalSend = proto.send;
+
+    proto.open = function (method, url) {
+      this.__loopdeskCartRequestUrl = url;
+      this.__loopdeskCartRequestMethod = method;
+      return originalOpen.apply(this, arguments);
+    };
+
+    proto.send = function () {
+      var isAdd = isCartAddUrl(this.__loopdeskCartRequestUrl);
+      var isMutation = isCartMutationUrl(this.__loopdeskCartRequestUrl);
+      if (isMutation) {
+        this.addEventListener('load', function () {
+          if (this.status >= 200 && this.status < 300) {
+            window.setTimeout(function () { refreshAfterCartMutation(isAdd); }, 0);
+          }
+        });
+      }
+      return originalSend.apply(this, arguments);
+    };
+
+    proto[XHR_MARKER] = true;
+    debugLog('XHR patch installed');
   }
 
   function patchFetch() {
@@ -742,14 +895,45 @@
     window.fetch = function () {
       var args = arguments;
       var cartAdd = isCartAddUrl(args[0]);
+      var cartMutation = isCartMutationUrl(args[0]);
       return originalFetch.apply(this, args).then(function (response) {
-        if (cartAdd && response && response.ok && config.openAfterAddToCart && !detectThemeDrawer()) {
-          window.setTimeout(function () { refreshAndMaybeOpen(true); }, 0);
+        if (cartMutation && response && response.ok) {
+          window.setTimeout(function () { refreshAfterCartMutation(cartAdd); }, 0);
         }
         return response;
       });
     };
     window.fetch[FETCH_MARKER] = true;
+    debugLog('fetch patch installed');
+  }
+
+  var CART_CUSTOM_EVENTS = [
+    'cart:open',
+    'cart:toggle',
+    'theme:cart:open',
+    'cart-drawer:open',
+    'cart-drawer:toggle',
+    'mini-cart:open',
+    'mini-cart:toggle',
+    'open-cart',
+    'CartDrawer:open',
+    'cartOpen',
+    'ajaxCart:open',
+    'drawer:open'
+  ];
+
+  function listenForCartCustomEvents() {
+    CART_CUSTOM_EVENTS.forEach(function (eventName) {
+      document.addEventListener(eventName, function (event) {
+        debugLog('custom cart event observed', { eventName: eventName, detail: event.detail });
+        window.setTimeout(function () { refreshAndMaybeOpen(false); }, 0);
+        if (!isAppOwnedCartMode()) return;
+        event.preventDefault();
+        event.stopPropagation();
+        if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+        refreshAndMaybeOpen(true);
+      }, true);
+    });
   }
 
 
@@ -763,8 +947,8 @@
       if (!form || form.nodeName !== "FORM") return;
       var action = form.getAttribute("action");
       if (!action || !isCartAddUrl(action)) return;
-      if (!config.openAfterAddToCart || detectThemeDrawer()) return;
-      window.setTimeout(function () { refreshAndMaybeOpen(true); }, 900);
+      if (!config.openAfterAddToCart) return;
+      window.setTimeout(function () { refreshAfterCartMutation(true); }, 900);
     }, true);
   }
 
@@ -780,8 +964,12 @@
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", mount);
   else mount();
   patchFetch();
+  patchXMLHttpRequest();
+  patchFormSubmission();
+  patchLocationNavigation();
   listenForForms();
   listenForCartLinks();
+  listenForCartCustomEvents();
   listenForCheckoutIntent();
   scheduleCheckoutCtaScan();
   observeCheckoutCtaTargets();
