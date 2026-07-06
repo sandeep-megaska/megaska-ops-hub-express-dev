@@ -1,17 +1,54 @@
 (function () {
   var DEFAULT_CONFIG = {
+    branding: {
+      merchantName: "LoopDesk",
+      storeName: "LoopDesk",
+      logoUrl: null,
+      primaryColor: "#111827",
+      secondaryColor: "#374151",
+      accentColor: "#2563eb",
+      textColor: "#111827",
+      surfaceColor: "#ffffff",
+      borderRadius: "16px",
+      fontFamily: "inherit",
+      showPoweredBy: true,
+      poweredByText: "Powered by LoopDesk"
+    },
+    labels: {
+      expressCheckoutText: "Express Checkout",
+      viewCartText: "View Cart",
+      continueShoppingText: "Continue Shopping",
+      loadingText: "Loading...",
+      secureCheckoutText: "Secure checkout",
+      otpContinueText: "Continue"
+    },
+    cart: {
+      drawerMode: "auto",
+      openAfterAddToCart: false,
+      expressCheckoutButtonEnabled: true,
+      viewCartButtonEnabled: true,
+      nativeDrawerDisabledRequiredMessage: "To use LoopDesk Enhanced Drawer, set your theme cart type to Page in Shopify theme settings."
+    },
+    checkout: {
+      showSecureBadge: true,
+      showTrustCopy: true
+    },
     enabled: true,
-    primaryColor: "#111827",
-    buttonText: "Express Checkout",
-    checkoutButtonText: "",
-    showPoweredBy: true,
-    drawerMode: "auto",
-    openAfterAddToCart: false,
-    expressCheckoutButtonEnabled: true,
-    viewCartButtonEnabled: true,
-    cartOwnershipMode: "fallback",
+    cartOwnershipMode: "fallback"
   };
-  var config = normalizeConfig(Object.assign({}, DEFAULT_CONFIG, window.LOOPDESK_CART_DRAWER_CONFIG || window.LoopDeskCartDrawerConfig || {}));
+  var config = normalizeConfig(window.LoopDeskConfig || window.LOOPDESK_CART_DRAWER_CONFIG || window.LoopDeskCartDrawerConfig || {});
+  window.LoopDeskConfig = config;
+  window.LOOPDESK_CART_DRAWER_CONFIG = Object.assign({}, window.LOOPDESK_CART_DRAWER_CONFIG || {}, {
+    enabled: config.enabled,
+    drawerMode: config.cart.drawerMode,
+    openAfterAddToCart: config.cart.openAfterAddToCart,
+    expressCheckoutButtonEnabled: config.cart.expressCheckoutButtonEnabled,
+    viewCartButtonEnabled: config.cart.viewCartButtonEnabled,
+    primaryColor: config.branding.primaryColor,
+    checkoutButtonText: config.labels.expressCheckoutText,
+    buttonText: config.labels.expressCheckoutText,
+    showPoweredBy: config.branding.showPoweredBy
+  });
   var ROOT_ID = "loopdesk-cart-drawer-root";
   var FETCH_MARKER = "__loopdeskCartDrawerPatched";
   var XHR_MARKER = "__loopdeskCartDrawerXhrPatched";
@@ -126,15 +163,111 @@
   }
 
 
+  function isPlainObject(value) {
+    return Boolean(value && typeof value === "object" && !Array.isArray(value));
+  }
+
+  function text(value, fallback) {
+    var next = typeof value === "string" ? value.trim() : "";
+    return next || fallback;
+  }
+
+  function nullableText(value) {
+    var next = typeof value === "string" ? value.trim() : "";
+    return next || null;
+  }
+
+  function bool(value, fallback) {
+    return typeof value === "boolean" ? value : fallback;
+  }
+
+  function firstDefined(primary, fallback) {
+    return primary === undefined || primary === null ? fallback : primary;
+  }
+
+  function safeColor(value, fallback, path) {
+    var next = typeof value === "string" ? value.trim() : "";
+    if (/^(#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})|rgba?\([0-9.,%\s-]+\)|hsla?\([0-9.,%\s-]+\))$/i.test(next)) return next;
+    if (next) configDiagnostics("invalid values ignored", { path: path, value: next }, true);
+    return fallback;
+  }
+
+  function safeRadius(value, fallback) {
+    var next = typeof value === "string" ? value.trim() : "";
+    if (/^(?:0|[0-9]{1,2}(?:\.[0-9]{1,2})?(?:px|rem|em|%))$/i.test(next)) return next;
+    if (next) configDiagnostics("invalid values ignored", { path: "branding.borderRadius", value: next }, true);
+    return fallback;
+  }
+
+  function safeLogoUrl(value) {
+    var next = nullableText(value);
+    if (!next) return null;
+    try {
+      var url = new URL(next, window.location.origin);
+      if (url.protocol === "https:" || url.protocol === "http:" || url.protocol === "data:") return next;
+    } catch (_error) {}
+    configDiagnostics("invalid values ignored", { path: "branding.logoUrl" }, true);
+    return null;
+  }
+
+  function configDiagnostics(message, payload, force) {
+    if (!window.console || (window.LOOPDESK_CONFIG_DEBUG !== true && !force)) return;
+    window.console.debug("[LoopDesk Config] " + message, payload || {});
+  }
+
   function normalizeConfig(rawConfig) {
-    var mode = rawConfig.drawerMode || rawConfig.cartDrawerMode;
-    if (!mode && rawConfig.cartOwnershipMode === "theme") mode = "theme";
-    if (!mode && rawConfig.cartOwnershipMode === "app") mode = "loopdesk";
-    if (!mode || ["theme", "loopdesk", "auto"].indexOf(mode) === -1) mode = "auto";
-    rawConfig.drawerMode = mode;
-    rawConfig.checkoutButtonText = rawConfig.buttonText || rawConfig.checkoutButtonText || DEFAULT_CONFIG.buttonText;
-    rawConfig.primaryColor = rawConfig.primaryColor || DEFAULT_CONFIG.primaryColor;
-    return rawConfig;
+    var legacy = isPlainObject(window.LOOPDESK_CART_DRAWER_CONFIG) ? window.LOOPDESK_CART_DRAWER_CONFIG : {};
+    var raw = isPlainObject(rawConfig) ? rawConfig : {};
+    var branding = isPlainObject(raw.branding) ? raw.branding : raw;
+    var labels = isPlainObject(raw.labels) ? raw.labels : raw;
+    var cart = isPlainObject(raw.cart) ? raw.cart : raw;
+    var checkout = isPlainObject(raw.checkout) ? raw.checkout : raw;
+    var mode = cart.drawerMode || cart.cartDrawerMode || legacy.drawerMode || legacy.cartDrawerMode;
+    if (!mode && (cart.cartOwnershipMode || legacy.cartOwnershipMode) === "theme") mode = "theme";
+    if (!mode && (cart.cartOwnershipMode || legacy.cartOwnershipMode) === "app") mode = "loopdesk";
+    if (["theme", "loopdesk", "auto"].indexOf(mode) === -1) mode = DEFAULT_CONFIG.cart.drawerMode;
+    var storeName = text(branding.storeName, text(window.Shopify && window.Shopify.shop, DEFAULT_CONFIG.branding.storeName));
+    var normalized = {
+      branding: {
+        merchantName: text(branding.merchantName, storeName),
+        storeName: storeName,
+        logoUrl: safeLogoUrl(branding.logoUrl),
+        primaryColor: safeColor(branding.primaryColor || legacy.primaryColor, DEFAULT_CONFIG.branding.primaryColor, "branding.primaryColor"),
+        secondaryColor: safeColor(branding.secondaryColor, DEFAULT_CONFIG.branding.secondaryColor, "branding.secondaryColor"),
+        accentColor: safeColor(branding.accentColor, DEFAULT_CONFIG.branding.accentColor, "branding.accentColor"),
+        textColor: safeColor(branding.textColor, DEFAULT_CONFIG.branding.textColor, "branding.textColor"),
+        surfaceColor: safeColor(branding.surfaceColor, DEFAULT_CONFIG.branding.surfaceColor, "branding.surfaceColor"),
+        borderRadius: safeRadius(branding.borderRadius, DEFAULT_CONFIG.branding.borderRadius),
+        fontFamily: text(branding.fontFamily, DEFAULT_CONFIG.branding.fontFamily),
+        showPoweredBy: bool(firstDefined(branding.showPoweredBy, legacy.showPoweredBy), DEFAULT_CONFIG.branding.showPoweredBy),
+        poweredByText: text(branding.poweredByText, DEFAULT_CONFIG.branding.poweredByText)
+      },
+      labels: {
+        expressCheckoutText: text(labels.expressCheckoutText || legacy.buttonText || legacy.checkoutButtonText || labels.buttonText || labels.checkoutButtonText, DEFAULT_CONFIG.labels.expressCheckoutText),
+        viewCartText: text(labels.viewCartText, DEFAULT_CONFIG.labels.viewCartText),
+        continueShoppingText: text(labels.continueShoppingText, DEFAULT_CONFIG.labels.continueShoppingText),
+        loadingText: text(labels.loadingText, DEFAULT_CONFIG.labels.loadingText),
+        secureCheckoutText: text(labels.secureCheckoutText, DEFAULT_CONFIG.labels.secureCheckoutText),
+        otpContinueText: text(labels.otpContinueText, DEFAULT_CONFIG.labels.otpContinueText)
+      },
+      cart: {
+        drawerMode: mode,
+        openAfterAddToCart: bool(firstDefined(cart.openAfterAddToCart, legacy.openAfterAddToCart), DEFAULT_CONFIG.cart.openAfterAddToCart),
+        expressCheckoutButtonEnabled: bool(firstDefined(cart.expressCheckoutButtonEnabled, legacy.expressCheckoutButtonEnabled), DEFAULT_CONFIG.cart.expressCheckoutButtonEnabled),
+        viewCartButtonEnabled: bool(firstDefined(cart.viewCartButtonEnabled, legacy.viewCartButtonEnabled), DEFAULT_CONFIG.cart.viewCartButtonEnabled),
+        nativeDrawerDisabledRequiredMessage: text(cart.nativeDrawerDisabledRequiredMessage, DEFAULT_CONFIG.cart.nativeDrawerDisabledRequiredMessage)
+      },
+      checkout: {
+        showSecureBadge: bool(checkout.showSecureBadge, DEFAULT_CONFIG.checkout.showSecureBadge),
+        showTrustCopy: bool(checkout.showTrustCopy, DEFAULT_CONFIG.checkout.showTrustCopy)
+      },
+      enabled: bool(firstDefined(raw.enabled, legacy.enabled), DEFAULT_CONFIG.enabled),
+      cartOwnershipMode: text(cart.cartOwnershipMode || legacy.cartOwnershipMode, DEFAULT_CONFIG.cartOwnershipMode)
+    };
+    configDiagnostics("runtime config normalized", { drawerMode: normalized.cart.drawerMode }, true);
+    if (Object.keys(legacy).length) configDiagnostics("legacy config merged", { keys: Object.keys(legacy) }, true);
+    configDiagnostics("defaults applied", { merchantName: normalized.branding.merchantName }, true);
+    return normalized;
   }
 
   function debugLog(message, payload, force) {
@@ -148,7 +281,7 @@
     debugLog(message, payload, force);
   }
 
-  debugLog("config loaded", { drawerMode: config.drawerMode, openAfterAddToCart: config.openAfterAddToCart, expressCheckoutButtonEnabled: config.expressCheckoutButtonEnabled, viewCartButtonEnabled: config.viewCartButtonEnabled }, true);
+  debugLog("config loaded", { drawerMode: config.cart.drawerMode, openAfterAddToCart: config.cart.openAfterAddToCart, expressCheckoutButtonEnabled: config.cart.expressCheckoutButtonEnabled, viewCartButtonEnabled: config.cart.viewCartButtonEnabled }, true);
 
   function getLoopDeskRoot() {
     return document.getElementById(ROOT_ID);
@@ -198,13 +331,13 @@
 
   function isLoopDeskDrawerActive() {
     var capability = getCapabilityResult();
-    if (config.drawerMode === "theme") return false;
-    if (config.drawerMode === "loopdesk") return capability.safe;
+    if (config.cart.drawerMode === "theme") return false;
+    if (config.cart.drawerMode === "loopdesk") return capability.safe;
     return capability.safe;
   }
 
   function shouldOpenLoopDeskAfterCartAdd() {
-    return Boolean(config.openAfterAddToCart && isLoopDeskDrawerActive());
+    return Boolean(config.cart.openAfterAddToCart && isLoopDeskDrawerActive());
   }
 
   function scheduleNativeCartPanelCleanup() {
@@ -538,7 +671,7 @@
   }
 
   function renderLines(cart) {
-    if (state.loading) return '<div class="loopdesk-cart-drawer__loading"><span></span>Loading your cart…</div>';
+    if (state.loading) return '<div class="loopdesk-cart-drawer__loading"><span></span>' + escapeHtml(config.labels.loadingText) + '</div>';
     if (!cart || !cart.items || cart.items.length === 0) {
       return '<div class="loopdesk-cart-drawer__empty"><strong>Your cart is empty</strong><span>Add something you love and come back for express checkout.</span></div>';
     }
@@ -575,9 +708,9 @@
 
     elements.subtotal.textContent = money(cart ? cart.total_price : 0, cart && cart.currency);
     elements.count.textContent = itemCount ? "(" + itemCount + ")" : "";
-    elements.express.hidden = !config.expressCheckoutButtonEnabled || itemCount === 0;
-    elements.viewCart.hidden = !config.viewCartButtonEnabled;
-    if (elements.poweredBy) elements.poweredBy.hidden = config.showPoweredBy === false;
+    elements.express.hidden = !config.cart.expressCheckoutButtonEnabled || itemCount === 0;
+    elements.viewCart.hidden = !config.cart.viewCartButtonEnabled;
+    if (elements.poweredBy) elements.poweredBy.hidden = config.branding.showPoweredBy === false;
   }
 
   function setOpen(open) {
@@ -593,7 +726,7 @@
       restoreNeutralizedThemeDrawers();
       restoreLoopDeskBodyLock();
     }
-    if (open) debugLog("drawer opened", { source: "loopdesk", mode: config.drawerMode }, true);
+    if (open) debugLog("drawer opened", { source: "loopdesk", mode: config.cart.drawerMode }, true);
   }
 
   function closeDrawerForCheckoutHandoff() {
@@ -697,7 +830,7 @@
 
     var capability = getCapabilityResult();
     var active = isLoopDeskDrawerActive();
-    debugLog("selected drawer mode", { mode: config.drawerMode, active: active }, true);
+    debugLog("selected drawer mode", { mode: config.cart.drawerMode, active: active }, true);
     debugLog("capability result", capability, true);
     if (!active) {
       debugLog("fallback theme behavior allowed", { trigger: getElementDescriptor(trigger), reason: capability.reason || "theme-mode" }, true);
@@ -717,14 +850,29 @@
   }
 
   function shellHtml() {
+    var logo = config.branding.logoUrl ? '<img class="loopdesk-cart-drawer__brand-logo" src="' + escapeHtml(config.branding.logoUrl) + '" alt="" loading="lazy">' : '';
     return [
       '<div class="loopdesk-cart-drawer__overlay" hidden></div>',
       '<aside class="loopdesk-cart-drawer" aria-hidden="true" aria-label="Cart" role="dialog">',
-      '<header class="loopdesk-cart-drawer__header"><div><h2>Your bag <span data-loopdesk-cart-count></span></h2><p>Cart</p></div><button type="button" class="loopdesk-cart-drawer__close" aria-label="Close cart">×</button></header>',
+      '<header class="loopdesk-cart-drawer__header"><div class="loopdesk-cart-drawer__brand">' + logo + '<div><h2>' + escapeHtml(config.branding.merchantName || config.branding.storeName) + ' <span data-loopdesk-cart-count></span></h2><p>Your bag</p></div></div><button type="button" class="loopdesk-cart-drawer__close" aria-label="Close cart">×</button></header>',
       '<div class="loopdesk-cart-drawer__body"></div>',
-      '<footer class="loopdesk-cart-drawer__footer"><div class="loopdesk-cart-drawer__subtotal"><span>Subtotal</span><strong data-loopdesk-cart-subtotal></strong></div><button type="button" class="loopdesk-cart-drawer__express" data-loopdesk-express-checkout>' + escapeHtml(config.checkoutButtonText || config.buttonText || 'Express Checkout') + '</button><a class="loopdesk-cart-drawer__view-cart" href="/cart">View cart</a><p class="loopdesk-cart-drawer__microcopy">Secure checkout • UPI, cards, net banking & COD</p><p class="loopdesk-cart-drawer__powered">Powered by LoopDesk</p></footer>',
+      '<footer class="loopdesk-cart-drawer__footer"><div class="loopdesk-cart-drawer__subtotal"><span>Subtotal</span><strong data-loopdesk-cart-subtotal></strong></div><button type="button" class="loopdesk-cart-drawer__express" data-loopdesk-express-checkout></button><a class="loopdesk-cart-drawer__view-cart" href="/cart"></a><p class="loopdesk-cart-drawer__microcopy"></p><p class="loopdesk-cart-drawer__powered"></p></footer>',
       '</aside>',
     ].join("");
+  }
+
+  function applyCssVariables(target) {
+    var root = target || document.documentElement;
+    if (!root || !root.style) return;
+    root.style.setProperty("--loopdesk-primary", config.branding.primaryColor);
+    root.style.setProperty("--loopdesk-secondary", config.branding.secondaryColor);
+    root.style.setProperty("--loopdesk-accent", config.branding.accentColor);
+    root.style.setProperty("--loopdesk-text", config.branding.textColor);
+    root.style.setProperty("--loopdesk-surface", config.branding.surfaceColor);
+    root.style.setProperty("--loopdesk-radius", config.branding.borderRadius);
+    root.style.setProperty("--loopdesk-font", config.branding.fontFamily);
+    root.style.setProperty("--ld-primary", config.branding.primaryColor);
+    configDiagnostics("CSS variables applied", {}, true);
   }
 
   function bindElements(hostRoot) {
@@ -743,9 +891,16 @@
 
     if (elements.close) elements.close.addEventListener("click", function () { setOpen(false); });
     if (elements.overlay) elements.overlay.addEventListener("click", function () { setOpen(false); });
-    if (elements.express) elements.express.addEventListener("click", function (event) { interceptCheckout(event, "loopdesk-cart-drawer"); });
+    if (elements.express) {
+      elements.express.textContent = config.labels.expressCheckoutText;
+      elements.express.addEventListener("click", function (event) { interceptCheckout(event, "loopdesk-cart-drawer"); });
+    }
+    if (elements.viewCart) elements.viewCart.textContent = config.labels.viewCartText;
+    if (elements.poweredBy) elements.poweredBy.textContent = config.branding.poweredByText;
+    var microcopy = hostRoot.querySelector(".loopdesk-cart-drawer__microcopy");
+    if (microcopy) microcopy.textContent = config.labels.secureCheckoutText + " • UPI, cards, net banking & COD";
     if (elements.body) elements.body.addEventListener("click", handleDrawerAction);
-    if (elements.root) elements.root.style.setProperty("--ld-primary", config.primaryColor);
+    applyCssVariables(elements.root || document.documentElement);
   }
 
   function mount() {
@@ -757,7 +912,7 @@
     bindElements(root);
     document.addEventListener("keydown", function (event) { if (event.key === "Escape") setOpen(false); });
     document.addEventListener("loopdesk:cart-drawer:open", function () { refreshAndMaybeOpen(true); });
-    debugLog("selected drawer mode", { mode: config.drawerMode, active: isLoopDeskDrawerActive() }, true);
+    debugLog("selected drawer mode", { mode: config.cart.drawerMode, active: isLoopDeskDrawerActive() }, true);
     debugLog("capability result", getCapabilityResult(), true);
     refreshAndMaybeOpen(false);
     scheduleCartTriggerTakeover("mount");
@@ -958,7 +1113,7 @@
     button.className = 'loopdesk-checkout-cta';
     button.setAttribute('data-loopdesk-checkout-cta', 'true');
     button.innerHTML = [
-      '<span class="loopdesk-checkout-cta__label">' + escapeHtml(config.checkoutButtonText || 'Express Checkout') + '</span>',
+      '<span class="loopdesk-checkout-cta__label">' + escapeHtml(config.labels.expressCheckoutText) + '</span>',
       '<span class="loopdesk-checkout-cta__subtext">UPI • Cards • Net Banking • COD</span>',
       '<span class="loopdesk-checkout-cta__trust">Secure checkout powered by LoopDesk</span>'
     ].join('');
@@ -1326,7 +1481,7 @@
       if (!form || form.nodeName !== "FORM") return;
       var action = form.getAttribute("action");
       if (!action || !isCartAddUrl(action)) return;
-      if (!config.openAfterAddToCart) return;
+      if (!config.cart.openAfterAddToCart) return;
       window.setTimeout(function () { refreshAfterCartMutation(true); }, 900);
     }, true);
   }
