@@ -1534,6 +1534,17 @@ setTimeout(() => closeModal("success", { force: true }), SUCCESS_CLOSE_DELAY_MS)
     );
   }
 
+
+  function isThemeCartDrawerCheckoutIntent(target) {
+    const element = target?.target || target;
+    if (!element || typeof element.closest !== "function") return false;
+    const themeHost = element.closest(
+      "cart-drawer, #CartDrawer, #cart-drawer, .cart-drawer, [data-cart-drawer], [data-drawer='cart']"
+    );
+    if (!themeHost) return false;
+    return !element.closest("#loopdesk-cart-drawer-root, [data-loopdesk-cart-drawer]");
+  }
+
   function isExpressCheckoutIntent(target) {
     const element = target?.target || target;
     if (!element || typeof element.closest !== "function") return false;
@@ -1544,6 +1555,7 @@ setTimeout(() => closeModal("success", { force: true }), SUCCESS_CLOSE_DELAY_MS)
 
   function isCheckoutIntent(target) {
     if (isAddToCartIntent(target)) return false;
+    if (isThemeCartDrawerCheckoutIntent(target)) return false;
     if (isExpressCheckoutIntent(target)) return true;
 
     const element = target?.target || target;
@@ -1608,6 +1620,13 @@ setTimeout(() => closeModal("success", { force: true }), SUCCESS_CLOSE_DELAY_MS)
     field.dispatchEvent(new Event("input", { bubbles: true }));
     field.dispatchEvent(new Event("change", { bubbles: true }));
     return true;
+  }
+
+  function clearCheckoutErrors() {
+    state.errorMessage = "";
+    state.statusMessage = "";
+    document.querySelectorAll("[data-megaska-checkout-guard-error]").forEach((element) => element.remove());
+    if (state.isOpen) renderStep();
   }
 
   function renderCheckoutGuardError(options) {
@@ -3170,6 +3189,7 @@ function hasVisibleNativeDesktopAccountEntry() {
     resetModalState,
     interceptCheckoutClicks,
     ensureMegaskaAuthenticatedBeforeCheckout,
+    clearCheckoutErrors,
     clearPendingAction,
     hideAccountMenu,
     handleLogoutClick,
