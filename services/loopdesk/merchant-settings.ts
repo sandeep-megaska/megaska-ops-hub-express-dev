@@ -3,6 +3,7 @@ import { getDelhiveryRuntimeConfig, type DelhiveryPublicRuntimeConfig } from "..
 import { getRazorpayRuntimeConfig, type RazorpayPublicRuntimeConfig } from "../razorpay/config";
 
 export const LOOPDESK_RUNTIME_CONFIG_MODULE_KEY = "loopdesk_runtime_config";
+export const CART_INTELLIGENCE_CONFIG_MODULE_KEY = "cart_intelligence_config";
 
 type DrawerMode = "theme" | "loopdesk" | "auto";
 type IntegrationStatus = "not_configured" | "configured" | "disabled";
@@ -52,12 +53,28 @@ export type LoopDeskMerchantSettings = {
   analytics: { enabled: boolean; anonymizeCustomerData: boolean };
 };
 
+export type CartIntelligenceSettings = {
+  enabled: boolean;
+  freeShippingProgressEnabled: boolean;
+  freeShippingThreshold: number;
+  progressBarText: string;
+  trustBadgesEnabled: boolean;
+  dynamicBannerEnabled: boolean;
+  dynamicBannerText: string;
+  upsellsEnabled: boolean;
+  bundlesEnabled: boolean;
+  aiRecommendationsEnabled: boolean;
+};
+
+export type CartIntelligencePublicRuntimeConfig = CartIntelligenceSettings;
+
 export type LoopDeskPublicRuntimeConfig = Pick<
   LoopDeskMerchantSettings,
   "general" | "branding" | "labels" | "cart" | "checkout"
 > & {
   enabled: boolean;
   cartOwnershipMode: DrawerMode;
+  cartIntelligence?: CartIntelligencePublicRuntimeConfig;
   delhivery?: DelhiveryPublicRuntimeConfig;
   razorpay?: RazorpayPublicRuntimeConfig;
 };
@@ -73,9 +90,9 @@ type ShopModuleConfigDelegate = {
       shopId: string;
       moduleKey: string;
       enabled: boolean;
-      config: LoopDeskMerchantSettings;
+      config: LoopDeskMerchantSettings | CartIntelligenceSettings;
     };
-    update: { enabled: boolean; config: LoopDeskMerchantSettings };
+    update: { enabled: boolean; config: LoopDeskMerchantSettings | CartIntelligenceSettings };
   }): Promise<{ id: string; config: unknown; enabled: boolean }>;
 };
 
@@ -120,6 +137,10 @@ function nullableText(value: unknown, max = 500) {
 }
 function bool(value: unknown, fallback: boolean) {
   return typeof value === "boolean" ? value : fallback;
+}
+function numberValue(value: unknown, fallback: number, min = 0, max = 10000000) {
+  const next = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+  return Number.isFinite(next) ? Math.min(max, Math.max(min, next)) : fallback;
 }
 const COLOR_RE =
   /^(#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})|rgba?\(\s*(?:\d{1,3}%?\s*,\s*){2}\d{1,3}%?(?:\s*,\s*(?:0|1|0?\.\d+|\d{1,3}%))?\s*\)|hsla?\(\s*\d{1,3}(?:deg)?\s*,\s*\d{1,3}%\s*,\s*\d{1,3}%(?:\s*,\s*(?:0|1|0?\.\d+|\d{1,3}%))?\s*\))$/i;
@@ -171,6 +192,55 @@ function status(
 }
 function section(raw: Record<string, unknown>, name: string) {
   return isRecord(raw[name]) ? raw[name] : raw;
+}
+
+
+export function normalizeCartIntelligenceSettings(input: unknown): CartIntelligenceSettings {
+  const raw = isRecord(input) ? input : {};
+  return {
+    enabled: bool(raw.enabled, false),
+    freeShippingProgressEnabled: bool(raw.freeShippingProgressEnabled, false),
+    freeShippingThreshold: numberValue(raw.freeShippingThreshold, 0),
+    progressBarText: text(raw.progressBarText, "You're {amount} away from free shipping", 160),
+    trustBadgesEnabled: bool(raw.trustBadgesEnabled, false),
+    dynamicBannerEnabled: bool(raw.dynamicBannerEnabled, false),
+    dynamicBannerText: text(raw.dynamicBannerText, "Limited-time cart offers may appear here.", 160),
+    upsellsEnabled: bool(raw.upsellsEnabled, false),
+    bundlesEnabled: bool(raw.bundlesEnabled, false),
+    aiRecommendationsEnabled: bool(raw.aiRecommendationsEnabled, false),
+  };
+}
+
+export function validateCartIntelligenceSettingsPatch(patch: unknown): string[] {
+  const errors: string[] = [];
+  const raw = isRecord(patch) ? patch : {};
+  const validateBool = (value: unknown, label: string) => {
+    if (value !== undefined && typeof value !== "boolean") errors.push(`${label} must be true or false.`);
+  };
+  const validateText = (value: unknown, label: string, max: number) => {
+    if (value === undefined || value === null) return;
+    if (typeof value !== "string") errors.push(`${label} must be text.`);
+    else if (value.trim().length > max) errors.push(`${label} must be ${max} characters or fewer.`);
+  };
+  [
+    ["enabled", "Cart Intelligence Enabled"],
+    ["freeShippingProgressEnabled", "Free Shipping Progress Enabled"],
+    ["trustBadgesEnabled", "Trust Badges Enabled"],
+    ["dynamicBannerEnabled", "Dynamic Banner Enabled"],
+    ["upsellsEnabled", "Upsells Enabled"],
+    ["bundlesEnabled", "Bundles Enabled"],
+    ["aiRecommendationsEnabled", "AI Recommendations Enabled"],
+  ].forEach(([key, label]) => validateBool(raw[key], label));
+  if (raw.freeShippingThreshold !== undefined && !Number.isFinite(Number(raw.freeShippingThreshold))) {
+    errors.push("Free Shipping Threshold must be a number.");
+  }
+  validateText(raw.progressBarText, "Progress Bar Text", 160);
+  validateText(raw.dynamicBannerText, "Dynamic Banner Text", 160);
+  return errors;
+}
+
+export function toCartIntelligencePublicRuntimeConfig(settings: CartIntelligenceSettings): CartIntelligencePublicRuntimeConfig {
+  return { ...settings };
 }
 
 export function validateLoopDeskMerchantSettingsPatch(
@@ -471,12 +541,35 @@ export async function updateLoopDeskMerchantSettings(
   });
   return next;
 }
+export async function getCartIntelligenceSettings(shopId: string) {
+  const stored = await db().shopModuleConfig.findUnique({
+    where: { shopId_moduleKey: { shopId, moduleKey: CART_INTELLIGENCE_CONFIG_MODULE_KEY } },
+    select: { config: true, enabled: true },
+  });
+  const settings = normalizeCartIntelligenceSettings(stored?.config);
+  return { ...settings, enabled: Boolean(stored?.enabled && settings.enabled) };
+}
+
+export async function updateCartIntelligenceSettings(shopId: string, patch: unknown) {
+  const errors = validateCartIntelligenceSettingsPatch(patch);
+  if (errors.length) throw new Error(errors.join(" "));
+  const next = normalizeCartIntelligenceSettings(patch);
+  const persisted = await db().shopModuleConfig.upsert({
+    where: { shopId_moduleKey: { shopId, moduleKey: CART_INTELLIGENCE_CONFIG_MODULE_KEY } },
+    create: { shopId, moduleKey: CART_INTELLIGENCE_CONFIG_MODULE_KEY, enabled: next.enabled, config: next },
+    update: { enabled: next.enabled, config: next },
+  });
+  console.info("[Cart Intelligence Settings] config saved", { shopId, moduleKey: CART_INTELLIGENCE_CONFIG_MODULE_KEY, configId: persisted.id });
+  return next;
+}
+
 export async function getLoopDeskRuntimeConfig(shopId: string) {
-  const [settings, delhivery, razorpay] = await Promise.all([
+  const [settings, cartIntelligence, delhivery, razorpay] = await Promise.all([
     getLoopDeskMerchantSettings(shopId),
+    getCartIntelligenceSettings(shopId),
     getDelhiveryRuntimeConfig(shopId),
     getRazorpayRuntimeConfig(shopId),
   ]);
-  return { ...toLoopDeskPublicRuntimeConfig(settings), delhivery, razorpay };
+  return { ...toLoopDeskPublicRuntimeConfig(settings), cartIntelligence: toCartIntelligencePublicRuntimeConfig(cartIntelligence), delhivery, razorpay };
 }
 export const normalizeLoopDeskRuntimeConfig = normalizeLoopDeskMerchantSettings;
