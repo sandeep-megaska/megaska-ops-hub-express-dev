@@ -401,3 +401,19 @@ body.loopdesk-cart-drawer-is-open [class*="cart-drawer" i] {
   visibility: hidden !important;
   pointer-events: none !important;
 }
+
+body.loopdesk-cart-drawer-is-open #loopdesk-cart-drawer-root .loopdesk-cart-drawer {
+  display: flex !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
+}
+
+body.loopdesk-cart-drawer-is-open #loopdesk-cart-drawer-root .loopdesk-cart-drawer__overlay {
+  display: block !important;
+  visibility: visible !important;
+}
+
+body.loopdesk-cart-drawer-is-open #loopdesk-cart-drawer-root .loopdesk-cart-drawer__overlay[hidden] {
+  pointer-events: none !important;
+  opacity: 0 !important;
+}
