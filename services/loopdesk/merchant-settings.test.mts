@@ -53,6 +53,7 @@ test("public runtime config excludes integration and analytics settings", () => 
   assert.equal(runtime.integrations, undefined);
   assert.equal(runtime.analytics, undefined);
   assert.equal(runtime.enabled, true);
+  assert.equal((runtime.general as { merchantName: string }).merchantName, "LoopDesk");
 });
 
 test("legacy runtime shape remains available", () => {

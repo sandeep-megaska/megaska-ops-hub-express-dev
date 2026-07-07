@@ -52,7 +52,7 @@ export type LoopDeskMerchantSettings = {
 
 export type LoopDeskPublicRuntimeConfig = Pick<
   LoopDeskMerchantSettings,
-  "branding" | "labels" | "cart" | "checkout"
+  "general" | "branding" | "labels" | "cart" | "checkout"
 > & {
   enabled: boolean;
   cartOwnershipMode: DrawerMode;
@@ -397,6 +397,7 @@ export function toLoopDeskPublicRuntimeConfig(
   settings: LoopDeskMerchantSettings,
 ): LoopDeskPublicRuntimeConfig {
   return {
+    general: settings.general,
     branding: settings.branding,
     labels: settings.labels,
     cart: settings.cart,
@@ -444,7 +445,7 @@ export async function updateLoopDeskMerchantSettings(
   if (errors.length) throw new Error(errors.join(" "));
   const current = await getLoopDeskMerchantSettings(shopId);
   const next = mergeLoopDeskMerchantSettings(current, patch);
-  await db().shopModuleConfig.upsert({
+  const persisted = await db().shopModuleConfig.upsert({
     where: {
       shopId_moduleKey: {
         shopId,
@@ -458,6 +459,11 @@ export async function updateLoopDeskMerchantSettings(
       config: next,
     },
     update: { enabled: true, config: next },
+  });
+  console.info("[LoopDesk Merchant Settings] runtime config saved", {
+    shopId,
+    moduleKey: LOOPDESK_RUNTIME_CONFIG_MODULE_KEY,
+    configId: persisted.id,
   });
   return next;
 }

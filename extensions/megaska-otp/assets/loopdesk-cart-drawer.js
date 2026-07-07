@@ -61,7 +61,6 @@
     "cart-notification",
     "details[open][aria-controls*='cart' i]",
     "details[open][class*='cart' i]",
-    "details[open][id*='cart' i]",
     "#CartDrawer",
     "#cart-drawer",
     ".cart-drawer",
@@ -75,10 +74,6 @@
     ".ajax-cart",
     "#ajax-cart-container",
     "[data-section-type='cart-drawer']",
-    "[id*='CartDrawer']",
-    "[id*='cart-drawer' i]",
-    "[class*='cart-drawer' i]",
-    "[class*='cart-notification' i]",
     "#cart-sidebar",
     ".cart-sidebar"
   ];
