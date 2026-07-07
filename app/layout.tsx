@@ -38,6 +38,9 @@ export default function RootLayout({
               <Link href="/admin/issues" className="mk-nav-link">
                 Issues
               </Link>
+              <Link href="/admin/merchant-settings" className="mk-nav-link">
+                Merchant Settings
+              </Link>
             </nav>
 
             <div className="mk-sidebar-footer">
