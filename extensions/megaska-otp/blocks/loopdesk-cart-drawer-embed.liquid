@@ -31,7 +31,54 @@
       shopDomain: {{ shop.permanent_domain | json }}
     });
   </script>
-  <script src="{{ 'loopdesk-cart-drawer.js' | asset_url }}" defer></script>
+  <script>
+    (function () {
+      var drawerAssetUrl = {{ 'loopdesk-cart-drawer.js' | asset_url | json }};
+      var shopDomain = {{ shop.permanent_domain | json }};
+      var runtimeUrl = "/apps/megaska/api/runtime/config?shop=" + encodeURIComponent(shopDomain);
+
+      function mergeRuntimeConfig(payload) {
+        if (!payload || payload.ok !== true || !payload.config) return;
+        window.LoopDeskConfig = Object.assign({}, window.LoopDeskConfig || {}, payload.config, {
+          branding: Object.assign({}, (window.LoopDeskConfig && window.LoopDeskConfig.branding) || {}, payload.config.branding || {}),
+          labels: Object.assign({}, (window.LoopDeskConfig && window.LoopDeskConfig.labels) || {}, payload.config.labels || {}),
+          cart: Object.assign({}, (window.LoopDeskConfig && window.LoopDeskConfig.cart) || {}, payload.config.cart || {}),
+          checkout: Object.assign({}, (window.LoopDeskConfig && window.LoopDeskConfig.checkout) || {}, payload.config.checkout || {}),
+          shopDomain: shopDomain
+        });
+        window.LOOPDESK_CART_DRAWER_CONFIG = Object.assign({}, window.LOOPDESK_CART_DRAWER_CONFIG || {}, {
+          enabled: window.LoopDeskConfig.enabled,
+          drawerMode: window.LoopDeskConfig.cart && window.LoopDeskConfig.cart.drawerMode,
+          openAfterAddToCart: window.LoopDeskConfig.cart && window.LoopDeskConfig.cart.openAfterAddToCart,
+          expressCheckoutButtonEnabled: window.LoopDeskConfig.cart && window.LoopDeskConfig.cart.expressCheckoutButtonEnabled,
+          viewCartButtonEnabled: window.LoopDeskConfig.cart && window.LoopDeskConfig.cart.viewCartButtonEnabled,
+          primaryColor: window.LoopDeskConfig.branding && window.LoopDeskConfig.branding.primaryColor,
+          checkoutButtonText: window.LoopDeskConfig.labels && window.LoopDeskConfig.labels.expressCheckoutText,
+          buttonText: window.LoopDeskConfig.labels && window.LoopDeskConfig.labels.expressCheckoutText,
+          showPoweredBy: window.LoopDeskConfig.branding && window.LoopDeskConfig.branding.showPoweredBy,
+          shopDomain: shopDomain
+        });
+      }
+
+      function loadDrawerAsset() {
+        var script = document.createElement("script");
+        script.src = drawerAssetUrl;
+        script.defer = true;
+        document.head.appendChild(script);
+      }
+
+      if (typeof fetch !== "function") {
+        loadDrawerAsset();
+        return;
+      }
+
+      fetch(runtimeUrl, { credentials: "same-origin", cache: "no-store" })
+        .then(function (response) { return response.ok ? response.json() : null; })
+        .then(mergeRuntimeConfig)
+        .catch(function () {})
+        .then(loadDrawerAsset);
+    })();
+  </script>
 {% endif %}
 
 {% schema %}
