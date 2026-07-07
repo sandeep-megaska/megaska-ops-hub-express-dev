@@ -1,5 +1,6 @@
 import { prisma } from "../db/prisma";
 import { getDelhiveryRuntimeConfig, type DelhiveryPublicRuntimeConfig } from "../delhivery/config";
+import { getRazorpayRuntimeConfig, type RazorpayPublicRuntimeConfig } from "../razorpay/config";
 
 export const LOOPDESK_RUNTIME_CONFIG_MODULE_KEY = "loopdesk_runtime_config";
 
@@ -58,6 +59,7 @@ export type LoopDeskPublicRuntimeConfig = Pick<
   enabled: boolean;
   cartOwnershipMode: DrawerMode;
   delhivery?: DelhiveryPublicRuntimeConfig;
+  razorpay?: RazorpayPublicRuntimeConfig;
 };
 
 type ShopModuleConfigDelegate = {
@@ -470,10 +472,11 @@ export async function updateLoopDeskMerchantSettings(
   return next;
 }
 export async function getLoopDeskRuntimeConfig(shopId: string) {
-  const [settings, delhivery] = await Promise.all([
+  const [settings, delhivery, razorpay] = await Promise.all([
     getLoopDeskMerchantSettings(shopId),
     getDelhiveryRuntimeConfig(shopId),
+    getRazorpayRuntimeConfig(shopId),
   ]);
-  return { ...toLoopDeskPublicRuntimeConfig(settings), delhivery };
+  return { ...toLoopDeskPublicRuntimeConfig(settings), delhivery, razorpay };
 }
 export const normalizeLoopDeskRuntimeConfig = normalizeLoopDeskMerchantSettings;

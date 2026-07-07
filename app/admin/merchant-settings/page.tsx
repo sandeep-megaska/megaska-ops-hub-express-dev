@@ -9,6 +9,10 @@ import {
   updateDelhiveryConfig,
 } from "../../../services/delhivery/config";
 import {
+  getRazorpayAdminConfig,
+  updateRazorpayConfig,
+} from "../../../services/razorpay/config";
+import {
   formatAdminShopResolutionError,
   resolveAdminShopFromSearchParams,
 } from "../../../services/shopify/admin-shop-context";
@@ -80,6 +84,20 @@ async function saveMerchantSettings(
         showSecureBadge: formData.get("showSecureBadge") === "on",
         showTrustCopy: formData.get("showTrustCopy") === "on",
       },
+    });
+    await updateRazorpayConfig(shopId, {
+      enabled: formData.get("razorpayEnabled") === "on",
+      environment: formData.get("razorpayEnvironment"),
+      keyId: formData.get("razorpayKeyId"),
+      keySecret: formData.get("razorpayKeySecret"),
+      webhookSecret: formData.get("razorpayWebhookSecret"),
+      currency: formData.get("razorpayCurrency"),
+      captureMode: formData.get("razorpayCaptureMode"),
+      upiEnabled: formData.get("razorpayUpiEnabled") === "on",
+      cardsEnabled: formData.get("razorpayCardsEnabled") === "on",
+      netBankingEnabled: formData.get("razorpayNetBankingEnabled") === "on",
+      walletsEnabled: formData.get("razorpayWalletsEnabled") === "on",
+      codFallbackEnabled: formData.get("razorpayCodFallbackEnabled") === "on",
     });
     await updateDelhiveryConfig(shopId, {
       enabled: formData.get("delhiveryEnabled") === "on",
@@ -185,9 +203,10 @@ export default async function MerchantSettingsPage({
         </div>
       </main>
     );
-  const [settings, delhivery] = await Promise.all([
+  const [settings, delhivery, razorpay] = await Promise.all([
     getLoopDeskMerchantSettings(resolved.shop.id),
     getDelhiveryAdminConfig(resolved.shop.id),
+    getRazorpayAdminConfig(resolved.shop.id),
   ]);
   const shopParam = encodeURIComponent(resolved.shop.shopDomain);
   const saveAction = saveMerchantSettings.bind(
@@ -287,6 +306,40 @@ export default async function MerchantSettingsPage({
         </section>
 
         <section className={`${cardClass} grid gap-5`}>
+          <SectionHeader title="Razorpay" description="Merchant-level Razorpay configuration only. This does not change checkout payment execution, order creation, OTP, cart, Delhivery, analytics, or storefront business logic." />
+          <div className="grid gap-3 md:grid-cols-2">
+            <Check label="Razorpay Enabled" name="razorpayEnabled" defaultChecked={razorpay.enabled} help="Enables Razorpay as a configured merchant payment provider for backend services." />
+            <Check label="UPI Enabled" name="razorpayUpiEnabled" defaultChecked={razorpay.upiEnabled} help="Payment method toggles are merchant defaults for future server-side payment flows." />
+            <Check label="Cards Enabled" name="razorpayCardsEnabled" defaultChecked={razorpay.cardsEnabled} help="Payment method toggles are merchant defaults only." />
+            <Check label="Net Banking Enabled" name="razorpayNetBankingEnabled" defaultChecked={razorpay.netBankingEnabled} help="Payment method toggles are merchant defaults only." />
+            <Check label="Wallets Enabled" name="razorpayWalletsEnabled" defaultChecked={razorpay.walletsEnabled} help="Payment method toggles are merchant defaults only." />
+            <Check label="COD Fallback Enabled" name="razorpayCodFallbackEnabled" defaultChecked={razorpay.codFallbackEnabled} help="Allows backend flows to know whether COD fallback is allowed by default; no checkout behavior changes are made here." />
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <label className="grid gap-2 text-sm font-medium text-gray-800">
+              <span>Environment</span>
+              <select className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-950 shadow-sm outline-none transition focus:border-gray-900 focus:ring-2 focus:ring-gray-900/10" name="razorpayEnvironment" defaultValue={razorpay.environment}>
+                <option value="test">Test</option>
+                <option value="production">Production</option>
+              </select>
+              <span className={helpClass}>Test mode uses Razorpay test credentials. Production mode should use live merchant credentials.</span>
+            </label>
+            <label className="grid gap-2 text-sm font-medium text-gray-800">
+              <span>Capture Mode</span>
+              <select className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-950 shadow-sm outline-none transition focus:border-gray-900 focus:ring-2 focus:ring-gray-900/10" name="razorpayCaptureMode" defaultValue={razorpay.captureMode}>
+                <option value="automatic">Automatic</option>
+                <option value="manual">Manual</option>
+              </select>
+              <span className={helpClass}>Capture mode is stored as a merchant default for backend payment services.</span>
+            </label>
+            <Field label="Key ID" name="razorpayKeyId" defaultValue={razorpay.keyId} help="Public Razorpay Key ID may be exposed in safe runtime config when needed." />
+            <Field label="Currency" name="razorpayCurrency" defaultValue={razorpay.currency} placeholder="INR" help="Three-letter currency code, such as INR." />
+            <Field label="Key Secret" name="razorpayKeySecret" type="password" defaultValue={razorpay.keySecretMasked} help="Key Secret is stored securely, masked after save, backend-only, and can be replaced by entering a new value." />
+            <Field label="Webhook Secret" name="razorpayWebhookSecret" type="password" defaultValue={razorpay.webhookSecretMasked} help="Webhook Secret is stored securely for backend webhook verification only and is never exposed to storefront runtime config." />
+          </div>
+        </section>
+
+        <section className={`${cardClass} grid gap-5`}>
           <SectionHeader title="Delhivery" description="Merchant-level Delhivery configuration only. This does not change checkout, payment, order, or cart behavior." />
           <div className="grid gap-3 md:grid-cols-2">
             <Check label="Delhivery Enabled" name="delhiveryEnabled" defaultChecked={delhivery.enabled} help="Enables Delhivery as a configured merchant integration for backend use." />
@@ -315,7 +368,7 @@ export default async function MerchantSettingsPage({
         <section className="grid gap-4 rounded-2xl border border-gray-200 bg-gray-50 p-6 text-sm text-gray-700 md:grid-cols-2">
           <div>
             <h2 className="font-semibold text-gray-950">Integrations placeholder</h2>
-            <p className="mt-2">Razorpay status: {settings.integrations.razorpay.status}</p>
+            <p className="mt-2">Razorpay status: {razorpay.enabled ? "configured" : settings.integrations.razorpay.status}</p>
             <p>Delhivery status: {settings.integrations.delhivery.status}</p>
           </div>
           <div>
