@@ -390,16 +390,20 @@
 }
 
 body.loopdesk-cart-drawer-is-open cart-drawer,
+body.loopdesk-cart-drawer-is-open cart-notification,
 body.loopdesk-cart-drawer-is-open #CartDrawer,
 body.loopdesk-cart-drawer-is-open #cart-drawer,
 body.loopdesk-cart-drawer-is-open .cart-drawer,
 body.loopdesk-cart-drawer-is-open .cart-notification,
-body.loopdesk-cart-drawer-is-open .drawer--cart,
-body.loopdesk-cart-drawer-is-open [id*="cart-drawer" i],
-body.loopdesk-cart-drawer-is-open [class*="cart-drawer" i] {
+body.loopdesk-cart-drawer-is-open .drawer--cart {
   display: none !important;
   visibility: hidden !important;
   pointer-events: none !important;
+}
+
+#loopdesk-cart-drawer-root {
+  display: block !important;
+  visibility: visible !important;
 }
 
 body.loopdesk-cart-drawer-is-open #loopdesk-cart-drawer-root .loopdesk-cart-drawer {
