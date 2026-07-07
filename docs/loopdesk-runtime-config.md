@@ -55,3 +55,9 @@ To use LoopDesk Enhanced Drawer, merchants must disable the native theme drawer 
 The app exposes `/api/runtime/config` (and app-proxy path `/apps/megaska/api/runtime/config`) for the normalized config of the current shop. The endpoint reads `ShopModuleConfig` with module key `loopdesk_runtime_config`; no secrets are returned.
 
 Today, a test merchant config can be supplied by setting `window.LoopDeskConfig` before `loopdesk-cart-drawer.js` loads, or by persisting JSON into `ShopModuleConfig.config` for `moduleKey = "loopdesk_runtime_config"`. A future merchant admin UI/installation wizard will manage these values.
+
+## CONFIG-2B.1 Merchant Settings Foundation
+
+Merchant Settings now provide the source model for runtime config. Settings are persisted in `ShopModuleConfig.config` with `moduleKey = "loopdesk_runtime_config"`, normalized by the LoopDesk merchant settings service, and projected to public runtime config containing only `branding`, `labels`, `cart`, `checkout`, `enabled`, and `cartOwnershipMode`.
+
+General support fields, future integration statuses, and analytics placeholders are admin/foundation settings and are not exposed to storefront runtime config. See `docs/loopdesk-merchant-settings.md` for the full namespace map and public/private split.
