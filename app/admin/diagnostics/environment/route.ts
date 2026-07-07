@@ -12,9 +12,12 @@ export const dynamic = "force-dynamic";
 type ShopDiagnosticRow = {
   id: string;
   shopDomain: string;
+  myshopifyDomain: string | null;
   isActive: boolean;
+  installedAt: Date | null;
   uninstalledAt: Date | null;
   installationStatus: string | null;
+  updatedAt: Date;
 };
 
 function hasEnv(name: string) {
@@ -63,7 +66,7 @@ async function findShop(shopDomain: string) {
   if (!shopDomain) return null;
 
   const rows = await prisma.$queryRaw<ShopDiagnosticRow[]>`
-    SELECT "id", "shopDomain", "isActive", "uninstalledAt", "installationStatus"
+    SELECT "id", "shopDomain", "myshopifyDomain", "isActive", "installedAt", "uninstalledAt", "installationStatus", "updatedAt"
     FROM "Shop"
     WHERE "shopDomain" = ${shopDomain} OR "myshopifyDomain" = ${shopDomain}
     ORDER BY CASE WHEN "installationStatus" = 'ACTIVE' THEN 0 ELSE 1 END, "updatedAt" DESC
@@ -102,10 +105,16 @@ export async function GET(req: NextRequest) {
   let dbError: string | null = null;
   let installedActiveShopRowExists = false;
   let runtimeConfigRowExists = false;
-  let shopRowStatus: Pick<
+  let shopRowStatus: (Pick<
     ShopDiagnosticRow,
-    "shopDomain" | "isActive" | "installationStatus"
-  > | null = null;
+    | "shopDomain"
+    | "myshopifyDomain"
+    | "isActive"
+    | "installedAt"
+    | "uninstalledAt"
+    | "installationStatus"
+    | "updatedAt"
+  > & { exists: boolean; installed: boolean }) | null = null;
 
   try {
     await prisma.$queryRaw`SELECT 1`;
@@ -113,13 +122,20 @@ export async function GET(req: NextRequest) {
 
     const shop = await findShop(resolvedShopDomain);
     if (shop) {
+      const installed = Boolean(shop.installedAt && shop.installationStatus === "ACTIVE");
       installedActiveShopRowExists = Boolean(
         shop.isActive && !shop.uninstalledAt,
       );
       shopRowStatus = {
+        exists: true,
         shopDomain: shop.shopDomain,
+        myshopifyDomain: shop.myshopifyDomain,
+        installed,
         isActive: shop.isActive,
+        installedAt: shop.installedAt,
+        uninstalledAt: shop.uninstalledAt,
         installationStatus: shop.installationStatus,
+        updatedAt: shop.updatedAt,
       };
       runtimeConfigRowExists = await runtimeConfigExists(shop.id);
     }
@@ -146,6 +162,7 @@ export async function GET(req: NextRequest) {
     shop: {
       queryParam: shopQueryParam || null,
       resolvedShop: resolvedShopDomain || null,
+      rowExists: Boolean(shopRowStatus?.exists),
       installedActiveShopRowExists,
       rowStatus: shopRowStatus,
     },

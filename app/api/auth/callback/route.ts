@@ -96,13 +96,24 @@ export async function GET(request: NextRequest) {
   const appProxyEnabled = Boolean(process.env.SHOPIFY_APP_PROXY_PREFIX || process.env.SHOPIFY_APP_PROXY_SUBPATH || process.env.SHOPIFY_APP_URL);
   const checkoutEnabled = shop === "megaskastore.myshopify.com" || String(process.env.EXPRESS_CHECKOUT_ENABLED || "").toLowerCase() === "true";
 
-  const rows = await prisma.$queryRaw<{ id: string; installationStatus: string | null; myshopifyDomain: string | null; hasAccessToken: boolean }[]>`
+  const shopId = crypto.randomUUID();
+
+  let rows: { id: string; installationStatus: string | null; myshopifyDomain: string | null; hasAccessToken: boolean }[];
+  try {
+    console.info("[SHOPIFY OAUTH CALLBACK] persisting shop installation", {
+      requestShop: shop,
+      myshopifyDomain: metadata.myshopifyDomain,
+      hasMetadata: Boolean(metadata.shopName || metadata.primaryDomain),
+      scopesCount: scopes?.split(",").filter(Boolean).length || 0,
+    });
+
+    rows = await prisma.$queryRaw<{ id: string; installationStatus: string | null; myshopifyDomain: string | null; hasAccessToken: boolean }[]>`
     INSERT INTO "Shop" (
       "id", "shopDomain", "accessToken", "accessTokenEncrypted", "scopes", "isActive", "installedAt", "uninstalledAt",
       "createdAt", "updatedAt", "myshopifyDomain", "primaryDomain", "shopName", "appProxyEnabled", "checkoutEnabled", "installationStatus"
     )
     VALUES (
-      gen_random_uuid()::text, ${shop}, ${accessToken}, ${encryptedAccessToken}, ${scopes}, true, NOW(), NULL,
+      ${shopId}, ${shop}, ${accessToken}, ${encryptedAccessToken}, ${scopes}, true, NOW(), NULL,
       NOW(), NOW(), ${metadata.myshopifyDomain}, ${metadata.primaryDomain}, ${metadata.shopName}, ${appProxyEnabled}, ${checkoutEnabled}, 'ACTIVE'
     )
     ON CONFLICT ("shopDomain") DO UPDATE SET
@@ -121,6 +132,17 @@ export async function GET(request: NextRequest) {
       "installationStatus" = 'ACTIVE'
     RETURNING "id", "installationStatus", "myshopifyDomain", ("accessToken" IS NOT NULL OR "accessTokenEncrypted" IS NOT NULL) AS "hasAccessToken"
   `;
+  } catch (error) {
+    console.error("[SHOPIFY OAUTH CALLBACK] shop persistence failed after token exchange", {
+      requestShop: shop,
+      errorName: error instanceof Error ? error.name : "UnknownError",
+      errorMessage: error instanceof Error ? error.message : String(error),
+    });
+    return NextResponse.json(
+      { error: "Shop installation could not be persisted", shop },
+      { status: 500 },
+    );
+  }
 
   const persisted = rows[0];
   console.info("[SHOPIFY OAUTH CALLBACK] shop persisted", {
