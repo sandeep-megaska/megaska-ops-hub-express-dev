@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type ResourceMeta = { gid: string; title: string; imageUrl: string | null; handle: string; variantGid?: string; variantTitle?: string };
 type ShopifyPickerVariant = { id?: string; title?: string; displayName?: string; image?: { url?: string; originalSrc?: string } };
@@ -17,7 +17,14 @@ function firstImage(resource?: ShopifyPickerResource) { return resource?.image?.
 function normalizePicked(resource?: ShopifyPickerResource): ResourceMeta { return { gid: resource?.id || "", title: resource?.title || "", imageUrl: firstImage(resource), handle: resource?.handle || "" }; }
 function normalizeVariant(variant?: ShopifyPickerVariant) { return { gid: variant?.id || "", title: variant?.title || variant?.displayName || "", imageUrl: variant?.image?.url || variant?.image?.originalSrc || "" }; }
 function firstPicked(result: ShopifyPickerResource[] | ShopifyPickerResource | undefined) { return Array.isArray(result) ? result[0] : result; }
-function getPicker() { return window.shopify?.resourcePicker || window.app?.resourcePicker; }
+function getPicker() {
+  if (typeof window === "undefined") return undefined;
+  return window.shopify?.resourcePicker || window.app?.resourcePicker;
+}
+function hasAppBridgeGlobal() {
+  if (typeof window === "undefined") return false;
+  return Boolean(window.shopify || window.app);
+}
 
 function ResourceSummary({ meta, fallbackLabel }: { meta: ResourceMeta; fallbackLabel: string }) {
   const title = meta.title || (meta.gid ? `${fallbackLabel} selected` : `No ${fallbackLabel.toLowerCase()} selected`);
@@ -27,8 +34,11 @@ function ResourceSummary({ meta, fallbackLabel }: { meta: ResourceMeta; fallback
   </div>;
 }
 
-export function ResourcePickerFields({ triggerType: initialTriggerType, triggerValue, triggerProduct, triggerCollection, offerProduct }: { triggerType: string; triggerValue: string; triggerProduct: ResourceMeta; triggerCollection: ResourceMeta; offerProduct: ResourceMeta }) {
+export function ResourcePickerFields({ triggerType: initialTriggerType, triggerValue, triggerProduct, triggerCollection, offerProduct, shopPresent, hostPresent }: { triggerType: string; triggerValue: string; triggerProduct: ResourceMeta; triggerCollection: ResourceMeta; offerProduct: ResourceMeta; shopPresent: boolean; hostPresent: boolean }) {
   const [pickerError, setPickerError] = useState("");
+  const [hydrated, setHydrated] = useState(false);
+  const [appBridgeReady, setAppBridgeReady] = useState(false);
+  const [resourcePickerReady, setResourcePickerReady] = useState(false);
   const [triggerType, setTriggerType] = useState(initialTriggerType);
   const [triggerText, setTriggerText] = useState(triggerValue);
   const [product, setProduct] = useState<ResourceMeta>({ ...triggerProduct, gid: triggerProduct.gid || (triggerType === "cart_contains_product" ? triggerValue : "") });
@@ -39,9 +49,25 @@ export function ResourcePickerFields({ triggerType: initialTriggerType, triggerV
   const showTriggerProduct = triggerType === "cart_contains_product";
   const showTriggerCollection = triggerType === "cart_contains_collection";
 
+  useEffect(() => {
+    let cancelled = false;
+    function refresh() {
+      if (cancelled) return;
+      setHydrated(true);
+      setAppBridgeReady(hasAppBridgeGlobal());
+      setResourcePickerReady(Boolean(getPicker()));
+    }
+    const timers = [0, 150, 500, 1200, 2500].map((delay) => window.setTimeout(refresh, delay));
+    return () => {
+      cancelled = true;
+      timers.forEach((timer) => window.clearTimeout(timer));
+    };
+  }, []);
+
   async function pick(type: "product" | "collection", purpose: "trigger" | "offer") {
     setPickerError("");
     const picker = getPicker();
+    if (!hydrated) { setPickerError("Initializing Shopify Resource Picker. Try again in a moment, or use Advanced raw IDs below."); return; }
     if (!picker) { setPickerError("Shopify Resource Picker is unavailable in this browser context. Open this page inside Shopify Admin, or use Advanced raw IDs below."); return; }
     const picked = firstPicked(await picker({ type, multiple: false, action: "select" }));
     if (!picked?.id) return;
@@ -66,6 +92,8 @@ export function ResourcePickerFields({ triggerType: initialTriggerType, triggerV
     <input type="hidden" name="offerProductGid" value={offer.gid} /><input type="hidden" name="offerProductTitle" value={offer.title} /><input type="hidden" name="offerProductImageUrl" value={offer.imageUrl || ""} /><input type="hidden" name="offerProductHandle" value={offer.handle} /><input type="hidden" name="offerVariantGid" value={offer.variantGid || ""} /><input type="hidden" name="offerVariantTitle" value={offer.variantTitle || ""} />
 
     <div className="grid gap-4 md:grid-cols-2"><label className="grid gap-2 text-sm font-medium text-gray-800"><span>Trigger type</span><select className={inputClass} value={triggerType} onChange={(event) => setTriggerType(event.target.value)}><option value="always">Always</option><option value="cart_contains_product">Cart contains product</option><option value="cart_contains_collection">Cart contains collection</option><option value="cart_contains_product_type">Cart contains product type</option><option value="cart_contains_tag">Cart contains tag</option><option value="cart_subtotal_gte">Cart subtotal greater than or equal to</option><option value="cart_quantity_gte">Cart quantity greater than or equal to</option></select></label>{!showTriggerProduct && !showTriggerCollection ? <label className="grid gap-2 text-sm font-medium text-gray-800"><span>Trigger value</span><input className={inputClass} name="triggerValueText" value={triggerText} onChange={(event) => setTriggerText(event.target.value)} /><span className={helpClass}>Enter product type, tag, subtotal, or quantity based on trigger type.</span></label> : null}</div>
+    <div className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-xs text-blue-950">Shopify embedded diagnostic: shop present: {shopPresent ? "yes" : "no"}; host present: {hostPresent ? "yes" : "no"}; app bridge ready: {appBridgeReady ? "yes" : "no"}; resource picker ready: {resourcePickerReady ? "yes" : "no"}.</div>
+    {!hydrated ? <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">Initializing Shopify Resource Picker…</div> : !resourcePickerReady ? <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">Shopify Resource Picker is unavailable in this browser context. Open this page inside Shopify Admin, or use Advanced raw IDs below.</div> : null}
     {pickerError ? <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{pickerError}</div> : null}
     {showTriggerProduct ? <div className="grid gap-3"><div className="flex items-center justify-between gap-3"><div><p className="text-sm font-semibold text-gray-950">Trigger product</p><p className={helpClass}>Choose the product customers must have in cart.</p></div><button type="button" onClick={() => pick("product", "trigger")} className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium">Select product</button></div><ResourceSummary meta={product} fallbackLabel="Selected product" /></div> : null}
     {showTriggerCollection ? <div className="grid gap-3"><div className="flex items-center justify-between gap-3"><div><p className="text-sm font-semibold text-gray-950">Trigger collection</p><p className={helpClass}>Choose the collection customers must have in cart.</p></div><button type="button" onClick={() => pick("collection", "trigger")} className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium">Select collection</button></div><ResourceSummary meta={collection} fallbackLabel="Selected collection" /></div> : null}

@@ -1,5 +1,6 @@
 import "./globals.css";
 import { Suspense } from "react";
+import Script from "next/script";
 import AdminNavLink from "./AdminNavLink";
 
 export default function RootLayout({
@@ -9,7 +10,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
+      <head>{process.env.SHOPIFY_API_KEY ? <meta name="shopify-api-key" content={process.env.SHOPIFY_API_KEY} /> : null}</head>
       <body>
+        <Script src="https://cdn.shopify.com/shopifycloud/app-bridge.js" strategy="beforeInteractive" />
         <div className="mk-shell">
           <aside className="mk-sidebar">
             <div className="mk-brand">

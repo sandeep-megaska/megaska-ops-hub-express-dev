@@ -8,19 +8,22 @@ type AdminNavLinkProps = Omit<ComponentProps<typeof Link>, "href"> & {
   href: string;
 };
 
-function hrefWithShop(href: string, shop: string | null) {
-  if (!shop) return href;
+const OAUTH_CALLBACK_ONLY_PARAMS = new Set(["code", "hmac", "signature", "state", "timestamp"]);
+
+function hrefWithEmbeddedContext(href: string, currentParams: URLSearchParams | null) {
+  if (!currentParams) return href;
   const [pathAndQuery, hash = ""] = href.split("#", 2);
   const [pathname, query = ""] = pathAndQuery.split("?", 2);
   const params = new URLSearchParams(query);
-  if (!params.has("shop")) params.set("shop", shop);
+  currentParams.forEach((value, key) => {
+    if (OAUTH_CALLBACK_ONLY_PARAMS.has(key) || params.has(key)) return;
+    params.set(key, value);
+  });
   const nextQuery = params.toString();
   return `${pathname}${nextQuery ? `?${nextQuery}` : ""}${hash ? `#${hash}` : ""}`;
 }
 
 export default function AdminNavLink({ href, ...props }: AdminNavLinkProps) {
   const searchParams = useSearchParams();
-  const shop = searchParams?.get("shop") || searchParams?.get("shopify_shop") || null;
-
-  return <Link href={hrefWithShop(href, shop)} {...props} />;
+  return <Link href={hrefWithEmbeddedContext(href, searchParams)} {...props} />;
 }

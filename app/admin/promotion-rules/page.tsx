@@ -3,11 +3,12 @@ import { redirect } from "next/navigation";
 import { getPromotionRulesConfig, normalizePromotionRule, PROMOTION_RULES_CONFIG_MODULE_KEY, savePromotionRulesConfig, type PromotionConflictStrategy, type PromotionResourceMetadata } from "../../../services/promotion-rules/config";
 import { ResourcePickerFields } from "./ResourcePickerFields";
 import { formatAdminShopResolutionError, resolveAdminShopFromSearchParams } from "../../../services/shopify/admin-shop-context";
+import { embeddedContextFromFormData, embeddedContextHiddenInputs, withEmbeddedContext, type EmbeddedSearchParams } from "./embedded-query";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type PageProps = { searchParams?: Promise<{ shop?: string; rule?: string; saved?: string; error?: string }> };
+type PageProps = { searchParams?: Promise<EmbeddedSearchParams & { shop?: string; rule?: string; saved?: string; error?: string; host?: string }> };
 const cardClass = "rounded-2xl border border-gray-200 bg-white p-6 shadow-sm";
 const inputClass = "rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-950 shadow-sm outline-none transition focus:border-gray-900 focus:ring-2 focus:ring-gray-900/10";
 const helpClass = "text-xs leading-5 text-gray-500";
@@ -20,7 +21,10 @@ async function savePromotionRules(shopId: string, shopDomain: string, formData: 
   const rawIntent = getString(formData, "intent");
   const [intent, intentRuleId] = rawIntent.split(":");
   const ruleId = intentRuleId || getString(formData, "ruleId");
-  let redirectUrl = `/admin/promotion-rules?shop=${encodeURIComponent(shopDomain)}&saved=1`;
+  const embeddedContext = embeddedContextFromFormData(formData);
+  embeddedContext.set("shop", shopDomain);
+  embeddedContext.set("saved", "1");
+  let redirectUrl = `/admin/promotion-rules?${embeddedContext.toString()}`;
   try {
     const current = await getPromotionRulesConfig(shopId);
     const base = { ...current, enabled: getBool(formData, "moduleEnabled"), maxVisibleOffers: Number(getString(formData, "maxVisibleOffers")), conflictStrategy: getString(formData, "conflictStrategy") };
@@ -43,13 +47,17 @@ async function savePromotionRules(shopId: string, shopDomain: string, formData: 
         schedule: { alwaysActive: getBool(formData, "alwaysActive"), startAt: getString(formData, "startAt"), endAt: getString(formData, "endAt"), timezone: getString(formData, "timezone") },
       });
       rules = rules.some((existing) => existing.id === rule.id) ? rules.map((existing) => existing.id === rule.id ? rule : existing) : [...rules, rule];
-      redirectUrl += `&rule=${encodeURIComponent(rule.id)}`;
+      embeddedContext.set("rule", rule.id);
+      redirectUrl = `/admin/promotion-rules?${embeddedContext.toString()}`;
     }
     await savePromotionRulesConfig(shopId, { ...base, schemaVersion: 1, enabled: base.enabled, maxVisibleOffers: Number(base.maxVisibleOffers), conflictStrategy: base.conflictStrategy as PromotionConflictStrategy, rules });
     revalidatePath("/admin/promotion-rules");
   } catch (error) {
     const message = error instanceof Error ? error.message : "Invalid promotion rules configuration.";
-    redirectUrl = `/admin/promotion-rules?shop=${encodeURIComponent(shopDomain)}&error=${encodeURIComponent(message)}${ruleId ? `&rule=${encodeURIComponent(ruleId)}` : ""}`;
+    embeddedContext.delete("saved");
+    embeddedContext.set("error", message);
+    if (ruleId) embeddedContext.set("rule", ruleId);
+    redirectUrl = `/admin/promotion-rules?${embeddedContext.toString()}`;
   }
   redirect(redirectUrl);
 }
@@ -66,27 +74,29 @@ export default async function PromotionRulesPage({ searchParams }: PageProps) {
   const params = searchParams ? await searchParams : {};
   const resolved = await resolveAdminShopFromSearchParams(params);
   if (!resolved.shop?.id) return <main className="mx-auto max-w-3xl p-8"><div className={cardClass}><h1 className="text-2xl font-semibold">Promotion Rules</h1><p className="mt-3 text-sm text-red-700">{params.error || formatAdminShopResolutionError(resolved)}</p></div></main>;
-  const config = await getPromotionRulesConfig(resolved.shop.id);
-  const shopParam = encodeURIComponent(resolved.shop.shopDomain);
+  const shop = resolved.shop;
+  const config = await getPromotionRulesConfig(shop.id);
+  const createRuleHref = withEmbeddedContext("/admin/promotion-rules", params, { shop: shop.shopDomain, rule: null, saved: null, error: null });
   const selected = config.rules.find((rule) => rule.id === params.rule) || normalizePromotionRule({ id: "new_rule", name: "", display: { ctaLabel: "Add offer" } });
-  const action = savePromotionRules.bind(null, resolved.shop.id, resolved.shop.shopDomain);
+  const action = savePromotionRules.bind(null, shop.id, shop.shopDomain);
   const trigger = selected.eligibility.triggers[0];
   const emptyResource: PromotionResourceMetadata = { gid: "", title: "", imageUrl: "", handle: "" };
   const triggerProduct = trigger.product || { ...emptyResource, gid: trigger.productGid || "" };
   const triggerCollection = trigger.collection || { ...emptyResource, gid: trigger.collectionGid || "" };
   const offerProduct = selected.reward.product || { ...emptyResource, gid: selected.reward.productGid, variantGid: selected.reward.variantGid };
   return <main className="mx-auto max-w-6xl px-6 py-8">
-    <div className="mb-6 rounded-2xl bg-gray-950 p-6 text-white shadow-sm"><p className="text-xs font-semibold uppercase tracking-wide text-gray-300">Cart Intelligence / Promotion Rules</p><h1 className="mt-2 text-3xl font-semibold">Promotion Rules</h1><p className="mt-3 max-w-3xl text-sm leading-6 text-gray-200">Configure display-only offer rules for {resolved.shop.shopDomain}. Saves to ShopModuleConfig moduleKey {PROMOTION_RULES_CONFIG_MODULE_KEY}; no drawer, checkout, cart mutation, analytics, payment, order, or discount-enforcement behavior is changed.</p></div>
+    <div className="mb-6 rounded-2xl bg-gray-950 p-6 text-white shadow-sm"><p className="text-xs font-semibold uppercase tracking-wide text-gray-300">Cart Intelligence / Promotion Rules</p><h1 className="mt-2 text-3xl font-semibold">Promotion Rules</h1><p className="mt-3 max-w-3xl text-sm leading-6 text-gray-200">Configure display-only offer rules for {shop.shopDomain}. Saves to ShopModuleConfig moduleKey {PROMOTION_RULES_CONFIG_MODULE_KEY}; no drawer, checkout, cart mutation, analytics, payment, order, or discount-enforcement behavior is changed.</p></div>
     {params.saved ? <div className="mb-4 rounded-xl border border-green-200 bg-green-50 p-4 text-sm font-medium text-green-800">Promotion Rules configuration saved.</div> : null}
     {params.error ? <div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-800">{params.error}</div> : null}
     <form action={action} className="grid gap-6">
+      {embeddedContextHiddenInputs(params).map(([key, value]) => <input key={key} type="hidden" name={`embeddedContext:${key}`} value={value} />)}
       <section className={`${cardClass} grid gap-5`}><h2 className="text-lg font-semibold text-gray-950">Module settings</h2><div className="grid gap-4 md:grid-cols-3"><Check label="Module enabled" name="moduleEnabled" defaultChecked={config.enabled} help="Admin persistence only in this phase." /><Field label="Max visible offers" name="maxVisibleOffers" type="number" defaultValue={config.maxVisibleOffers} /><Select label="Conflict strategy" name="conflictStrategy" defaultValue={config.conflictStrategy}><option value="priority_first">Priority first</option><option value="newest_first">Newest first</option><option value="oldest_first">Oldest first</option></Select></div></section>
-      <section className={`${cardClass} grid gap-4`}><div className="flex items-center justify-between"><h2 className="text-lg font-semibold text-gray-950">Rules list</h2><a className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium" href={`/admin/promotion-rules?shop=${shopParam}`}>Create rule</a></div><div className="grid gap-3">{config.rules.length ? config.rules.map((rule) => <div key={rule.id} className="grid gap-3 rounded-xl border border-gray-200 p-4 md:grid-cols-[1fr_auto]"><div><p className="font-semibold text-gray-950">{rule.name}</p><p className="mt-1 text-sm text-gray-600">Status: {rule.status}. Enabled: {rule.enabled ? "Yes" : "No"}. Priority: {rule.priority}. Trigger: {rule.eligibility.triggers[0]?.type}. Offer: {rule.reward.productGid || "missing"}. Placement: {rule.display.placement}.</p></div><div className="flex flex-wrap gap-2"><a className="rounded-lg border px-3 py-2 text-sm" href={`/admin/promotion-rules?shop=${shopParam}&rule=${encodeURIComponent(rule.id)}`}>Edit</a><button className="rounded-lg border px-3 py-2 text-sm" name="intent" value={`toggle:${rule.id}`}>{rule.enabled ? "Disable" : "Enable"}</button><button className="rounded-lg border px-3 py-2 text-sm" name="intent" value={`pause:${rule.id}`}>Pause</button><button className="rounded-lg border px-3 py-2 text-sm" name="intent" value={`archive:${rule.id}`}>Archive</button><button className="rounded-lg border border-red-200 px-3 py-2 text-sm text-red-700" name="intent" value={`delete:${rule.id}`}>Delete</button></div></div>) : <p className="text-sm text-gray-600">No rules configured yet.</p>}</div></section>
+      <section className={`${cardClass} grid gap-4`}><div className="flex items-center justify-between"><h2 className="text-lg font-semibold text-gray-950">Rules list</h2><a className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium" href={createRuleHref}>Create rule</a></div><div className="grid gap-3">{config.rules.length ? config.rules.map((rule) => <div key={rule.id} className="grid gap-3 rounded-xl border border-gray-200 p-4 md:grid-cols-[1fr_auto]"><div><p className="font-semibold text-gray-950">{rule.name}</p><p className="mt-1 text-sm text-gray-600">Status: {rule.status}. Enabled: {rule.enabled ? "Yes" : "No"}. Priority: {rule.priority}. Trigger: {rule.eligibility.triggers[0]?.type}. Offer: {rule.reward.productGid || "missing"}. Placement: {rule.display.placement}.</p></div><div className="flex flex-wrap gap-2"><a className="rounded-lg border px-3 py-2 text-sm" href={withEmbeddedContext("/admin/promotion-rules", params, { shop: shop.shopDomain, rule: rule.id, saved: null, error: null })}>Edit</a><button className="rounded-lg border px-3 py-2 text-sm" name="intent" value={`toggle:${rule.id}`}>{rule.enabled ? "Disable" : "Enable"}</button><button className="rounded-lg border px-3 py-2 text-sm" name="intent" value={`pause:${rule.id}`}>Pause</button><button className="rounded-lg border px-3 py-2 text-sm" name="intent" value={`archive:${rule.id}`}>Archive</button><button className="rounded-lg border border-red-200 px-3 py-2 text-sm text-red-700" name="intent" value={`delete:${rule.id}`}>Delete</button></div></div>) : <p className="text-sm text-gray-600">No rules configured yet.</p>}</div></section>
       <input type="hidden" name="ruleId" value={selected.id} />
       <section className={`${cardClass} grid gap-5`}><h2 className="text-lg font-semibold text-gray-950">{config.rules.some((rule) => rule.id === selected.id) ? "Edit rule" : "Create rule"}</h2><div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-medium text-amber-900">Display price is not yet enforced as a real checkout discount. Discount enforcement will be added in a later Shopify-safe phase. Hidden discounted products are not recommended. Offer product must be available in storefront for runtime display later.</div>
         <div className="grid gap-4 md:grid-cols-4"><Field label="Rule name" name="name" defaultValue={selected.name} /><Check label="Enabled" name="enabled" defaultChecked={selected.enabled} /><Select label="Status" name="status" defaultValue={selected.status}><option value="draft">Draft</option><option value="active">Active</option><option value="paused">Paused</option><option value="archived">Archived</option></Select><Field label="Priority" name="priority" type="number" defaultValue={selected.priority} /></div>
         <div className="grid gap-4 md:grid-cols-3"><Select label="Match mode" name="match" defaultValue={selected.eligibility.match}><option value="all">All</option><option value="any">Any</option></Select></div>
-        <ResourcePickerFields triggerType={trigger.type} triggerValue={trigger.value || ""} triggerProduct={triggerProduct} triggerCollection={triggerCollection} offerProduct={offerProduct} />
+        <ResourcePickerFields triggerType={trigger.type} triggerValue={trigger.value || ""} triggerProduct={triggerProduct} triggerCollection={triggerCollection} offerProduct={offerProduct} shopPresent={Boolean(params.shop || params.shopify_shop)} hostPresent={Boolean(params.host)} />
         <details className="rounded-xl border border-gray-200 bg-gray-50 p-4"><summary className="cursor-pointer text-sm font-semibold text-gray-800">Advanced/debug raw Shopify IDs</summary><div className="mt-4 grid gap-4 md:grid-cols-3"><Field label="Trigger raw value" name="triggerValueRaw" defaultValue={trigger.value || ""} /><Field label="Offer product GID / ID" name="offerProductGidRaw" defaultValue={selected.reward.productGid} /><Field label="Offer variant GID / ID" name="offerVariantGidRaw" defaultValue={selected.reward.variantGid} /></div></details>
         <div className="grid gap-4 md:grid-cols-3"><Field label="Quantity" name="quantity" type="number" defaultValue={selected.reward.quantity} /><Field label="Display price" name="offerPriceDisplay" defaultValue={selected.display.offerPriceDisplay} /><Field label="Compare price" name="comparePriceDisplay" defaultValue={selected.display.comparePriceDisplay} /><Check label="Requires discount enforcement warning" name="requiresDiscountEnforcement" defaultChecked={selected.reward.requiresDiscountEnforcement} /></div>
         <div className="grid gap-4 md:grid-cols-3"><Field label="Heading" name="heading" defaultValue={selected.display.heading} /><Field label="Description" name="description" defaultValue={selected.display.description} /><Field label="Badge" name="badge" defaultValue={selected.display.badge} /><Field label="CTA label" name="ctaLabel" defaultValue={selected.display.ctaLabel} /><Field label="Image override URL" name="imageOverrideUrl" defaultValue={selected.display.imageOverrideUrl} /><Select label="Placement" name="placement" defaultValue={selected.display.placement}><option value="drawer">Drawer</option><option value="cart_page">Cart page</option><option value="both">Both</option></Select><Check label="Hide if offer product already in cart" name="hideIfOfferProductAlreadyInCart" defaultChecked={selected.display.hideIfOfferProductAlreadyInCart} /></div>
