@@ -5,6 +5,10 @@ import {
   updateLoopDeskMerchantSettings,
 } from "../../../services/loopdesk/merchant-settings";
 import {
+  getDelhiveryAdminConfig,
+  updateDelhiveryConfig,
+} from "../../../services/delhivery/config";
+import {
   formatAdminShopResolutionError,
   resolveAdminShopFromSearchParams,
 } from "../../../services/shopify/admin-shop-context";
@@ -76,6 +80,21 @@ async function saveMerchantSettings(
         showSecureBadge: formData.get("showSecureBadge") === "on",
         showTrustCopy: formData.get("showTrustCopy") === "on",
       },
+    });
+    await updateDelhiveryConfig(shopId, {
+      enabled: formData.get("delhiveryEnabled") === "on",
+      environment: formData.get("delhiveryEnvironment"),
+      apiToken: formData.get("delhiveryApiToken"),
+      pickupLocation: formData.get("delhiveryPickupLocation"),
+      originPincode: formData.get("delhiveryOriginPincode"),
+      codEnabled: formData.get("delhiveryCodEnabled") === "on",
+      prepaidEnabled: formData.get("delhiveryPrepaidEnabled") === "on",
+      serviceabilityCheckEnabled:
+        formData.get("delhiveryServiceabilityCheckEnabled") === "on",
+      defaultPackageWeight: formData.get("delhiveryDefaultPackageWeight"),
+      defaultLength: formData.get("delhiveryDefaultLength"),
+      defaultBreadth: formData.get("delhiveryDefaultBreadth"),
+      defaultHeight: formData.get("delhiveryDefaultHeight"),
     });
     revalidatePath(`/admin/merchant-settings?shop=${encodeURIComponent(shopDomain)}`);
     revalidatePath("/admin/merchant-settings");
@@ -166,7 +185,10 @@ export default async function MerchantSettingsPage({
         </div>
       </main>
     );
-  const settings = await getLoopDeskMerchantSettings(resolved.shop.id);
+  const [settings, delhivery] = await Promise.all([
+    getLoopDeskMerchantSettings(resolved.shop.id),
+    getDelhiveryAdminConfig(resolved.shop.id),
+  ]);
   const shopParam = encodeURIComponent(resolved.shop.shopDomain);
   const saveAction = saveMerchantSettings.bind(
     null,
@@ -261,6 +283,33 @@ export default async function MerchantSettingsPage({
           <div className="grid gap-3 md:grid-cols-2">
             <Check label="Show secure badge" name="showSecureBadge" defaultChecked={settings.checkout.showSecureBadge} />
             <Check label="Show trust copy" name="showTrustCopy" defaultChecked={settings.checkout.showTrustCopy} />
+          </div>
+        </section>
+
+        <section className={`${cardClass} grid gap-5`}>
+          <SectionHeader title="Delhivery" description="Merchant-level Delhivery configuration only. This does not change checkout, payment, order, or cart behavior." />
+          <div className="grid gap-3 md:grid-cols-2">
+            <Check label="Delhivery Enabled" name="delhiveryEnabled" defaultChecked={delhivery.enabled} help="Enables Delhivery as a configured merchant integration for backend use." />
+            <Check label="Pincode Serviceability Check Enabled" name="delhiveryServiceabilityCheckEnabled" defaultChecked={delhivery.serviceabilityCheckEnabled} help="Serviceability controls pincode validation when a backend flow chooses to use Delhivery checks." />
+            <Check label="COD Enabled" name="delhiveryCodEnabled" defaultChecked={delhivery.codEnabled} help="COD toggle is a merchant-level default only; no payment behavior changes are made here." />
+            <Check label="Prepaid Enabled" name="delhiveryPrepaidEnabled" defaultChecked={delhivery.prepaidEnabled} help="Prepaid toggle is a merchant-level default only; no checkout behavior changes are made here." />
+          </div>
+          <label className="grid gap-2 text-sm font-medium text-gray-800">
+            <span>Environment</span>
+            <select className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-950 shadow-sm outline-none transition focus:border-gray-900 focus:ring-2 focus:ring-gray-900/10" name="delhiveryEnvironment" defaultValue={delhivery.environment}>
+              <option value="test">Test</option>
+              <option value="production">Production</option>
+            </select>
+            <span className={helpClass}>Test/production controls which Delhivery endpoint is used by server-side Delhivery integrations.</span>
+          </label>
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field label="API Token" name="delhiveryApiToken" type="password" defaultValue={delhivery.apiTokenMasked} help="The token is stored securely, masked after save, and can be replaced by entering a new token." />
+            <Field label="Pickup Location / Warehouse Name" name="delhiveryPickupLocation" defaultValue={delhivery.pickupLocation} help="Delhivery pickup location or warehouse name configured for this merchant." />
+            <Field label="Origin Pincode" name="delhiveryOriginPincode" defaultValue={delhivery.originPincode} help="6-digit origin pincode used as the merchant-level Delhivery origin." />
+            <Field label="Default Package Weight" name="delhiveryDefaultPackageWeight" type="number" defaultValue={String(delhivery.defaultPackageWeight)} help="Default package weight used by backend shipping services when needed." />
+            <Field label="Default Length" name="delhiveryDefaultLength" type="number" defaultValue={String(delhivery.defaultLength)} help="Default package length." />
+            <Field label="Default Breadth" name="delhiveryDefaultBreadth" type="number" defaultValue={String(delhivery.defaultBreadth)} help="Default package breadth." />
+            <Field label="Default Height" name="delhiveryDefaultHeight" type="number" defaultValue={String(delhivery.defaultHeight)} help="Default package height." />
           </div>
         </section>
         <section className="grid gap-4 rounded-2xl border border-gray-200 bg-gray-50 p-6 text-sm text-gray-700 md:grid-cols-2">
