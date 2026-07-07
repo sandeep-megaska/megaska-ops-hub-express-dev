@@ -1,4 +1,5 @@
-import Link from "next/link";
+import { Suspense } from "react";
+import AdminNavLink from "./AdminNavLink";
 import CustomerSyncCard from "./CustomerSyncCard";
 
 const quickCards = [
@@ -45,14 +46,16 @@ export default function DashboardPage() {
           cancellations, issues, and LoopDesk merchant settings.
         </p>
 
-        <div className="mk-hero-actions">
-          <Link href="/admin/gst" className="mk-btn mk-btn-primary">
-            Open GST
-          </Link>
-          <Link href="/admin/exchanges" className="mk-btn">
-            Open Exchanges
-          </Link>
-        </div>
+        <Suspense fallback={null}>
+          <div className="mk-hero-actions">
+            <AdminNavLink href="/admin/gst" className="mk-btn mk-btn-primary">
+              Open GST
+            </AdminNavLink>
+            <AdminNavLink href="/admin/exchanges" className="mk-btn">
+              Open Exchanges
+            </AdminNavLink>
+          </div>
+        </Suspense>
       </section>
 
       <section className="mk-grid-4">
@@ -86,17 +89,19 @@ export default function DashboardPage() {
           Quick access to all operational workflows.
         </p>
 
-        <div className="mk-grid-2">
-          {quickCards.map((card) => (
-            <Link key={card.href} href={card.href} className="mk-card">
-              <p className="mk-stat-label">{card.title}</p>
-              <p className="mk-stat-value" style={{ fontSize: 24 }}>
-                {card.value}
-              </p>
-              <p className="mk-stat-meta">{card.meta}</p>
-            </Link>
-          ))}
-        </div>
+        <Suspense fallback={null}>
+          <div className="mk-grid-2">
+            {quickCards.map((card) => (
+              <AdminNavLink key={card.href} href={card.href} className="mk-card">
+                <p className="mk-stat-label">{card.title}</p>
+                <p className="mk-stat-value" style={{ fontSize: 24 }}>
+                  {card.value}
+                </p>
+                <p className="mk-stat-meta">{card.meta}</p>
+              </AdminNavLink>
+            ))}
+          </div>
+        </Suspense>
       </section>
     </div>
   );

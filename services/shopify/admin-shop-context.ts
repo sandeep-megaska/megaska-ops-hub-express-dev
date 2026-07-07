@@ -10,11 +10,18 @@ export type AdminShopSearchParams = {
   [key: string]: string | string[] | undefined;
 };
 
+export type AdminShopResolutionSource = {
+  source: "query param" | "session/install context" | "headers";
+  attempted: boolean;
+  resolved: boolean;
+};
+
 export type AdminShopContext = {
   shop: ShopRow | null;
   shopDomain: string;
   error: string | null;
   hmacVerified: boolean;
+  resolutionSources: AdminShopResolutionSource[];
 };
 
 function firstParam(value: string | string[] | null | undefined) {
@@ -60,6 +67,38 @@ function logAdminShopResolutionFailure(
   });
 }
 
+function describeResolutionSources(options: {
+  queryAttempted: boolean;
+  queryResolved: boolean;
+  headerAttempted?: boolean;
+  headerResolved?: boolean;
+}) {
+  return [
+    {
+      source: "query param" as const,
+      attempted: options.queryAttempted,
+      resolved: options.queryResolved,
+    },
+    {
+      source: "session/install context" as const,
+      attempted: false,
+      resolved: false,
+    },
+    {
+      source: "headers" as const,
+      attempted: Boolean(options.headerAttempted),
+      resolved: Boolean(options.headerResolved),
+    },
+  ];
+}
+
+export function formatAdminShopResolutionError(context: Pick<AdminShopContext, "error" | "resolutionSources">) {
+  const sourceSummary = context.resolutionSources
+    .map((item) => `${item.source}: ${item.resolved ? "resolved" : item.attempted ? "attempted" : "not available"}`)
+    .join("; ");
+  return `${context.error || "Unable to resolve shop."} Resolution sources: ${sourceSummary}.`;
+}
+
 function toUrlSearchParams(params: AdminShopSearchParams) {
   const searchParams = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
@@ -82,8 +121,16 @@ export function getAdminShopDomainFromSearchParams(
 
 export async function resolveAdminShopFromSearchParams(
   params: AdminShopSearchParams,
+  sourceOptions: { headerAttempted?: boolean; headerResolved?: boolean } = {},
 ): Promise<AdminShopContext> {
   const shopDomain = getAdminShopDomainFromSearchParams(params);
+  const queryAttempted = Boolean(firstParam(params.shop) || firstParam(params.shopify_shop));
+  const resolutionSources = describeResolutionSources({
+    queryAttempted,
+    queryResolved: queryAttempted && Boolean(shopDomain),
+    headerAttempted: sourceOptions.headerAttempted,
+    headerResolved: sourceOptions.headerResolved,
+  });
   if (!shopDomain) {
     logAdminShopResolutionFailure("missing_shop_param", {
       hasShopParam: Boolean(firstParam(params.shop)),
@@ -97,6 +144,7 @@ export async function resolveAdminShopFromSearchParams(
       error:
         "Unable to resolve shop. Open this page from Shopify admin or add a shop query parameter.",
       hmacVerified: false,
+      resolutionSources,
     };
   }
 
@@ -107,6 +155,7 @@ export async function resolveAdminShopFromSearchParams(
       shopDomain,
       error: "Invalid Shopify shop domain.",
       hmacVerified: false,
+      resolutionSources,
     };
   }
 
@@ -126,6 +175,7 @@ export async function resolveAdminShopFromSearchParams(
       error:
         "Invalid Shopify admin signature. Reopen this page from Shopify admin.",
       hmacVerified,
+      resolutionSources,
     };
   }
 
@@ -142,6 +192,7 @@ export async function resolveAdminShopFromSearchParams(
       shopDomain,
       error: "Unable to verify shop installation. Check database connectivity.",
       hmacVerified,
+      resolutionSources,
     };
   }
 
@@ -153,6 +204,7 @@ export async function resolveAdminShopFromSearchParams(
       error:
         "Shop not installed in this database. Reinstall the Shopify app to create the Shop record.",
       hmacVerified,
+      resolutionSources,
     };
   }
 
@@ -170,10 +222,22 @@ export async function resolveAdminShopFromSearchParams(
       error:
         "Shop is not installed or active. Please install the app for this shop.",
       hmacVerified,
+      resolutionSources,
     };
   }
 
-  return { shop, shopDomain: shop.shopDomain, error: null, hmacVerified };
+  return {
+    shop,
+    shopDomain: shop.shopDomain,
+    error: null,
+    hmacVerified,
+    resolutionSources: describeResolutionSources({
+      queryAttempted,
+      queryResolved: queryAttempted,
+      headerAttempted: sourceOptions.headerAttempted,
+      headerResolved: sourceOptions.headerResolved,
+    }),
+  };
 }
 
 export async function resolveAdminShopFromRequest(
@@ -191,8 +255,11 @@ export async function resolveAdminShopFromRequest(
   const headerShop = normalizeShopDomain(
     req.headers.get("x-shopify-shop-domain"),
   );
-  if (!params.shop && !params.shopify_shop && headerShop)
-    params.shop = headerShop;
+  const usedHeaderShop = !params.shop && !params.shopify_shop && Boolean(headerShop);
+  if (usedHeaderShop) params.shop = headerShop;
 
-  return resolveAdminShopFromSearchParams(params);
+  return resolveAdminShopFromSearchParams(params, {
+    headerAttempted: Boolean(headerShop),
+    headerResolved: usedHeaderShop,
+  });
 }
