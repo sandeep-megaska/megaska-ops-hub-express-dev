@@ -4,55 +4,70 @@ import {
   getLoopDeskMerchantSettings,
   updateLoopDeskMerchantSettings,
 } from "../../../services/loopdesk/merchant-settings";
-import { resolveShopConfig } from "../../../services/shopify/shop";
+import { getShopByDomain, normalizeShopDomain } from "../../../services/shopify/shop";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type PageProps = { searchParams?: Promise<{ shop?: string; saved?: string }> };
+type PageProps = {
+  searchParams?: Promise<{ shop?: string; saved?: string; error?: string }>;
+};
+
+const SHOP_UNRESOLVED_MESSAGE =
+  "Unable to resolve shop. Open this page from Shopify admin.";
 
 async function saveMerchantSettings(formData: FormData) {
   "use server";
-  const shopDomain = String(formData.get("shop") || "");
-  const resolved = await resolveShopConfig(shopDomain);
-  if (!resolved.id) throw new Error("Unable to resolve shop");
-  await updateLoopDeskMerchantSettings(resolved.id, {
-    general: {
-      merchantName: formData.get("merchantName"),
-      supportEmail: formData.get("supportEmail"),
-      supportPhone: formData.get("supportPhone"),
-      supportWhatsApp: formData.get("supportWhatsApp"),
-    },
-    branding: {
-      logoUrl: formData.get("logoUrl"),
-      primaryColor: formData.get("primaryColor"),
-      secondaryColor: formData.get("secondaryColor"),
-      accentColor: formData.get("accentColor"),
-      borderRadius: formData.get("borderRadius"),
-      showPoweredBy: formData.get("showPoweredBy") === "on",
-      poweredByText: formData.get("poweredByText"),
-    },
-    labels: {
-      expressCheckoutText: formData.get("expressCheckoutText"),
-      viewCartText: formData.get("viewCartText"),
-      secureCheckoutText: formData.get("secureCheckoutText"),
-    },
-    cart: {
-      drawerMode: formData.get("drawerMode"),
-      openAfterAddToCart: formData.get("openAfterAddToCart") === "on",
-      expressCheckoutButtonEnabled:
-        formData.get("expressCheckoutButtonEnabled") === "on",
-      viewCartButtonEnabled: formData.get("viewCartButtonEnabled") === "on",
-    },
-    checkout: {
-      showSecureBadge: formData.get("showSecureBadge") === "on",
-      showTrustCopy: formData.get("showTrustCopy") === "on",
-    },
-  });
-  revalidatePath("/admin/merchant-settings");
-  redirect(
-    `/admin/merchant-settings?shop=${encodeURIComponent(resolved.shopDomain)}&saved=1`,
-  );
+  const shopDomain = normalizeShopDomain(String(formData.get("shop") || ""));
+  const resolved = shopDomain ? await getShopByDomain(shopDomain) : null;
+  if (!resolved?.id) {
+    redirect(
+      `/admin/merchant-settings?error=${encodeURIComponent(SHOP_UNRESOLVED_MESSAGE)}`,
+    );
+  }
+
+  let redirectUrl = `/admin/merchant-settings?shop=${encodeURIComponent(resolved.shopDomain)}&saved=1`;
+  try {
+    await updateLoopDeskMerchantSettings(resolved.id, {
+      general: {
+        merchantName: formData.get("merchantName"),
+        supportEmail: formData.get("supportEmail"),
+        supportPhone: formData.get("supportPhone"),
+        supportWhatsApp: formData.get("supportWhatsApp"),
+      },
+      branding: {
+        logoUrl: formData.get("logoUrl"),
+        primaryColor: formData.get("primaryColor"),
+        secondaryColor: formData.get("secondaryColor"),
+        accentColor: formData.get("accentColor"),
+        borderRadius: formData.get("borderRadius"),
+        showPoweredBy: formData.get("showPoweredBy") === "on",
+        poweredByText: formData.get("poweredByText"),
+      },
+      labels: {
+        expressCheckoutText: formData.get("expressCheckoutText"),
+        viewCartText: formData.get("viewCartText"),
+        secureCheckoutText: formData.get("secureCheckoutText"),
+      },
+      cart: {
+        drawerMode: formData.get("drawerMode"),
+        openAfterAddToCart: formData.get("openAfterAddToCart") === "on",
+        expressCheckoutButtonEnabled:
+          formData.get("expressCheckoutButtonEnabled") === "on",
+        viewCartButtonEnabled: formData.get("viewCartButtonEnabled") === "on",
+      },
+      checkout: {
+        showSecureBadge: formData.get("showSecureBadge") === "on",
+        showTrustCopy: formData.get("showTrustCopy") === "on",
+      },
+    });
+    revalidatePath("/admin/merchant-settings");
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Invalid merchant settings.";
+    redirectUrl = `/admin/merchant-settings?shop=${encodeURIComponent(resolved.shopDomain)}&error=${encodeURIComponent(message)}`;
+  }
+  redirect(redirectUrl);
 }
 
 function Field(props: {
@@ -94,12 +109,13 @@ export default async function MerchantSettingsPage({
   searchParams,
 }: PageProps) {
   const params = searchParams ? await searchParams : {};
-  const resolved = await resolveShopConfig(params.shop);
-  if (!resolved.id)
+  const requestedShop = normalizeShopDomain(params.shop);
+  const resolved = requestedShop ? await getShopByDomain(requestedShop) : null;
+  if (!resolved?.id)
     return (
       <main className="p-8">
         <h1 className="text-xl font-semibold">Merchant Settings</h1>
-        <p>Unable to resolve shop.</p>
+        <p>{params.error || SHOP_UNRESOLVED_MESSAGE}</p>
       </main>
     );
   const settings = await getLoopDeskMerchantSettings(resolved.id);
@@ -115,6 +131,11 @@ export default async function MerchantSettingsPage({
         <div className="mt-4 rounded border border-green-200 bg-green-50 p-3 text-sm font-medium text-green-800">
           Merchant settings saved. The storefront runtime config endpoint now
           reflects these values.
+        </div>
+      ) : null}
+      {params.error ? (
+        <div className="mt-4 rounded border border-red-200 bg-red-50 p-3 text-sm font-medium text-red-800">
+          {params.error}
         </div>
       ) : null}
       <form action={saveMerchantSettings} className="mt-6 grid gap-6">
