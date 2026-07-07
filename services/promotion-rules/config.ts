@@ -14,6 +14,8 @@ export type PromotionTriggerType =
 export type PromotionPlacement = "drawer" | "cart_page" | "both";
 export type PromotionConflictStrategy = "priority_first" | "newest_first" | "oldest_first";
 
+export type PromotionResourceMetadata = { gid: string; title: string; imageUrl: string | null; handle: string; variantGid?: string; variantTitle?: string };
+
 export type PromotionRule = {
   id: string;
   name: string;
@@ -22,9 +24,9 @@ export type PromotionRule = {
   status: PromotionRuleStatus;
   eligibility: {
     match: "all" | "any";
-    triggers: Array<{ type: PromotionTriggerType; value?: string; productGid?: string; collectionGid?: string; productType?: string; tag?: string; subtotalGte?: number; quantityGte?: number }>;
+    triggers: Array<{ type: PromotionTriggerType; value?: string; productGid?: string; collectionGid?: string; productType?: string; tag?: string; subtotalGte?: number; quantityGte?: number; product?: PromotionResourceMetadata; collection?: PromotionResourceMetadata }>;
   };
-  reward: { type: "offer_product"; productGid: string; variantGid: string; quantity: number; requiresDiscountEnforcement: boolean };
+  reward: { type: "offer_product"; productGid: string; variantGid: string; quantity: number; requiresDiscountEnforcement: boolean; product?: PromotionResourceMetadata };
   display: { heading: string; description: string; badge: string; ctaLabel: string; imageOverrideUrl: string | null; offerPriceDisplay: string; comparePriceDisplay: string; placement: PromotionPlacement; hideIfOfferProductAlreadyInCart: boolean };
   limits: { maxQuantityPerCart: number; showOncePerSession: boolean; oneOfferPerRule: boolean };
   schedule: { alwaysActive: boolean; startAt: string | null; endAt: string | null; timezone: string };
@@ -50,6 +52,10 @@ function cleanText(value: unknown, fallback = "", max = 240) { return (typeof va
 function bool(value: unknown, fallback = false) { return typeof value === "boolean" ? value : fallback; }
 function num(value: unknown, fallback: number, min = 0, max = 1000000) { const n = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN; return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback; }
 function nullableUrl(value: unknown) { const next = cleanText(value, "", 800); if (!next) return null; try { const parsed = new URL(next); return parsed.protocol === "http:" || parsed.protocol === "https:" ? next : null; } catch { return null; } }
+function metadata(value: unknown, fallbackGid = ""): PromotionResourceMetadata {
+  const raw = isRecord(value) ? value : {};
+  return { gid: cleanText(raw.gid, fallbackGid, 300), title: cleanText(raw.title, "", 240), imageUrl: nullableUrl(raw.imageUrl), handle: cleanText(raw.handle, "", 240), variantGid: cleanText(raw.variantGid, "", 300), variantTitle: cleanText(raw.variantTitle, "", 240) };
+}
 function stableId(value: unknown) { const next = cleanText(value, "", 80).replace(/[^a-zA-Z0-9_-]/g, "_"); return next || `rule_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`; }
 function status(value: unknown): PromotionRuleStatus { return value === "active" || value === "paused" || value === "archived" || value === "draft" ? value : "draft"; }
 function triggerType(value: unknown): PromotionTriggerType { return value === "cart_contains_product" || value === "cart_contains_collection" || value === "cart_contains_product_type" || value === "cart_contains_tag" || value === "cart_subtotal_gte" || value === "cart_quantity_gte" ? value : "always"; }
@@ -67,8 +73,8 @@ export function normalizePromotionRule(input: unknown): PromotionRule {
   const limits = isRecord(raw.limits) ? raw.limits : {};
   const schedule = isRecord(raw.schedule) ? raw.schedule : {};
   const normalizedTrigger: Record<string, unknown> & { type: PromotionTriggerType; value: string } = { ...triggerRaw, type, value };
-  if (type === "cart_contains_product") normalizedTrigger.productGid = value;
-  if (type === "cart_contains_collection") normalizedTrigger.collectionGid = value;
+  if (type === "cart_contains_product") { normalizedTrigger.productGid = cleanText(triggerRaw.productGid, value, 300); normalizedTrigger.product = metadata(triggerRaw.product, normalizedTrigger.productGid as string); }
+  if (type === "cart_contains_collection") { normalizedTrigger.collectionGid = cleanText(triggerRaw.collectionGid, value, 300); normalizedTrigger.collection = metadata(triggerRaw.collection, normalizedTrigger.collectionGid as string); }
   if (type === "cart_contains_product_type") normalizedTrigger.productType = value;
   if (type === "cart_contains_tag") normalizedTrigger.tag = value;
   if (type === "cart_subtotal_gte") normalizedTrigger.subtotalGte = num(value, 0);
@@ -81,7 +87,7 @@ export function normalizePromotionRule(input: unknown): PromotionRule {
     priority: num(raw.priority, 100, -100000, 100000),
     status: status(raw.status),
     eligibility: { ...eligibility, match: eligibility.match === "all" ? "all" : "any", triggers: [normalizedTrigger] },
-    reward: { ...reward, type: "offer_product", productGid: cleanText(reward.productGid, "", 300), variantGid: cleanText(reward.variantGid, "", 300), quantity: num(reward.quantity, 1, 1, 999), requiresDiscountEnforcement: bool(reward.requiresDiscountEnforcement, false) },
+    reward: { ...reward, type: "offer_product", productGid: cleanText(reward.productGid, "", 300), variantGid: cleanText(reward.variantGid, "", 300), quantity: num(reward.quantity, 1, 1, 999), requiresDiscountEnforcement: bool(reward.requiresDiscountEnforcement, false), product: metadata(reward.product, cleanText(reward.productGid, "", 300)) },
     display: { ...display, heading: cleanText(display.heading, "", 120), description: cleanText(display.description, "", 500), badge: cleanText(display.badge, "", 80), ctaLabel: cleanText(display.ctaLabel, "Add offer", 80), imageOverrideUrl: nullableUrl(display.imageOverrideUrl), offerPriceDisplay: cleanText(display.offerPriceDisplay, "", 80), comparePriceDisplay: cleanText(display.comparePriceDisplay, "", 80), placement: placement(display.placement), hideIfOfferProductAlreadyInCart: bool(display.hideIfOfferProductAlreadyInCart, true) },
     limits: { ...limits, maxQuantityPerCart: num(limits.maxQuantityPerCart, 1, 1, 999), showOncePerSession: bool(limits.showOncePerSession, false), oneOfferPerRule: bool(limits.oneOfferPerRule, true) },
     schedule: { ...schedule, alwaysActive: bool(schedule.alwaysActive, true), startAt: cleanText(schedule.startAt, "", 80) || null, endAt: cleanText(schedule.endAt, "", 80) || null, timezone: cleanText(schedule.timezone, "Asia/Kolkata", 80) },
@@ -113,8 +119,10 @@ export function validatePromotionRulesConfig(config: PromotionRulesConfig): stri
     if (!rule.schedule.alwaysActive && rule.schedule.startAt && rule.schedule.endAt && Number.isFinite(start) && Number.isFinite(end) && end <= start) errors.push(`${prefix}: schedule end must be after start.`);
     if (rule.status === "active") {
       const trigger = rule.eligibility.triggers[0];
-      if (trigger.type !== "always" && !String(trigger.value || "").trim()) errors.push(`${prefix}: active rules must have a valid trigger value.`);
-      if (!rule.reward.productGid.trim() || !rule.reward.variantGid.trim()) errors.push(`${prefix}: active rules must have offer product and variant IDs.`);
+      if (trigger.type === "cart_contains_product" && !String(trigger.productGid || trigger.value || "").trim()) errors.push(`${prefix}: active product trigger rules require a selected product.`);
+      else if (trigger.type === "cart_contains_collection" && !String(trigger.collectionGid || trigger.value || "").trim()) errors.push(`${prefix}: active collection trigger rules require a selected collection.`);
+      else if (trigger.type !== "always" && !String(trigger.value || "").trim()) errors.push(`${prefix}: active rules must have a valid trigger value.`);
+      if (!rule.reward.productGid.trim() || !rule.reward.variantGid.trim()) errors.push(`${prefix}: active offer product rules require a selected product and variant.`);
     }
   }
   return errors;
