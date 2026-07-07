@@ -303,6 +303,15 @@
     return isLoopDeskDrawerActive();
   }
 
+  function setCartOwnershipMode(mode, reason) {
+    config.cartOwnershipMode = mode;
+    window.LoopDeskConfig = config;
+    window.LOOPDESK_CART_DRAWER_CONFIG = Object.assign({}, window.LOOPDESK_CART_DRAWER_CONFIG || {}, {
+      cartOwnershipMode: mode,
+      ownershipReason: reason
+    });
+  }
+
   function canUseCartAjax() {
     return typeof window.fetch === "function";
   }
@@ -313,10 +322,11 @@
 
   function getCapabilityResult() {
     var root = getLoopDeskRoot();
+    var rootAvailable = Boolean(root || document.body);
     var result = {
       assetsLoaded: Boolean(window.__LOOPDESK_CART_DRAWER_LOADED__),
       cartAjaxAvailable: canUseCartAjax(),
-      rootAvailable: Boolean(root || document.body),
+      rootAvailable: rootAvailable,
       expressCheckoutBridgeAvailable: canUseExpressCheckoutBridge(),
       unsupportedState: Boolean(window.location && /^\/(?:checkout|account)(?:\/|$)/.test(window.location.pathname || "")),
       reason: "safe"
@@ -329,11 +339,43 @@
     return result;
   }
 
+  function cartOwnershipDecision(capability) {
+    var hasController = Boolean(window.LoopDeskCartController);
+    var hasRoot = Boolean(getLoopDeskRoot() || document.body);
+    var hasCartApi = canUseCartAjax();
+    var reason = capability && capability.reason ? capability.reason : "safe";
+    var active = false;
+
+    if (config.enabled === false) {
+      reason = "disabled";
+    } else if (config.cart.drawerMode === "theme") {
+      reason = "theme-mode";
+    } else if (!capability || !capability.safe) {
+      reason = reason || "capability-failed";
+    } else {
+      active = true;
+      reason = "capability-passed";
+    }
+
+    var ownershipMode = active ? "loopdesk" : "fallback";
+    state.drawerModeActive = active;
+    state.fallbackReason = active ? "" : reason;
+    setCartOwnershipMode(ownershipMode, reason);
+    debugLog("ownership decision", {
+      drawerMode: config.cart.drawerMode,
+      cartOwnershipMode: ownershipMode,
+      enabled: config.enabled,
+      hasController: hasController,
+      hasCartApi: hasCartApi,
+      hasRoot: hasRoot,
+      reason: reason
+    }, true);
+    return { active: active, reason: reason, cartOwnershipMode: ownershipMode };
+  }
+
   function isLoopDeskDrawerActive() {
     var capability = getCapabilityResult();
-    if (config.cart.drawerMode === "theme") return false;
-    if (config.cart.drawerMode === "loopdesk") return capability.safe;
-    return capability.safe;
+    return cartOwnershipDecision(capability).active;
   }
 
   function shouldOpenLoopDeskAfterCartAdd() {
@@ -1487,7 +1529,10 @@
   }
 
   window.LoopDeskCartController = {
-    open: function () { return refreshAndMaybeOpen(true); },
+    open: function () {
+      if (!isDrawerAvailable() && document.body) mount();
+      return refreshAndMaybeOpen(true);
+    },
     close: function () { setOpen(false); },
     render: render,
     refresh: function () { return refreshAndMaybeOpen(false); },
