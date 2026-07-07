@@ -6,6 +6,10 @@ import {
 import { getDelhiveryAdminConfig } from "../../../services/delhivery/config";
 import { getRazorpayAdminConfig } from "../../../services/razorpay/config";
 import {
+  getPromotionRulesConfig,
+  promotionRulesSetupStatus,
+} from "../../../services/promotion-rules/config";
+import {
   formatAdminShopResolutionError,
   resolveAdminShopFromSearchParams,
 } from "../../../services/shopify/admin-shop-context";
@@ -112,12 +116,13 @@ export default async function InstallationWizardPage({ searchParams }: PageProps
     );
   }
 
-  const [settings, cartIntelligence, runtimeConfig, delhivery, razorpay] = await Promise.all([
+  const [settings, cartIntelligence, runtimeConfig, delhivery, razorpay, promotionRules] = await Promise.all([
     getLoopDeskMerchantSettings(resolved.shop.id),
     getCartIntelligenceSettings(resolved.shop.id),
     getLoopDeskRuntimeConfig(resolved.shop.id),
     getDelhiveryAdminConfig(resolved.shop.id),
     getRazorpayAdminConfig(resolved.shop.id),
+    getPromotionRulesConfig(resolved.shop.id),
   ]);
 
   const shopParam = encodeURIComponent(resolved.shop.shopDomain);
@@ -125,6 +130,7 @@ export default async function InstallationWizardPage({ searchParams }: PageProps
   const runtimeHref = `/api/runtime/config?shop=${shopParam}`;
   const installHref = `/api/auth/install?shop=${shopParam}`;
   const diagnosticsHref = `/admin/diagnostics/environment?shop=${shopParam}`;
+  const promotionRulesHref = `/admin/promotion-rules?shop=${shopParam}`;
   const appEmbedDeepLink = `https://${resolved.shop.shopDomain}/admin/themes/current/editor?context=apps`;
 
   const coreEnvNames = ["DATABASE_URL", "SHOPIFY_API_KEY", "SHOPIFY_API_SECRET", "SHOPIFY_APP_URL", "SHOPIFY_SCOPES"];
@@ -140,6 +146,7 @@ export default async function InstallationWizardPage({ searchParams }: PageProps
   const razorpayComplete = Boolean(razorpay.enabled && razorpay.keyId && razorpay.hasKeySecret);
   const runtimeComplete = Boolean(runtimeConfig.cart && runtimeConfig.branding && runtimeConfig.cartIntelligence && runtimeConfig.razorpay && runtimeConfig.delhivery);
   const cartIntelligenceConfigured = Boolean(cartIntelligence.enabled || cartIntelligence.freeShippingProgressEnabled || cartIntelligence.trustBadgesEnabled || cartIntelligence.dynamicBannerEnabled || cartIntelligence.upsellsEnabled || cartIntelligence.bundlesEnabled || cartIntelligence.aiRecommendationsEnabled || cartIntelligence.freeShippingThreshold > 0);
+  const promotionRulesStatus = promotionRulesSetupStatus(promotionRules);
   const cartNeedsAttention = settings.cart.drawerMode === "loopdesk" || settings.cart.drawerMode === "auto";
   const ready = installationComplete && runtimeComplete && missingCoreEnv.length === 0 && brandingComplete && delhiveryComplete && razorpayComplete;
 
@@ -227,6 +234,14 @@ export default async function InstallationWizardPage({ searchParams }: PageProps
         />
         <WizardStep
           number={10}
+          title="Promotion Rules setup status"
+          status={promotionRulesStatus === "Enabled with active rules" ? "Complete" : promotionRulesStatus === "Configured but disabled" ? "Needs attention" : "Incomplete"}
+          description="Shows merchant Promotion Rules admin configuration status. This is setup visibility only and does not enable drawer rendering or checkout discounts."
+          details={<p>Status: <strong>{promotionRulesStatus}</strong>. Module enabled: <strong>{promotionRules.enabled ? "Yes" : "No"}</strong>. Rules saved: <strong>{promotionRules.rules.length}</strong>. Active enabled rules: <strong>{promotionRules.rules.filter((rule) => rule.enabled && rule.status === "active").length}</strong>.</p>}
+          actions={<LinkButton href={promotionRulesHref}>Open Promotion Rules</LinkButton>}
+        />
+        <WizardStep
+          number={11}
           title="Ready / launch checklist"
           status={ready ? "Complete" : "Needs attention"}
           description="Launch once install, OAuth, environment validation, theme embed, cart guidance, branding, Delhivery, and Razorpay are reviewed."
