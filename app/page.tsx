@@ -28,6 +28,12 @@ const quickCards = [
     href: "/admin/issues",
   },
   {
+    title: "Installation Wizard",
+    value: "LoopDesk Setup",
+    meta: "Install, OAuth, theme embed, cart guidance, branding, and provider readiness",
+    href: "/admin/installation-wizard",
+  },
+  {
     title: "Merchant Settings",
     value: "LoopDesk Config",
     meta: "Branding, cart drawer, labels, and checkout runtime settings",
@@ -43,7 +49,7 @@ export default function DashboardPage() {
         <p className="mk-hero-subtitle">
           Central control for store operations. Monitor workflows, manage
           exceptions, and navigate quickly across GST, exchanges,
-          cancellations, issues, and LoopDesk merchant settings.
+          cancellations, issues, LoopDesk installation, and merchant settings.
         </p>
 
         <Suspense fallback={null}>
@@ -61,8 +67,8 @@ export default function DashboardPage() {
       <section className="mk-grid-4">
         <div className="mk-card mk-stat-card">
           <p className="mk-stat-label">Active Modules</p>
-          <p className="mk-stat-value">5</p>
-          <p className="mk-stat-meta">GST, Exchanges, Cancellations, Issues, Settings</p>
+          <p className="mk-stat-value">6</p>
+          <p className="mk-stat-meta">GST, Exchanges, Cancellations, Issues, Wizard, Settings</p>
         </div>
         <div className="mk-card mk-stat-card">
           <p className="mk-stat-label">Store Mode</p>

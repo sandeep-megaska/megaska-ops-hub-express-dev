@@ -258,7 +258,7 @@ export default async function MerchantSettingsPage({
             <Field label="Support WhatsApp" name="supportWhatsApp" defaultValue={settings.general.supportWhatsApp} help="Optional public WhatsApp contact." />
           </div>
         </section>
-        <section className={`${cardClass} grid gap-5`}>
+        <section id="branding" className={`${cardClass} grid gap-5`}>
           <SectionHeader title="Branding" description="Safe public styling values used by the drawer and runtime config." />
           <div className="grid gap-4 md:grid-cols-2">
             <Field label="Logo URL" name="logoUrl" defaultValue={settings.branding.logoUrl} placeholder="https://cdn.shopify.com/..." help="HTTP(S) image URL only; secrets are never stored here." />
@@ -278,7 +278,7 @@ export default async function MerchantSettingsPage({
             <Field label="Secure checkout text" name="secureCheckoutText" defaultValue={settings.labels.secureCheckoutText} />
           </div>
         </section>
-        <section className={`${cardClass} grid gap-5`}>
+        <section id="cart" className={`${cardClass} grid gap-5`}>
           <SectionHeader title="Cart behavior" description="Choose whether LoopDesk owns the drawer or allows the theme cart to continue." />
           <label className="grid gap-2 text-sm font-medium text-gray-800">
             <span>Drawer mode</span>
@@ -305,7 +305,7 @@ export default async function MerchantSettingsPage({
           </div>
         </section>
 
-        <section className={`${cardClass} grid gap-5`}>
+        <section id="razorpay" className={`${cardClass} grid gap-5`}>
           <SectionHeader title="Razorpay" description="Merchant-level Razorpay configuration only. This does not change checkout payment execution, order creation, OTP, cart, Delhivery, analytics, or storefront business logic." />
           <div className="grid gap-3 md:grid-cols-2">
             <Check label="Razorpay Enabled" name="razorpayEnabled" defaultChecked={razorpay.enabled} help="Enables Razorpay as a configured merchant payment provider for backend services." />
@@ -339,7 +339,7 @@ export default async function MerchantSettingsPage({
           </div>
         </section>
 
-        <section className={`${cardClass} grid gap-5`}>
+        <section id="delhivery" className={`${cardClass} grid gap-5`}>
           <SectionHeader title="Delhivery" description="Merchant-level Delhivery configuration only. This does not change checkout, payment, order, or cart behavior." />
           <div className="grid gap-3 md:grid-cols-2">
             <Check label="Delhivery Enabled" name="delhiveryEnabled" defaultChecked={delhivery.enabled} help="Enables Delhivery as a configured merchant integration for backend use." />
