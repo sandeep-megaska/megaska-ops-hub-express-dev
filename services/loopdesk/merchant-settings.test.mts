@@ -3,8 +3,11 @@ import assert from "node:assert/strict";
 
 import {
   mergeLoopDeskMerchantSettings,
+  normalizeCartIntelligenceSettings,
   normalizeLoopDeskMerchantSettings,
+  toCartIntelligencePublicRuntimeConfig,
   toLoopDeskPublicRuntimeConfig,
+  validateCartIntelligenceSettingsPatch,
   validateLoopDeskMerchantSettingsPatch,
 } from "./merchant-settings.ts";
 
@@ -81,4 +84,48 @@ test("validates merchant settings admin patch fields", () => {
   assert.match(errors.join(" "), /Drawer mode/);
   assert.match(errors.join(" "), /Open after add to cart/);
   assert.match(errors.join(" "), /Express checkout text/);
+});
+
+
+test("normalizes cart intelligence defaults disabled", () => {
+  const settings = normalizeCartIntelligenceSettings({});
+  assert.equal(settings.enabled, false);
+  assert.equal(settings.freeShippingProgressEnabled, false);
+  assert.equal(settings.freeShippingThreshold, 0);
+  assert.equal(settings.upsellsEnabled, false);
+  assert.equal(settings.bundlesEnabled, false);
+  assert.equal(settings.aiRecommendationsEnabled, false);
+});
+
+test("cart intelligence public runtime exposes only safe flags threshold and display text", () => {
+  const settings = normalizeCartIntelligenceSettings({
+    enabled: true,
+    freeShippingProgressEnabled: true,
+    freeShippingThreshold: "999",
+    progressBarText: "Spend more for free shipping",
+    trustBadgesEnabled: true,
+    dynamicBannerEnabled: true,
+    dynamicBannerText: "Members get early access",
+    upsellsEnabled: true,
+    bundlesEnabled: true,
+    aiRecommendationsEnabled: true,
+    secret: "do-not-return",
+  });
+  const runtime = toCartIntelligencePublicRuntimeConfig(settings) as Record<string, unknown>;
+  assert.equal(runtime.enabled, true);
+  assert.equal(runtime.freeShippingThreshold, 999);
+  assert.equal(runtime.progressBarText, "Spend more for free shipping");
+  assert.equal(runtime.dynamicBannerText, "Members get early access");
+  assert.equal(runtime.secret, undefined);
+});
+
+test("validates cart intelligence patch fields", () => {
+  const errors = validateCartIntelligenceSettingsPatch({
+    enabled: "yes",
+    freeShippingThreshold: "not-a-number",
+    progressBarText: "x".repeat(161),
+  });
+  assert.match(errors.join(" "), /Cart Intelligence Enabled/);
+  assert.match(errors.join(" "), /Free Shipping Threshold/);
+  assert.match(errors.join(" "), /Progress Bar Text/);
 });

@@ -1,7 +1,9 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import {
+  getCartIntelligenceSettings,
   getLoopDeskMerchantSettings,
+  updateCartIntelligenceSettings,
   updateLoopDeskMerchantSettings,
 } from "../../../services/loopdesk/merchant-settings";
 import {
@@ -84,6 +86,18 @@ async function saveMerchantSettings(
         showSecureBadge: formData.get("showSecureBadge") === "on",
         showTrustCopy: formData.get("showTrustCopy") === "on",
       },
+    });
+    await updateCartIntelligenceSettings(shopId, {
+      enabled: formData.get("cartIntelligenceEnabled") === "on",
+      freeShippingProgressEnabled: formData.get("freeShippingProgressEnabled") === "on",
+      freeShippingThreshold: formData.get("freeShippingThreshold"),
+      progressBarText: formData.get("progressBarText"),
+      trustBadgesEnabled: formData.get("trustBadgesEnabled") === "on",
+      dynamicBannerEnabled: formData.get("dynamicBannerEnabled") === "on",
+      dynamicBannerText: formData.get("dynamicBannerText"),
+      upsellsEnabled: formData.get("upsellsEnabled") === "on",
+      bundlesEnabled: formData.get("bundlesEnabled") === "on",
+      aiRecommendationsEnabled: formData.get("aiRecommendationsEnabled") === "on",
     });
     await updateRazorpayConfig(shopId, {
       enabled: formData.get("razorpayEnabled") === "on",
@@ -203,8 +217,9 @@ export default async function MerchantSettingsPage({
         </div>
       </main>
     );
-  const [settings, delhivery, razorpay] = await Promise.all([
+  const [settings, cartIntelligence, delhivery, razorpay] = await Promise.all([
     getLoopDeskMerchantSettings(resolved.shop.id),
+    getCartIntelligenceSettings(resolved.shop.id),
     getDelhiveryAdminConfig(resolved.shop.id),
     getRazorpayAdminConfig(resolved.shop.id),
   ]);
@@ -302,6 +317,28 @@ export default async function MerchantSettingsPage({
           <div className="grid gap-3 md:grid-cols-2">
             <Check label="Show secure badge" name="showSecureBadge" defaultChecked={settings.checkout.showSecureBadge} />
             <Check label="Show trust copy" name="showTrustCopy" defaultChecked={settings.checkout.showTrustCopy} />
+          </div>
+        </section>
+
+
+        <section id="cart-intelligence" className={`${cardClass} grid gap-5`}>
+          <SectionHeader title="Cart Intelligence" description="Future-ready cart intelligence configuration only. These settings save to ShopModuleConfig with moduleKey cart_intelligence_config and do not render upsells, bundles, AI blocks, checkout changes, payment changes, analytics, or order logic." />
+          <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm font-medium text-blue-900">
+            These features are configuration-ready and may require later activation before they affect storefront behavior.
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <Check label="Cart Intelligence Enabled" name="cartIntelligenceEnabled" defaultChecked={cartIntelligence.enabled} help="Master public flag for future Cart Intelligence experiences; disabled by default." />
+            <Check label="Free Shipping Progress Enabled" name="freeShippingProgressEnabled" defaultChecked={cartIntelligence.freeShippingProgressEnabled} help="Stores whether a future free-shipping progress indicator may be shown." />
+            <Check label="Trust Badges Enabled" name="trustBadgesEnabled" defaultChecked={cartIntelligence.trustBadgesEnabled} help="Stores whether future public trust badge display is allowed." />
+            <Check label="Dynamic Banner Enabled" name="dynamicBannerEnabled" defaultChecked={cartIntelligence.dynamicBannerEnabled} help="Stores whether a future cart banner may be shown." />
+            <Check label="Upsells Enabled" name="upsellsEnabled" defaultChecked={cartIntelligence.upsellsEnabled} help="Configuration flag only; no upsell logic is implemented in this phase." />
+            <Check label="Bundles Enabled" name="bundlesEnabled" defaultChecked={cartIntelligence.bundlesEnabled} help="Configuration flag only; no bundle logic is implemented in this phase." />
+            <Check label="AI Recommendations Enabled" name="aiRecommendationsEnabled" defaultChecked={cartIntelligence.aiRecommendationsEnabled} help="Configuration flag only; no AI recommendations are implemented in this phase." />
+          </div>
+          <div className="grid gap-4 md:grid-cols-3">
+            <Field label="Free Shipping Threshold" name="freeShippingThreshold" type="number" defaultValue={String(cartIntelligence.freeShippingThreshold)} help="Public threshold value for future display only; no shipping calculation changes." />
+            <Field label="Progress Bar Text" name="progressBarText" defaultValue={cartIntelligence.progressBarText} help="Public copy for a future free-shipping progress bar." />
+            <Field label="Dynamic Banner Text" name="dynamicBannerText" defaultValue={cartIntelligence.dynamicBannerText} help="Public copy for a future cart banner." />
           </div>
         </section>
 

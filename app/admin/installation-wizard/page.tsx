@@ -1,4 +1,5 @@
 import {
+  getCartIntelligenceSettings,
   getLoopDeskMerchantSettings,
   getLoopDeskRuntimeConfig,
 } from "../../../services/loopdesk/merchant-settings";
@@ -111,8 +112,9 @@ export default async function InstallationWizardPage({ searchParams }: PageProps
     );
   }
 
-  const [settings, runtimeConfig, delhivery, razorpay] = await Promise.all([
+  const [settings, cartIntelligence, runtimeConfig, delhivery, razorpay] = await Promise.all([
     getLoopDeskMerchantSettings(resolved.shop.id),
+    getCartIntelligenceSettings(resolved.shop.id),
     getLoopDeskRuntimeConfig(resolved.shop.id),
     getDelhiveryAdminConfig(resolved.shop.id),
     getRazorpayAdminConfig(resolved.shop.id),
@@ -136,7 +138,8 @@ export default async function InstallationWizardPage({ searchParams }: PageProps
   const brandingComplete = Boolean(settings.branding.primaryColor && settings.labels.expressCheckoutText);
   const delhiveryComplete = Boolean(delhivery.enabled && delhivery.hasApiToken && delhivery.pickupLocation && delhivery.originPincode);
   const razorpayComplete = Boolean(razorpay.enabled && razorpay.keyId && razorpay.hasKeySecret);
-  const runtimeComplete = Boolean(runtimeConfig.cart && runtimeConfig.branding && runtimeConfig.razorpay && runtimeConfig.delhivery);
+  const runtimeComplete = Boolean(runtimeConfig.cart && runtimeConfig.branding && runtimeConfig.cartIntelligence && runtimeConfig.razorpay && runtimeConfig.delhivery);
+  const cartIntelligenceConfigured = Boolean(cartIntelligence.enabled || cartIntelligence.freeShippingProgressEnabled || cartIntelligence.trustBadgesEnabled || cartIntelligence.dynamicBannerEnabled || cartIntelligence.upsellsEnabled || cartIntelligence.bundlesEnabled || cartIntelligence.aiRecommendationsEnabled || cartIntelligence.freeShippingThreshold > 0);
   const cartNeedsAttention = settings.cart.drawerMode === "loopdesk" || settings.cart.drawerMode === "auto";
   const ready = installationComplete && runtimeComplete && missingCoreEnv.length === 0 && brandingComplete && delhiveryComplete && razorpayComplete;
 
@@ -213,12 +216,21 @@ export default async function InstallationWizardPage({ searchParams }: PageProps
           details={<p>Enabled: <strong>{razorpay.enabled ? "Yes" : "No"}</strong>. Key ID: <strong>{razorpay.keyId ? "present" : "missing"}</strong>. Key secret saved: <strong>{razorpay.hasKeySecret ? "Yes" : "No"}</strong>. Environment: <strong>{razorpay.environment}</strong>.</p>}
           actions={<LinkButton href={`${settingsHref}#razorpay`}>Open Razorpay settings</LinkButton>}
         />
+
         <WizardStep
           number={9}
+          title="Cart Intelligence setup status"
+          status={cartIntelligenceConfigured ? "Complete" : "Incomplete"}
+          description="Shows merchant-configurable Cart Intelligence setup status. This is configuration foundation only and may require later activation before any storefront feature renders."
+          details={<p>Module key: <strong>cart_intelligence_config</strong>. Master enabled: <strong>{cartIntelligence.enabled ? "Yes" : "No"}</strong>. Free shipping progress: <strong>{cartIntelligence.freeShippingProgressEnabled ? "Yes" : "No"}</strong>. Threshold: <strong>{cartIntelligence.freeShippingThreshold}</strong>. Upsells, bundles, and AI flags are saved as safe public flags only.</p>}
+          actions={<LinkButton href={`${settingsHref}#cart-intelligence`}>Open Cart Intelligence settings</LinkButton>}
+        />
+        <WizardStep
+          number={10}
           title="Ready / launch checklist"
           status={ready ? "Complete" : "Needs attention"}
           description="Launch once install, OAuth, environment validation, theme embed, cart guidance, branding, Delhivery, and Razorpay are reviewed."
-          details={<ul className="list-disc space-y-1 pl-5"><li>Runtime config reads loopdesk_runtime_config, delhivery_config, and razorpay_config.</li><li>No checkout, payment execution, shipment creation, OTP, cart logic, analytics, upsell, or AI behavior is changed by this wizard.</li><li>Preserved shop parameter: {resolved.shop.shopDomain}</li></ul>}
+          details={<ul className="list-disc space-y-1 pl-5"><li>Runtime config reads loopdesk_runtime_config, cart_intelligence_config, delhivery_config, and razorpay_config.</li><li>No checkout, payment execution, shipment creation, OTP, cart logic, analytics, upsell, or AI behavior is changed by this wizard.</li><li>Preserved shop parameter: {resolved.shop.shopDomain}</li></ul>}
         />
       </div>
     </main>
