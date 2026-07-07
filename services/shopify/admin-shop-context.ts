@@ -21,7 +21,7 @@ function firstParam(value: string | string[] | null | undefined) {
   return Array.isArray(value) ? value[0] || "" : value || "";
 }
 
-function isInstalledShop(shop: ShopRow | null): shop is ShopRow {
+function isInstalledShop(shop: ShopRow | null) {
   return Boolean(shop?.id && shop.isActive && !shop.uninstalledAt);
 }
 
@@ -50,6 +50,16 @@ function validateShopifyHmac(params: URLSearchParams) {
   );
 }
 
+function logAdminShopResolutionFailure(
+  reason: string,
+  details: Record<string, unknown> = {},
+) {
+  console.warn("[ADMIN SHOP RESOLUTION]", {
+    reason,
+    ...details,
+  });
+}
+
 function toUrlSearchParams(params: AdminShopSearchParams) {
   const searchParams = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
@@ -65,7 +75,9 @@ function toUrlSearchParams(params: AdminShopSearchParams) {
 export function getAdminShopDomainFromSearchParams(
   params: AdminShopSearchParams,
 ) {
-  return normalizeShopDomain(firstParam(params.shop) || firstParam(params.shopify_shop));
+  return normalizeShopDomain(
+    firstParam(params.shop) || firstParam(params.shopify_shop),
+  );
 }
 
 export async function resolveAdminShopFromSearchParams(
@@ -73,15 +85,23 @@ export async function resolveAdminShopFromSearchParams(
 ): Promise<AdminShopContext> {
   const shopDomain = getAdminShopDomainFromSearchParams(params);
   if (!shopDomain) {
+    logAdminShopResolutionFailure("missing_shop_param", {
+      hasShopParam: Boolean(firstParam(params.shop)),
+      hasShopifyShopParam: Boolean(firstParam(params.shopify_shop)),
+      hasHostParam: Boolean(firstParam(params.host)),
+      hasHmac: Boolean(firstParam(params.hmac)),
+    });
     return {
       shop: null,
       shopDomain: "",
-      error: "Unable to resolve shop. Open this page from Shopify admin or add a shop query parameter.",
+      error:
+        "Unable to resolve shop. Open this page from Shopify admin or add a shop query parameter.",
       hmacVerified: false,
     };
   }
 
   if (!isValidShopifyShopDomain(shopDomain)) {
+    logAdminShopResolutionFailure("invalid_shop_format", { shopDomain });
     return {
       shop: null,
       shopDomain,
@@ -94,20 +114,61 @@ export async function resolveAdminShopFromSearchParams(
     ? validateShopifyHmac(toUrlSearchParams(params))
     : false;
   if (firstParam(params.hmac) && !hmacVerified) {
+    logAdminShopResolutionFailure(
+      String(process.env.SHOPIFY_API_SECRET || "").trim()
+        ? "hmac_invalid"
+        : "missing_shopify_api_secret_with_hmac",
+      { shopDomain },
+    );
     return {
       shop: null,
       shopDomain,
-      error: "Invalid Shopify admin signature. Reopen this page from Shopify admin.",
+      error:
+        "Invalid Shopify admin signature. Reopen this page from Shopify admin.",
       hmacVerified,
     };
   }
 
-  const shop = await getShopByDomain(shopDomain);
-  if (!isInstalledShop(shop)) {
+  let shop: ShopRow | null = null;
+  try {
+    shop = await getShopByDomain(shopDomain);
+  } catch (error) {
+    logAdminShopResolutionFailure("database_unavailable", {
+      shopDomain,
+      error: error instanceof Error ? error.message : "Unknown database error",
+    });
     return {
       shop: null,
       shopDomain,
-      error: "Shop is not installed or active. Please install the app for this shop.",
+      error: "Unable to verify shop installation. Check database connectivity.",
+      hmacVerified,
+    };
+  }
+
+  if (!shop) {
+    logAdminShopResolutionFailure("no_active_shop_row_found", { shopDomain });
+    return {
+      shop: null,
+      shopDomain,
+      error:
+        "Shop not installed in this database. Reinstall the Shopify app to create the Shop record.",
+      hmacVerified,
+    };
+  }
+
+  if (!isInstalledShop(shop)) {
+    logAdminShopResolutionFailure("shop_inactive_or_uninstalled", {
+      shopDomain,
+      shopId: shop.id,
+      isActive: shop.isActive,
+      hasUninstalledAt: Boolean(shop.uninstalledAt),
+      installationStatus: shop.installationStatus,
+    });
+    return {
+      shop: null,
+      shopDomain,
+      error:
+        "Shop is not installed or active. Please install the app for this shop.",
       hmacVerified,
     };
   }
@@ -127,8 +188,11 @@ export async function resolveAdminShopFromRequest(
     else params[key] = value;
   });
 
-  const headerShop = normalizeShopDomain(req.headers.get("x-shopify-shop-domain"));
-  if (!params.shop && !params.shopify_shop && headerShop) params.shop = headerShop;
+  const headerShop = normalizeShopDomain(
+    req.headers.get("x-shopify-shop-domain"),
+  );
+  if (!params.shop && !params.shopify_shop && headerShop)
+    params.shop = headerShop;
 
   return resolveAdminShopFromSearchParams(params);
 }

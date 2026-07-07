@@ -125,6 +125,16 @@ export default async function MerchantSettingsPage({
       <main className="p-8">
         <h1 className="text-xl font-semibold">Merchant Settings</h1>
         <p>{params.error || resolved.error || SHOP_UNRESOLVED_MESSAGE}</p>
+        {resolved.shopDomain ? (
+          <p className="mt-4 text-sm">
+            <a
+              className="text-blue-700 underline"
+              href={`/api/auth/install?shop=${encodeURIComponent(resolved.shopDomain)}`}
+            >
+              Reinstall the Shopify app for {resolved.shopDomain}
+            </a>
+          </p>
+        ) : null}
       </main>
     );
   const settings = await getLoopDeskMerchantSettings(resolved.shop.id);
@@ -138,9 +148,9 @@ export default async function MerchantSettingsPage({
       <h1 className="text-2xl font-semibold">Merchant Settings</h1>
       <p className="mt-2 text-sm text-gray-600">
         Manage the LoopDesk storefront runtime config persisted in
-        ShopModuleConfig / loopdesk_runtime_config for {resolved.shop.shopDomain}.
-        Razorpay, Delhivery, and analytics values are read-only placeholders and
-        no secrets are exposed.
+        ShopModuleConfig / loopdesk_runtime_config for{" "}
+        {resolved.shop.shopDomain}. Razorpay, Delhivery, and analytics values
+        are read-only placeholders and no secrets are exposed.
       </p>
       {params.saved === "1" ? (
         <div className="mt-4 rounded border border-green-200 bg-green-50 p-3 text-sm font-medium text-green-800">
