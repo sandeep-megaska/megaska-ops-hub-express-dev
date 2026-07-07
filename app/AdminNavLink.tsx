@@ -20,7 +20,7 @@ function hrefWithShop(href: string, shop: string | null) {
 
 export default function AdminNavLink({ href, ...props }: AdminNavLinkProps) {
   const searchParams = useSearchParams();
-  const shop = searchParams.get("shop") || searchParams.get("shopify_shop");
+  const shop = searchParams?.get("shop") || searchParams?.get("shopify_shop") || null;
 
   return <Link href={hrefWithShop(href, shop)} {...props} />;
 }
