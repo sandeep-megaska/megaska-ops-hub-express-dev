@@ -747,6 +747,9 @@
     elements.subtotal.textContent = money(cart ? cart.total_price : 0, cart && cart.currency);
     elements.count.textContent = itemCount ? "(" + itemCount + ")" : "";
     elements.express.hidden = !config.cart.expressCheckoutButtonEnabled || itemCount === 0;
+    elements.express.disabled = state.expressCheckoutLock;
+    elements.express.classList.toggle("is-loading", state.expressCheckoutLock);
+    elements.express.textContent = state.expressCheckoutLock ? "Opening checkout..." : config.labels.expressCheckoutText;
     elements.viewCart.hidden = !config.cart.viewCartButtonEnabled;
     if (elements.poweredBy) elements.poweredBy.hidden = config.branding.showPoweredBy === false;
   }
@@ -931,7 +934,7 @@
     if (elements.overlay) elements.overlay.addEventListener("click", function () { setOpen(false); });
     if (elements.express) {
       elements.express.textContent = config.labels.expressCheckoutText;
-      elements.express.addEventListener("click", function (event) { interceptCheckout(event, "loopdesk-cart-drawer"); });
+      elements.express.addEventListener("click", function (event) { interceptCheckout(event, "drawer"); });
     }
     if (elements.viewCart) elements.viewCart.textContent = config.labels.viewCartText;
     if (elements.poweredBy) elements.poweredBy.textContent = config.branding.poweredByText;
@@ -976,8 +979,12 @@
   function openLoopDeskExpressCheckout(source) {
     if (state.expressCheckoutLock) return;
     state.expressCheckoutLock = true;
+    render();
     var checkoutSource = source || "checkout-intent";
-    var releaseLock = function () { state.expressCheckoutLock = false; };
+    var releaseLock = function () {
+      state.expressCheckoutLock = false;
+      render();
+    };
     clearLocalCartDrawerErrors();
     closeDrawerForCheckoutHandoff();
     debugLog("OTP/checkout handoff started", { source: checkoutSource }, true);
@@ -1156,7 +1163,7 @@
       '<span class="loopdesk-checkout-cta__trust">Secure checkout powered by LoopDesk</span>'
     ].join('');
     button.addEventListener('click', function (event) {
-      interceptCheckout(event, 'loopdesk-checkout-cta');
+      interceptCheckout(event, 'drawer');
     });
     return button;
   }
