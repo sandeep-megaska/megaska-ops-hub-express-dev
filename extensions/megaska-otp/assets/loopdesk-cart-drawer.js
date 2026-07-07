@@ -741,6 +741,7 @@
     if (!elements.panel) return;
     elements.panel.setAttribute("aria-hidden", state.open ? "false" : "true");
     elements.overlay.hidden = !state.open;
+    if (elements.root) elements.root.classList.toggle("loopdesk-cart-drawer--open", state.open);
     document.documentElement.classList.toggle("loopdesk-cart-drawer-is-open", state.open);
     if (document.body) document.body.classList.toggle("loopdesk-cart-drawer-is-open", state.open);
 
@@ -1511,6 +1512,39 @@
   }
 
 
+  function computedVisibility(element) {
+    var style = element && window.getComputedStyle ? window.getComputedStyle(element) : null;
+    return {
+      display: style ? style.display : "",
+      visibility: style ? style.visibility : "",
+      opacity: style ? style.opacity : "",
+      transform: style ? style.transform : "",
+      zIndex: style ? style.zIndex : ""
+    };
+  }
+
+  function debugState() {
+    var root = getLoopDeskRoot();
+    var panel = root ? root.querySelector(".loopdesk-cart-drawer") : null;
+    var overlay = root ? root.querySelector(".loopdesk-cart-drawer__overlay") : null;
+    return {
+      hasRoot: Boolean(root),
+      hasPanel: Boolean(panel),
+      hasOverlay: Boolean(overlay),
+      rootClass: root ? root.className : "",
+      panelClass: panel ? panel.className : "",
+      bodyClass: document.body ? document.body.className : "",
+      ariaHidden: panel ? panel.getAttribute("aria-hidden") : null,
+      computed: {
+        root: computedVisibility(root),
+        panel: computedVisibility(panel),
+        overlay: computedVisibility(overlay)
+      },
+      drawerMode: config.cart.drawerMode,
+      ownershipMode: state.cartOwnershipMode || config.cartOwnershipMode || (state.drawerModeActive ? "loopdesk" : "fallback")
+    };
+  }
+
   function listenForCartLinks() {
     ["pointerdown", "mousedown", "touchstart", "click", "keydown"].forEach(function (eventName) {
       document.addEventListener(eventName, handleCartTriggerEvent, true);
@@ -1538,6 +1572,7 @@
     refresh: function () { return refreshAndMaybeOpen(false); },
     acquireHost: acquireHost,
     getState: function () { return Object.assign({}, state); },
+    debugState: debugState,
   };
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", mount);
