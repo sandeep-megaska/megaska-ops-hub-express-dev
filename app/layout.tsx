@@ -1,5 +1,6 @@
 import "./globals.css";
-import Link from "next/link";
+import { Suspense } from "react";
+import AdminNavLink from "./AdminNavLink";
 
 export default function RootLayout({
   children,
@@ -19,29 +20,31 @@ export default function RootLayout({
               </div>
             </div>
 
-            <nav className="mk-nav">
-              <Link href="/" className="mk-nav-link">
-                Dashboard
-              </Link>
-              <Link href="/admin/gst" className="mk-nav-link">
-                GST
-              </Link>
-              <Link href="/admin/exchanges" className="mk-nav-link">
-                Exchanges
-              </Link>
-              <Link href="/admin/cancellations" className="mk-nav-link">
-                Cancellations
-              </Link>
-              <Link href="/admin/wallets" className="mk-nav-link">
-                Store Credit / Wallets
-              </Link>
-              <Link href="/admin/issues" className="mk-nav-link">
-                Issues
-              </Link>
-              <Link href="/admin/merchant-settings" className="mk-nav-link">
-                Merchant Settings
-              </Link>
-            </nav>
+            <Suspense fallback={null}>
+              <nav className="mk-nav">
+                <AdminNavLink href="/" className="mk-nav-link">
+                  Dashboard
+                </AdminNavLink>
+                <AdminNavLink href="/admin/gst" className="mk-nav-link">
+                  GST
+                </AdminNavLink>
+                <AdminNavLink href="/admin/exchanges" className="mk-nav-link">
+                  Exchanges
+                </AdminNavLink>
+                <AdminNavLink href="/admin/cancellations" className="mk-nav-link">
+                  Cancellations
+                </AdminNavLink>
+                <AdminNavLink href="/admin/wallets" className="mk-nav-link">
+                  Store Credit / Wallets
+                </AdminNavLink>
+                <AdminNavLink href="/admin/issues" className="mk-nav-link">
+                  Issues
+                </AdminNavLink>
+                <AdminNavLink href="/admin/merchant-settings" className="mk-nav-link">
+                  Merchant Settings
+                </AdminNavLink>
+              </nav>
+            </Suspense>
 
             <div className="mk-sidebar-footer">
               <div className="mk-mini-card">

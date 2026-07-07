@@ -4,7 +4,10 @@ import {
   getLoopDeskMerchantSettings,
   updateLoopDeskMerchantSettings,
 } from "../../../services/loopdesk/merchant-settings";
-import { resolveAdminShopFromSearchParams } from "../../../services/shopify/admin-shop-context";
+import {
+  formatAdminShopResolutionError,
+  resolveAdminShopFromSearchParams,
+} from "../../../services/shopify/admin-shop-context";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,7 +24,7 @@ type PageProps = {
 };
 
 const SHOP_UNRESOLVED_MESSAGE =
-  "Unable to resolve shop. Open this page from Shopify admin.";
+  "Unable to resolve shop. Open this page from Shopify admin or add a shop query parameter.";
 
 const cardClass = "rounded-2xl border border-gray-200 bg-white p-6 shadow-sm";
 const helpClass = "text-xs leading-5 text-gray-500";
@@ -148,7 +151,7 @@ export default async function MerchantSettingsPage({
         <div className={cardClass}>
           <h1 className="text-2xl font-semibold">Merchant Settings</h1>
           <p className="mt-3 text-sm text-red-700">
-            {params.error || resolved.error || SHOP_UNRESOLVED_MESSAGE}
+            {params.error || formatAdminShopResolutionError(resolved)}
           </p>
           {resolved.shopDomain ? (
             <p className="mt-4 text-sm">
