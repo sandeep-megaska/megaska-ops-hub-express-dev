@@ -4,31 +4,41 @@ import {
   getLoopDeskMerchantSettings,
   updateLoopDeskMerchantSettings,
 } from "../../../services/loopdesk/merchant-settings";
-import { getShopByDomain, normalizeShopDomain } from "../../../services/shopify/shop";
+import { resolveAdminShopFromSearchParams } from "../../../services/shopify/admin-shop-context";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 type PageProps = {
-  searchParams?: Promise<{ shop?: string; saved?: string; error?: string }>;
+  searchParams?: Promise<{
+    shop?: string;
+    shopify_shop?: string;
+    host?: string;
+    hmac?: string;
+    saved?: string;
+    error?: string;
+  }>;
 };
 
 const SHOP_UNRESOLVED_MESSAGE =
   "Unable to resolve shop. Open this page from Shopify admin.";
 
-async function saveMerchantSettings(formData: FormData) {
+async function saveMerchantSettings(
+  shopId: string,
+  shopDomain: string,
+  formData: FormData,
+) {
   "use server";
-  const shopDomain = normalizeShopDomain(String(formData.get("shop") || ""));
-  const resolved = shopDomain ? await getShopByDomain(shopDomain) : null;
-  if (!resolved?.id) {
+  const resolved = await resolveAdminShopFromSearchParams({ shop: shopDomain });
+  if (!shopId || !resolved.shop?.id || resolved.shop.id !== shopId) {
     redirect(
-      `/admin/merchant-settings?error=${encodeURIComponent(SHOP_UNRESOLVED_MESSAGE)}`,
+      `/admin/merchant-settings?shop=${encodeURIComponent(shopDomain)}&error=${encodeURIComponent(SHOP_UNRESOLVED_MESSAGE)}`,
     );
   }
 
-  let redirectUrl = `/admin/merchant-settings?shop=${encodeURIComponent(resolved.shopDomain)}&saved=1`;
+  let redirectUrl = `/admin/merchant-settings?shop=${encodeURIComponent(shopDomain)}&saved=1`;
   try {
-    await updateLoopDeskMerchantSettings(resolved.id, {
+    await updateLoopDeskMerchantSettings(shopId, {
       general: {
         merchantName: formData.get("merchantName"),
         supportEmail: formData.get("supportEmail"),
@@ -65,7 +75,7 @@ async function saveMerchantSettings(formData: FormData) {
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Invalid merchant settings.";
-    redirectUrl = `/admin/merchant-settings?shop=${encodeURIComponent(resolved.shopDomain)}&error=${encodeURIComponent(message)}`;
+    redirectUrl = `/admin/merchant-settings?shop=${encodeURIComponent(shopDomain)}&error=${encodeURIComponent(message)}`;
   }
   redirect(redirectUrl);
 }
@@ -109,23 +119,28 @@ export default async function MerchantSettingsPage({
   searchParams,
 }: PageProps) {
   const params = searchParams ? await searchParams : {};
-  const requestedShop = normalizeShopDomain(params.shop);
-  const resolved = requestedShop ? await getShopByDomain(requestedShop) : null;
-  if (!resolved?.id)
+  const resolved = await resolveAdminShopFromSearchParams(params);
+  if (!resolved.shop?.id)
     return (
       <main className="p-8">
         <h1 className="text-xl font-semibold">Merchant Settings</h1>
-        <p>{params.error || SHOP_UNRESOLVED_MESSAGE}</p>
+        <p>{params.error || resolved.error || SHOP_UNRESOLVED_MESSAGE}</p>
       </main>
     );
-  const settings = await getLoopDeskMerchantSettings(resolved.id);
+  const settings = await getLoopDeskMerchantSettings(resolved.shop.id);
+  const saveAction = saveMerchantSettings.bind(
+    null,
+    resolved.shop.id,
+    resolved.shop.shopDomain,
+  );
   return (
     <main className="mx-auto max-w-5xl p-8">
       <h1 className="text-2xl font-semibold">Merchant Settings</h1>
       <p className="mt-2 text-sm text-gray-600">
         Manage the LoopDesk storefront runtime config persisted in
-        ShopModuleConfig / loopdesk_runtime_config. Razorpay, Delhivery, and
-        analytics values are read-only placeholders and no secrets are exposed.
+        ShopModuleConfig / loopdesk_runtime_config for {resolved.shop.shopDomain}.
+        Razorpay, Delhivery, and analytics values are read-only placeholders and
+        no secrets are exposed.
       </p>
       {params.saved === "1" ? (
         <div className="mt-4 rounded border border-green-200 bg-green-50 p-3 text-sm font-medium text-green-800">
@@ -138,8 +153,7 @@ export default async function MerchantSettingsPage({
           {params.error}
         </div>
       ) : null}
-      <form action={saveMerchantSettings} className="mt-6 grid gap-6">
-        <input type="hidden" name="shop" value={resolved.shopDomain} />
+      <form action={saveAction} className="mt-6 grid gap-6">
         <section className="grid gap-3 rounded border p-4">
           <h2 className="font-semibold">General</h2>
           <Field

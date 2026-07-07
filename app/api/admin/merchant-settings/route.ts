@@ -3,37 +3,34 @@ import {
   getLoopDeskMerchantSettings,
   updateLoopDeskMerchantSettings,
 } from "../../../../services/loopdesk/merchant-settings";
-import {
-  getShopDomainFromRequest,
-  resolveShopConfig,
-} from "../../../../services/shopify/shop";
+import { resolveAdminShopFromRequest } from "../../../../services/shopify/admin-shop-context";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 async function shop(req: NextRequest) {
-  return resolveShopConfig(getShopDomainFromRequest(req));
+  return resolveAdminShopFromRequest(req);
 }
 
 export async function GET(req: NextRequest) {
   const resolved = await shop(req);
-  if (!resolved.id)
+  if (!resolved.shop?.id)
     return NextResponse.json(
-      { ok: false, error: "Unable to resolve shop" },
+      { ok: false, error: resolved.error || "Unable to resolve shop" },
       { status: 400 },
     );
-  const settings = await getLoopDeskMerchantSettings(resolved.id);
+  const settings = await getLoopDeskMerchantSettings(resolved.shop.id);
   return NextResponse.json(
-    { ok: true, settings, shopDomain: resolved.shopDomain },
+    { ok: true, settings, shopDomain: resolved.shop.shopDomain },
     { headers: { "Cache-Control": "no-store" } },
   );
 }
 
 export async function POST(req: NextRequest) {
   const resolved = await shop(req);
-  if (!resolved.id)
+  if (!resolved.shop?.id)
     return NextResponse.json(
-      { ok: false, error: "Unable to resolve shop" },
+      { ok: false, error: resolved.error || "Unable to resolve shop" },
       { status: 400 },
     );
   const body = (await req.json().catch(() => null)) as Record<
@@ -46,7 +43,7 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     );
   try {
-    const settings = await updateLoopDeskMerchantSettings(resolved.id, body);
+    const settings = await updateLoopDeskMerchantSettings(resolved.shop.id, body);
     return NextResponse.json(
       { ok: true, settings },
       { headers: { "Cache-Control": "no-store" } },
