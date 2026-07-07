@@ -40,6 +40,9 @@ export default function RootLayout({
                 <AdminNavLink href="/admin/issues" className="mk-nav-link">
                   Issues
                 </AdminNavLink>
+                <AdminNavLink href="/admin/installation-wizard" className="mk-nav-link">
+                  Installation Wizard
+                </AdminNavLink>
                 <AdminNavLink href="/admin/merchant-settings" className="mk-nav-link">
                   Merchant Settings
                 </AdminNavLink>
