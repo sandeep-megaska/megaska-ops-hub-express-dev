@@ -6,7 +6,7 @@ import { compileLoopDeskDiscountFunctionConfig } from "./discount-function-confi
 
 const EXTENSION_HANDLE = "loopdesk-discount-function";
 const DISCOUNT_TITLE = "LoopDesk Promotions";
-const FUNCTION_ARTIFACT_PATH = path.join(process.cwd(), "extensions", "loopdesk-discount-function", "dist", "function.wasm");
+const FUNCTION_ARTIFACT_PATH = path.join(process.cwd(), "extensions", "loopdesk-discount-function", "dist", "index.wasm");
 
 type UserError = { field?: string[] | null; message?: string | null };
 type AppDiscountType = { functionId: string; title: string; description?: string | null; appKey?: string | null; discountClasses?: string[] };
