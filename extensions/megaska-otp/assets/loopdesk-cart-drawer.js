@@ -37,6 +37,14 @@
     cartOwnershipMode: "fallback"
   };
   var config = normalizeConfig(window.LoopDeskConfig || window.LOOPDESK_CART_DRAWER_CONFIG || window.LoopDeskCartDrawerConfig || {});
+  if (window.console) {
+    window.console.info("[LoopDesk Runtime] promotion_rules_config before merge", {
+      source: window.LoopDeskConfig && window.LoopDeskConfig.promotion_rules_config,
+      legacy: window.LOOPDESK_CART_DRAWER_CONFIG && window.LOOPDESK_CART_DRAWER_CONFIG.promotion_rules_config
+    });
+    window.console.info("[LoopDesk Runtime] promotion_rules_config after merge", config.promotion_rules_config);
+    window.console.info("[LoopDesk Runtime] assigning window.LoopDeskConfig", config);
+  }
   window.LoopDeskConfig = config;
   window.LOOPDESK_CART_DRAWER_CONFIG = Object.assign({}, window.LOOPDESK_CART_DRAWER_CONFIG || {}, {
     enabled: config.enabled,
@@ -47,8 +55,13 @@
     primaryColor: config.branding.primaryColor,
     checkoutButtonText: config.labels.expressCheckoutText,
     buttonText: config.labels.expressCheckoutText,
-    showPoweredBy: config.branding.showPoweredBy
+    showPoweredBy: config.branding.showPoweredBy,
+    promotion_rules_config: config.promotion_rules_config,
+    promotionRules: config.promotion_rules_config
   });
+  if (window.console) {
+    window.console.info("[LoopDesk Runtime] legacy drawer config projection", window.LOOPDESK_CART_DRAWER_CONFIG);
+  }
   var ROOT_ID = "loopdesk-cart-drawer-root";
   var FETCH_MARKER = "__loopdeskCartDrawerPatched";
   var XHR_MARKER = "__loopdeskCartDrawerXhrPatched";
@@ -221,6 +234,49 @@
     };
   }
 
+  function getRuntimeConfigUrl() {
+    var shopDomain = (window.LoopDeskConfig && window.LoopDeskConfig.shopDomain) || (window.LOOPDESK_CART_DRAWER_CONFIG && window.LOOPDESK_CART_DRAWER_CONFIG.shopDomain) || window.MEGASKA_SHOP_DOMAIN || (window.Shopify && window.Shopify.shop) || "";
+    if (!shopDomain) return null;
+    return "/apps/megaska/api/runtime/config?shop=" + encodeURIComponent(shopDomain);
+  }
+
+  function mergeFetchedRuntimeConfig(payload) {
+    if (!payload || payload.ok !== true || !isPlainObject(payload.config)) return;
+    if (window.console) {
+      window.console.info("[LoopDesk Runtime] fetched config", payload);
+      window.console.info("[LoopDesk Runtime] promotion_rules_config before merge", {
+        current: config && config.promotion_rules_config,
+        fetched: payload.config.promotion_rules_config
+      });
+    }
+    config = normalizeConfig(Object.assign({}, config || {}, payload.config, {
+      branding: Object.assign({}, (config && config.branding) || {}, payload.config.branding || {}),
+      labels: Object.assign({}, (config && config.labels) || {}, payload.config.labels || {}),
+      cart: Object.assign({}, (config && config.cart) || {}, payload.config.cart || {}),
+      checkout: Object.assign({}, (config && config.checkout) || {}, payload.config.checkout || {})
+    }));
+    window.LoopDeskConfig = config;
+    window.LOOPDESK_CART_DRAWER_CONFIG = Object.assign({}, window.LOOPDESK_CART_DRAWER_CONFIG || {}, {
+      enabled: config.enabled,
+      drawerMode: config.cart.drawerMode,
+      openAfterAddToCart: config.cart.openAfterAddToCart,
+      expressCheckoutButtonEnabled: config.cart.expressCheckoutButtonEnabled,
+      viewCartButtonEnabled: config.cart.viewCartButtonEnabled,
+      primaryColor: config.branding.primaryColor,
+      checkoutButtonText: config.labels.expressCheckoutText,
+      buttonText: config.labels.expressCheckoutText,
+      showPoweredBy: config.branding.showPoweredBy,
+      promotion_rules_config: config.promotion_rules_config,
+      promotionRules: config.promotion_rules_config
+    });
+    if (window.console) {
+      window.console.info("[LoopDesk Runtime] promotion_rules_config after merge", config.promotion_rules_config);
+      window.console.info("[LoopDesk Runtime] assigning window.LoopDeskConfig", window.LoopDeskConfig);
+      window.console.info("[LoopDesk Runtime] legacy drawer config projection", window.LOOPDESK_CART_DRAWER_CONFIG);
+    }
+    if (state && state.cart) render();
+  }
+
   function normalizeConfig(rawConfig) {
     var legacy = isPlainObject(window.LOOPDESK_CART_DRAWER_CONFIG) ? window.LOOPDESK_CART_DRAWER_CONFIG : {};
     var raw = isPlainObject(rawConfig) ? rawConfig : {};
@@ -289,6 +345,18 @@
   }
 
   debugLog("config loaded", { drawerMode: config.cart.drawerMode, openAfterAddToCart: config.cart.openAfterAddToCart, expressCheckoutButtonEnabled: config.cart.expressCheckoutButtonEnabled, viewCartButtonEnabled: config.cart.viewCartButtonEnabled }, true);
+
+  if (typeof window.fetch === "function" && (!config.promotion_rules_config.enabled || !config.promotion_rules_config.rules.length)) {
+    var runtimeConfigUrl = getRuntimeConfigUrl();
+    if (runtimeConfigUrl) {
+      window.fetch(runtimeConfigUrl, { credentials: "same-origin", cache: "no-store" })
+        .then(function (response) { return response.ok ? response.json() : null; })
+        .then(mergeFetchedRuntimeConfig)
+        .catch(function (error) {
+          if (window.console) window.console.info("[LoopDesk Runtime] fetched config", { ok: false, error: error && error.message ? error.message : String(error || "unknown") });
+        });
+    }
+  }
 
   function getLoopDeskRoot() {
     return document.getElementById(ROOT_ID);
