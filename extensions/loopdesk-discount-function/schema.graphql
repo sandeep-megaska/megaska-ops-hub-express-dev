@@ -7,12 +7,19 @@ scalar ID
 scalar JSON
 
 type Input {
-  discountNode: DiscountNode!
+  discount: Discount!
   cart: Cart!
 }
 
-type DiscountNode {
+type Discount {
   metafield(namespace: String, key: String!): Metafield
+  discountClasses: [DiscountClass!]!
+}
+
+enum DiscountClass {
+  PRODUCT
+  ORDER
+  SHIPPING
 }
 enum LanguageCode {
   EN
@@ -63,12 +70,14 @@ type CollectionMembership {
 }
 
 type CartLinesDiscountsGenerateRunResult {
-  operations: [CartOperation!]!
+  operations: [CartLinesDiscountsGenerateRunOperation!]!
 }
 
-union CartOperation = ProductDiscountsAddOperation
+type CartLinesDiscountsGenerateRunOperation {
+  productDiscountsAdd: AddProductDiscountsOperation
+}
 
-type ProductDiscountsAddOperation {
+type AddProductDiscountsOperation {
   candidates: [ProductDiscountCandidate!]!
   selectionStrategy: ProductDiscountSelectionStrategy!
 }
@@ -81,25 +90,44 @@ enum ProductDiscountSelectionStrategy {
 
 type ProductDiscountCandidate {
   message: String
-  targets: [ProductDiscountCandidateTarget!]!
-  value: ProductDiscountCandidateValue!
-  associatedDiscountCode: String
+  targets: [ProductDiscountTarget!]!
+  value: ProductDiscountValue!
+  associatedDiscountCode: AssociatedDiscountCode
+  prerequisites: [ProductDiscountCandidatePrerequisite!]
 }
 
-union ProductDiscountCandidateTarget = CartLineTarget
+type ProductDiscountTarget {
+  cartLine: LineDiscountTarget
+}
 
-type CartLineTarget {
+type LineDiscountTarget {
   id: ID!
   quantity: Int
 }
 
-union ProductDiscountCandidateValue = Percentage | ProductDiscountCandidateFixedAmount
+type ProductDiscountValue {
+  percentage: Percentage
+  fixedAmount: ProductDiscountFixedAmount
+}
+
+type AssociatedDiscountCode {
+  code: String!
+}
+
+type ProductDiscountCandidatePrerequisite {
+  cartLine: CartLinePrerequisite
+}
+
+type CartLinePrerequisite {
+  id: ID!
+  quantity: Int!
+}
 
 type Percentage {
   value: Decimal!
 }
 
-type ProductDiscountCandidateFixedAmount {
+type ProductDiscountFixedAmount {
   amount: Decimal!
   appliesToEachItem: Boolean
 }
