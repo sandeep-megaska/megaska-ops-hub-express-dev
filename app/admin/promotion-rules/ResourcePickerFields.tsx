@@ -7,7 +7,7 @@ type ResourceMeta = { gid: string; title: string; imageUrl: string | null; handl
 type ShopifyPickerVariant = { id?: string; title?: string; displayName?: string; image?: { url?: string; originalSrc?: string } };
 type ShopifyPickerResource = { id?: string; title?: string; handle?: string; image?: { url?: string; originalSrc?: string; altText?: string }; images?: Array<{ url?: string; originalSrc?: string }>; variants?: ShopifyPickerVariant[] };
 
-type ShopifyGlobal = { resourcePicker?: (options: Record<string, unknown>) => Promise<ShopifyPickerResource[] | ShopifyPickerResource | undefined> };
+type ShopifyGlobal = { resourcePicker?: (options: Record<string, unknown>) => Promise<ShopifyPickerResource[] | ShopifyPickerResource | undefined>; config?: Record<string, unknown> };
 
 declare global { interface Window { shopify?: ShopifyGlobal; app?: ShopifyGlobal } }
 
