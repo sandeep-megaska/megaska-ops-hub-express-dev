@@ -209,7 +209,7 @@ fn evaluate(cart_lines: &[CartLine], rules: &[Rule]) -> Vec<DiscountOperationSpe
 #[shopify_function]
 fn cartLinesDiscountsGenerateRun(
     input: schema::cart_lines_discounts_generate_run::input::Input,
-) -> Result {
+) -> Result<schema::CartLinesDiscountsGenerateRunResult> {
     let raw_config = input
         .discount()
         .metafield()
