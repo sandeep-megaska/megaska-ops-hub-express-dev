@@ -1,0 +1,55 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+
+import { normalizePromotionRule } from "../promotion-rules/config.ts";
+import { compilePromotionRuleEnforcementRule } from "./discount-function-config.server.ts";
+
+test("fixed_price enforcement uses reward discount value and ignores display price", () => {
+  const rule = normalizePromotionRule({
+    id: "display-price-ignored",
+    name: "Display price ignored",
+    enabled: true,
+    priority: 1,
+    status: "active",
+    reward: {
+      type: "offer_product",
+      productGid: "gid://shopify/Product/1",
+      variantGid: "gid://shopify/ProductVariant/1",
+      quantity: 1,
+      discount: { type: "fixed_price", value: 125 },
+    },
+    display: {
+      heading: "Offer",
+      ctaLabel: "Add offer",
+      offerPriceDisplay: "₹999 merchant display copy",
+    },
+  });
+
+  const compiled = compilePromotionRuleEnforcementRule(rule);
+
+  assert.equal(compiled?.rewardEnforcementType, "fixed_price");
+  assert.equal(compiled?.fixedPriceAmount, 125);
+});
+
+test("display price alone does not create fixed_price enforcement", () => {
+  const rule = normalizePromotionRule({
+    id: "display-price-only",
+    name: "Display price only",
+    enabled: true,
+    priority: 1,
+    status: "active",
+    reward: {
+      type: "offer_product",
+      productGid: "gid://shopify/Product/1",
+      variantGid: "gid://shopify/ProductVariant/1",
+      quantity: 1,
+    },
+    display: {
+      heading: "Offer",
+      ctaLabel: "Add offer",
+      offerPriceDisplay: "₹125",
+    },
+  });
+
+  assert.equal(compilePromotionRuleEnforcementRule(rule), null);
+});
