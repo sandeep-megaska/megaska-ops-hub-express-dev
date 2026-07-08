@@ -11,7 +11,8 @@
     "prisma:generate": "prisma generate",
     "postinstall": "prisma generate",
     "dev:seed:mock-tracking": "ALLOW_MOCK_TRACKING_SEED=true node scripts/dev-seed-mock-tracking.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build:discount-function": "npm --prefix extensions/loopdesk-discount-function run build"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.6.0",
