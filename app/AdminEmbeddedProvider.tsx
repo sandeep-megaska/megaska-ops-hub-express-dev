@@ -17,6 +17,7 @@ declare global {
     shopify?: ShopifyGlobal;
     __shopifyAppBridgeScriptLoaded?: boolean;
     __shopifyAppBridgeScriptError?: string;
+    __shopifyAppBridgeScriptEvents?: Array<Record<string, unknown>>;
   }
 }
 
@@ -33,6 +34,7 @@ type EmbeddedAdminStatus = {
   appBridgeScriptTagPresent: boolean;
   appBridgeScriptLoadedEventFired: boolean;
   appBridgeScriptError: string;
+  appBridgeScriptDiagnostics: string;
   shopifyGlobalPresent: boolean;
   resourcePickerType: string;
   shop: string;
@@ -88,6 +90,7 @@ export function AdminEmbeddedProvider({ apiKey, children }: { apiKey: string; ch
     appBridgeScriptTagPresent: false,
     appBridgeScriptLoadedEventFired: false,
     appBridgeScriptError: "",
+    appBridgeScriptDiagnostics: "",
     shopifyGlobalPresent: false,
     resourcePickerType: "undefined",
     shop: "",
@@ -103,17 +106,24 @@ export function AdminEmbeddedProvider({ apiKey, children }: { apiKey: string; ch
   useEffect(() => {
     function refresh() {
       const apiKeyMeta = document.querySelector<HTMLMetaElement>('meta[name="shopify-api-key"]');
-      const script = document.querySelector<HTMLScriptElement>('script[src="https://cdn.shopify.com/shopifycloud/app-bridge.js"]');
+      const scripts = Array.from(document.querySelectorAll<HTMLScriptElement>('script[src="https://cdn.shopify.com/shopifycloud/app-bridge.js"]'));
+      const script = scripts[0];
       const shopifyGlobalPresent = Boolean(window.shopify);
       const resourcePickerType = typeof window.shopify?.resourcePicker;
       const appBridgeInitialized = shopifyGlobalPresent;
+      const diagnostics = [
+        `script count: ${scripts.length}`,
+        `script readyState: ${(script as (HTMLScriptElement & { readyState?: string }) | undefined)?.readyState || "unknown"}`,
+        `events: ${JSON.stringify(window.__shopifyAppBridgeScriptEvents || [])}`,
+      ].join("; ");
       setStatus({
         apiKeyPresent: Boolean(apiKey),
         apiKeyMetaPresent: Boolean(apiKeyMeta),
         apiKeyMetaContentLength: apiKeyMeta?.content.length || 0,
-        appBridgeScriptTagPresent: Boolean(script),
+        appBridgeScriptTagPresent: scripts.length > 0,
         appBridgeScriptLoadedEventFired: Boolean(window.__shopifyAppBridgeScriptLoaded || shopifyGlobalPresent),
-        appBridgeScriptError: window.__shopifyAppBridgeScriptError || "",
+        appBridgeScriptError: window.__shopifyAppBridgeScriptError || (scripts.length > 1 ? "Duplicate App Bridge CDN script tags detected." : ""),
+        appBridgeScriptDiagnostics: diagnostics,
         shopifyGlobalPresent,
         resourcePickerType,
         appBridgeInitialized,
