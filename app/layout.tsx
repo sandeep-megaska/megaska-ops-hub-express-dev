@@ -13,48 +13,19 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        {process.env.SHOPIFY_API_KEY ? <meta name="shopify-api-key" content={process.env.SHOPIFY_API_KEY} /> : null}
-        {process.env.SHOPIFY_API_KEY ? (
-          <script
-            id="shopify-app-bridge-diagnostics-before"
-            dangerouslySetInnerHTML={{
-              __html: `
-                window.__shopifyAppBridgeScriptLoaded = false;
-                window.__shopifyAppBridgeScriptError = "";
-                window.__shopifyAppBridgeScriptEvents = [];
-                window.__markShopifyAppBridgeLoaded = function () {
-                  window.__shopifyAppBridgeScriptLoaded = true;
-                  window.__shopifyAppBridgeScriptEvents.push({ type: "load", at: Date.now(), shopifyPresent: Boolean(window.shopify), resourcePickerType: typeof window.shopify?.resourcePicker });
-                };
-                window.__markShopifyAppBridgeError = function (event) {
-                  var target = event && event.target;
-                  window.__shopifyAppBridgeScriptError = "App Bridge CDN script failed to load or was blocked: " + (target && target.src ? target.src : "unknown source");
-                  window.__shopifyAppBridgeScriptEvents.push({ type: "error", at: Date.now(), message: window.__shopifyAppBridgeScriptError });
-                };
-              `,
-            }}
-          />
-        ) : null}
-        {process.env.SHOPIFY_API_KEY ? (
-          <script
-            id="shopify-app-bridge-cdn-writer"
-            dangerouslySetInnerHTML={{
-              __html: `
-                document.write('<script id="shopify-app-bridge-cdn" src="https://cdn.shopify.com/shopifycloud/app-bridge.js" onload="window.__markShopifyAppBridgeLoaded && window.__markShopifyAppBridgeLoaded()" onerror="window.__markShopifyAppBridgeError && window.__markShopifyAppBridgeError(event)"><\/script>');
-              `,
-            }}
-          />
-        ) : null}
-        {process.env.SHOPIFY_API_KEY ? (
-          <script
-            id="shopify-app-bridge-diagnostics-after"
-            dangerouslySetInnerHTML={{
-              __html: `
-                window.__shopifyAppBridgeScriptEvents.push({ type: "after-tag", at: Date.now(), shopifyPresent: Boolean(window.shopify), resourcePickerType: typeof window.shopify?.resourcePicker });
-              `,
-            }}
-          />
-        ) : null}
+        <meta name="shopify-api-key" content={process.env.SHOPIFY_API_KEY || ""} />
+        {/* eslint-disable-next-line @next/next/no-sync-scripts -- Shopify App Bridge CDN must be server-rendered in the initial admin document head. */}
+        <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>
+        <script
+          id="shopify-app-bridge-diagnostics"
+          dangerouslySetInnerHTML={{
+            __html: `
+              window.__shopifyAppBridgeScriptLoaded = Boolean(window.shopify);
+              window.__shopifyAppBridgeScriptError = "";
+              window.__shopifyAppBridgeScriptEvents = [{ type: "after-tag", at: Date.now(), shopifyPresent: Boolean(window.shopify), resourcePickerType: typeof window.shopify?.resourcePicker }];
+            `,
+          }}
+        />
       </head>
       <body>
         <Suspense fallback={<div className="mk-shell" />}>
