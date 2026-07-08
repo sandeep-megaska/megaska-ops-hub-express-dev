@@ -19,6 +19,7 @@ export type ShopRow = {
   scopes: string | null;
   isActive: boolean;
   myshopifyDomain: string | null;
+  primaryDomain: string | null;
   installationStatus: string | null;
   installedAt: Date | null;
   uninstalledAt: Date | null;
@@ -44,6 +45,12 @@ export function normalizeShopDomain(input: string | null | undefined) {
     .replace(/^https?:\/\//, "")
     .replace(/\/$/, "")
     .toLowerCase();
+}
+
+function domainFamily(shopDomain: string) {
+  return normalizeShopDomain(shopDomain)
+    .replace(/^www\./, "")
+    .replace(/\.myshopify\.com$/, "");
 }
 
 export function getShopDomainFromRequest(req: NextRequest) {
@@ -76,15 +83,40 @@ export function getShopDomainFromRequest(req: NextRequest) {
 export async function getShopByDomain(shopDomain: string) {
   const normalized = normalizeShopDomain(shopDomain);
   if (!normalized) return null;
+  const family = domainFamily(normalized);
 
   const rows = await prisma.$queryRawUnsafe<ShopRow[]>(
-    `SELECT "id", "shopDomain", "accessToken", "accessTokenEncrypted", "storefrontAccessToken", "storefrontTokenEncrypted", "scopes", "isActive", "installedAt", "uninstalledAt", "myshopifyDomain", "installationStatus"
+    `SELECT "id", "shopDomain", "accessToken", "accessTokenEncrypted", "storefrontAccessToken", "storefrontTokenEncrypted", "scopes", "isActive", "installedAt", "uninstalledAt", "myshopifyDomain", "primaryDomain", "installationStatus"
      FROM "Shop"
-     WHERE "shopDomain" = $1 OR "myshopifyDomain" = $1
-     ORDER BY CASE WHEN "installationStatus" = 'ACTIVE' THEN 0 ELSE 1 END, "updatedAt" DESC
-     LIMIT 1`,
-    normalized
+     WHERE "shopDomain" = $1
+        OR "myshopifyDomain" = $1
+        OR "primaryDomain" = $1
+        OR replace(regexp_replace(COALESCE("shopDomain", ''), '^www\\.', ''), '.myshopify.com', '') = $2
+        OR replace(regexp_replace(COALESCE("myshopifyDomain", ''), '^www\\.', ''), '.myshopify.com', '') = $2
+        OR replace(regexp_replace(COALESCE("primaryDomain", ''), '^www\\.', ''), '.myshopify.com', '') = $2
+     ORDER BY CASE WHEN "shopDomain" = $1 THEN 0 WHEN "myshopifyDomain" = $1 THEN 1 WHEN "primaryDomain" = $1 THEN 2 ELSE 3 END,
+       CASE WHEN "installationStatus" = 'ACTIVE' THEN 0 ELSE 1 END,
+       "updatedAt" DESC
+     LIMIT 5`,
+    normalized,
+    family
   );
+
+  if (rows.length > 1) {
+    console.warn("[Shop Resolver] duplicate shop domain candidates", {
+      requestedShopDomain: normalized,
+      candidateCount: rows.length,
+      selectedShopId: rows[0]?.id || null,
+      candidates: rows.map((row) => ({
+        id: row.id,
+        shopDomain: row.shopDomain,
+        myshopifyDomain: row.myshopifyDomain,
+        primaryDomain: row.primaryDomain,
+        isActive: row.isActive,
+        installationStatus: row.installationStatus,
+      })),
+    });
+  }
 
   return rows[0] || null;
 }
