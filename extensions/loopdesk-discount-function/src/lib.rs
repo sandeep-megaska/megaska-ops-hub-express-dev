@@ -1,8 +1,7 @@
 use serde::Deserialize;
-use serde_json::json;
 use shopify_function::prelude::*;
 use shopify_function::Result;
-use shopify_function_wasm_api::JsonValue;
+use std::collections::BTreeMap;
 
 #[typegen("schema.graphql")]
 pub mod schema {
@@ -192,7 +191,7 @@ fn cart_lines_discounts_generate_run(
         .map(|metafield| metafield.value());
     let rules = parse_config(raw_config.map(String::as_str));
     if rules.is_empty() {
-        return Ok(json!({ "operations": [] }).into());
+        return Ok(empty_result());
     }
 
     let cart_lines: Vec<CartLine> = input
@@ -212,51 +211,74 @@ fn cart_lines_discounts_generate_run(
         .collect();
 
     if candidates.is_empty() {
-        return Ok(json!({ "operations": [] }).into());
+        return Ok(empty_result());
     }
 
-    Ok(json!({
-        "operations": [
-            {
-                "productDiscountsAdd": {
-                    "selectionStrategy": "FIRST",
-                    "candidates": candidates
-                }
-            }
-        ]
-    })
-    .into())
+    Ok(object(vec![
+        ("operations", array(vec![object(vec![
+            ("productDiscountsAdd", object(vec![
+                ("selectionStrategy", string("FIRST")),
+                ("candidates", array(candidates)),
+            ])),
+        ])])),
+    ]))
 }
 
 fn to_product_discount_candidate(spec: DiscountCandidateSpec) -> JsonValue {
     let value = match spec.value {
-        DiscountValue::Percentage(value) => json!({
-            "percentage": {
-                "value": value
-            }
-        }),
-        DiscountValue::FixedAmountEach(amount) => json!({
-            "fixedAmount": {
-                "amount": (amount * 100.0).round() / 100.0,
-                "appliesToEachItem": true
-            }
-        }),
+        DiscountValue::Percentage(value) => object(vec![
+            ("percentage", object(vec![
+                ("value", number(value)),
+            ])),
+        ]),
+        DiscountValue::FixedAmountEach(amount) => object(vec![
+            ("fixedAmount", object(vec![
+                ("amount", number((amount * 100.0).round() / 100.0)),
+                ("appliesToEachItem", boolean(true)),
+            ])),
+        ]),
     };
 
-    json!({
-        "targets": [
-            {
-                "productVariant": {
-                    "id": spec.variant_gid,
-                    "quantity": spec.quantity as i32
-                }
-            }
-        ],
-        "message": REWARD_MESSAGE,
-        "value": value,
-        "associatedDiscountCode": null
-    })
-    .into()
+    object(vec![
+        ("targets", array(vec![object(vec![
+            ("productVariant", object(vec![
+                ("id", string(spec.variant_gid)),
+                ("quantity", number(spec.quantity as f64)),
+            ])),
+        ])])),
+        ("message", string(REWARD_MESSAGE)),
+        ("value", value),
+        ("associatedDiscountCode", JsonValue::Null),
+    ])
+}
+
+fn empty_result() -> JsonValue {
+    object(vec![("operations", array(vec![]))])
+}
+
+fn object(entries: Vec<(&str, JsonValue)>) -> JsonValue {
+    JsonValue::Object(
+        entries
+            .into_iter()
+            .map(|(key, value)| (key.to_string(), value))
+            .collect::<BTreeMap<_, _>>(),
+    )
+}
+
+fn array(values: Vec<JsonValue>) -> JsonValue {
+    JsonValue::Array(values)
+}
+
+fn string(value: impl Into<String>) -> JsonValue {
+    JsonValue::String(value.into())
+}
+
+fn number(value: f64) -> JsonValue {
+    JsonValue::Number(value)
+}
+
+fn boolean(value: bool) -> JsonValue {
+    JsonValue::Boolean(value)
 }
 
 #[cfg(test)]
