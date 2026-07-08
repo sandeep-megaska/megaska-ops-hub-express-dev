@@ -14,7 +14,9 @@ type Input {
 type DiscountNode {
   metafield(namespace: String, key: String!): Metafield
 }
-
+enum LanguageCode {
+  EN
+}
 type Metafield {
   value: String!
 }
