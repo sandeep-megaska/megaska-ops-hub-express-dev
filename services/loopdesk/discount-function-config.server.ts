@@ -31,7 +31,7 @@ function isValidCompiledRule(rule: CompiledPromotionEnforcementRule) {
 
   if (rule.rewardEnforcementType === "percentage") {
     const percentageValue = rule.percentageValue;
-    return Number.isFinite(percentageValue) && percentageValue > 0 && percentageValue <= 100 && hasValidTrigger(rule);
+    return typeof percentageValue === "number" && Number.isFinite(percentageValue) && percentageValue > 0 && percentageValue <= 100 && hasValidTrigger(rule);
   }
 
   return false;
