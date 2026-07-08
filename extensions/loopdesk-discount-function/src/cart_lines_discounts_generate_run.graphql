@@ -15,7 +15,9 @@ query Input {
         }
       }
       merchandise {
-        id
+        ... on ProductVariant {
+          id
+        }
       }
     }
   }
