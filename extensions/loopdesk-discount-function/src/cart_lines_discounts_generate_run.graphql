@@ -1,0 +1,33 @@
+query CartLinesDiscountsGenerateRunInput {
+  discountNode {
+    metafield(namespace: "loopdesk", key: "discount_function_config") {
+      value
+    }
+  }
+  cart {
+    lines {
+      id
+      quantity
+      cost {
+        subtotalAmount {
+          amount
+          currencyCode
+        }
+      }
+      merchandise {
+        ... on ProductVariant {
+          id
+          product {
+            id
+            productType
+            tags
+            inCollections(first: 100) {
+              collectionId
+              isMember
+            }
+          }
+        }
+      }
+    }
+  }
+}
