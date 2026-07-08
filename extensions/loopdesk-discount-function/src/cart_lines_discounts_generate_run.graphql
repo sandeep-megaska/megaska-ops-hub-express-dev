@@ -16,18 +16,7 @@ query CartLinesDiscountsGenerateRunInput {
       }
       merchandise {
         __typename
-        ... on ProductVariant {
-          id
-          product {
-            id
-            productType
-            tags
-            inCollections(first: 100) {
-              collectionId
-              isMember
-            }
-          }
-        }
+        id
       }
     }
   }
