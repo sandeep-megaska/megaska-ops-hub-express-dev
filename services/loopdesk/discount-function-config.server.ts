@@ -24,11 +24,16 @@ function hasValidTrigger(rule: CompiledPromotionEnforcementRule) {
 
 function isValidCompiledRule(rule: CompiledPromotionEnforcementRule) {
   if (!rule.id || !rule.rewardVariantGid || !rule.rewardProductGid) return false;
-  if (rule.rewardEnforcementType === "fixed_price") return Number.isFinite(rule.fixedPriceAmount) && hasValidTrigger(rule);
+
+  if (rule.rewardEnforcementType === "fixed_price") {
+    return Number.isFinite(rule.fixedPriceAmount) && hasValidTrigger(rule);
+  }
+
   if (rule.rewardEnforcementType === "percentage") {
     const percentageValue = rule.percentageValue;
     return Number.isFinite(percentageValue) && percentageValue > 0 && percentageValue <= 100 && hasValidTrigger(rule);
   }
+
   return false;
 }
 
