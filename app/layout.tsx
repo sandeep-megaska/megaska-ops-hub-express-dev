@@ -2,6 +2,7 @@ import "./globals.css";
 import { Suspense } from "react";
 import Script from "next/script";
 import AdminNavLink from "./AdminNavLink";
+import ShopifyHostContext from "./ShopifyHostContext";
 
 export default function RootLayout({
   children,
@@ -24,6 +25,7 @@ export default function RootLayout({
             </div>
 
             <Suspense fallback={null}>
+              <ShopifyHostContext />
               <nav className="mk-nav">
                 <AdminNavLink href="/" className="mk-nav-link">
                   Dashboard
@@ -48,6 +50,9 @@ export default function RootLayout({
                 </AdminNavLink>
                 <AdminNavLink href="/admin/merchant-settings" className="mk-nav-link">
                   Merchant Settings
+                </AdminNavLink>
+                <AdminNavLink href="/admin/promotion-rules" className="mk-nav-link">
+                  Promotion Rules
                 </AdminNavLink>
               </nav>
             </Suspense>

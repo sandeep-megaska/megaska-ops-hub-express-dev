@@ -8,7 +8,7 @@ type AdminNavLinkProps = Omit<ComponentProps<typeof Link>, "href"> & {
   href: string;
 };
 
-const OAUTH_CALLBACK_ONLY_PARAMS = new Set(["code", "hmac", "signature", "state", "timestamp"]);
+const EMBEDDED_CONTEXT_PARAMS = new Set(["shop", "shopify_shop", "host", "embedded"]);
 
 function hrefWithEmbeddedContext(href: string, currentParams: URLSearchParams | null) {
   if (!currentParams) return href;
@@ -16,7 +16,7 @@ function hrefWithEmbeddedContext(href: string, currentParams: URLSearchParams | 
   const [pathname, query = ""] = pathAndQuery.split("?", 2);
   const params = new URLSearchParams(query);
   currentParams.forEach((value, key) => {
-    if (OAUTH_CALLBACK_ONLY_PARAMS.has(key) || params.has(key)) return;
+    if (!EMBEDDED_CONTEXT_PARAMS.has(key) || params.has(key)) return;
     params.set(key, value);
   });
   const nextQuery = params.toString();
