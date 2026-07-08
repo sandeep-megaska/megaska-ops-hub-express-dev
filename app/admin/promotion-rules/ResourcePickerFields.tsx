@@ -8,10 +8,6 @@ type ResourceMeta = { id?: string; gid: string; title: string; image?: string | 
 type ShopifyPickerVariant = { id?: string; title?: string; displayName?: string; handle?: string; image?: { url?: string; originalSrc?: string } };
 type ShopifyPickerResource = { id?: string; title?: string; handle?: string; image?: { url?: string; originalSrc?: string; altText?: string }; images?: Array<{ url?: string; originalSrc?: string }>; variants?: ShopifyPickerVariant[] };
 
-type ShopifyGlobal = { resourcePicker?: (options: Record<string, unknown>) => Promise<ShopifyPickerResource[] | ShopifyPickerResource | undefined>; config?: Record<string, unknown> };
-
-declare global { interface Window { shopify?: ShopifyGlobal } }
-
 const inputClass = "rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-950 shadow-sm outline-none transition focus:border-gray-900 focus:ring-2 focus:ring-gray-900/10";
 const helpClass = "text-xs leading-5 text-gray-500";
 
