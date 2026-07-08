@@ -53,3 +53,27 @@ test("display price alone does not create fixed_price enforcement", () => {
 
   assert.equal(compilePromotionRuleEnforcementRule(rule), null);
 });
+
+test("percentage enforcement compiles valid reward discount values", () => {
+  const rule = normalizePromotionRule({
+    id: "percentage-reward",
+    name: "Percentage reward",
+    enabled: true,
+    priority: 1,
+    status: "active",
+    reward: {
+      type: "offer_product",
+      productGid: "gid://shopify/Product/1",
+      variantGid: "gid://shopify/ProductVariant/1",
+      quantity: 2,
+      discount: { type: "percentage", value: 25 },
+    },
+    display: { heading: "Offer", ctaLabel: "Add offer" },
+  });
+
+  const compiled = compilePromotionRuleEnforcementRule(rule);
+
+  assert.equal(compiled?.rewardEnforcementType, "percentage");
+  assert.equal(compiled?.percentageValue, 25);
+  assert.equal(compiled?.quantity, 2);
+});

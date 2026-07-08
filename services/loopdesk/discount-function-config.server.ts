@@ -17,29 +17,48 @@ function triggerValue(rule: PromotionRule): string | number | null {
   return null;
 }
 
-function isValidCompiledRule(rule: CompiledPromotionEnforcementRule) {
-  if (!rule.id || !rule.rewardVariantGid || !rule.rewardProductGid) return false;
-  if (rule.rewardEnforcementType !== "fixed_price") return false;
-  if (!Number.isFinite(rule.fixedPriceAmount)) return false;
+function hasValidTrigger(rule: CompiledPromotionEnforcementRule) {
   if (rule.triggerType === "always") return true;
   return rule.triggerValue !== null && rule.triggerValue !== undefined && String(rule.triggerValue).trim() !== "";
 }
 
+function isValidCompiledRule(rule: CompiledPromotionEnforcementRule) {
+  if (!rule.id || !rule.rewardVariantGid || !rule.rewardProductGid) return false;
+  if (rule.rewardEnforcementType === "fixed_price") return Number.isFinite(rule.fixedPriceAmount) && hasValidTrigger(rule);
+  if (rule.rewardEnforcementType === "percentage") {
+    const percentageValue = rule.percentageValue;
+    return Number.isFinite(percentageValue) && percentageValue > 0 && percentageValue <= 100 && hasValidTrigger(rule);
+  }
+  return false;
+}
+
 export function compilePromotionRuleEnforcementRule(rule: PromotionRule): CompiledPromotionEnforcementRule | null {
   const discount = rule.reward.discount;
-  if (discount?.type !== "fixed_price") return null;
+  if (discount?.type !== "fixed_price" && discount?.type !== "percentage") return null;
 
-  return {
+  const baseRule = {
     id: rule.id,
     enabled: true,
     priority: rule.priority,
     triggerType: firstTrigger(rule).type as LoopDeskDiscountFunctionTriggerType,
     triggerValue: triggerValue(rule),
-    rewardEnforcementType: "fixed_price" satisfies RewardEnforcementType,
     rewardProductGid: rule.reward.productGid || null,
     rewardVariantGid: rule.reward.variantGid || null,
-    fixedPriceAmount: discount.value,
     quantity: rule.reward.quantity,
+  };
+
+  if (discount.type === "percentage") {
+    return {
+      ...baseRule,
+      rewardEnforcementType: "percentage" satisfies RewardEnforcementType,
+      percentageValue: discount.value,
+    };
+  }
+
+  return {
+    ...baseRule,
+    rewardEnforcementType: "fixed_price" satisfies RewardEnforcementType,
+    fixedPriceAmount: discount.value,
   };
 }
 
