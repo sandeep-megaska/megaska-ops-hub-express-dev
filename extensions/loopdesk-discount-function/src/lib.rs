@@ -228,10 +228,10 @@ fn cartLinesDiscountsGenerateRun(
             quantity: *line.quantity() as i64,
             subtotal_amount: *line.cost().subtotal_amount().amount(),
             variant_gid: line.merchandise().id().clone(),
-            product_gid: product_id(line),
-            product_type: product_type(line),
-            tags: product_tags(line),
-            collection_gids: product_collection_ids(line),
+            product_gid: String::new(),
+            product_type: String::new(),
+            tags: vec![],
+            collection_gids: vec![],
         })
         .collect();
 
@@ -241,52 +241,6 @@ fn cartLinesDiscountsGenerateRun(
             .map(to_product_discount_operation)
             .collect(),
     })
-}
-
-fn product(
-    line: &schema::cart_lines_discounts_generate_run::input::CartLinesMerchandise,
-) -> Option<
-    &schema::cart_lines_discounts_generate_run::input::CartLinesMerchandiseProductVariantProduct,
-> {
-    match line {
-        schema::cart_lines_discounts_generate_run::input::CartLinesMerchandise::ProductVariant(
-            variant,
-        ) => Some(variant.product()),
-        _ => None,
-    }
-}
-
-fn product_id(line: &schema::cart_lines_discounts_generate_run::input::CartLines) -> String {
-    product(line.merchandise())
-        .map(|product| product.id().clone())
-        .unwrap_or_default()
-}
-
-fn product_type(line: &schema::cart_lines_discounts_generate_run::input::CartLines) -> String {
-    product(line.merchandise())
-        .map(|product| product.product_type().clone())
-        .unwrap_or_default()
-}
-
-fn product_tags(line: &schema::cart_lines_discounts_generate_run::input::CartLines) -> Vec<String> {
-    product(line.merchandise())
-        .map(|product| product.tags().clone())
-        .unwrap_or_default()
-}
-
-fn product_collection_ids(
-    line: &schema::cart_lines_discounts_generate_run::input::CartLines,
-) -> Vec<String> {
-    product(line.merchandise())
-        .map(|product| {
-            product
-                .in_collections()
-                .iter()
-                .filter(|membership| *membership.is_member())
-                .map(|membership| membership.collection_id().clone())
-                .collect()
-        })
-        .unwrap_or_default()
 }
 
 fn to_product_discount_operation(
