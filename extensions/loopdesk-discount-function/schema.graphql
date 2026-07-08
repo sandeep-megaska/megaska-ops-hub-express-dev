@@ -5,6 +5,10 @@ schema {
 scalar Decimal
 scalar ID
 
+enum LanguageCode {
+  EN
+}
+
 type Input {
   discount: Discount!
   cart: Cart!
