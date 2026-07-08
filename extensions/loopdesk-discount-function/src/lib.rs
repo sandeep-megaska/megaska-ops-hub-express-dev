@@ -1,7 +1,8 @@
 use serde::Deserialize;
+use serde_json::json;
 use shopify_function::prelude::*;
 use shopify_function::Result;
-use shopify_function_wasm_api::Serialize;
+use shopify_function_wasm_api::JsonValue;
 
 #[typegen("schema.graphql")]
 pub mod schema {
@@ -56,78 +57,6 @@ struct DiscountCandidateSpec {
     variant_gid: String,
     quantity: i64,
     value: DiscountValue,
-}
-
-#[derive(Clone, Debug, Serialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-struct CartLinesDiscountsGenerateRunResult {
-    operations: Vec<CartOperation>,
-}
-
-#[derive(Clone, Debug, Serialize, PartialEq)]
-enum CartOperation {
-    #[serde(rename = "productDiscountsAdd")]
-    ProductDiscountsAdd(ProductDiscountsAddOperation),
-}
-
-#[derive(Clone, Debug, Serialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-struct ProductDiscountsAddOperation {
-    candidates: Vec<ProductDiscountCandidate>,
-    selection_strategy: ProductDiscountSelectionStrategy,
-}
-
-#[derive(Clone, Debug, Serialize, PartialEq)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-enum ProductDiscountSelectionStrategy {
-    First,
-}
-
-#[derive(Clone, Debug, Serialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-struct ProductDiscountCandidate {
-    targets: Vec<ProductDiscountCandidateTarget>,
-    message: Option<String>,
-    value: ProductDiscountCandidateValue,
-    associated_discount_code: Option<AssociatedDiscountCode>,
-}
-
-#[derive(Clone, Debug, Serialize, PartialEq)]
-enum ProductDiscountCandidateTarget {
-    #[serde(rename = "productVariant")]
-    ProductVariant(ProductVariantTarget),
-}
-
-#[derive(Clone, Debug, Serialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-struct ProductVariantTarget {
-    id: String,
-    quantity: Option<i32>,
-}
-
-#[derive(Clone, Debug, Serialize, PartialEq)]
-enum ProductDiscountCandidateValue {
-    #[serde(rename = "percentage")]
-    Percentage(Percentage),
-    #[serde(rename = "fixedAmount")]
-    FixedAmount(FixedAmount),
-}
-
-#[derive(Clone, Debug, Serialize, PartialEq)]
-struct Percentage {
-    value: Decimal,
-}
-
-#[derive(Clone, Debug, Serialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-struct FixedAmount {
-    amount: Decimal,
-    applies_to_each_item: Option<bool>,
-}
-
-#[derive(Clone, Debug, Serialize, PartialEq)]
-struct AssociatedDiscountCode {
-    code: String,
 }
 
 fn parse_config(raw_value: Option<&str>) -> Vec<Rule> {
@@ -256,14 +185,14 @@ fn evaluate(cart_lines: &[CartLine], rules: &[Rule]) -> Vec<DiscountCandidateSpe
 #[shopify_function]
 fn cart_lines_discounts_generate_run(
     input: schema::cart_lines_discounts_generate_run::Input,
-) -> Result<CartLinesDiscountsGenerateRunResult> {
+) -> Result<JsonValue> {
     let raw_config = input
         .discount()
         .metafield()
         .map(|metafield| metafield.value());
     let rules = parse_config(raw_config.map(String::as_str));
     if rules.is_empty() {
-        return Ok(CartLinesDiscountsGenerateRunResult { operations: vec![] });
+        return Ok(json!({ "operations": [] }).into());
     }
 
     let cart_lines: Vec<CartLine> = input
@@ -277,49 +206,57 @@ fn cart_lines_discounts_generate_run(
         })
         .collect();
 
-    let candidates: Vec<ProductDiscountCandidate> = evaluate(&cart_lines, &rules)
+    let candidates: Vec<JsonValue> = evaluate(&cart_lines, &rules)
         .into_iter()
         .map(to_product_discount_candidate)
         .collect();
 
     if candidates.is_empty() {
-        return Ok(CartLinesDiscountsGenerateRunResult { operations: vec![] });
+        return Ok(json!({ "operations": [] }).into());
     }
 
-    Ok(CartLinesDiscountsGenerateRunResult {
-        operations: vec![CartOperation::ProductDiscountsAdd(
-            ProductDiscountsAddOperation {
-                selection_strategy: ProductDiscountSelectionStrategy::First,
-                candidates,
-            },
-        )],
+    Ok(json!({
+        "operations": [
+            {
+                "productDiscountsAdd": {
+                    "selectionStrategy": "FIRST",
+                    "candidates": candidates
+                }
+            }
+        ]
     })
+    .into())
 }
 
-fn to_product_discount_candidate(spec: DiscountCandidateSpec) -> ProductDiscountCandidate {
+fn to_product_discount_candidate(spec: DiscountCandidateSpec) -> JsonValue {
     let value = match spec.value {
-        DiscountValue::Percentage(value) => ProductDiscountCandidateValue::Percentage(Percentage {
-            value: Decimal::from(value),
+        DiscountValue::Percentage(value) => json!({
+            "percentage": {
+                "value": value
+            }
         }),
-        DiscountValue::FixedAmountEach(amount) => {
-            ProductDiscountCandidateValue::FixedAmount(FixedAmount {
-                amount: Decimal::from((amount * 100.0).round() / 100.0),
-                applies_to_each_item: Some(true),
-            })
-        }
+        DiscountValue::FixedAmountEach(amount) => json!({
+            "fixedAmount": {
+                "amount": (amount * 100.0).round() / 100.0,
+                "appliesToEachItem": true
+            }
+        }),
     };
 
-    ProductDiscountCandidate {
-        targets: vec![ProductDiscountCandidateTarget::ProductVariant(
-            ProductVariantTarget {
-                id: spec.variant_gid,
-                quantity: Some(spec.quantity as i32),
-            },
-        )],
-        message: Some(REWARD_MESSAGE.to_string()),
-        value,
-        associated_discount_code: None,
-    }
+    json!({
+        "targets": [
+            {
+                "productVariant": {
+                    "id": spec.variant_gid,
+                    "quantity": spec.quantity as i32
+                }
+            }
+        ],
+        "message": REWARD_MESSAGE,
+        "value": value,
+        "associatedDiscountCode": null
+    })
+    .into()
 }
 
 #[cfg(test)]
