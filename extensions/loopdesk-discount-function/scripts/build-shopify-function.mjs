@@ -49,7 +49,7 @@ async function main() {
   ];
   const javyBin = javyBinCandidates.find((path) => existsSync(path));
   if (!javyBin) {
-    throw new Error("Missing Javy compiler binary. Run npm install in extensions/loopdesk-discount-function so the javy-cli devDependency is installed.");
+    throw new Error("Missing Javy compiler binary. Run npm install in extensions/loopdesk-discount-function so the javy-cli@3.0.1 devDependency is installed.");
   }
 
   const pluginCandidates = [
