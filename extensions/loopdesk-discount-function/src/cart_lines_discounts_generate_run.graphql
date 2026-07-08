@@ -1,5 +1,6 @@
-query CartLinesDiscountsGenerateRunInput {
+query Input {
   discount {
+    discountClasses
     metafield(namespace: "loopdesk", key: "discount_function_config") {
       value
     }
@@ -11,11 +12,9 @@ query CartLinesDiscountsGenerateRunInput {
       cost {
         subtotalAmount {
           amount
-          currencyCode
         }
       }
       merchandise {
-        __typename
         id
       }
     }

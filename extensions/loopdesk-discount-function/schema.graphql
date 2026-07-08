@@ -70,14 +70,12 @@ type CollectionMembership {
 }
 
 type CartLinesDiscountsGenerateRunResult {
-  operations: [CartLinesDiscountsGenerateRunOperation!]!
+  operations: [CartOperation!]!
 }
 
-type CartLinesDiscountsGenerateRunOperation {
-  productDiscountsAdd: AddProductDiscountsOperation
-}
+union CartOperation = ProductDiscountsAddOperation
 
-type AddProductDiscountsOperation {
+type ProductDiscountsAddOperation {
   candidates: [ProductDiscountCandidate!]!
   selectionStrategy: ProductDiscountSelectionStrategy!
 }
@@ -90,25 +88,19 @@ enum ProductDiscountSelectionStrategy {
 
 type ProductDiscountCandidate {
   message: String
-  targets: [ProductDiscountTarget!]!
-  value: ProductDiscountValue!
+  targets: [ProductDiscountCandidateTarget!]!
+  value: ProductDiscountCandidateValue!
   associatedDiscountCode: AssociatedDiscountCode
-  prerequisites: [ProductDiscountCandidatePrerequisite!]
 }
 
-type ProductDiscountTarget {
-  cartLine: LineDiscountTarget
-}
+union ProductDiscountCandidateTarget = CartLineTarget
 
-type LineDiscountTarget {
+type CartLineTarget {
   id: ID!
   quantity: Int
 }
 
-type ProductDiscountValue {
-  percentage: Percentage
-  fixedAmount: ProductDiscountFixedAmount
-}
+union ProductDiscountCandidateValue = Percentage | ProductDiscountCandidateFixedAmount
 
 type AssociatedDiscountCode {
   code: String!
@@ -127,7 +119,7 @@ type Percentage {
   value: Decimal!
 }
 
-type ProductDiscountFixedAmount {
+type ProductDiscountCandidateFixedAmount {
   amount: Decimal!
   appliesToEachItem: Boolean
 }
