@@ -198,10 +198,16 @@ fn cart_lines_discounts_generate_run(
         .cart()
         .lines()
         .iter()
-        .map(|line| CartLine {
-            quantity: *line.quantity() as i64,
-            subtotal_amount: **line.cost().subtotal_amount().amount(),
-            variant_gid: line.merchandise().id().clone(),
+        .filter_map(|line| {
+            let variant_gid = match line.merchandise() {
+                schema::cart_lines_discounts_generate_run::input::cart::lines::Merchandise::ProductVariant(variant) => variant.id().clone(),
+            };
+
+            Some(CartLine {
+                quantity: *line.quantity() as i64,
+                subtotal_amount: **line.cost().subtotal_amount().amount(),
+                variant_gid,
+            })
         })
         .collect();
 
