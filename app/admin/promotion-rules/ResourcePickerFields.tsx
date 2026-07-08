@@ -9,7 +9,7 @@ type ShopifyPickerResource = { id?: string; title?: string; handle?: string; ima
 
 type ShopifyGlobal = { resourcePicker?: (options: Record<string, unknown>) => Promise<ShopifyPickerResource[] | ShopifyPickerResource | undefined>; config?: Record<string, unknown> };
 
-declare global { interface Window { shopify?: ShopifyGlobal; app?: ShopifyGlobal } }
+declare global { interface Window { shopify?: ShopifyGlobal } }
 
 const inputClass = "rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-950 shadow-sm outline-none transition focus:border-gray-900 focus:ring-2 focus:ring-gray-900/10";
 const helpClass = "text-xs leading-5 text-gray-500";
@@ -20,11 +20,11 @@ function normalizeVariant(variant?: ShopifyPickerVariant) { return { gid: varian
 function firstPicked(result: ShopifyPickerResource[] | ShopifyPickerResource | undefined) { return Array.isArray(result) ? result[0] : result; }
 function getPicker() {
   if (typeof window === "undefined") return undefined;
-  return window.shopify?.resourcePicker || window.app?.resourcePicker;
+  return window.shopify?.resourcePicker;
 }
 function hasAppBridgeGlobal() {
   if (typeof window === "undefined") return false;
-  return Boolean(window.shopify || window.app);
+  return Boolean(window.shopify);
 }
 
 function ResourceSummary({ meta, fallbackLabel }: { meta: ResourceMeta; fallbackLabel: string }) {

@@ -1,5 +1,6 @@
 import "./globals.css";
 import { Suspense } from "react";
+import Script from "next/script";
 import AdminNavLink from "./AdminNavLink";
 import ShopifyHostContext from "./ShopifyHostContext";
 import { AdminEmbeddedProvider } from "./AdminEmbeddedProvider";
@@ -13,8 +14,13 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
+        {process.env.SHOPIFY_API_KEY ? <meta name="shopify-api-key" content={process.env.SHOPIFY_API_KEY} /> : null}
         {process.env.SHOPIFY_API_KEY ? (
-          <meta name="shopify-api-key" content={process.env.SHOPIFY_API_KEY} />
+          <Script
+            id="shopify-app-bridge-cdn"
+            src="https://cdn.shopify.com/shopifycloud/app-bridge.js"
+            strategy="beforeInteractive"
+          />
         ) : null}
       </head>
       <body>
