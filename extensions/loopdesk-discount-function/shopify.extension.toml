@@ -12,4 +12,5 @@ description = "Universal LoopDesk promotion reward discount function foundation.
   export = "cartLinesDiscountsGenerateRun"
 
   [extensions.build]
-  path = "dist/function.wasm"
+  command = "npm run build"
+  path = "dist/index.wasm"
