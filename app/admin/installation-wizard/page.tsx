@@ -13,6 +13,7 @@ import {
   formatAdminShopResolutionError,
   resolveAdminShopFromSearchParams,
 } from "../../../services/shopify/admin-shop-context";
+import { withEmbeddedContext } from "../promotion-rules/embedded-query";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,6 +24,7 @@ type PageProps = {
     shopify_shop?: string;
     host?: string;
     hmac?: string;
+    embedded?: string;
   }>;
 };
 
@@ -126,11 +128,11 @@ export default async function InstallationWizardPage({ searchParams }: PageProps
   ]);
 
   const shopParam = encodeURIComponent(resolved.shop.shopDomain);
-  const settingsHref = `/admin/merchant-settings?shop=${shopParam}`;
+  const settingsHref = withEmbeddedContext("/admin/merchant-settings", params, { shop: resolved.shop.shopDomain });
   const runtimeHref = `/api/runtime/config?shop=${shopParam}`;
   const installHref = `/api/auth/install?shop=${shopParam}`;
-  const diagnosticsHref = `/admin/diagnostics/environment?shop=${shopParam}`;
-  const promotionRulesHref = `/admin/promotion-rules?shop=${shopParam}`;
+  const diagnosticsHref = withEmbeddedContext("/admin/diagnostics/environment", params, { shop: resolved.shop.shopDomain });
+  const promotionRulesHref = withEmbeddedContext("/admin/promotion-rules", params, { shop: resolved.shop.shopDomain });
   const appEmbedDeepLink = `https://${resolved.shop.shopDomain}/admin/themes/current/editor?context=apps`;
 
   const coreEnvNames = ["DATABASE_URL", "SHOPIFY_API_KEY", "SHOPIFY_API_SECRET", "SHOPIFY_APP_URL", "SHOPIFY_SCOPES"];

@@ -1,8 +1,9 @@
 import "./globals.css";
 import { Suspense } from "react";
-import Script from "next/script";
 import AdminNavLink from "./AdminNavLink";
 import ShopifyHostContext from "./ShopifyHostContext";
+import { AdminEmbeddedProvider } from "./AdminEmbeddedProvider";
+import AdminEmbeddedDiagnostic from "./AdminEmbeddedDiagnostic";
 
 export default function RootLayout({
   children,
@@ -13,7 +14,7 @@ export default function RootLayout({
     <html lang="en">
       <head>{process.env.SHOPIFY_API_KEY ? <meta name="shopify-api-key" content={process.env.SHOPIFY_API_KEY} /> : null}</head>
       <body>
-        <Script src="https://cdn.shopify.com/shopifycloud/app-bridge.js" strategy="beforeInteractive" />
+        <AdminEmbeddedProvider apiKey={process.env.SHOPIFY_API_KEY || ""}>
         <div className="mk-shell">
           <aside className="mk-sidebar">
             <div className="mk-brand">
@@ -65,8 +66,9 @@ export default function RootLayout({
             </div>
           </aside>
 
-          <main className="mk-main">{children}</main>
+          <main className="mk-main"><Suspense fallback={null}><AdminEmbeddedDiagnostic /></Suspense>{children}</main>
         </div>
+        </AdminEmbeddedProvider>
       </body>
     </html>
   );

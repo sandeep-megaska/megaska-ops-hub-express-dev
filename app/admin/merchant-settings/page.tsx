@@ -18,6 +18,7 @@ import {
   formatAdminShopResolutionError,
   resolveAdminShopFromSearchParams,
 } from "../../../services/shopify/admin-shop-context";
+import { embeddedContextFromFormData, embeddedContextHiddenInputs, withEmbeddedContext } from "../promotion-rules/embedded-query";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,6 +29,7 @@ type PageProps = {
     shopify_shop?: string;
     host?: string;
     hmac?: string;
+    embedded?: string;
     saved?: string;
     error?: string;
   }>;
@@ -52,7 +54,11 @@ async function saveMerchantSettings(
     );
   }
 
-  let redirectUrl = `/admin/merchant-settings?shop=${encodeURIComponent(shopDomain)}&saved=1`;
+  const embeddedContext = embeddedContextFromFormData(formData);
+  embeddedContext.set("shop", shopDomain);
+  embeddedContext.set("saved", "1");
+  embeddedContext.delete("error");
+  let redirectUrl = `/admin/merchant-settings?${embeddedContext.toString()}`;
   try {
     await updateLoopDeskMerchantSettings(shopId, {
       general: {
@@ -133,7 +139,9 @@ async function saveMerchantSettings(
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Invalid merchant settings.";
-    redirectUrl = `/admin/merchant-settings?shop=${encodeURIComponent(shopDomain)}&error=${encodeURIComponent(message)}`;
+    embeddedContext.delete("saved");
+    embeddedContext.set("error", message);
+    redirectUrl = `/admin/merchant-settings?${embeddedContext.toString()}`;
   }
   redirect(redirectUrl);
 }
@@ -244,7 +252,7 @@ export default async function MerchantSettingsPage({
           </p>
         </div>
         <div className="flex flex-wrap gap-2 text-sm">
-          <a className="rounded-lg bg-white/10 px-3 py-2 font-medium hover:bg-white/20" href={`/?shop=${shopParam}`}>
+          <a className="rounded-lg bg-white/10 px-3 py-2 font-medium hover:bg-white/20" href={withEmbeddedContext("/", params, { shop: resolved.shop.shopDomain, saved: null, error: null })}>
             Dashboard
           </a>
           <a className="rounded-lg bg-white/10 px-3 py-2 font-medium hover:bg-white/20" href={`/api/runtime/config?shop=${shopParam}`}>
@@ -264,6 +272,7 @@ export default async function MerchantSettingsPage({
       ) : null}
       <form action={saveAction} className="grid gap-6">
         <input type="hidden" name="shop" value={resolved.shop.shopDomain} />
+        {embeddedContextHiddenInputs(params).map(([key, value]) => <input key={key} type="hidden" name={`embeddedContext:${key}`} value={value} />)}
         <section className={`${cardClass} grid gap-5`}>
           <SectionHeader title="General" description="Customer-facing store and support details. Keep these short and public-safe." />
           <div className="grid gap-4 md:grid-cols-2">
