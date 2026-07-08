@@ -57,11 +57,9 @@ type MoneyV2 {
   currencyCode: String!
 }
 
-interface Merchandise {
-  id: ID!
-}
+union Merchandise = ProductVariant
 
-type ProductVariant implements Merchandise {
+type ProductVariant {
   id: ID!
 }
 
