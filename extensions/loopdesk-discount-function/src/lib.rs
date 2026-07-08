@@ -1,7 +1,7 @@
 use serde::Deserialize;
 use shopify_function::prelude::*;
-use shopify_function::shopify_function_wasm_api::Serialize;
 use shopify_function::Result;
+use shopify_function_wasm_api::Serialize;
 
 #[typegen("schema.graphql")]
 pub mod schema {
