@@ -497,6 +497,7 @@ body.loopdesk-cart-drawer-is-open #loopdesk-cart-drawer-root .loopdesk-cart-draw
 .loopdesk-cart-drawer__offer-prices s {
   color: #6b7280;
   font-size: 12px;
+  font-weight: 600;
 }
 
 .loopdesk-cart-drawer__offer-cta {
