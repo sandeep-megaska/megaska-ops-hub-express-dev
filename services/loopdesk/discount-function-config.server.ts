@@ -17,15 +17,30 @@ function triggerValue(rule: PromotionRule): string | number | null {
   return null;
 }
 
-function rewardEnforcementType(rule: PromotionRule): RewardEnforcementType {
-  const displayPrice = String(rule.display.offerPriceDisplay || "").trim();
-  return displayPrice ? "fixed_price" : "free_gift";
-}
-
 function isValidCompiledRule(rule: CompiledPromotionEnforcementRule) {
   if (!rule.id || !rule.rewardVariantGid || !rule.rewardProductGid) return false;
+  if (rule.rewardEnforcementType !== "fixed_price") return false;
+  if (!Number.isFinite(rule.fixedPriceAmount)) return false;
   if (rule.triggerType === "always") return true;
   return rule.triggerValue !== null && rule.triggerValue !== undefined && String(rule.triggerValue).trim() !== "";
+}
+
+export function compilePromotionRuleEnforcementRule(rule: PromotionRule): CompiledPromotionEnforcementRule | null {
+  const discount = rule.reward.discount;
+  if (discount?.type !== "fixed_price") return null;
+
+  return {
+    id: rule.id,
+    enabled: true,
+    priority: rule.priority,
+    triggerType: firstTrigger(rule).type as LoopDeskDiscountFunctionTriggerType,
+    triggerValue: triggerValue(rule),
+    rewardEnforcementType: "fixed_price" satisfies RewardEnforcementType,
+    rewardProductGid: rule.reward.productGid || null,
+    rewardVariantGid: rule.reward.variantGid || null,
+    fixedPriceAmount: discount.value,
+    quantity: rule.reward.quantity,
+  };
 }
 
 export async function compileLoopDeskDiscountFunctionConfig(shopId: string, shopDomain?: string | null): Promise<LoopDeskDiscountFunctionConfig> {
@@ -34,17 +49,8 @@ export async function compileLoopDeskDiscountFunctionConfig(shopId: string, shop
 
   const rules = promotionConfig.rules
     .filter((rule) => rule.enabled && rule.status === "active")
-    .map((rule): CompiledPromotionEnforcementRule => ({
-      id: rule.id,
-      enabled: true,
-      priority: rule.priority,
-      triggerType: firstTrigger(rule).type as LoopDeskDiscountFunctionTriggerType,
-      triggerValue: triggerValue(rule),
-      rewardEnforcementType: rewardEnforcementType(rule),
-      rewardProductGid: rule.reward.productGid || null,
-      rewardVariantGid: rule.reward.variantGid || null,
-      quantity: rule.reward.quantity,
-    }))
+    .map(compilePromotionRuleEnforcementRule)
+    .filter((rule): rule is CompiledPromotionEnforcementRule => Boolean(rule))
     .filter(isValidCompiledRule)
     .sort((left, right) => left.priority - right.priority);
 

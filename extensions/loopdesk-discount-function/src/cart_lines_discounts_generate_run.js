@@ -2,9 +2,6 @@ const CONFIG_NAMESPACE = "loopdesk";
 const CONFIG_KEY = "discount_function_config";
 const SUPPORTED_REWARD_ENFORCEMENT_TYPES = new Set([
   "fixed_price",
-  "percentage",
-  "fixed_amount",
-  "free_gift",
 ]);
 const SUPPORTED_TRIGGER_TYPES = new Set([
   "always",
@@ -40,6 +37,7 @@ function parseConfig(input) {
     if (!isRecord(rule) || rule.enabled !== true) return false;
     if (typeof rule.id !== "string" || !rule.id.trim()) return false;
     if (!SUPPORTED_REWARD_ENFORCEMENT_TYPES.has(String(rule.rewardEnforcementType))) return false;
+    if (!Number.isFinite(Number(rule.fixedPriceAmount))) return false;
     return SUPPORTED_TRIGGER_TYPES.has(String(rule.triggerType));
   });
 
