@@ -3,8 +3,9 @@
   "private": true,
   "version": "0.0.0",
   "scripts": {
-    "build": "node scripts/build-placeholder.mjs",
-    "typecheck": "tsc -p tsconfig.json"
+    "build": "node scripts/build-function.mjs",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "cargo test"
   },
   "devDependencies": {
     "typescript": "^5"
