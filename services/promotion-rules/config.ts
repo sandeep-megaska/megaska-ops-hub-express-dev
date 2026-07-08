@@ -16,7 +16,7 @@ export type PromotionPlacement = "drawer" | "cart_page" | "both";
 export type PromotionConflictStrategy = "priority_first" | "newest_first" | "oldest_first";
 
 export type PromotionResourceMetadata = { id?: string; gid: string; title: string; image?: string | null; imageUrl: string | null; handle: string; resourceType?: "product" | "collection" | "variant"; variantGid?: string; variantTitle?: string };
-export type PromotionRewardDiscount = { type: "fixed_price"; value: number };
+export type PromotionRewardDiscount = { type: "fixed_price" | "percentage"; value: number };
 
 export type PromotionRule = {
   id: string;
@@ -69,9 +69,9 @@ function placement(value: unknown): PromotionPlacement { return value === "drawe
 function conflict(value: unknown): PromotionConflictStrategy { return value === "newest_first" || value === "oldest_first" || value === "priority_first" ? value : "priority_first"; }
 function rewardDiscount(value: unknown): PromotionRewardDiscount | undefined {
   const raw = isRecord(value) ? value : {};
-  if (raw.type !== "fixed_price") return undefined;
-  const amount = num(raw.value, NaN, 0, 1000000);
-  return Number.isFinite(amount) ? { type: "fixed_price", value: amount } : undefined;
+  if (raw.type !== "fixed_price" && raw.type !== "percentage") return undefined;
+  const amount = num(raw.value, NaN, raw.type === "percentage" ? -1000000 : 0, 1000000);
+  return Number.isFinite(amount) ? { type: raw.type, value: amount } : undefined;
 }
 function normalizeShopDomainForPromotionLookup(input: string | null | undefined) { return String(input || "").trim().replace(/^https?:\/\//, "").replace(/\/$/, "").toLowerCase(); }
 function promotionDomainFamily(shopDomain: string) { return normalizeShopDomainForPromotionLookup(shopDomain).replace(/^www\./, "").replace(/\.myshopify\.com$/, ""); }
