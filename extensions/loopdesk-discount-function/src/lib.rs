@@ -209,18 +209,14 @@ fn evaluate(cart_lines: &[CartLine], rules: &[Rule]) -> Vec<DiscountOperationSpe
 #[shopify_function]
 fn cartLinesDiscountsGenerateRun(
     input: schema::cart_lines_discounts_generate_run::Input,
-) -> Result<schema::cart_lines_discounts_generate_run::CartLinesDiscountsGenerateRunResult> {
+) -> Result<schema::CartLinesDiscountsGenerateRunResult> {
     let raw_config = input
         .discount_node()
         .metafield()
         .map(|metafield| metafield.value());
     let rules = parse_config(raw_config.map(String::as_str));
     if rules.is_empty() {
-        return Ok(
-            schema::cart_lines_discounts_generate_run::CartLinesDiscountsGenerateRunResult {
-                operations: vec![],
-            },
-        );
+        return Ok(schema::CartLinesDiscountsGenerateRunResult { operations: vec![] });
     }
 
     let cart_lines: Vec<CartLine> = input
@@ -239,30 +235,24 @@ fn cartLinesDiscountsGenerateRun(
         })
         .collect();
 
-    Ok(
-        schema::cart_lines_discounts_generate_run::CartLinesDiscountsGenerateRunResult {
-            operations: evaluate(&cart_lines, &rules)
-                .into_iter()
-                .map(to_product_discount_operation)
-                .collect(),
-        },
-    )
+    Ok(schema::CartLinesDiscountsGenerateRunResult {
+        operations: evaluate(&cart_lines, &rules)
+            .into_iter()
+            .map(to_product_discount_operation)
+            .collect(),
+    })
 }
 
-fn to_product_discount_operation(
-    spec: DiscountOperationSpec,
-) -> schema::cart_lines_discounts_generate_run::CartOperation {
+fn to_product_discount_operation(spec: DiscountOperationSpec) -> schema::CartOperation {
     let value = match spec.value {
         DiscountValue::Percentage(value) => {
-            schema::cart_lines_discounts_generate_run::ProductDiscountCandidateValue::Percentage(
-                schema::cart_lines_discounts_generate_run::Percentage {
-                    value: Decimal(value),
-                },
-            )
+            schema::ProductDiscountCandidateValue::Percentage(schema::Percentage {
+                value: Decimal(value),
+            })
         }
         DiscountValue::FixedAmountEach(amount) => {
-            schema::cart_lines_discounts_generate_run::ProductDiscountCandidateValue::FixedAmount(
-                schema::cart_lines_discounts_generate_run::ProductDiscountCandidateFixedAmount {
+            schema::ProductDiscountCandidateValue::FixedAmount(
+                schema::ProductDiscountCandidateFixedAmount {
                     amount: Decimal((amount * 100.0).round() / 100.0),
                     applies_to_each_item: Some(true),
                 },
@@ -270,11 +260,11 @@ fn to_product_discount_operation(
         }
     };
 
-    schema::cart_lines_discounts_generate_run::CartOperation::ProductDiscountsAdd(schema::cart_lines_discounts_generate_run::ProductDiscountsAddOperation {
-        selection_strategy: schema::cart_lines_discounts_generate_run::ProductDiscountSelectionStrategy::First,
-        candidates: vec![schema::cart_lines_discounts_generate_run::ProductDiscountCandidate {
-            targets: vec![schema::cart_lines_discounts_generate_run::ProductDiscountCandidateTarget::CartLine(
-                schema::cart_lines_discounts_generate_run::CartLineTarget {
+    schema::CartOperation::ProductDiscountsAdd(schema::ProductDiscountsAddOperation {
+        selection_strategy: schema::ProductDiscountSelectionStrategy::First,
+        candidates: vec![schema::ProductDiscountCandidate {
+            targets: vec![schema::ProductDiscountCandidateTarget::CartLine(
+                schema::CartLineTarget {
                     id: spec.cart_line_id,
                     quantity: Some(spec.quantity as i64),
                 },
