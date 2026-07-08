@@ -1,0 +1,12 @@
+{
+  "name": "loopdesk-discount-function",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "build": "node scripts/build-placeholder.mjs",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "typescript": "^5"
+  }
+}
