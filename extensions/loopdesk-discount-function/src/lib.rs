@@ -2,7 +2,7 @@ use serde::Deserialize;
 use shopify_function::prelude::*;
 use shopify_function::Result;
 
-#[typegen("schema.graphql")]
+#[typegen("schema.graphql", enums_as_str = ["LanguageCode", "CountryCode", "CurrencyCode"])]
 pub mod schema {
     #[query("src/cart_lines_discounts_generate_run.graphql")]
     pub mod cart_lines_discounts_generate_run {}
