@@ -17,10 +17,15 @@ function triggerValue(rule: PromotionRule): string | number | null {
   return null;
 }
 
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
 function isValidCompiledRule(rule: CompiledPromotionEnforcementRule) {
   if (!rule.id || !rule.rewardVariantGid || !rule.rewardProductGid) return false;
   if (rule.rewardEnforcementType !== "fixed_price") return false;
-  if (!Number.isFinite(rule.fixedPriceAmount)) return false;
+  const fixedPriceAmount = rule.fixedPriceAmount;
+  if (!isFiniteNumber(fixedPriceAmount)) return false;
   if (rule.triggerType === "always") return true;
   return rule.triggerValue !== null && rule.triggerValue !== undefined && String(rule.triggerValue).trim() !== "";
 }
