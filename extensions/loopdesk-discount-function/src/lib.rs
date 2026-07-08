@@ -223,26 +223,15 @@ fn cartLinesDiscountsGenerateRun(
         .cart()
         .lines()
         .iter()
-        .filter_map(|line| match line.merchandise() {
-            schema::cart_lines_discounts_generate_run::input::cart::lines::Merchandise::ProductVariant(variant) => {
-                let product = variant.product();
-                Some(CartLine {
-                    id: line.id().clone(),
-                    quantity: *line.quantity() as i64,
-                    subtotal_amount: *line.cost().subtotal_amount().amount(),
-                    variant_gid: variant.id().clone(),
-                    product_gid: product.id().clone(),
-                    product_type: product.product_type().clone(),
-                    tags: product.tags().clone(),
-                    collection_gids: product
-                        .in_collections()
-                        .iter()
-                        .filter(|membership| *membership.is_member())
-                        .map(|membership| membership.collection_id().clone())
-                        .collect(),
-                })
-            }
-            _ => None,
+        .map(|line| CartLine {
+            id: line.id().clone(),
+            quantity: *line.quantity() as i64,
+            subtotal_amount: *line.cost().subtotal_amount().amount(),
+            variant_gid: line.merchandise().id().clone(),
+            product_gid: String::new(),
+            product_type: String::new(),
+            tags: vec![],
+            collection_gids: vec![],
         })
         .collect();
 
