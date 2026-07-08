@@ -45,3 +45,8 @@ next-env.d.ts
 # generated Shopify Function artifacts
 extensions/loopdesk-discount-function/dist/index.wasm
 extensions/loopdesk-discount-function/dist/function.wasm
+
+# extension dependencies
+extensions/*/node_modules/
+extensions/loopdesk-discount-function/dist/function.js
+extensions/loopdesk-discount-function/dist/javy-entry.js
