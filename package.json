@@ -12,7 +12,7 @@
     "postinstall": "prisma generate",
     "dev:seed:mock-tracking": "ALLOW_MOCK_TRACKING_SEED=true node scripts/dev-seed-mock-tracking.mjs",
     "typecheck": "tsc --noEmit",
-    "build:discount-function": "npm --prefix extensions/loopdesk-discount-function run build"
+    "build:discount-function": "cargo build --manifest-path extensions/loopdesk-discount-function/Cargo.toml --target=wasm32-unknown-unknown --release"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.6.0",

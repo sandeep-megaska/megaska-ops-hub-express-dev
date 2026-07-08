@@ -1,0 +1,103 @@
+schema {
+  query: Input
+}
+
+scalar Decimal
+scalar ID
+scalar JSON
+
+type Input {
+  discountNode: DiscountNode!
+  cart: Cart!
+}
+
+type DiscountNode {
+  metafield(namespace: String, key: String!): Metafield
+}
+
+type Metafield {
+  value: String!
+}
+
+type Cart {
+  lines: [CartLine!]!
+}
+
+type CartLine {
+  id: ID!
+  quantity: Int!
+  cost: CartLineCost!
+  merchandise: Merchandise!
+}
+
+type CartLineCost {
+  subtotalAmount: MoneyV2!
+}
+
+type MoneyV2 {
+  amount: Decimal!
+  currencyCode: String!
+}
+
+interface Merchandise {
+  id: ID!
+}
+
+type ProductVariant implements Merchandise {
+  id: ID!
+  product: Product!
+}
+
+type Product {
+  id: ID!
+  productType: String!
+  tags: [String!]!
+  inCollections(first: Int): [CollectionMembership!]!
+}
+
+type CollectionMembership {
+  collectionId: ID!
+  isMember: Boolean!
+}
+
+type CartLinesDiscountsGenerateRunResult {
+  operations: [CartOperation!]!
+}
+
+union CartOperation = ProductDiscountsAddOperation
+
+type ProductDiscountsAddOperation {
+  candidates: [ProductDiscountCandidate!]!
+  selectionStrategy: ProductDiscountSelectionStrategy!
+}
+
+enum ProductDiscountSelectionStrategy {
+  FIRST
+  MAXIMUM
+  ALL
+}
+
+type ProductDiscountCandidate {
+  message: String
+  targets: [ProductDiscountCandidateTarget!]!
+  value: ProductDiscountCandidateValue!
+  associatedDiscountCode: String
+}
+
+union ProductDiscountCandidateTarget = CartLineTarget
+
+type CartLineTarget {
+  id: ID!
+  quantity: Int
+}
+
+union ProductDiscountCandidateValue = Percentage | ProductDiscountCandidateFixedAmount
+
+type Percentage {
+  value: Decimal!
+}
+
+type ProductDiscountCandidateFixedAmount {
+  amount: Decimal!
+  appliesToEachItem: Boolean
+}

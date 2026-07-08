@@ -15,6 +15,7 @@ query CartLinesDiscountsGenerateRunInput {
         }
       }
       merchandise {
+        __typename
         ... on ProductVariant {
           id
           product {

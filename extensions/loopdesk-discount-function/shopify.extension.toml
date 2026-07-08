@@ -12,5 +12,6 @@ description = "Universal LoopDesk promotion reward discount function foundation.
   export = "cartLinesDiscountsGenerateRun"
 
   [extensions.build]
-  command = "npm run build"
-  path = "dist/index.wasm"
+  command = "cargo build --target=wasm32-unknown-unknown --release"
+  path = "target/wasm32-unknown-unknown/release/loopdesk_discount_function.wasm"
+  watch = [ "src/**/*.rs", "Cargo.toml" ]
