@@ -112,7 +112,7 @@
   if (!config.enabled || window.__LOOPDESK_CART_DRAWER_LOADED__) return;
   window.__LOOPDESK_CART_DRAWER_LOADED__ = true;
 
-  var state = { open: false, loading: false, cart: null, error: "", hostMode: LOOPDESK_HOST_MODE, themeDrawer: null, fallbackReason: "", expressCheckoutLock: false, capability: null, drawerModeActive: false, neutralizedThemeDrawers: [], bodyLockSnapshot: null, removedThemeBodyClasses: [], cartTriggerTakeovers: [] };
+  var state = { open: false, loading: false, cart: null, error: "", offerError: "", offerAdding: false, hostMode: LOOPDESK_HOST_MODE, themeDrawer: null, fallbackReason: "", expressCheckoutLock: false, capability: null, drawerModeActive: false, neutralizedThemeDrawers: [], bodyLockSnapshot: null, removedThemeBodyClasses: [], cartTriggerTakeovers: [] };
   var cartTriggerObserver = null;
   var cartTriggerTakeoverTimer = null;
   var suppressNextCartClickUntil = 0;
@@ -805,6 +805,45 @@
     return Boolean(cart && Array.isArray(cart.items) && cart.items.some(function (item) { return sameShopifyId(item.variant_id, variantGid) || sameShopifyId(item.variant_gid, variantGid) || sameShopifyId(item.variantGid, variantGid) || sameShopifyId(item.id, variantGid); }));
   }
 
+  function cartVariantQuantity(cart, variantGid) {
+    if (!cart || !Array.isArray(cart.items) || !variantGid) return 0;
+    return cart.items.reduce(function (total, item) {
+      return total + (sameShopifyId(item.variant_id, variantGid) || sameShopifyId(item.variant_gid, variantGid) || sameShopifyId(item.variantGid, variantGid) || sameShopifyId(item.id, variantGid) ? Math.max(0, Number(item.quantity) || 0) : 0);
+    }, 0);
+  }
+
+  function firstAvailableVariantGidFromMetadata(product) {
+    if (!isPlainObject(product)) return "";
+    var direct = product.firstAvailableVariantGid || product.firstAvailableVariantId || product.availableVariantGid;
+    if (direct) return String(direct);
+    var directVariant = isPlainObject(product.firstAvailableVariant) ? product.firstAvailableVariant : isPlainObject(product.selectedOrFirstAvailableVariant) ? product.selectedOrFirstAvailableVariant : null;
+    if (directVariant && (directVariant.gid || directVariant.id)) return String(directVariant.gid || directVariant.id);
+    var variants = Array.isArray(product.variants) ? product.variants : [];
+    for (var i = 0; i < variants.length; i += 1) {
+      var variant = variants[i];
+      if (!isPlainObject(variant)) continue;
+      var availabilityKnown = typeof variant.available === "boolean" || typeof variant.availableForSale === "boolean";
+      var available = variant.available === true || variant.availableForSale === true;
+      if (availabilityKnown && available && (variant.gid || variant.id)) return String(variant.gid || variant.id);
+    }
+    return "";
+  }
+
+  function resolvePromotionOfferVariantGid(reward) {
+    if (!isPlainObject(reward)) return "";
+    if (reward.variantGid) return String(reward.variantGid);
+    return firstAvailableVariantGidFromMetadata(reward.product);
+  }
+
+  function promotionOfferRemainingQuantity(cart, rule, variantGid) {
+    var reward = isPlainObject(rule && rule.reward) ? rule.reward : {};
+    var limits = isPlainObject(rule && rule.limits) ? rule.limits : {};
+    var desired = Math.max(1, Number(reward.quantity) || 1);
+    var max = Math.max(1, Number(limits.maxQuantityPerCart) || 1);
+    var existing = cartVariantQuantity(cart, variantGid);
+    return Math.max(0, Math.min(desired, max - existing));
+  }
+
   function arrayField(item, names) {
     for (var i = 0; i < names.length; i += 1) {
       var value = item && item[names[i]];
@@ -875,7 +914,8 @@
       var rulePlacement = display.placement || "drawer";
       var triggers = Array.isArray(eligibility.triggers) && eligibility.triggers.length ? eligibility.triggers : [{ type: "always" }];
       var matched = eligibility.match === "all" ? triggers.every(function (trigger) { return triggerMatches(trigger, cart); }) : triggers.some(function (trigger) { return triggerMatches(trigger, cart); });
-      return rule && rule.enabled === true && rule.status === "active" && (rulePlacement === placement || rulePlacement === "both") && reward.productGid && reward.variantGid && isPromotionScheduled(rule, now) && !(display.hideIfOfferProductAlreadyInCart !== false && (cartContainsProduct(cart, reward.productGid) || cartContainsVariant(cart, reward.variantGid))) && matched;
+      var offerVariantGid = resolvePromotionOfferVariantGid(reward);
+      return rule && rule.enabled === true && rule.status === "active" && (rulePlacement === placement || rulePlacement === "both") && reward.productGid && offerVariantGid && promotionOfferRemainingQuantity(cart, rule, offerVariantGid) > 0 && isPromotionScheduled(rule, now) && !(display.hideIfOfferProductAlreadyInCart !== false && (cartContainsProduct(cart, reward.productGid) || cartContainsVariant(cart, offerVariantGid))) && matched;
     }).sort(function (a, b) { return (Number(a.priority) || 0) - (Number(b.priority) || 0); }).slice(0, promotionConfig.maxVisibleOffers);
   }
 
@@ -886,13 +926,16 @@
       var display = isPlainObject(rule.display) ? rule.display : {};
       var reward = isPlainObject(rule.reward) ? rule.reward : {};
       var product = isPlainObject(reward.product) ? reward.product : {};
+      var offerVariantGid = resolvePromotionOfferVariantGid(reward);
+      var offerQuantity = promotionOfferRemainingQuantity(cart, rule, offerVariantGid);
+      var adding = state.offerAdding === String(rule.id || offerVariantGid);
       var image = display.imageOverrideUrl || product.imageUrl || product.image || "";
       var title = product.title || rule.name || "Offer product";
       var offerPrice = text(display.offerPriceDisplay, "");
       var comparePrice = text(display.comparePriceDisplay, "");
       var pricing = offerPrice ? '<div class="loopdesk-cart-drawer__offer-prices"><span>Get it for ' + escapeHtml(offerPrice) + '</span>' + (comparePrice ? '<s aria-label="Usually ' + escapeHtml(comparePrice) + '">Usually ' + escapeHtml(comparePrice) + '</s>' : '') + '</div>' : '';
       var deferred = reward.requiresDiscountEnforcement ? ' data-loopdesk-promotion-enforcement="deferred"' : '';
-      return ['<article class="loopdesk-cart-drawer__offer" data-loopdesk-promotion-rule="' + escapeHtml(rule.id || '') + '"' + deferred + '>', display.badge ? '<div class="loopdesk-cart-drawer__offer-badge">' + escapeHtml(display.badge) + '</div>' : '', '<div class="loopdesk-cart-drawer__offer-content">', image ? '<img class="loopdesk-cart-drawer__offer-image" src="' + escapeHtml(image) + '" alt="' + escapeHtml(title) + '" loading="lazy">' : '<div class="loopdesk-cart-drawer__offer-image loopdesk-cart-drawer__offer-image--placeholder"></div>', '<div class="loopdesk-cart-drawer__offer-copy"><h3>' + escapeHtml(display.heading || rule.name || 'Special offer') + '</h3>', display.description ? '<p>' + escapeHtml(display.description) + '</p>' : '', '<strong>' + escapeHtml(title) + '</strong>' + pricing + '</div></div>', '<button type="button" class="loopdesk-cart-drawer__offer-cta" data-loopdesk-offer-add data-loopdesk-offer-variant="' + escapeHtml(reward.variantGid) + '" data-loopdesk-offer-quantity="' + escapeHtml(reward.quantity || 1) + '">' + escapeHtml(display.ctaLabel || 'Add offer') + '</button></article>'].join('');
+      return ['<article class="loopdesk-cart-drawer__offer" data-loopdesk-promotion-rule="' + escapeHtml(rule.id || '') + '"' + deferred + '>', display.badge ? '<div class="loopdesk-cart-drawer__offer-badge">' + escapeHtml(display.badge) + '</div>' : '', '<div class="loopdesk-cart-drawer__offer-content">', image ? '<img class="loopdesk-cart-drawer__offer-image" src="' + escapeHtml(image) + '" alt="' + escapeHtml(title) + '" loading="lazy">' : '<div class="loopdesk-cart-drawer__offer-image loopdesk-cart-drawer__offer-image--placeholder"></div>', '<div class="loopdesk-cart-drawer__offer-copy"><h3>' + escapeHtml(display.heading || rule.name || 'Special offer') + '</h3>', display.description ? '<p>' + escapeHtml(display.description) + '</p>' : '', '<strong>' + escapeHtml(title) + '</strong>' + pricing + '</div></div>', state.offerError ? '<div class="loopdesk-cart-drawer__offer-error" role="alert">' + escapeHtml(state.offerError) + '</div>' : '', '<button type="button" class="loopdesk-cart-drawer__offer-cta" data-loopdesk-offer-add data-loopdesk-offer-key="' + escapeHtml(rule.id || offerVariantGid) + '" data-loopdesk-offer-variant="' + escapeHtml(offerVariantGid) + '" data-loopdesk-offer-quantity="' + escapeHtml(offerQuantity) + '"' + (adding ? ' disabled aria-busy="true"' : '') + '>' + escapeHtml(adding ? 'Adding…' : display.ctaLabel || 'Add offer') + '</button></article>'].join('');
     }).join('') + '</section>';
   }
 
@@ -1012,10 +1055,11 @@
   }
 
 
-  function addPromotionOffer(variantGid, quantity) {
+  function addPromotionOffer(variantGid, quantity, offerKey) {
     var id = idTail(variantGid);
-    if (!id || !canUseCartAjax()) return;
-    state.loading = true;
+    if (!id || !canUseCartAjax() || state.offerAdding) return;
+    state.offerAdding = String(offerKey || variantGid || "offer");
+    state.offerError = "";
     render();
     return fetch("/cart/add.js", {
       method: "POST",
@@ -1026,15 +1070,15 @@
       if (!response.ok) throw new Error("Offer add failed");
       return fetchCart();
     }).catch(function (error) {
-      state.error = error && error.message ? error.message : "Offer add failed";
-    }).finally(function () { state.loading = false; render(); });
+      state.offerError = error && error.message ? error.message : "Offer add failed";
+    }).finally(function () { state.offerAdding = false; render(); });
   }
 
   function handleDrawerAction(event) {
     var offerButton = event.target && event.target.closest && event.target.closest("[data-loopdesk-offer-add]");
     if (offerButton) {
       event.preventDefault();
-      return addPromotionOffer(offerButton.getAttribute("data-loopdesk-offer-variant"), offerButton.getAttribute("data-loopdesk-offer-quantity"));
+      return addPromotionOffer(offerButton.getAttribute("data-loopdesk-offer-variant"), offerButton.getAttribute("data-loopdesk-offer-quantity"), offerButton.getAttribute("data-loopdesk-offer-key"));
     }
     var qtyButton = event.target && event.target.closest && event.target.closest("[data-loopdesk-qty]");
     var removeButton = event.target && event.target.closest && event.target.closest("[data-loopdesk-remove]");

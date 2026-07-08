@@ -512,3 +512,18 @@ body.loopdesk-cart-drawer-is-open #loopdesk-cart-drawer-root .loopdesk-cart-draw
   font-weight: 700;
   padding: 10px 12px;
 }
+
+.loopdesk-cart-drawer__offer-cta:disabled {
+  cursor: wait;
+  opacity: .7;
+}
+
+.loopdesk-cart-drawer__offer-error {
+  margin-top: 10px;
+  border-radius: 10px;
+  background: #fef2f2;
+  color: #991b1b;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 8px 10px;
+}
