@@ -44,6 +44,8 @@ export default function ShopifyHostContext() {
   const searchParams = useSearchParams();
 
   useEffect(() => {
+    if (!pathname || !searchParams) return;
+
     const params = new URLSearchParams(searchParams.toString());
     const shop = firstParam(params, "shop") || firstParam(params, "shopify_shop");
     if (!shop) return;
