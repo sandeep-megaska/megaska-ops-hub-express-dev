@@ -103,3 +103,14 @@ type ProductDiscountCandidateFixedAmount {
   amount: Decimal!
   appliesToEachItem: Boolean
 }
+enum LanguageCode {
+  EN
+}
+
+enum CountryCode {
+  US
+}
+
+enum CurrencyCode {
+  USD
+}
