@@ -2,7 +2,6 @@
 
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import Script from "next/script";
 import { getStoredShopifyHost } from "./ShopifyHostContext";
 
 type ShopifyPickerVariant = { id?: string; title?: string; displayName?: string; image?: { url?: string; originalSrc?: string } };
@@ -16,7 +15,8 @@ type ShopifyGlobal = {
 declare global {
   interface Window {
     shopify?: ShopifyGlobal;
-    app?: ShopifyGlobal;
+    __shopifyAppBridgeScriptLoaded?: boolean;
+    __shopifyAppBridgeScriptError?: string;
   }
 }
 
@@ -28,6 +28,13 @@ type EmbeddedAdminStatus = {
   host: string;
   hostPresent: boolean;
   resourcePickerAvailable: boolean;
+  apiKeyMetaPresent: boolean;
+  apiKeyMetaContentLength: number;
+  appBridgeScriptTagPresent: boolean;
+  appBridgeScriptLoadedEventFired: boolean;
+  appBridgeScriptError: string;
+  shopifyGlobalPresent: boolean;
+  resourcePickerType: string;
   shop: string;
   shopPresent: boolean;
 };
@@ -41,7 +48,7 @@ function firstParam(params: URLSearchParams | null, key: string) {
 
 function getResourcePicker() {
   if (typeof window === "undefined") return undefined;
-  return window.shopify?.resourcePicker || window.app?.resourcePicker;
+  return window.shopify?.resourcePicker;
 }
 
 function isAdminHref(anchor: HTMLAnchorElement) {
@@ -68,7 +75,6 @@ export function AdminEmbeddedProvider({ apiKey, children }: { apiKey: string; ch
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [scriptLoaded, setScriptLoaded] = useState(false);
   const [status, setStatus] = useState<EmbeddedAdminStatus>({
     apiKeyPresent: Boolean(apiKey),
     appBridgeInitialized: false,
@@ -77,6 +83,13 @@ export function AdminEmbeddedProvider({ apiKey, children }: { apiKey: string; ch
     host: "",
     hostPresent: false,
     resourcePickerAvailable: false,
+    apiKeyMetaPresent: false,
+    apiKeyMetaContentLength: 0,
+    appBridgeScriptTagPresent: false,
+    appBridgeScriptLoadedEventFired: false,
+    appBridgeScriptError: "",
+    shopifyGlobalPresent: false,
+    resourcePickerType: "undefined",
     shop: "",
     shopPresent: false,
   });
@@ -89,9 +102,20 @@ export function AdminEmbeddedProvider({ apiKey, children }: { apiKey: string; ch
 
   useEffect(() => {
     function refresh() {
-      const appBridgeInitialized = Boolean(window.shopify || window.app);
+      const apiKeyMeta = document.querySelector<HTMLMetaElement>('meta[name="shopify-api-key"]');
+      const script = document.querySelector<HTMLScriptElement>('script[src="https://cdn.shopify.com/shopifycloud/app-bridge.js"]');
+      const shopifyGlobalPresent = Boolean(window.shopify);
+      const resourcePickerType = typeof window.shopify?.resourcePicker;
+      const appBridgeInitialized = shopifyGlobalPresent;
       setStatus({
         apiKeyPresent: Boolean(apiKey),
+        apiKeyMetaPresent: Boolean(apiKeyMeta),
+        apiKeyMetaContentLength: apiKeyMeta?.content.length || 0,
+        appBridgeScriptTagPresent: Boolean(script),
+        appBridgeScriptLoadedEventFired: Boolean(window.__shopifyAppBridgeScriptLoaded || shopifyGlobalPresent),
+        appBridgeScriptError: window.__shopifyAppBridgeScriptError || "",
+        shopifyGlobalPresent,
+        resourcePickerType,
         appBridgeInitialized,
         currentRoute,
         embedded,
@@ -106,7 +130,20 @@ export function AdminEmbeddedProvider({ apiKey, children }: { apiKey: string; ch
     refresh();
     const timers = [100, 400, 1000, 2500].map((delay) => window.setTimeout(refresh, delay));
     return () => timers.forEach((timer) => window.clearTimeout(timer));
-  }, [apiKey, currentRoute, embedded, host, scriptLoaded, shop]);
+  }, [apiKey, currentRoute, embedded, host, shop]);
+
+  useEffect(() => {
+    const script = document.querySelector<HTMLScriptElement>('script[src="https://cdn.shopify.com/shopifycloud/app-bridge.js"]');
+    if (!script) return;
+    const markLoaded = () => { window.__shopifyAppBridgeScriptLoaded = true; };
+    const markError = () => { window.__shopifyAppBridgeScriptError = "App Bridge CDN script failed to load or was blocked."; };
+    script.addEventListener("load", markLoaded);
+    script.addEventListener("error", markError);
+    return () => {
+      script.removeEventListener("load", markLoaded);
+      script.removeEventListener("error", markError);
+    };
+  }, []);
 
   useEffect(() => {
     function handleClick(event: MouseEvent) {
@@ -127,7 +164,6 @@ export function AdminEmbeddedProvider({ apiKey, children }: { apiKey: string; ch
 
   return (
     <AdminEmbeddedContext.Provider value={value}>
-      {apiKey ? <Script src="https://cdn.shopify.com/shopifycloud/app-bridge.js" strategy="afterInteractive" onLoad={() => setScriptLoaded(true)} /> : null}
       {children}
     </AdminEmbeddedContext.Provider>
   );
