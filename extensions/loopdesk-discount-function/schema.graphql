@@ -9,6 +9,14 @@ enum LanguageCode {
   EN
 }
 
+enum CountryCode {
+  US
+}
+
+enum CurrencyCode {
+  USD
+}
+
 type Input {
   discount: Discount!
   cart: Cart!
