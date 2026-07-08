@@ -135,14 +135,29 @@ export function validatePromotionRulesConfig(config: PromotionRulesConfig): stri
 
 export async function getPromotionRulesConfig(shopId: string) {
   const stored = await db().shopModuleConfig.findUnique({ where: { shopId_moduleKey: { shopId, moduleKey: PROMOTION_RULES_CONFIG_MODULE_KEY } }, select: { config: true, enabled: true } });
-  return normalizePromotionRulesConfig(stored?.config, Boolean(stored?.enabled));
+  const normalized = normalizePromotionRulesConfig(stored?.config, Boolean(stored?.enabled));
+  console.info("[Promotion Rules Config] runtime projection lookup", {
+    shopId,
+    moduleKey: PROMOTION_RULES_CONFIG_MODULE_KEY,
+    found: Boolean(stored),
+    enabled: normalized.enabled,
+    ruleCount: normalized.rules.length,
+  });
+  return normalized;
 }
 
 export async function savePromotionRulesConfig(shopId: string, nextConfig: PromotionRulesConfig) {
   const next = normalizePromotionRulesConfig(nextConfig, nextConfig.enabled);
   const errors = validatePromotionRulesConfig(next);
   if (errors.length) throw new Error(errors.join(" "));
-  await db().shopModuleConfig.upsert({ where: { shopId_moduleKey: { shopId, moduleKey: PROMOTION_RULES_CONFIG_MODULE_KEY } }, create: { shopId, moduleKey: PROMOTION_RULES_CONFIG_MODULE_KEY, enabled: next.enabled, config: next }, update: { enabled: next.enabled, config: next } });
+  const persisted = await db().shopModuleConfig.upsert({ where: { shopId_moduleKey: { shopId, moduleKey: PROMOTION_RULES_CONFIG_MODULE_KEY } }, create: { shopId, moduleKey: PROMOTION_RULES_CONFIG_MODULE_KEY, enabled: next.enabled, config: next }, update: { enabled: next.enabled, config: next } });
+  console.info("[Promotion Rules Config] admin save", {
+    shopId,
+    moduleKey: PROMOTION_RULES_CONFIG_MODULE_KEY,
+    configId: persisted.id,
+    enabled: next.enabled,
+    savedConfig: next,
+  });
   return next;
 }
 

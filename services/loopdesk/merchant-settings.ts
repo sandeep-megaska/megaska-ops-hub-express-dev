@@ -1,6 +1,6 @@
 import { prisma } from "../db/prisma";
 import { getDelhiveryRuntimeConfig, type DelhiveryPublicRuntimeConfig } from "../delhivery/config";
-import { getPromotionRulesConfig } from "../promotion-rules/config";
+import { getPromotionRulesConfig, PROMOTION_RULES_CONFIG_MODULE_KEY } from "../promotion-rules/config";
 import { getRazorpayRuntimeConfig, type RazorpayPublicRuntimeConfig } from "../razorpay/config";
 
 export const LOOPDESK_RUNTIME_CONFIG_MODULE_KEY = "loopdesk_runtime_config";
@@ -572,6 +572,14 @@ export async function getLoopDeskRuntimeConfig(shopId: string) {
     getDelhiveryRuntimeConfig(shopId),
     getRazorpayRuntimeConfig(shopId),
   ]);
+  console.info("[LoopDesk Runtime Config] promotion rules projection", {
+    shopId,
+    moduleKey: PROMOTION_RULES_CONFIG_MODULE_KEY,
+    found: promotionRulesConfig.rules.length > 0,
+    enabled: promotionRulesConfig.enabled,
+    ruleCount: promotionRulesConfig.rules.length,
+  });
+
   return {
     ...toLoopDeskPublicRuntimeConfig(settings),
     cartIntelligence: toCartIntelligencePublicRuntimeConfig(cartIntelligence),
