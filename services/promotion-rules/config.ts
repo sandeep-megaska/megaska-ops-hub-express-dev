@@ -43,8 +43,10 @@ export type PromotionRulesConfig = {
   [key: string]: unknown;
 };
 
+type StoredPromotionRulesConfig = { id: string; shopId: string; config: unknown; enabled: boolean };
+
 type Delegate = {
-  findUnique(args: { where: { shopId_moduleKey: { shopId: string; moduleKey: string } }; select: { config: true; enabled: true } }): Promise<{ config: unknown; enabled: boolean } | null>;
+  findUnique(args: { where: { shopId_moduleKey: { shopId: string; moduleKey: string } }; select: { id: true; shopId: true; config: true; enabled: true } }): Promise<StoredPromotionRulesConfig | null>;
   upsert(args: { where: { shopId_moduleKey: { shopId: string; moduleKey: string } }; create: { shopId: string; moduleKey: string; enabled: boolean; config: PromotionRulesConfig }; update: { enabled: boolean; config: PromotionRulesConfig } }): Promise<{ id: string }>;
 };
 function db() { return prisma as unknown as { shopModuleConfig: Delegate }; }
@@ -64,6 +66,8 @@ function status(value: unknown): PromotionRuleStatus { return value === "active"
 function triggerType(value: unknown): PromotionTriggerType { return value === "cart_contains_product" || value === "cart_contains_collection" || value === "cart_contains_variant" || value === "cart_contains_product_type" || value === "cart_contains_tag" || value === "cart_subtotal_gte" || value === "cart_quantity_gte" ? value : "always"; }
 function placement(value: unknown): PromotionPlacement { return value === "drawer" || value === "cart_page" || value === "both" ? value : "drawer"; }
 function conflict(value: unknown): PromotionConflictStrategy { return value === "newest_first" || value === "oldest_first" || value === "priority_first" ? value : "priority_first"; }
+function normalizeShopDomainForPromotionLookup(input: string | null | undefined) { return String(input || "").trim().replace(/^https?:\/\//, "").replace(/\/$/, "").toLowerCase(); }
+function promotionDomainFamily(shopDomain: string) { return normalizeShopDomainForPromotionLookup(shopDomain).replace(/^www\./, "").replace(/\.myshopify\.com$/, ""); }
 
 export function normalizePromotionRule(input: unknown): PromotionRule {
   const raw = isRecord(input) ? input : {};
@@ -133,13 +137,52 @@ export function validatePromotionRulesConfig(config: PromotionRulesConfig): stri
   return errors;
 }
 
-export async function getPromotionRulesConfig(shopId: string) {
-  const stored = await db().shopModuleConfig.findUnique({ where: { shopId_moduleKey: { shopId, moduleKey: PROMOTION_RULES_CONFIG_MODULE_KEY } }, select: { config: true, enabled: true } });
-  const normalized = normalizePromotionRulesConfig(stored?.config, Boolean(stored?.enabled));
+async function findPromotionRulesConfigForShopDomain(shopId: string, shopDomain?: string | null) {
+  const normalizedDomain = normalizeShopDomainForPromotionLookup(shopDomain);
+  const family = promotionDomainFamily(normalizedDomain);
+  if (!family) return null;
+
+  const rows = await prisma.$queryRaw<StoredPromotionRulesConfig[]>`
+    SELECT smc."id", smc."shopId", smc."config", smc."enabled"
+    FROM "ShopModuleConfig" smc
+    INNER JOIN "Shop" s ON s."id" = smc."shopId"
+    WHERE smc."moduleKey" = ${PROMOTION_RULES_CONFIG_MODULE_KEY}
+      AND (
+        s."shopDomain" = ${normalizedDomain}
+        OR s."myshopifyDomain" = ${normalizedDomain}
+        OR s."primaryDomain" = ${normalizedDomain}
+        OR replace(regexp_replace(COALESCE(s."shopDomain", ''), '^www\.', ''), '.myshopify.com', '') = ${family}
+        OR replace(regexp_replace(COALESCE(s."myshopifyDomain", ''), '^www\.', ''), '.myshopify.com', '') = ${family}
+        OR replace(regexp_replace(COALESCE(s."primaryDomain", ''), '^www\.', ''), '.myshopify.com', '') = ${family}
+      )
+    ORDER BY
+      CASE WHEN smc."shopId" = ${shopId} THEN 0 ELSE 1 END,
+      CASE WHEN jsonb_array_length(COALESCE(smc."config"->'rules', '[]'::jsonb)) > 0 THEN 0 ELSE 1 END,
+      CASE WHEN smc."enabled" = true THEN 0 ELSE 1 END,
+      s."updatedAt" DESC
+    LIMIT 1
+  `;
+
+  return rows[0] || null;
+}
+
+async function getStoredPromotionRulesConfig(shopId: string, shopDomain?: string | null) {
+  const direct = await db().shopModuleConfig.findUnique({ where: { shopId_moduleKey: { shopId, moduleKey: PROMOTION_RULES_CONFIG_MODULE_KEY } }, select: { id: true, shopId: true, config: true, enabled: true } });
+  const directConfig = normalizePromotionRulesConfig(direct?.config, direct ? direct.enabled : undefined);
+  if (!shopDomain) return direct;
+  if (direct && (directConfig.rules.length > 0 || directConfig.enabled)) return direct;
+  return (await findPromotionRulesConfigForShopDomain(shopId, shopDomain)) || direct;
+}
+
+export async function getPromotionRulesConfig(shopId: string, shopDomain?: string | null) {
+  const stored = await getStoredPromotionRulesConfig(shopId, shopDomain);
+  const normalized = normalizePromotionRulesConfig(stored?.config, stored ? stored.enabled : undefined);
   console.info("[Promotion Rules Config] runtime projection lookup", {
     shopId,
+    shopDomain: shopDomain || null,
     moduleKey: PROMOTION_RULES_CONFIG_MODULE_KEY,
     found: Boolean(stored),
+    configShopId: stored?.shopId || null,
     enabled: normalized.enabled,
     ruleCount: normalized.rules.length,
   });
