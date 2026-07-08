@@ -564,16 +564,17 @@ export async function updateCartIntelligenceSettings(shopId: string, patch: unkn
   return next;
 }
 
-export async function getLoopDeskRuntimeConfig(shopId: string) {
+export async function getLoopDeskRuntimeConfig(shopId: string, shopDomain?: string | null) {
   const [settings, cartIntelligence, promotionRulesConfig, delhivery, razorpay] = await Promise.all([
     getLoopDeskMerchantSettings(shopId),
     getCartIntelligenceSettings(shopId),
-    getPromotionRulesConfig(shopId),
+    getPromotionRulesConfig(shopId, shopDomain),
     getDelhiveryRuntimeConfig(shopId),
     getRazorpayRuntimeConfig(shopId),
   ]);
   console.info("[LoopDesk Runtime Config] promotion rules projection", {
     shopId,
+    shopDomain: shopDomain || null,
     moduleKey: PROMOTION_RULES_CONFIG_MODULE_KEY,
     found: promotionRulesConfig.rules.length > 0,
     enabled: promotionRulesConfig.enabled,

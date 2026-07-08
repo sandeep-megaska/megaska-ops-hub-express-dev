@@ -50,7 +50,14 @@ async function savePromotionRules(shopId: string, shopDomain: string, formData: 
       embeddedContext.set("rule", rule.id);
       redirectUrl = `/admin/promotion-rules?${embeddedContext.toString()}`;
     }
-    await savePromotionRulesConfig(shopId, { ...base, schemaVersion: 1, enabled: base.enabled, maxVisibleOffers: Number(base.maxVisibleOffers), conflictStrategy: base.conflictStrategy as PromotionConflictStrategy, rules });
+    const saved = await savePromotionRulesConfig(shopId, { ...base, schemaVersion: 1, enabled: base.enabled, maxVisibleOffers: Number(base.maxVisibleOffers), conflictStrategy: base.conflictStrategy as PromotionConflictStrategy, rules });
+    console.info("[Promotion Admin Save]", {
+      shopId,
+      shopDomain,
+      moduleKey: PROMOTION_RULES_CONFIG_MODULE_KEY,
+      enabled: saved.enabled,
+      ruleCount: saved.rules.length,
+    });
     revalidatePath("/admin/promotion-rules");
   } catch (error) {
     const message = error instanceof Error ? error.message : "Invalid promotion rules configuration.";
@@ -75,7 +82,7 @@ export default async function PromotionRulesPage({ searchParams }: PageProps) {
   const resolved = await resolveAdminShopFromSearchParams(params);
   if (!resolved.shop?.id) return <main className="mx-auto max-w-3xl p-8"><div className={cardClass}><h1 className="text-2xl font-semibold">Promotion Rules</h1><p className="mt-3 text-sm text-red-700">{params.error || formatAdminShopResolutionError(resolved)}</p></div></main>;
   const shop = resolved.shop;
-  const config = await getPromotionRulesConfig(shop.id);
+  const config = await getPromotionRulesConfig(shop.id, shop.shopDomain);
   const createRuleHref = withEmbeddedContext("/admin/promotion-rules", params, { shop: shop.shopDomain, rule: null, saved: null, error: null });
   const selected = config.rules.find((rule) => rule.id === params.rule) || normalizePromotionRule({ id: "new_rule", name: "", display: { ctaLabel: "Add offer" } });
   const action = savePromotionRules.bind(null, shop.id, shop.shopDomain);

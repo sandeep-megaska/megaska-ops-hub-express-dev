@@ -9,12 +9,14 @@ export async function GET(req: NextRequest) {
   const shop = await resolveShopConfig(getShopDomainFromRequest(req));
   if (!shop.id) return NextResponse.json({ ok: false, error: "Unable to resolve shop" }, { status: 400 });
 
-  const config = await getLoopDeskRuntimeConfig(shop.id);
-  console.info("[Runtime Config API] resolved shop for projection", {
+  const config = await getLoopDeskRuntimeConfig(shop.id, shop.shopDomain);
+  console.info("[Runtime Config] projection", {
     shopId: shop.id,
     shopDomain: shop.shopDomain,
-    promotionRulesFound: Boolean(config.promotion_rules_config?.rules?.length),
-    promotionRulesEnabled: Boolean(config.promotion_rules_config?.enabled),
+    moduleKey: "promotion_rules_config",
+    found: Boolean(config.promotion_rules_config?.rules?.length),
+    enabled: Boolean(config.promotion_rules_config?.enabled),
+    ruleCount: config.promotion_rules_config?.rules?.length || 0,
   });
   return NextResponse.json(
     { ok: true, config, shopDomain: shop.shopDomain },
