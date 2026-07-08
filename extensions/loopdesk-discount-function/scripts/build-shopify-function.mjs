@@ -43,20 +43,22 @@ async function main() {
   const wit = `package function:impl;\n\nworld shopify-function {\n  export %${wasmExport}: func();\n}\n`;
   writeFileSync(witPath, wit);
 
-  const javyBin = resolve("node_modules/.bin/javy");
-  if (!existsSync(javyBin)) {
-    throw new Error("Missing Javy compiler binary. Run npm install in extensions/loopdesk-discount-function so the javy dependency is installed.");
+  const javyBinCandidates = [
+    resolve("node_modules/.bin/javy-cli"),
+    resolve("node_modules/.bin/javy"),
+  ];
+  const javyBin = javyBinCandidates.find((path) => existsSync(path));
+  if (!javyBin) {
+    throw new Error("Missing Javy compiler binary. Run npm install in extensions/loopdesk-discount-function so the javy-cli devDependency is installed.");
   }
 
   const pluginCandidates = [
     "node_modules/@shopify/shopify_function/bin/javy_quickjs_provider_v3.wasm",
     "node_modules/@shopify/shopify_function/javy_quickjs_provider_v3.wasm",
-    "node_modules/javy/dist/javy_quickjs_provider_v3.wasm",
-    "node_modules/javy/bin/javy_quickjs_provider_v3.wasm",
   ].map((path) => join(root, path));
   const pluginPath = pluginCandidates.find((path) => existsSync(path));
   if (!pluginPath) {
-    throw new Error("Missing Shopify Functions Javy provider plugin. Ensure @shopify/shopify_function v2.x and javy are installed.");
+    throw new Error("Missing Shopify Functions Javy provider plugin. Ensure @shopify/shopify_function v2.x is installed.");
   }
 
   run(javyBin, ["build", "-C", "dynamic", "-C", `plugin=${pluginPath}`, "-C", `wit=${witPath}`, "-C", "wit-world=shopify-function", "-o", wasmPath, bundledJsPath]);

@@ -8,8 +8,8 @@
   },
   "devDependencies": {
     "esbuild": "^0.25.0",
-    "javy": "^0.1.1",
-    "typescript": "^5"
+    "typescript": "^5",
+    "javy-cli": "^0.1.13"
   },
   "dependencies": {
     "@shopify/shopify_function": "~2.0.0"
