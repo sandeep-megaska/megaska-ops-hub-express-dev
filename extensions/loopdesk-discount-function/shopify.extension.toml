@@ -9,7 +9,7 @@ description = "Universal LoopDesk promotion reward discount function foundation.
   [[extensions.targeting]]
   target = "cart.lines.discounts.generate.run"
   input_query = "src/cart_lines_discounts_generate_run.graphql"
-  export = "cartLinesDiscountsGenerateRun"
+  export = "cart_lines_discounts_generate_run"
 
   [extensions.build]
   command = "cargo build --target=wasm32-unknown-unknown --release"

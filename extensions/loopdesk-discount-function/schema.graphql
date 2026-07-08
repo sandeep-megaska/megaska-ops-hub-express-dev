@@ -4,7 +4,6 @@ schema {
 
 scalar Decimal
 scalar ID
-scalar JSON
 
 type Input {
   discount: Discount!
@@ -21,9 +20,7 @@ enum DiscountClass {
   ORDER
   SHIPPING
 }
-enum LanguageCode {
-  EN
-}
+
 type Metafield {
   value: String!
 }
@@ -54,19 +51,6 @@ interface Merchandise {
 
 type ProductVariant implements Merchandise {
   id: ID!
-  product: Product!
-}
-
-type Product {
-  id: ID!
-  productType: String!
-  tags: [String!]!
-  inCollections(first: Int): [CollectionMembership!]!
-}
-
-type CollectionMembership {
-  collectionId: ID!
-  isMember: Boolean!
 }
 
 type CartLinesDiscountsGenerateRunResult {
@@ -93,41 +77,24 @@ type ProductDiscountCandidate {
   associatedDiscountCode: AssociatedDiscountCode
 }
 
-union ProductDiscountCandidateTarget = CartLineTarget
+union ProductDiscountCandidateTarget = ProductVariantTarget
 
-type CartLineTarget {
+type ProductVariantTarget {
   id: ID!
   quantity: Int
 }
 
-union ProductDiscountCandidateValue = Percentage | ProductDiscountCandidateFixedAmount
-
-type AssociatedDiscountCode {
-  code: String!
-}
-
-type ProductDiscountCandidatePrerequisite {
-  cartLine: CartLinePrerequisite
-}
-
-type CartLinePrerequisite {
-  id: ID!
-  quantity: Int!
-}
+union ProductDiscountCandidateValue = Percentage | FixedAmount
 
 type Percentage {
   value: Decimal!
 }
 
-type ProductDiscountCandidateFixedAmount {
+type FixedAmount {
   amount: Decimal!
   appliesToEachItem: Boolean
 }
 
-enum CountryCode {
-  US
-}
-
-enum CurrencyCode {
-  USD
+type AssociatedDiscountCode {
+  code: String!
 }
