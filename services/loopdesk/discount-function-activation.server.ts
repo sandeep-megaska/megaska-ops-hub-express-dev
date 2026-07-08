@@ -1,4 +1,4 @@
-import { existsSync } from "fs";
+import { existsSync, readFileSync, statSync } from "fs";
 import path from "path";
 import { shopifyAdminGraphql } from "../express-checkout/shopify-admin";
 import { LOOPDESK_DISCOUNT_FUNCTION_METAFIELD_KEY, LOOPDESK_DISCOUNT_FUNCTION_METAFIELD_NAMESPACE, type LoopDeskDiscountFunctionConfig } from "./discount-function";
@@ -20,8 +20,46 @@ function configMetafield(config: LoopDeskDiscountFunctionConfig) {
   return [{ namespace: LOOPDESK_DISCOUNT_FUNCTION_METAFIELD_NAMESPACE, key: LOOPDESK_DISCOUNT_FUNCTION_METAFIELD_KEY, type: "json", value: JSON.stringify(config) }];
 }
 
+export function validateLoopDeskDiscountFunctionBuildArtifact() {
+  if (!existsSync(FUNCTION_ARTIFACT_PATH)) {
+    return { ok: false, reason: `Missing Shopify Function artifact at ${FUNCTION_ARTIFACT_PATH}. Run the LoopDesk function build before activation.` };
+  }
+
+  const size = statSync(FUNCTION_ARTIFACT_PATH).size;
+  if (size <= 8) {
+    return { ok: false, reason: `Invalid Shopify Function artifact at ${FUNCTION_ARTIFACT_PATH}: synthetic/minimal WASM artifacts are not accepted.` };
+  }
+
+  const bytes = readFileSync(FUNCTION_ARTIFACT_PATH);
+  if (bytes[0] !== 0x00 || bytes[1] !== 0x61 || bytes[2] !== 0x73 || bytes[3] !== 0x6d) {
+    return { ok: false, reason: `Invalid Shopify Function artifact at ${FUNCTION_ARTIFACT_PATH}: file is not a WebAssembly module.` };
+  }
+
+  let module: WebAssembly.Module;
+  try {
+    module = new WebAssembly.Module(bytes);
+  } catch (error) {
+    return { ok: false, reason: `Invalid Shopify Function artifact at ${FUNCTION_ARTIFACT_PATH}: ${error instanceof Error ? error.message : "WebAssembly validation failed"}.` };
+  }
+
+  const exports = WebAssembly.Module.exports(module);
+  const imports = WebAssembly.Module.imports(module);
+  const hasTargetExport = exports.some((item) => item.kind === "function" && item.name === "cartLinesDiscountsGenerateRun");
+  const usesShopifyFunctionRuntime = imports.some((item) => item.module === "shopify_function_v2" || item.module === "shopify_function_v1");
+
+  if (!hasTargetExport) {
+    return { ok: false, reason: `Invalid Shopify Function artifact at ${FUNCTION_ARTIFACT_PATH}: missing cartLinesDiscountsGenerateRun export.` };
+  }
+
+  if (!usesShopifyFunctionRuntime) {
+    return { ok: false, reason: `Invalid Shopify Function artifact at ${FUNCTION_ARTIFACT_PATH}: missing Shopify Function runtime imports.` };
+  }
+
+  return { ok: true, reason: null };
+}
+
 export function loopDeskDiscountFunctionBuildArtifactPresent() {
-  return existsSync(FUNCTION_ARTIFACT_PATH);
+  return validateLoopDeskDiscountFunctionBuildArtifact().ok;
 }
 
 export async function queryLoopDeskAppDiscountTypes(shopDomain: string, shopId: string) {
@@ -54,11 +92,12 @@ async function updateAutomaticDiscount(shopDomain: string, shopId: string, disco
 }
 
 export async function activateLoopDeskDiscountFunction(input: { shopId: string; shopDomain: string }) {
-  const buildArtifactPresent = loopDeskDiscountFunctionBuildArtifactPresent();
+  const buildArtifactValidation = validateLoopDeskDiscountFunctionBuildArtifact();
+  const buildArtifactPresent = buildArtifactValidation.ok;
   const config = await compileLoopDeskDiscountFunctionConfig(input.shopId, input.shopDomain);
   const diagnostics = { functionFound: false, functionId: null as string | null, automaticDiscount: "not-run" as "not-run" | "found" | "created" | "updated", metafieldUpdated: false, rulesCompiledCount: config.rules.length, buildArtifactPresent, activationStatus: "blocked" as "blocked" | "activated" };
 
-  if (!buildArtifactPresent) return { ok: false, diagnostics, config, message: `Missing Shopify Function artifact at ${FUNCTION_ARTIFACT_PATH}. Run the LoopDesk function build before activation.` };
+  if (!buildArtifactValidation.ok) return { ok: false, diagnostics, config, message: buildArtifactValidation.reason };
 
   const functionType = selectLoopDeskAppDiscountType(await queryLoopDeskAppDiscountTypes(input.shopDomain, input.shopId));
   diagnostics.functionFound = Boolean(functionType?.functionId);
