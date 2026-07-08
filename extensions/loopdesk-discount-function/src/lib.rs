@@ -201,6 +201,7 @@ fn cart_lines_discounts_generate_run(
         .filter_map(|line| {
             let variant_gid = match line.merchandise() {
                 schema::cart_lines_discounts_generate_run::input::cart::lines::Merchandise::ProductVariant(variant) => variant.id().clone(),
+                schema::cart_lines_discounts_generate_run::input::cart::lines::Merchandise::Other => return None,
             };
 
             Some(CartLine {
