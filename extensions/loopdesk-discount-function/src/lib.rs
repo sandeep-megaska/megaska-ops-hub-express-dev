@@ -1,5 +1,6 @@
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use shopify_function::prelude::*;
+use shopify_function::shopify_function_wasm_api::Serialize;
 use shopify_function::Result;
 
 #[typegen("schema.graphql")]
