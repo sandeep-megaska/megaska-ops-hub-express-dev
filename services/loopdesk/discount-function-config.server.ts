@@ -22,8 +22,16 @@ function rewardEnforcementType(rule: PromotionRule): RewardEnforcementType {
   return displayPrice ? "fixed_price" : "free_gift";
 }
 
+function fixedPriceAmount(rule: PromotionRule): number | null {
+  const raw = String(rule.display.offerPriceDisplay || "").replace(/[^0-9.]/g, "");
+  const amount = Number(raw);
+  return Number.isFinite(amount) && amount > 0 ? amount : null;
+}
+
 function isValidCompiledRule(rule: CompiledPromotionEnforcementRule) {
   if (!rule.id || !rule.rewardVariantGid || !rule.rewardProductGid) return false;
+  if (rule.rewardEnforcementType !== "fixed_price") return false;
+  if (!rule.fixedPriceAmount || rule.fixedPriceAmount <= 0) return false;
   if (rule.triggerType === "always") return true;
   return rule.triggerValue !== null && rule.triggerValue !== undefined && String(rule.triggerValue).trim() !== "";
 }
@@ -44,6 +52,7 @@ export async function compileLoopDeskDiscountFunctionConfig(shopId: string, shop
       rewardProductGid: rule.reward.productGid || null,
       rewardVariantGid: rule.reward.variantGid || null,
       quantity: rule.reward.quantity,
+      fixedPriceAmount: fixedPriceAmount(rule),
     }))
     .filter(isValidCompiledRule)
     .sort((left, right) => left.priority - right.priority);

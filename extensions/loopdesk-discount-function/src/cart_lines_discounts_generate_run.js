@@ -1,11 +1,6 @@
 const CONFIG_NAMESPACE = "loopdesk";
 const CONFIG_KEY = "discount_function_config";
-const SUPPORTED_REWARD_ENFORCEMENT_TYPES = new Set([
-  "fixed_price",
-  "percentage",
-  "fixed_amount",
-  "free_gift",
-]);
+const SUPPORTED_REWARD_ENFORCEMENT_TYPES = new Set(["fixed_price"]);
 const SUPPORTED_TRIGGER_TYPES = new Set([
   "always",
   "cart_contains_product",
@@ -23,6 +18,15 @@ function isRecord(value) {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
 
+function positiveNumber(value) {
+  const next = Number(value);
+  return Number.isFinite(next) && next > 0 ? next : null;
+}
+
+function fixedPriceForRule(rule) {
+  return positiveNumber(rule.fixedPriceAmount ?? rule.fixedPrice ?? rule.fixedPriceValue ?? rule.rewardFixedPrice);
+}
+
 function parseConfig(input) {
   const rawValue = input?.discountNode?.metafield?.value;
   if (typeof rawValue !== "string" || !rawValue.trim()) return null;
@@ -36,12 +40,16 @@ function parseConfig(input) {
 
   if (!isRecord(parsed) || parsed.enabled !== true || !Array.isArray(parsed.rules)) return null;
 
-  const rules = parsed.rules.filter((rule) => {
-    if (!isRecord(rule) || rule.enabled !== true) return false;
-    if (typeof rule.id !== "string" || !rule.id.trim()) return false;
-    if (!SUPPORTED_REWARD_ENFORCEMENT_TYPES.has(String(rule.rewardEnforcementType))) return false;
-    return SUPPORTED_TRIGGER_TYPES.has(String(rule.triggerType));
-  });
+  const rules = parsed.rules
+    .filter((rule) => {
+      if (!isRecord(rule) || rule.enabled !== true) return false;
+      if (typeof rule.id !== "string" || !rule.id.trim()) return false;
+      if (!SUPPORTED_REWARD_ENFORCEMENT_TYPES.has(String(rule.rewardEnforcementType))) return false;
+      if (!SUPPORTED_TRIGGER_TYPES.has(String(rule.triggerType))) return false;
+      if (typeof rule.rewardVariantGid !== "string" || !rule.rewardVariantGid.trim()) return false;
+      return fixedPriceForRule(rule) !== null;
+    })
+    .map((rule) => ({ ...rule, fixedPriceAmount: fixedPriceForRule(rule) }));
 
   if (!rules.length) return null;
 
@@ -58,11 +66,14 @@ function parseCartLines(input) {
   return lines.map((line) => {
     const merchandise = line?.merchandise || {};
     const product = merchandise?.product || {};
+    const quantity = Math.max(0, Math.floor(Number(line?.quantity || 0)));
+    const subtotalAmount = Math.max(0, Number(line?.cost?.subtotalAmount?.amount || 0));
 
     return {
       id: String(line?.id || ""),
-      quantity: Number(line?.quantity || 0),
-      subtotalAmount: Number(line?.cost?.subtotalAmount?.amount || 0),
+      quantity,
+      subtotalAmount,
+      unitPrice: quantity > 0 ? subtotalAmount / quantity : 0,
       currencyCode: String(line?.cost?.subtotalAmount?.currencyCode || ""),
       variantGid: String(merchandise?.id || ""),
       productGid: String(product?.id || ""),
@@ -78,20 +89,83 @@ function parseCartLines(input) {
   });
 }
 
+function triggerMatches(rule, cartLines) {
+  const triggerValue = String(rule.triggerValue ?? "").trim();
+
+  if (rule.triggerType === "always") return true;
+  if (rule.triggerType === "cart_subtotal_gte") return cartLines.reduce((total, line) => total + line.subtotalAmount, 0) >= Number(rule.triggerValue || 0);
+  if (rule.triggerType === "cart_quantity_gte") return cartLines.reduce((total, line) => total + line.quantity, 0) >= Number(rule.triggerValue || 0);
+  if (!triggerValue) return false;
+
+  return cartLines.some((line) => {
+    if (rule.triggerType === "cart_contains_product") return line.productGid === triggerValue;
+    if (rule.triggerType === "cart_contains_collection") return line.collectionGids.includes(triggerValue);
+    if (rule.triggerType === "cart_contains_variant") return line.variantGid === triggerValue;
+    if (rule.triggerType === "cart_contains_product_type") return line.productType === triggerValue;
+    if (rule.triggerType === "cart_contains_tag") return line.tags.includes(triggerValue);
+    return false;
+  });
+}
+
+function discountCandidatesForRule(rule, cartLines) {
+  if (!triggerMatches(rule, cartLines)) return [];
+
+  const maxQuantity = Math.max(0, Math.floor(Number(rule.quantity || 0))) || 1;
+  const fixedPriceAmount = Number(rule.fixedPriceAmount);
+
+  return cartLines
+    .filter((line) => line.id && line.quantity > 0 && line.variantGid === rule.rewardVariantGid)
+    .map((line) => {
+      const discountAmount = line.unitPrice - fixedPriceAmount;
+      if (!Number.isFinite(discountAmount) || discountAmount <= 0) return null;
+
+      return {
+        targets: [
+          {
+            cartLine: {
+              id: line.id,
+              quantity: Math.min(line.quantity, maxQuantity),
+            },
+          },
+        ],
+        value: {
+          fixedAmount: {
+            amount: discountAmount.toFixed(2),
+            appliesToEachItem: true,
+          },
+        },
+        message: "LoopDesk fixed price reward",
+      };
+    })
+    .filter(Boolean);
+}
+
 function prepareEvaluationPipeline(cartLines, rules) {
+  const sortedRules = [...rules].sort((a, b) => Number(a.priority || 0) - Number(b.priority || 0));
+  const discountCandidates = sortedRules.flatMap((rule) => discountCandidatesForRule(rule, cartLines));
+
   return {
     cartLines,
-    rules: [...rules].sort((a, b) => Number(a.priority || 0) - Number(b.priority || 0)),
+    rules: sortedRules,
     matchedRules: [],
-    discountOperations: [],
+    discountOperations: discountCandidates.length
+      ? [
+          {
+            productDiscountsAdd: {
+              candidates: discountCandidates,
+              selectionStrategy: "ALL",
+            },
+          },
+        ]
+      : [],
   };
 }
 
 /**
- * Universal LoopDesk promotion discount function foundation.
+ * Enforces LoopDesk fixed_price promotion rewards in Shopify checkout.
  *
- * This phase intentionally returns no discount operations. Future phases will
- * use the parsed cart lines and compiled rules to enforce promotion rewards.
+ * Only compiled fixed_price rules from the LoopDesk discount function config
+ * metafield are considered. Shopify cart line prices remain authoritative.
  *
  * @param {unknown} input
  * @returns {{operations: unknown[]}}

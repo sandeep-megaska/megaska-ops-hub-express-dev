@@ -4,9 +4,11 @@
   "version": "0.0.0",
   "scripts": {
     "build": "node scripts/build-shopify-function.mjs",
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "node --test"
   },
   "devDependencies": {
     "typescript": "^5"
-  }
+  },
+  "type": "module"
 }

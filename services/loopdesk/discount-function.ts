@@ -27,6 +27,7 @@ export type CompiledPromotionEnforcementRule = {
   rewardProductGid?: string | null;
   rewardVariantGid?: string | null;
   quantity?: number;
+  fixedPriceAmount?: number | null;
 };
 
 export type LoopDeskDiscountFunctionConfig = {
