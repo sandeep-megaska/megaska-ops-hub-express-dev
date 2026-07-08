@@ -210,6 +210,17 @@
     window.console.debug("[LoopDesk Config] " + message, payload || {});
   }
 
+
+  function normalizePromotionConfig(rawConfig) {
+    var raw = isPlainObject(rawConfig) ? rawConfig : {};
+    return {
+      enabled: bool(raw.enabled, false),
+      maxVisibleOffers: Math.max(1, Math.min(20, Number(raw.maxVisibleOffers) || 1)),
+      conflictStrategy: raw.conflictStrategy === "priority_first" ? "priority_first" : "priority_first",
+      rules: Array.isArray(raw.rules) ? raw.rules : []
+    };
+  }
+
   function normalizeConfig(rawConfig) {
     var legacy = isPlainObject(window.LOOPDESK_CART_DRAWER_CONFIG) ? window.LOOPDESK_CART_DRAWER_CONFIG : {};
     var raw = isPlainObject(rawConfig) ? rawConfig : {};
@@ -256,6 +267,7 @@
         showSecureBadge: bool(checkout.showSecureBadge, DEFAULT_CONFIG.checkout.showSecureBadge),
         showTrustCopy: bool(checkout.showTrustCopy, DEFAULT_CONFIG.checkout.showTrustCopy)
       },
+      promotion_rules_config: normalizePromotionConfig(raw.promotion_rules_config || raw.promotionRules),
       enabled: bool(firstDefined(raw.enabled, legacy.enabled), DEFAULT_CONFIG.enabled),
       cartOwnershipMode: text(cart.cartOwnershipMode || legacy.cartOwnershipMode, DEFAULT_CONFIG.cartOwnershipMode)
     };
@@ -707,6 +719,112 @@
     return "";
   }
 
+  function idTail(value) {
+    var textValue = String(value || "");
+    return textValue.split("/").pop();
+  }
+
+  function sameShopifyId(left, right) {
+    if (!left || !right) return false;
+    return String(left) === String(right) || idTail(left) === idTail(right);
+  }
+
+  function cartContainsProduct(cart, productGid) {
+    return Boolean(cart && Array.isArray(cart.items) && cart.items.some(function (item) { return sameShopifyId(item.product_id, productGid) || sameShopifyId(item.product_gid, productGid) || sameShopifyId(item.productGid, productGid); }));
+  }
+
+  function cartContainsVariant(cart, variantGid) {
+    return Boolean(cart && Array.isArray(cart.items) && cart.items.some(function (item) { return sameShopifyId(item.variant_id, variantGid) || sameShopifyId(item.variant_gid, variantGid) || sameShopifyId(item.variantGid, variantGid) || sameShopifyId(item.id, variantGid); }));
+  }
+
+  function arrayField(item, names) {
+    for (var i = 0; i < names.length; i += 1) {
+      var value = item && item[names[i]];
+      if (Array.isArray(value)) return value.map(String);
+      if (typeof value === "string" && value.trim()) return value.split(",").map(function (part) { return part.trim(); });
+    }
+    return null;
+  }
+
+  function itemHasMetadataValue(cart, names, expected, diagnosticKey, label) {
+    var items = cart && Array.isArray(cart.items) ? cart.items : [];
+    var available = false;
+    var matched = items.some(function (item) {
+      var values = arrayField(item, names);
+      if (!values) return false;
+      available = true;
+      return values.some(function (value) { return sameShopifyId(value, expected) || String(value).toLowerCase() === String(expected || "").toLowerCase(); });
+    });
+    if (!available) debugLogOnce(diagnosticKey, "Promotion trigger skipped because storefront cart metadata is unavailable", { trigger: label }, true);
+    return matched;
+  }
+
+  function itemHasProductType(cart, expected) {
+    var items = cart && Array.isArray(cart.items) ? cart.items : [];
+    var available = false;
+    var matched = items.some(function (item) {
+      var value = item && (item.product_type || item.productType || item.type);
+      if (!value) return false;
+      available = true;
+      return String(value).toLowerCase() === String(expected || "").toLowerCase();
+    });
+    if (!available) debugLogOnce("promotion-product-type-unavailable", "Promotion trigger skipped because storefront cart metadata is unavailable", { trigger: "product_type" }, true);
+    return matched;
+  }
+
+  function isPromotionScheduled(rule, now) {
+    var schedule = isPlainObject(rule.schedule) ? rule.schedule : {};
+    if (schedule.alwaysActive !== false) return true;
+    var time = now ? now.getTime() : Date.now();
+    var start = schedule.startAt ? Date.parse(schedule.startAt) : NaN;
+    var end = schedule.endAt ? Date.parse(schedule.endAt) : NaN;
+    if (Number.isFinite(start) && time < start) return false;
+    if (Number.isFinite(end) && time > end) return false;
+    return true;
+  }
+
+  function triggerMatches(trigger, cart) {
+    var type = trigger && trigger.type;
+    var value = trigger && (trigger.value || trigger.productGid || trigger.variantGid || trigger.collectionGid || trigger.productType || trigger.tag || trigger.subtotalGte || trigger.quantityGte);
+    if (!type || type === "always") return true;
+    if (type === "cart_contains_product") return cartContainsProduct(cart, trigger.productGid || value);
+    if (type === "cart_contains_variant") return cartContainsVariant(cart, trigger.variantGid || value);
+    if (type === "cart_contains_collection") return itemHasMetadataValue(cart, ["collections", "collection_ids", "collectionGids"], trigger.collectionGid || value, "promotion-collections-unavailable", "cart_contains_collection");
+    if (type === "cart_contains_product_type" || type === "product_type") return itemHasProductType(cart, trigger.productType || value);
+    if (type === "cart_contains_tag" || type === "tag") return itemHasMetadataValue(cart, ["tags", "product_tags", "productTags"], trigger.tag || value, "promotion-tags-unavailable", "tag");
+    if (type === "cart_subtotal_gte" || type === "cart_subtotal_min") return Number(cart && cart.total_price || 0) >= Number(trigger.subtotalGte || value || 0);
+    if (type === "cart_quantity_gte" || type === "cart_quantity_min") return Number(cart && cart.item_count || 0) >= Number(trigger.quantityGte || value || 0);
+    return false;
+  }
+
+  function getEligiblePromotionRules(cart, placement, now) {
+    var promotionConfig = normalizePromotionConfig(config.promotion_rules_config || config.promotionRules);
+    if (!promotionConfig.enabled) return [];
+    return promotionConfig.rules.filter(function (rule) {
+      var display = isPlainObject(rule.display) ? rule.display : {};
+      var reward = isPlainObject(rule.reward) ? rule.reward : {};
+      var eligibility = isPlainObject(rule.eligibility) ? rule.eligibility : {};
+      var rulePlacement = display.placement || "drawer";
+      var triggers = Array.isArray(eligibility.triggers) && eligibility.triggers.length ? eligibility.triggers : [{ type: "always" }];
+      var matched = eligibility.match === "all" ? triggers.every(function (trigger) { return triggerMatches(trigger, cart); }) : triggers.some(function (trigger) { return triggerMatches(trigger, cart); });
+      return rule && rule.enabled === true && rule.status === "active" && (rulePlacement === placement || rulePlacement === "both") && reward.productGid && reward.variantGid && isPromotionScheduled(rule, now) && !(display.hideIfOfferProductAlreadyInCart !== false && (cartContainsProduct(cart, reward.productGid) || cartContainsVariant(cart, reward.variantGid))) && matched;
+    }).sort(function (a, b) { return (Number(a.priority) || 0) - (Number(b.priority) || 0); }).slice(0, promotionConfig.maxVisibleOffers);
+  }
+
+  function renderPromotionOffers(cart) {
+    var offers = getEligiblePromotionRules(cart, "drawer", new Date());
+    if (!offers.length) return "";
+    return '<section class="loopdesk-cart-drawer__offers" aria-label="Available offers">' + offers.map(function (rule) {
+      var display = isPlainObject(rule.display) ? rule.display : {};
+      var reward = isPlainObject(rule.reward) ? rule.reward : {};
+      var product = isPlainObject(reward.product) ? reward.product : {};
+      var image = display.imageOverrideUrl || product.imageUrl || product.image || "";
+      var title = product.title || rule.name || "Offer product";
+      var deferred = reward.requiresDiscountEnforcement ? ' data-loopdesk-promotion-enforcement="deferred"' : '';
+      return ['<article class="loopdesk-cart-drawer__offer" data-loopdesk-promotion-rule="' + escapeHtml(rule.id || '') + '"' + deferred + '>', display.badge ? '<div class="loopdesk-cart-drawer__offer-badge">' + escapeHtml(display.badge) + '</div>' : '', '<div class="loopdesk-cart-drawer__offer-content">', image ? '<img class="loopdesk-cart-drawer__offer-image" src="' + escapeHtml(image) + '" alt="' + escapeHtml(title) + '" loading="lazy">' : '<div class="loopdesk-cart-drawer__offer-image loopdesk-cart-drawer__offer-image--placeholder"></div>', '<div class="loopdesk-cart-drawer__offer-copy"><h3>' + escapeHtml(display.heading || rule.name || 'Special offer') + '</h3>', display.description ? '<p>' + escapeHtml(display.description) + '</p>' : '', '<strong>' + escapeHtml(title) + '</strong><div class="loopdesk-cart-drawer__offer-prices">' + (display.offerPriceDisplay ? '<span>' + escapeHtml(display.offerPriceDisplay) + '</span>' : '') + (display.comparePriceDisplay ? '<s>' + escapeHtml(display.comparePriceDisplay) + '</s>' : '') + '</div></div></div>', '<button type="button" class="loopdesk-cart-drawer__offer-cta" data-loopdesk-offer-add data-loopdesk-offer-variant="' + escapeHtml(reward.variantGid) + '" data-loopdesk-offer-quantity="' + escapeHtml(reward.quantity || 1) + '">' + escapeHtml(display.ctaLabel || 'Add offer') + '</button></article>'].join('');
+    }).join('') + '</section>';
+  }
+
   function renderLines(cart) {
     if (state.loading) return '<div class="loopdesk-cart-drawer__loading"><span></span>' + escapeHtml(config.labels.loadingText) + '</div>';
     if (!cart || !cart.items || cart.items.length === 0) {
@@ -742,7 +860,7 @@
 
     elements.body.innerHTML = state.error
       ? '<div class="loopdesk-cart-drawer__error">We could not load your cart. You can still use the cart page.</div>'
-      : renderLines(cart);
+      : renderLines(cart) + renderPromotionOffers(cart);
 
     elements.subtotal.textContent = money(cart ? cart.total_price : 0, cart && cart.currency);
     elements.count.textContent = itemCount ? "(" + itemCount + ")" : "";
@@ -822,7 +940,31 @@
       .finally(function () { state.loading = false; render(); });
   }
 
+
+  function addPromotionOffer(variantGid, quantity) {
+    var id = idTail(variantGid);
+    if (!id || !canUseCartAjax()) return;
+    state.loading = true;
+    render();
+    return fetch("/cart/add.js", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ id: id, quantity: Math.max(1, Number(quantity) || 1) })
+    }).then(function (response) {
+      if (!response.ok) throw new Error("Offer add failed");
+      return fetchCart();
+    }).catch(function (error) {
+      state.error = error && error.message ? error.message : "Offer add failed";
+    }).finally(function () { state.loading = false; render(); });
+  }
+
   function handleDrawerAction(event) {
+    var offerButton = event.target && event.target.closest && event.target.closest("[data-loopdesk-offer-add]");
+    if (offerButton) {
+      event.preventDefault();
+      return addPromotionOffer(offerButton.getAttribute("data-loopdesk-offer-variant"), offerButton.getAttribute("data-loopdesk-offer-quantity"));
+    }
     var qtyButton = event.target && event.target.closest && event.target.closest("[data-loopdesk-qty]");
     var removeButton = event.target && event.target.closest && event.target.closest("[data-loopdesk-remove]");
     var button = qtyButton || removeButton;

@@ -421,3 +421,93 @@ body.loopdesk-cart-drawer-is-open #loopdesk-cart-drawer-root .loopdesk-cart-draw
   pointer-events: none !important;
   opacity: 0 !important;
 }
+
+.loopdesk-cart-drawer__offers {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.loopdesk-cart-drawer__offer {
+  border: 1px solid color-mix(in srgb, var(--loopdesk-primary, #111827) 18%, transparent);
+  border-radius: var(--loopdesk-radius, 16px);
+  padding: 12px;
+  background: color-mix(in srgb, var(--loopdesk-accent, #2563eb) 7%, #fff);
+}
+
+.loopdesk-cart-drawer__offer-badge {
+  display: inline-flex;
+  margin-bottom: 8px;
+  border-radius: 999px;
+  background: var(--loopdesk-primary, #111827);
+  color: #fff;
+  padding: 4px 9px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.loopdesk-cart-drawer__offer-content {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.loopdesk-cart-drawer__offer-image {
+  width: 64px;
+  height: 64px;
+  flex: 0 0 64px;
+  border-radius: 12px;
+  object-fit: cover;
+  background: #f3f4f6;
+}
+
+.loopdesk-cart-drawer__offer-copy h3 {
+  margin: 0 0 4px;
+  color: var(--loopdesk-text, #111827);
+  font-size: 15px;
+}
+
+.loopdesk-cart-drawer__offer-copy p {
+  margin: 0 0 6px;
+  color: #4b5563;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.loopdesk-cart-drawer__offer-copy strong {
+  display: block;
+  color: var(--loopdesk-text, #111827);
+  font-size: 13px;
+}
+
+.loopdesk-cart-drawer__offer-prices {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  margin-top: 4px;
+}
+
+.loopdesk-cart-drawer__offer-prices span {
+  color: var(--loopdesk-primary, #111827);
+  font-weight: 800;
+}
+
+.loopdesk-cart-drawer__offer-prices s {
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.loopdesk-cart-drawer__offer-cta {
+  width: 100%;
+  margin-top: 10px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--loopdesk-primary, #111827);
+  color: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  padding: 10px 12px;
+}

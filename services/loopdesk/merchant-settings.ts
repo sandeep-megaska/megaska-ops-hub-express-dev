@@ -1,5 +1,6 @@
 import { prisma } from "../db/prisma";
 import { getDelhiveryRuntimeConfig, type DelhiveryPublicRuntimeConfig } from "../delhivery/config";
+import { getPromotionRulesConfig } from "../promotion-rules/config";
 import { getRazorpayRuntimeConfig, type RazorpayPublicRuntimeConfig } from "../razorpay/config";
 
 export const LOOPDESK_RUNTIME_CONFIG_MODULE_KEY = "loopdesk_runtime_config";
@@ -564,12 +565,20 @@ export async function updateCartIntelligenceSettings(shopId: string, patch: unkn
 }
 
 export async function getLoopDeskRuntimeConfig(shopId: string) {
-  const [settings, cartIntelligence, delhivery, razorpay] = await Promise.all([
+  const [settings, cartIntelligence, promotionRulesConfig, delhivery, razorpay] = await Promise.all([
     getLoopDeskMerchantSettings(shopId),
     getCartIntelligenceSettings(shopId),
+    getPromotionRulesConfig(shopId),
     getDelhiveryRuntimeConfig(shopId),
     getRazorpayRuntimeConfig(shopId),
   ]);
-  return { ...toLoopDeskPublicRuntimeConfig(settings), cartIntelligence: toCartIntelligencePublicRuntimeConfig(cartIntelligence), delhivery, razorpay };
+  return {
+    ...toLoopDeskPublicRuntimeConfig(settings),
+    cartIntelligence: toCartIntelligencePublicRuntimeConfig(cartIntelligence),
+    promotion_rules_config: promotionRulesConfig,
+    promotionRules: promotionRulesConfig,
+    delhivery,
+    razorpay,
+  };
 }
 export const normalizeLoopDeskRuntimeConfig = normalizeLoopDeskMerchantSettings;
