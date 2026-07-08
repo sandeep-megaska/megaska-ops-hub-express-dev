@@ -11,6 +11,7 @@ const FUNCTION_ARTIFACT_PATH = path.join(process.cwd(), "extensions", "loopdesk-
 type UserError = { field?: string[] | null; message?: string | null };
 type AppDiscountType = { functionId: string; title: string; description?: string | null; appKey?: string | null; discountClasses?: string[] };
 type AutomaticDiscount = { id: string; automaticDiscount?: { __typename?: string; title?: string | null; status?: string | null; discountId?: string | null; appDiscountType?: { functionId?: string | null } | null } | null };
+type AutomaticDiscountResult = { discountId?: string | null; title?: string | null; status?: string | null } | null | undefined;
 
 function userErrorsMessage(errors: UserError[] | undefined) {
   return (errors || []).map((error) => `${error.field?.join(".") || "discount"}: ${error.message || "Unknown Shopify error"}`).join("; ");
@@ -35,15 +36,15 @@ export function validateLoopDeskDiscountFunctionBuildArtifact() {
     return { ok: false, reason: `Invalid Shopify Function artifact at ${FUNCTION_ARTIFACT_PATH}: file is not a WebAssembly module.` };
   }
 
-  let module: WebAssembly.Module;
+  let wasmModule: WebAssembly.Module;
   try {
-    module = new WebAssembly.Module(bytes);
+    wasmModule = new WebAssembly.Module(bytes);
   } catch (error) {
     return { ok: false, reason: `Invalid Shopify Function artifact at ${FUNCTION_ARTIFACT_PATH}: ${error instanceof Error ? error.message : "WebAssembly validation failed"}.` };
   }
 
-  const exports = WebAssembly.Module.exports(module);
-  const imports = WebAssembly.Module.imports(module);
+  const exports = WebAssembly.Module.exports(wasmModule);
+  const imports = WebAssembly.Module.imports(wasmModule);
   const hasTargetExport = exports.some((item) => item.kind === "function" && item.name === "cartLinesDiscountsGenerateRun");
   const usesShopifyFunctionRuntime = imports.some((item) => item.module === "shopify_function_v2" || item.module === "shopify_function_v1");
 
@@ -95,7 +96,18 @@ export async function activateLoopDeskDiscountFunction(input: { shopId: string; 
   const buildArtifactValidation = validateLoopDeskDiscountFunctionBuildArtifact();
   const buildArtifactPresent = buildArtifactValidation.ok;
   const config = await compileLoopDeskDiscountFunctionConfig(input.shopId, input.shopDomain);
-  const diagnostics = { functionFound: false, functionId: null as string | null, automaticDiscount: "not-run" as "not-run" | "found" | "created" | "updated", metafieldUpdated: false, rulesCompiledCount: config.rules.length, buildArtifactPresent, activationStatus: "blocked" as "blocked" | "activated" };
+  const diagnostics = {
+    functionFound: false,
+    functionId: null as string | null,
+    automaticDiscount: "not-run" as "not-run" | "found" | "created" | "updated",
+    automaticDiscountId: null as string | null,
+    automaticDiscountTitle: null as string | null,
+    automaticDiscountStatus: null as string | null,
+    metafieldUpdated: false,
+    rulesCompiledCount: config.rules.length,
+    buildArtifactPresent,
+    activationStatus: "blocked" as "blocked" | "activated",
+  };
 
   if (!buildArtifactValidation.ok) return { ok: false, diagnostics, config, message: buildArtifactValidation.reason };
 
@@ -105,13 +117,17 @@ export async function activateLoopDeskDiscountFunction(input: { shopId: string; 
   if (!functionType?.functionId) return { ok: false, diagnostics, config, message: "LoopDesk app discount function was not found in Shopify appDiscountTypes." };
 
   const existing = await findExistingLoopDeskDiscount(input.shopDomain, input.shopId, functionType.functionId);
+  let automaticDiscount: AutomaticDiscountResult;
   if (existing?.id) {
-    await updateAutomaticDiscount(input.shopDomain, input.shopId, existing.id, functionType.functionId, config);
+    automaticDiscount = await updateAutomaticDiscount(input.shopDomain, input.shopId, existing.id, functionType.functionId, config);
     diagnostics.automaticDiscount = "updated";
   } else {
-    await createAutomaticDiscount(input.shopDomain, input.shopId, functionType.functionId, config);
+    automaticDiscount = await createAutomaticDiscount(input.shopDomain, input.shopId, functionType.functionId, config);
     diagnostics.automaticDiscount = "created";
   }
+  diagnostics.automaticDiscountId = automaticDiscount?.discountId || existing?.automaticDiscount?.discountId || existing?.id || null;
+  diagnostics.automaticDiscountTitle = automaticDiscount?.title || existing?.automaticDiscount?.title || DISCOUNT_TITLE;
+  diagnostics.automaticDiscountStatus = automaticDiscount?.status || existing?.automaticDiscount?.status || null;
   diagnostics.metafieldUpdated = true;
   diagnostics.activationStatus = "activated";
   return { ok: true, diagnostics, config, message: existing?.id ? "LoopDesk automatic discount updated idempotently." : "LoopDesk automatic discount created." };
