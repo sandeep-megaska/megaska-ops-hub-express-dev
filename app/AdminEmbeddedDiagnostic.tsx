@@ -38,6 +38,7 @@ export default function AdminEmbeddedDiagnostic() {
       </div>
       <p>shop present: {yesNo(status.shopPresent)}; host present: {yesNo(status.hostPresent)}; API key present: {yesNo(status.apiKeyPresent)}; API key meta present: {yesNo(status.apiKeyMetaPresent)}; API key meta content length: {status.apiKeyMetaContentLength}; App Bridge script tag present: {yesNo(status.appBridgeScriptTagPresent)}; App Bridge script loaded event fired: {yesNo(status.appBridgeScriptLoadedEventFired)}; window.shopify present: {yesNo(status.shopifyGlobalPresent)}; typeof window.shopify.resourcePicker: {status.resourcePickerType}; App Bridge initialized: {yesNo(status.appBridgeInitialized)}; Resource Picker available: {yesNo(status.resourcePickerAvailable)}.</p>
       {status.appBridgeScriptError ? <p className="mt-1 text-red-900">Script load error: {status.appBridgeScriptError}</p> : null}
+      <p>App Bridge script diagnostics: {status.appBridgeScriptDiagnostics}</p>
       <p>current route: {status.currentRoute || "—"}</p>
       {!status.appBridgeInitialized ? <p className="mt-1 text-amber-900">Fallback: admin pages remain usable, but Shopify embedded features need a valid Admin launch URL and API key.</p> : null}
       {message ? <p className="mt-1 font-medium">{message}</p> : null}

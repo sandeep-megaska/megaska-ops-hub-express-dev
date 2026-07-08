@@ -1,6 +1,5 @@
 import "./globals.css";
 import { Suspense } from "react";
-import Script from "next/script";
 import AdminNavLink from "./AdminNavLink";
 import ShopifyHostContext from "./ShopifyHostContext";
 import { AdminEmbeddedProvider } from "./AdminEmbeddedProvider";
@@ -16,10 +15,44 @@ export default function RootLayout({
       <head>
         {process.env.SHOPIFY_API_KEY ? <meta name="shopify-api-key" content={process.env.SHOPIFY_API_KEY} /> : null}
         {process.env.SHOPIFY_API_KEY ? (
-          <Script
-            id="shopify-app-bridge-cdn"
-            src="https://cdn.shopify.com/shopifycloud/app-bridge.js"
-            strategy="beforeInteractive"
+          <script
+            id="shopify-app-bridge-diagnostics-before"
+            dangerouslySetInnerHTML={{
+              __html: `
+                window.__shopifyAppBridgeScriptLoaded = false;
+                window.__shopifyAppBridgeScriptError = "";
+                window.__shopifyAppBridgeScriptEvents = [];
+                window.__markShopifyAppBridgeLoaded = function () {
+                  window.__shopifyAppBridgeScriptLoaded = true;
+                  window.__shopifyAppBridgeScriptEvents.push({ type: "load", at: Date.now(), shopifyPresent: Boolean(window.shopify), resourcePickerType: typeof window.shopify?.resourcePicker });
+                };
+                window.__markShopifyAppBridgeError = function (event) {
+                  var target = event && event.target;
+                  window.__shopifyAppBridgeScriptError = "App Bridge CDN script failed to load or was blocked: " + (target && target.src ? target.src : "unknown source");
+                  window.__shopifyAppBridgeScriptEvents.push({ type: "error", at: Date.now(), message: window.__shopifyAppBridgeScriptError });
+                };
+              `,
+            }}
+          />
+        ) : null}
+        {process.env.SHOPIFY_API_KEY ? (
+          <script
+            id="shopify-app-bridge-cdn-writer"
+            dangerouslySetInnerHTML={{
+              __html: `
+                document.write('<script id="shopify-app-bridge-cdn" src="https://cdn.shopify.com/shopifycloud/app-bridge.js" onload="window.__markShopifyAppBridgeLoaded && window.__markShopifyAppBridgeLoaded()" onerror="window.__markShopifyAppBridgeError && window.__markShopifyAppBridgeError(event)"><\/script>');
+              `,
+            }}
+          />
+        ) : null}
+        {process.env.SHOPIFY_API_KEY ? (
+          <script
+            id="shopify-app-bridge-diagnostics-after"
+            dangerouslySetInnerHTML={{
+              __html: `
+                window.__shopifyAppBridgeScriptEvents.push({ type: "after-tag", at: Date.now(), shopifyPresent: Boolean(window.shopify), resourcePickerType: typeof window.shopify?.resourcePicker });
+              `,
+            }}
           />
         ) : null}
       </head>
