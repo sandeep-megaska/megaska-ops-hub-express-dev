@@ -7,6 +7,7 @@ export type PromotionTriggerType =
   | "always"
   | "cart_contains_product"
   | "cart_contains_collection"
+  | "cart_contains_variant"
   | "cart_contains_product_type"
   | "cart_contains_tag"
   | "cart_subtotal_gte"
@@ -14,7 +15,7 @@ export type PromotionTriggerType =
 export type PromotionPlacement = "drawer" | "cart_page" | "both";
 export type PromotionConflictStrategy = "priority_first" | "newest_first" | "oldest_first";
 
-export type PromotionResourceMetadata = { gid: string; title: string; imageUrl: string | null; handle: string; variantGid?: string; variantTitle?: string };
+export type PromotionResourceMetadata = { id?: string; gid: string; title: string; image?: string | null; imageUrl: string | null; handle: string; resourceType?: "product" | "collection" | "variant"; variantGid?: string; variantTitle?: string };
 
 export type PromotionRule = {
   id: string;
@@ -24,7 +25,7 @@ export type PromotionRule = {
   status: PromotionRuleStatus;
   eligibility: {
     match: "all" | "any";
-    triggers: Array<{ type: PromotionTriggerType; value?: string; productGid?: string; collectionGid?: string; productType?: string; tag?: string; subtotalGte?: number; quantityGte?: number; product?: PromotionResourceMetadata; collection?: PromotionResourceMetadata }>;
+    triggers: Array<{ type: PromotionTriggerType; value?: string; productGid?: string; collectionGid?: string; variantGid?: string; productType?: string; tag?: string; subtotalGte?: number; quantityGte?: number; product?: PromotionResourceMetadata; collection?: PromotionResourceMetadata; variant?: PromotionResourceMetadata }>;
   };
   reward: { type: "offer_product"; productGid: string; variantGid: string; quantity: number; requiresDiscountEnforcement: boolean; product?: PromotionResourceMetadata };
   display: { heading: string; description: string; badge: string; ctaLabel: string; imageOverrideUrl: string | null; offerPriceDisplay: string; comparePriceDisplay: string; placement: PromotionPlacement; hideIfOfferProductAlreadyInCart: boolean };
@@ -52,13 +53,15 @@ function cleanText(value: unknown, fallback = "", max = 240) { return (typeof va
 function bool(value: unknown, fallback = false) { return typeof value === "boolean" ? value : fallback; }
 function num(value: unknown, fallback: number, min = 0, max = 1000000) { const n = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN; return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback; }
 function nullableUrl(value: unknown) { const next = cleanText(value, "", 800); if (!next) return null; try { const parsed = new URL(next); return parsed.protocol === "http:" || parsed.protocol === "https:" ? next : null; } catch { return null; } }
+function resourceType(value: unknown) { return value === "product" || value === "collection" || value === "variant" ? value : undefined; }
 function metadata(value: unknown, fallbackGid = ""): PromotionResourceMetadata {
   const raw = isRecord(value) ? value : {};
-  return { gid: cleanText(raw.gid, fallbackGid, 300), title: cleanText(raw.title, "", 240), imageUrl: nullableUrl(raw.imageUrl), handle: cleanText(raw.handle, "", 240), variantGid: cleanText(raw.variantGid, "", 300), variantTitle: cleanText(raw.variantTitle, "", 240) };
+  const imageUrl = nullableUrl(raw.imageUrl ?? raw.image);
+  return { id: cleanText(raw.id, fallbackGid, 300), gid: cleanText(raw.gid ?? raw.id, fallbackGid, 300), title: cleanText(raw.title, "", 240), image: imageUrl, imageUrl, handle: cleanText(raw.handle, "", 240), resourceType: resourceType(raw.resourceType), variantGid: cleanText(raw.variantGid, "", 300), variantTitle: cleanText(raw.variantTitle, "", 240) };
 }
 function stableId(value: unknown) { const next = cleanText(value, "", 80).replace(/[^a-zA-Z0-9_-]/g, "_"); return next || `rule_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`; }
 function status(value: unknown): PromotionRuleStatus { return value === "active" || value === "paused" || value === "archived" || value === "draft" ? value : "draft"; }
-function triggerType(value: unknown): PromotionTriggerType { return value === "cart_contains_product" || value === "cart_contains_collection" || value === "cart_contains_product_type" || value === "cart_contains_tag" || value === "cart_subtotal_gte" || value === "cart_quantity_gte" ? value : "always"; }
+function triggerType(value: unknown): PromotionTriggerType { return value === "cart_contains_product" || value === "cart_contains_collection" || value === "cart_contains_variant" || value === "cart_contains_product_type" || value === "cart_contains_tag" || value === "cart_subtotal_gte" || value === "cart_quantity_gte" ? value : "always"; }
 function placement(value: unknown): PromotionPlacement { return value === "drawer" || value === "cart_page" || value === "both" ? value : "drawer"; }
 function conflict(value: unknown): PromotionConflictStrategy { return value === "newest_first" || value === "oldest_first" || value === "priority_first" ? value : "priority_first"; }
 
@@ -75,6 +78,7 @@ export function normalizePromotionRule(input: unknown): PromotionRule {
   const normalizedTrigger: Record<string, unknown> & { type: PromotionTriggerType; value: string } = { ...triggerRaw, type, value };
   if (type === "cart_contains_product") { normalizedTrigger.productGid = cleanText(triggerRaw.productGid, value, 300); normalizedTrigger.product = metadata(triggerRaw.product, normalizedTrigger.productGid as string); }
   if (type === "cart_contains_collection") { normalizedTrigger.collectionGid = cleanText(triggerRaw.collectionGid, value, 300); normalizedTrigger.collection = metadata(triggerRaw.collection, normalizedTrigger.collectionGid as string); }
+  if (type === "cart_contains_variant") { normalizedTrigger.variantGid = cleanText(triggerRaw.variantGid, value, 300); normalizedTrigger.variant = metadata(triggerRaw.variant, normalizedTrigger.variantGid as string); }
   if (type === "cart_contains_product_type") normalizedTrigger.productType = value;
   if (type === "cart_contains_tag") normalizedTrigger.tag = value;
   if (type === "cart_subtotal_gte") normalizedTrigger.subtotalGte = num(value, 0);
@@ -121,6 +125,7 @@ export function validatePromotionRulesConfig(config: PromotionRulesConfig): stri
       const trigger = rule.eligibility.triggers[0];
       if (trigger.type === "cart_contains_product" && !String(trigger.productGid || trigger.value || "").trim()) errors.push(`${prefix}: active product trigger rules require a selected product.`);
       else if (trigger.type === "cart_contains_collection" && !String(trigger.collectionGid || trigger.value || "").trim()) errors.push(`${prefix}: active collection trigger rules require a selected collection.`);
+      else if (trigger.type === "cart_contains_variant" && !String(trigger.variantGid || trigger.value || "").trim()) errors.push(`${prefix}: active variant trigger rules require a selected variant.`);
       else if (trigger.type !== "always" && !String(trigger.value || "").trim()) errors.push(`${prefix}: active rules must have a valid trigger value.`);
       if (!rule.reward.productGid.trim() || !rule.reward.variantGid.trim()) errors.push(`${prefix}: active offer product rules require a selected product and variant.`);
     }
