@@ -554,3 +554,7 @@ body.loopdesk-cart-drawer-is-open #loopdesk-cart-drawer-root .loopdesk-cart-draw
   font-weight: 700;
   padding: 8px 10px;
 }
+.loopdesk-cart-drawer__offer-estimate { border-top: 1px solid #e2e8f0; margin-top: 10px; padding-top: 10px; color: #334155; font-size: 13px; }
+.loopdesk-cart-drawer__offer-estimate div { display: flex; justify-content: space-between; gap: 12px; margin: 4px 0; }
+.loopdesk-cart-drawer__offer-estimate strong { color: #0f172a; font-weight: 800; }
+.loopdesk-cart-drawer__offer-estimate p { margin: 6px 0 0; color: #64748b; font-size: 12px; }

@@ -36,18 +36,16 @@ assert.match(css, /#loopdesk-cart-drawer-root \.loopdesk-cart-drawer__overlay[\s
 
 console.log("LoopDesk cart drawer CONFIG-2B regression checks passed");
 
-const fixedAmountPricing = source.match(/function resolvePromotionOfferPriceDisplay\(display, reward\) \{[\s\S]*?\n  \}\n\n  function renderPromotionOffers/);
+const fixedAmountPricing = source.match(/function resolvePromotionOfferPriceDisplay\(display, reward, rule, cart, offerQuantity\) \{[\s\S]*?\n  \}\n\n  function renderPromotionOffers/);
 assert.ok(fixedAmountPricing, "fixed_amount drawer display resolver should exist");
-assert.match(fixedAmountPricing[0], /discount\.type !== "fixed_amount"/, "drawer should derive price only for fixed_amount rewards without merchant override");
-assert.match(fixedAmountPricing[0], /formatDisplayMoneyLike\(variantMoney, variantMoney\.amount - fixedAmount\)/, "fixed_amount drawer display should subtract discount from Shopify variant price");
+assert.match(fixedAmountPricing[0], /resolvePromotionDisplayPricing/, "drawer offer pricing should use the shared promotion resolver");
+assert.match(fixedAmountPricing[0], /source: "shared_resolver"/, "drawer should mark shared resolver-derived offer prices");
 assert.match(source, /var displayPriceSource = offerPrice \? resolvedOfferPrice\.source : "unavailable";/, "drawer should preserve merchant override source and mark derived fixed_amount prices");
 
 const rewardLinePricing = source.match(/function promotionRewardLineAdjustment\(rule, item, cart\) \{[\s\S]*?\n  \}\n\n  function findPromotionRewardLineAdjustment/);
 assert.ok(rewardLinePricing, "reward cart line adjustment helper should exist");
-assert.match(rewardLinePricing[0], /type === "percentage"[\s\S]*percentage <= 0 \|\| percentage > 100[\s\S]*originalUnit \* \(100 - percentage\) \/ 100/, "percentage rewards should be validated and displayed from the original unit price");
-assert.match(rewardLinePricing[0], /type === "fixed_amount"[\s\S]*Math\.max\(0, originalUnit - fixedAmount\)/, "fixed_amount rewards should not display negative prices");
-assert.match(rewardLinePricing[0], /type === "fixed_price"[\s\S]*fixedPrice >= originalUnit[\s\S]*adjustedUnit = fixedPrice/, "fixed_price rewards should only display when below the original price");
-assert.match(rewardLinePricing[0], /eligibleQuantity = Math\.max\(1, Math\.min\(quantity, rewardQty, maxQty\)\)/, "reward quantity display should respect reward and cart caps");
+assert.match(rewardLinePricing[0], /resolvePromotionDisplayPricing/, "reward line pricing should use the shared promotion resolver");
+assert.match(rewardLinePricing[0], /eligibleQuantity: resolved\.eligibleQuantity/, "reward quantity display should come from shared resolver caps");
 
 const rewardLineMatching = source.match(/function promotionRuleMatchesRewardLine\(rule, cart, item, now\) \{[\s\S]*?\n  \}\n\n  function promotionRewardLineAdjustment/);
 assert.ok(rewardLineMatching, "reward cart line matching helper should exist");
@@ -56,4 +54,5 @@ assert.match(rewardLineMatching[0], /rule\.enabled !== true \|\| rule\.status !=
 assert.match(source, /function triggerMatchesRewardLine\(trigger, cart, item\)[\s\S]*cartWithoutItem\(cart, item\)/, "reward line trigger checks should not let the reward-only line satisfy product or variant triggers");
 assert.match(source, /function rewardLinePriceHtml\(item, cart\)[\s\S]*Promotion applies to [\s\S]*Discount applied at checkout/, "reward cart lines should show checkout-discount and quantity-cap messaging");
 assert.match(source, /elements\.subtotal\.textContent = money\(cart \? cart\.total_price : 0, cart && cart\.currency\);/, "subtotal should keep using Shopify cart total and not an estimated promotional total");
+assert.match(source, /Estimated after offer/, "drawer subtotal area should add a clearly labeled estimated-after-offer line");
 assert.match(css, /\.loopdesk-cart-drawer__reward-price[\s\S]*\.loopdesk-cart-drawer__reward-note/, "reward line display styles should exist");
