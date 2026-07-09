@@ -943,9 +943,25 @@
     return parsed ? Math.round(parsed.amount * 100) : 0;
   }
 
+  function resolvePromotionRewardVariantPrice(rule, reward, display) {
+    reward = isPlainObject(reward) ? reward : {};
+    display = isPlainObject(display) ? display : {};
+    var product = isPlainObject(reward.product) ? reward.product : {};
+    var paths = [
+      { value: product.variantPrice, source: "reward.product.variantPrice" },
+      { value: reward.variantPrice, source: "reward.variantPrice" },
+      { value: rule && rule.rewardProductVariantPrice, source: "rewardProductVariantPrice" },
+      { value: display.comparePriceDisplay, source: "legacy_compare" }
+    ];
+    for (var i = 0; i < paths.length; i += 1) {
+      if (text(paths[i].value, "")) return paths[i];
+    }
+    return { value: "", source: "unavailable" };
+  }
+
   function resolvePromotionOfferPriceDisplay(display, reward, rule, cart, offerQuantity) {
-    var variantPrice = text(reward && reward.product && reward.product.variantPrice, "");
-    var originalUnit = centsFromDisplayMoney(variantPrice);
+    var configuredPrice = resolvePromotionRewardVariantPrice(rule, reward, display);
+    var originalUnit = centsFromDisplayMoney(configuredPrice.value);
     var helper = promotionPricingHelper();
     var resolved = helper && helper.resolvePromotionDisplayPricing ? helper.resolvePromotionDisplayPricing({ cart: cart, rule: rule, rewardVariantGid: resolvePromotionOfferVariantGid(reward), rewardUnitPrice: originalUnit, rewardQuantity: Math.max(1, Number(offerQuantity) || Number(reward && reward.quantity) || 1) }) : null;
     if (resolved && resolved.isEligible && resolved.promotionalUnitPrice !== null) {
@@ -970,10 +986,9 @@
       var title = product.title || rule.name || "Offer product";
       var resolvedOfferPrice = resolvePromotionOfferPriceDisplay(display, reward, rule, cart, offerQuantity);
       var offerPrice = resolvedOfferPrice.value;
-      var variantPrice = text(reward.product && reward.product.variantPrice, "");
-      var legacyComparePrice = text(display.comparePriceDisplay, "");
-      var comparePrice = variantPrice || legacyComparePrice;
-      var comparePriceSource = variantPrice ? "shopify_variant_price" : legacyComparePrice ? "legacy_compare_price" : "unavailable";
+      var configuredComparePrice = resolvePromotionRewardVariantPrice(rule, reward, display);
+      var comparePrice = text(configuredComparePrice.value, "");
+      var comparePriceSource = configuredComparePrice.source;
       var displayPriceSource = offerPrice ? resolvedOfferPrice.source : "unavailable";
       var pricing = offerPrice ? '<div class="loopdesk-cart-drawer__offer-prices" data-loopdesk-display-price-source="' + escapeHtml(displayPriceSource) + '" data-loopdesk-compare-price-source="' + escapeHtml(comparePriceSource) + '"><span>Get it for ' + escapeHtml(offerPrice) + '</span>' + (comparePrice ? '<s aria-label="Usually ' + escapeHtml(comparePrice) + '">Usually ' + escapeHtml(comparePrice) + '</s>' : '') + '</div>' : '';
       var deferred = reward.requiresDiscountEnforcement ? ' data-loopdesk-promotion-enforcement="deferred"' : '';

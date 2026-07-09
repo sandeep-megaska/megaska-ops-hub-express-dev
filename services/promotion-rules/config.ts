@@ -18,6 +18,7 @@ export type PromotionConflictStrategy = "priority_first" | "newest_first" | "old
 
 export type PromotionResourceMetadata = { id?: string; gid: string; title: string; image?: string | null; imageUrl: string | null; handle: string; resourceType?: "product" | "collection" | "variant"; variantGid?: string; variantTitle?: string; variantPrice?: string; variantCompareAtPrice?: string };
 export type PromotionRewardDiscount = { type: "fixed_price" | "percentage" | "fixed_amount"; value: number };
+export type PromotionReward = { type: "offer_product"; productGid: string; variantGid: string; quantity: number; requiresDiscountEnforcement: boolean; discount?: PromotionRewardDiscount; product?: PromotionResourceMetadata; variantPrice?: string };
 
 export type PromotionRule = {
   id: string;
@@ -29,7 +30,8 @@ export type PromotionRule = {
     match: "all" | "any";
     triggers: Array<{ type: PromotionTriggerType; value?: string; productGid?: string; collectionGid?: string; variantGid?: string; productType?: string; tag?: string; subtotalGte?: number; quantityGte?: number; product?: PromotionResourceMetadata; collection?: PromotionResourceMetadata; variant?: PromotionResourceMetadata }>;
   };
-  reward: { type: "offer_product"; productGid: string; variantGid: string; quantity: number; requiresDiscountEnforcement: boolean; discount?: PromotionRewardDiscount; product?: PromotionResourceMetadata };
+  reward: PromotionReward;
+  rewardProductVariantPrice?: string;
   display: { heading: string; description: string; badge: string; ctaLabel: string; imageOverrideUrl: string | null; offerPriceDisplay: string; comparePriceDisplay: string; placement: PromotionPlacement; hideIfOfferProductAlreadyInCart: boolean };
   limits: { maxQuantityPerCart: number; showOncePerSession: boolean; oneOfferPerRule: boolean };
   schedule: { alwaysActive: boolean; startAt: string | null; endAt: string | null; timezone: string };
@@ -101,6 +103,7 @@ export function normalizePromotionRule(input: unknown): PromotionRule {
   const rewardProductGid = cleanText(reward.productGid ?? rewardProduct.gid, rewardProduct.gid, 300);
   const rewardVariantGid = cleanText(reward.variantGid ?? rewardProduct.variantGid, rewardProduct.variantGid || "", 300);
   const normalizedRewardProduct = { ...rewardProduct, gid: rewardProduct.gid || rewardProductGid, id: rewardProduct.id || rewardProductGid, variantGid: rewardProduct.variantGid || rewardVariantGid };
+  const rewardVariantPrice = cleanText(reward.variantPrice ?? raw.rewardProductVariantPrice ?? normalizedRewardProduct.variantPrice, normalizedRewardProduct.variantPrice || "", 80);
   return {
     ...raw,
     id: stableId(raw.id),
@@ -109,7 +112,8 @@ export function normalizePromotionRule(input: unknown): PromotionRule {
     priority: num(raw.priority, 100, -100000, 100000),
     status: status(raw.status),
     eligibility: { ...eligibility, match: eligibility.match === "all" ? "all" : "any", triggers: [normalizedTrigger] },
-    reward: { ...reward, type: "offer_product", productGid: rewardProductGid, variantGid: rewardVariantGid, quantity: num(reward.quantity, 1, 1, 999), requiresDiscountEnforcement: bool(reward.requiresDiscountEnforcement, false), discount: rewardDiscount(reward.discount), product: normalizedRewardProduct },
+    reward: { ...reward, type: "offer_product", productGid: rewardProductGid, variantGid: rewardVariantGid, quantity: num(reward.quantity, 1, 1, 999), requiresDiscountEnforcement: bool(reward.requiresDiscountEnforcement, false), discount: rewardDiscount(reward.discount), product: normalizedRewardProduct, variantPrice: rewardVariantPrice },
+    rewardProductVariantPrice: cleanText(raw.rewardProductVariantPrice, rewardVariantPrice, 80),
     display: { ...display, heading: cleanText(display.heading, "", 120), description: cleanText(display.description, "", 500), badge: cleanText(display.badge, "", 80), ctaLabel: cleanText(display.ctaLabel, "Add offer", 80), imageOverrideUrl: nullableUrl(display.imageOverrideUrl), offerPriceDisplay: cleanText(display.offerPriceDisplay, "", 80), comparePriceDisplay: cleanText(display.comparePriceDisplay, "", 80), placement: placement(display.placement), hideIfOfferProductAlreadyInCart: bool(display.hideIfOfferProductAlreadyInCart, true) },
     limits: { ...limits, maxQuantityPerCart: num(limits.maxQuantityPerCart, 1, 1, 999), showOncePerSession: bool(limits.showOncePerSession, false), oneOfferPerRule: bool(limits.oneOfferPerRule, true) },
     schedule: { ...schedule, alwaysActive: bool(schedule.alwaysActive, true), startAt: cleanText(schedule.startAt, "", 80) || null, endAt: cleanText(schedule.endAt, "", 80) || null, timezone: cleanText(schedule.timezone, "Asia/Kolkata", 80) },
