@@ -43,6 +43,8 @@ next-env.d.ts
 /app/generated/prisma
 
 # generated Shopify Function artifacts
+extensions/loopdesk-discount-function/target/
+extensions/loopdesk-discount-function/Cargo.lock
 extensions/loopdesk-discount-function/dist/index.wasm
 extensions/loopdesk-discount-function/dist/function.wasm
 
