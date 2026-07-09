@@ -97,6 +97,10 @@ export function normalizePromotionRule(input: unknown): PromotionRule {
   if (type === "cart_contains_tag") normalizedTrigger.tag = value;
   if (type === "cart_subtotal_gte") normalizedTrigger.subtotalGte = num(value, 0);
   if (type === "cart_quantity_gte") normalizedTrigger.quantityGte = num(value, 0);
+  const rewardProduct = metadata(reward.product, cleanText(reward.productGid, "", 300));
+  const rewardProductGid = cleanText(reward.productGid ?? rewardProduct.gid, rewardProduct.gid, 300);
+  const rewardVariantGid = cleanText(reward.variantGid ?? rewardProduct.variantGid, rewardProduct.variantGid || "", 300);
+  const normalizedRewardProduct = { ...rewardProduct, gid: rewardProduct.gid || rewardProductGid, id: rewardProduct.id || rewardProductGid, variantGid: rewardProduct.variantGid || rewardVariantGid };
   return {
     ...raw,
     id: stableId(raw.id),
@@ -105,7 +109,7 @@ export function normalizePromotionRule(input: unknown): PromotionRule {
     priority: num(raw.priority, 100, -100000, 100000),
     status: status(raw.status),
     eligibility: { ...eligibility, match: eligibility.match === "all" ? "all" : "any", triggers: [normalizedTrigger] },
-    reward: { ...reward, type: "offer_product", productGid: cleanText(reward.productGid, "", 300), variantGid: cleanText(reward.variantGid, "", 300), quantity: num(reward.quantity, 1, 1, 999), requiresDiscountEnforcement: bool(reward.requiresDiscountEnforcement, false), discount: rewardDiscount(reward.discount), product: metadata(reward.product, cleanText(reward.productGid, "", 300)) },
+    reward: { ...reward, type: "offer_product", productGid: rewardProductGid, variantGid: rewardVariantGid, quantity: num(reward.quantity, 1, 1, 999), requiresDiscountEnforcement: bool(reward.requiresDiscountEnforcement, false), discount: rewardDiscount(reward.discount), product: normalizedRewardProduct },
     display: { ...display, heading: cleanText(display.heading, "", 120), description: cleanText(display.description, "", 500), badge: cleanText(display.badge, "", 80), ctaLabel: cleanText(display.ctaLabel, "Add offer", 80), imageOverrideUrl: nullableUrl(display.imageOverrideUrl), offerPriceDisplay: cleanText(display.offerPriceDisplay, "", 80), comparePriceDisplay: cleanText(display.comparePriceDisplay, "", 80), placement: placement(display.placement), hideIfOfferProductAlreadyInCart: bool(display.hideIfOfferProductAlreadyInCart, true) },
     limits: { ...limits, maxQuantityPerCart: num(limits.maxQuantityPerCart, 1, 1, 999), showOncePerSession: bool(limits.showOncePerSession, false), oneOfferPerRule: bool(limits.oneOfferPerRule, true) },
     schedule: { ...schedule, alwaysActive: bool(schedule.alwaysActive, true), startAt: cleanText(schedule.startAt, "", 80) || null, endAt: cleanText(schedule.endAt, "", 80) || null, timezone: cleanText(schedule.timezone, "Asia/Kolkata", 80) },
@@ -141,7 +145,9 @@ export function validatePromotionRulesConfig(config: PromotionRulesConfig): stri
       else if (trigger.type === "cart_contains_collection" && !String(trigger.collectionGid || trigger.value || "").trim()) errors.push(`${prefix}: active collection trigger rules require a selected collection.`);
       else if (trigger.type === "cart_contains_variant" && !String(trigger.variantGid || trigger.value || "").trim()) errors.push(`${prefix}: active variant trigger rules require a selected variant.`);
       else if (trigger.type !== "always" && !String(trigger.value || "").trim()) errors.push(`${prefix}: active rules must have a valid trigger value.`);
-      if (!rule.reward.productGid.trim() || !rule.reward.variantGid.trim()) errors.push(`${prefix}: active offer product rules require a selected product and variant.`);
+      const offerProductGid = String(rule.reward.productGid || rule.reward.product?.gid || rule.reward.product?.id || "").trim();
+      const offerVariantGid = String(rule.reward.variantGid || rule.reward.product?.variantGid || "").trim();
+      if (!offerProductGid || !offerVariantGid) errors.push(`${prefix}: active offer product rules require a selected product and variant.`);
     }
   }
   return errors;

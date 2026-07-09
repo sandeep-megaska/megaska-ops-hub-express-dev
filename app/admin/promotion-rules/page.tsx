@@ -14,6 +14,7 @@ const inputClass = "rounded-lg border border-gray-300 bg-white px-3 py-2 text-gr
 const helpClass = "text-xs leading-5 text-gray-500";
 
 function getString(formData: FormData, key: string) { return String(formData.get(key) || ""); }
+function getFirstString(formData: FormData, ...keys: string[]) { return keys.map((key) => getString(formData, key).trim()).find(Boolean) || ""; }
 function getBool(formData: FormData, key: string) { return formData.get(key) === "on"; }
 
 async function savePromotionRules(shopId: string, shopDomain: string, formData: FormData) {
@@ -34,6 +35,14 @@ async function savePromotionRules(shopId: string, shopDomain: string, formData: 
     if (intent === "pause") rules = rules.map((rule) => rule.id === ruleId ? { ...rule, enabled: false, status: "paused" as const } : rule);
     if (intent === "toggle") rules = rules.map((rule) => rule.id === ruleId ? { ...rule, enabled: !rule.enabled } : rule);
     if (intent === "upsert") {
+      const offerProductGid = getFirstString(formData, "offerProductGid", "offerProductGidRaw");
+      const offerVariantGid = getFirstString(formData, "offerVariantGid", "offerVariantGidRaw");
+      console.info("[Promotion Admin Save] submitted offer resource IDs", {
+        shopId,
+        ruleId,
+        offerProductGid: offerProductGid || null,
+        offerVariantGid: offerVariantGid || null,
+      });
       const rule = normalizePromotionRule({
         id: ruleId,
         name: getString(formData, "name"),
@@ -41,7 +50,7 @@ async function savePromotionRules(shopId: string, shopDomain: string, formData: 
         status: getString(formData, "status"),
         priority: getString(formData, "priority"),
         eligibility: { match: getString(formData, "match"), triggers: [{ type: getString(formData, "triggerType"), value: getString(formData, "triggerType") === "cart_contains_product" ? getString(formData, "triggerProductGid") : getString(formData, "triggerType") === "cart_contains_collection" ? getString(formData, "triggerCollectionGid") : getString(formData, "triggerType") === "cart_contains_variant" ? getString(formData, "triggerVariantGid") : getString(formData, "triggerValueText"), productGid: getString(formData, "triggerProductGid"), collectionGid: getString(formData, "triggerCollectionGid"), variantGid: getString(formData, "triggerVariantGid"), product: { id: getString(formData, "triggerProductGid"), gid: getString(formData, "triggerProductGid"), title: getString(formData, "triggerProductTitle"), image: getString(formData, "triggerProductImageUrl"), imageUrl: getString(formData, "triggerProductImageUrl"), handle: getString(formData, "triggerProductHandle"), resourceType: "product" }, collection: { id: getString(formData, "triggerCollectionGid"), gid: getString(formData, "triggerCollectionGid"), title: getString(formData, "triggerCollectionTitle"), image: getString(formData, "triggerCollectionImageUrl"), imageUrl: getString(formData, "triggerCollectionImageUrl"), handle: getString(formData, "triggerCollectionHandle"), resourceType: "collection" }, variant: { id: getString(formData, "triggerVariantGid"), gid: getString(formData, "triggerVariantGid"), title: getString(formData, "triggerVariantTitle"), image: getString(formData, "triggerVariantImageUrl"), imageUrl: getString(formData, "triggerVariantImageUrl"), handle: getString(formData, "triggerVariantHandle"), resourceType: "variant" } }] },
-        reward: { type: "offer_product", productGid: getString(formData, "offerProductGid"), variantGid: getString(formData, "offerVariantGid"), quantity: getString(formData, "quantity"), requiresDiscountEnforcement: getBool(formData, "requiresDiscountEnforcement"), discount: { type: getString(formData, "rewardDiscountType"), value: getString(formData, "rewardDiscountValue") }, product: { id: getString(formData, "offerProductGid"), gid: getString(formData, "offerProductGid"), title: getString(formData, "offerProductTitle"), image: getString(formData, "offerProductImageUrl"), imageUrl: getString(formData, "offerProductImageUrl"), handle: getString(formData, "offerProductHandle"), resourceType: "product", variantGid: getString(formData, "offerVariantGid"), variantTitle: getString(formData, "offerVariantTitle"), variantPrice: getString(formData, "offerVariantPrice"), variantCompareAtPrice: getString(formData, "offerVariantCompareAtPrice") } },
+        reward: { type: "offer_product", productGid: offerProductGid, variantGid: offerVariantGid, quantity: getString(formData, "quantity"), requiresDiscountEnforcement: getBool(formData, "requiresDiscountEnforcement"), discount: { type: getString(formData, "rewardDiscountType"), value: getString(formData, "rewardDiscountValue") }, product: { id: offerProductGid, gid: offerProductGid, title: getString(formData, "offerProductTitle"), image: getString(formData, "offerProductImageUrl"), imageUrl: getString(formData, "offerProductImageUrl"), handle: getString(formData, "offerProductHandle"), resourceType: "product", variantGid: offerVariantGid, variantTitle: getString(formData, "offerVariantTitle"), variantPrice: getString(formData, "offerVariantPrice"), variantCompareAtPrice: getString(formData, "offerVariantCompareAtPrice") } },
         display: { heading: getString(formData, "heading"), description: getString(formData, "description"), badge: getString(formData, "badge"), ctaLabel: getString(formData, "ctaLabel"), imageOverrideUrl: getString(formData, "imageOverrideUrl"), offerPriceDisplay: getString(formData, "offerPriceDisplay"), comparePriceDisplay: getString(formData, "comparePriceDisplay"), placement: getString(formData, "placement"), hideIfOfferProductAlreadyInCart: getBool(formData, "hideIfOfferProductAlreadyInCart") },
         limits: { maxQuantityPerCart: getString(formData, "maxQuantityPerCart"), showOncePerSession: getBool(formData, "showOncePerSession") },
         schedule: { alwaysActive: getBool(formData, "alwaysActive"), startAt: getString(formData, "startAt"), endAt: getString(formData, "endAt"), timezone: getString(formData, "timezone") },
@@ -91,7 +100,7 @@ export default async function PromotionRulesPage({ searchParams }: PageProps) {
   const triggerProduct = trigger.product || { ...emptyResource, gid: trigger.productGid || "" };
   const triggerCollection = trigger.collection || { ...emptyResource, gid: trigger.collectionGid || "" };
   const triggerVariant = (trigger as typeof trigger & { variant?: PromotionResourceMetadata; variantGid?: string }).variant || { ...emptyResource, gid: (trigger as typeof trigger & { variantGid?: string }).variantGid || "", resourceType: "variant" as const };
-  const offerProduct = selected.reward.product || { ...emptyResource, gid: selected.reward.productGid, resourceType: "product" as const, variantGid: selected.reward.variantGid };
+  const offerProduct = { ...(selected.reward.product || { ...emptyResource, gid: selected.reward.productGid, resourceType: "product" as const }), gid: selected.reward.product?.gid || selected.reward.productGid, id: selected.reward.product?.id || selected.reward.productGid, variantGid: selected.reward.product?.variantGid || selected.reward.variantGid, variantTitle: selected.reward.product?.variantTitle || "", variantPrice: selected.reward.product?.variantPrice || "", variantCompareAtPrice: selected.reward.product?.variantCompareAtPrice || "" };
   return <main className="mx-auto max-w-6xl px-6 py-8">
     <div className="mb-6 rounded-2xl bg-gray-950 p-6 text-white shadow-sm"><p className="text-xs font-semibold uppercase tracking-wide text-gray-300">Cart Intelligence / Promotion Rules</p><h1 className="mt-2 text-3xl font-semibold">Promotion Rules</h1><p className="mt-3 max-w-3xl text-sm leading-6 text-gray-200">Configure display-only offer rules for {shop.shopDomain}. Saves to ShopModuleConfig moduleKey {PROMOTION_RULES_CONFIG_MODULE_KEY}; no drawer, checkout, cart mutation, analytics, payment, order, or discount-enforcement behavior is changed.</p></div>
     {params.saved ? <div className="mb-4 rounded-xl border border-green-200 bg-green-50 p-4 text-sm font-medium text-green-800">Promotion Rules configuration saved.</div> : null}
