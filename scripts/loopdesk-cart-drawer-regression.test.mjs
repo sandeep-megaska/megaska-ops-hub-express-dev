@@ -59,3 +59,6 @@ assert.match(css, /\.loopdesk-cart-drawer__reward-price[\s\S]*\.loopdesk-cart-dr
 
 assert.match(source, /var offerViewModel = promotionViewModel\(cart \|\| \{\}\);[\s\S]*renderLines\(cart, offerViewModel\)[\s\S]*offerTotals = offerViewModel && offerViewModel\.totals/, "drawer render should pass the live render cart into one promotion VM used by lines and totals");
 assert.match(source, /cartItemCount: Array\.isArray\(cart && cart\.items\) \? cart\.items\.length : 0,[\s\S]*rulesCount: rules\.length,[\s\S]*hasPromotion:/, "drawer promotion VM diagnostics should report cart item count, rules count, and promotion status when debug is enabled");
+
+assert.match(source, /function loopdeskOfferHandoffPayload\(cart\) \{[\s\S]*loopdeskOfferDiscountAmountPaise:[\s\S]*loopdeskOfferAdjustedTotalAmountPaise:[\s\S]*loopdeskOfferBaseSubtotalAmountPaise:/, "drawer should build an Express Checkout handoff payload from Promotion VM totals");
+assert.match(source, /MegaskaExpressCheckout\.open\(\{ source: checkoutSource, loopdeskOfferPricing: loopdeskOfferPricing \}\)/, "drawer Express Checkout open call should include the offer pricing handoff payload");
