@@ -555,19 +555,9 @@ function buildBufferedEta(rawEta) {
     if (!vmLine?.isPromotionAdjusted) return `<strong>${money(linePrice(line), currency)}</strong>`;
     return `<strong><span>${money(vmLine.displayLineTotal, currency)}</span> <s aria-label="Original price ${escapeHtml(money(vmLine.originalLineTotal, currency))}">${money(vmLine.originalLineTotal, currency)}</s><small>${escapeHtml(vmLine.labelText || "Offer applied")} · Discount applied at checkout</small></strong>`;
   }
-  function expressCartOfferDiscountPaise() {
-    const totals = expressPromotionViewModel()?.totals || {};
-    return Math.max(0, Number(totals.promotionDiscountTotal || 0));
-  }
-  function expressCouponAwarePayablePaise() {
-    return Math.max(0, Number(state.intent?.totalAmountPaise || 0));
-  }
-  function expressFinalPayablePaise() {
-    return Math.max(0, expressCouponAwarePayablePaise() - expressCartOfferDiscountPaise());
-  }
   function expressPromotionSummary(intent) {
-    const offerDiscountPaise = expressCartOfferDiscountPaise();
-    return offerDiscountPaise > 0 ? `<p><span>LoopDesk offer discount</span><strong>- ${money(offerDiscountPaise, intent.currency)}</strong></p>` : "";
+    const totals = expressPromotionViewModel()?.totals || { promotionDiscountTotal: 0, estimatedAfterOffer: 0 };
+    return totals.promotionDiscountTotal > 0 ? `<p><span>Offer discount</span><strong>-${money(totals.promotionDiscountTotal, intent.currency)}</strong></p><p><span>Estimated after offer</span><strong>${money(totals.estimatedAfterOffer, intent.currency)}</strong></p><p class="megaska-otp-step-subtitle">Estimated offer discount shown for transparency. Total payable is unchanged in Express Checkout until checkout enforcement/payment integration is enabled.</p>` : `<p class="megaska-otp-step-subtitle">Subtotal shown before offer discount. Discount is applied at checkout.</p>`;
   }
   function cartSubtotalPaise(cart) { return Number(cart?.original_total_price || cart?.items_subtotal_price || cart?.total_price || 0); }
   function cartDiscountPaise(cart) { return Number(cart?.total_discount || 0); }
@@ -594,7 +584,7 @@ function buildBufferedEta(rawEta) {
   }
   function discountSummary(intent) { const discount = selectedDiscount(intent); if (!discount || !Number(intent?.discountAmountPaise || 0)) return ""; const raw = discount.rawShopifyPayload || {}; const code = discount.code || raw.discountCode || discount.title || "Discount"; return `<p><span>Discount<br><small>${escapeHtml(code)} applied</small></span><strong>- ${money(intent.discountAmountPaise, intent.currency)}</strong></p>`; }
   function storeCreditAppliedPaise() { return Math.round(Number(state.storeCredit?.appliedAmount || 0) * 100); }
-  function remainingBasePayablePaise() { return Math.max(0, expressFinalPayablePaise() - storeCreditAppliedPaise()); }
+  function remainingBasePayablePaise() { return Math.max(0, Number(state.intent?.totalAmountPaise || 0) - storeCreditAppliedPaise()); }
   function payableAmount(method) {
   const total = remainingBasePayablePaise();
 
@@ -1141,8 +1131,8 @@ function renderStoreCreditOrderPanel() {
     if (state.activeRazorpayOrder?.intentId === intentId) return state.activeRazorpayOrder.checkout;
     if (state.activeRazorpayOrderPromise?.intentId === intentId) return state.activeRazorpayOrderPromise.promise;
     const promise = (async () => {
-      const data = await apiFetch(`/express/checkout/intents/${encodeURIComponent(intentId)}/razorpay-order`, { method: "POST", body: { amountPaise: remainingBasePayablePaise() } });
-      const checkout = Object.assign({}, data.checkout || {}, { amountPaise: remainingBasePayablePaise() });
+      const data = await apiFetch(`/express/checkout/intents/${encodeURIComponent(intentId)}/razorpay-order`, { method: "POST", body: {} });
+      const checkout = data.checkout || {};
       if (!checkout.razorpayOrderId || !checkout.key) throw new MegaskaApiError("Could not start secure payment. Please try again.", { stage: "RAZORPAY_ORDER_CREATE", code: "RAZORPAY_ORDER_DETAILS_MISSING" });
       state.activeRazorpayOrder = { intentId, checkout };
       return checkout;
@@ -1352,7 +1342,7 @@ function renderStoreCreditOrderPanel() {
     const paymentMethod = backendPaymentMethodForDisplay(selectedDisplayPaymentMethod()) === "COD" || state.intent?.selectedPaymentMethod === "COD" ? "COD" : "PREPAID";
     const currentIntentId = String(state.intent?.id || "").trim();
     console.info("[Megaska Express] checkout_submit_branch", { branch: "create_order", currentIntentId, selectedPaymentMethod: paymentMethod });
-    const data = await apiFetch(`/express/checkout/intents/${encodeURIComponent(currentIntentId)}/order`, { method: "POST", body: { amountPaise: remainingBasePayablePaise() } });
+    const data = await apiFetch(`/express/checkout/intents/${encodeURIComponent(currentIntentId)}/order`, { method: "POST", body: {} });
     const responsePaymentMethod = data?.paymentMethod || paymentMethod;
     console.info("[Megaska Express] checkout_order_response", { currentIntentId, returnedIntentId: checkoutResponseIntentId(data), returnedOrderName: checkoutResponseOrderName(data) || null, returnedOrderId: checkoutResponseOrderId(data) || null, selectedPaymentMethod: paymentMethod, freshCompletion: data?.freshCompletion === true, completionSource: data?.completionSource || null });
    showCheckoutSuccess(data, responsePaymentMethod);
