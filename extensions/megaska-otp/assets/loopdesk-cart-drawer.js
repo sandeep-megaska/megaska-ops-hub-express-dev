@@ -936,15 +936,24 @@
     return String(template.prefix || "") + rendered + String(template.suffix || "");
   }
 
-  function resolvePromotionOfferPriceDisplay(display, reward) {
+  function promotionPricingHelper() { return window.LoopDeskPromotionPricing || null; }
+
+  function centsFromDisplayMoney(value) {
+    var parsed = parseDisplayMoney(value);
+    return parsed ? Math.round(parsed.amount * 100) : 0;
+  }
+
+  function resolvePromotionOfferPriceDisplay(display, reward, rule, cart, offerQuantity) {
+    var variantPrice = text(reward && reward.product && reward.product.variantPrice, "");
+    var originalUnit = centsFromDisplayMoney(variantPrice);
+    var helper = promotionPricingHelper();
+    var resolved = helper && helper.resolvePromotionDisplayPricing ? helper.resolvePromotionDisplayPricing({ cart: cart, rule: rule, rewardVariantGid: resolvePromotionOfferVariantGid(reward), rewardUnitPrice: originalUnit, rewardQuantity: Math.max(1, Number(offerQuantity) || Number(reward && reward.quantity) || 1) }) : null;
+    if (resolved && resolved.isEligible && resolved.promotionalUnitPrice !== null) {
+      return { value: money(resolved.promotionalUnitPrice, cart && cart.currency), source: "shared_resolver", resolved: resolved };
+    }
     var override = text(display && display.offerPriceDisplay, "");
-    if (override) return { value: override, source: "merchant_admin" };
-    var discount = isPlainObject(reward && reward.discount) ? reward.discount : {};
-    if (discount.type !== "fixed_amount") return { value: "", source: "unavailable" };
-    var fixedAmount = Number(discount.value);
-    var variantMoney = parseDisplayMoney(reward && reward.product && reward.product.variantPrice);
-    if (!Number.isFinite(fixedAmount) || fixedAmount <= 0 || !variantMoney) return { value: "", source: "unavailable" };
-    return { value: formatDisplayMoneyLike(variantMoney, variantMoney.amount - fixedAmount), source: "fixed_amount_derived" };
+    if (override) return { value: override, source: "merchant_admin", resolved: null };
+    return { value: "", source: "unavailable", resolved: null };
   }
 
   function renderPromotionOffers(cart) {
@@ -959,7 +968,7 @@
       var adding = state.offerAdding === String(rule.id || offerVariantGid);
       var image = display.imageOverrideUrl || product.imageUrl || product.image || "";
       var title = product.title || rule.name || "Offer product";
-      var resolvedOfferPrice = resolvePromotionOfferPriceDisplay(display, reward);
+      var resolvedOfferPrice = resolvePromotionOfferPriceDisplay(display, reward, rule, cart, offerQuantity);
       var offerPrice = resolvedOfferPrice.value;
       var variantPrice = text(reward.product && reward.product.variantPrice, "");
       var legacyComparePrice = text(display.comparePriceDisplay, "");
@@ -1012,33 +1021,14 @@
 
   function promotionRewardLineAdjustment(rule, item, cart) {
     var reward = isPlainObject(rule && rule.reward) ? rule.reward : {};
-    var discount = isPlainObject(reward.discount) ? reward.discount : {};
     var quantity = Math.max(1, Number(item.quantity) || 1);
     var originalLine = Number(item.final_line_price || item.original_line_price || item.line_price || 0);
     var originalUnit = Math.round(originalLine / quantity);
-    var adjustedUnit = originalUnit;
-    var type = discount.type;
-    if (type === "percentage") {
-      var percentage = Number(discount.value);
-      if (!Number.isFinite(percentage) || percentage <= 0 || percentage > 100) return null;
-      adjustedUnit = Math.max(0, Math.round(originalUnit * (100 - percentage) / 100));
-    } else if (type === "fixed_amount") {
-      var fixedAmount = promotionDiscountValueCents(discount);
-      if (!Number.isFinite(fixedAmount) || fixedAmount <= 0) return null;
-      adjustedUnit = Math.max(0, originalUnit - fixedAmount);
-    } else if (type === "fixed_price") {
-      var fixedPrice = promotionDiscountValueCents(discount);
-      if (!Number.isFinite(fixedPrice) || fixedPrice < 0 || fixedPrice >= originalUnit) return null;
-      adjustedUnit = fixedPrice;
-    } else {
-      return null;
-    }
-    if (adjustedUnit >= originalUnit) return null;
-    var limits = isPlainObject(rule && rule.limits) ? rule.limits : {};
-    var rewardQty = Math.max(1, Number(reward.quantity) || 1);
-    var maxQty = Math.max(1, Number(limits.maxQuantityPerCart) || rewardQty);
-    var eligibleQuantity = Math.max(1, Math.min(quantity, rewardQty, maxQty));
-    return { rule: rule, originalUnit: originalUnit, adjustedUnit: adjustedUnit, eligibleQuantity: eligibleQuantity, quantity: quantity, type: type };
+    var helper = promotionPricingHelper();
+    if (!helper || typeof helper.resolvePromotionDisplayPricing !== "function") return null;
+    var resolved = helper.resolvePromotionDisplayPricing({ cart: cart, rule: rule, rewardVariantGid: resolvePromotionOfferVariantGid(reward), rewardUnitPrice: originalUnit, rewardQuantity: quantity });
+    if (!resolved || !resolved.isEligible || resolved.promotionalUnitPrice === null) return null;
+    return { rule: rule, originalUnit: resolved.originalUnitPrice, adjustedUnit: resolved.promotionalUnitPrice, eligibleQuantity: resolved.eligibleQuantity, quantity: quantity, type: resolved.discountType, resolved: resolved };
   }
 
   function findPromotionRewardLineAdjustment(cart, item) {
@@ -1101,6 +1091,13 @@
       : renderLines(cart) + renderPromotionOffers(cart);
 
     elements.subtotal.textContent = money(cart ? cart.total_price : 0, cart && cart.currency);
+    if (elements.offerEstimate) {
+      var summaryHelper = promotionPricingHelper();
+      var rules = normalizePromotionConfig(config.promotion_rules_config || config.promotionRules).rules || [];
+      var offerSummary = summaryHelper && summaryHelper.summarizeCart ? summaryHelper.summarizeCart(cart || {}, rules) : { offerDiscount: 0, estimatedAfterOffer: 0 };
+      elements.offerEstimate.hidden = !(offerSummary.offerDiscount > 0);
+      elements.offerEstimate.innerHTML = offerSummary.offerDiscount > 0 ? '<div><span>Offer discount</span><strong>-' + escapeHtml(money(offerSummary.offerDiscount, cart && cart.currency)) + '</strong></div><div><span>Estimated after offer</span><strong>' + escapeHtml(money(offerSummary.estimatedAfterOffer, cart && cart.currency)) + '</strong></div><p>Final discount is applied at checkout.</p>' : '';
+    }
     elements.count.textContent = itemCount ? "(" + itemCount + ")" : "";
     elements.express.hidden = !config.cart.expressCheckoutButtonEnabled || itemCount === 0;
     elements.express.disabled = state.expressCheckoutLock;
@@ -1278,7 +1275,7 @@
       '<aside class="loopdesk-cart-drawer" aria-hidden="true" aria-label="Cart" role="dialog">',
       '<header class="loopdesk-cart-drawer__header"><div class="loopdesk-cart-drawer__brand">' + logo + '<div><h2>' + escapeHtml(config.branding.merchantName || config.branding.storeName) + ' <span data-loopdesk-cart-count></span></h2><p>Your bag</p></div></div><button type="button" class="loopdesk-cart-drawer__close" aria-label="Close cart">×</button></header>',
       '<div class="loopdesk-cart-drawer__body"></div>',
-      '<footer class="loopdesk-cart-drawer__footer"><div class="loopdesk-cart-drawer__subtotal"><span>Subtotal</span><strong data-loopdesk-cart-subtotal></strong></div><button type="button" class="loopdesk-cart-drawer__express" data-loopdesk-express-checkout></button><a class="loopdesk-cart-drawer__view-cart" href="/cart"></a><p class="loopdesk-cart-drawer__microcopy"></p><p class="loopdesk-cart-drawer__powered"></p></footer>',
+      '<footer class="loopdesk-cart-drawer__footer"><div class="loopdesk-cart-drawer__subtotal"><span>Subtotal</span><strong data-loopdesk-cart-subtotal></strong></div><div class="loopdesk-cart-drawer__offer-estimate" data-loopdesk-offer-estimate hidden></div><button type="button" class="loopdesk-cart-drawer__express" data-loopdesk-express-checkout></button><a class="loopdesk-cart-drawer__view-cart" href="/cart"></a><p class="loopdesk-cart-drawer__microcopy"></p><p class="loopdesk-cart-drawer__powered"></p></footer>',
       '</aside>',
     ].join("");
   }
@@ -1305,6 +1302,7 @@
       body: hostRoot.querySelector(".loopdesk-cart-drawer__body"),
       close: hostRoot.querySelector(".loopdesk-cart-drawer__close"),
       subtotal: hostRoot.querySelector("[data-loopdesk-cart-subtotal]"),
+      offerEstimate: hostRoot.querySelector("[data-loopdesk-offer-estimate]"),
       count: hostRoot.querySelector("[data-loopdesk-cart-count]"),
       express: hostRoot.querySelector(".loopdesk-cart-drawer__express"),
       viewCart: hostRoot.querySelector(".loopdesk-cart-drawer__view-cart"),
