@@ -63,6 +63,31 @@ function asRecord(value: unknown) {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
 }
 
+
+function validLoopDeskOfferPricing(value: unknown) {
+  const payload = asRecord(value);
+  if (!payload) return null;
+
+  const discount = Math.round(Number(payload.loopdeskOfferDiscountAmountPaise || 0));
+  const adjustedTotal = Math.round(Number(payload.loopdeskOfferAdjustedTotalAmountPaise));
+  const baseSubtotal = Math.round(Number(payload.loopdeskOfferBaseSubtotalAmountPaise));
+
+  if (!(discount > 0) || !(adjustedTotal >= 0) || !(baseSubtotal > 0) || adjustedTotal > baseSubtotal) return null;
+
+  return {
+    loopdeskOfferDiscountAmountPaise: discount,
+    loopdeskOfferAdjustedTotalAmountPaise: adjustedTotal,
+    loopdeskOfferBaseSubtotalAmountPaise: baseSubtotal,
+  };
+}
+
+function effectiveSubtotalFromHandoff(cartSnapshot: unknown, body: Record<string, unknown>) {
+  const snapshot = asRecord(cartSnapshot);
+  const handoff = validLoopDeskOfferPricing(snapshot?.loopdeskOfferPricing) || validLoopDeskOfferPricing(body.loopdeskOfferPricing);
+
+  return handoff ? handoff.loopdeskOfferAdjustedTotalAmountPaise : null;
+}
+
 function extractDiscountCode(cartSnapshot: unknown, body: Record<string, unknown>) {
   const direct = stringOrNull(body.discountCode) || stringOrNull(body.couponCode);
   if (direct) return direct.toUpperCase();
@@ -236,6 +261,12 @@ export async function POST(req: NextRequest) {
   }
 
   const cartSnapshot = body.cartSnapshot ?? undefined;
+  const effectiveSubtotalAmountPaise = effectiveSubtotalFromHandoff(cartSnapshot, body);
+
+  if (effectiveSubtotalAmountPaise !== null) {
+    paiseValues.subtotalAmountPaise = effectiveSubtotalAmountPaise;
+  }
+
   const capturedDiscount = calculateKnownDiscount(
     extractDiscountCode(cartSnapshot, body),
     paiseValues.subtotalAmountPaise,
@@ -244,6 +275,13 @@ export async function POST(req: NextRequest) {
 
   if (capturedDiscount) {
     paiseValues.discountAmountPaise = capturedDiscount.discountAmountPaise;
+  }
+
+  if (effectiveSubtotalAmountPaise !== null || capturedDiscount) {
+    paiseValues.totalAmountPaise = Math.max(
+      0,
+      paiseValues.subtotalAmountPaise + paiseValues.shippingAmountPaise + paiseValues.codFeeAmountPaise - paiseValues.discountAmountPaise
+    );
   }
 
   if (cartSnapshot !== undefined && !hasCartLineItems(cartSnapshot)) {

@@ -17,6 +17,35 @@ function jsonWithCors(req: NextRequest, body: unknown, init?: ResponseInit) {
 }
 
 
+
+function asRecord(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+}
+
+function validLoopDeskOfferPricing(value: unknown) {
+  const payload = asRecord(value);
+  if (!payload) return null;
+
+  const discount = Math.round(Number(payload.loopdeskOfferDiscountAmountPaise || 0));
+  const adjustedTotal = Math.round(Number(payload.loopdeskOfferAdjustedTotalAmountPaise));
+  const baseSubtotal = Math.round(Number(payload.loopdeskOfferBaseSubtotalAmountPaise));
+
+  if (!(discount > 0) || !(adjustedTotal >= 0) || !(baseSubtotal > 0) || adjustedTotal > baseSubtotal) return null;
+
+  return {
+    loopdeskOfferDiscountAmountPaise: discount,
+    loopdeskOfferAdjustedTotalAmountPaise: adjustedTotal,
+    loopdeskOfferBaseSubtotalAmountPaise: baseSubtotal,
+  };
+}
+
+function couponBaseAmountPaise(intent: { subtotalAmountPaise: number; cartSnapshot?: Prisma.JsonValue | null }) {
+  const snapshot = asRecord(intent.cartSnapshot);
+  const handoff = validLoopDeskOfferPricing(snapshot?.loopdeskOfferPricing);
+
+  return handoff ? handoff.loopdeskOfferAdjustedTotalAmountPaise : intent.subtotalAmountPaise;
+}
+
 function optionalString(value: unknown) {
   const normalized = typeof value === "string" ? value.trim() : "";
 
@@ -89,10 +118,11 @@ function recalculateTotal(intent: {
   subtotalAmountPaise: number;
   shippingAmountPaise: number;
   codFeeAmountPaise: number;
+  cartSnapshot?: Prisma.JsonValue | null;
 }, discountAmountPaise: number) {
   return Math.max(
     0,
-    intent.subtotalAmountPaise + intent.shippingAmountPaise + intent.codFeeAmountPaise - discountAmountPaise
+    couponBaseAmountPaise(intent) + intent.shippingAmountPaise + intent.codFeeAmountPaise - discountAmountPaise
   );
 }
 
@@ -182,7 +212,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
 
   const calculatedDiscount = calculateKnownDiscount({
     code,
-    subtotalAmountPaise: editable.intent.subtotalAmountPaise,
+    subtotalAmountPaise: couponBaseAmountPaise(editable.intent),
     requestedDiscountAmountPaise: discountAmount.value,
     rawShopifyPayload: body.rawShopifyPayload,
   });
@@ -221,6 +251,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
         customerProfileId: editable.customerProfileId,
       },
       data: {
+        subtotalAmountPaise: couponBaseAmountPaise(editable.intent),
         discountAmountPaise: calculatedDiscount.discountAmountPaise,
         totalAmountPaise,
         status: "DISCOUNT_APPLIED",
@@ -267,6 +298,7 @@ export async function DELETE(req: NextRequest, context: { params: Promise<{ id: 
         customerProfileId: editable.customerProfileId,
       },
       data: {
+        subtotalAmountPaise: couponBaseAmountPaise(editable.intent),
         discountAmountPaise: 0,
         totalAmountPaise,
         ...(editable.intent.status === "DISCOUNT_APPLIED" ? { status: "ADDRESS_CAPTURED" } : {}),
