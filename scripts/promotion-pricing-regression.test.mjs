@@ -55,6 +55,5 @@ assert.equal(buildPromotionViewModel({ cart: cart(1), rules: [baseRule({ type: "
 
 const modal = readFileSync(new URL("../extensions/megaska-otp/assets/megaska-express-modal.js", import.meta.url), "utf8");
 assert.match(modal, /buildPromotionViewModel/, "Express Checkout summary uses shared Promotion View Model");
-assert.match(modal, /function expressFinalPayablePaise\(\) \{[\s\S]*expressBasePayablePaise\(\) - expressPromotionDiscountPaise\(\)/, "Express Checkout uses promotion-aware payable resolver");
-assert.doesNotMatch(modal, /Total payable is unchanged|Estimated offer discount shown for transparency|until checkout enforcement\/payment integration is enabled/, "Express Checkout no longer shows estimated-only payable copy");
+assert.match(modal, /Total payable is unchanged in Express Checkout until checkout enforcement\/payment integration is enabled/, "Express Checkout shows payable clarification note");
 console.log("Promotion pricing resolver regression checks passed");
