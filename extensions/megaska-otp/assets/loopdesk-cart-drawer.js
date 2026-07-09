@@ -972,6 +972,97 @@
     }).join('') + '</section>';
   }
 
+  function promotionDiscountValueCents(discount) {
+    if (!isPlainObject(discount)) return NaN;
+    var cents = discount.valueCents || discount.amountCents || discount.fixedPriceCents || discount.fixedAmountCents;
+    if (cents !== undefined && cents !== null && cents !== "") return Number(cents);
+    var value = Number(discount.value);
+    if (!Number.isFinite(value)) return NaN;
+    return Math.round(value * 100);
+  }
+
+  function cartWithoutItem(cart, excludedItem) {
+    if (!cart || !Array.isArray(cart.items)) return cart;
+    var quantity = cart.items.reduce(function (total, item) {
+      if (item === excludedItem || item.key === excludedItem.key) return total;
+      return total + (Math.max(0, Number(item.quantity) || 0));
+    }, 0);
+    var clone = Object.assign({}, cart, {
+      items: cart.items.filter(function (item) { return !(item === excludedItem || item.key === excludedItem.key); }),
+      item_count: quantity
+    });
+    return clone;
+  }
+
+  function triggerMatchesRewardLine(trigger, cart, item) {
+    var type = trigger && trigger.type;
+    if (type === "cart_contains_product" || type === "cart_contains_variant") return triggerMatches(trigger, cartWithoutItem(cart, item));
+    return triggerMatches(trigger, cart);
+  }
+
+  function promotionRuleMatchesRewardLine(rule, cart, item, now) {
+    var reward = isPlainObject(rule && rule.reward) ? rule.reward : {};
+    var eligibility = isPlainObject(rule && rule.eligibility) ? rule.eligibility : {};
+    var offerVariantGid = resolvePromotionOfferVariantGid(reward);
+    if (!rule || rule.enabled !== true || rule.status !== "active" || !isPromotionScheduled(rule, now) || !offerVariantGid) return false;
+    if (!(sameShopifyId(item.variant_id, offerVariantGid) || sameShopifyId(item.variant_gid, offerVariantGid) || sameShopifyId(item.variantGid, offerVariantGid) || sameShopifyId(item.id, offerVariantGid))) return false;
+    var triggers = Array.isArray(eligibility.triggers) && eligibility.triggers.length ? eligibility.triggers : [{ type: "always" }];
+    return eligibility.match === "all" ? triggers.every(function (trigger) { return triggerMatchesRewardLine(trigger, cart, item); }) : triggers.some(function (trigger) { return triggerMatchesRewardLine(trigger, cart, item); });
+  }
+
+  function promotionRewardLineAdjustment(rule, item, cart) {
+    var reward = isPlainObject(rule && rule.reward) ? rule.reward : {};
+    var discount = isPlainObject(reward.discount) ? reward.discount : {};
+    var quantity = Math.max(1, Number(item.quantity) || 1);
+    var originalLine = Number(item.final_line_price || item.original_line_price || item.line_price || 0);
+    var originalUnit = Math.round(originalLine / quantity);
+    var adjustedUnit = originalUnit;
+    var type = discount.type;
+    if (type === "percentage") {
+      var percentage = Number(discount.value);
+      if (!Number.isFinite(percentage) || percentage <= 0 || percentage > 100) return null;
+      adjustedUnit = Math.max(0, Math.round(originalUnit * (100 - percentage) / 100));
+    } else if (type === "fixed_amount") {
+      var fixedAmount = promotionDiscountValueCents(discount);
+      if (!Number.isFinite(fixedAmount) || fixedAmount <= 0) return null;
+      adjustedUnit = Math.max(0, originalUnit - fixedAmount);
+    } else if (type === "fixed_price") {
+      var fixedPrice = promotionDiscountValueCents(discount);
+      if (!Number.isFinite(fixedPrice) || fixedPrice < 0 || fixedPrice >= originalUnit) return null;
+      adjustedUnit = fixedPrice;
+    } else {
+      return null;
+    }
+    if (adjustedUnit >= originalUnit) return null;
+    var limits = isPlainObject(rule && rule.limits) ? rule.limits : {};
+    var rewardQty = Math.max(1, Number(reward.quantity) || 1);
+    var maxQty = Math.max(1, Number(limits.maxQuantityPerCart) || rewardQty);
+    var eligibleQuantity = Math.max(1, Math.min(quantity, rewardQty, maxQty));
+    return { rule: rule, originalUnit: originalUnit, adjustedUnit: adjustedUnit, eligibleQuantity: eligibleQuantity, quantity: quantity, type: type };
+  }
+
+  function findPromotionRewardLineAdjustment(cart, item) {
+    var promotionConfig = normalizePromotionConfig(config.promotion_rules_config || config.promotionRules);
+    if (!promotionConfig.enabled || !Array.isArray(promotionConfig.rules)) return null;
+    var now = new Date();
+    var rules = promotionConfig.rules.slice().sort(function (a, b) { return (Number(a.priority) || 0) - (Number(b.priority) || 0); });
+    for (var i = 0; i < rules.length; i += 1) {
+      if (!promotionRuleMatchesRewardLine(rules[i], cart, item, now)) continue;
+      var adjustment = promotionRewardLineAdjustment(rules[i], item, cart);
+      if (adjustment) return adjustment;
+    }
+    return null;
+  }
+
+  function rewardLinePriceHtml(item, cart) {
+    var adjustment = findPromotionRewardLineAdjustment(cart, item);
+    if (!adjustment) return money(item.final_line_price, cart.currency) + lineSavingsHtml(item, cart);
+    var display = isPlainObject(adjustment.rule.display) ? adjustment.rule.display : {};
+    var label = display.badge || display.heading || adjustment.rule.name || "Offer applied";
+    var quantityNote = adjustment.quantity > adjustment.eligibleQuantity ? '<div class="loopdesk-cart-drawer__reward-note">Promotion applies to ' + escapeHtml(adjustment.eligibleQuantity) + ' item' + (adjustment.eligibleQuantity === 1 ? '' : 's') + '</div>' : '';
+    return '<div class="loopdesk-cart-drawer__reward-price"><span>' + money(adjustment.adjustedUnit, cart.currency) + '</span><s aria-label="Original price ' + escapeHtml(money(adjustment.originalUnit, cart.currency)) + '">' + money(adjustment.originalUnit, cart.currency) + '</s></div><div class="loopdesk-cart-drawer__reward-badge">' + escapeHtml(label) + '</div><div class="loopdesk-cart-drawer__reward-note">Discount applied at checkout</div>' + quantityNote;
+  }
+
   function renderLines(cart) {
     if (state.loading) return '<div class="loopdesk-cart-drawer__loading"><span></span>' + escapeHtml(config.labels.loadingText) + '</div>';
     if (!cart || !cart.items || cart.items.length === 0) {
@@ -985,7 +1076,7 @@
         '<article class="loopdesk-cart-drawer__line" data-loopdesk-line-key="' + escapeHtml(item.key) + '">',
         '<div class="loopdesk-cart-drawer__image-wrap">' + (image ? '<img class="loopdesk-cart-drawer__image" src="' + escapeHtml(image) + '" alt="' + escapeHtml(item.product_title || item.title) + '" loading="lazy">' : '<div class="loopdesk-cart-drawer__image loopdesk-cart-drawer__image--placeholder"></div>') + '</div>',
         '<div class="loopdesk-cart-drawer__line-main">',
-        '<div class="loopdesk-cart-drawer__line-top"><div><div class="loopdesk-cart-drawer__title">' + escapeHtml(item.product_title || item.title) + "</div>" + variant + '</div><div class="loopdesk-cart-drawer__price">' + money(item.final_line_price, cart.currency) + lineSavingsHtml(item, cart) + '</div></div>',
+        '<div class="loopdesk-cart-drawer__line-top"><div><div class="loopdesk-cart-drawer__title">' + escapeHtml(item.product_title || item.title) + "</div>" + variant + '</div><div class="loopdesk-cart-drawer__price">' + rewardLinePriceHtml(item, cart) + '</div></div>',
         '<div class="loopdesk-cart-drawer__line-actions"><div class="loopdesk-cart-drawer__qty" aria-label="Quantity controls"><button type="button" data-loopdesk-qty="decrease" data-loopdesk-line="' + index + '">−</button><span>' + escapeHtml(item.quantity) + '</span><button type="button" data-loopdesk-qty="increase" data-loopdesk-line="' + index + '">+</button></div><button type="button" class="loopdesk-cart-drawer__remove" data-loopdesk-remove data-loopdesk-line="' + index + '">Remove</button></div>',
         "</div>",
         "</article>",
