@@ -1,3 +1,4 @@
+import { Prisma } from "../../../../../generated/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { withCors, handleOptions } from "../../../_lib/cors";
 import { prisma } from "../../../../../services/db/prisma";
@@ -155,6 +156,14 @@ function calculateKnownDiscount(code: string | null, subtotalAmountPaise: number
   return null;
 }
 
+
+function nullableJsonInput(value: unknown): Prisma.NullableJsonNullValueInput | Prisma.InputJsonValue | undefined {
+  if (value === undefined) return undefined;
+  if (value === null) return Prisma.JsonNull;
+
+  return value as Prisma.InputJsonValue;
+}
+
 function hasCartLineItems(cartSnapshot: unknown) {
   const snapshot = cartSnapshot && typeof cartSnapshot === "object" && !Array.isArray(cartSnapshot)
     ? (cartSnapshot as Record<string, unknown>)
@@ -301,6 +310,7 @@ export async function POST(req: NextRequest) {
     return jsonWithCors(req, { ok: false, error: "Cart line items required", reason: "cartSnapshot must include lineItems/items/lines with variantId or variant_id and quantity" }, { status: 400 });
   }
 
+  const prismaCartSnapshot = nullableJsonInput(cartSnapshot);
   const now = new Date();
   const reusableIntent = reuseConditions.length > 0
     ? await prisma.expressCheckoutIntent.findFirst({
@@ -320,7 +330,7 @@ export async function POST(req: NextRequest) {
       ? await prisma.expressCheckoutIntent.update({
           where: { id: reusableIntent.id },
           data: {
-            ...(cartSnapshot !== undefined ? { cartSnapshot } : {}),
+            ...(prismaCartSnapshot !== undefined ? { cartSnapshot: prismaCartSnapshot } : {}),
             status: capturedDiscount ? "DISCOUNT_APPLIED" : cartSnapshot !== undefined ? "CART_SNAPSHOT_LOCKED" : reusableIntent.status,
             ...paiseValues,
           },
@@ -371,7 +381,7 @@ export async function POST(req: NextRequest) {
       phoneSnapshot: stringOrNull(auth.customer.phoneE164),
       cartToken,
       shopifyCartId,
-      cartSnapshot,
+      cartSnapshot: prismaCartSnapshot,
       ...paiseValues,
       currency: "INR",
       expiresAt: new Date(now.getTime() + INTENT_EXPIRES_IN_MS),
