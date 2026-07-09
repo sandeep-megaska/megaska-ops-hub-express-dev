@@ -985,11 +985,19 @@
   function promotionViewModel(cart) {
     var helper = promotionPricingHelper();
     var rules = normalizePromotionConfig(config.promotion_rules_config || config.promotionRules).rules || [];
-    return helper && helper.buildPromotionViewModel ? helper.buildPromotionViewModel({ cart: cart || {}, rules: rules, currency: cart && cart.currency }) : null;
+    if (!helper || !helper.buildPromotionViewModel) return null;
+    var vm = helper.buildPromotionViewModel({ cart: cart || {}, rules: rules, currency: cart && cart.currency });
+    if (window.LOOPDESK_CONFIG_DEBUG === true && window.console && window.console.debug) {
+      window.console.debug("[LoopDesk Promotion VM]", {
+        cartItemCount: Array.isArray(cart && cart.items) ? cart.items.length : 0,
+        rulesCount: rules.length,
+        hasPromotion: Boolean(vm && vm.totals && vm.totals.promotionDiscountTotal > 0)
+      });
+    }
+    return vm;
   }
 
-  function promotionViewModelLine(cart, item) {
-    var vm = promotionViewModel(cart);
+  function promotionViewModelLine(vm, item) {
     if (!vm || !Array.isArray(vm.cartLines)) return null;
     var itemKey = item && item.key;
     var itemVariant = item && (item.variant_id || item.variant_gid || item.variantGid || item.id);
@@ -1063,14 +1071,14 @@
     return null;
   }
 
-  function rewardLinePriceHtml(item, cart) {
-    var vmLine = promotionViewModelLine(cart, item);
+  function rewardLinePriceHtml(item, cart, viewModel) {
+    var vmLine = promotionViewModelLine(viewModel, item);
     if (!vmLine || !vmLine.isPromotionAdjusted) return money(item.final_line_price, cart.currency) + lineSavingsHtml(item, cart);
     var quantityNote = vmLine.quantity > vmLine.eligibleQuantity ? '<div class="loopdesk-cart-drawer__reward-note">Promotion applies to ' + escapeHtml(vmLine.eligibleQuantity) + ' item' + (vmLine.eligibleQuantity === 1 ? '' : 's') + '</div>' : '';
     return '<div class="loopdesk-cart-drawer__reward-price"><span>' + money(vmLine.displayLineTotal, cart.currency) + '</span><s aria-label="Original price ' + escapeHtml(money(vmLine.originalLineTotal, cart.currency)) + '">' + money(vmLine.originalLineTotal, cart.currency) + '</s></div><div class="loopdesk-cart-drawer__reward-badge">' + escapeHtml(vmLine.labelText || "Offer applied") + '</div><div class="loopdesk-cart-drawer__reward-note">Discount applied at checkout</div>' + quantityNote;
   }
 
-  function renderLines(cart) {
+  function renderLines(cart, promotionVm) {
     if (state.loading) return '<div class="loopdesk-cart-drawer__loading"><span></span>' + escapeHtml(config.labels.loadingText) + '</div>';
     if (!cart || !cart.items || cart.items.length === 0) {
       return '<div class="loopdesk-cart-drawer__empty"><strong>Your cart is empty</strong><span>Add something you love and come back for express checkout.</span></div>';
@@ -1083,7 +1091,7 @@
         '<article class="loopdesk-cart-drawer__line" data-loopdesk-line-key="' + escapeHtml(item.key) + '">',
         '<div class="loopdesk-cart-drawer__image-wrap">' + (image ? '<img class="loopdesk-cart-drawer__image" src="' + escapeHtml(image) + '" alt="' + escapeHtml(item.product_title || item.title) + '" loading="lazy">' : '<div class="loopdesk-cart-drawer__image loopdesk-cart-drawer__image--placeholder"></div>') + '</div>',
         '<div class="loopdesk-cart-drawer__line-main">',
-        '<div class="loopdesk-cart-drawer__line-top"><div><div class="loopdesk-cart-drawer__title">' + escapeHtml(item.product_title || item.title) + "</div>" + variant + '</div><div class="loopdesk-cart-drawer__price">' + rewardLinePriceHtml(item, cart) + '</div></div>',
+        '<div class="loopdesk-cart-drawer__line-top"><div><div class="loopdesk-cart-drawer__title">' + escapeHtml(item.product_title || item.title) + "</div>" + variant + '</div><div class="loopdesk-cart-drawer__price">' + rewardLinePriceHtml(item, cart, promotionVm) + '</div></div>',
         '<div class="loopdesk-cart-drawer__line-actions"><div class="loopdesk-cart-drawer__qty" aria-label="Quantity controls"><button type="button" data-loopdesk-qty="decrease" data-loopdesk-line="' + index + '">−</button><span>' + escapeHtml(item.quantity) + '</span><button type="button" data-loopdesk-qty="increase" data-loopdesk-line="' + index + '">+</button></div><button type="button" class="loopdesk-cart-drawer__remove" data-loopdesk-remove data-loopdesk-line="' + index + '">Remove</button></div>',
         "</div>",
         "</article>",
@@ -1103,13 +1111,13 @@
     document.documentElement.classList.toggle("loopdesk-cart-drawer-is-open", state.open);
     if (document.body) document.body.classList.toggle("loopdesk-cart-drawer-is-open", state.open);
 
+    var offerViewModel = promotionViewModel(cart || {});
     elements.body.innerHTML = state.error
       ? '<div class="loopdesk-cart-drawer__error">We could not load your cart. You can still use the cart page.</div>'
-      : renderLines(cart) + renderPromotionOffers(cart);
+      : renderLines(cart, offerViewModel) + renderPromotionOffers(cart);
 
     elements.subtotal.textContent = money(cart ? cart.total_price : 0, cart && cart.currency);
     if (elements.offerEstimate) {
-      var offerViewModel = promotionViewModel(cart || {});
       var offerTotals = offerViewModel && offerViewModel.totals ? offerViewModel.totals : { promotionDiscountTotal: 0, estimatedAfterOffer: 0 };
       elements.offerEstimate.hidden = !(offerTotals.promotionDiscountTotal > 0);
       elements.offerEstimate.innerHTML = offerTotals.promotionDiscountTotal > 0 ? '<div><span>Offer discount</span><strong>-' + escapeHtml(money(offerTotals.promotionDiscountTotal, cart && cart.currency)) + '</strong></div><div><span>Estimated after offer</span><strong>' + escapeHtml(money(offerTotals.estimatedAfterOffer, cart && cart.currency)) + '</strong></div><p>Final discount is applied at checkout.</p>' : '';

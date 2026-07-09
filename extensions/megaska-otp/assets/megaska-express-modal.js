@@ -442,6 +442,7 @@ function buildBufferedEta(rawEta) {
     const quantity = Math.max(0, Math.floor(Number(item?.quantity || 0)));
     if (!variantId || quantity <= 0) return null;
     return {
+      key: item?.key || "",
       variantId,
       quantity,
       title: item?.product_title || item?.title || "Item",
@@ -530,7 +531,17 @@ function buildBufferedEta(rawEta) {
   function expressPromotionViewModel() {
     const helper = window.LoopDeskPromotionPricing;
     const cart = state.intent?.cartSnapshot || {};
-    return helper?.buildPromotionViewModel ? helper.buildPromotionViewModel({ cart, rules: promotionRules(), currency: state.intent?.currency || cart.currency }) : null;
+    const rules = promotionRules();
+    if (!helper?.buildPromotionViewModel) return null;
+    const vm = helper.buildPromotionViewModel({ cart, rules, currency: state.intent?.currency || cart.currency });
+    if (window.LOOPDESK_CONFIG_DEBUG === true && window.console?.debug) {
+      window.console.debug("[LoopDesk Promotion VM]", {
+        cartItemCount: Array.isArray(cart?.items) ? cart.items.length : 0,
+        rulesCount: rules.length,
+        hasPromotion: Boolean(vm?.totals?.promotionDiscountTotal > 0)
+      });
+    }
+    return vm;
   }
   function expressPromotionLine(line) {
     const vm = expressPromotionViewModel();
@@ -798,7 +809,13 @@ function buildBufferedEta(rawEta) {
     render();
     const startedAt = perfNow();
     const data = await apiFetch("/express/checkout/intents", { method: "POST", body: { cartToken: snapshot.token, cartSnapshot: snapshot, subtotalAmountPaise: cartSubtotalPaise(cart), discountAmountPaise: cartDiscountPaise(cart), shippingAmountPaise: 0, codFeeAmountPaise: 0, totalAmountPaise: cartTotalPaise(cart), currency: snapshot.currency || "INR" } });
-    state.intent = data.intent;
+    state.intent = Object.assign({}, data.intent || {}, {
+      cartSnapshot: Array.isArray(data.intent?.cartSnapshot?.items) && data.intent.cartSnapshot.items.length ? data.intent.cartSnapshot : snapshot,
+      subtotalAmountPaise: data.intent?.subtotalAmountPaise ?? cartSubtotalPaise(cart),
+      discountAmountPaise: data.intent?.discountAmountPaise ?? cartDiscountPaise(cart),
+      totalAmountPaise: data.intent?.totalAmountPaise ?? cartTotalPaise(cart),
+      currency: data.intent?.currency || snapshot.currency || "INR"
+    });
     state.customerDefaultAddress = data.customerDefaultAddress || state.customerDefaultAddress;
     state.settings = Object.assign({}, state.settings, data.settings || {});
     state.discountCode = state.intent?.discounts?.[0]?.code || state.discountCode;
