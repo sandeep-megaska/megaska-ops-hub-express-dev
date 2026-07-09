@@ -1012,6 +1012,20 @@
     return vm;
   }
 
+  function loopdeskOfferHandoffPayload(cart) {
+    var vm = promotionViewModel(cart || state.cart || {});
+    var totals = vm && vm.totals ? vm.totals : null;
+    var offerDiscount = Number(totals && totals.promotionDiscountTotal);
+    var adjustedTotal = Number(totals && totals.estimatedAfterOffer);
+    var baseSubtotal = Number(totals && totals.shopifySubtotal);
+    if (!(offerDiscount > 0) || !(adjustedTotal >= 0) || !(baseSubtotal > 0)) return null;
+    return {
+      loopdeskOfferDiscountAmountPaise: Math.round(offerDiscount),
+      loopdeskOfferAdjustedTotalAmountPaise: Math.round(adjustedTotal),
+      loopdeskOfferBaseSubtotalAmountPaise: Math.round(baseSubtotal)
+    };
+  }
+
   function promotionViewModelLine(vm, item) {
     if (!vm || !Array.isArray(vm.cartLines)) return null;
     var itemKey = item && item.key;
@@ -1405,12 +1419,13 @@
     };
     clearLocalCartDrawerErrors();
     closeDrawerForCheckoutHandoff();
-    debugLog("OTP/checkout handoff started", { source: checkoutSource }, true);
+    var loopdeskOfferPricing = loopdeskOfferHandoffPayload(state.cart);
+    debugLog("OTP/checkout handoff started", { source: checkoutSource, loopdeskOfferPricing: loopdeskOfferPricing }, true);
     if (window.MegaskaExpressCheckout && typeof window.MegaskaExpressCheckout.open === "function") {
       debugLog("Express modal API present", { source: checkoutSource });
       window.setTimeout(function () {
         try {
-          window.MegaskaExpressCheckout.open({ source: checkoutSource });
+          window.MegaskaExpressCheckout.open({ source: checkoutSource, loopdeskOfferPricing: loopdeskOfferPricing });
         } finally {
           window.setTimeout(releaseLock, 900);
         }

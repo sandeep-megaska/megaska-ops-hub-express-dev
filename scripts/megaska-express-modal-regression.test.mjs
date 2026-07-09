@@ -10,3 +10,12 @@ assert.match(source, /key: item\?\.key \|\| "",[\s\S]*items, lineItems/, "expres
 assert.match(source, /cartItemCount: Array\.isArray\(cart\?\.items\) \? cart\.items\.length : 0,[\s\S]*rulesCount: rules\.length,[\s\S]*hasPromotion:/, "express promotion VM diagnostics should report cart item count, rules count, and promotion status when debug is enabled");
 
 console.log("Megaska express modal promotion cart regression checks passed");
+
+assert.match(source, /function validLoopDeskOfferPricing\(value\) \{[\s\S]*loopdeskOfferDiscountAmountPaise:[\s\S]*loopdeskOfferAdjustedTotalAmountPaise:[\s\S]*loopdeskOfferBaseSubtotalAmountPaise:/, "express checkout should validate and normalize the drawer offer handoff payload");
+assert.match(source, /const loopdeskOfferPricing = validLoopDeskOfferPricing\(state\.loopdeskOfferPricing\);[\s\S]*\.\.\.\(loopdeskOfferPricing \? \{ loopdeskOfferPricing \} : \{\}\)/, "express checkout cart snapshot should preserve the offer handoff payload");
+assert.match(source, /function expressBaseSubtotalPaise\(snapshot, cart\) \{[\s\S]*return handoff \? handoff\.loopdeskOfferAdjustedTotalAmountPaise : cartSubtotalPaise\(cart\);[\s\S]*\}/, "express checkout should use the offer-adjusted total as the base subtotal when valid");
+assert.match(source, /const baseSubtotalAmountPaise = expressBaseSubtotalPaise\(snapshot, cart\);[\s\S]*subtotalAmountPaise: baseSubtotalAmountPaise,[\s\S]*totalAmountPaise: initialTotalAmountPaise/, "intent creation should receive the offer-adjusted base amount instead of the raw Shopify subtotal");
+assert.match(source, /You saved \$\{money\(intent\.discountAmountPaise, intent\.currency\)\}/, "coupon success message should continue to display the coupon saved amount from the coupon-aware intent");
+assert.match(source, /function remainingBasePayablePaise\(\) \{ return Math\.max\(0, Number\(state\.intent\?\.totalAmountPaise \|\| 0\) - storeCreditAppliedPaise\(\)\); \}/, "footer and payment labels should keep using the existing payable pipeline");
+assert.doesNotMatch(source, /payableAmount[\s\S]*loopdeskOfferDiscountAmountPaise/, "payment method layer must not subtract the LoopDesk offer discount a second time");
+assert.doesNotMatch(source, /Total payable is unchanged in Express Checkout until checkout enforcement\/payment integration is enabled/, "old misleading estimated-only Express Checkout text should be absent");
