@@ -81,6 +81,19 @@ function validLoopDeskOfferPricing(value: unknown) {
   };
 }
 
+function preserveLoopDeskOfferPricing(cartSnapshot: unknown, body: Record<string, unknown>) {
+  const snapshot = asRecord(cartSnapshot);
+  const snapshotHandoff = validLoopDeskOfferPricing(snapshot?.loopdeskOfferPricing);
+  const bodyHandoff = validLoopDeskOfferPricing(body.loopdeskOfferPricing);
+
+  if (!snapshot || snapshotHandoff || !bodyHandoff) return cartSnapshot;
+
+  return {
+    ...snapshot,
+    loopdeskOfferPricing: bodyHandoff,
+  };
+}
+
 function effectiveSubtotalFromHandoff(cartSnapshot: unknown, body: Record<string, unknown>) {
   const snapshot = asRecord(cartSnapshot);
   const handoff = validLoopDeskOfferPricing(snapshot?.loopdeskOfferPricing) || validLoopDeskOfferPricing(body.loopdeskOfferPricing);
@@ -260,7 +273,7 @@ export async function POST(req: NextRequest) {
     reuseConditions.push({ shopifyCartId });
   }
 
-  const cartSnapshot = body.cartSnapshot ?? undefined;
+  const cartSnapshot = body.cartSnapshot === undefined ? undefined : preserveLoopDeskOfferPricing(body.cartSnapshot, body);
   const effectiveSubtotalAmountPaise = effectiveSubtotalFromHandoff(cartSnapshot, body);
 
   if (effectiveSubtotalAmountPaise !== null) {

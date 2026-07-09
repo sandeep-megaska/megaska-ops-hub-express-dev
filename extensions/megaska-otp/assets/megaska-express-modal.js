@@ -823,7 +823,14 @@ function buildBufferedEta(rawEta) {
     state.busy = false; render();
   }
 
-  async function refreshIntent() { const startedAt = perfNow(); const data = await apiFetch(`/express/checkout/intents/${encodeURIComponent(state.intent.id)}`); state.intent = data.intent; state.customerDefaultAddress = data.customerDefaultAddress || state.customerDefaultAddress; state.settings = Object.assign({}, state.settings, data.settings || {}); state.discountCode = state.intent?.discounts?.[0]?.code || state.discountCode; await loadStoreCredit(); perfDetails("intent_fetch_ms", { shopId: getShopDomain() || null, intentId: state.intent?.id || null, duplicateCallsFound: state.perf.duplicateCallsFound, durationMs: Math.round(perfNow() - startedAt) }); }
+  function preserveLoopDeskOfferPricingOnIntent(nextIntent, fallbackIntent) {
+    const nextSnapshot = nextIntent?.cartSnapshot;
+    const handoff = validLoopDeskOfferPricing(nextSnapshot?.loopdeskOfferPricing || fallbackIntent?.cartSnapshot?.loopdeskOfferPricing || state.loopdeskOfferPricing);
+    if (!handoff || !nextSnapshot || nextSnapshot.loopdeskOfferPricing) return nextIntent;
+    return Object.assign({}, nextIntent, { cartSnapshot: Object.assign({}, nextSnapshot, { loopdeskOfferPricing: handoff }) });
+  }
+
+  async function refreshIntent() { const startedAt = perfNow(); const data = await apiFetch(`/express/checkout/intents/${encodeURIComponent(state.intent.id)}`); state.intent = preserveLoopDeskOfferPricingOnIntent(data.intent, state.intent); state.customerDefaultAddress = data.customerDefaultAddress || state.customerDefaultAddress; state.settings = Object.assign({}, state.settings, data.settings || {}); state.discountCode = state.intent?.discounts?.[0]?.code || state.discountCode; await loadStoreCredit(); perfDetails("intent_fetch_ms", { shopId: getShopDomain() || null, intentId: state.intent?.id || null, duplicateCallsFound: state.perf.duplicateCallsFound, durationMs: Math.round(perfNow() - startedAt) }); }
 
   async function createIntent() {
     state.hydration.cart = "loading";
@@ -840,13 +847,13 @@ function buildBufferedEta(rawEta) {
     const startedAt = perfNow();
     const intentPayload = { cartToken: snapshot.token, cartSnapshot: snapshot, loopdeskOfferPricing: snapshot.loopdeskOfferPricing, subtotalAmountPaise: baseSubtotalAmountPaise, discountAmountPaise: cartDiscountPaise(cart), shippingAmountPaise: 0, codFeeAmountPaise: 0, totalAmountPaise: initialTotalAmountPaise, currency: snapshot.currency || "INR" };
     const data = await apiFetch("/express/checkout/intents", { method: "POST", body: intentPayload });
-    state.intent = Object.assign({}, data.intent || {}, {
+    state.intent = preserveLoopDeskOfferPricingOnIntent(Object.assign({}, data.intent || {}, {
       cartSnapshot: Array.isArray(data.intent?.cartSnapshot?.items) && data.intent.cartSnapshot.items.length ? data.intent.cartSnapshot : snapshot,
       subtotalAmountPaise: data.intent?.subtotalAmountPaise ?? baseSubtotalAmountPaise,
       discountAmountPaise: data.intent?.discountAmountPaise ?? cartDiscountPaise(cart),
       totalAmountPaise: data.intent?.totalAmountPaise ?? initialTotalAmountPaise,
       currency: data.intent?.currency || snapshot.currency || "INR"
-    });
+    }), { cartSnapshot: snapshot });
     state.customerDefaultAddress = data.customerDefaultAddress || state.customerDefaultAddress;
     state.settings = Object.assign({}, state.settings, data.settings || {});
     state.discountCode = state.intent?.discounts?.[0]?.code || state.discountCode;
