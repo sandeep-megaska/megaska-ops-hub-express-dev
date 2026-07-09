@@ -77,3 +77,39 @@ test("percentage enforcement compiles valid reward discount values", () => {
   assert.equal(compiled?.percentageValue, 25);
   assert.equal(compiled?.quantity, 2);
 });
+
+test("fixed_amount enforcement compiles valid reward discount values", () => {
+  const rule = normalizePromotionRule({
+    id: "fixed-amount-reward",
+    name: "Fixed amount reward",
+    enabled: true,
+    priority: 1,
+    status: "active",
+    reward: {
+      type: "offer_product",
+      productGid: "gid://shopify/Product/1",
+      variantGid: "gid://shopify/ProductVariant/1",
+      quantity: 2,
+      discount: { type: "fixed_amount", value: 100 },
+    },
+    display: { heading: "Offer", ctaLabel: "Add offer" },
+  });
+
+  const compiled = compilePromotionRuleEnforcementRule(rule);
+
+  assert.equal(compiled?.rewardEnforcementType, "fixed_amount");
+  assert.equal(compiled?.fixedAmountValue, 100);
+  assert.equal(compiled?.quantity, 2);
+});
+
+test("invalid fixed_amount reward values are ignored", () => {
+  const rule = normalizePromotionRule({
+    id: "invalid-fixed-amount",
+    name: "Invalid fixed amount",
+    reward: { discount: { type: "fixed_amount", value: 0 } },
+    display: { heading: "Offer", ctaLabel: "Add offer" },
+  });
+
+  assert.equal(rule.reward.discount, undefined);
+  assert.equal(compilePromotionRuleEnforcementRule(rule), null);
+});

@@ -919,6 +919,34 @@
     }).sort(function (a, b) { return (Number(a.priority) || 0) - (Number(b.priority) || 0); }).slice(0, promotionConfig.maxVisibleOffers);
   }
 
+
+  function parseDisplayMoney(value) {
+    var raw = text(value, "");
+    if (!raw) return null;
+    var match = raw.match(/(-?\d+(?:[,.]\d+)?)/);
+    if (!match) return null;
+    var amount = Number(match[1].replace(/,/g, ""));
+    if (!Number.isFinite(amount)) return null;
+    return { amount: amount, prefix: raw.slice(0, match.index), suffix: raw.slice((match.index || 0) + match[0].length) };
+  }
+
+  function formatDisplayMoneyLike(template, amount) {
+    var rounded = Math.round(Math.max(0, amount) * 100) / 100;
+    var rendered = Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
+    return String(template.prefix || "") + rendered + String(template.suffix || "");
+  }
+
+  function resolvePromotionOfferPriceDisplay(display, reward) {
+    var override = text(display && display.offerPriceDisplay, "");
+    if (override) return { value: override, source: "merchant_admin" };
+    var discount = isPlainObject(reward && reward.discount) ? reward.discount : {};
+    if (discount.type !== "fixed_amount") return { value: "", source: "unavailable" };
+    var fixedAmount = Number(discount.value);
+    var variantMoney = parseDisplayMoney(reward && reward.product && reward.product.variantPrice);
+    if (!Number.isFinite(fixedAmount) || fixedAmount <= 0 || !variantMoney) return { value: "", source: "unavailable" };
+    return { value: formatDisplayMoneyLike(variantMoney, variantMoney.amount - fixedAmount), source: "fixed_amount_derived" };
+  }
+
   function renderPromotionOffers(cart) {
     var offers = getEligiblePromotionRules(cart, "drawer", new Date());
     if (!offers.length) return "";
@@ -931,12 +959,13 @@
       var adding = state.offerAdding === String(rule.id || offerVariantGid);
       var image = display.imageOverrideUrl || product.imageUrl || product.image || "";
       var title = product.title || rule.name || "Offer product";
-      var offerPrice = text(display.offerPriceDisplay, "");
+      var resolvedOfferPrice = resolvePromotionOfferPriceDisplay(display, reward);
+      var offerPrice = resolvedOfferPrice.value;
       var variantPrice = text(reward.product && reward.product.variantPrice, "");
       var legacyComparePrice = text(display.comparePriceDisplay, "");
       var comparePrice = variantPrice || legacyComparePrice;
       var comparePriceSource = variantPrice ? "shopify_variant_price" : legacyComparePrice ? "legacy_compare_price" : "unavailable";
-      var displayPriceSource = offerPrice ? "merchant_admin" : "unavailable";
+      var displayPriceSource = offerPrice ? resolvedOfferPrice.source : "unavailable";
       var pricing = offerPrice ? '<div class="loopdesk-cart-drawer__offer-prices" data-loopdesk-display-price-source="' + escapeHtml(displayPriceSource) + '" data-loopdesk-compare-price-source="' + escapeHtml(comparePriceSource) + '"><span>Get it for ' + escapeHtml(offerPrice) + '</span>' + (comparePrice ? '<s aria-label="Usually ' + escapeHtml(comparePrice) + '">Usually ' + escapeHtml(comparePrice) + '</s>' : '') + '</div>' : '';
       var deferred = reward.requiresDiscountEnforcement ? ' data-loopdesk-promotion-enforcement="deferred"' : '';
       return ['<article class="loopdesk-cart-drawer__offer" data-loopdesk-promotion-rule="' + escapeHtml(rule.id || '') + '"' + deferred + '>', display.badge ? '<div class="loopdesk-cart-drawer__offer-badge">' + escapeHtml(display.badge) + '</div>' : '', '<div class="loopdesk-cart-drawer__offer-content">', image ? '<img class="loopdesk-cart-drawer__offer-image" src="' + escapeHtml(image) + '" alt="' + escapeHtml(title) + '" loading="lazy">' : '<div class="loopdesk-cart-drawer__offer-image loopdesk-cart-drawer__offer-image--placeholder"></div>', '<div class="loopdesk-cart-drawer__offer-copy"><h3>' + escapeHtml(display.heading || rule.name || 'Special offer') + '</h3>', display.description ? '<p>' + escapeHtml(display.description) + '</p>' : '', '<strong>' + escapeHtml(title) + '</strong>' + pricing + '</div></div>', state.offerError ? '<div class="loopdesk-cart-drawer__offer-error" role="alert">' + escapeHtml(state.offerError) + '</div>' : '', '<button type="button" class="loopdesk-cart-drawer__offer-cta" data-loopdesk-offer-add data-loopdesk-offer-key="' + escapeHtml(rule.id || offerVariantGid) + '" data-loopdesk-offer-variant="' + escapeHtml(offerVariantGid) + '" data-loopdesk-offer-quantity="' + escapeHtml(offerQuantity) + '"' + (adding ? ' disabled aria-busy="true"' : '') + '>' + escapeHtml(adding ? 'Adding…' : display.ctaLabel || 'Add offer') + '</button></article>'].join('');

@@ -34,12 +34,17 @@ function isValidCompiledRule(rule: CompiledPromotionEnforcementRule) {
     return typeof percentageValue === "number" && Number.isFinite(percentageValue) && percentageValue > 0 && percentageValue <= 100 && hasValidTrigger(rule);
   }
 
+  if (rule.rewardEnforcementType === "fixed_amount") {
+    const fixedAmountValue = rule.fixedAmountValue;
+    return typeof fixedAmountValue === "number" && Number.isFinite(fixedAmountValue) && fixedAmountValue > 0 && hasValidTrigger(rule);
+  }
+
   return false;
 }
 
 export function compilePromotionRuleEnforcementRule(rule: PromotionRule): CompiledPromotionEnforcementRule | null {
   const discount = rule.reward.discount;
-  if (discount?.type !== "fixed_price" && discount?.type !== "percentage") return null;
+  if (discount?.type !== "fixed_price" && discount?.type !== "percentage" && discount?.type !== "fixed_amount") return null;
 
   const baseRule = {
     id: rule.id,
@@ -57,6 +62,14 @@ export function compilePromotionRuleEnforcementRule(rule: PromotionRule): Compil
       ...baseRule,
       rewardEnforcementType: "percentage" satisfies RewardEnforcementType,
       percentageValue: discount.value,
+    };
+  }
+
+  if (discount.type === "fixed_amount") {
+    return {
+      ...baseRule,
+      rewardEnforcementType: "fixed_amount" satisfies RewardEnforcementType,
+      fixedAmountValue: discount.value,
     };
   }
 
