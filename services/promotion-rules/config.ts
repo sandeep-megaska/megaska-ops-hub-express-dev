@@ -1,4 +1,5 @@
 import { prisma } from "../db/prisma";
+export { resolvePromotionComparePrice, type PromotionComparePriceSource } from "./price-resolution";
 
 export const PROMOTION_RULES_CONFIG_MODULE_KEY = "promotion_rules_config";
 
@@ -15,7 +16,7 @@ export type PromotionTriggerType =
 export type PromotionPlacement = "drawer" | "cart_page" | "both";
 export type PromotionConflictStrategy = "priority_first" | "newest_first" | "oldest_first";
 
-export type PromotionResourceMetadata = { id?: string; gid: string; title: string; image?: string | null; imageUrl: string | null; handle: string; resourceType?: "product" | "collection" | "variant"; variantGid?: string; variantTitle?: string };
+export type PromotionResourceMetadata = { id?: string; gid: string; title: string; image?: string | null; imageUrl: string | null; handle: string; resourceType?: "product" | "collection" | "variant"; variantGid?: string; variantTitle?: string; variantPrice?: string; variantCompareAtPrice?: string };
 export type PromotionRewardDiscount = { type: "fixed_price" | "percentage"; value: number };
 
 export type PromotionRule = {
@@ -60,7 +61,7 @@ function resourceType(value: unknown) { return value === "product" || value === 
 function metadata(value: unknown, fallbackGid = ""): PromotionResourceMetadata {
   const raw = isRecord(value) ? value : {};
   const imageUrl = nullableUrl(raw.imageUrl ?? raw.image);
-  return { id: cleanText(raw.id, fallbackGid, 300), gid: cleanText(raw.gid ?? raw.id, fallbackGid, 300), title: cleanText(raw.title, "", 240), image: imageUrl, imageUrl, handle: cleanText(raw.handle, "", 240), resourceType: resourceType(raw.resourceType), variantGid: cleanText(raw.variantGid, "", 300), variantTitle: cleanText(raw.variantTitle, "", 240) };
+  return { id: cleanText(raw.id, fallbackGid, 300), gid: cleanText(raw.gid ?? raw.id, fallbackGid, 300), title: cleanText(raw.title, "", 240), image: imageUrl, imageUrl, handle: cleanText(raw.handle, "", 240), resourceType: resourceType(raw.resourceType), variantGid: cleanText(raw.variantGid, "", 300), variantTitle: cleanText(raw.variantTitle, "", 240), variantPrice: cleanText(raw.variantPrice, "", 80), variantCompareAtPrice: cleanText(raw.variantCompareAtPrice, "", 80) };
 }
 function stableId(value: unknown) { const next = cleanText(value, "", 80).replace(/[^a-zA-Z0-9_-]/g, "_"); return next || `rule_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`; }
 function status(value: unknown): PromotionRuleStatus { return value === "active" || value === "paused" || value === "archived" || value === "draft" ? value : "draft"; }
