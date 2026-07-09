@@ -527,29 +527,26 @@ function buildBufferedEta(rawEta) {
   function lineImage(line) { return line?.image || line?.featured_image?.url || line?.featuredImage?.url || ""; }
   function linePrice(line) { return line?.original_line_price ?? line?.originalLinePrice ?? line?.line_price ?? line?.linePrice ?? line?.final_line_price ?? line?.price ?? 0; }
   function promotionRules() { return window.LoopDeskConfig?.promotion_rules_config?.rules || window.LOOPDESK_CART_DRAWER_CONFIG?.promotion_rules_config?.rules || window.LOOPDESK_CART_DRAWER_CONFIG?.promotionRules?.rules || []; }
-  function expressPromotionLine(line) {
+  function expressPromotionViewModel() {
     const helper = window.LoopDeskPromotionPricing;
-    if (!helper?.resolvePromotionDisplayPricing) return null;
     const cart = state.intent?.cartSnapshot || {};
-    for (const rule of promotionRules()) {
-      const gid = rule?.reward?.variantGid || "";
-      const lineGid = line?.variant_id || line?.variant_gid || line?.variantGid || line?.id || "";
-      if (String(lineGid) !== String(gid) && String(lineGid).split('/').pop() !== String(gid).split('/').pop()) continue;
-      const qty = Math.max(1, Number(line?.quantity || 1));
-      const resolved = helper.resolvePromotionDisplayPricing({ cart, rule, rewardVariantGid: gid, rewardUnitPrice: Math.round(Number(linePrice(line) || 0) / qty), rewardQuantity: qty });
-      if (resolved?.isEligible) return resolved;
-    }
-    return null;
+    return helper?.buildPromotionViewModel ? helper.buildPromotionViewModel({ cart, rules: promotionRules(), currency: state.intent?.currency || cart.currency }) : null;
+  }
+  function expressPromotionLine(line) {
+    const vm = expressPromotionViewModel();
+    if (!vm?.cartLines) return null;
+    const lineKey = line?.key || "";
+    const lineGid = line?.variant_id || line?.variant_gid || line?.variantGid || line?.id || "";
+    return vm.cartLines.find((vmLine) => (lineKey && vmLine.lineKey === lineKey) || window.LoopDeskPromotionPricing?.sameShopifyId?.(vmLine.variantId, lineGid)) || null;
   }
   function expressLinePriceHtml(line, currency) {
-    const resolved = expressPromotionLine(line);
-    if (!resolved) return `<strong>${money(linePrice(line), currency)}</strong>`;
-    return `<strong><span>${money(resolved.promotionalLineTotal, currency)}</span> <s aria-label="Original price ${escapeHtml(money(resolved.originalLineTotal, currency))}">${money(resolved.originalLineTotal, currency)}</s><small>Offer applied · Discount applied at checkout</small></strong>`;
+    const vmLine = expressPromotionLine(line);
+    if (!vmLine?.isPromotionAdjusted) return `<strong>${money(linePrice(line), currency)}</strong>`;
+    return `<strong><span>${money(vmLine.displayLineTotal, currency)}</span> <s aria-label="Original price ${escapeHtml(money(vmLine.originalLineTotal, currency))}">${money(vmLine.originalLineTotal, currency)}</s><small>${escapeHtml(vmLine.labelText || "Offer applied")} · Discount applied at checkout</small></strong>`;
   }
   function expressPromotionSummary(intent) {
-    const helper = window.LoopDeskPromotionPricing;
-    const summary = helper?.summarizeCart ? helper.summarizeCart(state.intent?.cartSnapshot || {}, promotionRules()) : { offerDiscount: 0, estimatedAfterOffer: 0 };
-    return summary.offerDiscount > 0 ? `<p><span>Offer discount</span><strong>-${money(summary.offerDiscount, intent.currency)}</strong></p><p><span>Estimated after offer</span><strong>${money(summary.estimatedAfterOffer, intent.currency)}</strong></p><p class="megaska-otp-step-subtitle">Final discount is applied at checkout. Total payable is unchanged in Express Checkout.</p>` : `<p class="megaska-otp-step-subtitle">Subtotal shown before offer discount. Discount is applied at checkout.</p>`;
+    const totals = expressPromotionViewModel()?.totals || { promotionDiscountTotal: 0, estimatedAfterOffer: 0 };
+    return totals.promotionDiscountTotal > 0 ? `<p><span>Offer discount</span><strong>-${money(totals.promotionDiscountTotal, intent.currency)}</strong></p><p><span>Estimated after offer</span><strong>${money(totals.estimatedAfterOffer, intent.currency)}</strong></p><p class="megaska-otp-step-subtitle">Estimated offer discount shown for transparency. Total payable is unchanged in Express Checkout until checkout enforcement/payment integration is enabled.</p>` : `<p class="megaska-otp-step-subtitle">Subtotal shown before offer discount. Discount is applied at checkout.</p>`;
   }
   function cartSubtotalPaise(cart) { return Number(cart?.original_total_price || cart?.items_subtotal_price || cart?.total_price || 0); }
   function cartDiscountPaise(cart) { return Number(cart?.total_discount || 0); }

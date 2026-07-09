@@ -1,8 +1,9 @@
 (function () {
   if (window.LoopDeskPromotionPricing) return;
   function plain(v) { return v && typeof v === "object" && !Array.isArray(v); }
-  function idTail(v) { return String(v || "").split("/").pop(); }
-  function sameId(a, b) { return String(a || "") === String(b || "") || idTail(a) === idTail(b); }
+  function normalizeShopifyId(v) { return String(v || "").trim().split("/").pop(); }
+  function sameId(a, b) { var left = normalizeShopifyId(a), right = normalizeShopifyId(b); return Boolean(left && right && left === right); }
+  function money(cents, currency) { var amount = Math.max(0, Number(cents) || 0) / 100; try { return new Intl.NumberFormat(undefined, { style: "currency", currency: currency || "INR", maximumFractionDigits: amount % 1 ? 2 : 0 }).format(amount); } catch (_) { return (currency || "₹") + (amount % 1 ? amount.toFixed(2) : String(Math.round(amount))); } }
   function valueCents(discount) {
     if (!plain(discount)) return NaN;
     var cents = discount.valueCents || discount.amountCents || discount.fixedPriceCents || discount.fixedAmountCents;
@@ -10,18 +11,12 @@
     var value = Number(discount.value);
     return Number.isFinite(value) ? Math.round(value * 100) : NaN;
   }
-  function variantQty(cart, gid) {
-    return (cart && Array.isArray(cart.items) ? cart.items : []).reduce(function (sum, item) {
-      return sum + (sameId(item && (item.variant_id || item.variant_gid || item.variantGid || item.id), gid) ? Math.max(0, Number(item.quantity) || 0) : 0);
-    }, 0);
-  }
-  function containsProduct(cart, gid) { return (cart && Array.isArray(cart.items) ? cart.items : []).some(function (item) { return sameId(item && (item.product_id || item.product_gid || item.productGid), gid); }); }
+  function itemVariantId(item) { return item && (item.variant_id || item.variant_gid || item.variantGid || item.id); }
+  function itemProductId(item) { return item && (item.product_id || item.product_gid || item.productGid); }
+  function variantQty(cart, gid) { return (cart && Array.isArray(cart.items) ? cart.items : []).reduce(function (sum, item) { return sum + (sameId(itemVariantId(item), gid) ? Math.max(0, Number(item.quantity) || 0) : 0); }, 0); }
+  function containsProduct(cart, gid) { return (cart && Array.isArray(cart.items) ? cart.items : []).some(function (item) { return sameId(itemProductId(item), gid); }); }
   function containsVariant(cart, gid) { return variantQty(cart, gid) > 0; }
-  function withoutReward(cart, rewardVariantGid) {
-    if (!cart || !Array.isArray(cart.items)) return cart;
-    var items = cart.items.filter(function (item) { return !sameId(item && (item.variant_id || item.variant_gid || item.variantGid || item.id), rewardVariantGid); });
-    return Object.assign({}, cart, { items: items, item_count: items.reduce(function (sum, item) { return sum + (Number(item.quantity) || 0); }, 0) });
-  }
+  function withoutReward(cart, rewardVariantGid) { if (!cart || !Array.isArray(cart.items)) return cart; var items = cart.items.filter(function (item) { return !sameId(itemVariantId(item), rewardVariantGid); }); return Object.assign({}, cart, { items: items, item_count: items.reduce(function (sum, item) { return sum + (Number(item.quantity) || 0); }, 0) }); }
   function triggerMatches(trigger, cart) {
     var type = trigger && trigger.type;
     var value = trigger && (trigger.value || trigger.productGid || trigger.variantGid || trigger.subtotalGte || trigger.quantityGte);
@@ -32,59 +27,23 @@
     if (type === "cart_quantity_gte" || type === "cart_quantity_min") return Number(cart && cart.item_count || 0) >= Number(trigger.quantityGte || value || 0);
     return false;
   }
-  function triggersEligible(cart, rule, rewardVariantGid) {
-    var eligibility = plain(rule && rule.eligibility) ? rule.eligibility : {};
-    var triggers = Array.isArray(eligibility.triggers) && eligibility.triggers.length ? eligibility.triggers : [{ type: "always" }];
-    var triggerCart = withoutReward(cart, rewardVariantGid);
-    return eligibility.match === "all" ? triggers.every(function (t) { return triggerMatches(t, triggerCart); }) : triggers.some(function (t) { return triggerMatches(t, triggerCart); });
+  function ruleActive(rule) { return Boolean(rule && rule.enabled === true && rule.status === "active"); }
+  function triggersEligible(cart, rule, rewardVariantGid) { var eligibility = plain(rule && rule.eligibility) ? rule.eligibility : {}; var triggers = Array.isArray(eligibility.triggers) && eligibility.triggers.length ? eligibility.triggers : [{ type: "always" }]; var triggerCart = withoutReward(cart, rewardVariantGid); return eligibility.match === "all" ? triggers.every(function (t) { return triggerMatches(t, triggerCart); }) : triggers.some(function (t) { return triggerMatches(t, triggerCart); }); }
+  function resolveVariantGid(reward) { return String(reward && (reward.variantGid || reward.variant_id || (reward.product && (reward.product.variantGid || reward.product.firstAvailableVariantGid))) || ""); }
+  function parseMoneyCents(value) { var raw = String(value || "").trim(); if (!raw) return 0; var match = raw.match(/(-?\d+(?:[,.]\d+)?)/); if (!match) return 0; var amount = Number(match[1].replace(/,/g, "")); return Number.isFinite(amount) ? Math.round(amount * 100) : 0; }
+  function unitFromLine(item) { var qty = Math.max(1, Number(item && item.quantity) || 1); return Math.round(Number(item && (item.final_line_price || item.original_line_price || item.line_price) || 0) / qty); }
+  function calculatePromotion(input) {
+    input = plain(input) ? input : {}; var rule = plain(input.rule) ? input.rule : {}; var reward = plain(input.reward) ? input.reward : plain(rule.reward) ? rule.reward : {}; var discount = plain(input.discount) ? input.discount : plain(reward.discount) ? reward.discount : {}; var cart = input.cart || { items: [] }; var rewardVariantGid = String(input.rewardVariantGid || resolveVariantGid(reward)); var originalUnit = Math.max(0, Number(input.rewardUnitPrice) || 0); var quantity = Math.max(1, Number(input.rewardQuantity) || Number(reward.quantity) || 1); var limits = plain(rule.limits) ? rule.limits : {}; var cap = Math.max(1, Number(input.quantityCap) || Number(limits.maxQuantityPerCart) || Number(reward.quantity) || quantity); var eligibleQuantity = Math.max(0, Math.min(quantity, cap)); var eligible = ruleActive(rule) && Boolean(input.triggerEligible !== undefined ? input.triggerEligible : triggersEligible(cart, rule, rewardVariantGid)); var promoUnit = null, type = null;
+    if (eligible && eligibleQuantity > 0 && originalUnit > 0) { if (discount.type === "percentage") { var pct = Number(discount.value); if (Number.isFinite(pct) && pct > 0 && pct <= 100) { promoUnit = Math.max(0, Math.round(originalUnit * (100 - pct) / 100)); type = "percentage"; } } else if (discount.type === "fixed_amount") { var amt = Math.min(originalUnit, valueCents(discount)); if (Number.isFinite(amt) && amt > 0) { promoUnit = Math.max(0, originalUnit - amt); type = "fixed_amount"; } } else if (discount.type === "fixed_price") { var fixed = valueCents(discount); if (Number.isFinite(fixed) && fixed >= 0 && fixed < originalUnit) { promoUnit = fixed; type = "fixed_price"; } } if (promoUnit !== null && promoUnit >= originalUnit) { promoUnit = null; type = null; } }
+    var discountPerUnit = promoUnit === null ? 0 : Math.max(0, originalUnit - promoUnit); var adjustedLine = promoUnit === null ? null : (promoUnit * eligibleQuantity) + (originalUnit * Math.max(0, quantity - eligibleQuantity)); return { eligible: Boolean(eligible && promoUnit !== null), originalUnit: originalUnit, promotionalUnit: promoUnit, discountPerUnit: discountPerUnit, eligibleQuantity: eligibleQuantity, originalLineTotal: originalUnit * quantity, promotionalLineTotal: adjustedLine, discountType: type, discountValue: discount.value };
   }
-  function resolvePromotionDisplayPricing(input) {
-    input = plain(input) ? input : {};
-    var rule = plain(input.rule) ? input.rule : {};
-    var reward = plain(input.reward) ? input.reward : plain(rule.reward) ? rule.reward : {};
-    var discount = plain(input.discount) ? input.discount : plain(reward.discount) ? reward.discount : {};
-    var cart = input.cart || { items: [] };
-    var rewardVariantGid = String(input.rewardVariantGid || reward.variantGid || "");
-    var originalUnit = Math.max(0, Number(input.rewardUnitPrice) || 0);
-    var quantity = Math.max(1, Number(input.rewardQuantity) || Number(reward.quantity) || 1);
-    var limits = plain(rule.limits) ? rule.limits : {};
-    var cap = Math.max(1, Number(input.quantityCap) || Number(limits.maxQuantityPerCart) || quantity);
-    var eligibleQuantity = Math.max(0, Math.min(quantity, cap));
-    var eligible = Boolean(input.triggerEligible !== undefined ? input.triggerEligible : triggersEligible(cart, rule, rewardVariantGid));
-    var promoUnit = null, discountPerUnit = 0, type = null;
-    if (eligible && eligibleQuantity > 0 && originalUnit > 0) {
-      if (discount.type === "percentage") {
-        var pct = Number(discount.value);
-        if (Number.isFinite(pct) && pct > 0 && pct <= 100) { promoUnit = Math.max(0, Math.round(originalUnit * (100 - pct) / 100)); type = "percentage"; }
-      } else if (discount.type === "fixed_amount") {
-        var amt = Math.min(originalUnit, valueCents(discount));
-        if (Number.isFinite(amt) && amt > 0) { promoUnit = Math.max(0, originalUnit - amt); type = "fixed_amount"; }
-      } else if (discount.type === "fixed_price") {
-        var fixed = valueCents(discount);
-        if (Number.isFinite(fixed) && fixed >= 0 && fixed < originalUnit) { promoUnit = fixed; type = "fixed_price"; }
-      }
-      if (promoUnit !== null && promoUnit >= originalUnit) { promoUnit = null; type = null; }
-    }
-    discountPerUnit = promoUnit === null ? 0 : Math.max(0, originalUnit - promoUnit);
-    var label = promoUnit === null ? "" : type === "percentage" ? String(Number(discount.value)) + "% off" : type === "fixed_amount" ? "Offer applied" : "Special price";
-    return { isEligible: Boolean(eligible && promoUnit !== null), originalUnitPrice: originalUnit, promotionalUnitPrice: promoUnit, discountPerUnit: discountPerUnit, eligibleQuantity: eligibleQuantity, originalLineTotal: originalUnit * quantity, promotionalLineTotal: promoUnit === null ? null : (promoUnit * eligibleQuantity) + (originalUnit * Math.max(0, quantity - eligibleQuantity)), displayLabel: label, discountType: type, note: promoUnit === null ? null : "Discount applied at checkout" };
+  function resolvePromotionDisplayPricing(input) { var r = calculatePromotion(input); return { isEligible: r.eligible, originalUnitPrice: r.originalUnit, promotionalUnitPrice: r.promotionalUnit, discountPerUnit: r.discountPerUnit, eligibleQuantity: r.eligibleQuantity, originalLineTotal: r.originalLineTotal, promotionalLineTotal: r.promotionalLineTotal, displayLabel: r.eligible ? (r.discountType === "percentage" ? String(Number(r.discountValue)) + "% off" : r.discountType === "fixed_price" ? "Special price" : "Offer applied") : "", discountType: r.discountType, note: r.eligible ? "Discount applied at checkout" : null }; }
+  function buildPromotionViewModel(input) {
+    input = plain(input) ? input : {}; var cart = input.cart || { items: [] }; var rules = Array.isArray(input.rules) ? input.rules : []; var currency = input.currency || cart.currency || null; var vm = { hasPromotion: false, currency: currency, offerCards: [], cartLines: [], totals: { shopifySubtotal: Number(cart.total_price || cart.items_subtotal_price || 0), promotionDiscountTotal: 0, estimatedAfterOffer: Number(cart.total_price || cart.items_subtotal_price || 0), hasEstimatedTotal: false, subtotalNote: "Subtotal is the Shopify cart subtotal before display-only offers.", payableNote: "Final discount is applied at checkout." } };
+    rules.forEach(function (rule) { var reward = plain(rule.reward) ? rule.reward : {}; var display = plain(rule.display) ? rule.display : {}; var product = plain(reward.product) ? reward.product : {}; var gid = resolveVariantGid(reward); var original = Number(input.rewardUnitPrices && input.rewardUnitPrices[normalizeShopifyId(gid)] || 0) || parseMoneyCents(product.variantPrice); var qty = Math.max(1, Number(reward.quantity) || 1); var resolved = calculatePromotion({ cart: cart, rule: rule, rewardVariantGid: gid, rewardUnitPrice: original, rewardQuantity: qty }); var override = String(display.offerPriceDisplay || "").trim(); var priceText = resolved.eligible ? money(resolved.promotionalUnit, currency) : override; vm.offerCards.push({ ruleId: rule.id || "", heading: display.heading || rule.name || "Special offer", badge: display.badge || "", title: product.title || rule.name || "Offer product", image: display.imageOverrideUrl || product.imageUrl || product.image || "", ctaLabel: display.ctaLabel || "Add offer", rewardVariantId: gid, originalUnitPrice: original, promotionalUnitPrice: resolved.promotionalUnit, discountPerUnit: resolved.discountPerUnit, discountType: resolved.discountType, discountValue: resolved.discountValue, eligibleQuantity: resolved.eligibleQuantity, priceText: priceText, originalPriceText: original > 0 ? money(original, currency) : String(display.comparePriceDisplay || ""), benefitText: resolved.eligible ? "Get it for " + money(resolved.promotionalUnit, currency) + ", Usually " + money(original, currency) : "", labelText: display.badge || "Offer applied", noteText: resolved.eligible ? "Discount applied at checkout" : "", canShowPriceBenefit: Boolean(resolved.eligible && original > 0) }); });
+    (Array.isArray(cart.items) ? cart.items : Array.isArray(cart.lineItems) ? cart.lineItems : []).forEach(function (item) { var qty = Math.max(1, Number(item.quantity) || 1); var originalUnit = unitFromLine(item); var best = null; rules.some(function (rule) { var reward = plain(rule.reward) ? rule.reward : {}; var gid = resolveVariantGid(reward); if (!sameId(itemVariantId(item), gid)) return false; var resolved = calculatePromotion({ cart: cart, rule: rule, rewardVariantGid: gid, rewardUnitPrice: originalUnit, rewardQuantity: qty }); if (!resolved.eligible) return false; best = { rule: rule, resolved: resolved }; return true; }); var r = best && best.resolved; var displayUnit = r ? r.promotionalUnit : originalUnit; var lineTotal = r ? r.promotionalLineTotal : originalUnit * qty; var discountTotal = r ? r.discountPerUnit * r.eligibleQuantity : 0; vm.totals.promotionDiscountTotal += discountTotal; vm.cartLines.push({ lineKey: item.key || "", variantId: itemVariantId(item) || "", title: item.product_title || item.title || "", quantity: qty, originalUnitPrice: originalUnit, originalLineTotal: originalUnit * qty, displayUnitPrice: displayUnit, displayLineTotal: lineTotal, discountPerUnit: r ? r.discountPerUnit : 0, discountLineTotal: discountTotal, isRewardLine: Boolean(best), isPromotionAdjusted: Boolean(r), eligibleQuantity: r ? r.eligibleQuantity : 0, labelText: best ? ((best.rule.display && (best.rule.display.badge || best.rule.display.heading)) || best.rule.name || "Offer applied") : "", noteText: r ? (qty > r.eligibleQuantity ? "Offer applies to " + r.eligibleQuantity + " item" + (r.eligibleQuantity === 1 ? "" : "s") : "Discount applied at checkout") : "", originalPriceText: money(originalUnit * qty, currency), displayPriceText: money(lineTotal, currency) }); });
+    vm.totals.estimatedAfterOffer = Math.max(0, vm.totals.shopifySubtotal - vm.totals.promotionDiscountTotal); vm.totals.hasEstimatedTotal = vm.totals.promotionDiscountTotal > 0; vm.hasPromotion = vm.offerCards.some(function (o) { return o.canShowPriceBenefit; }) || vm.totals.hasEstimatedTotal; return vm;
   }
-  function summarizeCart(cart, rules) {
-    var discount = 0;
-    (cart && Array.isArray(cart.items) ? cart.items : []).forEach(function (item) {
-      (Array.isArray(rules) ? rules : []).some(function (rule) {
-        var reward = plain(rule.reward) ? rule.reward : {};
-        var gid = reward.variantGid || "";
-        if (!sameId(item.variant_id || item.variant_gid || item.variantGid || item.id, gid)) return false;
-        var qty = Math.max(1, Number(item.quantity) || 1);
-        var unit = Math.round(Number(item.final_line_price || item.original_line_price || item.line_price || 0) / qty);
-        var resolved = resolvePromotionDisplayPricing({ cart: cart, rule: rule, rewardVariantGid: gid, rewardUnitPrice: unit, rewardQuantity: qty });
-        if (resolved.isEligible) { discount += resolved.discountPerUnit * resolved.eligibleQuantity; return true; }
-        return false;
-      });
-    });
-    var subtotal = Number(cart && cart.total_price || 0);
-    return { offerDiscount: discount, estimatedAfterOffer: Math.max(0, subtotal - discount) };
-  }
-  window.LoopDeskPromotionPricing = { resolvePromotionDisplayPricing: resolvePromotionDisplayPricing, summarizeCart: summarizeCart };
+  function summarizeCart(cart, rules) { var vm = buildPromotionViewModel({ cart: cart, rules: rules, currency: cart && cart.currency }); return { offerDiscount: vm.totals.promotionDiscountTotal, estimatedAfterOffer: vm.totals.estimatedAfterOffer, viewModel: vm }; }
+  window.LoopDeskPromotionPricing = { normalizeShopifyId: normalizeShopifyId, sameShopifyId: sameId, resolvePromotionDisplayPricing: resolvePromotionDisplayPricing, buildPromotionViewModel: buildPromotionViewModel, summarizeCart: summarizeCart };
 })();
