@@ -981,6 +981,25 @@
     }).join('') + '</section>';
   }
 
+
+  function promotionViewModel(cart) {
+    var helper = promotionPricingHelper();
+    var rules = normalizePromotionConfig(config.promotion_rules_config || config.promotionRules).rules || [];
+    return helper && helper.buildPromotionViewModel ? helper.buildPromotionViewModel({ cart: cart || {}, rules: rules, currency: cart && cart.currency }) : null;
+  }
+
+  function promotionViewModelLine(cart, item) {
+    var vm = promotionViewModel(cart);
+    if (!vm || !Array.isArray(vm.cartLines)) return null;
+    var itemKey = item && item.key;
+    var itemVariant = item && (item.variant_id || item.variant_gid || item.variantGid || item.id);
+    for (var i = 0; i < vm.cartLines.length; i += 1) {
+      var line = vm.cartLines[i];
+      if ((itemKey && line.lineKey === itemKey) || sameShopifyId(line.variantId, itemVariant)) return line;
+    }
+    return null;
+  }
+
   function promotionDiscountValueCents(discount) {
     if (!isPlainObject(discount)) return NaN;
     var cents = discount.valueCents || discount.amountCents || discount.fixedPriceCents || discount.fixedAmountCents;
@@ -1045,12 +1064,10 @@
   }
 
   function rewardLinePriceHtml(item, cart) {
-    var adjustment = findPromotionRewardLineAdjustment(cart, item);
-    if (!adjustment) return money(item.final_line_price, cart.currency) + lineSavingsHtml(item, cart);
-    var display = isPlainObject(adjustment.rule.display) ? adjustment.rule.display : {};
-    var label = display.badge || display.heading || adjustment.rule.name || "Offer applied";
-    var quantityNote = adjustment.quantity > adjustment.eligibleQuantity ? '<div class="loopdesk-cart-drawer__reward-note">Promotion applies to ' + escapeHtml(adjustment.eligibleQuantity) + ' item' + (adjustment.eligibleQuantity === 1 ? '' : 's') + '</div>' : '';
-    return '<div class="loopdesk-cart-drawer__reward-price"><span>' + money(adjustment.adjustedUnit, cart.currency) + '</span><s aria-label="Original price ' + escapeHtml(money(adjustment.originalUnit, cart.currency)) + '">' + money(adjustment.originalUnit, cart.currency) + '</s></div><div class="loopdesk-cart-drawer__reward-badge">' + escapeHtml(label) + '</div><div class="loopdesk-cart-drawer__reward-note">Discount applied at checkout</div>' + quantityNote;
+    var vmLine = promotionViewModelLine(cart, item);
+    if (!vmLine || !vmLine.isPromotionAdjusted) return money(item.final_line_price, cart.currency) + lineSavingsHtml(item, cart);
+    var quantityNote = vmLine.quantity > vmLine.eligibleQuantity ? '<div class="loopdesk-cart-drawer__reward-note">Promotion applies to ' + escapeHtml(vmLine.eligibleQuantity) + ' item' + (vmLine.eligibleQuantity === 1 ? '' : 's') + '</div>' : '';
+    return '<div class="loopdesk-cart-drawer__reward-price"><span>' + money(vmLine.displayLineTotal, cart.currency) + '</span><s aria-label="Original price ' + escapeHtml(money(vmLine.originalLineTotal, cart.currency)) + '">' + money(vmLine.originalLineTotal, cart.currency) + '</s></div><div class="loopdesk-cart-drawer__reward-badge">' + escapeHtml(vmLine.labelText || "Offer applied") + '</div><div class="loopdesk-cart-drawer__reward-note">Discount applied at checkout</div>' + quantityNote;
   }
 
   function renderLines(cart) {
@@ -1092,11 +1109,10 @@
 
     elements.subtotal.textContent = money(cart ? cart.total_price : 0, cart && cart.currency);
     if (elements.offerEstimate) {
-      var summaryHelper = promotionPricingHelper();
-      var rules = normalizePromotionConfig(config.promotion_rules_config || config.promotionRules).rules || [];
-      var offerSummary = summaryHelper && summaryHelper.summarizeCart ? summaryHelper.summarizeCart(cart || {}, rules) : { offerDiscount: 0, estimatedAfterOffer: 0 };
-      elements.offerEstimate.hidden = !(offerSummary.offerDiscount > 0);
-      elements.offerEstimate.innerHTML = offerSummary.offerDiscount > 0 ? '<div><span>Offer discount</span><strong>-' + escapeHtml(money(offerSummary.offerDiscount, cart && cart.currency)) + '</strong></div><div><span>Estimated after offer</span><strong>' + escapeHtml(money(offerSummary.estimatedAfterOffer, cart && cart.currency)) + '</strong></div><p>Final discount is applied at checkout.</p>' : '';
+      var offerViewModel = promotionViewModel(cart || {});
+      var offerTotals = offerViewModel && offerViewModel.totals ? offerViewModel.totals : { promotionDiscountTotal: 0, estimatedAfterOffer: 0 };
+      elements.offerEstimate.hidden = !(offerTotals.promotionDiscountTotal > 0);
+      elements.offerEstimate.innerHTML = offerTotals.promotionDiscountTotal > 0 ? '<div><span>Offer discount</span><strong>-' + escapeHtml(money(offerTotals.promotionDiscountTotal, cart && cart.currency)) + '</strong></div><div><span>Estimated after offer</span><strong>' + escapeHtml(money(offerTotals.estimatedAfterOffer, cart && cart.currency)) + '</strong></div><p>Final discount is applied at checkout.</p>' : '';
     }
     elements.count.textContent = itemCount ? "(" + itemCount + ")" : "";
     elements.express.hidden = !config.cart.expressCheckoutButtonEnabled || itemCount === 0;
