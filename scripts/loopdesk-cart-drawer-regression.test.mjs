@@ -26,7 +26,7 @@ assert.match(controllerOpen[0], /return refreshAndMaybeOpen\(true\);/, "manual o
 assert.doesNotMatch(controllerOpen[0], /isLoopDeskDrawerActive\(\)/, "manual open helper should not be gated by cartOwnershipMode");
 
 assert.match(source, /if \(wasAdd && shouldOpenLoopDeskAfterCartAdd\(\)\) return refreshAndMaybeOpen\(true\);/, "add-to-cart should only open the drawer when explicitly configured, avoiding OTP/checkout changes");
-assert.match(source, /elements\.express\.addEventListener\("click", function \(event\) \{ interceptCheckout\(event, "loopdesk-cart-drawer"\); \}\);/, "express checkout OTP/checkout should remain scoped to the drawer checkout CTA");
+assert.match(source, /elements\.express\.addEventListener\("click", function \(event\) \{ interceptCheckout\(event, "drawer"\); \}\);/, "express checkout OTP/checkout should remain scoped to the drawer checkout CTA context");
 
 assert.match(source, /debugState: debugState,/, "debugState helper should be exposed on the public controller");
 assert.match(source, /rootClass:[\s\S]*panelClass:[\s\S]*bodyClass:[\s\S]*ariaHidden:[\s\S]*computed:[\s\S]*drawerMode:[\s\S]*ownershipMode:/, "debugState should include DOM classes, aria state, computed visibility, drawer mode, and ownership mode");
@@ -41,3 +41,19 @@ assert.ok(fixedAmountPricing, "fixed_amount drawer display resolver should exist
 assert.match(fixedAmountPricing[0], /discount\.type !== "fixed_amount"/, "drawer should derive price only for fixed_amount rewards without merchant override");
 assert.match(fixedAmountPricing[0], /formatDisplayMoneyLike\(variantMoney, variantMoney\.amount - fixedAmount\)/, "fixed_amount drawer display should subtract discount from Shopify variant price");
 assert.match(source, /var displayPriceSource = offerPrice \? resolvedOfferPrice\.source : "unavailable";/, "drawer should preserve merchant override source and mark derived fixed_amount prices");
+
+const rewardLinePricing = source.match(/function promotionRewardLineAdjustment\(rule, item, cart\) \{[\s\S]*?\n  \}\n\n  function findPromotionRewardLineAdjustment/);
+assert.ok(rewardLinePricing, "reward cart line adjustment helper should exist");
+assert.match(rewardLinePricing[0], /type === "percentage"[\s\S]*percentage <= 0 \|\| percentage > 100[\s\S]*originalUnit \* \(100 - percentage\) \/ 100/, "percentage rewards should be validated and displayed from the original unit price");
+assert.match(rewardLinePricing[0], /type === "fixed_amount"[\s\S]*Math\.max\(0, originalUnit - fixedAmount\)/, "fixed_amount rewards should not display negative prices");
+assert.match(rewardLinePricing[0], /type === "fixed_price"[\s\S]*fixedPrice >= originalUnit[\s\S]*adjustedUnit = fixedPrice/, "fixed_price rewards should only display when below the original price");
+assert.match(rewardLinePricing[0], /eligibleQuantity = Math\.max\(1, Math\.min\(quantity, rewardQty, maxQty\)\)/, "reward quantity display should respect reward and cart caps");
+
+const rewardLineMatching = source.match(/function promotionRuleMatchesRewardLine\(rule, cart, item, now\) \{[\s\S]*?\n  \}\n\n  function promotionRewardLineAdjustment/);
+assert.ok(rewardLineMatching, "reward cart line matching helper should exist");
+assert.match(rewardLineMatching[0], /sameShopifyId\(item\.variant_id, offerVariantGid\)[\s\S]*sameShopifyId\(item\.id, offerVariantGid\)/, "reward line matching should normalize Shopify GID and numeric variant IDs");
+assert.match(rewardLineMatching[0], /rule\.enabled !== true \|\| rule\.status !== "active" \|\| !isPromotionScheduled/, "reward line matching should require active scheduled rules");
+assert.match(source, /function triggerMatchesRewardLine\(trigger, cart, item\)[\s\S]*cartWithoutItem\(cart, item\)/, "reward line trigger checks should not let the reward-only line satisfy product or variant triggers");
+assert.match(source, /function rewardLinePriceHtml\(item, cart\)[\s\S]*Promotion applies to [\s\S]*Discount applied at checkout/, "reward cart lines should show checkout-discount and quantity-cap messaging");
+assert.match(source, /elements\.subtotal\.textContent = money\(cart \? cart\.total_price : 0, cart && cart\.currency\);/, "subtotal should keep using Shopify cart total and not an estimated promotional total");
+assert.match(css, /\.loopdesk-cart-drawer__reward-price[\s\S]*\.loopdesk-cart-drawer__reward-note/, "reward line display styles should exist");
