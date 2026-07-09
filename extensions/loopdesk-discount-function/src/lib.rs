@@ -1,7 +1,7 @@
 use serde::Deserialize;
 use shopify_function::prelude::*;
 use shopify_function::Result;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 #[typegen("schema.graphql")]
 pub mod schema {
@@ -22,7 +22,30 @@ struct CartLine {
 #[serde(rename_all = "camelCase")]
 struct DiscountConfig {
     enabled: bool,
+    #[serde(default)]
     rules: Vec<Rule>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[serde(untagged)]
+enum TriggerValue {
+    String(String),
+    Number(f64),
+}
+
+impl TriggerValue {
+    fn as_trimmed_string(&self) -> String {
+        match self {
+            TriggerValue::String(value) => value.trim().to_string(),
+            TriggerValue::Number(value) => {
+                if value.fract() == 0.0 {
+                    format!("{value:.0}")
+                } else {
+                    value.to_string()
+                }
+            }
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -34,9 +57,10 @@ struct Rule {
     priority: i64,
     trigger_type: String,
     #[serde(default)]
-    trigger_value: Option<String>,
+    trigger_value: Option<TriggerValue>,
     reward_enforcement_type: String,
-    reward_variant_gid: String,
+    #[serde(default)]
+    reward_variant_gid: Option<String>,
     #[serde(default)]
     fixed_price_amount: Option<f64>,
     #[serde(default)]
@@ -76,7 +100,11 @@ fn parse_config(raw_value: Option<&str>) -> Vec<Rule> {
         .into_iter()
         .filter(|rule| rule.enabled)
         .filter(|rule| !rule.id.trim().is_empty())
-        .filter(|rule| !rule.reward_variant_gid.trim().is_empty())
+        .filter(|rule| {
+            rule.reward_variant_gid
+                .as_deref()
+                .is_some_and(|gid| !gid.trim().is_empty())
+        })
         .filter(is_supported_trigger)
         .filter(is_valid_reward_value)
         .collect();
@@ -107,7 +135,12 @@ fn trigger_matches(rule: &Rule, cart_lines: &[CartLine]) -> bool {
         return true;
     }
 
-    let trigger_value = rule.trigger_value.as_deref().unwrap_or("").trim();
+    let trigger_value = rule
+        .trigger_value
+        .as_ref()
+        .map(TriggerValue::as_trimmed_string)
+        .unwrap_or_default();
+    let trigger_value = trigger_value.trim();
     if trigger_value.is_empty() {
         return false;
     }
@@ -169,16 +202,33 @@ fn create_discount_candidate(rule: &Rule, line: &CartLine) -> Option<DiscountCan
 }
 
 fn evaluate(cart_lines: &[CartLine], rules: &[Rule]) -> Vec<DiscountCandidateSpec> {
-    rules
+    let mut discounted_variants = BTreeSet::new();
+    let mut candidates = Vec::new();
+
+    for rule in rules
         .iter()
         .filter(|rule| trigger_matches(rule, cart_lines))
-        .filter_map(|rule| {
-            cart_lines
-                .iter()
-                .find(|line| line.variant_gid == rule.reward_variant_gid)
-                .and_then(|reward_line| create_discount_candidate(rule, reward_line))
-        })
-        .collect()
+    {
+        let Some(reward_variant_gid) = rule.reward_variant_gid.as_deref() else {
+            continue;
+        };
+        if discounted_variants.contains(reward_variant_gid) {
+            continue;
+        }
+        let Some(reward_line) = cart_lines
+            .iter()
+            .find(|line| line.variant_gid == reward_variant_gid)
+        else {
+            continue;
+        };
+        let Some(candidate) = create_discount_candidate(rule, reward_line) else {
+            continue;
+        };
+        discounted_variants.insert(reward_variant_gid.to_string());
+        candidates.push(candidate);
+    }
+
+    candidates
 }
 
 #[shopify_function]
@@ -221,38 +271,43 @@ fn cart_lines_discounts_generate_run(
         return Ok(empty_result());
     }
 
-    Ok(object(vec![
-        ("operations", array(vec![object(vec![
-            ("productDiscountsAdd", object(vec![
+    Ok(object(vec![(
+        "operations",
+        array(vec![object(vec![(
+            "productDiscountsAdd",
+            object(vec![
                 ("selectionStrategy", string("FIRST")),
                 ("candidates", array(candidates)),
-            ])),
-        ])])),
-    ]))
+            ]),
+        )])]),
+    )]))
 }
 
 fn to_product_discount_candidate(spec: DiscountCandidateSpec) -> JsonValue {
     let value = match spec.value {
-        DiscountValue::Percentage(value) => object(vec![
-            ("percentage", object(vec![
-                ("value", number(value)),
-            ])),
-        ]),
-        DiscountValue::FixedAmountEach(amount) => object(vec![
-            ("fixedAmount", object(vec![
+        DiscountValue::Percentage(value) => {
+            object(vec![("percentage", object(vec![("value", number(value))]))])
+        }
+        DiscountValue::FixedAmountEach(amount) => object(vec![(
+            "fixedAmount",
+            object(vec![
                 ("amount", number((amount * 100.0).round() / 100.0)),
                 ("appliesToEachItem", boolean(true)),
-            ])),
-        ]),
+            ]),
+        )]),
     };
 
     object(vec![
-        ("targets", array(vec![object(vec![
-            ("productVariant", object(vec![
-                ("id", string(spec.variant_gid)),
-                ("quantity", number(spec.quantity as f64)),
-            ])),
-        ])])),
+        (
+            "targets",
+            array(vec![object(vec![(
+                "productVariant",
+                object(vec![
+                    ("id", string(spec.variant_gid)),
+                    ("quantity", number(spec.quantity as f64)),
+                ]),
+            )])]),
+        ),
         ("message", string(REWARD_MESSAGE)),
         ("value", value),
         ("associatedDiscountCode", JsonValue::Null),
@@ -301,9 +356,9 @@ mod tests {
             enabled: true,
             priority: 1,
             trigger_type: "cart_contains_variant".to_string(),
-            trigger_value: Some(TRIGGER_VARIANT_GID.to_string()),
+            trigger_value: Some(TriggerValue::String(TRIGGER_VARIANT_GID.to_string())),
             reward_enforcement_type: "percentage".to_string(),
-            reward_variant_gid: REWARD_VARIANT_GID.to_string(),
+            reward_variant_gid: Some(REWARD_VARIANT_GID.to_string()),
             fixed_price_amount: None,
             percentage_value: Some(20.0),
             quantity: Some(1),
@@ -368,7 +423,7 @@ mod tests {
         let operations = evaluate(
             &default_lines(),
             &[rule(|rule| {
-                rule.reward_variant_gid = "gid://shopify/ProductVariant/missing".to_string()
+                rule.reward_variant_gid = Some("gid://shopify/ProductVariant/missing".to_string())
             })],
         );
 
@@ -389,6 +444,61 @@ mod tests {
         );
 
         assert_eq!(operations[0].quantity, 2);
+    }
+
+    #[test]
+    fn reward_without_trigger_does_not_apply() {
+        let operations = evaluate(&[cart_line(REWARD_VARIANT_GID, 2, 200.0)], &[rule(|_| {})]);
+        assert!(operations.is_empty());
+    }
+
+    #[test]
+    fn trigger_without_reward_does_not_apply() {
+        let operations = evaluate(&[cart_line(TRIGGER_VARIANT_GID, 1, 100.0)], &[rule(|_| {})]);
+        assert!(operations.is_empty());
+    }
+
+    #[test]
+    fn disabled_and_malformed_config_produce_no_rules() {
+        assert!(parse_config(Some("not json")).is_empty());
+        assert!(parse_config(Some(r#"{"enabled":false,"rules":[]}"#)).is_empty());
+        assert!(parse_config(Some(
+            r#"{"enabled":true,"rules":[{"id":"missing-reward"}]}"#
+        ))
+        .is_empty());
+    }
+
+    #[test]
+    fn numeric_trigger_values_parse_safely() {
+        let parsed = parse_config(Some(
+            r#"{"schemaVersion":1,"enabled":true,"rules":[{"id":"subtotal","enabled":true,"priority":1,"triggerType":"cart_subtotal_gte","triggerValue":250,"rewardEnforcementType":"percentage","rewardVariantGid":"gid://shopify/ProductVariant/reward","percentageValue":10,"quantity":1}]}"#,
+        ));
+        assert_eq!(parsed.len(), 1);
+        assert!(trigger_matches(
+            &parsed[0],
+            &[cart_line(REWARD_VARIANT_GID, 1, 300.0)]
+        ));
+    }
+
+    #[test]
+    fn multiple_rules_do_not_double_discount_same_reward_variant() {
+        let operations = evaluate(
+            &default_lines(),
+            &[
+                rule(|rule| {
+                    rule.priority = 1;
+                    rule.percentage_value = Some(10.0);
+                }),
+                rule(|rule| {
+                    rule.id = "rule-2".to_string();
+                    rule.priority = 2;
+                    rule.percentage_value = Some(20.0);
+                }),
+            ],
+        );
+
+        assert_eq!(operations.len(), 1);
+        assert_eq!(operations[0].value, DiscountValue::Percentage(10.0));
     }
 
     #[test]
