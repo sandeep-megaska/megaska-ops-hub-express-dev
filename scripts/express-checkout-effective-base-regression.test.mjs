@@ -18,4 +18,7 @@ assert.match(modal, /expressDisplaySubtotalPaise\(intent\)[\s\S]*loopdeskOfferBa
 assert.match(modal, /expressPromotionSummary\(intent\)[\s\S]*LoopDesk offer discount/, "order summary should show the LoopDesk offer separately from coupon discounts");
 assert.match(modal, /discountSummary\(intent\)[\s\S]*intent\.discountAmountPaise/, "order summary should show coupon discounts from the coupon-aware intent state");
 
+assert.match(intentRoute, /function preserveLoopDeskOfferPricing\(cartSnapshot: unknown, body: Record<string, unknown>\) \{[\s\S]*bodyHandoff = validLoopDeskOfferPricing\(body\.loopdeskOfferPricing\)[\s\S]*loopdeskOfferPricing: bodyHandoff/, "intent creation should persist drawer offer pricing into cartSnapshot when supplied as top-level handoff context");
+assert.match(intentRoute, /const cartSnapshot = body\.cartSnapshot === undefined \? undefined : preserveLoopDeskOfferPricing\(body\.cartSnapshot, body\);/, "intent creation should normalize cart snapshots before reuse/create writes");
+
 console.log("Express Checkout effective coupon base regression checks passed");
