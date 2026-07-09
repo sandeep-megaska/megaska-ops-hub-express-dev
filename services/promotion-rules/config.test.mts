@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { resolvePromotionComparePrice } from "./price-resolution.ts";
+import { normalizePromotionRule } from "./config.ts";
 
 test("compare price resolves from selected offer variant Shopify price before admin fallback", () => {
   const rule = {
@@ -40,4 +41,16 @@ test("compare price is unavailable when neither variant price nor legacy fallbac
   };
 
   assert.deepEqual(resolvePromotionComparePrice(rule), { value: "", source: "unavailable" });
+});
+
+test("fixed_amount reward discount normalizes and serializes correctly", () => {
+  const rule = normalizePromotionRule({
+    id: "fixed-amount",
+    name: "Fixed amount",
+    reward: { discount: { type: "fixed_amount", value: 100 } },
+    display: { heading: "Offer", ctaLabel: "Add offer" },
+  });
+
+  assert.deepEqual(rule.reward.discount, { type: "fixed_amount", value: 100 });
+  assert.equal(JSON.parse(JSON.stringify(rule)).reward.discount.type, "fixed_amount");
 });

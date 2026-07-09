@@ -108,6 +108,7 @@ export async function activateLoopDeskDiscountFunction(input: { shopId: string; 
     compiledRewardTypes: Array.from(new Set(config.rules.map((rule) => rule.rewardEnforcementType))).sort(),
     fixedPriceRulesCompiledCount: config.rules.filter((rule) => rule.rewardEnforcementType === "fixed_price").length,
     percentageRulesCompiledCount: config.rules.filter((rule) => rule.rewardEnforcementType === "percentage").length,
+    fixedAmountRulesCompiledCount: config.rules.filter((rule) => rule.rewardEnforcementType === "fixed_amount").length,
     buildArtifactPresent,
     activationStatus: "blocked" as "blocked" | "activated",
   };

@@ -35,3 +35,9 @@ assert.match(css, /#loopdesk-cart-drawer-root \.loopdesk-cart-drawer[\s\S]*displ
 assert.match(css, /#loopdesk-cart-drawer-root \.loopdesk-cart-drawer__overlay[\s\S]*display: block !important;[\s\S]*visibility: visible !important;/, "LoopDesk overlay must override broad native cart hiding selectors");
 
 console.log("LoopDesk cart drawer CONFIG-2B regression checks passed");
+
+const fixedAmountPricing = source.match(/function resolvePromotionOfferPriceDisplay\(display, reward\) \{[\s\S]*?\n  \}\n\n  function renderPromotionOffers/);
+assert.ok(fixedAmountPricing, "fixed_amount drawer display resolver should exist");
+assert.match(fixedAmountPricing[0], /discount\.type !== "fixed_amount"/, "drawer should derive price only for fixed_amount rewards without merchant override");
+assert.match(fixedAmountPricing[0], /formatDisplayMoneyLike\(variantMoney, variantMoney\.amount - fixedAmount\)/, "fixed_amount drawer display should subtract discount from Shopify variant price");
+assert.match(source, /var displayPriceSource = offerPrice \? resolvedOfferPrice\.source : "unavailable";/, "drawer should preserve merchant override source and mark derived fixed_amount prices");

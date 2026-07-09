@@ -66,6 +66,8 @@ struct Rule {
     #[serde(default)]
     percentage_value: Option<f64>,
     #[serde(default)]
+    fixed_amount_value: Option<f64>,
+    #[serde(default)]
     quantity: Option<i64>,
 }
 
@@ -126,6 +128,9 @@ fn is_valid_reward_value(rule: &Rule) -> bool {
         "percentage" => rule.percentage_value.is_some_and(|percentage| {
             percentage.is_finite() && percentage > 0.0 && percentage <= 100.0
         }),
+        "fixed_amount" => rule
+            .fixed_amount_value
+            .is_some_and(|amount| amount.is_finite() && amount > 0.0),
         _ => false,
     }
 }
@@ -186,6 +191,19 @@ fn create_discount_candidate(rule: &Rule, line: &CartLine) -> Option<DiscountCan
                 0.0
             };
             let discount_amount = (unit_price - fixed_price_amount).max(0.0);
+            if !discount_amount.is_finite() || discount_amount <= 0.0 {
+                return None;
+            }
+            DiscountValue::FixedAmountEach(discount_amount)
+        }
+        "fixed_amount" => {
+            let fixed_amount = rule.fixed_amount_value?;
+            let unit_price = if line.quantity > 0 {
+                line.subtotal_amount / line.quantity as f64
+            } else {
+                0.0
+            };
+            let discount_amount = fixed_amount.min(unit_price).max(0.0);
             if !discount_amount.is_finite() || discount_amount <= 0.0 {
                 return None;
             }
@@ -361,6 +379,7 @@ mod tests {
             reward_variant_gid: Some(REWARD_VARIANT_GID.to_string()),
             fixed_price_amount: None,
             percentage_value: Some(20.0),
+            fixed_amount_value: None,
             quantity: Some(1),
         };
         overrides(&mut rule);
@@ -397,6 +416,49 @@ mod tests {
         assert_eq!(operations[0].variant_gid, REWARD_VARIANT_GID);
         assert_eq!(operations[0].quantity, 1);
         assert_eq!(operations[0].value, DiscountValue::FixedAmountEach(75.0));
+    }
+
+    #[test]
+    fn fixed_amount_applies_correct_amount_to_capped_reward_line() {
+        let operations = evaluate(
+            &default_lines(),
+            &[rule(|rule| {
+                rule.reward_enforcement_type = "fixed_amount".to_string();
+                rule.fixed_amount_value = Some(30.0);
+                rule.percentage_value = None;
+                rule.quantity = Some(1);
+            })],
+        );
+
+        assert_eq!(operations.len(), 1);
+        assert_eq!(operations[0].variant_gid, REWARD_VARIANT_GID);
+        assert_eq!(operations[0].quantity, 1);
+        assert_eq!(operations[0].value, DiscountValue::FixedAmountEach(30.0));
+    }
+
+    #[test]
+    fn fixed_amount_caps_at_unit_price() {
+        let operations = evaluate(
+            &default_lines(),
+            &[rule(|rule| {
+                rule.reward_enforcement_type = "fixed_amount".to_string();
+                rule.fixed_amount_value = Some(150.0);
+                rule.percentage_value = None;
+            })],
+        );
+
+        assert_eq!(operations[0].value, DiscountValue::FixedAmountEach(100.0));
+    }
+
+    #[test]
+    fn invalid_fixed_amount_values_are_ignored() {
+        for amount in [0.0, -1.0, f64::NAN] {
+            assert!(!is_valid_reward_value(&rule(|rule| {
+                rule.reward_enforcement_type = "fixed_amount".to_string();
+                rule.percentage_value = None;
+                rule.fixed_amount_value = Some(amount);
+            })));
+        }
     }
 
     #[test]
@@ -503,7 +565,7 @@ mod tests {
 
     #[test]
     fn unsupported_reward_types_are_ignored() {
-        for reward_type in ["fixed_amount", "free_gift", "bundles"] {
+        for reward_type in ["free_gift", "bundles"] {
             assert!(!is_valid_reward_value(&rule(|rule| {
                 rule.reward_enforcement_type = reward_type.to_string()
             })));
