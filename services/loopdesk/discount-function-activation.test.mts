@@ -314,3 +314,36 @@ test("publication diagnostics audit does not invoke create or update mutations",
   assert.equal(diagnosticsSource.includes("updateAutomaticDiscount("), false);
   assert.match(diagnosticsSource, /automaticDiscountDiscoveryDiagnostics/);
 });
+
+test("discountNodes discovery has filtered fast path and unfiltered fallback diagnostics", () => {
+  const source = readFileSync(new URL("./discount-function-activation.server.ts", import.meta.url), "utf8");
+  const discoverySource = source.slice(source.indexOf("export async function queryLoopDeskDiscountNodes"), source.indexOf("async function hydrateSelectedDiscountMetafield"));
+  assert.match(discoverySource, /runStage\("filteredSearch", automaticDiscountTitleQuery\(DISCOUNT_TITLE\)\)/);
+  assert.match(discoverySource, /runStage\("unfilteredFallback", null\)/);
+  assert.match(source, /filteredSearch:\s*\{ attempted: false, pagesRead: 0, edgesRead: 0, candidateNodeIds: \[\] \}/);
+  assert.match(source, /unfilteredFallback:\s*\{ attempted: false, pagesRead: 0, edgesRead: 0, candidateNodeIds: \[\] \}/);
+  assert.match(source, /selectedAutomaticDiscountId: null/);
+  assert.match(source, /totalCandidatesInspected/);
+});
+
+test("discountNodes filtered identity match skips unfiltered fallback", () => {
+  const source = readFileSync(new URL("./discount-function-activation.server.ts", import.meta.url), "utf8");
+  const discoverySource = source.slice(source.indexOf("const filteredMatch"), source.indexOf("const unfilteredMatch"));
+  assert.match(discoverySource, /if \(filteredMatch\)/);
+  assert.match(discoverySource, /return \{ \.\.\.hydrated, discountNodesDiscoveryDiagnostics: diagnostics \}/);
+});
+
+test("discountNodes fallback remains bounded and reports page limit", () => {
+  const source = readFileSync(new URL("./discount-function-activation.server.ts", import.meta.url), "utf8");
+  assert.match(source, /const MAX_DISCOUNT_NODE_PAGES = 20/);
+  assert.match(source, /pagesRead >= MAX_DISCOUNT_NODE_PAGES/);
+  assert.match(source, /diagnostics\.stoppedBecause = "page_limit"/);
+});
+
+test("discountNodes identity matching requires app discount, exact title, and function id", () => {
+  const source = readFileSync(new URL("./discount-function-activation.server.ts", import.meta.url), "utf8");
+  const identitySource = source.slice(source.indexOf("function isIdentityMatch"), source.indexOf("function exactTitleNodes"));
+  assert.match(identitySource, /__typename === "DiscountAutomaticApp"/);
+  assert.match(identitySource, /discount\.title === DISCOUNT_TITLE/);
+  assert.match(identitySource, /appDiscountType\?\.functionId === functionType\.functionId/);
+});
