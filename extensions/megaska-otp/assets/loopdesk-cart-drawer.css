@@ -558,3 +558,82 @@ body.loopdesk-cart-drawer-is-open #loopdesk-cart-drawer-root .loopdesk-cart-draw
 .loopdesk-cart-drawer__offer-estimate div { display: flex; justify-content: space-between; gap: 12px; margin: 4px 0; }
 .loopdesk-cart-drawer__offer-estimate strong { color: #0f172a; font-weight: 800; }
 .loopdesk-cart-drawer__offer-estimate p { margin: 6px 0 0; color: #64748b; font-size: 12px; }
+
+.loopdesk-cart-drawer__offer-selector {
+  margin-top: 12px;
+  border: 1px solid #dbe3ef;
+  border-radius: 12px;
+  background: #fff;
+  padding: 12px;
+}
+
+.loopdesk-cart-drawer__offer-selector p,
+.loopdesk-cart-drawer__offer-variant,
+.loopdesk-cart-drawer__offer-selected,
+.loopdesk-cart-drawer__offer-applied,
+.loopdesk-cart-drawer__offer-unavailable {
+  margin: 6px 0 0;
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.loopdesk-cart-drawer__offer-option {
+  display: grid;
+  gap: 5px;
+  margin-top: 10px;
+  color: var(--loopdesk-text, #111827);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.loopdesk-cart-drawer__offer-option select {
+  width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #fff;
+  color: #0f172a;
+  font: inherit;
+  padding: 9px 10px;
+}
+
+.loopdesk-cart-drawer__offer-option select:focus,
+.loopdesk-cart-drawer__offer-cta:focus-visible,
+.loopdesk-cart-drawer__offer-cancel:focus-visible {
+  outline: 2px solid var(--loopdesk-accent, #2563eb);
+  outline-offset: 2px;
+}
+
+.loopdesk-cart-drawer__offer-cancel {
+  width: 100%;
+  margin-top: 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  background: #fff;
+  color: #334155;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  padding: 10px 12px;
+}
+
+.loopdesk-cart-drawer__offer-cancel:disabled,
+.loopdesk-cart-drawer__offer-option select:disabled {
+  cursor: not-allowed;
+  opacity: .65;
+}
+
+.loopdesk-cart-drawer__offer-applied {
+  color: #166534;
+  font-weight: 700;
+}
+
+@media (max-width: 480px) {
+  .loopdesk-cart-drawer__offer-content {
+    gap: 10px;
+  }
+
+  .loopdesk-cart-drawer__offer-selector {
+    padding: 10px;
+  }
+}
