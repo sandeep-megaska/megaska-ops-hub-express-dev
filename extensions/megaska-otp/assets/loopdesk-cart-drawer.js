@@ -899,7 +899,7 @@
     if (type === "cart_contains_collection") return itemHasMetadataValue(cart, ["collections", "collection_ids", "collectionGids"], trigger.collectionGid || value, "promotion-collections-unavailable", "cart_contains_collection");
     if (type === "cart_contains_product_type" || type === "product_type") return itemHasProductType(cart, trigger.productType || value);
     if (type === "cart_contains_tag" || type === "tag") return itemHasMetadataValue(cart, ["tags", "product_tags", "productTags"], trigger.tag || value, "promotion-tags-unavailable", "tag");
-    if (type === "cart_subtotal_gte" || type === "cart_subtotal_min") return Number(cart && cart.total_price || 0) >= Number(trigger.subtotalGte || value || 0);
+    if (type === "cart_subtotal_gte" || type === "cart_subtotal_min") return cartRawSubtotal(cart) >= Number(trigger.subtotalGte || value || 0);
     if (type === "cart_quantity_gte" || type === "cart_quantity_min") return Number(cart && cart.item_count || 0) >= Number(trigger.quantityGte || value || 0);
     return false;
   }
@@ -1129,7 +1129,15 @@
   }
 
   function cartRawSubtotal(cart) {
-    return Number(cart && (cart.original_total_price || cart.items_subtotal_price || cart.total_price) || 0);
+    var fields = ["original_total_price", "items_subtotal_price", "total_price"];
+    for (var i = 0; i < fields.length; i += 1) {
+      var value = cart && cart[fields[i]];
+      if (value !== undefined && value !== null && value !== "") {
+        var cents = Number(value);
+        if (Number.isFinite(cents)) return cents;
+      }
+    }
+    return 0;
   }
 
   function render() {

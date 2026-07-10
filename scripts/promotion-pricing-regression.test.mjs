@@ -53,6 +53,44 @@ assert.equal(capped.totals.promotionDiscountTotal, 30000, "quantity cap discount
 assert.equal(sameShopifyId("gid://shopify/ProductVariant/123", "123"), true, "ID normalization GID vs numeric");
 assert.equal(buildPromotionViewModel({ cart: cart(1), rules: [baseRule({ type: "percentage", value: 150 })], currency: "INR" }).totals.promotionDiscountTotal, 0, "invalid discount config produces no misleading display");
 
+
+const subtotalRule = (subtotalGte = 180000) => ({
+  id: "subtotal-rule",
+  name: "Subtotal gated add-on",
+  enabled: true,
+  status: "active",
+  display: { badge: "Offer applied", heading: "Special add-on", ctaLabel: "Add offer" },
+  eligibility: { triggers: [{ type: "cart_subtotal_gte", subtotalGte }] },
+  limits: { maxQuantityPerCart: 1 },
+  reward: { variantGid: "gid://shopify/ProductVariant/reward", quantity: 1, discount: { type: "percentage", value: 50 }, product: { title: "Reward", variantPrice: "600" } },
+});
+const couponCart = {
+  currency: "INR",
+  original_total_price: 199000,
+  items_subtotal_price: 199000,
+  total_discount: 29850,
+  total_price: 169150,
+  item_count: 2,
+  items: [
+    { key: "trigger-key", variant_id: "trigger", quantity: 1, original_line_price: 139000, line_price: 139000, final_line_price: 118150 },
+    { key: "reward-key", variant_id: "reward", quantity: 1, original_line_price: 60000, line_price: 60000, final_line_price: 51000 },
+  ],
+};
+const couponViewModel = buildPromotionViewModel({ cart: couponCart, rules: [subtotalRule()], currency: "INR" });
+assert.equal(couponViewModel.totals.shopifySubtotal, 199000, "coupon-adjusted cart uses raw Shopify subtotal");
+assert.equal(couponViewModel.totals.promotionDiscountTotal, 30000, "coupon-adjusted cart keeps LoopDesk offer discount independent of Shopify coupon");
+assert.equal(couponViewModel.totals.estimatedAfterOffer, 169000, "coupon-adjusted cart estimates after LoopDesk offer from raw subtotal");
+const mega15Base = couponViewModel.totals.estimatedAfterOffer;
+const mega15Discount = Math.round(mega15Base * 0.15);
+assert.equal(mega15Base, 169000, "MEGA15 coupon base is LoopDesk estimated after offer");
+assert.equal(mega15Discount, 25350, "MEGA15 coupon discount is calculated from LoopDesk estimated after offer");
+assert.equal(Math.max(0, mega15Base - mega15Discount), 143650, "MEGA15 coupon total stacks after LoopDesk offer exactly once");
+const couponChangedCart = { ...couponCart, total_discount: 0, total_price: 199000, cart_level_discount_applications: [], discount_codes: [] };
+const couponChangedViewModel = buildPromotionViewModel({ cart: couponChangedCart, rules: [subtotalRule()], currency: "INR" });
+assert.deepEqual(couponChangedViewModel.totals, couponViewModel.totals, "LoopDesk promotion totals are identical before and after Shopify coupon fields change");
+assert.equal(buildPromotionViewModel({ cart: { ...couponCart, original_total_price: undefined, items_subtotal_price: undefined }, rules: [subtotalRule()], currency: "INR" }).totals.promotionDiscountTotal, 0, "subtotal trigger falls back to total_price only when raw subtotal fields are unavailable");
+assert.equal(buildPromotionViewModel({ cart: { ...couponCart, total_price: 1000 }, rules: [subtotalRule()], currency: "INR" }).totals.promotionDiscountTotal, 30000, "subtotal trigger ignores coupon-adjusted total_price when raw subtotal fields exist");
+
 const modal = readFileSync(new URL("../extensions/megaska-otp/assets/megaska-express-modal.js", import.meta.url), "utf8");
 assert.match(modal, /buildPromotionViewModel/, "Express Checkout summary uses shared Promotion View Model");
 assert.doesNotMatch(modal, /Total payable is unchanged in Express Checkout until checkout enforcement\/payment integration is enabled/, "Express Checkout no longer shows estimated-only payable clarification");
