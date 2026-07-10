@@ -8,6 +8,7 @@ import { canonicalizeProductVariantGid, compileLoopDeskDiscountFunctionConfig, i
 
 const DISCOUNT_TITLE = "LoopDesk Promotions";
 const FUNCTION_ARTIFACT_PATH = path.join(process.cwd(), "extensions", "loopdesk-discount-function", "target", "wasm32-unknown-unknown", "release", "loopdesk_discount_function.wasm");
+const MAX_DISCOUNT_NODE_PAGES = 20;
 const VALID_STATUSES = new Set(["ACTIVE", "SCHEDULED"]);
 const SUPPORTED_DISCOUNT_CLASSES = new Set(["PRODUCT", "ORDER", "SHIPPING"]);
 
@@ -51,7 +52,21 @@ export type DiscountNodesDiscoveryDiagnostics = {
   candidateNodeIds: string[];
   candidates: DiscountNodesDiscoveryCandidate[];
   queryArgumentSupported: boolean;
-  stoppedBecause: "found_identity" | "end_of_connection" | "missing_cursor";
+  filteredSearch: {
+    attempted: boolean;
+    pagesRead: number;
+    edgesRead: number;
+    candidateNodeIds: string[];
+  };
+  unfilteredFallback: {
+    attempted: boolean;
+    pagesRead: number;
+    edgesRead: number;
+    candidateNodeIds: string[];
+  };
+  totalCandidatesInspected: number;
+  selectedAutomaticDiscountId: string | null;
+  stoppedBecause: "found_identity" | "end_of_connection" | "missing_cursor" | "page_limit";
 };
 export type AutomaticDiscountDiscoveryDiagnostics = {
   exactTitleSearch: {
@@ -343,6 +358,47 @@ function normalizeDiscountNode(node: DiscountNode, discountFieldName: string): A
   return { id: node.id, metafield: node.metafield || null, automaticDiscount: discount };
 }
 
+function emptyDiscountNodesDiscoveryDiagnostics(queryArgumentSupported: boolean): DiscountNodesDiscoveryDiagnostics {
+  return {
+    pagesRead: 0,
+    edgesRead: 0,
+    candidateNodeIds: [],
+    candidates: [],
+    queryArgumentSupported,
+    filteredSearch: { attempted: false, pagesRead: 0, edgesRead: 0, candidateNodeIds: [] },
+    unfilteredFallback: { attempted: false, pagesRead: 0, edgesRead: 0, candidateNodeIds: [] },
+    totalCandidatesInspected: 0,
+    selectedAutomaticDiscountId: null,
+    stoppedBecause: "end_of_connection",
+  };
+}
+
+function recordDiscountNodesPageDiagnostics(
+  diagnostics: DiscountNodesDiscoveryDiagnostics,
+  stage: "filteredSearch" | "unfilteredFallback",
+  pageNodes: AutomaticDiscount[],
+) {
+  const pageCandidates = automaticDiscountDiscoveryCandidates(pageNodes);
+  const pageCandidateNodeIds = pageCandidates.map((candidate) => candidate.nodeId).filter((id): id is string => Boolean(id));
+  diagnostics.pagesRead += 1;
+  diagnostics.edgesRead += pageNodes.length;
+  diagnostics.candidates.push(...pageCandidates);
+  diagnostics.candidateNodeIds.push(...pageCandidateNodeIds);
+  diagnostics.totalCandidatesInspected = diagnostics.candidates.length;
+  diagnostics[stage].pagesRead += 1;
+  diagnostics[stage].edgesRead += pageNodes.length;
+  diagnostics[stage].candidateNodeIds.push(...pageCandidateNodeIds);
+}
+
+async function queryDiscountNodesPage(shopDomain: string, shopId: string, discountNodesNodeFields: string, after: string | null, query: string | null) {
+  return shopifyAdminGraphql<{ discountNodes: DiscountNodesConnection }>(shopDomain, query
+    ? `query LoopDeskDiscountNodes($after: String, $query: String!) { discountNodes(first: 100, after: $after, query: $query) { ${discountNodesNodeFields} } }`
+    : `query LoopDeskDiscountNodes($after: String) { discountNodes(first: 100, after: $after) { ${discountNodesNodeFields} } }`, { after, ...(query ? { query } : {}) }, { shopId }).catch(async (error: unknown) => {
+      if (isMetafieldSchemaError(error)) await assertAutomaticDiscountNodeMetafieldReadable(shopDomain, shopId);
+      throw error;
+    });
+}
+
 export async function queryLoopDeskDiscountNodes(shopDomain: string, shopId: string, functionType: AppDiscountType): Promise<ExactTitleAutomaticDiscountsResult> {
   const schema = await introspectDiscountNodesSchema(shopDomain, shopId);
   const queryField = schema.queryRoot?.fields?.find((field) => field.name === "discountNodes");
@@ -357,35 +413,51 @@ export async function queryLoopDeskDiscountNodes(shopDomain: string, shopId: str
   }
   const discountNodesNodeFields = discountNodeFields(discountFieldName, discountNodeHasMetafield);
   const queryArgumentSupported = hasDiscountNodesQueryArgument(schema);
-  const diagnostics: DiscountNodesDiscoveryDiagnostics = { pagesRead: 0, edgesRead: 0, candidateNodeIds: [], candidates: [], queryArgumentSupported, stoppedBecause: "end_of_connection" };
+  const diagnostics = emptyDiscountNodesDiscoveryDiagnostics(queryArgumentSupported);
   const nodes: AutomaticDiscount[] = [];
-  let after: string | null = null;
-  do {
-    const data: { discountNodes: DiscountNodesConnection } = await shopifyAdminGraphql<{ discountNodes: DiscountNodesConnection }>(shopDomain, queryArgumentSupported
-      ? `query LoopDeskDiscountNodes($after: String, $query: String!) { discountNodes(first: 100, after: $after, query: $query) { ${discountNodesNodeFields} } }`
-      : `query LoopDeskDiscountNodes($after: String) { discountNodes(first: 100, after: $after) { ${discountNodesNodeFields} } }`, { after, ...(queryArgumentSupported ? { query: automaticDiscountTitleQuery(DISCOUNT_TITLE) } : {}) }, { shopId }).catch(async (error: unknown) => {
-        if (isMetafieldSchemaError(error)) await assertAutomaticDiscountNodeMetafieldReadable(shopDomain, shopId);
-        throw error;
-      });
-    diagnostics.pagesRead += 1;
-    const connection: DiscountNodesConnection = data.discountNodes;
-    const pageNodes = (connection?.edges || []).map((edge) => edge?.node).filter((node): node is DiscountNode => Boolean(node)).map((node) => normalizeDiscountNode(node, discountFieldName));
-    diagnostics.edgesRead += pageNodes.length;
-    const pageCandidates = automaticDiscountDiscoveryCandidates(pageNodes);
-    diagnostics.candidates.push(...pageCandidates);
-    diagnostics.candidateNodeIds.push(...pageCandidates.map((candidate) => candidate.nodeId).filter((id): id is string => Boolean(id)));
-    nodes.push(...exactTitleNodes(pageNodes));
-    const classified = classifyExactTitleAutomaticDiscounts(nodes, functionType);
-    if (classified.identityMatches.length) {
-      diagnostics.stoppedBecause = "found_identity";
-      const hydrated = discountNodeHasMetafield ? classified : await hydrateSelectedDiscountMetafield(shopDomain, shopId, classified);
-      return { ...hydrated, discountNodesDiscoveryDiagnostics: diagnostics };
-    }
-    after = connection?.pageInfo?.endCursor || null;
-    if (!connection?.pageInfo?.hasNextPage) { diagnostics.stoppedBecause = "end_of_connection"; break; }
-    if (!after) { diagnostics.stoppedBecause = "missing_cursor"; break; }
-  } while (after);
+
+  const runStage = async (stage: "filteredSearch" | "unfilteredFallback", query: string | null) => {
+    diagnostics[stage].attempted = true;
+    let after: string | null = null;
+    let pagesRead = 0;
+    do {
+      if (pagesRead >= MAX_DISCOUNT_NODE_PAGES) {
+        diagnostics.stoppedBecause = "page_limit";
+        break;
+      }
+      const data = await queryDiscountNodesPage(shopDomain, shopId, discountNodesNodeFields, after, query);
+      pagesRead += 1;
+      const connection: DiscountNodesConnection = data.discountNodes;
+      const pageNodes = (connection?.edges || []).map((edge) => edge?.node).filter((node): node is DiscountNode => Boolean(node)).map((node) => normalizeDiscountNode(node, discountFieldName));
+      recordDiscountNodesPageDiagnostics(diagnostics, stage, pageNodes);
+      nodes.push(...exactTitleNodes(pageNodes));
+      const classified = classifyExactTitleAutomaticDiscounts(nodes, functionType);
+      if (classified.identityMatches.length) {
+        diagnostics.stoppedBecause = "found_identity";
+        diagnostics.selectedAutomaticDiscountId = classified.selected?.id || null;
+        return classified;
+      }
+      after = connection?.pageInfo?.endCursor || null;
+      if (!connection?.pageInfo?.hasNextPage) { diagnostics.stoppedBecause = "end_of_connection"; break; }
+      if (!after) { diagnostics.stoppedBecause = "missing_cursor"; break; }
+    } while (after);
+    return null;
+  };
+
+  const filteredMatch = queryArgumentSupported ? await runStage("filteredSearch", automaticDiscountTitleQuery(DISCOUNT_TITLE)) : null;
+  if (filteredMatch) {
+    const hydrated = discountNodeHasMetafield ? filteredMatch : await hydrateSelectedDiscountMetafield(shopDomain, shopId, filteredMatch);
+    return { ...hydrated, discountNodesDiscoveryDiagnostics: diagnostics };
+  }
+
+  const unfilteredMatch = await runStage("unfilteredFallback", null);
+  if (unfilteredMatch) {
+    const hydrated = discountNodeHasMetafield ? unfilteredMatch : await hydrateSelectedDiscountMetafield(shopDomain, shopId, unfilteredMatch);
+    return { ...hydrated, discountNodesDiscoveryDiagnostics: diagnostics };
+  }
+
   const classified = classifyExactTitleAutomaticDiscounts(nodes, functionType);
+  diagnostics.selectedAutomaticDiscountId = classified.selected?.id || null;
   const hydrated = discountNodeHasMetafield ? classified : await hydrateSelectedDiscountMetafield(shopDomain, shopId, classified);
   return { ...hydrated, discountNodesDiscoveryDiagnostics: diagnostics };
 }
