@@ -44,6 +44,15 @@ export type AutomaticDiscountDiscoveryCandidate = {
     automaticDiscountAppDiscountTypeFunctionId: boolean;
   };
 };
+export type DiscountNodesDiscoveryCandidate = AutomaticDiscountDiscoveryCandidate;
+export type DiscountNodesDiscoveryDiagnostics = {
+  pagesRead: number;
+  edgesRead: number;
+  candidateNodeIds: string[];
+  candidates: DiscountNodesDiscoveryCandidate[];
+  queryArgumentSupported: boolean;
+  stoppedBecause: "found_identity" | "end_of_connection" | "missing_cursor";
+};
 export type AutomaticDiscountDiscoveryDiagnostics = {
   exactTitleSearch: {
     queryString: string;
@@ -65,7 +74,7 @@ export type AutomaticDiscountDiscoveryDiagnostics = {
   };
   queryRootDiscountFieldNames: string[];
 };
-type ExactTitleAutomaticDiscountsResult = { selected: AutomaticDiscount | null; duplicates: string[]; titleOnlyCount: number; identityMatches: AutomaticDiscount[]; titleCollisions: AutomaticDiscount[]; automaticDiscountTitleCollisions: AutomaticDiscountTitleCollision[]; automaticDiscountDiscoveryDiagnostics?: AutomaticDiscountDiscoveryDiagnostics };
+type ExactTitleAutomaticDiscountsResult = { selected: AutomaticDiscount | null; duplicates: string[]; titleOnlyCount: number; identityMatches: AutomaticDiscount[]; titleCollisions: AutomaticDiscount[]; automaticDiscountTitleCollisions: AutomaticDiscountTitleCollision[]; automaticDiscountDiscoveryDiagnostics?: AutomaticDiscountDiscoveryDiagnostics; discountNodesDiscoveryDiagnostics?: DiscountNodesDiscoveryDiagnostics };
 
 export type PublicationRecoveryHint = { required: boolean; action: "none" | "publish" | "resolve_duplicates" | "resolve_ambiguity" | "fix_configuration"; message: string };
 
@@ -107,6 +116,7 @@ type PublicationDiagnostics = {
   recoveryHint?: PublicationRecoveryHint;
   verification: { ok: boolean; errors: string[]; storedConfigHash: string | null };
   automaticDiscountDiscoveryDiagnostics?: AutomaticDiscountDiscoveryDiagnostics;
+  discountNodesDiscoveryDiagnostics?: DiscountNodesDiscoveryDiagnostics;
 };
 
 export function publicationRecoveryHint(blockingReasons: string[]): PublicationRecoveryHint {
@@ -268,9 +278,87 @@ async function queryRootDiscountFieldNames(shopDomain: string, shopId: string) {
   return (data.__schema?.queryType?.fields || []).map((field) => field.name).filter((name): name is string => typeof name === "string" && /discount/i.test(name)).sort();
 }
 
+type GraphqlTypeRef = { kind?: string | null; name?: string | null; ofType?: GraphqlTypeRef | null };
+type GraphqlField = { name?: string | null; args?: Array<{ name?: string | null; type?: GraphqlTypeRef | null }> | null; type?: GraphqlTypeRef | null };
+type DiscountNodesSchema = { queryRoot?: { fields?: GraphqlField[] | null } | null; discountNode?: { fields?: GraphqlField[] | null } | null; discountAutomaticNode?: { fields?: GraphqlField[] | null } | null; discountAutomaticApp?: { fields?: GraphqlField[] | null } | null; appDiscountType?: { fields?: GraphqlField[] | null } | null };
+
+async function introspectDiscountNodesSchema(shopDomain: string, shopId: string) {
+  return shopifyAdminGraphql<DiscountNodesSchema>(shopDomain, `query LoopDeskDiscountNodesSchema {
+    queryRoot: __type(name: "QueryRoot") { fields { name args { name type { kind name ofType { kind name ofType { kind name } } } } type { kind name ofType { kind name ofType { kind name } } } } }
+    discountNode: __type(name: "DiscountNode") { fields { name type { kind name ofType { kind name ofType { kind name } } } } }
+    discountAutomaticNode: __type(name: "DiscountAutomaticNode") { fields { name type { kind name ofType { kind name ofType { kind name } } } } }
+    discountAutomaticApp: __type(name: "DiscountAutomaticApp") { fields { name type { kind name ofType { kind name ofType { kind name } } } } }
+    appDiscountType: __type(name: "AppDiscountType") { fields { name type { kind name ofType { kind name ofType { kind name } } } } }
+  }`, {}, { shopId });
+}
+
+function hasField(type: { fields?: GraphqlField[] | null } | null | undefined, name: string) {
+  return Boolean(type?.fields?.some((field) => field.name === name));
+}
+
+function hasDiscountNodesQueryArgument(schema: DiscountNodesSchema) {
+  return Boolean(schema.queryRoot?.fields?.find((field) => field.name === "discountNodes")?.args?.some((arg) => arg.name === "query"));
+}
+
+const DISCOUNT_NODES_NODE_FIELDS = `
+  edges {
+    node {
+      id
+      __typename
+      ... on DiscountAutomaticNode {
+        metafield(namespace: "loopdesk", key: "discount_function_config") { value }
+        automaticDiscount {
+          __typename
+          ... on DiscountAutomaticApp { title status discountId appDiscountType { functionId } }
+        }
+      }
+    }
+  }
+  pageInfo { hasNextPage endCursor }
+`;
+
+type DiscountNodesConnection = { edges?: Array<{ node?: AutomaticDiscount | null } | null> | null; pageInfo?: { hasNextPage?: boolean; endCursor?: string | null } | null };
+
+export async function queryLoopDeskDiscountNodes(shopDomain: string, shopId: string, functionType: AppDiscountType): Promise<ExactTitleAutomaticDiscountsResult> {
+  const schema = await introspectDiscountNodesSchema(shopDomain, shopId);
+  const queryField = schema.queryRoot?.fields?.find((field) => field.name === "discountNodes");
+  if (!queryField || !hasField(schema.discountNode, "id") || !hasField(schema.discountAutomaticNode, "automaticDiscount") || !hasField(schema.discountAutomaticNode, "metafield") || !hasField(schema.discountAutomaticApp, "title") || !hasField(schema.discountAutomaticApp, "status") || !hasField(schema.discountAutomaticApp, "discountId") || !hasField(schema.discountAutomaticApp, "appDiscountType") || !hasField(schema.appDiscountType, "functionId")) {
+    throw new DiscountMetafieldReadUnsupportedError();
+  }
+  const queryArgumentSupported = hasDiscountNodesQueryArgument(schema);
+  const diagnostics: DiscountNodesDiscoveryDiagnostics = { pagesRead: 0, edgesRead: 0, candidateNodeIds: [], candidates: [], queryArgumentSupported, stoppedBecause: "end_of_connection" };
+  const nodes: AutomaticDiscount[] = [];
+  let after: string | null = null;
+  do {
+    const data: { discountNodes: DiscountNodesConnection } = await shopifyAdminGraphql<{ discountNodes: DiscountNodesConnection }>(shopDomain, queryArgumentSupported
+      ? `query LoopDeskDiscountNodes($after: String, $query: String!) { discountNodes(first: 100, after: $after, query: $query) { ${DISCOUNT_NODES_NODE_FIELDS} } }`
+      : `query LoopDeskDiscountNodes($after: String) { discountNodes(first: 100, after: $after) { ${DISCOUNT_NODES_NODE_FIELDS} } }`, { after, ...(queryArgumentSupported ? { query: automaticDiscountTitleQuery(DISCOUNT_TITLE) } : {}) }, { shopId }).catch(async (error: unknown) => {
+        if (isMetafieldSchemaError(error)) await assertAutomaticDiscountNodeMetafieldReadable(shopDomain, shopId);
+        throw error;
+      });
+    diagnostics.pagesRead += 1;
+    const connection: DiscountNodesConnection = data.discountNodes;
+    const pageNodes = (connection?.edges || []).map((edge: { node?: AutomaticDiscount | null } | null) => edge?.node).filter((node: AutomaticDiscount | null | undefined): node is AutomaticDiscount => Boolean(node));
+    diagnostics.edgesRead += pageNodes.length;
+    const pageCandidates = automaticDiscountDiscoveryCandidates(pageNodes);
+    diagnostics.candidates.push(...pageCandidates);
+    diagnostics.candidateNodeIds.push(...pageCandidates.map((candidate) => candidate.nodeId).filter((id): id is string => Boolean(id)));
+    nodes.push(...exactTitleNodes(pageNodes));
+    const classified = classifyExactTitleAutomaticDiscounts(nodes, functionType);
+    if (classified.identityMatches.length) {
+      diagnostics.stoppedBecause = "found_identity";
+      return { ...classified, discountNodesDiscoveryDiagnostics: diagnostics };
+    }
+    after = connection?.pageInfo?.endCursor || null;
+    if (!connection?.pageInfo?.hasNextPage) { diagnostics.stoppedBecause = "end_of_connection"; break; }
+    if (!after) { diagnostics.stoppedBecause = "missing_cursor"; break; }
+  } while (after);
+  return { ...classifyExactTitleAutomaticDiscounts(nodes, functionType), discountNodesDiscoveryDiagnostics: diagnostics };
+}
+
 function isIdentityMatch(node: AutomaticDiscount, functionType: AppDiscountType) {
   const discount = node.automaticDiscount;
-  return discount?.__typename === "DiscountAutomaticApp" && discount.appDiscountType?.functionId === functionType.functionId;
+  return discount?.__typename === "DiscountAutomaticApp" && discount.title === DISCOUNT_TITLE && discount.appDiscountType?.functionId === functionType.functionId;
 }
 
 function exactTitleNodes(nodes: AutomaticDiscount[]) {
@@ -352,7 +440,9 @@ async function queryAutomaticDiscountsByExactTitleFallback(shopDomain: string, s
 }
 
 async function findExistingLoopDeskDiscounts(shopDomain: string, shopId: string, functionType: AppDiscountType) {
-  return queryAutomaticDiscountsByExactTitle(shopDomain, shopId, functionType);
+  const result = await queryLoopDeskDiscountNodes(shopDomain, shopId, functionType);
+  result.automaticDiscountDiscoveryDiagnostics = await queryAutomaticDiscountsByExactTitle(shopDomain, shopId, functionType).then((legacy) => legacy.automaticDiscountDiscoveryDiagnostics).catch(() => undefined);
+  return result;
 }
 
 export function automaticDiscountInput(functionType: AppDiscountType, config: LoopDeskDiscountFunctionConfig, includeStartsAt = false) {
@@ -433,6 +523,7 @@ export async function publishLoopDeskPromotions(input: { shopId: string; shopDom
   diagnostics.titleOnlyAutomaticDiscountCount = existing.titleOnlyCount;
   diagnostics.automaticDiscountTitleCollisions = existing.automaticDiscountTitleCollisions;
   diagnostics.automaticDiscountDiscoveryDiagnostics = existing.automaticDiscountDiscoveryDiagnostics;
+  diagnostics.discountNodesDiscoveryDiagnostics = existing.discountNodesDiscoveryDiagnostics;
   if (existing.duplicates.length) diagnostics.blockingReasons.push("duplicate_automatic_discounts");
   if (!existing.selected && existing.titleOnlyCount > 0) diagnostics.blockingReasons.push("automatic_discount_title_collision");
   if (diagnostics.blockingReasons.length) return { ok: false, diagnostics, config, message: `Publication blocked: ${diagnostics.blockingReasons.join(", ")}` };
@@ -525,6 +616,7 @@ export async function getLoopDeskPromotionPublicationDiagnostics(input: { shopId
   let titleOnlyAutomaticDiscountCount = 0;
   let automaticDiscountTitleCollisions: AutomaticDiscountTitleCollision[] = [];
   let automaticDiscountDiscoveryDiagnostics: AutomaticDiscountDiscoveryDiagnostics | undefined;
+  let discountNodesDiscoveryDiagnostics: DiscountNodesDiscoveryDiagnostics | undefined;
   let verified = { ok: false, errors: functionType ? ["missing_automatic_discount"] : blockingReasons, storedConfigHash: null as string | null, metafieldRawValue: null as string | null, metafieldParsed: null as LoopDeskDiscountFunctionConfig | null };
   if (functionType) {
     const existing = await findExistingLoopDeskDiscounts(input.shopDomain, input.shopId, functionType).catch((error: unknown) => {
@@ -553,6 +645,7 @@ export async function getLoopDeskPromotionPublicationDiagnostics(input: { shopId
         automaticDiscountStatus: null,
         blockingReasons: uniqueBlockingReasons,
         recoveryHint: publicationRecoveryHint(uniqueBlockingReasons),
+        discountNodesDiscoveryDiagnostics: undefined,
       };
     }
     automaticDiscount = existing.selected;
@@ -560,6 +653,7 @@ export async function getLoopDeskPromotionPublicationDiagnostics(input: { shopId
     titleOnlyAutomaticDiscountCount = existing.titleOnlyCount;
     automaticDiscountTitleCollisions = existing.automaticDiscountTitleCollisions;
     automaticDiscountDiscoveryDiagnostics = existing.automaticDiscountDiscoveryDiagnostics;
+    discountNodesDiscoveryDiagnostics = existing.discountNodesDiscoveryDiagnostics;
     if (duplicates.length) blockingReasons.push("duplicate_automatic_discounts");
     if (!existing.selected && existing.titleOnlyCount > 0) blockingReasons.push("automatic_discount_title_collision");
     verified = existing.selected ? verifyStoredConfig(existing.selected, functionType, config) : verified;
@@ -582,6 +676,7 @@ export async function getLoopDeskPromotionPublicationDiagnostics(input: { shopId
     titleOnlyAutomaticDiscountCount,
     automaticDiscountTitleCollisions,
     automaticDiscountDiscoveryDiagnostics,
+    discountNodesDiscoveryDiagnostics,
     metafieldRawValue: verified.metafieldRawValue,
     metafieldParsed: verified.metafieldParsed,
     storedConfigHash: verified.storedConfigHash,
