@@ -53,7 +53,7 @@ assert.match(rewardLineMatching[0], /sameShopifyId\(item\.variant_id, offerVaria
 assert.match(rewardLineMatching[0], /rule\.enabled !== true \|\| rule\.status !== "active" \|\| !isPromotionScheduled/, "reward line matching should require active scheduled rules");
 assert.match(source, /function triggerMatchesRewardLine\(trigger, cart, item\)[\s\S]*cartWithoutItem\(cart, item\)/, "reward line trigger checks should not let the reward-only line satisfy product or variant triggers");
 assert.match(source, /function rewardLinePriceHtml\(item, cart, viewModel\)[\s\S]*Promotion applies to [\s\S]*Discount applied at checkout/, "reward cart lines should show checkout-discount and quantity-cap messaging");
-assert.match(source, /elements\.subtotal\.textContent = money\(cart \? cart\.total_price : 0, cart && cart\.currency\);/, "subtotal should keep using Shopify cart total and not an estimated promotional total");
+assert.match(source, /elements\.subtotal\.textContent = money\(cartRawSubtotal\(cart\), cart && cart\.currency\);/, "subtotal should keep using the raw Shopify subtotal and not an estimated promotional total");
 assert.match(source, /Estimated after offer/, "drawer subtotal area should add a clearly labeled estimated-after-offer line");
 assert.match(css, /\.loopdesk-cart-drawer__reward-price[\s\S]*\.loopdesk-cart-drawer__reward-note/, "reward line display styles should exist");
 
@@ -62,3 +62,10 @@ assert.match(source, /cartItemCount: Array\.isArray\(cart && cart\.items\) \? ca
 
 assert.match(source, /function loopdeskOfferHandoffPayload\(cart\) \{[\s\S]*loopdeskOfferDiscountAmountPaise:[\s\S]*loopdeskOfferAdjustedTotalAmountPaise:[\s\S]*loopdeskOfferBaseSubtotalAmountPaise:/, "drawer should build an Express Checkout handoff payload from Promotion VM totals");
 assert.match(source, /MegaskaExpressCheckout\.open\(\{ source: checkoutSource, loopdeskOfferPricing: loopdeskOfferPricing \}\)/, "drawer Express Checkout open call should include the offer pricing handoff payload");
+
+
+
+const rawSubtotalResolver = source.match(/function cartRawSubtotal\(cart\) \{[\s\S]*?\n  \}/);
+assert.ok(rawSubtotalResolver, "drawer raw subtotal helper should exist");
+assert.match(rawSubtotalResolver[0], /\["original_total_price", "items_subtotal_price", "total_price"\]/, "drawer raw subtotal helper should prefer original_total_price, then items_subtotal_price, then total_price");
+assert.match(source, /cart_subtotal_gte" \|\| type === "cart_subtotal_min"\) return cartRawSubtotal\(cart\) >=/, "drawer subtotal promotion triggers should use coupon-independent raw subtotal");
