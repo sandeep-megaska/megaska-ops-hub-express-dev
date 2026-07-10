@@ -112,7 +112,7 @@
   if (!config.enabled || window.__LOOPDESK_CART_DRAWER_LOADED__) return;
   window.__LOOPDESK_CART_DRAWER_LOADED__ = true;
 
-  var state = { open: false, loading: false, cart: null, pricing: null, error: "", offerError: "", offerAdding: false, hostMode: LOOPDESK_HOST_MODE, themeDrawer: null, fallbackReason: "", expressCheckoutLock: false, capability: null, drawerModeActive: false, neutralizedThemeDrawers: [], bodyLockSnapshot: null, removedThemeBodyClasses: [], cartTriggerTakeovers: [] };
+  var state = { open: false, loading: false, cart: null, pricing: null, error: "", offerError: "", offerAdding: false, offerRefreshRetrying: false, hostMode: LOOPDESK_HOST_MODE, themeDrawer: null, fallbackReason: "", expressCheckoutLock: false, capability: null, drawerModeActive: false, neutralizedThemeDrawers: [], bodyLockSnapshot: null, removedThemeBodyClasses: [], cartTriggerTakeovers: [] };
   var cartTriggerObserver = null;
   var cartTriggerTakeoverTimer = null;
   var suppressNextCartClickUntil = 0;
@@ -956,66 +956,120 @@
       var triggers = Array.isArray(eligibility.triggers) && eligibility.triggers.length ? eligibility.triggers : [{ type: "always" }];
       var matched = eligibility.match === "all" ? triggers.every(function (trigger) { return triggerMatches(trigger, cart); }) : triggers.some(function (trigger) { return triggerMatches(trigger, cart); });
       var offerVariantGid = resolvePromotionOfferVariantGid(reward);
-      return rule && rule.enabled === true && rule.status === "active" && (rulePlacement === placement || rulePlacement === "both") && reward.productGid && offerVariantGid && promotionOfferRemainingQuantity(cart, rule, offerVariantGid) > 0 && isPromotionScheduled(rule, now) && !(display.hideIfOfferProductAlreadyInCart !== false && (cartContainsProduct(cart, reward.productGid) || cartContainsVariant(cart, offerVariantGid))) && matched;
+      return rule && rule.enabled === true && rule.status === "active" && (rulePlacement === placement || rulePlacement === "both") && reward.productGid && offerVariantGid && isPromotionScheduled(rule, now) && matched;
     }).sort(function (a, b) { return (Number(a.priority) || 0) - (Number(b.priority) || 0); }).slice(0, promotionConfig.maxVisibleOffers);
   }
 
 
-  function parseDisplayMoney(value) {
-    var raw = text(value, "");
-    if (!raw) return null;
-    var match = raw.match(/(-?\d+(?:[,.]\d+)?)/);
-    if (!match) return null;
-    var amount = Number(match[1].replace(/,/g, ""));
-    if (!Number.isFinite(amount)) return null;
-    return { amount: amount, prefix: raw.slice(0, match.index), suffix: raw.slice((match.index || 0) + match[0].length) };
+
+  function promotionPublicationState() {
+    return normalizePromotionConfig(config.promotion_rules_config || config.promotionRules).publication || { synchronized: false };
   }
 
-  function formatDisplayMoneyLike(template, amount) {
-    var rounded = Math.round(Math.max(0, amount) * 100) / 100;
-    var rendered = Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
-    return String(template.prefix || "") + rendered + String(template.suffix || "");
+  function isPromotionPublicationSynchronized() {
+    var publication = promotionPublicationState();
+    return Boolean(publication && publication.synchronized === true && publication.activeAutomaticDiscount === true && publication.productCapability !== false);
   }
 
-  function promotionPricingHelper() { return window.LoopDeskPromotionPricing || null; }
-
-  function centsFromDisplayMoney(value) {
-    var parsed = parseDisplayMoney(value);
-    return parsed ? Math.round(parsed.amount * 100) : 0;
+  function promotionDebugEnabled() {
+    return window.LOOPDESK_PROMOTION_UAT_DEBUG === true && window.console && window.console.debug;
   }
 
-  function resolvePromotionRewardVariantPrice(rule, reward, display) {
-    reward = isPlainObject(reward) ? reward : {};
-    display = isPlainObject(display) ? display : {};
-    var product = isPlainObject(reward.product) ? reward.product : {};
-    var paths = [
-      { value: product.variantPrice, source: "reward.product.variantPrice" },
-      { value: reward.variantPrice, source: "reward.variantPrice" },
-      { value: rule && rule.rewardProductVariantPrice, source: "rewardProductVariantPrice" },
-      { value: display.comparePriceDisplay, source: "legacy_compare" }
-    ];
-    for (var i = 0; i < paths.length; i += 1) {
-      if (text(paths[i].value, "")) return paths[i];
+  function cartLineDiscountAllocations(item) {
+    if (!item) return [];
+    if (Array.isArray(item.discounts)) return item.discounts;
+    if (Array.isArray(item.line_level_discount_allocations)) return item.line_level_discount_allocations;
+    if (Array.isArray(item.discount_allocations)) return item.discount_allocations;
+    var pricingLine = pricingLineForItem(item);
+    return pricingLine && Array.isArray(pricingLine.discountAllocations) ? pricingLine.discountAllocations : [];
+  }
+
+  function discountAllocationAmount(allocation) {
+    if (!allocation) return 0;
+    if (allocation.amount && typeof allocation.amount === "object") return moneyValue(allocation.amount) || 0;
+    return Number(allocation.amount || allocation.value || allocation.amountCents || allocation.valueCents || 0) || 0;
+  }
+
+  function discountAllocationTitle(allocation) {
+    return String(allocation && (allocation.title || allocation.code || allocation.discount_application && allocation.discount_application.title) || "Discount");
+  }
+
+  function promotionRewardLine(cart, rewardVariantGid) {
+    var items = cart && Array.isArray(cart.items) ? cart.items : [];
+    for (var i = 0; i < items.length; i += 1) {
+      var item = items[i];
+      if (sameShopifyId(item.variant_id, rewardVariantGid) || sameShopifyId(item.variant_gid, rewardVariantGid) || sameShopifyId(item.variantGid, rewardVariantGid) || sameShopifyId(item.id, rewardVariantGid)) return item;
     }
-    return { value: "", source: "unavailable" };
+    return null;
   }
 
-  function resolvePromotionOfferPriceDisplay(display, reward, rule, cart, offerQuantity) {
-    var configuredPrice = resolvePromotionRewardVariantPrice(rule, reward, display);
-    var originalUnit = centsFromDisplayMoney(configuredPrice.value);
-    var helper = promotionPricingHelper();
-    var resolved = helper && helper.resolvePromotionDisplayPricing ? helper.resolvePromotionDisplayPricing({ cart: cart, rule: rule, rewardVariantGid: resolvePromotionOfferVariantGid(reward), rewardUnitPrice: originalUnit, rewardQuantity: Math.max(1, Number(offerQuantity) || Number(reward && reward.quantity) || 1) }) : null;
-    if (resolved && resolved.isEligible && resolved.promotionalUnitPrice !== null) {
-      return { value: money(resolved.promotionalUnitPrice, cart && cart.currency), source: "shared_resolver", resolved: resolved };
-    }
-    var override = text(display && display.offerPriceDisplay, "");
-    if (override) return { value: override, source: "merchant_admin", resolved: null };
-    return { value: "", source: "unavailable", resolved: null };
+  function lineShopifyDiscountObserved(item) {
+    if (!item) return false;
+    var original = Number(item.original_line_price);
+    var finalPrice = Number(item.final_line_price);
+    var hasReducedFinal = Number.isFinite(original) && Number.isFinite(finalPrice) && finalPrice < original;
+    var hasAllocation = cartLineDiscountAllocations(item).some(function (allocation) { return discountAllocationAmount(allocation) > 0; });
+    return Boolean(hasReducedFinal || hasAllocation);
   }
+
+  function classifyPromotionOfferExecution(cart, rule) {
+    var promotionConfig = normalizePromotionConfig(config.promotion_rules_config || config.promotionRules);
+    rule = rule || firstPromotionRule();
+    var reward = isPlainObject(rule && rule.reward) ? rule.reward : {};
+    var rewardVariantGid = resolvePromotionOfferVariantGid(reward);
+    var synchronized = isPromotionPublicationSynchronized();
+    if (!promotionConfig.enabled || !rule || rule.enabled !== true || rule.status !== "active" || !rewardVariantGid || !synchronized) return "unavailable";
+    var line = promotionRewardLine(cart, rewardVariantGid);
+    var observed = lineShopifyDiscountObserved(line);
+    if (line && observed) return "applied_by_shopify";
+    var remaining = promotionOfferRemainingQuantity(cart, rule, rewardVariantGid);
+    if (line && remaining <= 0) return "quantity_cap_reached";
+    var eligible = getEligiblePromotionRules(cart, "drawer", new Date()).some(function (candidate) { return candidate === rule || String(candidate.id || "") === String(rule.id || ""); });
+    if (!eligible && !line) return "unavailable";
+    if (!line) return remaining > 0 ? "eligible_not_added" : "quantity_cap_reached";
+    return state.offerRefreshRetrying ? "added_pending_shopify" : "added_without_discount";
+  }
+
+  function firstPromotionRule() {
+    var rules = normalizePromotionConfig(config.promotion_rules_config || config.promotionRules).rules || [];
+    return rules.length ? rules[0] : null;
+  }
+
+  function promotionUatDebugCartSnapshot(cart, context, rule) {
+    if (!promotionDebugEnabled()) return;
+    var promotionConfig = normalizePromotionConfig(config.promotion_rules_config || config.promotionRules);
+    rule = rule || firstPromotionRule();
+    var reward = isPlainObject(rule && rule.reward) ? rule.reward : {};
+    var trigger = rule && rule.eligibility && Array.isArray(rule.eligibility.triggers) ? rule.eligibility.triggers.map(function (item) { return item && (item.variantGid || item.value); }).filter(Boolean)[0] : "";
+    var rewardVariantGid = resolvePromotionOfferVariantGid(reward);
+    window.console.debug("[LoopDesk Promotion UAT] " + context, {
+      cartItemCount: Number(cart && cart.item_count || 0),
+      original_total_price: cart && cart.original_total_price,
+      total_discount: cart && cart.total_discount,
+      total_price: cart && cart.total_price,
+      lines: (cart && Array.isArray(cart.items) ? cart.items : []).map(function (item) {
+        return {
+          key: item.key,
+          variant_id: item.variant_id,
+          quantity: item.quantity,
+          original_line_price: item.original_line_price,
+          final_line_price: item.final_line_price,
+          discounts: cartLineDiscountAllocations(item).map(function (allocation) { return { title: discountAllocationTitle(allocation), amount: discountAllocationAmount(allocation) }; })
+        };
+      }),
+      publicationSynchronized: Boolean(promotionConfig.publication && promotionConfig.publication.synchronized === true),
+      triggerVariantGid: trigger,
+      rewardVariantGid: rewardVariantGid
+    });
+  }
+
+  window.LoopDeskPromotionUat = Object.assign({}, window.LoopDeskPromotionUat || {}, {
+    classifyPromotionOfferExecution: classifyPromotionOfferExecution,
+    lineShopifyDiscountObserved: lineShopifyDiscountObserved
+  });
 
   function hasSynchronizedPromotionPublication() {
-    var publication = normalizePromotionConfig(config.promotion_rules_config || config.promotionRules).publication;
-    return Boolean(publication && publication.synchronized === true && publication.activeAutomaticDiscount === true && publication.productCapability !== false);
+    return isPromotionPublicationSynchronized();
   }
 
   function renderPromotionOffers(cart) {
@@ -1029,18 +1083,23 @@
       var offerQuantity = promotionOfferRemainingQuantity(cart, rule, offerVariantGid);
       var adding = state.offerAdding === String(rule.id || offerVariantGid);
       var synchronized = hasSynchronizedPromotionPublication();
+      var executionState = classifyPromotionOfferExecution(cart, rule);
+      var rewardLine = promotionRewardLine(cart, offerVariantGid);
+      var shopifyDiscountObserved = lineShopifyDiscountObserved(rewardLine);
+      var offerQuantityCapReached = executionState === "quantity_cap_reached";
+      var ctaEnabled = synchronized && executionState === "eligible_not_added" && !offerQuantityCapReached && !adding;
       var image = display.imageOverrideUrl || product.imageUrl || product.image || "";
       var title = product.title || rule.name || "Offer product";
-      var resolvedOfferPrice = resolvePromotionOfferPriceDisplay(display, reward, rule, cart, offerQuantity);
-      var offerPrice = resolvedOfferPrice.value;
       var configuredComparePrice = resolvePromotionRewardVariantPrice(rule, reward, display);
       var comparePrice = text(configuredComparePrice.value, "");
       var comparePriceSource = configuredComparePrice.source;
-      var displayPriceSource = offerPrice ? resolvedOfferPrice.source : "unavailable";
+      var shopifyFinalLinePrice = rewardLine && Number.isFinite(Number(rewardLine.final_line_price)) ? Number(rewardLine.final_line_price) : null;
+      var offerPrice = shopifyDiscountObserved && shopifyFinalLinePrice !== null ? money(shopifyFinalLinePrice, cart && cart.currency) : "";
+      var displayPriceSource = offerPrice ? "shopify_cart" : "unavailable";
       var pricing = offerPrice ? '<div class="loopdesk-cart-drawer__offer-prices" data-loopdesk-display-price-source="' + escapeHtml(displayPriceSource) + '" data-loopdesk-compare-price-source="' + escapeHtml(comparePriceSource) + '"><span>Get it for ' + escapeHtml(offerPrice) + '</span>' + (comparePrice ? '<s aria-label="Usually ' + escapeHtml(comparePrice) + '">Usually ' + escapeHtml(comparePrice) + '</s>' : '') + '</div>' : '';
       var deferred = reward.requiresDiscountEnforcement ? ' data-loopdesk-promotion-enforcement="deferred"' : '';
       var unavailable = synchronized ? '' : '<p class="loopdesk-cart-drawer__offer-unavailable">Offer unavailable until Shopify discount sync completes.</p>';
-      return ['<article class="loopdesk-cart-drawer__offer" data-loopdesk-promotion-rule="' + escapeHtml(rule.id || '') + '"' + deferred + '>', display.badge ? '<div class="loopdesk-cart-drawer__offer-badge">' + escapeHtml(display.badge) + '</div>' : '', '<div class="loopdesk-cart-drawer__offer-content">', image ? '<img class="loopdesk-cart-drawer__offer-image" src="' + escapeHtml(image) + '" alt="' + escapeHtml(title) + '" loading="lazy">' : '<div class="loopdesk-cart-drawer__offer-image loopdesk-cart-drawer__offer-image--placeholder"></div>', '<div class="loopdesk-cart-drawer__offer-copy"><h3>' + escapeHtml(display.heading || rule.name || 'Special offer') + '</h3>', display.description ? '<p>' + escapeHtml(display.description) + '</p>' : '', '<strong>' + escapeHtml(title) + '</strong>' + pricing + unavailable + '</div></div>', state.offerError ? '<div class="loopdesk-cart-drawer__offer-error" role="alert">' + escapeHtml(state.offerError) + '</div>' : '', '<button type="button" class="loopdesk-cart-drawer__offer-cta" data-loopdesk-offer-add data-loopdesk-offer-key="' + escapeHtml(rule.id || offerVariantGid) + '" data-loopdesk-offer-variant="' + escapeHtml(offerVariantGid) + '" data-loopdesk-offer-quantity="' + escapeHtml(offerQuantity) + '"' + (adding || !synchronized ? ' disabled' + (adding ? ' aria-busy="true"' : '') : '') + '>' + escapeHtml(adding ? 'Adding…' : (synchronized ? (display.ctaLabel || 'Add offer') : 'Unavailable')) + '</button></article>'].join('');
+      return ['<article class="loopdesk-cart-drawer__offer" data-loopdesk-promotion-rule="' + escapeHtml(rule.id || '') + '" data-loopdesk-offer-execution-state="' + escapeHtml(executionState) + '" data-loopdesk-shopify-discount-observed="' + escapeHtml(shopifyDiscountObserved ? 'true' : 'false') + '" data-loopdesk-reward-variant="' + escapeHtml(offerVariantGid) + '"' + deferred + '>', display.badge ? '<div class="loopdesk-cart-drawer__offer-badge">' + escapeHtml(display.badge) + '</div>' : '', '<div class="loopdesk-cart-drawer__offer-content">', image ? '<img class="loopdesk-cart-drawer__offer-image" src="' + escapeHtml(image) + '" alt="' + escapeHtml(title) + '" loading="lazy">' : '<div class="loopdesk-cart-drawer__offer-image loopdesk-cart-drawer__offer-image--placeholder"></div>', '<div class="loopdesk-cart-drawer__offer-copy"><h3>' + escapeHtml(display.heading || rule.name || 'Special offer') + '</h3>', display.description ? '<p>' + escapeHtml(display.description) + '</p>' : '', '<strong>' + escapeHtml(title) + '</strong>' + pricing + unavailable + '</div></div>', state.offerError ? '<div class="loopdesk-cart-drawer__offer-error" role="alert">' + escapeHtml(state.offerError) + '</div>' : '', '<button type="button" class="loopdesk-cart-drawer__offer-cta" data-loopdesk-offer-add data-loopdesk-offer-key="' + escapeHtml(rule.id || offerVariantGid) + '" data-loopdesk-offer-variant="' + escapeHtml(offerVariantGid) + '" data-loopdesk-offer-quantity="' + escapeHtml(offerQuantity) + '"' + (!ctaEnabled ? ' disabled' + (adding ? ' aria-busy="true"' : '') : '') + '>' + escapeHtml(adding ? 'Adding…' : (synchronized ? (display.ctaLabel || 'Add offer') : 'Unavailable')) + '</button></article>'].join('');
     }).join('') + '</section>';
   }
 
@@ -1297,7 +1356,7 @@
         if (!response.ok) throw new Error("Cart request failed");
         return response.json();
       })
-      .then(function (cart) { state.cart = cart; state.pricing = normalizeShopifyPricing(cart); if (!Number(cart && cart.item_count || 0)) removeShopifyDiscountCode().catch(function () {}); })
+      .then(function (cart) { state.cart = cart; state.pricing = normalizeShopifyPricing(cart); promotionUatDebugCartSnapshot(cart, "cart refresh", null); if (!Number(cart && cart.item_count || 0)) removeShopifyDiscountCode().catch(function () {}); })
       .catch(function (error) {
         state.error = error && error.message ? error.message : "Cart request failed";
       })
@@ -1329,11 +1388,24 @@
   }
 
 
+  function findPromotionRuleByKey(offerKey, variantGid) {
+    var rules = normalizePromotionConfig(config.promotion_rules_config || config.promotionRules).rules || [];
+    for (var i = 0; i < rules.length; i += 1) {
+      var reward = isPlainObject(rules[i] && rules[i].reward) ? rules[i].reward : {};
+      var ruleVariant = resolvePromotionOfferVariantGid(reward);
+      if (String(rules[i].id || ruleVariant) === String(offerKey || variantGid || "") || sameShopifyId(ruleVariant, variantGid)) return rules[i];
+    }
+    return null;
+  }
+
   function addPromotionOffer(variantGid, quantity, offerKey) {
     var id = idTail(variantGid);
+    var rule = findPromotionRuleByKey(offerKey, variantGid);
     if (!id || !canUseCartAjax() || state.offerAdding) return;
+    if (!rule || !hasSynchronizedPromotionPublication() || classifyPromotionOfferExecution(state.cart || {}, rule) !== "eligible_not_added") return;
     state.offerAdding = String(offerKey || variantGid || "offer");
     state.offerError = "";
+    state.offerRefreshRetrying = false;
     render();
     return fetch("/cart/add.js", {
       method: "POST",
@@ -1343,9 +1415,26 @@
     }).then(function (response) {
       if (!response.ok) throw new Error("Offer add failed");
       return fetchCart();
+    }).then(function () {
+      promotionUatDebugCartSnapshot(state.cart, "offer add and cart refresh", rule);
+      var executionState = classifyPromotionOfferExecution(state.cart || {}, rule);
+      if (executionState !== "added_without_discount" && executionState !== "quantity_cap_reached") return null;
+      state.offerRefreshRetrying = true;
+      state.offerError = "Offer added, but the promotional price is still updating. Refreshing…";
+      render();
+      return new Promise(function (resolve) { window.setTimeout(resolve, 900); }).then(fetchCart).then(function () {
+        promotionUatDebugCartSnapshot(state.cart, "offer retry cart refresh", rule);
+        state.offerRefreshRetrying = false;
+        var retryState = classifyPromotionOfferExecution(state.cart || {}, rule);
+        if (retryState === "added_without_discount" || retryState === "quantity_cap_reached") {
+          state.offerError = "We couldn’t confirm the promotional price. Please try again.";
+        } else {
+          state.offerError = "";
+        }
+      });
     }).catch(function (error) {
       state.offerError = error && error.message ? error.message : "Offer add failed";
-    }).finally(function () { state.offerAdding = false; render(); });
+    }).finally(function () { state.offerAdding = false; state.offerRefreshRetrying = false; render(); });
   }
 
   function handleDrawerAction(event) {
