@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { automaticDiscountInput, deterministicConfigHash, publicationRecoveryHint, selectLoopDeskAppDiscountType, verifyStoredConfig, type AppDiscountType, type AutomaticDiscount } from "./discount-function-activation.server.ts";
+import { automaticDiscountInput, classifyExactTitleAutomaticDiscounts, deterministicConfigHash, publicationRecoveryHint, selectLoopDeskAppDiscountType, verifyStoredConfig, type AppDiscountType, type AutomaticDiscount } from "./discount-function-activation.server.ts";
 import type { LoopDeskDiscountFunctionConfig } from "./discount-function.ts";
 
 const config: LoopDeskDiscountFunctionConfig = { schemaVersion: 1, enabled: true, rules: [{ id: "a", enabled: true, priority: 1, triggerType: "always", rewardEnforcementType: "fixed_price", rewardVariantGid: "gid://shopify/ProductVariant/1", rewardProductGid: "gid://shopify/Product/1", fixedPriceAmount: 300 }] };
@@ -170,4 +170,58 @@ test("publication recovery hint prioritizes duplicate discount cleanup", () => {
   const hint = publicationRecoveryHint(["missing_automatic_discount", "duplicate_automatic_discounts"]);
   assert.equal(hint.required, true);
   assert.equal(hint.action, "resolve_duplicates");
+});
+
+
+test("classifies exact-title app discount with the same functionId as an identity match for update", () => {
+  const node: AutomaticDiscount = { id: "node-match", metafield, automaticDiscount: { __typename: "DiscountAutomaticApp", title: "LoopDesk Promotions", status: "ACTIVE", discountId: "discount-match", appDiscountType: { functionId: functionType.functionId } } };
+  const result = classifyExactTitleAutomaticDiscounts([node], functionType);
+  assert.equal(result.selected?.id, "node-match");
+  assert.equal(result.identityMatches.length, 1);
+  assert.equal(result.titleCollisions.length, 0);
+});
+
+test("classification ignores non-exact title matches so create remains eligible only with no exact records", () => {
+  const partial: AutomaticDiscount = { id: "node-partial", automaticDiscount: { __typename: "DiscountAutomaticApp", title: "LoopDesk Promotions Legacy", status: "ACTIVE", discountId: "discount-partial", appDiscountType: { functionId: "other" } } };
+  const result = classifyExactTitleAutomaticDiscounts([partial], functionType);
+  assert.equal(result.selected, null);
+  assert.equal(result.identityMatches.length, 0);
+  assert.equal(result.titleCollisions.length, 0);
+  assert.equal(result.titleOnlyCount, 0);
+});
+
+test("exact-title app discount with a different functionId is a title collision", () => {
+  const node: AutomaticDiscount = { id: "node-other-function", automaticDiscount: { __typename: "DiscountAutomaticApp", title: "LoopDesk Promotions", status: "ACTIVE", discountId: "discount-other", appDiscountType: { functionId: "gid://shopify/ShopifyFunction/other" } } };
+  const result = classifyExactTitleAutomaticDiscounts([node], functionType);
+  assert.equal(result.selected, null);
+  assert.equal(result.titleCollisions.length, 1);
+  assert.deepEqual(result.automaticDiscountTitleCollisions, [{ id: "node-other-function", typename: "DiscountAutomaticApp", title: "LoopDesk Promotions", status: "ACTIVE", functionId: "gid://shopify/ShopifyFunction/other" }]);
+});
+
+test("exact-title non-app automatic discount is a title collision and is not discarded", () => {
+  const node: AutomaticDiscount = { id: "node-basic", automaticDiscount: { __typename: "DiscountAutomaticBasic", title: "LoopDesk Promotions", status: "ACTIVE" } };
+  const result = classifyExactTitleAutomaticDiscounts([node], functionType);
+  assert.equal(result.selected, null);
+  assert.equal(result.titleCollisions.length, 1);
+  assert.deepEqual(result.automaticDiscountTitleCollisions, [{ id: "node-basic", typename: "DiscountAutomaticBasic", title: "LoopDesk Promotions", status: "ACTIVE", functionId: null }]);
+});
+
+test("multiple exact-title identity matches are duplicates", () => {
+  const nodes: AutomaticDiscount[] = ["one", "two"].map((id) => ({ id, automaticDiscount: { __typename: "DiscountAutomaticApp", title: "LoopDesk Promotions", status: "ACTIVE", discountId: `discount-${id}`, appDiscountType: { functionId: functionType.functionId } } }));
+  const result = classifyExactTitleAutomaticDiscounts(nodes, functionType);
+  assert.deepEqual(result.duplicates, ["one", "two"]);
+});
+
+test("publication recovery hint for title collision instructs Shopify Admin inspection", () => {
+  const hint = publicationRecoveryHint(["missing_automatic_discount", "automatic_discount_title_collision"]);
+  assert.equal(hint.required, true);
+  assert.equal(hint.action, "resolve_ambiguity");
+  assert.match(hint.message, /Shopify Admin/);
+});
+
+test("GraphQL uses exact-title search and bounded pagination fallback", () => {
+  const source = readFileSync(new URL("./discount-function-activation.server.ts", import.meta.url), "utf8");
+  assert.match(source, /automaticDiscountNodes\(first: 50, query: \$query\)/);
+  assert.match(source, /automaticDiscountNodes\(first: 100, after: \$after\)/);
+  assert.match(source, /queryAutomaticDiscountsByExactTitleFallback/);
 });
