@@ -6,11 +6,10 @@ import {
   AmbiguousShopInstallationError,
   ShopInstallationCredentialsMissingError,
   selectCanonicalShopCandidate,
-  type ShopIdentityRow,
 } from "./shop-identity";
-import { getShopByDomain, resolveShopConfig } from "./shop";
+import { canonicalPublicationShopDomain, getShopByDomain, resolveShopConfig, shopRowToResolved, type ShopRow } from "./shop";
 
-function row(overrides: Partial<ShopIdentityRow> = {}): ShopIdentityRow {
+function row(overrides: Partial<ShopRow> = {}): ShopRow {
   return {
     id: "shop-installed",
     shopDomain: "example.myshopify.com",
@@ -22,6 +21,9 @@ function row(overrides: Partial<ShopIdentityRow> = {}): ShopIdentityRow {
     installationStatus: "ACTIVE",
     installedAt: new Date("2026-01-01T00:00:00Z"),
     uninstalledAt: null,
+    storefrontAccessToken: "storefront-token",
+    storefrontTokenEncrypted: null,
+    scopes: null,
     ...overrides,
   };
 }
@@ -57,6 +59,27 @@ test("primary domain and myshopify domain resolve to the same Shop ID", () => {
   assert.equal(selectCanonicalShopCandidate("example.myshopify.com", candidates).id, "canonical");
 });
 
+test("shopRowToResolved preserves canonical and primary domain metadata", () => {
+  const resolved = shopRowToResolved(row({
+    id: "domain-preservation",
+    shopDomain: "merchant.example.com",
+    myshopifyDomain: "example.myshopify.com",
+    primaryDomain: "www.example.com",
+  }));
+
+  assert.equal(resolved.id, "domain-preservation");
+  assert.equal(resolved.shopDomain, "merchant.example.com");
+  assert.equal(resolved.myshopifyDomain, "example.myshopify.com");
+  assert.equal(resolved.primaryDomain, "www.example.com");
+});
+
+test("canonical publication domain prefers myshopifyDomain over merchant primary domain", () => {
+  assert.equal(
+    canonicalPublicationShopDomain(row({ shopDomain: "example.com", myshopifyDomain: "Example.MyShopify.com", primaryDomain: "example.com" })),
+    "example.myshopify.com",
+  );
+});
+
 test("getShopByDomain and resolveShopConfig use the same authoritative candidate query", async () => {
   const original = prisma.$queryRawUnsafe;
   let queryCount = 0;
@@ -73,6 +96,8 @@ test("getShopByDomain and resolveShopConfig use the same authoritative candidate
     const fromConfig = await resolveShopConfig("example.myshopify.com");
     assert.equal(fromDomain?.id, "shared-resolver");
     assert.equal(fromConfig.id, "shared-resolver");
+    assert.equal(fromConfig.myshopifyDomain, "example.myshopify.com");
+    assert.equal(fromConfig.primaryDomain, "example.com");
     assert.equal(queryCount, 2, "one candidate SQL lookup per public resolver call");
   } finally {
     prisma.$queryRawUnsafe = original;
@@ -84,6 +109,34 @@ test("candidate SQL lookup is not duplicated outside the authoritative function"
   assert.equal((source.match(/FROM "Shop"/g) || []).length, 1);
   assert.match(source, /export async function queryShopIdentityCandidates/);
   assert.match(source, /export async function resolveCanonicalShopInstallation/);
+});
+
+test("runtime and admin promotion callers pass canonical publication domain", () => {
+  const runtimeSource = readFileSync(new URL("../../app/api/runtime/config/route.ts", import.meta.url), "utf8");
+  assert.match(runtimeSource, /const canonicalShopDomain = canonicalPublicationShopDomain\(shop\)/);
+  assert.match(runtimeSource, /getLoopDeskRuntimeConfig\(shop\.id, canonicalShopDomain\)/);
+  assert.doesNotMatch(runtimeSource, /getLoopDeskRuntimeConfig\(shop\.id, shop\.shopDomain\)/);
+
+  const pageSource = readFileSync(new URL("../../app/admin/promotion-rules/page.tsx", import.meta.url), "utf8");
+  assert.match(pageSource, /getPromotionRulesConfig\(shop\.id, canonicalShopDomain\)/);
+  assert.match(pageSource, /getLoopDeskPromotionPublicationDiagnostics\(\{ shopId: shop\.id, shopDomain: canonicalShopDomain \}\)/);
+  assert.match(pageSource, /publishLoopDeskPromotions\(\{ shopId, shopDomain: canonicalShopDomain \}\)/);
+
+  const diagnosticsSource = readFileSync(new URL("../../app/admin/promotion-rules/actions/publication-diagnostics/route.ts", import.meta.url), "utf8");
+  assert.match(diagnosticsSource, /getLoopDeskPromotionPublicationDiagnostics\(\{ shopId: resolved\.shop\.id, shopDomain: canonicalShopDomain \}\)/);
+  assert.match(diagnosticsSource, /publishLoopDeskPromotions\(\{ shopId: resolved\.shop\.id, shopDomain: canonicalShopDomain \}\)/);
+});
+
+test("primaryDomain is not used directly for promotion Shopify Admin publication calls", () => {
+  const sources = [
+    readFileSync(new URL("../../app/api/runtime/config/route.ts", import.meta.url), "utf8"),
+    readFileSync(new URL("../../app/admin/promotion-rules/page.tsx", import.meta.url), "utf8"),
+    readFileSync(new URL("../../app/admin/promotion-rules/actions/publication-diagnostics/route.ts", import.meta.url), "utf8"),
+  ].join("\n");
+  assert.doesNotMatch(sources, /shopDomain:\s*[^\n]*primaryDomain/);
+  assert.doesNotMatch(sources, /getLoopDeskRuntimeConfig\([^\n]*primaryDomain/);
+  assert.doesNotMatch(sources, /publishLoopDeskPromotions\([^\n]*primaryDomain/);
+  assert.doesNotMatch(sources, /getLoopDeskPromotionPublicationDiagnostics\([^\n]*primaryDomain/);
 });
 
 test("no real production Shopify resource IDs are embedded in LoopDesk publication tests", () => {

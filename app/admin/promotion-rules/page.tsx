@@ -4,6 +4,7 @@ import { getPromotionRulesConfig, normalizePromotionRule, PROMOTION_RULES_CONFIG
 import { ResourcePickerFields } from "./ResourcePickerFields";
 import { getLoopDeskPromotionPublicationDiagnostics, publishLoopDeskPromotions } from "../../../services/loopdesk/discount-function-activation.server";
 import { formatAdminShopResolutionError, resolveAdminShopFromSearchParams } from "../../../services/shopify/admin-shop-context";
+import { canonicalPublicationShopDomain } from "../../../services/shopify/shop";
 import { embeddedContextFromFormData, embeddedContextHiddenInputs, withEmbeddedContext, type EmbeddedSearchParams } from "./embedded-query";
 
 export const runtime = "nodejs";
@@ -18,20 +19,20 @@ function getString(formData: FormData, key: string) { return String(formData.get
 function getFirstString(formData: FormData, ...keys: string[]) { return keys.map((key) => getString(formData, key).trim()).find(Boolean) || ""; }
 function getBool(formData: FormData, key: string) { return formData.get(key) === "on"; }
 
-async function savePromotionRules(shopId: string, shopDomain: string, formData: FormData) {
+async function savePromotionRules(shopId: string, rawShopDomain: string, canonicalShopDomain: string, formData: FormData) {
   "use server";
   const rawIntent = getString(formData, "intent");
   const [intent, intentRuleId] = rawIntent.split(":");
   const ruleId = intentRuleId || getString(formData, "ruleId");
   const embeddedContext = embeddedContextFromFormData(formData);
-  embeddedContext.set("shop", shopDomain);
+  embeddedContext.set("shop", rawShopDomain);
   embeddedContext.set("saved", "1");
   let redirectUrl = `/admin/promotion-rules?${embeddedContext.toString()}`;
   try {
     const current = await getPromotionRulesConfig(shopId);
     if (intent === "republish") {
       try {
-        const publication = await publishLoopDeskPromotions({ shopId, shopDomain });
+        const publication = await publishLoopDeskPromotions({ shopId, shopDomain: canonicalShopDomain });
         embeddedContext.set("synced", publication.ok ? "1" : "0");
         if (!publication.ok) embeddedContext.set("syncError", publication.message || "Shopify publication failed.");
       } catch (publicationError) {
@@ -78,13 +79,14 @@ async function savePromotionRules(shopId: string, shopDomain: string, formData: 
     const saved = await savePromotionRulesConfig(shopId, { ...base, schemaVersion: 1, enabled: base.enabled, maxVisibleOffers: Number(base.maxVisibleOffers), conflictStrategy: base.conflictStrategy as PromotionConflictStrategy, rules });
     console.info("[Promotion Admin Save]", {
       shopId,
-      shopDomain,
+      shopDomain: canonicalShopDomain,
+      rawShopDomain,
       moduleKey: PROMOTION_RULES_CONFIG_MODULE_KEY,
       enabled: saved.enabled,
       ruleCount: saved.rules.length,
     });
     try {
-      const publication = await publishLoopDeskPromotions({ shopId, shopDomain });
+      const publication = await publishLoopDeskPromotions({ shopId, shopDomain: canonicalShopDomain });
       embeddedContext.set("synced", publication.ok ? "1" : "0");
       if (!publication.ok) embeddedContext.set("syncError", publication.message || "Shopify publication failed.");
     } catch (publicationError) {
@@ -116,11 +118,12 @@ export default async function PromotionRulesPage({ searchParams }: PageProps) {
   const resolved = await resolveAdminShopFromSearchParams(params);
   if (!resolved.shop?.id) return <main className="mx-auto max-w-3xl p-8"><div className={cardClass}><h1 className="text-2xl font-semibold">Promotion Rules</h1><p className="mt-3 text-sm text-red-700">{params.error || formatAdminShopResolutionError(resolved)}</p></div></main>;
   const shop = resolved.shop;
-  const config = await getPromotionRulesConfig(shop.id, shop.shopDomain);
-  const publicationDiagnostics = await getLoopDeskPromotionPublicationDiagnostics({ shopId: shop.id, shopDomain: shop.shopDomain }).catch((error) => ({ ok: false, synchronized: false, blockingReasons: [error instanceof Error ? error.message : "diagnostics_unavailable"], compiledConfigHash: null, storedConfigHash: null, automaticDiscountStatus: null, recoveryHint: null }));
+  const canonicalShopDomain = canonicalPublicationShopDomain(shop);
+  const config = await getPromotionRulesConfig(shop.id, canonicalShopDomain);
+  const publicationDiagnostics = await getLoopDeskPromotionPublicationDiagnostics({ shopId: shop.id, shopDomain: canonicalShopDomain }).catch((error) => ({ ok: false, synchronized: false, blockingReasons: [error instanceof Error ? error.message : "diagnostics_unavailable"], compiledConfigHash: null, storedConfigHash: null, automaticDiscountStatus: null, recoveryHint: null }));
   const createRuleHref = withEmbeddedContext("/admin/promotion-rules", params, { shop: shop.shopDomain, rule: null, saved: null, error: null });
   const selected = config.rules.find((rule) => rule.id === params.rule) || normalizePromotionRule({ id: "new_rule", name: "", display: { ctaLabel: "Add offer" } });
-  const action = savePromotionRules.bind(null, shop.id, shop.shopDomain);
+  const action = savePromotionRules.bind(null, shop.id, shop.shopDomain, canonicalShopDomain);
   const trigger = selected.eligibility.triggers[0];
   const emptyResource: PromotionResourceMetadata = { id: "", gid: "", title: "", image: "", imageUrl: "", handle: "" };
   const triggerProduct = trigger.product || { ...emptyResource, gid: trigger.productGid || "" };
