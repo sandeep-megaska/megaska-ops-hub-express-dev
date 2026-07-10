@@ -61,6 +61,11 @@ union Merchandise = ProductVariant
 
 type ProductVariant {
   id: ID!
+  product: Product!
+}
+
+type Product {
+  id: ID!
 }
 
 type CartLinesDiscountsGenerateRunResult {

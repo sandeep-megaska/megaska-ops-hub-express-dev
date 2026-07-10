@@ -2,6 +2,7 @@ export const LOOPDESK_DISCOUNT_FUNCTION_METAFIELD_NAMESPACE = "loopdesk" as cons
 export const LOOPDESK_DISCOUNT_FUNCTION_METAFIELD_KEY = "discount_function_config" as const;
 
 export type RewardEnforcementType = "fixed_price" | "percentage" | "fixed_amount";
+export type RewardSelectionMode = "product" | "variant";
 
 export type LoopDeskDiscountFunctionTriggerType =
   | "always"
@@ -19,6 +20,7 @@ export type CompiledPromotionEnforcementRule = {
   priority: number;
   triggerType: LoopDeskDiscountFunctionTriggerType;
   triggerValue?: string | number | null;
+  rewardSelectionMode?: RewardSelectionMode;
   rewardEnforcementType: RewardEnforcementType;
   rewardProductGid?: string | null;
   rewardVariantGid?: string | null;
