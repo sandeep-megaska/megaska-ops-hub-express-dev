@@ -1090,10 +1090,10 @@
       var ctaEnabled = synchronized && executionState === "eligible_not_added" && !offerQuantityCapReached && !adding;
       var image = display.imageOverrideUrl || product.imageUrl || product.image || "";
       var title = product.title || rule.name || "Offer product";
-      var configuredComparePrice = resolvePromotionRewardVariantPrice(rule, reward, display);
-      var comparePrice = text(configuredComparePrice.value, "");
-      var comparePriceSource = configuredComparePrice.source;
+      var shopifyOriginalLinePrice = rewardLine && Number.isFinite(Number(rewardLine.original_line_price)) ? Number(rewardLine.original_line_price) : null;
       var shopifyFinalLinePrice = rewardLine && Number.isFinite(Number(rewardLine.final_line_price)) ? Number(rewardLine.final_line_price) : null;
+      var comparePrice = shopifyDiscountObserved && shopifyOriginalLinePrice !== null && shopifyFinalLinePrice !== null && shopifyOriginalLinePrice > shopifyFinalLinePrice ? money(shopifyOriginalLinePrice, cart && cart.currency) : "";
+      var comparePriceSource = comparePrice ? "shopify_cart" : "unavailable";
       var offerPrice = shopifyDiscountObserved && shopifyFinalLinePrice !== null ? money(shopifyFinalLinePrice, cart && cart.currency) : "";
       var displayPriceSource = offerPrice ? "shopify_cart" : "unavailable";
       var pricing = offerPrice ? '<div class="loopdesk-cart-drawer__offer-prices" data-loopdesk-display-price-source="' + escapeHtml(displayPriceSource) + '" data-loopdesk-compare-price-source="' + escapeHtml(comparePriceSource) + '"><span>Get it for ' + escapeHtml(offerPrice) + '</span>' + (comparePrice ? '<s aria-label="Usually ' + escapeHtml(comparePrice) + '">Usually ' + escapeHtml(comparePrice) + '</s>' : '') + '</div>' : '';
@@ -1104,19 +1104,8 @@
   }
 
 
-  function promotionViewModel(cart) {
-    var helper = promotionPricingHelper();
-    var rules = normalizePromotionConfig(config.promotion_rules_config || config.promotionRules).rules || [];
-    if (!helper || !helper.buildPromotionViewModel) return null;
-    var vm = helper.buildPromotionViewModel({ cart: cart || {}, rules: rules, currency: cart && cart.currency });
-    if (window.LOOPDESK_CONFIG_DEBUG === true && window.console && window.console.debug) {
-      window.console.debug("[LoopDesk Promotion VM]", {
-        cartItemCount: Array.isArray(cart && cart.items) ? cart.items.length : 0,
-        rulesCount: rules.length,
-        hasPromotion: Boolean(vm && vm.totals && vm.totals.promotionDiscountTotal > 0)
-      });
-    }
-    return vm;
+  function promotionViewModel(_cart) {
+    return null;
   }
 
   function loopdeskOfferHandoffPayload(cart) {
@@ -1183,16 +1172,8 @@
     return eligibility.match === "all" ? triggers.every(function (trigger) { return triggerMatchesRewardLine(trigger, cart, item); }) : triggers.some(function (trigger) { return triggerMatchesRewardLine(trigger, cart, item); });
   }
 
-  function promotionRewardLineAdjustment(rule, item, cart) {
-    var reward = isPlainObject(rule && rule.reward) ? rule.reward : {};
-    var quantity = Math.max(1, Number(item.quantity) || 1);
-    var originalLine = Number(item.final_line_price || item.original_line_price || item.line_price || 0);
-    var originalUnit = Math.round(originalLine / quantity);
-    var helper = promotionPricingHelper();
-    if (!helper || typeof helper.resolvePromotionDisplayPricing !== "function") return null;
-    var resolved = helper.resolvePromotionDisplayPricing({ cart: cart, rule: rule, rewardVariantGid: resolvePromotionOfferVariantGid(reward), rewardUnitPrice: originalUnit, rewardQuantity: quantity });
-    if (!resolved || !resolved.isEligible || resolved.promotionalUnitPrice === null) return null;
-    return { rule: rule, originalUnit: resolved.originalUnitPrice, adjustedUnit: resolved.promotionalUnitPrice, eligibleQuantity: resolved.eligibleQuantity, quantity: quantity, type: resolved.discountType, resolved: resolved };
+  function promotionRewardLineAdjustment(_rule, _item, _cart) {
+    return null;
   }
 
   function findPromotionRewardLineAdjustment(cart, item) {
@@ -1270,6 +1251,20 @@
     return "";
   }
 
+  function renderPromotionOffersSafely(cart) {
+    try {
+      return renderPromotionOffers(cart);
+    } catch (error) {
+      if (promotionDebugEnabled() && window.console && window.console.error) {
+        window.console.error("[LoopDesk Promotion UAT] Offer rendering failed", {
+          name: error && error.name ? String(error.name) : "Error",
+          message: error && error.message ? String(error.message) : "Promotion offer rendering failed"
+        });
+      }
+      return "";
+    }
+  }
+
   function render() {
     var cart = state.cart;
     var itemCount = cart && typeof cart.item_count === "number" ? cart.item_count : 0;
@@ -1285,7 +1280,7 @@
     var offerViewModel = promotionViewModel(cart || {});
     elements.body.innerHTML = state.error
       ? '<div class="loopdesk-cart-drawer__error">We could not load your cart. You can still use the cart page.</div>'
-      : renderLines(cart, offerViewModel) + renderPromotionOffers(cart);
+      : renderLines(cart, offerViewModel) + renderPromotionOffersSafely(cart);
 
     var pricing = state.pricing;
     var subtotal = moneyValue(pricing && pricing.originalSubtotal);

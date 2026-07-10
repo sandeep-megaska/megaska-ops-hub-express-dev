@@ -76,3 +76,92 @@ assert.equal(/expected|fixed final|fixedFinal|fixed_price|promotionalUnitPrice|p
 assert.equal(/original_line_price\s*[-+*/]|final_line_price\s*[-+*/]|expectedDiscount|discountAmount|fixedFinalPrice/i.test(classifierSource), false, 'classifier does not locally subtract, multiply, or derive discount amounts');
 
 console.log('CONFIG-4.4A promotion execution UAT classifier fixtures passed');
+
+const forbiddenLocalPricingReferences = [
+  'resolvePromotionRewardVariantPrice',
+  'parseDisplayMoney',
+  'formatDisplayMoneyLike',
+  'promotionPricingHelper',
+  'centsFromDisplayMoney',
+  'resolvePromotionOfferPriceDisplay'
+];
+for (const helperName of forbiddenLocalPricingReferences) {
+  assert.equal(asset.includes(helperName), false, `${helperName} is not referenced in the cart drawer asset`);
+}
+
+const functionNames = new Set([...asset.matchAll(/\bfunction\s+([A-Za-z_$][\w$]*)\s*\(/g)].map((match) => match[1]));
+const calledPromotionHelpers = new Set([...asset.matchAll(/\b([A-Za-z_$][\w$]*)\s*\(/g)]
+  .map((match) => match[1])
+  .filter((name) => /Promotion|promotion/.test(name))
+  .filter((name) => !['if', 'for', 'while', 'switch', 'function'].includes(name)));
+for (const helperName of calledPromotionHelpers) {
+  assert.ok(functionNames.has(helperName), `called promotion helper ${helperName} is defined`);
+}
+
+const renderPromotionOffersSource = asset.match(/function renderPromotionOffers\(cart\) {[\s\S]*?\n  }\n\n\n  function promotionViewModel/)?.[0]
+  ?.replace(/\n\n\n  function promotionViewModel[\s\S]*$/, '');
+assert.ok(renderPromotionOffersSource, 'renderPromotionOffers source is extractable');
+
+function createRenderPromotionOffers({ display = {} } = {}) {
+  const harness = new Function(`${renderPromotionOffersSource}
+    return renderPromotionOffers;`);
+  return harness.call({});
+}
+
+const renderHarness = new Function('rule', 'synchronizedConfig', 'TRIGGER_VARIANT_GID', 'REWARD_VARIANT_GID', 'triggerLine', 'rewardDiscounted', `
+  const state = { offerAdding: false, offerError: '' };
+  const config = { promotion_rules_config: { ...synchronizedConfig, rules: [rule], maxVisibleOffers: 1 } };
+  function isPlainObject(value) { return Boolean(value && typeof value === 'object' && !Array.isArray(value)); }
+  function normalizePromotionConfig(value) { return value || { rules: [] }; }
+  function sameShopifyId(left, right) { return Boolean(left && right && (String(left) === String(right) || String(left).split('/').pop() === String(right).split('/').pop())); }
+  function resolvePromotionOfferVariantGid(reward) { return reward && (reward.variantGid || reward.variant_gid || reward.variantId || ''); }
+  function promotionRewardLine(cart, rewardVariantGid) { return (cart.items || []).find((item) => sameShopifyId(item.variant_id, rewardVariantGid) || sameShopifyId(item.id, rewardVariantGid)) || null; }
+  function cartLineDiscountAllocations(item) { return (item && (item.line_level_discount_allocations || item.discounts || item.discount_allocations)) || []; }
+  function discountAllocationAmount(allocation) { return Number(allocation && (allocation.amount || allocation.value || allocation.amountCents || allocation.valueCents || 0)) || 0; }
+  function lineShopifyDiscountObserved(item) {
+    if (!item) return false;
+    const original = Number(item.original_line_price);
+    const finalPrice = Number(item.final_line_price);
+    return (Number.isFinite(original) && Number.isFinite(finalPrice) && finalPrice < original) || cartLineDiscountAllocations(item).some((allocation) => discountAllocationAmount(allocation) > 0);
+  }
+  function promotionOfferRemainingQuantity(cart, testRule, rewardVariantGid) {
+    const max = Math.max(1, Number(testRule.limits && testRule.limits.maxQuantityPerCart) || 1);
+    const existing = (cart.items || []).reduce((total, item) => total + (sameShopifyId(item.variant_id, rewardVariantGid) ? Math.max(0, Number(item.quantity) || 0) : 0), 0);
+    return Math.max(0, max - existing);
+  }
+  function isPromotionPublicationSynchronized() { return true; }
+  function hasSynchronizedPromotionPublication() { return true; }
+  function getEligiblePromotionRules(cart) { return (cart.items || []).some((item) => sameShopifyId(item.variant_id, TRIGGER_VARIANT_GID) || sameShopifyId(item.id, TRIGGER_VARIANT_GID)) ? [rule] : []; }
+  function classifyPromotionOfferExecution(cart, testRule) {
+    const rewardVariantGid = resolvePromotionOfferVariantGid(testRule.reward || {});
+    const line = promotionRewardLine(cart, rewardVariantGid);
+    if (line && lineShopifyDiscountObserved(line)) return 'applied_by_shopify';
+    if (!line) return 'eligible_not_added';
+    return 'added_without_discount';
+  }
+  function money(cents, currency) { return String(currency || 'INR') + ':' + cents; }
+  function escapeHtml(value) { return String(value == null ? '' : value).replace(/[&<>"']/g, ''); }
+  ${renderPromotionOffersSource}
+  return [
+    renderPromotionOffers({ currency: 'INR', items: [triggerLine] }),
+    renderPromotionOffers({ currency: 'INR', items: [triggerLine] }),
+    renderPromotionOffers({ currency: 'INR', items: [triggerLine, rewardDiscounted] }),
+    renderPromotionOffers({ currency: 'INR', items: [triggerLine] })
+  ];
+`);
+
+const renderRuleWithDisplay = {
+  ...rule,
+  display: { placement: 'drawer', description: 'Get this item for a special price' },
+  reward: { ...rule.reward, product: { title: 'Reward item' } }
+};
+const renderRuleMissingDisplay = { ...rule, display: {}, reward: { ...rule.reward, product: {} } };
+const [triggerOnlyHtml, noRewardHtml, discountedHtml] = renderHarness(renderRuleWithDisplay, synchronizedConfig, TRIGGER_VARIANT_GID, REWARD_VARIANT_GID, triggerLine, rewardDiscounted);
+assert.match(triggerOnlyHtml, /Get this item for a special price/, 'pre-add offer descriptive text renders');
+assert.doesNotMatch(noRewardHtml, /Get it for/, 'no reward line does not present an applied Shopify final price');
+assert.match(discountedHtml, /data-loopdesk-display-price-source="shopify_cart"/, 'discounted reward line uses Shopify cart as final price source');
+assert.match(discountedHtml, /data-loopdesk-compare-price-source="shopify_cart"/, 'discounted reward line uses Shopify cart as compare price source');
+assert.match(discountedHtml, /Usually INR:500/, 'discounted reward line renders Shopify original line price as compare price');
+assert.doesNotThrow(() => renderHarness(renderRuleMissingDisplay, synchronizedConfig, TRIGGER_VARIANT_GID, REWARD_VARIANT_GID, triggerLine, rewardDiscounted), 'renderPromotionOffers tolerates missing optional display values');
+
+console.log('CONFIG-4.4A promotion offer render regression assertions passed');
