@@ -12,6 +12,8 @@ import {
 export type ResolvedShopConfig = {
   id: string | null;
   shopDomain: string;
+  myshopifyDomain: string | null;
+  primaryDomain: string | null;
   accessToken: string | null;
   accessTokenEncrypted: string | null;
   accessTokenDirect: string | null;
@@ -147,39 +149,40 @@ export async function getDefaultShopFromConfig() {
   return rows[0] || null;
 }
 
+export function shopRowToResolved(row: ShopRow): ResolvedShopConfig {
+  return {
+    id: row.id,
+    shopDomain: row.shopDomain,
+    myshopifyDomain: row.myshopifyDomain,
+    primaryDomain: row.primaryDomain,
+    accessToken: row.accessToken || decryptShopifyToken(row.accessTokenEncrypted),
+    accessTokenEncrypted: row.accessTokenEncrypted,
+    accessTokenDirect: row.accessToken,
+    storefrontAccessToken: row.storefrontAccessToken || decryptShopifyToken(row.storefrontTokenEncrypted),
+  };
+}
+
+export function canonicalPublicationShopDomain(shop: Pick<ResolvedShopConfig | ShopRow, "myshopifyDomain" | "shopDomain">) {
+  return normalizeShopDomain(shop.myshopifyDomain || shop.shopDomain);
+}
+
 export async function resolveShopConfig(
   preferredShopDomain?: string | null
 ): Promise<ResolvedShopConfig> {
   const normalizedPreferred = normalizeShopDomain(preferredShopDomain);
   if (normalizedPreferred) {
     const shop = await resolveCanonicalShopInstallation(normalizedPreferred);
-    if (shop) {
-      return {
-        id: shop.id,
-        shopDomain: shop.shopDomain,
-        accessToken: shop.accessToken || decryptShopifyToken(shop.accessTokenEncrypted),
-        accessTokenEncrypted: shop.accessTokenEncrypted,
-        accessTokenDirect: shop.accessToken,
-        storefrontAccessToken: shop.storefrontAccessToken || decryptShopifyToken(shop.storefrontTokenEncrypted),
-      };
-    }
+    if (shop) return shopRowToResolved(shop);
   }
 
   const defaultShop = await getDefaultShopFromConfig();
-  if (defaultShop) {
-    return {
-      id: defaultShop.id,
-      shopDomain: defaultShop.shopDomain,
-      accessToken: defaultShop.accessToken || decryptShopifyToken(defaultShop.accessTokenEncrypted),
-      accessTokenEncrypted: defaultShop.accessTokenEncrypted,
-      accessTokenDirect: defaultShop.accessToken,
-      storefrontAccessToken: defaultShop.storefrontAccessToken || decryptShopifyToken(defaultShop.storefrontTokenEncrypted),
-    };
-  }
+  if (defaultShop) return shopRowToResolved(defaultShop);
 
   return {
     id: null,
     shopDomain: normalizeShopDomain(trimEnv("SHOPIFY_STORE_DOMAIN")),
+    myshopifyDomain: null,
+    primaryDomain: null,
     accessToken: trimEnv("SHOPIFY_ADMIN_ACCESS_TOKEN") || null,
     accessTokenEncrypted: null,
     accessTokenDirect: trimEnv("SHOPIFY_ADMIN_ACCESS_TOKEN") || null,

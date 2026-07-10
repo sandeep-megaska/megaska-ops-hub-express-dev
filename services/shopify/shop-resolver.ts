@@ -1,4 +1,5 @@
 export {
+  canonicalPublicationShopDomain,
   getDefaultShopFromConfig,
   getShopByDomain,
   getShopDomainFromRequest,
@@ -6,6 +7,7 @@ export {
   queryShopIdentityCandidates,
   resolveCanonicalShopInstallation,
   resolveShopConfig,
+  shopRowToResolved,
   type ResolvedShopConfig,
   type ShopRow,
 } from "./shop";
