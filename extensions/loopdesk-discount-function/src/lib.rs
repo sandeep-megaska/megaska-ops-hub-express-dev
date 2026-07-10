@@ -16,6 +16,7 @@ struct CartLine {
     quantity: i64,
     subtotal_amount: f64,
     variant_gid: String,
+    product_gid: String,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -60,6 +61,10 @@ struct Rule {
     trigger_value: Option<TriggerValue>,
     reward_enforcement_type: String,
     #[serde(default)]
+    reward_selection_mode: Option<String>,
+    #[serde(default)]
+    reward_product_gid: Option<String>,
+    #[serde(default)]
     reward_variant_gid: Option<String>,
     #[serde(default)]
     fixed_price_amount: Option<f64>,
@@ -69,6 +74,12 @@ struct Rule {
     fixed_amount_value: Option<f64>,
     #[serde(default)]
     quantity: Option<i64>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+enum RewardSelectionMode {
+    Product,
+    Variant,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -102,11 +113,7 @@ fn parse_config(raw_value: Option<&str>) -> Vec<Rule> {
         .into_iter()
         .filter(|rule| rule.enabled)
         .filter(|rule| !rule.id.trim().is_empty())
-        .filter(|rule| {
-            rule.reward_variant_gid
-                .as_deref()
-                .is_some_and(|gid| !gid.trim().is_empty())
-        })
+        .filter(|rule| normalized_reward_selection_mode(rule).is_some())
         .filter(is_supported_trigger)
         .filter(is_valid_reward_value)
         .collect();
@@ -118,7 +125,11 @@ fn parse_config(raw_value: Option<&str>) -> Vec<Rule> {
 fn is_supported_trigger(rule: &Rule) -> bool {
     matches!(
         rule.trigger_type.as_str(),
-        "always" | "cart_contains_variant" | "cart_subtotal_gte" | "cart_quantity_gte"
+        "always"
+            | "cart_contains_product"
+            | "cart_contains_variant"
+            | "cart_subtotal_gte"
+            | "cart_quantity_gte"
     )
 }
 
@@ -151,6 +162,9 @@ fn trigger_matches(rule: &Rule, cart_lines: &[CartLine]) -> bool {
     }
 
     match rule.trigger_type.as_str() {
+        "cart_contains_product" => cart_lines
+            .iter()
+            .any(|line| line.product_gid == trigger_value),
         "cart_contains_variant" => cart_lines
             .iter()
             .any(|line| line.variant_gid == trigger_value),
@@ -165,6 +179,53 @@ fn trigger_matches(rule: &Rule, cart_lines: &[CartLine]) -> bool {
             cart_lines.iter().map(|line| line.quantity).sum::<i64>() >= threshold
         }),
         _ => false,
+    }
+}
+
+fn normalized_reward_selection_mode(rule: &Rule) -> Option<RewardSelectionMode> {
+    match rule.reward_selection_mode.as_deref().map(str::trim) {
+        Some("product") => rule
+            .reward_product_gid
+            .as_deref()
+            .is_some_and(|gid| !gid.trim().is_empty())
+            .then_some(RewardSelectionMode::Product),
+        Some("variant") => rule
+            .reward_variant_gid
+            .as_deref()
+            .is_some_and(|gid| !gid.trim().is_empty())
+            .then_some(RewardSelectionMode::Variant),
+        Some(_) => None,
+        None => {
+            if rule
+                .reward_variant_gid
+                .as_deref()
+                .is_some_and(|gid| !gid.trim().is_empty())
+            {
+                Some(RewardSelectionMode::Variant)
+            } else if rule
+                .reward_product_gid
+                .as_deref()
+                .is_some_and(|gid| !gid.trim().is_empty())
+            {
+                Some(RewardSelectionMode::Product)
+            } else {
+                None
+            }
+        }
+    }
+}
+
+fn reward_line_matches(rule: &Rule, line: &CartLine) -> bool {
+    match normalized_reward_selection_mode(rule) {
+        Some(RewardSelectionMode::Product) => rule
+            .reward_product_gid
+            .as_deref()
+            .is_some_and(|gid| line.product_gid == gid.trim()),
+        Some(RewardSelectionMode::Variant) => rule
+            .reward_variant_gid
+            .as_deref()
+            .is_some_and(|gid| line.variant_gid == gid.trim()),
+        None => false,
     }
 }
 
@@ -227,22 +288,15 @@ fn evaluate(cart_lines: &[CartLine], rules: &[Rule]) -> Vec<DiscountCandidateSpe
         .iter()
         .filter(|rule| trigger_matches(rule, cart_lines))
     {
-        let Some(reward_variant_gid) = rule.reward_variant_gid.as_deref() else {
-            continue;
-        };
-        if discounted_variants.contains(reward_variant_gid) {
-            continue;
-        }
-        let Some(reward_line) = cart_lines
-            .iter()
-            .find(|line| line.variant_gid == reward_variant_gid)
-        else {
+        let Some(reward_line) = cart_lines.iter().find(|line| {
+            reward_line_matches(rule, line) && !discounted_variants.contains(&line.variant_gid)
+        }) else {
             continue;
         };
         let Some(candidate) = create_discount_candidate(rule, reward_line) else {
             continue;
         };
-        discounted_variants.insert(reward_variant_gid.to_string());
+        discounted_variants.insert(reward_line.variant_gid.clone());
         candidates.push(candidate);
     }
 
@@ -267,15 +321,16 @@ fn cart_lines_discounts_generate_run(
         .lines()
         .iter()
         .filter_map(|line| {
-            let variant_gid = match line.merchandise() {
-                schema::cart_lines_discounts_generate_run::input::cart::lines::Merchandise::ProductVariant(variant) => variant.id().clone(),
+            let variant = match line.merchandise() {
+                schema::cart_lines_discounts_generate_run::input::cart::lines::Merchandise::ProductVariant(variant) => variant,
                 schema::cart_lines_discounts_generate_run::input::cart::lines::Merchandise::Other => return None,
             };
 
             Some(CartLine {
                 quantity: *line.quantity() as i64,
                 subtotal_amount: **line.cost().subtotal_amount().amount(),
-                variant_gid,
+                variant_gid: variant.id().clone(),
+                product_gid: variant.product().id().clone(),
             })
         })
         .collect();
@@ -376,6 +431,8 @@ mod tests {
             trigger_type: "cart_contains_variant".to_string(),
             trigger_value: Some(TriggerValue::String(TRIGGER_VARIANT_GID.to_string())),
             reward_enforcement_type: "percentage".to_string(),
+            reward_selection_mode: Some("variant".to_string()),
+            reward_product_gid: Some("gid://shopify/Product/reward-product".to_string()),
             reward_variant_gid: Some(REWARD_VARIANT_GID.to_string()),
             fixed_price_amount: None,
             percentage_value: Some(20.0),
@@ -391,6 +448,25 @@ mod tests {
             quantity,
             subtotal_amount,
             variant_gid: variant_gid.to_string(),
+            product_gid: if variant_gid == TRIGGER_VARIANT_GID {
+                "gid://shopify/Product/trigger-product".to_string()
+            } else {
+                "gid://shopify/Product/reward-product".to_string()
+            },
+        }
+    }
+
+    fn product_cart_line(
+        variant_gid: &str,
+        product_gid: &str,
+        quantity: i64,
+        subtotal_amount: f64,
+    ) -> CartLine {
+        CartLine {
+            quantity,
+            subtotal_amount,
+            variant_gid: variant_gid.to_string(),
+            product_gid: product_gid.to_string(),
         }
     }
 
@@ -417,7 +493,6 @@ mod tests {
         assert_eq!(operations[0].quantity, 1);
         assert_eq!(operations[0].value, DiscountValue::FixedAmountEach(75.0));
     }
-
 
     #[test]
     fn fixed_price_three_hundred_on_six_hundred_rupee_reward_line_discounts_three_hundred() {
@@ -586,6 +661,157 @@ mod tests {
     }
 
     #[test]
+    fn cart_contains_product_matches_any_variant_of_product() {
+        let r = rule(|rule| {
+            rule.trigger_type = "cart_contains_product".to_string();
+            rule.trigger_value = Some(TriggerValue::String(
+                "gid://shopify/Product/trigger-product".to_string(),
+            ));
+        });
+        assert!(trigger_matches(
+            &r,
+            &[product_cart_line(
+                "gid://shopify/ProductVariant/other",
+                "gid://shopify/Product/trigger-product",
+                1,
+                100.0
+            )]
+        ));
+        assert!(!trigger_matches(
+            &r,
+            &[product_cart_line(
+                "gid://shopify/ProductVariant/other",
+                "gid://shopify/Product/other-product",
+                1,
+                100.0
+            )]
+        ));
+    }
+
+    #[test]
+    fn product_reward_discounts_first_matching_product_variant_target() {
+        let operations = evaluate(
+            &[
+                cart_line(TRIGGER_VARIANT_GID, 1, 100.0),
+                product_cart_line(
+                    "gid://shopify/ProductVariant/reward-a",
+                    "gid://shopify/Product/reward-product",
+                    3,
+                    300.0,
+                ),
+                product_cart_line(
+                    "gid://shopify/ProductVariant/reward-b",
+                    "gid://shopify/Product/reward-product",
+                    3,
+                    300.0,
+                ),
+            ],
+            &[rule(|rule| {
+                rule.reward_selection_mode = Some("product".to_string());
+                rule.reward_variant_gid = None;
+                rule.quantity = Some(2);
+            })],
+        );
+        assert_eq!(operations.len(), 1);
+        assert_eq!(
+            operations[0].variant_gid,
+            "gid://shopify/ProductVariant/reward-a"
+        );
+        assert_eq!(operations[0].quantity, 2);
+    }
+
+    #[test]
+    fn variant_reward_ignores_other_variants_of_same_product() {
+        let operations = evaluate(
+            &[
+                cart_line(TRIGGER_VARIANT_GID, 1, 100.0),
+                product_cart_line(
+                    "gid://shopify/ProductVariant/reward-a",
+                    "gid://shopify/Product/reward-product",
+                    1,
+                    100.0,
+                ),
+                product_cart_line(
+                    REWARD_VARIANT_GID,
+                    "gid://shopify/Product/reward-product",
+                    1,
+                    100.0,
+                ),
+            ],
+            &[rule(|_| {})],
+        );
+        assert_eq!(operations.len(), 1);
+        assert_eq!(operations[0].variant_gid, REWARD_VARIANT_GID);
+    }
+
+    #[test]
+    fn legacy_variant_rule_without_mode_retains_variant_behavior() {
+        let operations = evaluate(
+            &default_lines(),
+            &[rule(|rule| rule.reward_selection_mode = None)],
+        );
+        assert_eq!(operations.len(), 1);
+        assert_eq!(operations[0].variant_gid, REWARD_VARIANT_GID);
+    }
+
+    #[test]
+    fn product_reward_without_matching_product_emits_no_operation() {
+        let operations = evaluate(
+            &[cart_line(TRIGGER_VARIANT_GID, 1, 100.0)],
+            &[rule(|rule| {
+                rule.reward_selection_mode = Some("product".to_string());
+                rule.reward_variant_gid = None;
+                rule.reward_product_gid = Some("gid://shopify/Product/missing".to_string());
+            })],
+        );
+        assert!(operations.is_empty());
+    }
+
+    #[test]
+    fn malformed_reward_modes_or_missing_product_ids_are_invalidated() {
+        assert_eq!(
+            normalized_reward_selection_mode(&rule(
+                |rule| rule.reward_selection_mode = Some("bogus".to_string())
+            )),
+            None
+        );
+        assert_eq!(
+            normalized_reward_selection_mode(&rule(|rule| {
+                rule.reward_selection_mode = Some("product".to_string());
+                rule.reward_product_gid = None;
+            })),
+            None
+        );
+    }
+
+    #[test]
+    fn same_trigger_and_reward_product_is_deterministic_without_quantity_separation() {
+        let same_product = "gid://shopify/Product/same";
+        let operations = evaluate(
+            &[product_cart_line(
+                "gid://shopify/ProductVariant/same-a",
+                same_product,
+                2,
+                200.0,
+            )],
+            &[rule(|rule| {
+                rule.trigger_type = "cart_contains_product".to_string();
+                rule.trigger_value = Some(TriggerValue::String(same_product.to_string()));
+                rule.reward_selection_mode = Some("product".to_string());
+                rule.reward_product_gid = Some(same_product.to_string());
+                rule.reward_variant_gid = None;
+                rule.quantity = Some(1);
+            })],
+        );
+        assert_eq!(operations.len(), 1);
+        assert_eq!(
+            operations[0].variant_gid,
+            "gid://shopify/ProductVariant/same-a"
+        );
+        assert_eq!(operations[0].quantity, 1);
+    }
+
+    #[test]
     fn unsupported_reward_types_are_ignored() {
         for reward_type in ["free_gift", "bundles"] {
             assert!(!is_valid_reward_value(&rule(|rule| {
@@ -597,7 +823,6 @@ mod tests {
     #[test]
     fn unsupported_non_variant_triggers_are_ignored() {
         for trigger_type in [
-            "cart_contains_product",
             "cart_contains_collection",
             "cart_contains_product_type",
             "cart_contains_tag",

@@ -4,7 +4,7 @@ import path from "path";
 import { shopifyAdminGraphql } from "../express-checkout/shopify-admin";
 import { getPromotionRulesConfig } from "../promotion-rules/config";
 import { LOOPDESK_DISCOUNT_FUNCTION_METAFIELD_KEY, LOOPDESK_DISCOUNT_FUNCTION_METAFIELD_NAMESPACE, type LoopDeskDiscountFunctionConfig } from "./discount-function";
-import { canonicalizeProductVariantGid, compileLoopDeskDiscountFunctionConfig, isRustFunctionSupportedTriggerType } from "./discount-function-config.server";
+import { canonicalizeProductGid, canonicalizeProductVariantGid, compileLoopDeskDiscountFunctionConfig, isRustFunctionSupportedTriggerType } from "./discount-function-config.server";
 
 const DISCOUNT_TITLE = "LoopDesk Promotions";
 const FUNCTION_ARTIFACT_PATH = path.join(process.cwd(), "extensions", "loopdesk-discount-function", "target", "wasm32-unknown-unknown", "release", "loopdesk_discount_function.wasm");
@@ -837,7 +837,11 @@ async function promotionPublicationPreflight(shopId: string, shopDomain: string,
   for (const rule of promotionConfig.rules.filter((rule) => rule.enabled && rule.status === "active")) {
     const trigger = rule.eligibility.triggers[0] || { type: "always" as const };
     if (!isRustFunctionSupportedTriggerType(trigger.type)) blockingReasons.push(`unsupported_trigger:${rule.id}:${trigger.type}`);
-    try { canonicalizeProductVariantGid(rule.reward.variantGid); } catch { blockingReasons.push(`malformed_reward_variant_gid:${rule.id}`); }
+    try { canonicalizeProductGid(rule.reward.productGid); } catch { blockingReasons.push(`malformed_reward_product_gid:${rule.id}`); }
+    const rewardMode = rule.reward.variantSelectionMode ?? rule.reward.scope ?? (rule.reward.variantGid ? "variant" : "product");
+    if (rewardMode === "variant") {
+      try { canonicalizeProductVariantGid(rule.reward.variantGid); } catch { blockingReasons.push(`malformed_reward_variant_gid:${rule.id}`); }
+    }
   }
   return { blockingReasons: Array.from(new Set(blockingReasons)) };
 }

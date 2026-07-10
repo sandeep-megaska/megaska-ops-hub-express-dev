@@ -18,6 +18,9 @@ query Input {
         __typename
         ... on ProductVariant {
           id
+          product {
+            id
+          }
         }
       }
     }

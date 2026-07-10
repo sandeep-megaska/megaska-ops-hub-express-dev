@@ -18,7 +18,8 @@ export type PromotionConflictStrategy = "priority_first" | "newest_first" | "old
 
 export type PromotionResourceMetadata = { id?: string; gid: string; title: string; image?: string | null; imageUrl: string | null; handle: string; resourceType?: "product" | "collection" | "variant"; variantGid?: string; variantTitle?: string; variantPrice?: string; variantCompareAtPrice?: string };
 export type PromotionRewardDiscount = { type: "fixed_price" | "percentage" | "fixed_amount"; value: number };
-export type PromotionReward = { type: "offer_product"; productGid: string; variantGid: string; quantity: number; requiresDiscountEnforcement: boolean; discount?: PromotionRewardDiscount; product?: PromotionResourceMetadata; variantPrice?: string };
+export type PromotionRewardSelectionMode = "product" | "variant";
+export type PromotionReward = { type: "offer_product"; productGid: string; variantGid: string; variantSelectionMode?: PromotionRewardSelectionMode; scope?: PromotionRewardSelectionMode; quantity: number; requiresDiscountEnforcement: boolean; discount?: PromotionRewardDiscount; product?: PromotionResourceMetadata; variantPrice?: string };
 
 export type PromotionRule = {
   id: string;
@@ -70,6 +71,7 @@ function status(value: unknown): PromotionRuleStatus { return value === "active"
 function triggerType(value: unknown): PromotionTriggerType { return value === "cart_contains_product" || value === "cart_contains_collection" || value === "cart_contains_variant" || value === "cart_contains_product_type" || value === "cart_contains_tag" || value === "cart_subtotal_gte" || value === "cart_quantity_gte" ? value : "always"; }
 function placement(value: unknown): PromotionPlacement { return value === "drawer" || value === "cart_page" || value === "both" ? value : "drawer"; }
 function conflict(value: unknown): PromotionConflictStrategy { return value === "newest_first" || value === "oldest_first" || value === "priority_first" ? value : "priority_first"; }
+function rewardSelectionMode(value: unknown): PromotionRewardSelectionMode | undefined { return value === "product" || value === "variant" ? value : undefined; }
 function rewardDiscount(value: unknown): PromotionRewardDiscount | undefined {
   const raw = isRecord(value) ? value : {};
   if (raw.type !== "fixed_price" && raw.type !== "percentage" && raw.type !== "fixed_amount") return undefined;
@@ -112,7 +114,7 @@ export function normalizePromotionRule(input: unknown): PromotionRule {
     priority: num(raw.priority, 100, -100000, 100000),
     status: status(raw.status),
     eligibility: { ...eligibility, match: eligibility.match === "all" ? "all" : "any", triggers: [normalizedTrigger] },
-    reward: { ...reward, type: "offer_product", productGid: rewardProductGid, variantGid: rewardVariantGid, quantity: num(reward.quantity, 1, 1, 999), requiresDiscountEnforcement: bool(reward.requiresDiscountEnforcement, false), discount: rewardDiscount(reward.discount), product: normalizedRewardProduct, variantPrice: rewardVariantPrice },
+    reward: { ...reward, type: "offer_product", productGid: rewardProductGid, variantGid: rewardVariantGid, variantSelectionMode: rewardSelectionMode(reward.variantSelectionMode ?? reward.scope), scope: rewardSelectionMode(reward.scope ?? reward.variantSelectionMode), quantity: num(reward.quantity, 1, 1, 999), requiresDiscountEnforcement: bool(reward.requiresDiscountEnforcement, false), discount: rewardDiscount(reward.discount), product: normalizedRewardProduct, variantPrice: rewardVariantPrice },
     rewardProductVariantPrice: cleanText(raw.rewardProductVariantPrice, rewardVariantPrice, 80),
     display: { ...display, heading: cleanText(display.heading, "", 120), description: cleanText(display.description, "", 500), badge: cleanText(display.badge, "", 80), ctaLabel: cleanText(display.ctaLabel, "Add offer", 80), imageOverrideUrl: nullableUrl(display.imageOverrideUrl), offerPriceDisplay: cleanText(display.offerPriceDisplay, "", 80), comparePriceDisplay: cleanText(display.comparePriceDisplay, "", 80), placement: placement(display.placement), hideIfOfferProductAlreadyInCart: bool(display.hideIfOfferProductAlreadyInCart, true) },
     limits: { ...limits, maxQuantityPerCart: num(limits.maxQuantityPerCart, 1, 1, 999), showOncePerSession: bool(limits.showOncePerSession, false), oneOfferPerRule: bool(limits.oneOfferPerRule, true) },
