@@ -11,9 +11,27 @@ const FUNCTION_ARTIFACT_PATH = path.join(process.cwd(), "extensions", "loopdesk-
 const VALID_STATUSES = new Set(["ACTIVE", "SCHEDULED"]);
 
 type UserError = { field?: string[] | null; message?: string | null };
+type DiscountMetafieldSchemaType = { name?: string | null; fields?: Array<{ name?: string | null }> | null } | null;
 export type AppDiscountType = { functionId: string; title: string; description?: string | null; appKey?: string | null; discountClasses?: string[] };
-export type AutomaticDiscount = { id: string; automaticDiscount?: { __typename?: string; title?: string | null; status?: string | null; discountId?: string | null; appDiscountType?: { functionId?: string | null } | null; metafield?: { value?: string | null } | null } | null };
+export type AutomaticDiscount = {
+  id: string;
+  metafield?: { value?: string | null } | null;
+  automaticDiscount?: {
+    __typename?: string;
+    title?: string | null;
+    status?: string | null;
+    discountId?: string | null;
+    appDiscountType?: { functionId?: string | null } | null;
+  } | null;
+};
 type AutomaticDiscountResult = { discountId?: string | null; title?: string | null; status?: string | null } | null | undefined;
+
+class DiscountMetafieldReadUnsupportedError extends Error {
+  constructor() {
+    super("discount_metafield_read_unsupported");
+    this.name = "DiscountMetafieldReadUnsupportedError";
+  }
+}
 
 type PublicationDiagnostics = {
   localCompiledConfig: LoopDeskDiscountFunctionConfig;
@@ -100,8 +118,35 @@ export function selectLoopDeskAppDiscountType(types: AppDiscountType[]) {
   return { selected: productCandidates[0], reason: null };
 }
 
+function isMetafieldSchemaError(error: unknown) {
+  return error instanceof Error && /\bField 'metafield' doesn't exist\b/.test(error.message);
+}
+
+function fieldNames(type: DiscountMetafieldSchemaType) {
+  return type?.fields?.map((field) => field.name).filter((name): name is string => Boolean(name)) || [];
+}
+
+async function assertAutomaticDiscountNodeMetafieldReadable(shopDomain: string, shopId: string) {
+  const data = await shopifyAdminGraphql<{
+    discountAutomaticNode: DiscountMetafieldSchemaType;
+    discountAutomaticApp: DiscountMetafieldSchemaType;
+  }>(shopDomain, `query LoopDeskDiscountMetafieldSchema { discountAutomaticNode: __type(name: "DiscountAutomaticNode") { name fields { name } } discountAutomaticApp: __type(name: "DiscountAutomaticApp") { name fields { name } } }`, {}, { shopId });
+  const nodeFields = fieldNames(data.discountAutomaticNode);
+  const appFields = fieldNames(data.discountAutomaticApp);
+  if (!nodeFields.includes("metafield") && !nodeFields.includes("metafields") && !appFields.includes("metafield") && !appFields.includes("metafields")) {
+    console.warn("[LOOPDESK DISCOUNT METAFIELD SCHEMA] read_unsupported", {
+      discountAutomaticNodeFields: nodeFields,
+      discountAutomaticAppFields: appFields,
+    });
+    throw new DiscountMetafieldReadUnsupportedError();
+  }
+}
+
 async function findExistingLoopDeskDiscounts(shopDomain: string, shopId: string, functionType: AppDiscountType) {
-  const data = await shopifyAdminGraphql<{ automaticDiscountNodes: { edges: Array<{ node: AutomaticDiscount }> } }>(shopDomain, `query LoopDeskAutomaticDiscounts { automaticDiscountNodes(first: 100) { edges { node { id automaticDiscount { __typename ... on DiscountAutomaticApp { title status discountId appDiscountType { functionId } metafield(namespace: "loopdesk", key: "discount_function_config") { value } } } } } } }`, {}, { shopId });
+  const data = await shopifyAdminGraphql<{ automaticDiscountNodes: { edges: Array<{ node: AutomaticDiscount }> } }>(shopDomain, `query LoopDeskAutomaticDiscounts { automaticDiscountNodes(first: 100) { edges { node { id metafield(namespace: "loopdesk", key: "discount_function_config") { value } automaticDiscount { __typename ... on DiscountAutomaticApp { title status discountId appDiscountType { functionId } } } } } } }`, {}, { shopId }).catch(async (error: unknown) => {
+    if (isMetafieldSchemaError(error)) await assertAutomaticDiscountNodeMetafieldReadable(shopDomain, shopId);
+    throw error;
+  });
   const nodes = data.automaticDiscountNodes?.edges?.map((edge) => edge.node).filter((node) => node.automaticDiscount?.__typename === "DiscountAutomaticApp") || [];
   const identityMatches = nodes.filter((node) => node.automaticDiscount?.appDiscountType?.functionId === functionType.functionId);
   const titleOnly = nodes.filter((node) => node.automaticDiscount?.title === DISCOUNT_TITLE && !identityMatches.includes(node));
@@ -134,7 +179,7 @@ export function verifyStoredConfig(node: AutomaticDiscount | null, functionType:
   if (discount?.appDiscountType?.functionId !== functionType.functionId) errors.push("function_identity_mismatch");
   let storedHash: string | null = null;
   let parsed: LoopDeskDiscountFunctionConfig | null = null;
-  const raw = discount?.metafield?.value || null;
+  const raw = node?.metafield?.value || null;
   try {
     parsed = JSON.parse(raw || "");
     storedHash = deterministicConfigHash(parsed as LoopDeskDiscountFunctionConfig);
@@ -146,7 +191,10 @@ export function verifyStoredConfig(node: AutomaticDiscount | null, functionType:
 }
 
 async function queryAutomaticDiscountById(shopDomain: string, shopId: string, id: string) {
-  const data = await shopifyAdminGraphql<{ node?: AutomaticDiscount | null }>(shopDomain, `query LoopDeskAutomaticDiscountById($id: ID!) { node(id: $id) { id ... on DiscountAutomaticNode { automaticDiscount { __typename ... on DiscountAutomaticApp { title status discountId appDiscountType { functionId } metafield(namespace: "loopdesk", key: "discount_function_config") { value } } } } } }`, { id }, { shopId });
+  const data = await shopifyAdminGraphql<{ node?: AutomaticDiscount | null }>(shopDomain, `query LoopDeskAutomaticDiscountById($id: ID!) { node(id: $id) { id ... on DiscountAutomaticNode { metafield(namespace: "loopdesk", key: "discount_function_config") { value } automaticDiscount { __typename ... on DiscountAutomaticApp { title status discountId appDiscountType { functionId } } } } } }`, { id }, { shopId }).catch(async (error: unknown) => {
+    if (isMetafieldSchemaError(error)) await assertAutomaticDiscountNodeMetafieldReadable(shopDomain, shopId);
+    throw error;
+  });
   return data.node || null;
 }
 
@@ -169,7 +217,14 @@ export async function publishLoopDeskPromotions(input: { shopId: string; shopDom
   if (preflight.blockingReasons.length) return { ok: false, diagnostics, config, message: `Publication blocked: ${diagnostics.blockingReasons.join(", ")}` };
   if (!functionType) return { ok: false, diagnostics, config, message: `Publication blocked: ${diagnostics.blockingReasons.join(", ")}` };
 
-  const existing = await findExistingLoopDeskDiscounts(input.shopDomain, input.shopId, functionType);
+  const existing = await findExistingLoopDeskDiscounts(input.shopDomain, input.shopId, functionType).catch((error: unknown) => {
+    if (error instanceof DiscountMetafieldReadUnsupportedError) return null;
+    throw error;
+  });
+  if (!existing) {
+    diagnostics.blockingReasons.push("discount_metafield_read_unsupported");
+    return { ok: false, diagnostics, config, message: `Publication blocked: ${diagnostics.blockingReasons.join(", ")}` };
+  }
   diagnostics.duplicateAutomaticDiscountIds = existing.duplicates;
   diagnostics.titleOnlyAutomaticDiscountCount = existing.titleOnlyCount;
   if (existing.duplicates.length) diagnostics.blockingReasons.push("duplicate_automatic_discounts");
@@ -190,7 +245,14 @@ export async function publishLoopDeskPromotions(input: { shopId: string; shopDom
   diagnostics.metafieldUpdated = true;
 
   const verifyNodeId = existing.selected?.id || diagnostics.automaticDiscountId;
-  const verifyNode = verifyNodeId ? await queryAutomaticDiscountById(input.shopDomain, input.shopId, verifyNodeId) : null;
+  const verifyNode = verifyNodeId ? await queryAutomaticDiscountById(input.shopDomain, input.shopId, verifyNodeId).catch((error: unknown) => {
+    if (error instanceof DiscountMetafieldReadUnsupportedError) return null;
+    throw error;
+  }) : null;
+  if (verifyNodeId && !verifyNode) {
+    diagnostics.blockingReasons.push("discount_metafield_read_unsupported");
+    return { ok: false, diagnostics, config, message: `LoopDesk automatic discount saved but verification failed: discount_metafield_read_unsupported` };
+  }
   const verified = verifyNode ? verifyStoredConfig(verifyNode, functionType, config) : { ok: false, errors: ["missing_verification_discount_id"], storedConfigHash: null, metafieldRawValue: null, metafieldParsed: null };
   diagnostics.functionIdentityMatch = Boolean(functionType && verifyNode?.automaticDiscount?.appDiscountType?.functionId === functionType.functionId);
   diagnostics.verification = verified;
@@ -223,7 +285,14 @@ export async function getLoopDeskPromotionPublicationStatus(input: { shopId: str
     const blockingReasons = [selectedResult.reason || "missing_function"];
     return { ok: false, synchronized: false, message: blockingReasons.join(", "), compiledConfigHash: deterministicConfigHash(config), storedConfigHash: null, functionHandle: null, functionId: null, automaticDiscountId: null, activeAutomaticDiscount: false, automaticDiscountStatus: null, blockingReasons, fixedPriceRulesCompiledCount: config.rules.filter((rule) => rule.rewardEnforcementType === "fixed_price").length };
   }
-  const existing = await findExistingLoopDeskDiscounts(input.shopDomain, input.shopId, functionType);
+  const existing = await findExistingLoopDeskDiscounts(input.shopDomain, input.shopId, functionType).catch((error: unknown) => {
+    if (error instanceof DiscountMetafieldReadUnsupportedError) return null;
+    throw error;
+  });
+  if (!existing) {
+    const blockingReasons = ["discount_metafield_read_unsupported"];
+    return { ok: false, synchronized: false, message: blockingReasons.join(", "), compiledConfigHash: deterministicConfigHash(config), storedConfigHash: null, functionHandle: null, functionId: functionType.functionId || null, automaticDiscountId: null, activeAutomaticDiscount: false, automaticDiscountStatus: null, blockingReasons, fixedPriceRulesCompiledCount: config.rules.filter((rule) => rule.rewardEnforcementType === "fixed_price").length };
+  }
   const verified = existing.selected ? verifyStoredConfig(existing.selected, functionType, config) : { ok: false, errors: ["missing_automatic_discount"], storedConfigHash: null, metafieldRawValue: null, metafieldParsed: null };
   const activeAutomaticDiscount = Boolean(existing.selected?.automaticDiscount?.status && VALID_STATUSES.has(existing.selected.automaticDiscount.status));
   const fixedPriceRulesCompiledCount = config.rules.filter((rule) => rule.rewardEnforcementType === "fixed_price").length;
@@ -248,7 +317,32 @@ export async function getLoopDeskPromotionPublicationDiagnostics(input: { shopId
   let titleOnlyAutomaticDiscountCount = 0;
   let verified = { ok: false, errors: functionType ? ["missing_automatic_discount"] : blockingReasons, storedConfigHash: null as string | null, metafieldRawValue: null as string | null, metafieldParsed: null as LoopDeskDiscountFunctionConfig | null };
   if (functionType) {
-    const existing = await findExistingLoopDeskDiscounts(input.shopDomain, input.shopId, functionType);
+    const existing = await findExistingLoopDeskDiscounts(input.shopDomain, input.shopId, functionType).catch((error: unknown) => {
+      if (error instanceof DiscountMetafieldReadUnsupportedError) return null;
+      throw error;
+    });
+    if (!existing) {
+      blockingReasons.push("discount_metafield_read_unsupported");
+      const uniqueBlockingReasons = Array.from(new Set(blockingReasons));
+      return {
+        ok: false,
+        shopDomain: input.shopDomain,
+        localCompiledConfig: config,
+        compiledConfigHash: deterministicConfigHash(config),
+        deployedFunction: functionType,
+        appDiscountTypes,
+        functionIdentityMatch: false,
+        matchingAutomaticDiscount: null,
+        duplicateAutomaticDiscountIds: [],
+        titleOnlyAutomaticDiscountCount: 0,
+        metafieldRawValue: null,
+        metafieldParsed: null,
+        storedConfigHash: null,
+        synchronized: false,
+        automaticDiscountStatus: null,
+        blockingReasons: uniqueBlockingReasons,
+      };
+    }
     automaticDiscount = existing.selected;
     duplicates = existing.duplicates;
     titleOnlyAutomaticDiscountCount = existing.titleOnlyCount;

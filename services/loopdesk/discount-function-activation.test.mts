@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { deterministicConfigHash, selectLoopDeskAppDiscountType, verifyStoredConfig, type AppDiscountType, type AutomaticDiscount } from "./discount-function-activation.server.ts";
 import type { LoopDeskDiscountFunctionConfig } from "./discount-function.ts";
 
@@ -50,15 +51,74 @@ test("selection does not depend on functionHandle", () => {
 });
 
 test("automatic discount with matching functionId passes Function identity verification", () => {
-  const node: AutomaticDiscount = { id: "node", automaticDiscount: { __typename: "DiscountAutomaticApp", title: "LoopDesk Promotions", status: "ACTIVE", discountId: "discount", appDiscountType: { functionId: functionType.functionId }, metafield } };
+  const node: AutomaticDiscount = { id: "node", metafield, automaticDiscount: { __typename: "DiscountAutomaticApp", title: "LoopDesk Promotions", status: "ACTIVE", discountId: "discount", appDiscountType: { functionId: functionType.functionId } } };
   const result = verifyStoredConfig(node, functionType, config);
   assert.equal(result.ok, true);
   assert.deepEqual(result.errors, []);
 });
 
 test("mismatched automatic-discount functionId returns function_identity_mismatch", () => {
-  const node: AutomaticDiscount = { id: "node", automaticDiscount: { __typename: "DiscountAutomaticApp", title: "LoopDesk Promotions", status: "ACTIVE", discountId: "discount", appDiscountType: { functionId: "gid://shopify/ShopifyFunction/other" }, metafield } };
+  const node: AutomaticDiscount = { id: "node", metafield, automaticDiscount: { __typename: "DiscountAutomaticApp", title: "LoopDesk Promotions", status: "ACTIVE", discountId: "discount", appDiscountType: { functionId: "gid://shopify/ShopifyFunction/other" } } };
   const result = verifyStoredConfig(node, functionType, config);
   assert.equal(result.ok, false);
   assert.ok(result.errors.includes("function_identity_mismatch"));
+});
+
+test("metafield verification reads from the automatic-discount node", () => {
+  const node: AutomaticDiscount = {
+    id: "node",
+    metafield,
+    automaticDiscount: {
+      __typename: "DiscountAutomaticApp",
+      title: "LoopDesk Promotions",
+      status: "ACTIVE",
+      discountId: "discount",
+      appDiscountType: { functionId: functionType.functionId },
+    },
+  };
+  const result = verifyStoredConfig(node, functionType, config);
+  assert.equal(result.metafieldRawValue, metafield.value);
+  assert.deepEqual(result.metafieldParsed, config);
+});
+
+test("valid JSON produces a stored config hash", () => {
+  const node: AutomaticDiscount = { id: "node", metafield, automaticDiscount: { __typename: "DiscountAutomaticApp", status: "ACTIVE", appDiscountType: { functionId: functionType.functionId } } };
+  const result = verifyStoredConfig(node, functionType, config);
+  assert.equal(result.storedConfigHash, deterministicConfigHash(config));
+});
+
+test("semantically matching JSON passes verification", () => {
+  const semanticallyMatchingConfig: LoopDeskDiscountFunctionConfig = {
+    rules: [{ fixedPriceAmount: 300, rewardProductGid: "gid://shopify/Product/1", rewardVariantGid: "gid://shopify/ProductVariant/1", rewardEnforcementType: "fixed_price", triggerType: "always", priority: 1, enabled: true, id: "a" }],
+    enabled: true,
+    schemaVersion: 1,
+  };
+  const node: AutomaticDiscount = { id: "node", metafield: { value: JSON.stringify(semanticallyMatchingConfig) }, automaticDiscount: { __typename: "DiscountAutomaticApp", status: "ACTIVE", appDiscountType: { functionId: functionType.functionId } } };
+  const result = verifyStoredConfig(node, functionType, config);
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.errors, []);
+});
+
+test("missing node-level metafield returns missing_or_invalid_metafield", () => {
+  const node: AutomaticDiscount = { id: "node", automaticDiscount: { __typename: "DiscountAutomaticApp", status: "ACTIVE", appDiscountType: { functionId: functionType.functionId } } };
+  const result = verifyStoredConfig(node, functionType, config);
+  assert.equal(result.ok, false);
+  assert.ok(result.errors.includes("missing_or_invalid_metafield"));
+});
+
+test("different compiled and stored hashes return stale_metafield", () => {
+  const staleConfig: LoopDeskDiscountFunctionConfig = { ...config, enabled: false };
+  const node: AutomaticDiscount = { id: "node", metafield: { value: JSON.stringify(staleConfig) }, automaticDiscount: { __typename: "DiscountAutomaticApp", status: "ACTIVE", appDiscountType: { functionId: functionType.functionId } } };
+  const result = verifyStoredConfig(node, functionType, config);
+  assert.equal(result.ok, false);
+  assert.ok(result.errors.includes("stale_metafield"));
+});
+
+
+test("automatic discount GraphQL fragments do not request metafield from DiscountAutomaticApp", () => {
+  const source = readFileSync(new URL("./discount-function-activation.server.ts", import.meta.url), "utf8");
+  for (const occurrence of source.matchAll(/\.\.\.\s+on\s+DiscountAutomaticApp\s*\{/g)) {
+    const followingTemplateSource = source.slice(occurrence.index, source.indexOf("`", occurrence.index));
+    assert.equal(followingTemplateSource.includes("metafield("), false);
+  }
 });
