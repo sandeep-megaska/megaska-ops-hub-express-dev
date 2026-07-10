@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { automaticDiscountInput, classifyExactTitleAutomaticDiscounts, deterministicConfigHash, publicationRecoveryHint, selectLoopDeskAppDiscountType, verifyStoredConfig, type AppDiscountType, type AutomaticDiscount } from "./discount-function-activation.server.ts";
+import { automaticDiscountDiscoveryCandidates, automaticDiscountInput, classifyExactTitleAutomaticDiscounts, deterministicConfigHash, publicationRecoveryHint, selectLoopDeskAppDiscountType, verifyStoredConfig, type AppDiscountType, type AutomaticDiscount } from "./discount-function-activation.server.ts";
 import type { LoopDeskDiscountFunctionConfig } from "./discount-function.ts";
 
 const config: LoopDeskDiscountFunctionConfig = { schemaVersion: 1, enabled: true, rules: [{ id: "a", enabled: true, priority: 1, triggerType: "always", rewardEnforcementType: "fixed_price", rewardVariantGid: "gid://shopify/ProductVariant/1", rewardProductGid: "gid://shopify/Product/1", fixedPriceAmount: 300 }] };
@@ -224,4 +224,54 @@ test("GraphQL uses exact-title search and bounded pagination fallback", () => {
   assert.match(source, /automaticDiscountNodes\(first: 50, query: \$query\)/);
   assert.match(source, /automaticDiscountNodes\(first: 100, after: \$after\)/);
   assert.match(source, /queryAutomaticDiscountsByExactTitleFallback/);
+});
+
+test("discovery diagnostics record raw candidates before exact-title filtering", () => {
+  const nodes: AutomaticDiscount[] = [
+    { id: "node-legacy", metafield: { value: "secret-metafield" }, automaticDiscount: { __typename: "DiscountAutomaticApp", title: "LoopDesk Promotions Legacy", status: "ACTIVE", discountId: "discount-legacy", appDiscountType: { functionId: "other" } } },
+    { id: "node-match", automaticDiscount: { __typename: "DiscountAutomaticApp", title: "LoopDesk Promotions", status: "ACTIVE", discountId: "discount-match", appDiscountType: { functionId: functionType.functionId } } },
+  ];
+  const candidates = automaticDiscountDiscoveryCandidates(nodes);
+  assert.deepEqual(candidates.map((candidate) => candidate.title), ["LoopDesk Promotions Legacy", "LoopDesk Promotions"]);
+  const classified = classifyExactTitleAutomaticDiscounts(nodes, functionType);
+  assert.equal(classified.selected?.id, "node-match");
+});
+
+test("discovery diagnostics include quoted and unquoted title search strings", () => {
+  const source = readFileSync(new URL("./discount-function-activation.server.ts", import.meta.url), "utf8");
+  assert.match(source, /title:\"\$\{title\.replace/);
+  assert.match(source, /return `title:\$\{title\}`/);
+  assert.match(source, /LoopDeskAutomaticDiscountsByUnquotedTitle/);
+});
+
+test("pagination diagnostics retain page and edge counts", () => {
+  const source = readFileSync(new URL("./discount-function-activation.server.ts", import.meta.url), "utf8");
+  assert.match(source, /pagesRead \+= 1/);
+  assert.match(source, /totalEdgesRead \+= rawNodes\.length/);
+  assert.match(source, /stoppedBecause = "found_exact_title"/);
+});
+
+test("discovery diagnostics tolerate missing nested response fields", () => {
+  const [candidate] = automaticDiscountDiscoveryCandidates([{ id: "node-missing", automaticDiscount: { __typename: "DiscountAutomaticApp" } } as AutomaticDiscount]);
+  assert.equal(candidate.nodeId, "node-missing");
+  assert.equal(candidate.title, null);
+  assert.equal(candidate.discountId, null);
+  assert.equal(candidate.functionId, null);
+  assert.equal(candidate.responseShape.nodeId, true);
+  assert.equal(candidate.responseShape.automaticDiscountTitle, false);
+  assert.equal(candidate.responseShape.automaticDiscountAppDiscountTypeFunctionId, false);
+});
+
+test("discovery diagnostics exclude raw metafield values", () => {
+  const [candidate] = automaticDiscountDiscoveryCandidates([{ id: "node", metafield: { value: "do-not-leak" }, automaticDiscount: { title: "LoopDesk Promotions" } } as AutomaticDiscount]);
+  assert.equal(JSON.stringify(candidate).includes("do-not-leak"), false);
+  assert.equal("metafield" in candidate, false);
+});
+
+test("publication diagnostics audit does not invoke create or update mutations", () => {
+  const source = readFileSync(new URL("./discount-function-activation.server.ts", import.meta.url), "utf8");
+  const diagnosticsSource = source.slice(source.indexOf("export async function getLoopDeskPromotionPublicationDiagnostics"), source.indexOf("export const activateLoopDeskDiscountFunction"));
+  assert.equal(diagnosticsSource.includes("createAutomaticDiscount("), false);
+  assert.equal(diagnosticsSource.includes("updateAutomaticDiscount("), false);
+  assert.match(diagnosticsSource, /automaticDiscountDiscoveryDiagnostics/);
 });
