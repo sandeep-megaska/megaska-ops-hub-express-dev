@@ -9,6 +9,7 @@ type ResolvedShopConfig = {
   accessTokenEncrypted: string | null;
   accessTokenDirect: string | null;
   storefrontAccessToken: string | null;
+  storefrontCredentialSource: "shop_row_plain" | "shop_row_encrypted" | "env_dev_fallback" | "none";
 };
 
 type ShopRow = {
@@ -65,6 +66,41 @@ export async function getShopByDomain(shopDomain: string) {
   return rows[0] || null;
 }
 
+export async function getShopByIdAndDomain(shopId: string, shopDomain: string) {
+  const normalized = normalizeShopDomain(shopDomain);
+  const id = String(shopId || "").trim();
+  if (!id || !normalized) return null;
+
+  const rows = await prisma.$queryRawUnsafe<ShopRow[]>(
+    `SELECT "id", "shopDomain", "accessToken", "accessTokenEncrypted", "storefrontAccessToken", "storefrontTokenEncrypted", "scopes", "isActive", "installedAt", "uninstalledAt", "myshopifyDomain", "installationStatus"
+     FROM "Shop"
+     WHERE "id" = $1 AND ("shopDomain" = $2 OR "myshopifyDomain" = $2)
+     ORDER BY CASE WHEN "installationStatus" = 'ACTIVE' THEN 0 ELSE 1 END, "updatedAt" DESC
+     LIMIT 1`,
+    id,
+    normalized
+  );
+
+  return rows[0] || null;
+}
+
+function storefrontTokenFromShop(shop: ShopRow) {
+  const plain = String(shop.storefrontAccessToken || "").trim();
+  if (plain) return { token: plain, source: "shop_row_plain" as const };
+  const decrypted = decryptShopifyToken(shop.storefrontTokenEncrypted);
+  if (decrypted) return { token: decrypted, source: "shop_row_encrypted" as const };
+  return { token: null, source: "none" as const };
+}
+
+function envStorefrontTokenForDevelopmentShop(shopDomain: string) {
+  const envDomain = normalizeShopDomain(trimEnv("SHOPIFY_STORE_DOMAIN"));
+  const requested = normalizeShopDomain(shopDomain);
+  const token = trimEnv("SHOPIFY_STOREFRONT_ACCESS_TOKEN");
+  if (!token || !envDomain || requested !== envDomain) return null;
+  if (process.env.NODE_ENV === "production") return null;
+  return token;
+}
+
 export async function getDefaultShopFromConfig() {
   const envDomain = normalizeShopDomain(trimEnv("SHOPIFY_STORE_DOMAIN"));
   if (!envDomain) return null;
@@ -73,7 +109,7 @@ export async function getDefaultShopFromConfig() {
   if (existing) return existing;
 
   const envAdminToken = trimEnv("SHOPIFY_ADMIN_ACCESS_TOKEN") || null;
-  const envStorefrontToken = trimEnv("SHOPIFY_STOREFRONT_ACCESS_TOKEN") || null;
+  const envStorefrontToken = process.env.NODE_ENV === "production" ? null : (trimEnv("SHOPIFY_STOREFRONT_ACCESS_TOKEN") || null);
 
   // TODO(multistore): remove env bootstrap fallback once install flow persists shop tokens for every store.
   const rows = await prisma.$queryRawUnsafe<ShopRow[]>(
@@ -94,31 +130,49 @@ export async function getDefaultShopFromConfig() {
   return rows[0] || null;
 }
 
-export async function resolveShopConfig(preferredShopDomain?: string | null): Promise<ResolvedShopConfig> {
+export async function resolveShopConfig(preferredShopDomain?: string | null, preferredShopId?: string | null): Promise<ResolvedShopConfig> {
   const normalizedPreferred = normalizeShopDomain(preferredShopDomain);
+  const normalizedShopId = String(preferredShopId || "").trim();
   if (normalizedPreferred) {
-    const shop = await getShopByDomain(normalizedPreferred);
+    const shop = normalizedShopId ? await getShopByIdAndDomain(normalizedShopId, normalizedPreferred) : await getShopByDomain(normalizedPreferred);
     if (shop) {
+      const storefront = storefrontTokenFromShop(shop);
+      const envToken = storefront.token ? null : envStorefrontTokenForDevelopmentShop(shop.shopDomain);
       return {
         id: shop.id,
         shopDomain: shop.shopDomain,
         accessToken: shop.accessToken || decryptShopifyToken(shop.accessTokenEncrypted),
         accessTokenEncrypted: shop.accessTokenEncrypted,
         accessTokenDirect: shop.accessToken,
-        storefrontAccessToken: shop.storefrontAccessToken || decryptShopifyToken(shop.storefrontTokenEncrypted),
+        storefrontAccessToken: storefront.token || envToken,
+        storefrontCredentialSource: storefront.token ? storefront.source : envToken ? "env_dev_fallback" : "none",
+      };
+    }
+    if (normalizedShopId) {
+      return {
+        id: null,
+        shopDomain: normalizedPreferred,
+        accessToken: null,
+        accessTokenEncrypted: null,
+        accessTokenDirect: null,
+        storefrontAccessToken: envStorefrontTokenForDevelopmentShop(normalizedPreferred),
+        storefrontCredentialSource: envStorefrontTokenForDevelopmentShop(normalizedPreferred) ? "env_dev_fallback" : "none",
       };
     }
   }
 
   const defaultShop = await getDefaultShopFromConfig();
   if (defaultShop) {
+    const storefront = storefrontTokenFromShop(defaultShop);
+    const envToken = storefront.token ? null : envStorefrontTokenForDevelopmentShop(defaultShop.shopDomain);
     return {
       id: defaultShop.id,
       shopDomain: defaultShop.shopDomain,
       accessToken: defaultShop.accessToken || decryptShopifyToken(defaultShop.accessTokenEncrypted),
       accessTokenEncrypted: defaultShop.accessTokenEncrypted,
       accessTokenDirect: defaultShop.accessToken,
-      storefrontAccessToken: defaultShop.storefrontAccessToken || decryptShopifyToken(defaultShop.storefrontTokenEncrypted),
+      storefrontAccessToken: storefront.token || envToken,
+      storefrontCredentialSource: storefront.token ? storefront.source : envToken ? "env_dev_fallback" : "none",
     };
   }
 
@@ -128,6 +182,7 @@ export async function resolveShopConfig(preferredShopDomain?: string | null): Pr
     accessToken: trimEnv("SHOPIFY_ADMIN_ACCESS_TOKEN") || null,
     accessTokenEncrypted: null,
     accessTokenDirect: trimEnv("SHOPIFY_ADMIN_ACCESS_TOKEN") || null,
-    storefrontAccessToken: trimEnv("SHOPIFY_STOREFRONT_ACCESS_TOKEN") || null,
+    storefrontAccessToken: envStorefrontTokenForDevelopmentShop(trimEnv("SHOPIFY_STORE_DOMAIN")),
+    storefrontCredentialSource: envStorefrontTokenForDevelopmentShop(trimEnv("SHOPIFY_STORE_DOMAIN")) ? "env_dev_fallback" : "none",
   };
 }

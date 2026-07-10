@@ -62,7 +62,7 @@ function config(): PromotionRulesConfig {
         enabled: true,
         status: "active",
         eligibility: { triggers: [{ type: "cart_contains_product", productGid: "gid://shopify/Product/1", value: "gid://shopify/Product/1" }] },
-        reward: { type: "offer_product", productGid, variantSelectionMode: "product", scope: "product", quantity: 1 },
+        reward: { type: "offer_product", productGid, variantSelectionMode: "product", scope: "product", quantity: 1, product: { gid: productGid, title: "Offered product", imageUrl: null, handle: "offered-product" } },
         display: { heading: "Offer", ctaLabel: "Add offer" },
       },
       {
@@ -176,4 +176,45 @@ test("runtime enrichment does not calculate cart totals or discounts", async () 
   });
   const serialized = JSON.stringify(result.config);
   assert.equal(/subtotal|totalAmount|discountAmount|appliedSavings/i.test(serialized), false);
+});
+
+test("reward product handle is passed to tenant-scoped product lookup for Ajax fallback", async () => {
+  const calls: Array<{ shopDomain: string; productGid: string; handle?: string | null }> = [];
+  await enrichPromotionRulesWithStorefrontProducts({
+    shopId: "shop_a",
+    shopDomain: "tenant-a.myshopify.com",
+    config: config(),
+    now,
+    fetcher: async (input) => {
+      calls.push(input);
+      return { status: "ready", product: product() };
+    },
+  });
+  assert.deepEqual(calls, [{ shopDomain: "tenant-a.myshopify.com", productGid, handle: "offered-product" }]);
+});
+
+test("invalid or missing fallback handle returns sanitized non-ready status", async () => {
+  const { fetchPublicProductJson } = await import("./promotion-storefront-products.server");
+  const result = await fetchPublicProductJson({ shopDomain: "tenant-a.myshopify.com", productGid, handle: "" });
+  assert.equal(result.status, "not_found");
+  assert.equal(result.product, null);
+  assert.equal(JSON.stringify(result).includes("token"), false);
+});
+
+test("runtime diagnostics never include token values", async () => {
+  const result = await enrichPromotionRulesWithStorefrontProducts({
+    shopId: "shop_a",
+    shopDomain: "demo.myshopify.com",
+    config: config(),
+    now,
+    fetcher: async () => ({
+      status: "storefront_auth_unavailable",
+      product: null,
+      diagnostics: { credentialSource: "none", hasStorefrontToken: false, lookupTransport: "public_product_json", fallbackAttempted: true, fallbackSucceeded: false },
+    }),
+  });
+  const serialized = JSON.stringify(result);
+  assert.equal(serialized.includes("shpat_"), false);
+  assert.equal(serialized.includes("storefront-secret"), false);
+  assert.equal(result.config.rewardProductStatuses[productGid], "storefront_auth_unavailable");
 });
