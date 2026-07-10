@@ -8,8 +8,6 @@ import {
   requireExpressCheckoutShop,
 } from "../../../../../lib/express-checkout/safety";
 import { getExpressCheckoutSettings } from "../../../../../services/express-checkout/settings";
-import { calculateExpressCheckoutDiscount } from "../../../../../services/express-checkout/discounts";
-import { resolveExpressCheckoutCoupon } from "../../../../../services/express-checkout/coupon-resolver";
 import {
   attachAddressSnapshotToIntent,
   customerProfileToExpressAddress,
@@ -97,39 +95,6 @@ function preserveLoopDeskOfferPricing(cartSnapshot: unknown, body: Record<string
   };
 }
 
-function couponBaseAmountPaise(subtotalAmountPaise: number, cartSnapshot: unknown, body: Record<string, unknown>) {
-  const snapshot = asRecord(cartSnapshot);
-  const handoff = validLoopDeskOfferPricing(snapshot?.loopdeskOfferPricing) || validLoopDeskOfferPricing(body.loopdeskOfferPricing);
-
-  return handoff ? handoff.loopdeskOfferAdjustedTotalAmountPaise : subtotalAmountPaise;
-}
-
-function extractDiscountCode(cartSnapshot: unknown, body: Record<string, unknown>) {
-  const direct = stringOrNull(body.discountCode) || stringOrNull(body.couponCode);
-  if (direct) return direct.toUpperCase();
-
-  const snapshot = asRecord(cartSnapshot);
-  const attributes = asRecord(snapshot?.attributes);
-  const attributeCode = stringOrNull(attributes?.discountCode) || stringOrNull(attributes?.couponCode) || stringOrNull(attributes?.megaska_discount_code);
-  if (attributeCode) return attributeCode.toUpperCase();
-
-  const discountCodes = Array.isArray(snapshot?.discount_codes) ? snapshot.discount_codes : Array.isArray(snapshot?.discountCodes) ? snapshot.discountCodes : [];
-  for (const entry of discountCodes) {
-    const record = asRecord(entry);
-    const code = stringOrNull(record?.code) || (typeof entry === "string" ? entry.trim() : null);
-    if (code) return code.toUpperCase();
-  }
-
-  const cartLevelDiscounts = Array.isArray(snapshot?.cart_level_discount_applications) ? snapshot.cart_level_discount_applications : [];
-  for (const entry of cartLevelDiscounts) {
-    const record = asRecord(entry);
-    const code = stringOrNull(record?.code) || stringOrNull(record?.title);
-    if (code) return code.toUpperCase();
-  }
-
-  return null;
-}
-
 function firstIntentAddress(intent: { addressSnapshots?: Array<Record<string, unknown>> } | null | undefined) {
   const address = Array.isArray(intent?.addressSnapshots) ? intent.addressSnapshots[0] : null;
   if (!address) return null;
@@ -145,7 +110,6 @@ function firstIntentAddress(intent: { addressSnapshots?: Array<Record<string, un
     zip: stringOrNull(address.zip),
   };
 }
-
 
 function nullableJsonInput(value: unknown): Prisma.NullableJsonNullValueInput | Prisma.InputJsonValue | undefined {
   if (value === undefined) return undefined;
@@ -273,35 +237,8 @@ export async function POST(req: NextRequest) {
   }
 
   const cartSnapshot = body.cartSnapshot === undefined ? undefined : preserveLoopDeskOfferPricing(body.cartSnapshot, body);
-  const couponBasePaise = couponBaseAmountPaise(paiseValues.subtotalAmountPaise, cartSnapshot, body);
-
-  const rawShopifyPayload = body.rawShopifyPayload ?? body.discountPayload ?? null;
-  const discountDefinition = await resolveExpressCheckoutCoupon({
-    shopId: shop.shopId,
-    shopDomain: shop.shopDomain,
-    code: extractDiscountCode(cartSnapshot, body),
-    cartSnapshot,
-    rawShopifyPayload,
-    trustedDefinition: body.discountDefinition,
-  });
-  const capturedDiscount = discountDefinition
-    ? calculateExpressCheckoutDiscount({
-        definition: discountDefinition,
-        couponBaseAmountPaise: couponBasePaise,
-        rawShopifyPayload,
-      })
-    : null;
-
-  if (capturedDiscount) {
-    paiseValues.discountAmountPaise = capturedDiscount.discountAmountPaise;
-  }
-
-  if (couponBasePaise !== paiseValues.subtotalAmountPaise || capturedDiscount) {
-    paiseValues.totalAmountPaise = Math.max(
-      0,
-      couponBasePaise + paiseValues.shippingAmountPaise + paiseValues.codFeeAmountPaise - paiseValues.discountAmountPaise
-    );
-  }
+  // Express Checkout now receives product pricing from the Shopify Ajax cart read model.
+  // Shipping, COD, and store credit remain separate adjustments; no local coupon resolver runs here.
 
   if (cartSnapshot !== undefined && !hasCartLineItems(cartSnapshot)) {
     return jsonWithCors(req, { ok: false, error: "Cart line items required", reason: "cartSnapshot must include lineItems/items/lines with variantId or variant_id and quantity" }, { status: 400 });
@@ -323,33 +260,16 @@ export async function POST(req: NextRequest) {
     : null;
 
   if (reusableIntent) {
-    const updatedIntent = cartSnapshot !== undefined || capturedDiscount
+    const updatedIntent = cartSnapshot !== undefined
       ? await prisma.expressCheckoutIntent.update({
           where: { id: reusableIntent.id },
           data: {
             ...(prismaCartSnapshot !== undefined ? { cartSnapshot: prismaCartSnapshot } : {}),
-            status: capturedDiscount ? "DISCOUNT_APPLIED" : cartSnapshot !== undefined ? "CART_SNAPSHOT_LOCKED" : reusableIntent.status,
+            status: cartSnapshot !== undefined ? "CART_SNAPSHOT_LOCKED" : reusableIntent.status,
             ...paiseValues,
           },
         })
       : reusableIntent;
-
-    if (capturedDiscount) {
-      await prisma.expressCheckoutDiscount.deleteMany({
-        where: { shopId: shop.shopId, intentId: updatedIntent.id, type: "MANUAL_CODE" },
-      });
-      await prisma.expressCheckoutDiscount.create({
-        data: {
-          shopId: shop.shopId,
-          intentId: updatedIntent.id,
-          type: "MANUAL_CODE",
-          code: capturedDiscount.code,
-          title: capturedDiscount.title,
-          discountAmountPaise: capturedDiscount.discountAmountPaise,
-          rawShopifyPayload: capturedDiscount.rawShopifyPayload,
-        },
-      });
-    }
 
     await hydrateIntentAddress({
       shopId: shop.shopId,
@@ -374,7 +294,7 @@ export async function POST(req: NextRequest) {
       shopId: shop.shopId,
       customerProfileId,
       sessionTokenHash: hashSessionToken(sessionToken),
-      status: capturedDiscount ? "DISCOUNT_APPLIED" : cartSnapshot ? "CART_SNAPSHOT_LOCKED" : "CUSTOMER_AUTHENTICATED",
+      status: cartSnapshot ? "CART_SNAPSHOT_LOCKED" : "CUSTOMER_AUTHENTICATED",
       phoneSnapshot: stringOrNull(auth.customer.phoneE164),
       cartToken,
       shopifyCartId,
@@ -384,20 +304,6 @@ export async function POST(req: NextRequest) {
       expiresAt: new Date(now.getTime() + INTENT_EXPIRES_IN_MS),
     },
   });
-
-  if (capturedDiscount) {
-    await prisma.expressCheckoutDiscount.create({
-      data: {
-        shopId: shop.shopId,
-        intentId: intent.id,
-        type: "MANUAL_CODE",
-        code: capturedDiscount.code,
-        title: capturedDiscount.title,
-        discountAmountPaise: capturedDiscount.discountAmountPaise,
-        rawShopifyPayload: capturedDiscount.rawShopifyPayload,
-      },
-    });
-  }
 
   await hydrateIntentAddress({
     shopId: shop.shopId,
