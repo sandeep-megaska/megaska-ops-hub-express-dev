@@ -4,6 +4,7 @@ import { getSessionTokenFromRequest } from "../../../../../../../services/auth/s
 import { withCors, handleOptions } from "../../../../../_lib/cors";
 import { prisma } from "../../../../../../../services/db/prisma";
 import { calculateExpressCheckoutDiscount } from "../../../../../../../services/express-checkout/discounts";
+import { resolveExpressCheckoutCoupon } from "../../../../../../../services/express-checkout/coupon-resolver";
 import {
   requireCustomerSessionForShop,
   requireExpressCheckoutShop,
@@ -131,7 +132,7 @@ async function requireEditableIntent(
     return { response: jsonWithCors(req, { ok: false, error: "Intent expired" }, { status: 409 }) };
   }
 
-  return { shopId: shop.shopId, intentId, customerProfileId, intent };
+  return { shopId: shop.shopId, shopDomain: shop.shopDomain, intentId, customerProfileId, intent };
 }
 
 export async function POST(req: NextRequest, context: { params: Promise<{ id: string }> }) {
@@ -159,12 +160,21 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     return jsonWithCors(req, { ok: false, error: discountAmount.error }, { status: 400 });
   }
 
-  const calculatedDiscount = calculateExpressCheckoutDiscount({
+  const definition = await resolveExpressCheckoutCoupon({
+    shopId: editable.shopId,
+    shopDomain: editable.shopDomain,
     code,
-    couponBaseAmountPaise: couponBaseAmountPaise(editable.intent),
-    fallbackDiscountAmountPaise: discountAmount.value,
+    cartSnapshot: editable.intent.cartSnapshot,
     rawShopifyPayload: body.rawShopifyPayload,
+    trustedDefinition: body.discountDefinition,
   });
+  const calculatedDiscount = definition
+    ? calculateExpressCheckoutDiscount({
+        definition,
+        couponBaseAmountPaise: couponBaseAmountPaise(editable.intent),
+        rawShopifyPayload: body.rawShopifyPayload,
+      })
+    : null;
 
   if (!calculatedDiscount) {
     return jsonWithCors(req, { ok: false, error: "Discount code is not valid for this checkout" }, { status: 400 });

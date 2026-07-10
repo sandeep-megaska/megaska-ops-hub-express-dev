@@ -9,6 +9,7 @@ import {
 } from "../../../../../lib/express-checkout/safety";
 import { getExpressCheckoutSettings } from "../../../../../services/express-checkout/settings";
 import { calculateExpressCheckoutDiscount } from "../../../../../services/express-checkout/discounts";
+import { resolveExpressCheckoutCoupon } from "../../../../../services/express-checkout/coupon-resolver";
 import {
   attachAddressSnapshotToIntent,
   customerProfileToExpressAddress,
@@ -274,11 +275,22 @@ export async function POST(req: NextRequest) {
   const cartSnapshot = body.cartSnapshot === undefined ? undefined : preserveLoopDeskOfferPricing(body.cartSnapshot, body);
   const couponBasePaise = couponBaseAmountPaise(paiseValues.subtotalAmountPaise, cartSnapshot, body);
 
-  const capturedDiscount = calculateExpressCheckoutDiscount({
+  const rawShopifyPayload = body.rawShopifyPayload ?? body.discountPayload ?? null;
+  const discountDefinition = await resolveExpressCheckoutCoupon({
+    shopId: shop.shopId,
+    shopDomain: shop.shopDomain,
     code: extractDiscountCode(cartSnapshot, body),
-    couponBaseAmountPaise: couponBasePaise,
-    fallbackDiscountAmountPaise: paiseValues.discountAmountPaise,
+    cartSnapshot,
+    rawShopifyPayload,
+    trustedDefinition: body.discountDefinition,
   });
+  const capturedDiscount = discountDefinition
+    ? calculateExpressCheckoutDiscount({
+        definition: discountDefinition,
+        couponBaseAmountPaise: couponBasePaise,
+        rawShopifyPayload,
+      })
+    : null;
 
   if (capturedDiscount) {
     paiseValues.discountAmountPaise = capturedDiscount.discountAmountPaise;
