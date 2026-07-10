@@ -221,9 +221,40 @@ test("publication recovery hint for title collision instructs Shopify Admin insp
 
 test("GraphQL uses exact-title search and bounded pagination fallback", () => {
   const source = readFileSync(new URL("./discount-function-activation.server.ts", import.meta.url), "utf8");
-  assert.match(source, /automaticDiscountNodes\(first: 50, query: \$query\)/);
-  assert.match(source, /automaticDiscountNodes\(first: 100, after: \$after\)/);
-  assert.match(source, /queryAutomaticDiscountsByExactTitleFallback/);
+  assert.match(source, /discountNodes\(first: 100, after: \$after, query: \$query\)/);
+  assert.match(source, /discountNodes\(first: 100, after: \$after\)/);
+  assert.match(source, /queryLoopDeskDiscountNodes/);
+});
+
+test("discountNodes discovery is authoritative before legacy automaticDiscountNodes diagnostics", () => {
+  const source = readFileSync(new URL("./discount-function-activation.server.ts", import.meta.url), "utf8");
+  const finderSource = source.slice(source.indexOf("async function findExistingLoopDeskDiscounts"), source.indexOf("export function automaticDiscountInput"));
+  assert.match(finderSource, /queryLoopDeskDiscountNodes/);
+  assert.match(finderSource, /queryAutomaticDiscountsByExactTitle/);
+  assert.ok(finderSource.indexOf("queryLoopDeskDiscountNodes") < finderSource.indexOf("queryAutomaticDiscountsByExactTitle"));
+});
+
+test("discountNodes query reads node metafield and app Function identity fields", () => {
+  const source = readFileSync(new URL("./discount-function-activation.server.ts", import.meta.url), "utf8");
+  assert.match(source, /discountNodesSchema/);
+  assert.match(source, /metafield\(namespace: "loopdesk", key: "discount_function_config"\)/);
+  assert.match(source, /\.\.\. on DiscountAutomaticApp \{ title status discountId appDiscountType \{ functionId \} \}/);
+});
+
+test("discountNodes pagination does not stop on title collision before an identity match is possible", () => {
+  const source = readFileSync(new URL("./discount-function-activation.server.ts", import.meta.url), "utf8");
+  const discoverySource = source.slice(source.indexOf("export async function queryLoopDeskDiscountNodes"), source.indexOf("function isIdentityMatch"));
+  assert.match(discoverySource, /classified\.identityMatches\.length/);
+  assert.doesNotMatch(discoverySource, /classified\.titleCollisions\.length/);
+});
+
+test("publish updates an identity match and creates only after discountNodes has no match or collision", () => {
+  const source = readFileSync(new URL("./discount-function-activation.server.ts", import.meta.url), "utf8");
+  const publishSource = source.slice(source.indexOf("export async function publishLoopDeskPromotions"), source.indexOf("async function promotionPublicationPreflight"));
+  assert.match(publishSource, /existing\.selected\?\.id/);
+  assert.match(publishSource, /updateAutomaticDiscount/);
+  assert.match(publishSource, /createAutomaticDiscount/);
+  assert.ok(publishSource.indexOf("automatic_discount_title_collision") < publishSource.indexOf("createAutomaticDiscount"));
 });
 
 test("discovery diagnostics record raw candidates before exact-title filtering", () => {
