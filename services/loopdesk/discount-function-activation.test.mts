@@ -1,13 +1,60 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { automaticDiscountDiscoveryCandidates, automaticDiscountInput, classifyExactTitleAutomaticDiscounts, deterministicConfigHash, discountNodeNormalizationComparison, discountNodeRawShapeDiagnostics, publicationRecoveryHint, selectLoopDeskAppDiscountType, verifyStoredConfig, type AppDiscountType, type AutomaticDiscount } from "./discount-function-activation.server.ts";
+import { automaticDiscountDiscoveryCandidates, automaticDiscountInput, classifyExactTitleAutomaticDiscounts, deterministicConfigHash, discountNodeNormalizationComparison, discountNodeRawShapeDiagnostics, loopDeskPromotionPublicationStatusResult, publicationRecoveryHint, selectLoopDeskAppDiscountType, verifyStoredConfig, type AppDiscountType, type AutomaticDiscount, type ExactTitleAutomaticDiscountsResult } from "./discount-function-activation.server.ts";
 import type { LoopDeskDiscountFunctionConfig } from "./discount-function.ts";
 
 const config: LoopDeskDiscountFunctionConfig = { schemaVersion: 1, enabled: true, rules: [{ id: "a", enabled: true, priority: 1, triggerType: "always", rewardEnforcementType: "fixed_price", rewardVariantGid: "gid://shopify/ProductVariant/1", rewardProductGid: "gid://shopify/Product/1", fixedPriceAmount: 300 }] };
 const metafield = { value: JSON.stringify(config) };
 const functionType: AppDiscountType = { functionId: "gid://shopify/ShopifyFunction/selected", title: "LoopDesk Discount Function", discountClasses: ["PRODUCT"] };
 const productOrderFunctionType: AppDiscountType = { ...functionType, discountClasses: ["PRODUCT", "ORDER"] };
+
+const publicationNode = (status = "ACTIVE", cfg: LoopDeskDiscountFunctionConfig = config): AutomaticDiscount => ({
+  id: "node-match",
+  metafield: { value: JSON.stringify(cfg) },
+  automaticDiscount: {
+    __typename: "DiscountAutomaticApp",
+    title: "LoopDesk Promotions",
+    status,
+    discountId: "discount-match",
+    appDiscountType: { functionId: functionType.functionId },
+  },
+});
+
+const publicationExisting = (selected: AutomaticDiscount | null = publicationNode(), overrides: Partial<ExactTitleAutomaticDiscountsResult> = {}): ExactTitleAutomaticDiscountsResult => ({
+  selected,
+  duplicates: [],
+  titleOnlyCount: 0,
+  identityMatches: selected ? [selected] : [],
+  titleCollisions: [],
+  automaticDiscountTitleCollisions: [],
+  ...overrides,
+});
+
+const ruleConfig = (rewardEnforcementType: "fixed_price" | "percentage" | "fixed_amount"): LoopDeskDiscountFunctionConfig => ({
+  schemaVersion: 1,
+  enabled: true,
+  rules: [{
+    id: rewardEnforcementType,
+    enabled: true,
+    priority: 1,
+    triggerType: "always",
+    rewardEnforcementType,
+    rewardVariantGid: "gid://shopify/ProductVariant/1",
+    rewardProductGid: "gid://shopify/Product/1",
+    ...(rewardEnforcementType === "fixed_price" ? { fixedPriceAmount: 300 } : {}),
+    ...(rewardEnforcementType === "percentage" ? { percentageValue: 50 } : {}),
+    ...(rewardEnforcementType === "fixed_amount" ? { fixedAmountValue: 500 } : {}),
+  }],
+});
+
+const publicationStatusFor = (cfg: LoopDeskDiscountFunctionConfig, existing = publicationExisting(publicationNode("ACTIVE", cfg)), verified = verifyStoredConfig(existing.selected as AutomaticDiscount, functionType, cfg)) => loopDeskPromotionPublicationStatusResult({
+  config: cfg,
+  functionType,
+  existing,
+  verified,
+});
+
 
 test("deterministic config hashes ignore object key ordering", () => {
   const left: LoopDeskDiscountFunctionConfig = config;
@@ -412,4 +459,94 @@ test("discountNodes identity matching requires app discount, exact title, and fu
   assert.match(identitySource, /__typename === "DiscountAutomaticApp"/);
   assert.match(identitySource, /discount\.title === DISCOUNT_TITLE/);
   assert.match(identitySource, /appDiscountType\?\.functionId === functionType\.functionId/);
+});
+
+
+test("publication status synchronizes fixed-price configuration", () => {
+  const cfg = ruleConfig("fixed_price");
+  const status = publicationStatusFor(cfg);
+  assert.equal(status.synchronized, true);
+  assert.equal(status.fixedPriceRulesCompiledCount, 1);
+  assert.deepEqual(status.blockingReasons, []);
+});
+
+test("publication status synchronizes percentage-only configuration", () => {
+  const cfg = ruleConfig("percentage");
+  const status = publicationStatusFor(cfg);
+  assert.equal(status.synchronized, true);
+  assert.equal(status.percentageRulesCompiledCount, 1);
+  assert.equal(status.fixedPriceRulesCompiledCount, 0);
+  assert.deepEqual(status.blockingReasons, []);
+});
+
+test("publication status synchronizes fixed-amount-only configuration", () => {
+  const cfg = ruleConfig("fixed_amount");
+  const status = publicationStatusFor(cfg);
+  assert.equal(status.synchronized, true);
+  assert.equal(status.fixedAmountRulesCompiledCount, 1);
+  assert.equal(status.fixedPriceRulesCompiledCount, 0);
+  assert.deepEqual(status.blockingReasons, []);
+});
+
+test("publication status synchronizes disabled empty configuration", () => {
+  const cfg: LoopDeskDiscountFunctionConfig = { schemaVersion: 1, enabled: false, rules: [] };
+  const status = publicationStatusFor(cfg);
+  assert.equal(status.synchronized, true);
+  assert.equal(status.rulesCompiledCount, 0);
+  assert.deepEqual(status.compiledRewardTypes, []);
+  assert.deepEqual(status.blockingReasons, []);
+});
+
+test("publication status never emits no_fixed_price_rules", () => {
+  const percentageStatus = publicationStatusFor(ruleConfig("percentage"));
+  const disabledStatus = publicationStatusFor({ schemaVersion: 1, enabled: false, rules: [] });
+  assert.equal(percentageStatus.blockingReasons.includes("no_fixed_price_rules"), false);
+  assert.equal(disabledStatus.blockingReasons.includes("no_fixed_price_rules"), false);
+});
+
+test("publication status blocks stale metafields", () => {
+  const cfg = ruleConfig("percentage");
+  const staleConfig = { ...cfg, enabled: false };
+  const existing = publicationExisting(publicationNode("ACTIVE", staleConfig));
+  const status = publicationStatusFor(cfg, existing, verifyStoredConfig(existing.selected as AutomaticDiscount, functionType, cfg));
+  assert.equal(status.synchronized, false);
+  assert.ok(status.blockingReasons.includes("stale_metafield"));
+});
+
+test("publication status blocks inactive automatic discounts", () => {
+  const cfg = ruleConfig("fixed_amount");
+  const existing = publicationExisting(publicationNode("EXPIRED", cfg));
+  const status = publicationStatusFor(cfg, existing, verifyStoredConfig(existing.selected as AutomaticDiscount, functionType, cfg));
+  assert.equal(status.synchronized, false);
+  assert.ok(status.blockingReasons.includes("inactive_discount"));
+});
+
+test("publication status blocks duplicate matching discounts", () => {
+  const cfg = ruleConfig("percentage");
+  const status = publicationStatusFor(cfg, publicationExisting(publicationNode("ACTIVE", cfg), { duplicates: ["one", "two"] }));
+  assert.equal(status.synchronized, false);
+  assert.ok(status.blockingReasons.includes("duplicate_automatic_discounts"));
+});
+
+test("publication status blocks missing automatic discounts", () => {
+  const cfg = ruleConfig("percentage");
+  const status = loopDeskPromotionPublicationStatusResult({
+    config: cfg,
+    functionType,
+    existing: publicationExisting(null),
+    verified: { ok: false, errors: ["missing_automatic_discount"], storedConfigHash: null },
+  });
+  assert.equal(status.synchronized, false);
+  assert.ok(status.blockingReasons.includes("missing_automatic_discount"));
+});
+
+test("publication status reward-type counts are informational only", () => {
+  for (const rewardType of ["percentage", "fixed_amount"] as const) {
+    const cfg = ruleConfig(rewardType);
+    const status = publicationStatusFor(cfg);
+    assert.equal(status.synchronized, true);
+    assert.equal(status.fixedPriceRulesCompiledCount, 0);
+    assert.equal(status.rulesCompiledCount, 1);
+    assert.deepEqual(status.compiledRewardTypes, [rewardType]);
+  }
 });
