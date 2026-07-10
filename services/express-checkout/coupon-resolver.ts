@@ -1,6 +1,12 @@
 import type { ExpressCheckoutDiscountDefinition } from "./discounts";
 import { resolveLegacyExpressCheckoutCoupon } from "./legacy-coupon-adapter";
 
+const DISCOUNT_DEFINITION_SOURCES = ["SHOPIFY", "LOOPDESK_CONFIG", "UPSTREAM_VALIDATED", "LEGACY_COMPATIBILITY"] as const;
+
+function isDiscountDefinitionSource(value: unknown): value is ExpressCheckoutDiscountDefinition["source"] {
+  return typeof value === "string" && DISCOUNT_DEFINITION_SOURCES.includes(value as ExpressCheckoutDiscountDefinition["source"]);
+}
+
 type ResolveExpressCheckoutCouponInput = {
   shopId: string;
   shopDomain?: string | null;
@@ -39,7 +45,7 @@ function normalizeDefinition(value: unknown, expectedCode: string, source?: Expr
   const definitionSource = source ?? (record.source as ExpressCheckoutDiscountDefinition["source"] | undefined);
 
   if (!code || code !== expectedCode || !type || !discountValue || !valueUnit) return null;
-  if (!["SHOPIFY", "LOOPDESK_CONFIG", "UPSTREAM_VALIDATED", "LEGACY_COMPATIBILITY"].includes(String(definitionSource))) return null;
+  if (!isDiscountDefinitionSource(definitionSource)) return null;
   if (type === "PERCENTAGE" && valueUnit !== "PERCENT") return null;
   if (type === "FIXED_AMOUNT" && valueUnit !== "PAISE") return null;
 
