@@ -7,7 +7,7 @@ import { compileLoopDeskDiscountFunctionConfig } from "./discount-function-confi
 
 const EXTENSION_HANDLE = "loopdesk-discount-function";
 const DISCOUNT_TITLE = "LoopDesk Promotions";
-const FUNCTION_ARTIFACT_PATH = path.join(process.cwd(), "extensions", "loopdesk-discount-function", "dist", "index.wasm");
+const FUNCTION_ARTIFACT_PATH = path.join(process.cwd(), "extensions", "loopdesk-discount-function", "target", "wasm32-unknown-unknown", "release", "loopdesk_discount_function.wasm");
 const VALID_STATUSES = new Set(["ACTIVE", "SCHEDULED"]);
 
 type UserError = { field?: string[] | null; message?: string | null };
@@ -64,7 +64,7 @@ export function validateLoopDeskDiscountFunctionBuildArtifact() {
     const wasmModule = new WebAssembly.Module(bytes);
     const exports = WebAssembly.Module.exports(wasmModule);
     const imports = WebAssembly.Module.imports(wasmModule);
-    if (!exports.some((item) => item.kind === "function" && item.name === "cartLinesDiscountsGenerateRun")) return { ok: false, reason: `Invalid Shopify Function artifact at ${FUNCTION_ARTIFACT_PATH}: missing cartLinesDiscountsGenerateRun export.` };
+    if (!exports.some((item) => item.kind === "function" && item.name === "cart_lines_discounts_generate_run")) return { ok: false, reason: `Invalid Shopify Function artifact at ${FUNCTION_ARTIFACT_PATH}: missing cart_lines_discounts_generate_run export.` };
     if (!imports.some((item) => item.module === "shopify_function_v2" || item.module === "shopify_function_v1")) return { ok: false, reason: `Invalid Shopify Function artifact at ${FUNCTION_ARTIFACT_PATH}: missing Shopify Function runtime imports.` };
   } catch (error) {
     return { ok: false, reason: `Invalid Shopify Function artifact at ${FUNCTION_ARTIFACT_PATH}: ${error instanceof Error ? error.message : "WebAssembly validation failed"}.` };
@@ -143,7 +143,8 @@ export async function publishLoopDeskPromotions(input: { shopId: string; shopDom
   const buildArtifactValidation = validateLoopDeskDiscountFunctionBuildArtifact();
   const config = await compileLoopDeskDiscountFunctionConfig(input.shopId, input.shopDomain);
   const diagnostics: PublicationDiagnostics = { functionFound: false, functionId: null, functionHandle: null, automaticDiscount: "not-run", automaticDiscountId: null, automaticDiscountTitle: null, automaticDiscountStatus: null, duplicateAutomaticDiscountIds: [], metafieldUpdated: false, rulesCompiledCount: config.rules.length, compiledRewardTypes: Array.from(new Set(config.rules.map((rule) => rule.rewardEnforcementType))).sort(), fixedPriceRulesCompiledCount: config.rules.filter((rule) => rule.rewardEnforcementType === "fixed_price").length, percentageRulesCompiledCount: config.rules.filter((rule) => rule.rewardEnforcementType === "percentage").length, fixedAmountRulesCompiledCount: config.rules.filter((rule) => rule.rewardEnforcementType === "fixed_amount").length, buildArtifactPresent: buildArtifactValidation.ok, activationStatus: "blocked", configHash: deterministicConfigHash(config), verification: { ok: false, errors: [], storedConfigHash: null } };
-  if (!buildArtifactValidation.ok) return { ok: false, diagnostics, config, message: buildArtifactValidation.reason };
+  // Publication validates the deployed Shopify Function identity via Admin GraphQL.
+  // A local WASM artifact is diagnostic-only because Vercel/Next.js runtime deployments do not own Shopify Function publication.
 
   const selectedResult = selectLoopDeskAppDiscountType(await queryLoopDeskAppDiscountTypes(input.shopDomain, input.shopId));
   const functionType = selectedResult.selected;
@@ -176,6 +177,21 @@ export async function publishLoopDeskPromotions(input: { shopId: string; shopDom
   diagnostics.verification = verified;
   diagnostics.activationStatus = verified.ok ? "activated" : "blocked";
   return { ok: verified.ok, diagnostics, config, message: verified.ok ? (existing.selected?.id ? "LoopDesk automatic discount updated idempotently." : "LoopDesk automatic discount created.") : `LoopDesk automatic discount saved but verification failed: ${verified.errors.join(" ")}` };
+}
+
+export async function getLoopDeskPromotionPublicationStatus(input: { shopId: string; shopDomain: string }) {
+  const config = await compileLoopDeskDiscountFunctionConfig(input.shopId, input.shopDomain);
+  const selectedResult = selectLoopDeskAppDiscountType(await queryLoopDeskAppDiscountTypes(input.shopDomain, input.shopId));
+  const functionType = selectedResult.selected;
+  if (!functionType) {
+    return { ok: false, synchronized: false, message: selectedResult.reason || "LoopDesk Function unavailable.", configHash: deterministicConfigHash(config), functionHandle: null, functionId: null, automaticDiscountId: null, activeAutomaticDiscount: false, fixedPriceRulesCompiledCount: config.rules.filter((rule) => rule.rewardEnforcementType === "fixed_price").length };
+  }
+  const existing = await findExistingLoopDeskDiscounts(input.shopDomain, input.shopId, functionType);
+  const verified = existing.selected ? verifyStoredConfig(existing.selected, functionType, config) : { ok: false, errors: ["LoopDesk automatic app discount was not found."], storedConfigHash: null };
+  const activeAutomaticDiscount = Boolean(existing.selected?.automaticDiscount?.status && VALID_STATUSES.has(existing.selected.automaticDiscount.status));
+  const fixedPriceRulesCompiledCount = config.rules.filter((rule) => rule.rewardEnforcementType === "fixed_price").length;
+  const synchronized = Boolean(verified.ok && activeAutomaticDiscount && fixedPriceRulesCompiledCount > 0);
+  return { ok: synchronized, synchronized, message: synchronized ? "LoopDesk automatic discount is synchronized." : verified.errors.join(" "), configHash: deterministicConfigHash(config), storedConfigHash: verified.storedConfigHash, functionHandle: functionType.functionHandle || null, functionId: functionType.functionId || null, productCapability: functionType.discountClasses?.includes("PRODUCT") || false, automaticDiscountId: existing.selected?.automaticDiscount?.discountId || existing.selected?.id || null, activeAutomaticDiscount, automaticDiscountStatus: existing.selected?.automaticDiscount?.status || null, fixedPriceRulesCompiledCount };
 }
 
 export const activateLoopDeskDiscountFunction = publishLoopDeskPromotions;

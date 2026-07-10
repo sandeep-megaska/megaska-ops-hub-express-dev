@@ -428,7 +428,9 @@ function buildBufferedEta(rawEta) {
   async function readCart() {
     const res = await fetch("/cart.js", { credentials: "same-origin", headers: { Accept: "application/json" } });
     if (!res.ok) throw new Error(`Unable to load cart (${res.status})`);
-    return res.json();
+    const cart = await res.json();
+    if (!Number(cart?.item_count || 0)) removeShopifyDiscountCode().catch(() => null);
+    return cart;
   }
 
   function normalizeShopifyPricing(cart) {
@@ -444,7 +446,7 @@ function buildBufferedEta(rawEta) {
     return { cart, pricing };
   }
 
-  async function updateShopifyDiscountCode(code) {
+  async function applyShopifyDiscountCode(code) {
     const response = await fetch("/cart/update.js", {
       method: "POST",
       credentials: "same-origin",
@@ -454,6 +456,13 @@ function buildBufferedEta(rawEta) {
     if (!response.ok) throw new Error(`Unable to update discount (${response.status})`);
     return response.json().catch(() => null);
   }
+
+  function removeShopifyDiscountCode() { return applyShopifyDiscountCode(""); }
+  function readShopifyDiscountState(cart) {
+    const pricing = normalizeShopifyPricing(cart || state.intent?.cartSnapshot || {});
+    return { cart: cart || state.intent?.cartSnapshot || {}, pricing, codes: appliedShopifyCodes(pricing) };
+  }
+  window.LoopDeskShopifyDiscountSession = Object.assign({}, window.LoopDeskShopifyDiscountSession || {}, { applyShopifyDiscountCode, removeShopifyDiscountCode, readShopifyDiscountState });
 
   function variantGid(value) {
     const raw = String(value || "").trim();
@@ -499,8 +508,7 @@ function buildBufferedEta(rawEta) {
   function cartSnapshot(cart) {
     const items = Array.isArray(cart?.items) ? cart.items : [];
     const lineItems = items.map(cartLineItem).filter(Boolean);
-    const loopdeskOfferPricing = validLoopDeskOfferPricing(state.loopdeskOfferPricing);
-    return { token: cart?.token || "", items, lineItems, item_count: Number(cart?.item_count || 0), total_price: Number(cart?.total_price || 0), original_total_price: Number(cart?.original_total_price || 0), items_subtotal_price: Number(cart?.items_subtotal_price || 0), total_discount: Number(cart?.total_discount || 0), cart_level_discount_applications: cart?.cart_level_discount_applications || [], discount_codes: cart?.discount_codes || [], currency: cart?.currency || "INR", ...(loopdeskOfferPricing ? { loopdeskOfferPricing } : {}) };
+    return { token: cart?.token || "", items, lineItems, item_count: Number(cart?.item_count || 0), total_price: Number(cart?.total_price || 0), original_total_price: Number(cart?.original_total_price || 0), items_subtotal_price: Number(cart?.items_subtotal_price || 0), total_discount: Number(cart?.total_discount || 0), cart_level_discount_applications: cart?.cart_level_discount_applications || [], discount_codes: cart?.discount_codes || [], currency: cart?.currency || "INR" };
   }
 
   async function ensureAuthenticated(triggerEl, event) {
@@ -608,10 +616,7 @@ function buildBufferedEta(rawEta) {
     return validLoopDeskOfferPricing(intent?.cartSnapshot?.loopdeskOfferPricing || state.loopdeskOfferPricing);
   }
   function expressPromotionSummary(intent) {
-    if (activeShopifyPricing()) return "";
-    const handoff = loopdeskOfferPricingFromIntent(intent);
-    const totals = handoff ? { promotionDiscountTotal: handoff.loopdeskOfferDiscountAmountPaise, estimatedAfterOffer: handoff.loopdeskOfferAdjustedTotalAmountPaise } : expressPromotionViewModel()?.totals || { promotionDiscountTotal: 0, estimatedAfterOffer: 0 };
-    return totals.promotionDiscountTotal > 0 ? `<p><span>LoopDesk offer discount</span><strong>-${money(totals.promotionDiscountTotal, intent.currency)}</strong></p>` : "";
+    return "";
   }
   function cartSubtotalPaise(cart) { return Number(cart?.original_total_price || cart?.items_subtotal_price || cart?.total_price || 0); }
   function cartDiscountPaise(cart) { return Number(cart?.total_discount || 0); }
@@ -619,8 +624,7 @@ function buildBufferedEta(rawEta) {
   function expressDisplaySubtotalPaise(intent) {
     const pricing = activeShopifyPricing();
     if (pricing?.originalSubtotal) return pricing.originalSubtotal.amount;
-    const handoff = loopdeskOfferPricingFromIntent(intent);
-    return handoff ? handoff.loopdeskOfferBaseSubtotalAmountPaise : intent?.subtotalAmountPaise;
+    return intent?.subtotalAmountPaise;
   }
   function shopLabel() { return "Megaska"; }
   function logoUrl() {
@@ -815,7 +819,7 @@ function buildBufferedEta(rawEta) {
       : hasAddress
         ? `<section class="megaska-express-stack"><div class="megaska-express-section-head"><h3>Delivery address</h3><button class="megaska-express-link-btn" type="button" data-express-action="change-address">Change Address ›</button></div><div class="megaska-express-address-card"><span class="megaska-express-address-icon" aria-hidden="true">⌖</span><div><strong>${escapeHtml(currentAddress.name)}</strong><p>${escapeHtml(currentAddress.address1)}${currentAddress.address2 ? `, ${escapeHtml(currentAddress.address2)}` : ""}</p><p>${escapeHtml(currentAddress.city)}, ${escapeHtml(currentAddress.province)} ${escapeHtml(currentAddress.zip)}, ${escapeHtml(currentAddress.country)}</p><p>${escapeHtml(intent.phoneSnapshot || currentAddress.phone)}</p>${savedPincodeMarkup}</div></div></section>`
         : `<form data-express-form="address" class="megaska-express-stack" novalidate><h3>Delivery address</h3><input name="name" value="${escapeHtml(currentAddress.name || "")}" placeholder="Full name" required><input name="email" value="${escapeHtml(currentAddress.email || state.customer?.email || "")}" placeholder="Email" type="email"><input value="${escapeHtml(intent.phoneSnapshot || currentAddress.phone || "Verified phone")}" disabled><input name="zip" value="${escapeHtml(currentAddress.zip || state.customer?.postalCode || "")}" placeholder="PIN code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required><p class="megaska-express-pincode-status" data-express-pincode-message data-status="${escapeHtml(state.pincodeStatus)}">${escapeHtml(state.pincodeMessage)}</p><p class="megaska-express-pincode-eta" data-express-pincode-eta>${state.pincodeEta ? `Estimated delivery by ${escapeHtml(formatEta(state.pincodeEta))}` : ""}</p><div class="megaska-express-fields"><input name="city" value="${escapeHtml(currentAddress.city || state.customer?.city || "")}" placeholder="City" required><input name="province" value="${escapeHtml(currentAddress.province || state.customer?.stateProvince || "")}" placeholder="State" required></div><input name="address1" value="${escapeHtml(currentAddress.address1 || state.customer?.addressLine1 || "")}" placeholder="Address line 1" required><input name="address2" value="${escapeHtml(currentAddress.address2 || state.customer?.addressLine2 || "")}" placeholder="Address line 2 / Landmark"><input name="country" value="${escapeHtml(currentAddress.country || "India")}" placeholder="Country" required><button type="submit" ${!state.intent?.id || state.busy ? "disabled" : ""}>Save address</button><p class="megaska-otp-step-subtitle">Address is saved to your checkout and profile.</p></form>`;
-    root.innerHTML = `${state.error ? `<p class="megaska-otp-error">${escapeHtml(state.error)}</p>` : ""}<header class="megaska-express-modal-header"><div class="megaska-express-logo">${logoMarkup()}</div><div class="megaska-express-heading"><p class="megaska-otp-step-subtitle">Secure Checkout</p><h2 id="megaska-express-title" class="megaska-otp-step-title">Express checkout</h2></div></header><div class="megaska-express-progress"><span>Address</span><span>Coupon</span><span>Payment</span></div><section class="megaska-express-summary"><h3>Order summary</h3>${rows || `<p class="megaska-otp-step-subtitle">${state.hydration.cart === "loading" ? "Loading cart summary..." : "Cart details unavailable."}</p>`}${extraCount ? `<p class="megaska-otp-step-subtitle">+ ${extraCount} more item${extraCount > 1 ? "s" : ""}</p>` : ""}<div class="megaska-express-totals"><p><span>Subtotal</span><strong>${priceHydrating ? "Calculating..." : money(expressDisplaySubtotalPaise(intent), intent.currency)}</strong></p>${expressPromotionSummary(intent)}${discountSummary(intent)}<p><span>Delivery</span><strong>${Number(intent.shippingAmountPaise || 0) ? money(intent.shippingAmountPaise, intent.currency) : "Free"}</strong></p><p class="megaska-express-total"><span>Total</span><strong>${totalAmount}</strong></p></div></section>${addressMarkup}<form data-express-form="discount" class="megaska-express-stack"><h3>Have a coupon?</h3><div class="megaska-express-inline"><input name="code" value="${escapeHtml(state.discountCode)}" placeholder="Enter coupon code"><button type="submit" ${!state.intent?.id || state.busy ? "disabled" : ""}>Apply</button></div>${discountChip}</form>${storeCreditBlock}<section class="megaska-express-stack megaska-express-payment${storeCreditFullyCovers ? " megaska-express-payment--store-credit-only" : ""}" data-express-payment-section>${storeCreditFullyCovers ? renderStoreCreditOrderPanel() : (state.inlinePaymentMode ? renderInlinePaymentPanel(selectedDisplayMethod) : renderPaymentMethodList())}</section><div class="megaska-express-sticky-cta"><div class="megaska-express-sticky-trust"><p><span>🔒</span><strong>100% Secure Payments</strong></p><p><span>🛡</span><strong>Trusted & Reliable</strong></p></div><div class="megaska-express-sticky-main"><div><span>Total Payable</span><strong>${totalAmount}</strong></div></div></div>`;
+    root.innerHTML = `${state.error ? `<p class="megaska-otp-error">${escapeHtml(state.error)}</p>` : ""}<header class="megaska-express-modal-header"><div class="megaska-express-logo">${logoMarkup()}</div><div class="megaska-express-heading"><p class="megaska-otp-step-subtitle">Secure Checkout</p><h2 id="megaska-express-title" class="megaska-otp-step-title">Express checkout</h2></div></header><div class="megaska-express-progress"><span>Address</span><span>Coupon</span><span>Payment</span></div><section class="megaska-express-summary"><h3>Order summary</h3>${rows || `<p class="megaska-otp-step-subtitle">${state.hydration.cart === "loading" ? "Loading cart summary..." : "Cart details unavailable."}</p>`}${extraCount ? `<p class="megaska-otp-step-subtitle">+ ${extraCount} more item${extraCount > 1 ? "s" : ""}</p>` : ""}<div class="megaska-express-totals"><p><span>Subtotal</span><strong>${priceHydrating ? "Calculating..." : money(expressDisplaySubtotalPaise(intent), intent.currency)}</strong></p>${expressPromotionSummary(intent)}${discountSummary(intent)}<p><span>Delivery</span><strong>${Number(intent.shippingAmountPaise || 0) ? money(intent.shippingAmountPaise, intent.currency) : "Free"}</strong></p><p class="megaska-express-total"><span>Total</span><strong>${totalAmount}</strong></p></div></section>${addressMarkup}<section class="megaska-express-stack"><h3>Discount codes</h3><p class="megaska-otp-step-subtitle">Discount codes applied to your cart are reflected automatically.</p>${discountChip}</section>${storeCreditBlock}<section class="megaska-express-stack megaska-express-payment${storeCreditFullyCovers ? " megaska-express-payment--store-credit-only" : ""}" data-express-payment-section>${storeCreditFullyCovers ? renderStoreCreditOrderPanel() : (state.inlinePaymentMode ? renderInlinePaymentPanel(selectedDisplayMethod) : renderPaymentMethodList())}</section><div class="megaska-express-sticky-cta"><div class="megaska-express-sticky-trust"><p><span>🔒</span><strong>100% Secure Payments</strong></p><p><span>🛡</span><strong>Trusted & Reliable</strong></p></div><div class="megaska-express-sticky-main"><div><span>Total Payable</span><strong>${totalAmount}</strong></div></div></div>`;
     console.info("[EXPRESS UI] payment chips rendered", {
       paymentOptionCount: document.querySelectorAll(".megaska-express-payment-option").length,
       selectedDisplayMethod,
@@ -864,10 +868,7 @@ function buildBufferedEta(rawEta) {
   }
 
   function preserveLoopDeskOfferPricingOnIntent(nextIntent, fallbackIntent) {
-    const nextSnapshot = nextIntent?.cartSnapshot;
-    const handoff = validLoopDeskOfferPricing(nextSnapshot?.loopdeskOfferPricing || fallbackIntent?.cartSnapshot?.loopdeskOfferPricing || state.loopdeskOfferPricing);
-    if (!handoff || !nextSnapshot || nextSnapshot.loopdeskOfferPricing) return nextIntent;
-    return Object.assign({}, nextIntent, { cartSnapshot: Object.assign({}, nextSnapshot, { loopdeskOfferPricing: handoff }) });
+    return nextIntent || fallbackIntent;
   }
 
   async function refreshIntent() { const startedAt = perfNow(); const data = await apiFetch(`/express/checkout/intents/${encodeURIComponent(state.intent.id)}`); state.intent = preserveLoopDeskOfferPricingOnIntent(data.intent, state.intent); state.customerDefaultAddress = data.customerDefaultAddress || state.customerDefaultAddress; state.settings = Object.assign({}, state.settings, data.settings || {}); state.discountCode = state.intent?.discounts?.[0]?.code || state.discountCode; await loadStoreCredit(); perfDetails("intent_fetch_ms", { shopId: getShopDomain() || null, intentId: state.intent?.id || null, duplicateCallsFound: state.perf.duplicateCallsFound, durationMs: Math.round(perfNow() - startedAt) }); }
@@ -887,7 +888,7 @@ function buildBufferedEta(rawEta) {
     state.hydration.intent = "loading";
     render();
     const startedAt = perfNow();
-    const intentPayload = { cartToken: snapshot.token, cartSnapshot: snapshot, loopdeskOfferPricing: snapshot.loopdeskOfferPricing, subtotalAmountPaise: rawSubtotalAmountPaise, discountAmountPaise: pricing?.totalDiscount?.amount ?? cartDiscountPaise(cart), shippingAmountPaise: 0, codFeeAmountPaise: 0, totalAmountPaise: initialTotalAmountPaise, currency: snapshot.currency || "INR" };
+    const intentPayload = { cartToken: snapshot.token, cartSnapshot: snapshot, subtotalAmountPaise: rawSubtotalAmountPaise, discountAmountPaise: pricing?.totalDiscount?.amount ?? cartDiscountPaise(cart), shippingAmountPaise: 0, codFeeAmountPaise: 0, totalAmountPaise: initialTotalAmountPaise, currency: snapshot.currency || "INR" };
     const data = await apiFetch("/express/checkout/intents", { method: "POST", body: intentPayload });
     state.intent = preserveLoopDeskOfferPricingOnIntent(Object.assign({}, data.intent || {}, {
       cartSnapshot: Array.isArray(data.intent?.cartSnapshot?.items) && data.intent.cartSnapshot.items.length ? data.intent.cartSnapshot : snapshot,
@@ -911,7 +912,7 @@ function buildBufferedEta(rawEta) {
 
   async function open(opts) {
     const openStart = Number(opts?.openStart || perfNow());
-    state.open = true; state.step = "checkout"; state.error = ""; state.busy = false; state.paymentStarted = false; state.orderSubmitting = false; state.loopdeskOfferPricing = validLoopDeskOfferPricing(opts?.loopdeskOfferPricing); state.shopifyPricing = null; state.intent = null; state.customer = null; state.customerDefaultAddress = null; state.addressDraft = {}; state.editingAddress = false; state.discountMessage = ""; state.storeCredit = { loading: false, availableAmount: 0, appliedAmount: 0, remainingPayable: null, currency: "INR", enabled: false, error: "" }; state.inlinePaymentMode = false; state.inlinePaymentError = ""; state.activeRazorpayOrder = null; state.activeRazorpayOrderPromise = null; state.activeRazorpayInstance = null; state.prepaidWarmupKey = ""; state.prepaidWarmupCompletedKey = ""; state.prepaidWarmupPromise = null; state.addressSavedForIntentId = null; state.paymentInProgress = false; resetDeliveryServiceability(); state.pincode = ""; state.pincodeStatus = "idle"; state.pincodeMessage = "Enter 6-digit PIN code to check delivery."; state.pincodeEta = ""; state.pincodeCity = ""; state.pincodeState = ""; state.lastCheckedPincode = ""; state.pincodeCache = {}; state.savedPincode = ""; state.savedPincodeStatus = "idle"; state.savedPincodeMessage = ""; state.savedPincodeEta = ""; state.lastCheckedSavedPincode = ""; state.hydration = { session: "loading", cart: "idle", intent: "idle", address: "loading", discount: "loading", pincode: "idle", payment: "loading" }; resetApiCallPerf(openStart);
+    state.open = true; state.step = "checkout"; state.error = ""; state.busy = false; state.paymentStarted = false; state.orderSubmitting = false; state.loopdeskOfferPricing = null; state.shopifyPricing = null; state.intent = null; state.customer = null; state.customerDefaultAddress = null; state.addressDraft = {}; state.editingAddress = false; state.discountMessage = ""; state.storeCredit = { loading: false, availableAmount: 0, appliedAmount: 0, remainingPayable: null, currency: "INR", enabled: false, error: "" }; state.inlinePaymentMode = false; state.inlinePaymentError = ""; state.activeRazorpayOrder = null; state.activeRazorpayOrderPromise = null; state.activeRazorpayInstance = null; state.prepaidWarmupKey = ""; state.prepaidWarmupCompletedKey = ""; state.prepaidWarmupPromise = null; state.addressSavedForIntentId = null; state.paymentInProgress = false; resetDeliveryServiceability(); state.pincode = ""; state.pincodeStatus = "idle"; state.pincodeMessage = "Enter 6-digit PIN code to check delivery."; state.pincodeEta = ""; state.pincodeCity = ""; state.pincodeState = ""; state.lastCheckedPincode = ""; state.pincodeCache = {}; state.savedPincode = ""; state.savedPincodeStatus = "idle"; state.savedPincodeMessage = ""; state.savedPincodeEta = ""; state.lastCheckedSavedPincode = ""; state.hydration = { session: "loading", cart: "idle", intent: "idle", address: "loading", discount: "loading", pincode: "idle", payment: "loading" }; resetApiCallPerf(openStart);
     const modal = ensureModal(); modal.hidden = false; modal.setAttribute("aria-hidden", "false"); document.documentElement.classList.add("megaska-otp-open"); render();
     try {
       await waitForModalShellPaint(openStart);
@@ -984,7 +985,7 @@ function buildBufferedEta(rawEta) {
       catch (error) { showInlinePaymentError(error instanceof Error ? error.message : "Check payment details and try again."); }
       return;
     }
-    try { state.busy = true; state.error = ""; render(); const intentId = encodeURIComponent(state.intent.id); const data = new FormData(form); if (form.dataset.expressForm === "address") await saveAddressFromCheckout(); if (form.dataset.expressForm === "discount") { const code = String(data.get("code") || "").trim(); if (!code) throw new Error("Enter a discount code."); await updateShopifyDiscountCode(code); const refreshed = await refreshShopifyPricing(); const snapshot = cartSnapshot(refreshed.cart); const pricing = refreshed.pricing; const appliedCodes = appliedShopifyCodes(pricing); if (!appliedCodes.some((appliedCode) => appliedCode.toUpperCase() === code.toUpperCase()) && Number(pricing?.totalDiscount?.amount || 0) <= 0) throw new Error("Discount code is not valid for this checkout"); await apiFetch(`/express/checkout/intents/${intentId}/discount`, { method: "POST", body: { code, cartSnapshot: snapshot, subtotalAmountPaise: pricing?.originalSubtotal?.amount ?? cartSubtotalPaise(refreshed.cart), discountAmountPaise: pricing?.totalDiscount?.amount ?? cartDiscountPaise(refreshed.cart), totalAmountPaise: pricing?.finalTotal?.amount ?? cartTotalPaise(refreshed.cart), currency: snapshot.currency || "INR", rawShopifyPayload: pricing || refreshed.cart } }); state.discountCode = appliedCodes[0] || code; state.discountMessage = ""; } await refreshIntent(); state.busy = false; render(); } catch (error) { state.busy = false; state.error = error instanceof Error ? error.message : "Something went wrong."; render(); }
+    try { state.busy = true; state.error = ""; render(); const intentId = encodeURIComponent(state.intent.id); const data = new FormData(form); if (form.dataset.expressForm === "address") await saveAddressFromCheckout(); if (form.dataset.expressForm === "discount") { state.discountMessage = "Discount codes applied to your cart are reflected automatically."; } await refreshIntent(); state.busy = false; render(); } catch (error) { state.busy = false; state.error = error instanceof Error ? error.message : "Something went wrong."; render(); }
   }
 
   function onInput(event) {
@@ -1554,7 +1555,7 @@ function renderStoreCreditOrderPanel() {
       if (action === "standard-razorpay") await openStandardRazorpayFallback();
       if (action === "remove-discount") {
         state.busy = true; state.error = ""; render();
-        await updateShopifyDiscountCode("");
+        await removeShopifyDiscountCode();
         const refreshed = await refreshShopifyPricing();
         await apiFetch(`/express/checkout/intents/${encodeURIComponent(state.intent.id)}/discount`, { method: "DELETE", body: { cartSnapshot: cartSnapshot(refreshed.cart), subtotalAmountPaise: refreshed.pricing?.originalSubtotal?.amount ?? cartSubtotalPaise(refreshed.cart), discountAmountPaise: refreshed.pricing?.totalDiscount?.amount ?? cartDiscountPaise(refreshed.cart), totalAmountPaise: refreshed.pricing?.finalTotal?.amount ?? cartTotalPaise(refreshed.cart), currency: refreshed.cart?.currency || "INR", rawShopifyPayload: refreshed.pricing || refreshed.cart } });
         state.discountCode = ""; state.discountMessage = "Discount removed."; await refreshIntent(); state.busy = false; render();
