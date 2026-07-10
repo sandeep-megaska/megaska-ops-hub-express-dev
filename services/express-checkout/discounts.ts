@@ -1,5 +1,16 @@
 import type { Prisma } from "../../generated/prisma";
 
+export type ExpressCheckoutDiscountDefinition = {
+  code: string;
+  title: string;
+  type: "PERCENTAGE" | "FIXED_AMOUNT";
+  value: number;
+  valueUnit: "PERCENT" | "PAISE";
+  source: "SHOPIFY" | "LOOPDESK_CONFIG" | "UPSTREAM_VALIDATED" | "LEGACY_COMPATIBILITY";
+  minimumSubtotalPaise?: number | null;
+  maximumDiscountPaise?: number | null;
+};
+
 export type ExpressCheckoutDiscountCalculation = {
   code: string;
   title: string;
@@ -8,9 +19,8 @@ export type ExpressCheckoutDiscountCalculation = {
 };
 
 type CalculateExpressCheckoutDiscountInput = {
-  code: string | null;
+  definition: ExpressCheckoutDiscountDefinition;
   couponBaseAmountPaise: number;
-  fallbackDiscountAmountPaise?: number;
   rawShopifyPayload?: unknown;
 };
 
@@ -19,51 +29,47 @@ function normalizedCouponCode(code: string | null) {
   return normalized || null;
 }
 
-export function calculateExpressCheckoutDiscount(input: CalculateExpressCheckoutDiscountInput): ExpressCheckoutDiscountCalculation | null {
+function normalizedDefinition(input: ExpressCheckoutDiscountDefinition) {
   const code = normalizedCouponCode(input.code);
-  if (!code) return null;
+  const value = Number(input.value);
+
+  if (!code || !Number.isFinite(value) || value <= 0) return null;
+  if (input.type === "PERCENTAGE" && input.valueUnit !== "PERCENT") return null;
+  if (input.type === "FIXED_AMOUNT" && input.valueUnit !== "PAISE") return null;
+
+  return { ...input, code, value };
+}
+
+export function calculateExpressCheckoutDiscount(input: CalculateExpressCheckoutDiscountInput): ExpressCheckoutDiscountCalculation | null {
+  const definition = normalizedDefinition(input.definition);
+  if (!definition) return null;
 
   const couponBaseAmountPaise = Math.max(0, Math.floor(Number(input.couponBaseAmountPaise || 0)));
-  const fallbackDiscountAmountPaise = Math.max(0, Math.floor(Number(input.fallbackDiscountAmountPaise || 0)));
+  const minimumSubtotalPaise = definition.minimumSubtotalPaise == null ? null : Math.max(0, Math.floor(Number(definition.minimumSubtotalPaise || 0)));
 
-  if (code === "MEGA15") {
-    const discountAmountPaise = Math.min(
-      couponBaseAmountPaise,
-      Math.round(couponBaseAmountPaise * 0.15)
-    );
+  if (minimumSubtotalPaise != null && couponBaseAmountPaise < minimumSubtotalPaise) return null;
 
-    return {
-      code,
-      title: "15% OFF",
+  const rawDiscountAmountPaise = definition.type === "PERCENTAGE"
+    ? Math.round(couponBaseAmountPaise * (definition.value / 100))
+    : Math.floor(definition.value);
+  const cappedByDefinition = definition.maximumDiscountPaise == null
+    ? rawDiscountAmountPaise
+    : Math.min(rawDiscountAmountPaise, Math.max(0, Math.floor(Number(definition.maximumDiscountPaise || 0))));
+  const discountAmountPaise = Math.min(couponBaseAmountPaise, Math.max(0, cappedByDefinition));
+
+  if (discountAmountPaise <= 0) return null;
+
+  return {
+    code: definition.code,
+    title: definition.title || "Discount",
+    discountAmountPaise,
+    rawShopifyPayload: {
+      discountCode: definition.code,
+      discountType: definition.type,
+      discountValue: definition.value,
       discountAmountPaise,
-      rawShopifyPayload: {
-        discountCode: code,
-        discountType: "PERCENTAGE",
-        discountValue: 15,
-        discountAmountPaise,
-        source: "megaska_known_coupon",
-        upstream: (input.rawShopifyPayload ?? null) as Prisma.InputJsonValue | null,
-      },
-    };
-  }
-
-  if (fallbackDiscountAmountPaise > 0) {
-    const discountAmountPaise = Math.min(couponBaseAmountPaise, fallbackDiscountAmountPaise);
-
-    return {
-      code,
-      title: "Discount",
-      discountAmountPaise,
-      rawShopifyPayload: {
-        discountCode: code,
-        discountType: "FIXED_AMOUNT",
-        discountValue: discountAmountPaise,
-        discountAmountPaise,
-        source: "fallback_discount_amount",
-        upstream: (input.rawShopifyPayload ?? null) as Prisma.InputJsonValue | null,
-      },
-    };
-  }
-
-  return null;
+      source: definition.source,
+      upstream: (input.rawShopifyPayload ?? null) as Prisma.InputJsonValue | null,
+    },
+  };
 }
