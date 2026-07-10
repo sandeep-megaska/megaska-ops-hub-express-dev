@@ -87,7 +87,7 @@ test("active rules accept canonical reward product variant metadata", () => {
   assert.deepEqual(validatePromotionRulesConfig(config), []);
 });
 
-test("active rules still reject missing offer variant metadata", () => {
+test("active product-scoped rules accept missing offer variant metadata", () => {
   const config = normalizePromotionRulesConfig({
     enabled: true,
     maxVisibleOffers: 1,
@@ -97,10 +97,60 @@ test("active rules still reject missing offer variant metadata", () => {
       enabled: true,
       status: "active",
       eligibility: { triggers: [{ type: "always", value: "" }] },
-      reward: { type: "offer_product", productGid: "gid://shopify/Product/1", quantity: 1, product: { gid: "gid://shopify/Product/1", title: "Offer" } },
+      reward: { type: "offer_product", productGid: "gid://shopify/Product/1", variantSelectionMode: "product", scope: "product", quantity: 1, product: { gid: "gid://shopify/Product/1", title: "Offer" } },
       display: { heading: "Offer", ctaLabel: "Add offer" },
     }],
   });
 
-  assert.match(validatePromotionRulesConfig(config).join(" "), /selected product and variant/);
+  assert.deepEqual(validatePromotionRulesConfig(config), []);
+  assert.equal(config.rules[0].reward.variantGid, "");
+});
+
+
+test("product-scoped rewards clear stale variant metadata", () => {
+  const rule = normalizePromotionRule({
+    id: "product-scope",
+    name: "Product scope",
+    reward: {
+      type: "offer_product",
+      productGid: "gid://shopify/Product/1",
+      variantGid: "gid://shopify/ProductVariant/stale",
+      variantSelectionMode: "product",
+      scope: "product",
+      product: {
+        gid: "gid://shopify/Product/1",
+        title: "Offer",
+        variantGid: "gid://shopify/ProductVariant/stale",
+        variantTitle: "Stale",
+        variantPrice: "999.00",
+        variantCompareAtPrice: "1299.00",
+      },
+    },
+  });
+
+  assert.equal(rule.reward.variantSelectionMode, "product");
+  assert.equal(rule.reward.scope, "product");
+  assert.equal(rule.reward.variantGid, "");
+  assert.equal(rule.reward.product?.variantGid, "");
+  assert.equal(rule.reward.product?.variantTitle, "");
+  assert.equal(rule.reward.product?.variantPrice, "");
+  assert.equal(rule.reward.product?.variantCompareAtPrice, "");
+});
+
+test("active variant-scoped rules require an explicit offer variant", () => {
+  const config = normalizePromotionRulesConfig({
+    enabled: true,
+    maxVisibleOffers: 1,
+    rules: [{
+      id: "missing-variant",
+      name: "Missing variant",
+      enabled: true,
+      status: "active",
+      eligibility: { triggers: [{ type: "always", value: "" }] },
+      reward: { type: "offer_product", productGid: "gid://shopify/Product/1", variantSelectionMode: "variant", scope: "variant", quantity: 1, product: { gid: "gid://shopify/Product/1", title: "Offer" } },
+      display: { heading: "Offer", ctaLabel: "Add offer" },
+    }],
+  });
+
+  assert.match(validatePromotionRulesConfig(config).join(" "), /Rule \"Missing variant\": variant-specific rewards require a selected variant\./);
 });
