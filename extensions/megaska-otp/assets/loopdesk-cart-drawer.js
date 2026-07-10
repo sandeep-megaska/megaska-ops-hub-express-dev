@@ -1128,6 +1128,10 @@
     }).join("");
   }
 
+  function cartRawSubtotal(cart) {
+    return Number(cart && (cart.original_total_price || cart.items_subtotal_price || cart.total_price) || 0);
+  }
+
   function render() {
     var cart = state.cart;
     var itemCount = cart && typeof cart.item_count === "number" ? cart.item_count : 0;
@@ -1145,7 +1149,7 @@
       ? '<div class="loopdesk-cart-drawer__error">We could not load your cart. You can still use the cart page.</div>'
       : renderLines(cart, offerViewModel) + renderPromotionOffers(cart);
 
-    elements.subtotal.textContent = money(cart ? cart.total_price : 0, cart && cart.currency);
+    elements.subtotal.textContent = money(cartRawSubtotal(cart), cart && cart.currency);
     if (elements.offerEstimate) {
       var offerTotals = offerViewModel && offerViewModel.totals ? offerViewModel.totals : { promotionDiscountTotal: 0, estimatedAfterOffer: 0 };
       elements.offerEstimate.hidden = !(offerTotals.promotionDiscountTotal > 0);

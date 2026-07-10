@@ -582,7 +582,7 @@ function buildBufferedEta(rawEta) {
   function cartSubtotalPaise(cart) { return Number(cart?.original_total_price || cart?.items_subtotal_price || cart?.total_price || 0); }
   function cartDiscountPaise(cart) { return Number(cart?.total_discount || 0); }
   function cartTotalPaise(cart) { return Math.max(Number(cart?.total_price || 0), 0); }
-  function expressBaseSubtotalPaise(snapshot, cart) {
+  function expressCouponBasePaise(snapshot, cart) {
     const handoff = validLoopDeskOfferPricing(snapshot?.loopdeskOfferPricing || state.loopdeskOfferPricing);
     return handoff ? handoff.loopdeskOfferAdjustedTotalAmountPaise : cartSubtotalPaise(cart);
   }
@@ -838,18 +838,19 @@ function buildBufferedEta(rawEta) {
     const cart = await readCart();
     if (!Number(cart?.item_count || 0)) throw new Error("Your cart is empty.");
     const snapshot = cartSnapshot(cart);
-    const baseSubtotalAmountPaise = expressBaseSubtotalPaise(snapshot, cart);
-    const initialTotalAmountPaise = Math.max(0, baseSubtotalAmountPaise - cartDiscountPaise(cart));
-    state.intent = Object.assign({}, state.intent || {}, { cartSnapshot: snapshot, subtotalAmountPaise: baseSubtotalAmountPaise, discountAmountPaise: cartDiscountPaise(cart), shippingAmountPaise: 0, totalAmountPaise: initialTotalAmountPaise, currency: snapshot.currency || "INR" });
+    const rawSubtotalAmountPaise = cartSubtotalPaise(cart);
+    const couponBaseAmountPaise = expressCouponBasePaise(snapshot, cart);
+    const initialTotalAmountPaise = Math.max(0, couponBaseAmountPaise - cartDiscountPaise(cart));
+    state.intent = Object.assign({}, state.intent || {}, { cartSnapshot: snapshot, subtotalAmountPaise: rawSubtotalAmountPaise, discountAmountPaise: cartDiscountPaise(cart), shippingAmountPaise: 0, totalAmountPaise: initialTotalAmountPaise, currency: snapshot.currency || "INR" });
     state.hydration.cart = "ready";
     state.hydration.intent = "loading";
     render();
     const startedAt = perfNow();
-    const intentPayload = { cartToken: snapshot.token, cartSnapshot: snapshot, loopdeskOfferPricing: snapshot.loopdeskOfferPricing, subtotalAmountPaise: baseSubtotalAmountPaise, discountAmountPaise: cartDiscountPaise(cart), shippingAmountPaise: 0, codFeeAmountPaise: 0, totalAmountPaise: initialTotalAmountPaise, currency: snapshot.currency || "INR" };
+    const intentPayload = { cartToken: snapshot.token, cartSnapshot: snapshot, loopdeskOfferPricing: snapshot.loopdeskOfferPricing, subtotalAmountPaise: rawSubtotalAmountPaise, discountAmountPaise: cartDiscountPaise(cart), shippingAmountPaise: 0, codFeeAmountPaise: 0, totalAmountPaise: initialTotalAmountPaise, currency: snapshot.currency || "INR" };
     const data = await apiFetch("/express/checkout/intents", { method: "POST", body: intentPayload });
     state.intent = preserveLoopDeskOfferPricingOnIntent(Object.assign({}, data.intent || {}, {
       cartSnapshot: Array.isArray(data.intent?.cartSnapshot?.items) && data.intent.cartSnapshot.items.length ? data.intent.cartSnapshot : snapshot,
-      subtotalAmountPaise: data.intent?.subtotalAmountPaise ?? baseSubtotalAmountPaise,
+      subtotalAmountPaise: data.intent?.subtotalAmountPaise ?? rawSubtotalAmountPaise,
       discountAmountPaise: data.intent?.discountAmountPaise ?? cartDiscountPaise(cart),
       totalAmountPaise: data.intent?.totalAmountPaise ?? initialTotalAmountPaise,
       currency: data.intent?.currency || snapshot.currency || "INR"
