@@ -112,7 +112,7 @@
   if (!config.enabled || window.__LOOPDESK_CART_DRAWER_LOADED__) return;
   window.__LOOPDESK_CART_DRAWER_LOADED__ = true;
 
-  var state = { open: false, loading: false, cart: null, error: "", offerError: "", offerAdding: false, hostMode: LOOPDESK_HOST_MODE, themeDrawer: null, fallbackReason: "", expressCheckoutLock: false, capability: null, drawerModeActive: false, neutralizedThemeDrawers: [], bodyLockSnapshot: null, removedThemeBodyClasses: [], cartTriggerTakeovers: [] };
+  var state = { open: false, loading: false, cart: null, pricing: null, error: "", offerError: "", offerAdding: false, hostMode: LOOPDESK_HOST_MODE, themeDrawer: null, fallbackReason: "", expressCheckoutLock: false, capability: null, drawerModeActive: false, neutralizedThemeDrawers: [], bodyLockSnapshot: null, removedThemeBodyClasses: [], cartTriggerTakeovers: [] };
   var cartTriggerObserver = null;
   var cartTriggerTakeoverTimer = null;
   var suppressNextCartClickUntil = 0;
@@ -780,7 +780,47 @@
     return image ? String(image).replace(/(\.(?:jpg|jpeg|png|webp))(?:\?.*)?$/i, "_160x$1") : "";
   }
 
+  function shopifyPricingNormalizer() { return window.LoopDeskShopifyPricing && window.LoopDeskShopifyPricing.normalizeAjaxCartPricing; }
+
+  function normalizeShopifyPricing(cart) {
+    var normalizer = shopifyPricingNormalizer();
+    if (typeof normalizer !== "function") return null;
+    try { return normalizer(cart || {}); } catch (error) { debugLog("Shopify pricing normalization failed", { error: error && error.message ? error.message : String(error || "unknown") }, true); return null; }
+  }
+
+  function moneyValue(moneyObject) {
+    return moneyObject && moneyObject.available !== false && moneyObject.amount !== null && moneyObject.amount !== undefined ? Number(moneyObject.amount) : null;
+  }
+
+  function pricingLineForItem(item) {
+    var pricing = state.pricing;
+    var lines = pricing && Array.isArray(pricing.lines) ? pricing.lines : [];
+    for (var i = 0; i < lines.length; i += 1) {
+      var line = lines[i];
+      if ((item && item.key && line.key === item.key) || sameShopifyId(line.variantId, item && (item.variant_id || item.variant_gid || item.variantGid || item.id))) return line;
+    }
+    return null;
+  }
+
+  function lineSavingsHtmlFromPricing(line, currency) {
+    var original = moneyValue(line && line.originalTotal);
+    var finalPrice = moneyValue(line && line.finalLineTotal);
+    if (original !== null && finalPrice !== null && original > finalPrice) return '<div class="loopdesk-cart-drawer__savings">You save ' + money(original - finalPrice, currency) + '</div>';
+    return "";
+  }
+
+  function lineDiscountAllocationsHtml(line, currency) {
+    var allocations = line && Array.isArray(line.discountAllocations) ? line.discountAllocations : [];
+    if (!allocations.length) return "";
+    return '<div class="loopdesk-cart-drawer__allocations">' + allocations.map(function (allocation) {
+      var label = allocation.title || allocation.code || "Discount";
+      return '<div><span>' + escapeHtml(label) + '</span><strong>-' + escapeHtml(money(moneyValue(allocation.amount) || 0, currency)) + '</strong></div>';
+    }).join("") + '</div>';
+  }
+
   function lineSavingsHtml(item, cart) {
+    var line = pricingLineForItem(item);
+    if (line) return lineSavingsHtmlFromPricing(line, (state.pricing && state.pricing.currency) || (cart && cart.currency));
     var original = Number(item.original_line_price || 0);
     var finalPrice = Number(item.final_line_price || 0);
     if (original > finalPrice) return '<div class="loopdesk-cart-drawer__savings">You save ' + money(original - finalPrice, cart.currency) + '</div>';
@@ -1101,10 +1141,19 @@
   }
 
   function rewardLinePriceHtml(item, cart, viewModel) {
+    var line = pricingLineForItem(item);
+    var currency = (state.pricing && state.pricing.currency) || (cart && cart.currency);
+    if (line) {
+      var original = moneyValue(line.originalTotal);
+      var finalPrice = moneyValue(line.finalLineTotal);
+      var price = finalPrice !== null ? finalPrice : Number(item.final_line_price || 0);
+      var originalHtml = original !== null && original > price ? '<s aria-label="Original price ' + escapeHtml(money(original, currency)) + '">' + money(original, currency) + '</s>' : '';
+      return '<div class="loopdesk-cart-drawer__reward-price"><span>' + money(price, currency) + '</span>' + originalHtml + '</div>' + lineDiscountAllocationsHtml(line, currency) + lineSavingsHtmlFromPricing(line, currency);
+    }
     var vmLine = promotionViewModelLine(viewModel, item);
     if (!vmLine || !vmLine.isPromotionAdjusted) return money(item.final_line_price, cart.currency) + lineSavingsHtml(item, cart);
     var quantityNote = vmLine.quantity > vmLine.eligibleQuantity ? '<div class="loopdesk-cart-drawer__reward-note">Promotion applies to ' + escapeHtml(vmLine.eligibleQuantity) + ' item' + (vmLine.eligibleQuantity === 1 ? '' : 's') + '</div>' : '';
-    return '<div class="loopdesk-cart-drawer__reward-price"><span>' + money(vmLine.displayLineTotal, cart.currency) + '</span><s aria-label="Original price ' + escapeHtml(money(vmLine.originalLineTotal, cart.currency)) + '">' + money(vmLine.originalLineTotal, cart.currency) + '</s></div><div class="loopdesk-cart-drawer__reward-badge">' + escapeHtml(vmLine.labelText || "Offer applied") + '</div><div class="loopdesk-cart-drawer__reward-note">Discount applied at checkout</div>' + quantityNote;
+    return '<div class="loopdesk-cart-drawer__reward-price"><span>' + money(vmLine.displayLineTotal, cart.currency) + '</span><s aria-label="Original price ' + escapeHtml(money(vmLine.originalLineTotal, cart.currency)) + '">' + money(vmLine.originalLineTotal, cart.currency) + '</s></div><div class="loopdesk-cart-drawer__reward-badge">' + escapeHtml(vmLine.labelText || "Offer applied") + '</div><div class="loopdesk-cart-drawer__reward-note">Discount applied at checkout — Promotion View Model estimate pending Shopify refresh</div>' + quantityNote;
   }
 
   function renderLines(cart, promotionVm) {
@@ -1140,6 +1189,21 @@
     return 0;
   }
 
+  function renderDiscountSummary(pricing, cart, offerViewModel) {
+    var currency = (pricing && pricing.currency) || (cart && cart.currency);
+    if (pricing && Array.isArray(pricing.discountAllocations) && pricing.discountAllocations.length) {
+      return pricing.discountAllocations.map(function (allocation) {
+        var label = allocation.title || allocation.code || "Discount";
+        return '<div><span>' + escapeHtml(label) + '</span><strong>-' + escapeHtml(money(moneyValue(allocation.amount) || 0, currency)) + '</strong></div>';
+      }).join("");
+    }
+    var totalDiscount = moneyValue(pricing && pricing.totalDiscount);
+    if (totalDiscount > 0) return '<div><span>Discounts</span><strong>-' + escapeHtml(money(totalDiscount, currency)) + '</strong></div>';
+    var offerTotals = offerViewModel && offerViewModel.totals ? offerViewModel.totals : null;
+    if (offerTotals && offerTotals.promotionDiscountTotal > 0) return '<div><span>Promotion estimate</span><strong>-' + escapeHtml(money(offerTotals.promotionDiscountTotal, currency)) + '</strong></div><p>Estimate only — Shopify totals update after refresh.</p>';
+    return "";
+  }
+
   function render() {
     var cart = state.cart;
     var itemCount = cart && typeof cart.item_count === "number" ? cart.item_count : 0;
@@ -1157,11 +1221,16 @@
       ? '<div class="loopdesk-cart-drawer__error">We could not load your cart. You can still use the cart page.</div>'
       : renderLines(cart, offerViewModel) + renderPromotionOffers(cart);
 
-    elements.subtotal.textContent = money(cartRawSubtotal(cart), cart && cart.currency);
+    var pricing = state.pricing;
+    var subtotal = moneyValue(pricing && pricing.originalSubtotal);
+    if (subtotal === null) subtotal = cartRawSubtotal(cart);
+    elements.subtotal.textContent = money(subtotal, (pricing && pricing.currency) || (cart && cart.currency));
     if (elements.offerEstimate) {
-      var offerTotals = offerViewModel && offerViewModel.totals ? offerViewModel.totals : { promotionDiscountTotal: 0, estimatedAfterOffer: 0 };
-      elements.offerEstimate.hidden = !(offerTotals.promotionDiscountTotal > 0);
-      elements.offerEstimate.innerHTML = offerTotals.promotionDiscountTotal > 0 ? '<div><span>Offer discount</span><strong>-' + escapeHtml(money(offerTotals.promotionDiscountTotal, cart && cart.currency)) + '</strong></div><div><span>Estimated after offer</span><strong>' + escapeHtml(money(offerTotals.estimatedAfterOffer, cart && cart.currency)) + '</strong></div><p>Final discount is applied at checkout.</p>' : '';
+      var finalTotal = moneyValue(pricing && pricing.finalTotal);
+      var summaryHtml = renderDiscountSummary(pricing, cart, offerViewModel);
+      if (pricing && finalTotal !== null) summaryHtml += '<div><span>Total</span><strong>' + escapeHtml(money(finalTotal, pricing.currency)) + '</strong></div>';
+      elements.offerEstimate.hidden = !summaryHtml;
+      elements.offerEstimate.innerHTML = summaryHtml;
     }
     elements.count.textContent = itemCount ? "(" + itemCount + ")" : "";
     elements.express.hidden = !config.cart.expressCheckoutButtonEnabled || itemCount === 0;
@@ -1209,7 +1278,7 @@
         if (!response.ok) throw new Error("Cart request failed");
         return response.json();
       })
-      .then(function (cart) { state.cart = cart; })
+      .then(function (cart) { state.cart = cart; state.pricing = normalizeShopifyPricing(cart); })
       .catch(function (error) {
         state.error = error && error.message ? error.message : "Cart request failed";
       })
