@@ -1,7 +1,6 @@
 import { prisma } from "../db/prisma";
 import { getDelhiveryRuntimeConfig, type DelhiveryPublicRuntimeConfig } from "../delhivery/config";
 import { getPromotionRulesConfig, PROMOTION_RULES_CONFIG_MODULE_KEY } from "../promotion-rules/config";
-import { enrichPromotionRulesWithStorefrontProducts } from "./promotion-storefront-products.server";
 import { getLoopDeskPromotionPublicationStatus } from "./discount-function-activation.server";
 import { getRazorpayRuntimeConfig, type RazorpayPublicRuntimeConfig } from "../razorpay/config";
 
@@ -566,11 +565,11 @@ export async function updateCartIntelligenceSettings(shopId: string, patch: unkn
   return next;
 }
 
-export async function getLoopDeskRuntimeConfig(shopId: string, shopDomain?: string | null, shopDomains?: { primaryDomain?: string | null; myshopifyDomain?: string | null }) {
+export async function getLoopDeskRuntimeConfig(shopId: string, shopDomain?: string | null, _shopDomains?: { primaryDomain?: string | null; myshopifyDomain?: string | null }) {
   const [settings, cartIntelligence, promotionRulesConfig, delhivery, razorpay, promotionPublication] = await Promise.all([
     getLoopDeskMerchantSettings(shopId),
     getCartIntelligenceSettings(shopId),
-    getPromotionRulesConfig(shopId, shopDomain).then((config) => shopDomain ? enrichPromotionRulesWithStorefrontProducts({ shopId, shopDomain, primaryDomain: shopDomains?.primaryDomain, myshopifyDomain: shopDomains?.myshopifyDomain, config }).then((result) => result.config) : config),
+    getPromotionRulesConfig(shopId, shopDomain),
     getDelhiveryRuntimeConfig(shopId),
     getRazorpayRuntimeConfig(shopId),
     shopDomain ? getLoopDeskPromotionPublicationStatus({ shopId, shopDomain }).catch((error) => ({ ok: false, synchronized: false, message: error instanceof Error ? error.message : "Publication diagnostics unavailable." })) : Promise.resolve({ ok: false, synchronized: false, message: "Shop domain unavailable." }),

@@ -112,7 +112,7 @@
   if (!config.enabled || window.__LOOPDESK_CART_DRAWER_LOADED__) return;
   window.__LOOPDESK_CART_DRAWER_LOADED__ = true;
 
-  var state = { open: false, loading: false, cart: null, pricing: null, error: "", offerError: "", offerAdding: false, offerSelectorRuleId: null, offerSelectedOptionsByRule: {}, offerSelectedVariantByRule: {}, offerSelectorError: "", offerDiscountRetryByRule: {}, hostMode: LOOPDESK_HOST_MODE, themeDrawer: null, fallbackReason: "", expressCheckoutLock: false, capability: null, drawerModeActive: false, neutralizedThemeDrawers: [], bodyLockSnapshot: null, removedThemeBodyClasses: [], cartTriggerTakeovers: [] };
+  var state = { open: false, loading: false, cart: null, pricing: null, error: "", offerError: "", offerAdding: false, offerSelectorRuleId: null, offerSelectedOptionsByRule: {}, offerSelectedVariantByRule: {}, offerSelectorError: "", offerDiscountRetryByRule: {}, rewardProductCatalogByGid: {}, rewardProductLoadStatusByGid: {}, rewardProductLoadPromiseByGid: {}, hostMode: LOOPDESK_HOST_MODE, themeDrawer: null, fallbackReason: "", expressCheckoutLock: false, capability: null, drawerModeActive: false, neutralizedThemeDrawers: [], bodyLockSnapshot: null, removedThemeBodyClasses: [], cartTriggerTakeovers: [] };
   var cartTriggerObserver = null;
   var cartTriggerTakeoverTimer = null;
   var suppressNextCartClickUntil = 0;
@@ -885,6 +885,82 @@
     return resolvePromotionOfferVariantGid(reward) ? "variant" : "product";
   }
 
+
+  function canonicalProductGid(productGid) {
+    var tail = idTail(productGid);
+    return tail ? "gid://shopify/Product/" + tail : "";
+  }
+
+  function canonicalVariantGid(variantId) {
+    var tail = idTail(variantId);
+    return tail ? "gid://shopify/ProductVariant/" + tail : "";
+  }
+
+  function promotionRewardProductHandle(reward) {
+    if (!isPlainObject(reward)) return "";
+    var product = isPlainObject(reward.product) ? reward.product : {};
+    return text(product.handle || reward.productHandle || reward.handle, "");
+  }
+
+  function shopCurrency(fallback) {
+    return fallback || (state.cart && state.cart.currency) || (config && (config.currency || config.shopCurrency || config.presentmentCurrency)) || "USD";
+  }
+
+  function normalizeAjaxProductMoney(value, currency) {
+    if (value === null || value === undefined || value === "") return null;
+    var numberValue = Number(value);
+    if (!Number.isFinite(numberValue)) return null;
+    return { amount: (numberValue / 100).toFixed(2), currencyCode: shopCurrency(currency) };
+  }
+
+  function normalizeAjaxProductOptions(raw) {
+    if (Array.isArray(raw && raw.options)) {
+      return raw.options.map(function (option, index) {
+        if (typeof option === "string") return { name: option || "Option " + (index + 1), values: [] };
+        return { name: text(option && option.name, "Option " + (index + 1)), values: Array.isArray(option && option.values) ? option.values.map(String) : [] };
+      });
+    }
+    return [];
+  }
+
+  function normalizeAjaxProduct(raw, configuredProductGid, handle) {
+    if (!isPlainObject(raw)) return null;
+    var numericProductId = String(raw.id || "").trim();
+    var canonicalGid = canonicalProductGid(configuredProductGid);
+    if (!numericProductId || !sameShopifyId(numericProductId, canonicalGid)) return null;
+    var currency = raw.currency || raw.currency_code || raw.currencyCode;
+    var options = normalizeAjaxProductOptions(raw);
+    var variants = (Array.isArray(raw.variants) ? raw.variants : []).map(function (variant) {
+      var numericVariantId = String(variant && variant.id || "").trim();
+      var optionValues = [variant && variant.option1, variant && variant.option2, variant && variant.option3];
+      var selectedOptions = options.map(function (option, index) { return { name: option.name, value: optionValues[index] === undefined || optionValues[index] === null ? "" : String(optionValues[index]) }; }).filter(function (option) { return option.value !== ""; });
+      var image = variant && variant.featured_image || variant && variant.image || null;
+      return {
+        variantGid: canonicalVariantGid(numericVariantId),
+        numericVariantId: numericVariantId,
+        title: text(variant && variant.title, "Default Title"),
+        availableForSale: Boolean(variant && variant.available),
+        currentlyNotInStock: variant && variant.available === false,
+        selectedOptions: selectedOptions,
+        price: normalizeAjaxProductMoney(variant && variant.price, currency),
+        compareAtPrice: normalizeAjaxProductMoney(variant && (variant.compare_at_price || variant.compareAtPrice), currency),
+        image: image ? { url: image.src || image.url || image } : null
+      };
+    }).filter(function (variant) { return Boolean(variant.numericVariantId); });
+    var featured = raw.featured_image || raw.image || (Array.isArray(raw.images) ? raw.images[0] : null);
+    return {
+      productGid: canonicalGid,
+      numericProductId: numericProductId,
+      handle: text(raw.handle, handle),
+      title: text(raw.title, "Offer product"),
+      availableForSale: variants.some(function (variant) { return variant.availableForSale === true; }),
+      featuredImage: featured ? { url: featured.src || featured.url || featured } : null,
+      options: options,
+      variants: variants,
+      variantsTruncated: false
+    };
+  }
+
   function productLookupKeys(productGid) {
     var raw = String(productGid || "");
     var tail = idTail(raw);
@@ -893,19 +969,60 @@
 
   function promotionRewardProduct(reward) {
     if (!isPlainObject(reward) || !reward.productGid) return null;
+    var keys = productLookupKeys(reward.productGid);
+    for (var c = 0; c < keys.length; c += 1) if (state.rewardProductCatalogByGid[keys[c]]) return state.rewardProductCatalogByGid[keys[c]];
     var promotionConfig = normalizePromotionConfig(config.promotion_rules_config || config.promotionRules);
     var products = promotionConfig.rewardProducts && typeof promotionConfig.rewardProducts === "object" ? promotionConfig.rewardProducts : {};
-    var keys = productLookupKeys(reward.productGid);
     for (var i = 0; i < keys.length; i += 1) if (products[keys[i]]) return products[keys[i]];
     return null;
   }
 
   function promotionRewardProductStatus(reward) {
+    var keys = productLookupKeys(reward && reward.productGid);
+    for (var c = 0; c < keys.length; c += 1) if (state.rewardProductLoadStatusByGid[keys[c]]) return state.rewardProductLoadStatusByGid[keys[c]];
     var promotionConfig = normalizePromotionConfig(config.promotion_rules_config || config.promotionRules);
     var statuses = promotionConfig.rewardProductStatuses && typeof promotionConfig.rewardProductStatuses === "object" ? promotionConfig.rewardProductStatuses : {};
-    var keys = productLookupKeys(reward && reward.productGid);
-    for (var i = 0; i < keys.length; i += 1) if (statuses[keys[i]]) return statuses[keys[i]];
-    return "";
+    for (var i = 0; i < keys.length; i += 1) if (statuses[keys[i]] === "ready" || statuses[keys[i]] === "unavailable" || statuses[keys[i]] === "not_found") return statuses[keys[i]];
+    return "idle";
+  }
+
+  function setPromotionRewardProductStatus(productGid, status) {
+    var keys = productLookupKeys(productGid);
+    for (var i = 0; i < keys.length; i += 1) state.rewardProductLoadStatusByGid[keys[i]] = status;
+  }
+
+  function cachePromotionRewardProduct(productGid, product) {
+    var keys = productLookupKeys(productGid);
+    for (var i = 0; i < keys.length; i += 1) state.rewardProductCatalogByGid[keys[i]] = product;
+  }
+
+  function loadPromotionRewardProduct(reward, forceRetry) {
+    if (!isPlainObject(reward) || !reward.productGid) return Promise.resolve({ status: "failed", reason: "missing-product-gid" });
+    var productGid = canonicalProductGid(reward.productGid);
+    var handle = promotionRewardProductHandle(reward);
+    if (!handle) { setPromotionRewardProductStatus(productGid, "failed"); return Promise.resolve({ status: "failed", reason: "missing-handle" }); }
+    if (!forceRetry && state.rewardProductCatalogByGid[productGid]) return Promise.resolve({ status: "ready", product: state.rewardProductCatalogByGid[productGid] });
+    if (!forceRetry && state.rewardProductLoadPromiseByGid[productGid]) return state.rewardProductLoadPromiseByGid[productGid];
+    setPromotionRewardProductStatus(productGid, "loading");
+    var promise = fetch("/products/" + encodeURIComponent(handle) + ".js", { credentials: "same-origin", cache: "no-store", headers: { Accept: "application/json" } })
+      .then(function (response) {
+        if (response.status === 404) { setPromotionRewardProductStatus(productGid, "not_found"); return { status: "not_found" }; }
+        if (!response.ok) throw new Error("Product lookup failed");
+        return response.json();
+      }).then(function (raw) {
+        if (raw && raw.status) return raw;
+        var normalized = normalizeAjaxProduct(raw, productGid, handle);
+        if (!normalized) { setPromotionRewardProductStatus(productGid, "failed"); return { status: "failed", reason: "product_identity_mismatch" }; }
+        cachePromotionRewardProduct(productGid, normalized);
+        var status = normalized.availableForSale ? "ready" : "unavailable";
+        setPromotionRewardProductStatus(productGid, status);
+        return { status: status, product: normalized };
+      }).catch(function (error) {
+        setPromotionRewardProductStatus(productGid, "failed");
+        return { status: "failed", error: error };
+      }).finally(function () { delete state.rewardProductLoadPromiseByGid[productGid]; });
+    state.rewardProductLoadPromiseByGid[productGid] = promise;
+    return promise;
   }
 
   function cartItemProductId(item) {
@@ -1036,10 +1153,7 @@
       var matched = eligibility.match === "all" ? triggers.every(function (trigger) { return triggerMatches(trigger, cart); }) : triggers.some(function (trigger) { return triggerMatches(trigger, cart); });
       var mode = promotionRewardSelectionMode(reward);
       var offerVariantGid = resolvePromotionOfferVariantGid(reward);
-      var product = promotionRewardProduct(reward);
-      var productReady = promotionRewardProductStatus(reward) === "ready";
-      var hasAvailableProductVariant = availableRewardVariants(product).length > 0;
-      var scopedRewardReady = mode === "product" ? product && productReady && hasAvailableProductVariant : offerVariantGid;
+      var scopedRewardReady = mode === "product" ? Boolean(reward.productGid) : offerVariantGid;
       var alreadyInCart = mode === "product" ? cartContainsProduct(cart, reward.productGid) : cartContainsVariant(cart, offerVariantGid);
       return rule && rule.enabled === true && rule.status === "active" && (rulePlacement === placement || rulePlacement === "both") && reward.productGid && scopedRewardReady && promotionOfferRemainingQuantity(cart, rule) > 0 && isPromotionScheduled(rule, now) && !(display.hideIfOfferProductAlreadyInCart !== false && alreadyInCart) && matched;
     }).sort(function (a, b) { return (Number(a.priority) || 0) - (Number(b.priority) || 0); }).slice(0, promotionConfig.maxVisibleOffers);
@@ -1189,9 +1303,13 @@
       var adding = state.offerAdding === ruleId;
       var synchronized = hasSynchronizedPromotionPublication();
       var status = mode === "product" ? promotionRewardProductStatus(reward) : "ready";
+      if (mode === "product" && status === "idle") {
+        loadPromotionRewardProduct(reward).then(function () { render(); });
+        status = "loading";
+      }
       var truncated = mode === "product" && product && product.variantsTruncated === true;
-      var missing = mode === "product" && !product;
-      var disabledMessage = missing ? 'Offer details are temporarily unavailable.' : status === 'query_failed' ? 'Offer options could not be loaded. Refresh and try again.' : truncated ? 'This product has too many variants to load safely.' : '';
+      var missing = mode === "product" && !product && status !== "loading";
+      var disabledMessage = status === 'loading' ? 'Loading offer options…' : status === 'not_found' ? 'Offer product is no longer available.' : status === 'unavailable' ? 'Sold out' : status === 'failed' ? 'Offer options could not be loaded.' : missing ? 'Offer details are temporarily unavailable.' : truncated ? 'This product has too many variants to load safely.' : '';
       var singleDirect = mode === "product" && available.length === 1 && productHasOnlyDefaultOption(product);
       var concreteVariant = mode === "product" ? (selected || (available.length === 1 ? available[0] : null)) : null;
       var image = mode === "product" ? rewardProductImage(product, concreteVariant, display, legacyProduct) : (display.imageOverrideUrl || legacyProduct.imageUrl || legacyProduct.image || "");
@@ -1206,11 +1324,11 @@
       var applied = line && lineHasShopifyDiscount(line) ? '<p class="loopdesk-cart-drawer__offer-applied">Original price: ' + money(line.original_line_price, cart.currency) + ' · Offer price: ' + money(line.final_line_price, cart.currency) + ' · You saved: ' + money(Number(line.original_line_price || 0) - Number(line.final_line_price || 0), cart.currency) + '</p>' : '';
       var stateName = promotionOfferExecutionState(cart, rule, concreteVariant);
       var unavailable = !synchronized ? '<p class="loopdesk-cart-drawer__offer-unavailable">Offer unavailable until Shopify discount sync completes.</p>' : disabledMessage ? '<p class="loopdesk-cart-drawer__offer-unavailable">' + escapeHtml(disabledMessage) + '</p>' : stateName === 'added_without_confirmed_discount' ? '<p class="loopdesk-cart-drawer__offer-unavailable">The item was added, but Shopify has not confirmed the promotional price yet.</p>' : '';
-      var ctaText = adding ? 'Adding…' : !synchronized || disabledMessage ? 'Unavailable' : mode === "product" && available.length === 0 ? 'Sold out' : (display.ctaLabel || 'Add offer');
+      var ctaText = adding ? 'Adding…' : status === 'failed' ? 'Retry loading offer' : status === 'unavailable' || (mode === "product" && available.length === 0 && !disabledMessage) ? 'Sold out' : !synchronized || disabledMessage ? (status === 'loading' ? 'Loading…' : 'Unavailable') : (display.ctaLabel || 'Add offer');
       var dataVariant = mode === "variant" ? resolvePromotionOfferVariantGid(reward) : (singleDirect && concreteVariant ? concreteVariant.numericVariantId : '');
       var selector = mode === "product" && selectorOpen && !disabledMessage && available.length > 1 && !productHasOnlyDefaultOption(product) ? renderPromotionOfferSelector(rule, product, selected, adding) : '';
       var deferred = reward.requiresDiscountEnforcement ? ' data-loopdesk-promotion-enforcement="deferred"' : '';
-      return ['<article class="loopdesk-cart-drawer__offer" data-loopdesk-promotion-rule="' + escapeHtml(rule.id || '') + '" data-loopdesk-offer-mode="' + escapeHtml(mode) + '"' + deferred + '>', display.badge ? '<div class="loopdesk-cart-drawer__offer-badge">' + escapeHtml(display.badge) + '</div>' : '', '<div class="loopdesk-cart-drawer__offer-content">', image ? '<img class="loopdesk-cart-drawer__offer-image" src="' + escapeHtml(image) + '" alt="' + escapeHtml(title) + '" loading="lazy">' : '<div class="loopdesk-cart-drawer__offer-image loopdesk-cart-drawer__offer-image--placeholder"></div>', '<div class="loopdesk-cart-drawer__offer-copy"><h3>' + escapeHtml(display.heading || rule.name || 'Special offer') + '</h3>', display.description ? '<p>' + escapeHtml(display.description) + '</p>' : '', '<strong>' + escapeHtml(title) + '</strong>' + (variantSummary ? '<p class="loopdesk-cart-drawer__offer-variant">' + escapeHtml(variantSummary) + '</p>' : '') + pricing + applied + unavailable + '</div></div>', state.offerError ? '<div class="loopdesk-cart-drawer__offer-error" role="alert">' + escapeHtml(state.offerError) + '</div>' : '', '<button type="button" class="loopdesk-cart-drawer__offer-cta" data-loopdesk-offer-add data-loopdesk-offer-mode="' + escapeHtml(mode) + '" data-loopdesk-offer-key="' + escapeHtml(ruleId) + '" data-loopdesk-offer-variant="' + escapeHtml(dataVariant) + '" data-loopdesk-offer-quantity="' + escapeHtml(offerQuantity) + '" aria-expanded="' + (selectorOpen ? 'true' : 'false') + '" aria-controls="loopdesk-offer-selector-' + escapeHtml(ruleId) + '"' + (adding || !synchronized || Boolean(disabledMessage) || (mode === "product" && available.length === 0) ? ' disabled' + (adding ? ' aria-busy="true"' : '') : '') + '>' + escapeHtml(ctaText) + '</button>' + selector + '</article>'].join('');
+      return ['<article class="loopdesk-cart-drawer__offer" data-loopdesk-promotion-rule="' + escapeHtml(rule.id || '') + '" data-loopdesk-offer-mode="' + escapeHtml(mode) + '"' + deferred + '>', display.badge ? '<div class="loopdesk-cart-drawer__offer-badge">' + escapeHtml(display.badge) + '</div>' : '', '<div class="loopdesk-cart-drawer__offer-content">', image ? '<img class="loopdesk-cart-drawer__offer-image" src="' + escapeHtml(image) + '" alt="' + escapeHtml(title) + '" loading="lazy">' : '<div class="loopdesk-cart-drawer__offer-image loopdesk-cart-drawer__offer-image--placeholder"></div>', '<div class="loopdesk-cart-drawer__offer-copy"><h3>' + escapeHtml(display.heading || rule.name || 'Special offer') + '</h3>', display.description ? '<p>' + escapeHtml(display.description) + '</p>' : '', '<strong>' + escapeHtml(title) + '</strong>' + (variantSummary ? '<p class="loopdesk-cart-drawer__offer-variant">' + escapeHtml(variantSummary) + '</p>' : '') + pricing + applied + unavailable + '</div></div>', state.offerError ? '<div class="loopdesk-cart-drawer__offer-error" role="alert">' + escapeHtml(state.offerError) + '</div>' : '', '<button type="button" class="loopdesk-cart-drawer__offer-cta" data-loopdesk-offer-add data-loopdesk-offer-mode="' + escapeHtml(mode) + '" data-loopdesk-offer-key="' + escapeHtml(ruleId) + '" data-loopdesk-offer-variant="' + escapeHtml(dataVariant) + '" data-loopdesk-offer-quantity="' + escapeHtml(offerQuantity) + '" aria-expanded="' + (selectorOpen ? 'true' : 'false') + '" aria-controls="loopdesk-offer-selector-' + escapeHtml(ruleId) + '"' + (adding || !synchronized || (Boolean(disabledMessage) && status !== 'failed') || (mode === "product" && status !== 'failed' && (status === 'unavailable' || available.length === 0)) ? ' disabled' + (adding ? ' aria-busy="true"' : '') : '') + '>' + escapeHtml(ctaText) + '</button>' + selector + '</article>'].join('');
     }).join('') + '</section>';
   }
 
@@ -1600,6 +1718,11 @@
       var key = offerButton.getAttribute("data-loopdesk-offer-key");
       var rule = promotionRuleByKey(key);
       if (mode === "product") {
+        if (rule && promotionRewardProductStatus(rule.reward || {}) === "failed") {
+          loadPromotionRewardProduct(rule.reward || {}, true).then(function () { render(); });
+          render();
+          return;
+        }
         var product = rule && promotionRewardProduct(rule.reward || {});
         var variants = availableRewardVariants(product);
         if (variants.length === 1) return addPromotionOffer(variants[0].numericVariantId, offerButton.getAttribute("data-loopdesk-offer-quantity"), key);
@@ -2356,6 +2479,8 @@
     promotionRewardSelectionMode: promotionRewardSelectionMode,
     promotionRewardProduct: promotionRewardProduct,
     promotionRewardProductStatus: promotionRewardProductStatus,
+    loadPromotionRewardProduct: loadPromotionRewardProduct,
+    normalizeAjaxProduct: normalizeAjaxProduct,
     promotionRewardQuantityInCart: promotionRewardQuantityInCart,
     promotionOfferRemainingQuantity: promotionOfferRemainingQuantity,
     availableRewardVariants: availableRewardVariants,
