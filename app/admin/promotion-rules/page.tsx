@@ -2,7 +2,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getPromotionRulesConfig, normalizePromotionRule, PROMOTION_RULES_CONFIG_MODULE_KEY, savePromotionRulesConfig, type PromotionConflictStrategy, type PromotionResourceMetadata } from "../../../services/promotion-rules/config";
 import { ResourcePickerFields } from "./ResourcePickerFields";
-import { publishLoopDeskPromotions } from "../../../services/loopdesk/discount-function-activation.server";
+import { getLoopDeskPromotionPublicationDiagnostics, publishLoopDeskPromotions } from "../../../services/loopdesk/discount-function-activation.server";
 import { formatAdminShopResolutionError, resolveAdminShopFromSearchParams } from "../../../services/shopify/admin-shop-context";
 import { embeddedContextFromFormData, embeddedContextHiddenInputs, withEmbeddedContext, type EmbeddedSearchParams } from "./embedded-query";
 
@@ -117,6 +117,7 @@ export default async function PromotionRulesPage({ searchParams }: PageProps) {
   if (!resolved.shop?.id) return <main className="mx-auto max-w-3xl p-8"><div className={cardClass}><h1 className="text-2xl font-semibold">Promotion Rules</h1><p className="mt-3 text-sm text-red-700">{params.error || formatAdminShopResolutionError(resolved)}</p></div></main>;
   const shop = resolved.shop;
   const config = await getPromotionRulesConfig(shop.id, shop.shopDomain);
+  const publicationDiagnostics = await getLoopDeskPromotionPublicationDiagnostics({ shopId: shop.id, shopDomain: shop.shopDomain }).catch((error) => ({ ok: false, synchronized: false, blockingReasons: [error instanceof Error ? error.message : "diagnostics_unavailable"], compiledConfigHash: null, storedConfigHash: null, automaticDiscountStatus: null }));
   const createRuleHref = withEmbeddedContext("/admin/promotion-rules", params, { shop: shop.shopDomain, rule: null, saved: null, error: null });
   const selected = config.rules.find((rule) => rule.id === params.rule) || normalizePromotionRule({ id: "new_rule", name: "", display: { ctaLabel: "Add offer" } });
   const action = savePromotionRules.bind(null, shop.id, shop.shopDomain);
@@ -133,6 +134,28 @@ export default async function PromotionRulesPage({ searchParams }: PageProps) {
     {params.error ? <div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-800">{params.error}</div> : null}
     <form id="promotion-rules-form" action={action} className="grid gap-6">
       {embeddedContextHiddenInputs(params).map(([key, value]) => <input key={key} type="hidden" name={`embeddedContext:${key}`} value={value} />)}
+      <section className={`${cardClass} grid gap-4`}>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-950">Shopify publication diagnostics</h2>
+            <p className="mt-1 text-sm text-gray-600">Offer CTAs remain disabled until Shopify synchronization is fully verified.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <a className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium" href={withEmbeddedContext("/admin/promotion-rules/actions/publication-diagnostics", params, { shop: shop.shopDomain })}>Refresh diagnostics</a>
+            <button className="rounded-lg bg-gray-900 px-3 py-2 text-sm font-medium text-white" name="intent" value="republish">Republish to Shopify</button>
+          </div>
+        </div>
+        <div className={publicationDiagnostics.synchronized ? "rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-900" : "rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"}>
+          <p className="font-semibold">Synchronization: {publicationDiagnostics.synchronized ? "verified" : "blocked"}</p>
+          <p className="mt-1">Automatic discount status: {publicationDiagnostics.automaticDiscountStatus || "not found"}</p>
+          <p className="mt-1">Compiled hash: {publicationDiagnostics.compiledConfigHash || "unavailable"}</p>
+          <p className="mt-1">Stored hash: {publicationDiagnostics.storedConfigHash || "unavailable"}</p>
+          <div className="mt-3">
+            <p className="font-semibold">Blocking reasons</p>
+            {publicationDiagnostics.blockingReasons?.length ? <ul className="mt-1 list-disc pl-5">{publicationDiagnostics.blockingReasons.map((reason) => <li key={reason}><code>{reason}</code></li>)}</ul> : <p className="mt-1">None.</p>}
+          </div>
+        </div>
+      </section>
       <section className={`${cardClass} grid gap-5`}><h2 className="text-lg font-semibold text-gray-950">Module settings</h2><div className="grid gap-4 md:grid-cols-3"><Check label="Module enabled" name="moduleEnabled" defaultChecked={config.enabled} help="Admin persistence only in this phase." /><Field label="Max visible offers" name="maxVisibleOffers" type="number" defaultValue={config.maxVisibleOffers} /><Select label="Conflict strategy" name="conflictStrategy" defaultValue={config.conflictStrategy}><option value="priority_first">Priority first</option><option value="newest_first">Newest first</option><option value="oldest_first">Oldest first</option></Select></div></section>
       <section className={`${cardClass} grid gap-4`}><div className="flex items-center justify-between"><h2 className="text-lg font-semibold text-gray-950">Rules list</h2><a className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium" href={createRuleHref}>Create rule</a></div><div className="grid gap-3">{config.rules.length ? config.rules.map((rule) => <div key={rule.id} className="grid gap-3 rounded-xl border border-gray-200 p-4 md:grid-cols-[1fr_auto]"><div><p className="font-semibold text-gray-950">{rule.name}</p><p className="mt-1 text-sm text-gray-600">Status: {rule.status}. Enabled: {rule.enabled ? "Yes" : "No"}. Priority: {rule.priority}. Trigger: {rule.eligibility.triggers[0]?.type}. Offer: {rule.reward.productGid || "missing"}. Placement: {rule.display.placement}.</p></div><div className="flex flex-wrap gap-2"><a className="rounded-lg border px-3 py-2 text-sm" href={withEmbeddedContext("/admin/promotion-rules", params, { shop: shop.shopDomain, rule: rule.id, saved: null, error: null })}>Edit</a><button className="rounded-lg border px-3 py-2 text-sm" name="intent" value={`toggle:${rule.id}`}>{rule.enabled ? "Disable" : "Enable"}</button><button className="rounded-lg border px-3 py-2 text-sm" name="intent" value={`pause:${rule.id}`}>Pause</button><button className="rounded-lg border px-3 py-2 text-sm" name="intent" value={`archive:${rule.id}`}>Archive</button><button className="rounded-lg border border-red-200 px-3 py-2 text-sm text-red-700" name="intent" value={`delete:${rule.id}`}>Delete</button></div></div>) : <p className="text-sm text-gray-600">No rules configured yet.</p>}</div></section>
       <input type="hidden" name="ruleId" value={selected.id} />
