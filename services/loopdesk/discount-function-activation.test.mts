@@ -236,9 +236,17 @@ test("discountNodes discovery is authoritative before legacy automaticDiscountNo
 
 test("discountNodes query reads node metafield and app Function identity fields", () => {
   const source = readFileSync(new URL("./discount-function-activation.server.ts", import.meta.url), "utf8");
-  assert.match(source, /discountNodesSchema/);
+  assert.match(source, /LoopDeskDiscountNodesSchema/);
   assert.match(source, /metafield\(namespace: "loopdesk", key: "discount_function_config"\)/);
   assert.match(source, /\.\.\. on DiscountAutomaticApp \{ title status discountId appDiscountType \{ functionId \} \}/);
+});
+
+test("discountNodes queries never spread DiscountAutomaticNode fragments", () => {
+  const source = readFileSync(new URL("./discount-function-activation.server.ts", import.meta.url), "utf8");
+  for (const occurrence of source.matchAll(/discountNodes\(first: 100, after: \$after(?:, query: \$query)?\)/g)) {
+    const querySource = source.slice(occurrence.index, source.indexOf("`", occurrence.index));
+    assert.doesNotMatch(querySource, /\.\.\.\s+on\s+DiscountAutomaticNode\b/);
+  }
 });
 
 test("discountNodes pagination does not stop on title collision before an identity match is possible", () => {

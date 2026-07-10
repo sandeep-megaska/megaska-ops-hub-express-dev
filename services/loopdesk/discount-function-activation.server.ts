@@ -280,13 +280,20 @@ async function queryRootDiscountFieldNames(shopDomain: string, shopId: string) {
 
 type GraphqlTypeRef = { kind?: string | null; name?: string | null; ofType?: GraphqlTypeRef | null };
 type GraphqlField = { name?: string | null; args?: Array<{ name?: string | null; type?: GraphqlTypeRef | null }> | null; type?: GraphqlTypeRef | null };
-type DiscountNodesSchema = { queryRoot?: { fields?: GraphqlField[] | null } | null; discountNode?: { fields?: GraphqlField[] | null } | null; discountAutomaticNode?: { fields?: GraphqlField[] | null } | null; discountAutomaticApp?: { fields?: GraphqlField[] | null } | null; appDiscountType?: { fields?: GraphqlField[] | null } | null };
+type GraphqlType = { kind?: string | null; name?: string | null; fields?: GraphqlField[] | null; possibleTypes?: Array<{ name?: string | null } | null> | null };
+type DiscountNode = {
+  id: string;
+  metafield?: { value?: string | null } | null;
+  discount?: AutomaticDiscount["automaticDiscount"];
+};
+type DiscountNodesSchema = { schema?: { mutationType?: { fields?: GraphqlField[] | null } | null } | null; queryRoot?: { fields?: GraphqlField[] | null } | null; discountNode?: GraphqlType | null; discountNodeDiscount?: GraphqlType | null; discountAutomaticApp?: GraphqlType | null; appDiscountType?: GraphqlType | null };
 
 async function introspectDiscountNodesSchema(shopDomain: string, shopId: string) {
   return shopifyAdminGraphql<DiscountNodesSchema>(shopDomain, `query LoopDeskDiscountNodesSchema {
+    schema: __schema { mutationType { fields { name args { name type { kind name ofType { kind name ofType { kind name } } } } type { kind name ofType { kind name ofType { kind name } } } } } }
     queryRoot: __type(name: "QueryRoot") { fields { name args { name type { kind name ofType { kind name ofType { kind name } } } } type { kind name ofType { kind name ofType { kind name } } } } }
     discountNode: __type(name: "DiscountNode") { fields { name type { kind name ofType { kind name ofType { kind name } } } } }
-    discountAutomaticNode: __type(name: "DiscountAutomaticNode") { fields { name type { kind name ofType { kind name ofType { kind name } } } } }
+    discountNodeDiscount: __type(name: "Discount") { kind name possibleTypes { name } fields { name type { kind name ofType { kind name ofType { kind name } } } } }
     discountAutomaticApp: __type(name: "DiscountAutomaticApp") { fields { name type { kind name ofType { kind name ofType { kind name } } } } }
     appDiscountType: __type(name: "AppDiscountType") { fields { name type { kind name ofType { kind name ofType { kind name } } } } }
   }`, {}, { shopId });
@@ -300,45 +307,69 @@ function hasDiscountNodesQueryArgument(schema: DiscountNodesSchema) {
   return Boolean(schema.queryRoot?.fields?.find((field) => field.name === "discountNodes")?.args?.some((arg) => arg.name === "query"));
 }
 
-const DISCOUNT_NODES_NODE_FIELDS = `
+function namedTypeName(type: GraphqlTypeRef | null | undefined): string | null {
+  let current = type || null;
+  while (current?.ofType) current = current.ofType;
+  return current?.name || null;
+}
+
+function discountNodeDiscountFieldName(schema: DiscountNodesSchema) {
+  return schema.discountNode?.fields?.find((field) => {
+    const returnTypeName = namedTypeName(field.type);
+    return returnTypeName === "Discount" || returnTypeName === "DiscountAutomaticApp";
+  })?.name || null;
+}
+
+function discountNodeFields(discountFieldName: string, includeMetafield: boolean) {
+  return `
   edges {
     node {
       id
-      __typename
-      ... on DiscountAutomaticNode {
-        metafield(namespace: "loopdesk", key: "discount_function_config") { value }
-        automaticDiscount {
-          __typename
-          ... on DiscountAutomaticApp { title status discountId appDiscountType { functionId } }
-        }
+      ${includeMetafield ? 'metafield(namespace: "loopdesk", key: "discount_function_config") { value }' : ""}
+      ${discountFieldName} {
+        __typename
+        ... on DiscountAutomaticApp { title status discountId appDiscountType { functionId } }
       }
     }
   }
   pageInfo { hasNextPage endCursor }
 `;
+}
 
-type DiscountNodesConnection = { edges?: Array<{ node?: AutomaticDiscount | null } | null> | null; pageInfo?: { hasNextPage?: boolean; endCursor?: string | null } | null };
+type DiscountNodesConnection = { edges?: Array<{ node?: DiscountNode | null } | null> | null; pageInfo?: { hasNextPage?: boolean; endCursor?: string | null } | null };
+
+function normalizeDiscountNode(node: DiscountNode, discountFieldName: string): AutomaticDiscount {
+  const discount = node.discount || (node as DiscountNode & Record<string, AutomaticDiscount["automaticDiscount"]>)[discountFieldName] || null;
+  return { id: node.id, metafield: node.metafield || null, automaticDiscount: discount };
+}
 
 export async function queryLoopDeskDiscountNodes(shopDomain: string, shopId: string, functionType: AppDiscountType): Promise<ExactTitleAutomaticDiscountsResult> {
   const schema = await introspectDiscountNodesSchema(shopDomain, shopId);
   const queryField = schema.queryRoot?.fields?.find((field) => field.name === "discountNodes");
-  if (!queryField || !hasField(schema.discountNode, "id") || !hasField(schema.discountAutomaticNode, "automaticDiscount") || !hasField(schema.discountAutomaticNode, "metafield") || !hasField(schema.discountAutomaticApp, "title") || !hasField(schema.discountAutomaticApp, "status") || !hasField(schema.discountAutomaticApp, "discountId") || !hasField(schema.discountAutomaticApp, "appDiscountType") || !hasField(schema.appDiscountType, "functionId")) {
+  const discountFieldName = discountNodeDiscountFieldName(schema);
+  const discountNodeHasMetafield = hasField(schema.discountNode, "metafield");
+  const discountReturnTypeName = namedTypeName(schema.discountNode?.fields?.find((field) => field.name === discountFieldName)?.type);
+  const discountReturnTypeSupportsAutomaticApp = discountReturnTypeName === "DiscountAutomaticApp" || Boolean(schema.discountNodeDiscount?.possibleTypes?.some((type) => type?.name === "DiscountAutomaticApp"));
+  const updateMutationAcceptsId = Boolean(schema.schema?.mutationType?.fields?.find((field) => field.name === "discountAutomaticAppUpdate")?.args?.some((arg) => arg.name === "id" && namedTypeName(arg.type) === "ID"));
+  const nodeQueryAcceptsId = Boolean(schema.queryRoot?.fields?.find((field) => field.name === "node")?.args?.some((arg) => arg.name === "id" && namedTypeName(arg.type) === "ID"));
+  if (!queryField || !hasField(schema.discountNode, "id") || !discountFieldName || !discountReturnTypeSupportsAutomaticApp || !hasField(schema.discountAutomaticApp, "title") || !hasField(schema.discountAutomaticApp, "status") || !hasField(schema.discountAutomaticApp, "discountId") || !hasField(schema.discountAutomaticApp, "appDiscountType") || !hasField(schema.appDiscountType, "functionId") || !updateMutationAcceptsId || !nodeQueryAcceptsId) {
     throw new DiscountMetafieldReadUnsupportedError();
   }
+  const discountNodesNodeFields = discountNodeFields(discountFieldName, discountNodeHasMetafield);
   const queryArgumentSupported = hasDiscountNodesQueryArgument(schema);
   const diagnostics: DiscountNodesDiscoveryDiagnostics = { pagesRead: 0, edgesRead: 0, candidateNodeIds: [], candidates: [], queryArgumentSupported, stoppedBecause: "end_of_connection" };
   const nodes: AutomaticDiscount[] = [];
   let after: string | null = null;
   do {
     const data: { discountNodes: DiscountNodesConnection } = await shopifyAdminGraphql<{ discountNodes: DiscountNodesConnection }>(shopDomain, queryArgumentSupported
-      ? `query LoopDeskDiscountNodes($after: String, $query: String!) { discountNodes(first: 100, after: $after, query: $query) { ${DISCOUNT_NODES_NODE_FIELDS} } }`
-      : `query LoopDeskDiscountNodes($after: String) { discountNodes(first: 100, after: $after) { ${DISCOUNT_NODES_NODE_FIELDS} } }`, { after, ...(queryArgumentSupported ? { query: automaticDiscountTitleQuery(DISCOUNT_TITLE) } : {}) }, { shopId }).catch(async (error: unknown) => {
+      ? `query LoopDeskDiscountNodes($after: String, $query: String!) { discountNodes(first: 100, after: $after, query: $query) { ${discountNodesNodeFields} } }`
+      : `query LoopDeskDiscountNodes($after: String) { discountNodes(first: 100, after: $after) { ${discountNodesNodeFields} } }`, { after, ...(queryArgumentSupported ? { query: automaticDiscountTitleQuery(DISCOUNT_TITLE) } : {}) }, { shopId }).catch(async (error: unknown) => {
         if (isMetafieldSchemaError(error)) await assertAutomaticDiscountNodeMetafieldReadable(shopDomain, shopId);
         throw error;
       });
     diagnostics.pagesRead += 1;
     const connection: DiscountNodesConnection = data.discountNodes;
-    const pageNodes = (connection?.edges || []).map((edge: { node?: AutomaticDiscount | null } | null) => edge?.node).filter((node: AutomaticDiscount | null | undefined): node is AutomaticDiscount => Boolean(node));
+    const pageNodes = (connection?.edges || []).map((edge) => edge?.node).filter((node): node is DiscountNode => Boolean(node)).map((node) => normalizeDiscountNode(node, discountFieldName));
     diagnostics.edgesRead += pageNodes.length;
     const pageCandidates = automaticDiscountDiscoveryCandidates(pageNodes);
     diagnostics.candidates.push(...pageCandidates);
@@ -347,13 +378,27 @@ export async function queryLoopDeskDiscountNodes(shopDomain: string, shopId: str
     const classified = classifyExactTitleAutomaticDiscounts(nodes, functionType);
     if (classified.identityMatches.length) {
       diagnostics.stoppedBecause = "found_identity";
-      return { ...classified, discountNodesDiscoveryDiagnostics: diagnostics };
+      const hydrated = discountNodeHasMetafield ? classified : await hydrateSelectedDiscountMetafield(shopDomain, shopId, classified);
+      return { ...hydrated, discountNodesDiscoveryDiagnostics: diagnostics };
     }
     after = connection?.pageInfo?.endCursor || null;
     if (!connection?.pageInfo?.hasNextPage) { diagnostics.stoppedBecause = "end_of_connection"; break; }
     if (!after) { diagnostics.stoppedBecause = "missing_cursor"; break; }
   } while (after);
-  return { ...classifyExactTitleAutomaticDiscounts(nodes, functionType), discountNodesDiscoveryDiagnostics: diagnostics };
+  const classified = classifyExactTitleAutomaticDiscounts(nodes, functionType);
+  const hydrated = discountNodeHasMetafield ? classified : await hydrateSelectedDiscountMetafield(shopDomain, shopId, classified);
+  return { ...hydrated, discountNodesDiscoveryDiagnostics: diagnostics };
+}
+
+async function hydrateSelectedDiscountMetafield(shopDomain: string, shopId: string, result: ExactTitleAutomaticDiscountsResult) {
+  if (!result.selected?.id) return result;
+  const hydratedSelected = await queryAutomaticDiscountById(shopDomain, shopId, result.selected.id);
+  if (!hydratedSelected) return result;
+  return {
+    ...result,
+    selected: hydratedSelected,
+    identityMatches: result.identityMatches.map((node) => node.id === hydratedSelected.id ? hydratedSelected : node),
+  };
 }
 
 function isIdentityMatch(node: AutomaticDiscount, functionType: AppDiscountType) {
