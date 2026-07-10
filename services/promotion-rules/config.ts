@@ -103,9 +103,11 @@ export function normalizePromotionRule(input: unknown): PromotionRule {
   if (type === "cart_quantity_gte") normalizedTrigger.quantityGte = num(value, 0);
   const rewardProduct = metadata(reward.product, cleanText(reward.productGid, "", 300));
   const rewardProductGid = cleanText(reward.productGid ?? rewardProduct.gid, rewardProduct.gid, 300);
-  const rewardVariantGid = cleanText(reward.variantGid ?? rewardProduct.variantGid, rewardProduct.variantGid || "", 300);
-  const normalizedRewardProduct = { ...rewardProduct, gid: rewardProduct.gid || rewardProductGid, id: rewardProduct.id || rewardProductGid, variantGid: rewardProduct.variantGid || rewardVariantGid };
-  const rewardVariantPrice = cleanText(reward.variantPrice ?? raw.rewardProductVariantPrice ?? normalizedRewardProduct.variantPrice, normalizedRewardProduct.variantPrice || "", 80);
+  const explicitRewardSelectionMode = rewardSelectionMode(reward.variantSelectionMode ?? reward.scope);
+  const normalizedRewardSelectionMode = explicitRewardSelectionMode || rewardSelectionMode(reward.scope ?? reward.variantSelectionMode);
+  const rewardVariantGid = normalizedRewardSelectionMode === "product" ? "" : cleanText(reward.variantGid ?? rewardProduct.variantGid, rewardProduct.variantGid || "", 300);
+  const normalizedRewardProduct = { ...rewardProduct, gid: rewardProduct.gid || rewardProductGid, id: rewardProduct.id || rewardProductGid, variantGid: normalizedRewardSelectionMode === "product" ? "" : rewardProduct.variantGid || rewardVariantGid, variantTitle: normalizedRewardSelectionMode === "product" ? "" : rewardProduct.variantTitle, variantPrice: normalizedRewardSelectionMode === "product" ? "" : rewardProduct.variantPrice, variantCompareAtPrice: normalizedRewardSelectionMode === "product" ? "" : rewardProduct.variantCompareAtPrice };
+  const rewardVariantPrice = normalizedRewardSelectionMode === "product" ? "" : cleanText(reward.variantPrice ?? raw.rewardProductVariantPrice ?? normalizedRewardProduct.variantPrice, normalizedRewardProduct.variantPrice || "", 80);
   return {
     ...raw,
     id: stableId(raw.id),
@@ -114,8 +116,8 @@ export function normalizePromotionRule(input: unknown): PromotionRule {
     priority: num(raw.priority, 100, -100000, 100000),
     status: status(raw.status),
     eligibility: { ...eligibility, match: eligibility.match === "all" ? "all" : "any", triggers: [normalizedTrigger] },
-    reward: { ...reward, type: "offer_product", productGid: rewardProductGid, variantGid: rewardVariantGid, variantSelectionMode: rewardSelectionMode(reward.variantSelectionMode ?? reward.scope), scope: rewardSelectionMode(reward.scope ?? reward.variantSelectionMode), quantity: num(reward.quantity, 1, 1, 999), requiresDiscountEnforcement: bool(reward.requiresDiscountEnforcement, false), discount: rewardDiscount(reward.discount), product: normalizedRewardProduct, variantPrice: rewardVariantPrice },
-    rewardProductVariantPrice: cleanText(raw.rewardProductVariantPrice, rewardVariantPrice, 80),
+    reward: { ...reward, type: "offer_product", productGid: rewardProductGid, variantGid: rewardVariantGid, variantSelectionMode: normalizedRewardSelectionMode, scope: normalizedRewardSelectionMode, quantity: num(reward.quantity, 1, 1, 999), requiresDiscountEnforcement: bool(reward.requiresDiscountEnforcement, false), discount: rewardDiscount(reward.discount), product: normalizedRewardProduct, variantPrice: rewardVariantPrice },
+    rewardProductVariantPrice: normalizedRewardSelectionMode === "product" ? "" : cleanText(raw.rewardProductVariantPrice, rewardVariantPrice, 80),
     display: { ...display, heading: cleanText(display.heading, "", 120), description: cleanText(display.description, "", 500), badge: cleanText(display.badge, "", 80), ctaLabel: cleanText(display.ctaLabel, "Add offer", 80), imageOverrideUrl: nullableUrl(display.imageOverrideUrl), offerPriceDisplay: cleanText(display.offerPriceDisplay, "", 80), comparePriceDisplay: cleanText(display.comparePriceDisplay, "", 80), placement: placement(display.placement), hideIfOfferProductAlreadyInCart: bool(display.hideIfOfferProductAlreadyInCart, true) },
     limits: { ...limits, maxQuantityPerCart: num(limits.maxQuantityPerCart, 1, 1, 999), showOncePerSession: bool(limits.showOncePerSession, false), oneOfferPerRule: bool(limits.oneOfferPerRule, true) },
     schedule: { ...schedule, alwaysActive: bool(schedule.alwaysActive, true), startAt: cleanText(schedule.startAt, "", 80) || null, endAt: cleanText(schedule.endAt, "", 80) || null, timezone: cleanText(schedule.timezone, "Asia/Kolkata", 80) },
@@ -152,8 +154,10 @@ export function validatePromotionRulesConfig(config: PromotionRulesConfig): stri
       else if (trigger.type === "cart_contains_variant" && !String(trigger.variantGid || trigger.value || "").trim()) errors.push(`${prefix}: active variant trigger rules require a selected variant.`);
       else if (trigger.type !== "always" && !String(trigger.value || "").trim()) errors.push(`${prefix}: active rules must have a valid trigger value.`);
       const offerProductGid = String(rule.reward.productGid || rule.reward.product?.gid || rule.reward.product?.id || "").trim();
+      const rewardMode = rule.reward.variantSelectionMode || rule.reward.scope || (rule.reward.variantGid ? "variant" : "product");
       const offerVariantGid = String(rule.reward.variantGid || rule.reward.product?.variantGid || "").trim();
-      if (!offerProductGid || !offerVariantGid) errors.push(`${prefix}: active offer product rules require a selected product and variant.`);
+      if (!offerProductGid) errors.push(`${prefix}: active offer product rules require a selected product.`);
+      if (rewardMode === "variant" && !offerVariantGid) errors.push(`${prefix}: variant-specific rewards require a selected variant.`);
     }
   }
   return errors;
