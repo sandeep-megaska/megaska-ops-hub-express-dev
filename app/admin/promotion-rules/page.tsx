@@ -2,13 +2,14 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getPromotionRulesConfig, normalizePromotionRule, PROMOTION_RULES_CONFIG_MODULE_KEY, savePromotionRulesConfig, type PromotionConflictStrategy, type PromotionResourceMetadata } from "../../../services/promotion-rules/config";
 import { ResourcePickerFields } from "./ResourcePickerFields";
+import { publishLoopDeskPromotions } from "../../../services/loopdesk/discount-function-activation.server";
 import { formatAdminShopResolutionError, resolveAdminShopFromSearchParams } from "../../../services/shopify/admin-shop-context";
 import { embeddedContextFromFormData, embeddedContextHiddenInputs, withEmbeddedContext, type EmbeddedSearchParams } from "./embedded-query";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type PageProps = { searchParams?: Promise<EmbeddedSearchParams & { shop?: string; rule?: string; saved?: string; error?: string; host?: string }> };
+type PageProps = { searchParams?: Promise<EmbeddedSearchParams & { shop?: string; rule?: string; saved?: string; synced?: string; syncError?: string; error?: string; host?: string }> };
 const cardClass = "rounded-2xl border border-gray-200 bg-white p-6 shadow-sm";
 const inputClass = "rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-950 shadow-sm outline-none transition focus:border-gray-900 focus:ring-2 focus:ring-gray-900/10";
 const helpClass = "text-xs leading-5 text-gray-500";
@@ -28,6 +29,19 @@ async function savePromotionRules(shopId: string, shopDomain: string, formData: 
   let redirectUrl = `/admin/promotion-rules?${embeddedContext.toString()}`;
   try {
     const current = await getPromotionRulesConfig(shopId);
+    if (intent === "republish") {
+      try {
+        const publication = await publishLoopDeskPromotions({ shopId, shopDomain });
+        embeddedContext.set("synced", publication.ok ? "1" : "0");
+        if (!publication.ok) embeddedContext.set("syncError", publication.message || "Shopify publication failed.");
+      } catch (publicationError) {
+        embeddedContext.set("synced", "0");
+        embeddedContext.set("syncError", publicationError instanceof Error ? publicationError.message : "Shopify publication failed.");
+      }
+      redirectUrl = `/admin/promotion-rules?${embeddedContext.toString()}`;
+      revalidatePath("/admin/promotion-rules");
+      return;
+    }
     const base = { ...current, enabled: getBool(formData, "moduleEnabled"), maxVisibleOffers: Number(getString(formData, "maxVisibleOffers")), conflictStrategy: getString(formData, "conflictStrategy") };
     let rules = [...current.rules];
     if (intent === "delete") rules = rules.filter((rule) => rule.id !== ruleId);
@@ -69,6 +83,15 @@ async function savePromotionRules(shopId: string, shopDomain: string, formData: 
       enabled: saved.enabled,
       ruleCount: saved.rules.length,
     });
+    try {
+      const publication = await publishLoopDeskPromotions({ shopId, shopDomain });
+      embeddedContext.set("synced", publication.ok ? "1" : "0");
+      if (!publication.ok) embeddedContext.set("syncError", publication.message || "Shopify publication failed.");
+    } catch (publicationError) {
+      embeddedContext.set("synced", "0");
+      embeddedContext.set("syncError", publicationError instanceof Error ? publicationError.message : "Shopify publication failed.");
+    }
+    redirectUrl = `/admin/promotion-rules?${embeddedContext.toString()}`;
     revalidatePath("/admin/promotion-rules");
   } catch (error) {
     const message = error instanceof Error ? error.message : "Invalid promotion rules configuration.";
@@ -104,10 +127,11 @@ export default async function PromotionRulesPage({ searchParams }: PageProps) {
   const triggerVariant = (trigger as typeof trigger & { variant?: PromotionResourceMetadata; variantGid?: string }).variant || { ...emptyResource, gid: (trigger as typeof trigger & { variantGid?: string }).variantGid || "", resourceType: "variant" as const };
   const offerProduct = { ...(selected.reward.product || { ...emptyResource, gid: selected.reward.productGid, resourceType: "product" as const }), gid: selected.reward.product?.gid || selected.reward.productGid, id: selected.reward.product?.id || selected.reward.productGid, variantGid: selected.reward.product?.variantGid || selected.reward.variantGid, variantTitle: selected.reward.product?.variantTitle || "", variantPrice: selected.reward.product?.variantPrice || "", variantCompareAtPrice: selected.reward.product?.variantCompareAtPrice || "" };
   return <main className="mx-auto max-w-6xl px-6 py-8">
-    <div className="mb-6 rounded-2xl bg-gray-950 p-6 text-white shadow-sm"><p className="text-xs font-semibold uppercase tracking-wide text-gray-300">Cart Intelligence / Promotion Rules</p><h1 className="mt-2 text-3xl font-semibold">Promotion Rules</h1><p className="mt-3 max-w-3xl text-sm leading-6 text-gray-200">Configure display-only offer rules for {shop.shopDomain}. Saves to ShopModuleConfig moduleKey {PROMOTION_RULES_CONFIG_MODULE_KEY}; no drawer, checkout, cart mutation, analytics, payment, order, or discount-enforcement behavior is changed.</p></div>
-    {params.saved ? <div className="mb-4 rounded-xl border border-green-200 bg-green-50 p-4 text-sm font-medium text-green-800">Promotion Rules configuration saved.</div> : null}
+    <div className="mb-6 rounded-2xl bg-gray-950 p-6 text-white shadow-sm"><p className="text-xs font-semibold uppercase tracking-wide text-gray-300">Cart Intelligence / Promotion Rules</p><h1 className="mt-2 text-3xl font-semibold">Promotion Rules</h1><p className="mt-3 max-w-3xl text-sm leading-6 text-gray-200">Configure display-only offer rules for {shop.shopDomain}. Saves to ShopModuleConfig moduleKey {PROMOTION_RULES_CONFIG_MODULE_KEY}; successful monetary saves publish the compiled Shopify Function config to the LoopDesk automatic app discount.</p></div>
+    {params.saved ? <div className="mb-4 rounded-xl border border-green-200 bg-green-50 p-4 text-sm font-medium text-green-800">Promotion Rules configuration saved{params.synced === "1" ? " and published to Shopify." : params.synced === "0" ? ", but Shopify is unsynchronized." : "."}</div> : null}
+    {params.syncError ? <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-medium text-amber-900"><div>Saved locally, but Shopify publication failed: {params.syncError}</div><button className="mt-3 rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm" form="promotion-rules-form" name="intent" value="republish">Retry / Republish</button></div> : null}
     {params.error ? <div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-800">{params.error}</div> : null}
-    <form action={action} className="grid gap-6">
+    <form id="promotion-rules-form" action={action} className="grid gap-6">
       {embeddedContextHiddenInputs(params).map(([key, value]) => <input key={key} type="hidden" name={`embeddedContext:${key}`} value={value} />)}
       <section className={`${cardClass} grid gap-5`}><h2 className="text-lg font-semibold text-gray-950">Module settings</h2><div className="grid gap-4 md:grid-cols-3"><Check label="Module enabled" name="moduleEnabled" defaultChecked={config.enabled} help="Admin persistence only in this phase." /><Field label="Max visible offers" name="maxVisibleOffers" type="number" defaultValue={config.maxVisibleOffers} /><Select label="Conflict strategy" name="conflictStrategy" defaultValue={config.conflictStrategy}><option value="priority_first">Priority first</option><option value="newest_first">Newest first</option><option value="oldest_first">Oldest first</option></Select></div></section>
       <section className={`${cardClass} grid gap-4`}><div className="flex items-center justify-between"><h2 className="text-lg font-semibold text-gray-950">Rules list</h2><a className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium" href={createRuleHref}>Create rule</a></div><div className="grid gap-3">{config.rules.length ? config.rules.map((rule) => <div key={rule.id} className="grid gap-3 rounded-xl border border-gray-200 p-4 md:grid-cols-[1fr_auto]"><div><p className="font-semibold text-gray-950">{rule.name}</p><p className="mt-1 text-sm text-gray-600">Status: {rule.status}. Enabled: {rule.enabled ? "Yes" : "No"}. Priority: {rule.priority}. Trigger: {rule.eligibility.triggers[0]?.type}. Offer: {rule.reward.productGid || "missing"}. Placement: {rule.display.placement}.</p></div><div className="flex flex-wrap gap-2"><a className="rounded-lg border px-3 py-2 text-sm" href={withEmbeddedContext("/admin/promotion-rules", params, { shop: shop.shopDomain, rule: rule.id, saved: null, error: null })}>Edit</a><button className="rounded-lg border px-3 py-2 text-sm" name="intent" value={`toggle:${rule.id}`}>{rule.enabled ? "Disable" : "Enable"}</button><button className="rounded-lg border px-3 py-2 text-sm" name="intent" value={`pause:${rule.id}`}>Pause</button><button className="rounded-lg border px-3 py-2 text-sm" name="intent" value={`archive:${rule.id}`}>Archive</button><button className="rounded-lg border border-red-200 px-3 py-2 text-sm text-red-700" name="intent" value={`delete:${rule.id}`}>Delete</button></div></div>) : <p className="text-sm text-gray-600">No rules configured yet.</p>}</div></section>
