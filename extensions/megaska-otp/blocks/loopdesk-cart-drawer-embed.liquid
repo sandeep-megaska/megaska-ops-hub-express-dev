@@ -33,21 +33,12 @@
   </script>
   <script>
     (function () {
-      var pricingAssetUrl = {{ 'loopdesk-promotion-pricing.js' | asset_url | json }};
-      var shopifyPricingAssetUrl = {{ 'loopdesk-shopify-pricing.js' | asset_url | json }};
       var drawerAssetUrl = {{ 'loopdesk-cart-drawer.js' | asset_url | json }};
       var shopDomain = {{ shop.permanent_domain | json }};
       var runtimeUrl = "/apps/megaska/api/runtime/config?shop=" + encodeURIComponent(shopDomain);
 
       function mergeRuntimeConfig(payload) {
         if (!payload || payload.ok !== true || !payload.config) return;
-        if (window.console) {
-          window.console.info("[LoopDesk Runtime] fetched config", payload);
-          window.console.info("[LoopDesk Runtime] promotion_rules_config before merge", {
-            existing: window.LoopDeskConfig && window.LoopDeskConfig.promotion_rules_config,
-            fetched: payload.config.promotion_rules_config
-          });
-        }
         window.LoopDeskConfig = Object.assign({}, window.LoopDeskConfig || {}, payload.config, {
           branding: Object.assign({}, (window.LoopDeskConfig && window.LoopDeskConfig.branding) || {}, payload.config.branding || {}),
           labels: Object.assign({}, (window.LoopDeskConfig && window.LoopDeskConfig.labels) || {}, payload.config.labels || {}),
@@ -55,10 +46,6 @@
           checkout: Object.assign({}, (window.LoopDeskConfig && window.LoopDeskConfig.checkout) || {}, payload.config.checkout || {}),
           shopDomain: shopDomain
         });
-        if (window.console) {
-          window.console.info("[LoopDesk Runtime] promotion_rules_config after merge", window.LoopDeskConfig.promotion_rules_config);
-          window.console.info("[LoopDesk Runtime] assigning window.LoopDeskConfig", window.LoopDeskConfig);
-        }
         window.LOOPDESK_CART_DRAWER_CONFIG = Object.assign({}, window.LOOPDESK_CART_DRAWER_CONFIG || {}, {
           enabled: window.LoopDeskConfig.enabled,
           drawerMode: window.LoopDeskConfig.cart && window.LoopDeskConfig.cart.drawerMode,
@@ -69,32 +56,15 @@
           checkoutButtonText: window.LoopDeskConfig.labels && window.LoopDeskConfig.labels.expressCheckoutText,
           buttonText: window.LoopDeskConfig.labels && window.LoopDeskConfig.labels.expressCheckoutText,
           showPoweredBy: window.LoopDeskConfig.branding && window.LoopDeskConfig.branding.showPoweredBy,
-          promotion_rules_config: window.LoopDeskConfig.promotion_rules_config,
-          promotionRules: window.LoopDeskConfig.promotionRules || window.LoopDeskConfig.promotion_rules_config,
           shopDomain: shopDomain
         });
-        if (window.console) {
-          window.console.info("[LoopDesk Runtime] legacy drawer config projection", window.LOOPDESK_CART_DRAWER_CONFIG);
-        }
       }
 
       function loadDrawerAsset() {
-        var shopifyPricing = document.createElement("script");
-        shopifyPricing.src = shopifyPricingAssetUrl;
-        shopifyPricing.defer = true;
-        shopifyPricing.onload = function () {
-          var pricing = document.createElement("script");
-          pricing.src = pricingAssetUrl;
-          pricing.defer = true;
-          pricing.onload = function () {
-            var script = document.createElement("script");
-            script.src = drawerAssetUrl;
-            script.defer = true;
-            document.head.appendChild(script);
-          };
-          document.head.appendChild(pricing);
-        };
-        document.head.appendChild(shopifyPricing);
+        var script = document.createElement("script");
+        script.src = drawerAssetUrl;
+        script.defer = true;
+        document.head.appendChild(script);
       }
 
       if (typeof fetch !== "function") {

@@ -26,7 +26,7 @@ assert.match(controllerOpen[0], /return refreshAndMaybeOpen\(true\);/, "manual o
 assert.doesNotMatch(controllerOpen[0], /isLoopDeskDrawerActive\(\)/, "manual open helper should not be gated by cartOwnershipMode");
 
 assert.match(source, /if \(wasAdd && shouldOpenLoopDeskAfterCartAdd\(\)\) return refreshAndMaybeOpen\(true\);/, "add-to-cart should only open the drawer when explicitly configured, avoiding OTP/checkout changes");
-assert.match(source, /elements\.express\.addEventListener\("click", function \(event\) \{ interceptCheckout\(event, "drawer"\); \}\);/, "express checkout OTP/checkout should remain scoped to the drawer checkout CTA context");
+assert.match(source, /elements\.express\.addEventListener\("click", function \(event\) \{ interceptCheckout\(event, "loopdesk-cart-drawer"\); \}\);/, "express checkout OTP/checkout should remain scoped to the drawer checkout CTA");
 
 assert.match(source, /debugState: debugState,/, "debugState helper should be exposed on the public controller");
 assert.match(source, /rootClass:[\s\S]*panelClass:[\s\S]*bodyClass:[\s\S]*ariaHidden:[\s\S]*computed:[\s\S]*drawerMode:[\s\S]*ownershipMode:/, "debugState should include DOM classes, aria state, computed visibility, drawer mode, and ownership mode");
@@ -35,38 +35,3 @@ assert.match(css, /#loopdesk-cart-drawer-root \.loopdesk-cart-drawer[\s\S]*displ
 assert.match(css, /#loopdesk-cart-drawer-root \.loopdesk-cart-drawer__overlay[\s\S]*display: block !important;[\s\S]*visibility: visible !important;/, "LoopDesk overlay must override broad native cart hiding selectors");
 
 console.log("LoopDesk cart drawer CONFIG-2B regression checks passed");
-
-const fixedAmountPricing = source.match(/function resolvePromotionOfferPriceDisplay\(display, reward, rule, cart, offerQuantity\) \{[\s\S]*?\n  \}\n\n  function renderPromotionOffers/);
-assert.ok(fixedAmountPricing, "fixed_amount drawer display resolver should exist");
-assert.match(fixedAmountPricing[0], /resolvePromotionDisplayPricing/, "drawer offer pricing should use the shared promotion resolver");
-assert.match(fixedAmountPricing[0], /source: "shared_resolver"/, "drawer should mark shared resolver-derived offer prices");
-assert.match(source, /var displayPriceSource = offerPrice \? resolvedOfferPrice\.source : "unavailable";/, "drawer should preserve merchant override source and mark derived fixed_amount prices");
-
-const rewardLinePricing = source.match(/function promotionRewardLineAdjustment\(rule, item, cart\) \{[\s\S]*?\n  \}\n\n  function findPromotionRewardLineAdjustment/);
-assert.ok(rewardLinePricing, "reward cart line adjustment helper should exist");
-assert.match(rewardLinePricing[0], /resolvePromotionDisplayPricing/, "reward line pricing should use the shared promotion resolver");
-assert.match(rewardLinePricing[0], /eligibleQuantity: resolved\.eligibleQuantity/, "reward quantity display should come from shared resolver caps");
-
-const rewardLineMatching = source.match(/function promotionRuleMatchesRewardLine\(rule, cart, item, now\) \{[\s\S]*?\n  \}\n\n  function promotionRewardLineAdjustment/);
-assert.ok(rewardLineMatching, "reward cart line matching helper should exist");
-assert.match(rewardLineMatching[0], /sameShopifyId\(item\.variant_id, offerVariantGid\)[\s\S]*sameShopifyId\(item\.id, offerVariantGid\)/, "reward line matching should normalize Shopify GID and numeric variant IDs");
-assert.match(rewardLineMatching[0], /rule\.enabled !== true \|\| rule\.status !== "active" \|\| !isPromotionScheduled/, "reward line matching should require active scheduled rules");
-assert.match(source, /function triggerMatchesRewardLine\(trigger, cart, item\)[\s\S]*cartWithoutItem\(cart, item\)/, "reward line trigger checks should not let the reward-only line satisfy product or variant triggers");
-assert.match(source, /function rewardLinePriceHtml\(item, cart, viewModel\)[\s\S]*Promotion applies to [\s\S]*Discount applied at checkout/, "reward cart lines should show checkout-discount and quantity-cap messaging");
-assert.match(source, /state\.pricing = normalizeShopifyPricing\(cart\);/, "drawer should derive normalized Shopify pricing from the same /cart.js response");
-assert.match(source, /var subtotal = moneyValue\(pricing && pricing\.originalSubtotal\);[\s\S]*if \(subtotal === null\) subtotal = cartRawSubtotal\(cart\);/, "subtotal should prefer normalized Shopify pricing and fall back to raw cart money");
-assert.match(source, /Promotion estimate[\s\S]*Estimate only/, "drawer fallback estimate must be clearly labelled");
-assert.match(css, /\.loopdesk-cart-drawer__reward-price[\s\S]*\.loopdesk-cart-drawer__reward-note/, "reward line display styles should exist");
-
-assert.match(source, /var offerViewModel = promotionViewModel\(cart \|\| \{\}\);[\s\S]*renderLines\(cart, offerViewModel\)[\s\S]*renderDiscountSummary\(pricing, cart, offerViewModel\)/, "drawer render should pass the live render cart into one promotion VM used by lines and fallback estimates");
-assert.match(source, /cartItemCount: Array\.isArray\(cart && cart\.items\) \? cart\.items\.length : 0,[\s\S]*rulesCount: rules\.length,[\s\S]*hasPromotion:/, "drawer promotion VM diagnostics should report cart item count, rules count, and promotion status when debug is enabled");
-
-assert.match(source, /function loopdeskOfferHandoffPayload\(cart\) \{[\s\S]*loopdeskOfferDiscountAmountPaise:[\s\S]*loopdeskOfferAdjustedTotalAmountPaise:[\s\S]*loopdeskOfferBaseSubtotalAmountPaise:/, "drawer should build an Express Checkout handoff payload from Promotion VM totals");
-assert.match(source, /MegaskaExpressCheckout\.open\(\{ source: checkoutSource, loopdeskOfferPricing: loopdeskOfferPricing \}\)/, "drawer Express Checkout open call should include the offer pricing handoff payload");
-
-
-
-const rawSubtotalResolver = source.match(/function cartRawSubtotal\(cart\) \{[\s\S]*?\n  \}/);
-assert.ok(rawSubtotalResolver, "drawer raw subtotal helper should exist");
-assert.match(rawSubtotalResolver[0], /\["original_total_price", "items_subtotal_price", "total_price"\]/, "drawer raw subtotal helper should prefer original_total_price, then items_subtotal_price, then total_price");
-assert.match(source, /cart_subtotal_gte" \|\| type === "cart_subtotal_min"\) return cartRawSubtotal\(cart\) >=/, "drawer subtotal promotion triggers should use coupon-independent raw subtotal");
