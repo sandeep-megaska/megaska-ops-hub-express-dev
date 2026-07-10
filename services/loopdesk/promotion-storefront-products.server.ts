@@ -1,11 +1,10 @@
 import type { PromotionRule, PromotionRulesConfig } from "../promotion-rules/config";
 
 export const MAX_PROMOTION_PRODUCT_VARIANTS = 250;
-const PAGE_SIZE = 100;
 
 type Money = { amount: string; currencyCode: string };
 type Image = { url: string; altText: string | null };
-export type StorefrontPromotionProductStatus = "ready" | "not_found" | "unavailable" | "query_failed" | "invalid_product_gid" | "storefront_auth_unavailable";
+export type StorefrontPromotionProductStatus = "ready" | "not_found" | "unavailable" | "missing_handle" | "product_identity_mismatch" | "query_failed" | "invalid_product_gid";
 export type StorefrontPromotionProduct = {
   productGid: string;
   numericProductId: string;
@@ -28,7 +27,7 @@ export type StorefrontPromotionProduct = {
   variantsTruncated?: boolean;
 };
 export type StorefrontPromotionProductLookup = { status: StorefrontPromotionProductStatus; product: StorefrontPromotionProduct | null; diagnostics?: PromotionStorefrontProductLookupDiagnostics };
-export type PromotionStorefrontProductLookupDiagnostics = { credentialSource?: string; hasStorefrontToken?: boolean; lookupTransport?: "storefront_graphql" | "public_product_json"; storefrontHttpStatus?: number; fallbackAttempted?: boolean; fallbackSucceeded?: boolean };
+export type PromotionStorefrontProductLookupDiagnostics = { credentialSource?: string | null; hasStorefrontToken?: boolean; lookupTransport?: "public_product_json"; publicProductHttpStatus?: number; fallbackAttempted?: boolean; fallbackSucceeded?: boolean };
 export type PromotionStorefrontProductDiagnostics = {
   requestedProductGids: string[];
   resolvedProductGids: string[];
@@ -38,27 +37,6 @@ export type PromotionStorefrontProductDiagnostics = {
 };
 
 type Fetcher = (input: { shopDomain: string; productGid: string; handle?: string | null }) => Promise<StorefrontPromotionProductLookup>;
-
-type StorefrontProductNode = {
-  id?: string | null;
-  handle?: string | null;
-  title?: string | null;
-  availableForSale?: boolean | null;
-  featuredImage?: Image | null;
-  options?: Array<{ id?: string | null; name?: string | null; values?: string[] | null; optionValues?: Array<{ name?: string | null }> | null }> | null;
-  variants?: { nodes?: StorefrontVariantNode[] | null; pageInfo?: { hasNextPage?: boolean | null; endCursor?: string | null } | null } | null;
-};
-
-type StorefrontVariantNode = {
-  id?: string | null;
-  title?: string | null;
-  availableForSale?: boolean | null;
-  currentlyNotInStock?: boolean | null;
-  selectedOptions?: Array<{ name?: string | null; value?: string | null }> | null;
-  price?: Money | null;
-  compareAtPrice?: Money | null;
-  image?: Image | null;
-};
 
 function scheduled(rule: PromotionRule, now: Date) {
   const scheduleConfig = rule.schedule || { alwaysActive: true, startAt: null, endAt: null };
@@ -99,50 +77,70 @@ export function selectPromotionRewardProductGids(config: PromotionRulesConfig, n
 }
 
 function rewardProductHandlesByGid(config: PromotionRulesConfig, now = new Date()) {
-  const entries = config.rules.filter((rule) => isProductScopedReward(rule, now)).map((rule) => [canonicalProductGid(rule.reward.productGid), String(rule.reward.product?.handle || "").trim()] as const).filter(([gid, handle]) => Boolean(gid && handle));
-  return Object.fromEntries(entries) as Record<string, string>;
+  const handles: Record<string, string> = {};
+  for (const rule of config.rules.filter((candidate) => isProductScopedReward(candidate, now))) {
+    const gid = canonicalProductGid(rule.reward.productGid);
+    if (!gid) continue;
+    const handle = String(rule.reward.product?.handle || "").trim();
+    if (handles[gid] === undefined) {
+      handles[gid] = handle;
+    } else if (handle && handles[gid] && handle !== handles[gid]) {
+      console.warn("[LoopDesk Promotion Products] Conflicting persisted reward product handles", { productGid: gid, preferredHandle: handles[gid], ignoredHandle: handle });
+    }
+  }
+  return handles;
 }
 
-function normalizeProduct(node: StorefrontProductNode, variants: StorefrontVariantNode[], variantsTruncated: boolean): StorefrontPromotionProduct | null {
-  const productGid = canonicalProductGid(node.id);
-  if (!productGid) return null;
-  return {
-    productGid,
-    numericProductId: numericId(productGid),
-    handle: String(node.handle || ""),
-    title: String(node.title || ""),
-    availableForSale: Boolean(node.availableForSale),
-    featuredImage: node.featuredImage || null,
-    options: (node.options || []).map((option) => ({
-      id: option.id || null,
-      name: String(option.name || ""),
-      values: Array.isArray(option.optionValues) ? option.optionValues.map((value) => String(value.name || "")).filter(Boolean) : (option.values || []).map(String),
-    })),
-    variants: variants.map((variant) => ({
-      variantGid: String(variant.id || ""),
-      numericVariantId: numericId(String(variant.id || "")),
-      title: String(variant.title || ""),
-      availableForSale: Boolean(variant.availableForSale),
-      currentlyNotInStock: Boolean(variant.currentlyNotInStock),
-      selectedOptions: (variant.selectedOptions || []).map((option) => ({ name: String(option.name || ""), value: String(option.value || "") })),
-      price: { amount: String(variant.price?.amount || "0"), currencyCode: String(variant.price?.currencyCode || "") },
-      compareAtPrice: variant.compareAtPrice ? { amount: String(variant.compareAtPrice.amount || "0"), currencyCode: String(variant.compareAtPrice.currencyCode || "") } : null,
-      image: variant.image || null,
-    })).filter((variant) => variant.variantGid && variant.numericVariantId),
-    ...(variantsTruncated ? { variantsTruncated: true } : {}),
-  };
+type AjaxProduct = {
+  id?: number | string;
+  handle?: string;
+  title?: string;
+  available?: boolean;
+  featured_image?: string | { src?: string; url?: string; alt?: string | null } | null;
+  image?: string | { src?: string; url?: string; alt?: string | null } | null;
+  images?: string[];
+  options?: Array<{ name?: string; values?: string[] } | string>;
+  variants?: Array<{ id?: number | string; title?: string; available?: boolean; option1?: string | null; option2?: string | null; option3?: string | null; featured_image?: { src?: string; url?: string; alt?: string | null } | string | null; image?: { src?: string; url?: string; alt?: string | null } | string | null; price?: number | string; compare_at_price?: number | string | null }>;
+  currency?: string;
+  currency_code?: string;
+};
+
+const PUBLIC_PRODUCT_JSON_TIMEOUT_MS = 5_000;
+
+function diagnostics(publicProductHttpStatus?: number): PromotionStorefrontProductLookupDiagnostics {
+  return { credentialSource: null, hasStorefrontToken: false, lookupTransport: "public_product_json", ...(publicProductHttpStatus ? { publicProductHttpStatus } : {}), fallbackAttempted: false, fallbackSucceeded: false };
 }
 
-type AjaxProduct = { id?: number | string; handle?: string; title?: string; available?: boolean; featured_image?: string | null; images?: string[]; options?: Array<{ name?: string; values?: string[] } | string>; variants?: Array<{ id?: number | string; title?: string; available?: boolean; option1?: string | null; option2?: string | null; option3?: string | null; featured_image?: { src?: string; alt?: string | null } | string | null; price?: number | string; compare_at_price?: number | string | null }> };
+function safeShopHostname(shopDomain: string) {
+  const hostname = String(shopDomain || "").trim().toLowerCase().replace(/^https?:\/\//, "").split("/")[0];
+  if (!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(hostname)) return null;
+  return hostname;
+}
 
-function moneyFromAjax(value: unknown) {
-  const cents = typeof value === "number" ? value : Number(value);
-  return { amount: Number.isFinite(cents) ? (cents / 100).toFixed(2) : "0.00", currencyCode: "" };
+function publicProductUrl(shopDomain: string, handle: string) {
+  const hostname = safeShopHostname(shopDomain);
+  if (!hostname) return null;
+  return new URL(`/products/${encodeURIComponent(handle)}.js`, `https://${hostname}`);
+}
+
+function isSameApprovedHost(url: URL, shopDomain: string) {
+  const hostname = safeShopHostname(shopDomain);
+  return Boolean(hostname && url.protocol === "https:" && url.hostname.toLowerCase() === hostname);
+}
+
+function moneyFromAjax(value: unknown, currencyCode: string): Money {
+  if (value == null || value === "") return { amount: "0.00", currencyCode };
+  if (typeof value === "number") return { amount: (value / 100).toFixed(2), currencyCode };
+  const text = String(value).trim();
+  if (!text) return { amount: "0.00", currencyCode };
+  if (/^-?\d+$/.test(text)) return { amount: (Number(text) / 100).toFixed(2), currencyCode };
+  const parsed = Number(text);
+  return { amount: Number.isFinite(parsed) ? parsed.toFixed(2) : "0.00", currencyCode };
 }
 
 function ajaxImage(value: unknown): Image | null {
   if (!value) return null;
-  if (typeof value === "string") return { url: value, altText: null };
+  if (typeof value === "string") return value.trim() ? { url: value, altText: null } : null;
   if (typeof value === "object") {
     const record = value as Record<string, unknown>;
     const url = String(record.src || record.url || "").trim();
@@ -152,112 +150,84 @@ function ajaxImage(value: unknown): Image | null {
 }
 
 function normalizeAjaxProduct(productGid: string, raw: AjaxProduct): StorefrontPromotionProduct | null {
-  const normalizedProductId = String(raw.id || numericId(productGid));
-  if (!/^\d+$/.test(normalizedProductId)) return null;
+  const configuredProductId = numericId(productGid);
+  const returnedProductId = String(raw.id || "").trim();
+  if (!configuredProductId || !/^\d+$/.test(returnedProductId) || returnedProductId !== configuredProductId) return null;
+  const featuredImage = ajaxImage(raw.featured_image || raw.image || raw.images?.[0]);
+  const currencyCode = String(raw.currency_code || raw.currency || "").trim();
   const options = (raw.options || []).map((option, index) => typeof option === "string" ? { name: option, values: [] } : { name: String(option.name || `Option ${index + 1}`), values: (option.values || []).map(String) });
   const variants = (raw.variants || []).map((variant) => {
-    const variantId = String(variant.id || "");
-    const selectedOptions = options.map((option, index) => ({ name: option.name, value: String((variant as Record<string, unknown>)[`option${index + 1}`] || "") })).filter((option) => option.value);
+    const variantId = String(variant.id || "").trim();
+    const selectedOptions = options.map((option, index) => ({ name: option.name, value: String((variant as Record<string, unknown>)[`option${index + 1}`] || "") })).filter((option) => option.name && option.value);
+    const image = ajaxImage(variant.featured_image || variant.image) || featuredImage;
     return {
-      variantGid: variantId ? `gid://shopify/ProductVariant/${variantId}` : "",
+      variantGid: /^\d+$/.test(variantId) ? `gid://shopify/ProductVariant/${variantId}` : "",
       numericVariantId: variantId,
       title: String(variant.title || ""),
       availableForSale: Boolean(variant.available),
       currentlyNotInStock: !variant.available,
       selectedOptions,
-      price: moneyFromAjax(variant.price),
-      compareAtPrice: variant.compare_at_price == null ? null : moneyFromAjax(variant.compare_at_price),
-      image: ajaxImage(variant.featured_image),
+      price: moneyFromAjax(variant.price, currencyCode),
+      compareAtPrice: variant.compare_at_price == null ? null : moneyFromAjax(variant.compare_at_price, currencyCode),
+      image,
     };
   }).filter((variant) => /^\d+$/.test(variant.numericVariantId));
   return {
     productGid,
-    numericProductId: normalizedProductId,
+    numericProductId: configuredProductId,
     handle: String(raw.handle || ""),
     title: String(raw.title || ""),
-    availableForSale: Boolean(raw.available || variants.some((variant) => variant.availableForSale)),
-    featuredImage: ajaxImage(raw.featured_image || raw.images?.[0]),
+    availableForSale: variants.some((variant) => variant.availableForSale),
+    featuredImage,
     options,
     variants,
+    variantsTruncated: false,
   };
+}
+
+async function fetchSameShopPublicJson(url: URL, shopDomain: string, signal: AbortSignal, redirects = 0): Promise<Response> {
+  const response = await fetch(url, { method: "GET", redirect: "manual", signal, headers: { Accept: "application/json" } });
+  if (![301, 302, 303, 307, 308].includes(response.status)) return response;
+  if (redirects >= 3) throw new Error("too_many_redirects");
+  const location = response.headers.get("location");
+  if (!location) throw new Error("invalid_redirect");
+  const nextUrl = new URL(location, url);
+  if (!isSameApprovedHost(nextUrl, shopDomain)) throw new Error("cross_domain_redirect");
+  return fetchSameShopPublicJson(nextUrl, shopDomain, signal, redirects + 1);
 }
 
 export async function fetchPublicProductJson(input: { shopDomain: string; productGid: string; handle?: string | null }): Promise<StorefrontPromotionProductLookup> {
   const productGid = canonicalProductGid(input.productGid);
   const handle = String(input.handle || "").trim();
-  if (!productGid) return { status: "invalid_product_gid", product: null, diagnostics: { lookupTransport: "public_product_json" } };
-  if (!handle) return { status: "not_found", product: null, diagnostics: { lookupTransport: "public_product_json", fallbackAttempted: true, fallbackSucceeded: false } };
-  const response = await fetch(`https://${input.shopDomain}/products/${encodeURIComponent(handle)}.js`, { headers: { Accept: "application/json" } });
-  if (response.status === 404) return { status: "not_found", product: null, diagnostics: { lookupTransport: "public_product_json", storefrontHttpStatus: 404, fallbackAttempted: true, fallbackSucceeded: false } };
-  if (!response.ok) return { status: "unavailable", product: null, diagnostics: { lookupTransport: "public_product_json", storefrontHttpStatus: response.status, fallbackAttempted: true, fallbackSucceeded: false } };
-  const product = normalizeAjaxProduct(productGid, (await response.json()) as AjaxProduct);
-  if (!product) return { status: "not_found", product: null, diagnostics: { lookupTransport: "public_product_json", storefrontHttpStatus: response.status, fallbackAttempted: true, fallbackSucceeded: false } };
-  return { status: product.availableForSale && product.variants.some((variant) => variant.availableForSale) ? "ready" : "unavailable", product, diagnostics: { lookupTransport: "public_product_json", storefrontHttpStatus: response.status, fallbackAttempted: true, fallbackSucceeded: true } };
-}
-
-const PRODUCT_QUERY = `
-  query LoopDeskPromotionRewardProduct($id: ID!, $first: Int!, $after: String) {
-    product(id: $id) {
-      id
-      handle
-      title
-      availableForSale
-      featuredImage { url altText }
-      options { id name optionValues { name } }
-      variants(first: $first, after: $after) {
-        nodes {
-          id
-          title
-          availableForSale
-          currentlyNotInStock
-          selectedOptions { name value }
-          price { amount currencyCode }
-          compareAtPrice { amount currencyCode }
-          image { url altText }
-        }
-        pageInfo { hasNextPage endCursor }
-      }
-    }
-  }
-`;
-
-export async function fetchStorefrontPromotionProduct(input: { shopId?: string; shopDomain: string; productGid: string; handle?: string | null }): Promise<StorefrontPromotionProductLookup> {
-  const productGid = canonicalProductGid(input.productGid);
-  if (!productGid) return { status: "invalid_product_gid", product: null };
-  const variants: StorefrontVariantNode[] = [];
-  let productNode: StorefrontProductNode | null = null;
-  let after: string | null | undefined;
-  let truncated = false;
+  if (!productGid) return { status: "invalid_product_gid", product: null, diagnostics: diagnostics() };
+  if (!handle) return { status: "missing_handle", product: null, diagnostics: diagnostics() };
+  const url = publicProductUrl(input.shopDomain, handle);
+  if (!url) return { status: "query_failed", product: null, diagnostics: diagnostics() };
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), PUBLIC_PRODUCT_JSON_TIMEOUT_MS);
   try {
-    do {
-      const remaining = MAX_PROMOTION_PRODUCT_VARIANTS - variants.length;
-      const { storefrontGraphql } = await import("../shopify/storefront");
-      const response = await storefrontGraphql<{ product?: StorefrontProductNode | null }>(PRODUCT_QUERY, { id: productGid, first: Math.min(PAGE_SIZE, remaining), after }, { shopDomain: input.shopDomain, shopId: input.shopId });
-      const httpStatus = response.extensions?.storefrontHttpStatus;
-      if (response.errors?.length) {
-        if (!response.extensions?.hasStorefrontToken || httpStatus === 401 || httpStatus === 403) {
-          const fallback = await fetchPublicProductJson(input);
-          return { ...fallback, status: fallback.product ? fallback.status : (!response.extensions?.hasStorefrontToken ? "storefront_auth_unavailable" : fallback.status), diagnostics: { ...response.extensions, lookupTransport: fallback.diagnostics?.lookupTransport, storefrontHttpStatus: httpStatus, fallbackAttempted: true, fallbackSucceeded: Boolean(fallback.product) } };
-        }
-        throw new Error(response.errors.map((error) => error.message || "Storefront query failed").join("; "));
-      }
-      productNode = response.data?.product || null;
-      if (!productNode?.id) return { status: "not_found", product: null };
-      variants.push(...(productNode.variants?.nodes || []));
-      after = productNode.variants?.pageInfo?.endCursor;
-      truncated = Boolean(productNode.variants?.pageInfo?.hasNextPage && variants.length >= MAX_PROMOTION_PRODUCT_VARIANTS);
-    } while (productNode?.variants?.pageInfo?.hasNextPage && after && variants.length < MAX_PROMOTION_PRODUCT_VARIANTS);
-    const product = normalizeProduct(productNode, variants, truncated);
-    if (!product) return { status: "invalid_product_gid", product: null };
-    return { status: product.availableForSale ? "ready" : "unavailable", product, diagnostics: { lookupTransport: "storefront_graphql", fallbackAttempted: false, fallbackSucceeded: false } };
+    const response = await fetchSameShopPublicJson(url, input.shopDomain, controller.signal);
+    if (response.status === 404) return { status: "not_found", product: null, diagnostics: diagnostics(404) };
+    if (!response.ok) return { status: "query_failed", product: null, diagnostics: diagnostics(response.status) };
+    const raw = (await response.json()) as AjaxProduct;
+    const returnedId = String(raw.id || "").trim();
+    if (returnedId !== numericId(productGid)) {
+      console.warn("[LoopDesk Promotion Products] Public product identity mismatch", { shopDomain: safeShopHostname(input.shopDomain), configuredProductId: numericId(productGid), returnedProductId: returnedId || null });
+      return { status: "product_identity_mismatch", product: null, diagnostics: diagnostics(response.status) };
+    }
+    const product = normalizeAjaxProduct(productGid, raw);
+    if (!product) return { status: "query_failed", product: null, diagnostics: diagnostics(response.status) };
+    return { status: product.availableForSale ? "ready" : "unavailable", product, diagnostics: diagnostics(response.status) };
   } catch (error) {
-    console.warn("[LoopDesk Promotion Products] Storefront product query failed", { shopId: input.shopId || null, productGid, status: "query_failed", message: error instanceof Error ? error.message : String(error || "unknown") });
-    return { status: "query_failed", product: null, diagnostics: { lookupTransport: "storefront_graphql", fallbackAttempted: false, fallbackSucceeded: false } };
+    console.warn("[LoopDesk Promotion Products] Public product JSON lookup failed", { shopDomain: safeShopHostname(input.shopDomain), productGid, status: "query_failed", message: error instanceof Error ? error.message : String(error || "unknown") });
+    return { status: "query_failed", product: null, diagnostics: diagnostics() };
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
 export async function enrichPromotionRulesWithStorefrontProducts(input: { shopId: string; shopDomain: string; config: PromotionRulesConfig; now?: Date; fetcher?: Fetcher }) {
-  const fetcher = input.fetcher || ((args) => fetchStorefrontPromotionProduct({ ...args, shopId: input.shopId }));
+  const fetcher = input.fetcher || fetchPublicProductJson;
   const requestedProductGids = selectPromotionRewardProductGids(input.config, input.now);
   const handlesByGid = rewardProductHandlesByGid(input.config, input.now);
   const entries = await Promise.all(requestedProductGids.map(async (productGid) => [productGid, await fetcher({ shopDomain: input.shopDomain, productGid, handle: handlesByGid[productGid] })] as const));
@@ -276,6 +246,6 @@ export async function enrichPromotionRulesWithStorefrontProducts(input: { shopId
     productCount: Object.keys(rewardProducts).length,
     variantCountsByProduct: Object.fromEntries(Object.entries(rewardProducts).map(([gid, product]) => [gid, product.variants.length])),
   };
-  console.info("[LoopDesk Promotion Products] storefront projection", { shopId: input.shopId, shopDomain: input.shopDomain, credentialSources: Object.fromEntries(entries.map(([gid, lookup]) => [gid, lookup.diagnostics?.credentialSource || null])), hasStorefrontToken: Object.fromEntries(entries.map(([gid, lookup]) => [gid, Boolean(lookup.diagnostics?.hasStorefrontToken)])), lookupTransports: Object.fromEntries(entries.map(([gid, lookup]) => [gid, lookup.diagnostics?.lookupTransport || null])), storefrontHttpStatuses: Object.fromEntries(entries.map(([gid, lookup]) => [gid, lookup.diagnostics?.storefrontHttpStatus || null])), fallbackAttempted: Object.fromEntries(entries.map(([gid, lookup]) => [gid, Boolean(lookup.diagnostics?.fallbackAttempted)])), fallbackSucceeded: Object.fromEntries(entries.map(([gid, lookup]) => [gid, Boolean(lookup.diagnostics?.fallbackSucceeded)])), ...diagnostics });
+  console.info("[LoopDesk Promotion Products] public product projection", { shopId: input.shopId, shopDomain: input.shopDomain, credentialSources: Object.fromEntries(entries.map(([gid, lookup]) => [gid, lookup.diagnostics?.credentialSource || null])), hasStorefrontToken: Object.fromEntries(entries.map(([gid, lookup]) => [gid, Boolean(lookup.diagnostics?.hasStorefrontToken)])), lookupTransports: Object.fromEntries(entries.map(([gid, lookup]) => [gid, lookup.diagnostics?.lookupTransport || null])), publicProductHttpStatuses: Object.fromEntries(entries.map(([gid, lookup]) => [gid, lookup.diagnostics?.publicProductHttpStatus || null])), fallbackAttempted: Object.fromEntries(entries.map(([gid, lookup]) => [gid, Boolean(lookup.diagnostics?.fallbackAttempted)])), fallbackSucceeded: Object.fromEntries(entries.map(([gid, lookup]) => [gid, Boolean(lookup.diagnostics?.fallbackSucceeded)])), ...diagnostics });
   return { config: { ...input.config, rewardProducts, rewardProductStatuses }, diagnostics };
 }

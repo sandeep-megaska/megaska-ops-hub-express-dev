@@ -6,13 +6,20 @@ import type { PromotionRulesConfig } from "../promotion-rules/config";
 import {
   canonicalProductGid,
   enrichPromotionRulesWithStorefrontProducts,
+  fetchPublicProductJson,
   selectPromotionRewardProductGids,
   type StorefrontPromotionProduct,
 } from "./promotion-storefront-products.server";
 
 const now = new Date("2026-07-10T00:00:00.000Z");
 const productGid = "gid://shopify/Product/9958145327402";
+const secondProductGid = "gid://shopify/Product/9958145327403";
 const variantGid = "gid://shopify/ProductVariant/501";
+const originalFetch = globalThis.fetch;
+
+test.afterEach(() => {
+  globalThis.fetch = originalFetch;
+});
 
 function product(overrides: Partial<StorefrontPromotionProduct> = {}): StorefrontPromotionProduct {
   return {
@@ -87,6 +94,29 @@ function config(): PromotionRulesConfig {
   } as unknown as PromotionRulesConfig;
 }
 
+function ajaxProduct(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 9958145327402,
+    handle: "offered-product",
+    title: "Offered product",
+    currency_code: "INR",
+    featured_image: "https://cdn.shopify.com/product.jpg",
+    options: [
+      { name: "Color", values: ["Black", "Blue"] },
+      { name: "Size", values: ["L", "M"] },
+    ],
+    variants: [
+      { id: 501, title: "Black / L", available: true, option1: "Black", option2: "L", price: 69995, compare_at_price: 99995 },
+      { id: "502", title: "Blue / M", available: false, option1: "Blue", option2: "M", price: "450.50", compare_at_price: null, featured_image: { src: "https://cdn.shopify.com/variant.jpg", alt: null } },
+    ],
+    ...overrides,
+  };
+}
+
+function jsonResponse(body: unknown, init: ResponseInit = {}) {
+  return new Response(typeof body === "string" ? body : JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" }, ...init });
+}
+
 test("product-scoped active rules select canonical reward Product GIDs once", () => {
   assert.equal(canonicalProductGid("9958145327402"), productGid);
   assert.equal(canonicalProductGid(productGid), productGid);
@@ -95,7 +125,7 @@ test("product-scoped active rules select canonical reward Product GIDs once", ()
 });
 
 test("enrichment fetches duplicate product reward GIDs once and leaves variant rewards unenriched", async () => {
-  const calls: Array<{ shopDomain: string; productGid: string }> = [];
+  const calls: Array<{ shopDomain: string; productGid: string; handle?: string | null }> = [];
   const result = await enrichPromotionRulesWithStorefrontProducts({
     shopId: "shop_a",
     shopDomain: "demo.myshopify.com",
@@ -107,66 +137,98 @@ test("enrichment fetches duplicate product reward GIDs once and leaves variant r
     },
   });
 
-  assert.deepEqual(calls, [{ shopDomain: "demo.myshopify.com", productGid }]);
+  assert.deepEqual(calls, [{ shopDomain: "demo.myshopify.com", productGid, handle: "offered-product" }]);
   assert.equal(result.config.rules[2].reward.variantGid, "gid://shopify/ProductVariant/2");
   assert.equal(result.config.rewardProducts[productGid].title, "Offered product");
   assert.equal(result.config.rewardProductStatuses[productGid], "ready");
 });
 
-test("product projection contains storefront-safe catalogue fields for future variant add", async () => {
+test("public product JSON normalizes ready catalogue shape, identity, variants, options, prices, and fallback images", async () => {
+  let requested: { url: string; init?: RequestInit } | null = null;
+  const getRequested = () => requested as { url: string; init?: RequestInit };
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    requested = { url: String(input), init };
+    return jsonResponse(ajaxProduct());
+  }) as typeof fetch;
+
+  const result = await fetchPublicProductJson({ shopDomain: "demo.myshopify.com", productGid, handle: "offered product" });
+
+  assert.equal(result.status, "ready");
+  assert.equal(getRequested().url, "https://demo.myshopify.com/products/offered%20product.js");
+  assert.equal(getRequested().init?.headers && (getRequested().init!.headers as Record<string, string>).Accept, "application/json");
+  assert.equal(JSON.stringify(getRequested().init?.headers || {}).includes("Authorization"), false);
+  assert.equal(JSON.stringify(getRequested().init?.headers || {}).includes("X-Shopify-Storefront-Access-Token"), false);
+  assert.equal(result.product?.productGid, productGid);
+  assert.equal(result.product?.numericProductId, "9958145327402");
+  assert.equal(result.product?.availableForSale, true);
+  assert.deepEqual(result.product?.options, [{ name: "Color", values: ["Black", "Blue"] }, { name: "Size", values: ["L", "M"] }]);
+  assert.equal(result.product?.variants[0].variantGid, "gid://shopify/ProductVariant/501");
+  assert.deepEqual(result.product?.variants[0].selectedOptions, [{ name: "Color", value: "Black" }, { name: "Size", value: "L" }]);
+  assert.deepEqual(result.product?.variants[0].price, { amount: "699.95", currencyCode: "INR" });
+  assert.deepEqual(result.product?.variants[0].compareAtPrice, { amount: "999.95", currencyCode: "INR" });
+  assert.equal(result.product?.variants[0].image?.url, "https://cdn.shopify.com/product.jpg");
+  assert.equal(result.product?.variants[1].availableForSale, false);
+  assert.equal(result.product?.variants[1].currentlyNotInStock, true);
+  assert.equal(result.product?.variants[1].image?.url, "https://cdn.shopify.com/variant.jpg");
+});
+
+test("public product JSON returns product_identity_mismatch for stale handles", async () => {
+  globalThis.fetch = (async () => jsonResponse(ajaxProduct({ id: 111 }))) as typeof fetch;
+  const result = await fetchPublicProductJson({ shopDomain: "demo.myshopify.com", productGid, handle: "offered-product" });
+  assert.equal(result.status, "product_identity_mismatch");
+  assert.equal(result.product, null);
+});
+
+test("public product JSON maps HTTP 404, missing handle, unavailable, invalid JSON, network failure, timeout, and cross-tenant domains", async () => {
+  globalThis.fetch = (async () => new Response("not found", { status: 404 })) as typeof fetch;
+  assert.equal((await fetchPublicProductJson({ shopDomain: "demo.myshopify.com", productGid, handle: "missing" })).status, "not_found");
+
+  assert.equal((await fetchPublicProductJson({ shopDomain: "demo.myshopify.com", productGid, handle: "" })).status, "missing_handle");
+
+  globalThis.fetch = (async () => jsonResponse(ajaxProduct({ variants: [{ id: 501, title: "Sold out", available: false, price: 100 }] }))) as typeof fetch;
+  const unavailable = await fetchPublicProductJson({ shopDomain: "demo.myshopify.com", productGid, handle: "sold-out" });
+  assert.equal(unavailable.status, "unavailable");
+  assert.equal(unavailable.product?.variants[0].availableForSale, false);
+
+  globalThis.fetch = (async () => jsonResponse("{")) as typeof fetch;
+  assert.equal((await fetchPublicProductJson({ shopDomain: "demo.myshopify.com", productGid, handle: "bad-json" })).status, "query_failed");
+
+  globalThis.fetch = (async () => { throw new Error("socket closed"); }) as typeof fetch;
+  assert.equal((await fetchPublicProductJson({ shopDomain: "demo.myshopify.com", productGid, handle: "network" })).status, "query_failed");
+
+  globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => new Promise<Response>((_resolve, reject) => init?.signal?.addEventListener("abort", () => reject(new Error("aborted"))))) as typeof fetch;
+  assert.equal((await fetchPublicProductJson({ shopDomain: "demo.myshopify.com", productGid, handle: "timeout" })).status, "query_failed");
+
+  assert.equal((await fetchPublicProductJson({ shopDomain: "evil.example.com", productGid, handle: "offered-product" })).status, "query_failed");
+});
+
+test("cross-domain redirects are rejected", async () => {
+  globalThis.fetch = (async () => new Response(null, { status: 302, headers: { location: "https://evil.example.com/products/offered-product.js" } })) as typeof fetch;
+  const result = await fetchPublicProductJson({ shopDomain: "demo.myshopify.com", productGid, handle: "offered-product" });
+  assert.equal(result.status, "query_failed");
+  assert.equal(result.product, null);
+});
+
+test("one failed public lookup does not fail another product", async () => {
+  const multi = config();
+  multi.rules.push({
+    ...multi.rules[0],
+    id: "second-product",
+    reward: { ...multi.rules[0].reward, productGid: secondProductGid, product: { gid: secondProductGid, title: "Second", imageUrl: null, handle: "second-product" } },
+  } as never);
   const result = await enrichPromotionRulesWithStorefrontProducts({
     shopId: "shop_a",
     shopDomain: "demo.myshopify.com",
-    config: config(),
+    config: multi,
     now,
-    fetcher: async () => ({ status: "ready", product: product() }),
+    fetcher: async ({ productGid: gid }) => gid === productGid ? { status: "query_failed", product: null } : { status: "ready", product: product({ productGid: secondProductGid, numericProductId: "9958145327403" }) },
   });
-
-  const projected = result.config.rewardProducts[productGid];
-  assert.equal(projected.productGid, productGid);
-  assert.equal(projected.numericProductId, "9958145327402");
-  assert.equal(projected.handle, "offered-product");
-  assert.equal(projected.availableForSale, true);
-  assert.deepEqual(projected.options[0], { id: "gid://shopify/ProductOption/1", name: "Size", values: ["S", "M"] });
-  assert.equal(projected.variants[0].variantGid, variantGid);
-  assert.equal(projected.variants[0].numericVariantId, "501");
-  assert.deepEqual(projected.variants[0].price, { amount: "450.00", currencyCode: "INR" });
-  assert.deepEqual(projected.variants[0].compareAtPrice, { amount: "999.00", currencyCode: "INR" });
-  assert.equal(projected.variants[0].image?.url, "https://cdn.shopify.com/variant.jpg");
-  assert.equal(projected.variants[1].availableForSale, false);
-  assert.equal(projected.variants[1].currentlyNotInStock, true);
+  assert.equal(result.config.rewardProductStatuses[productGid], "query_failed");
+  assert.equal(result.config.rewardProductStatuses[secondProductGid], "ready");
+  assert.equal(result.config.rewardProducts[secondProductGid].numericProductId, "9958145327403");
 });
 
-test("missing and query-failed products are isolated and sanitized in runtime config", async () => {
-  const missing = await enrichPromotionRulesWithStorefrontProducts({
-    shopId: "shop_a",
-    shopDomain: "demo.myshopify.com",
-    config: config(),
-    now,
-    fetcher: async () => ({ status: "query_failed", product: null }),
-  });
-
-  assert.deepEqual(missing.config.rewardProducts, {});
-  assert.equal(missing.config.rewardProductStatuses[productGid], "query_failed");
-  assert.equal(JSON.stringify(missing.config).includes("GraphQL exploded"), false);
-});
-
-test("shop domain is passed through every product lookup for tenant isolation", async () => {
-  const calls: Array<{ shopDomain: string; productGid: string }> = [];
-  await enrichPromotionRulesWithStorefrontProducts({
-    shopId: "shop_a",
-    shopDomain: "tenant-a.myshopify.com",
-    config: config(),
-    now,
-    fetcher: async (input) => {
-      calls.push(input);
-      return { status: "ready", product: product() };
-    },
-  });
-  assert.deepEqual(calls, [{ shopDomain: "tenant-a.myshopify.com", productGid }]);
-});
-
-test("runtime enrichment does not calculate cart totals or discounts", async () => {
+test("runtime enrichment does not calculate cart totals or discounts and keeps storefront-safe runtime shapes", async () => {
   const result = await enrichPromotionRulesWithStorefrontProducts({
     shopId: "shop_a",
     shopDomain: "demo.myshopify.com",
@@ -176,45 +238,8 @@ test("runtime enrichment does not calculate cart totals or discounts", async () 
   });
   const serialized = JSON.stringify(result.config);
   assert.equal(/subtotal|totalAmount|discountAmount|appliedSavings/i.test(serialized), false);
-});
-
-test("reward product handle is passed to tenant-scoped product lookup for Ajax fallback", async () => {
-  const calls: Array<{ shopDomain: string; productGid: string; handle?: string | null }> = [];
-  await enrichPromotionRulesWithStorefrontProducts({
-    shopId: "shop_a",
-    shopDomain: "tenant-a.myshopify.com",
-    config: config(),
-    now,
-    fetcher: async (input) => {
-      calls.push(input);
-      return { status: "ready", product: product() };
-    },
-  });
-  assert.deepEqual(calls, [{ shopDomain: "tenant-a.myshopify.com", productGid, handle: "offered-product" }]);
-});
-
-test("invalid or missing fallback handle returns sanitized non-ready status", async () => {
-  const { fetchPublicProductJson } = await import("./promotion-storefront-products.server");
-  const result = await fetchPublicProductJson({ shopDomain: "tenant-a.myshopify.com", productGid, handle: "" });
-  assert.equal(result.status, "not_found");
-  assert.equal(result.product, null);
-  assert.equal(JSON.stringify(result).includes("token"), false);
-});
-
-test("runtime diagnostics never include token values", async () => {
-  const result = await enrichPromotionRulesWithStorefrontProducts({
-    shopId: "shop_a",
-    shopDomain: "demo.myshopify.com",
-    config: config(),
-    now,
-    fetcher: async () => ({
-      status: "storefront_auth_unavailable",
-      product: null,
-      diagnostics: { credentialSource: "none", hasStorefrontToken: false, lookupTransport: "public_product_json", fallbackAttempted: true, fallbackSucceeded: false },
-    }),
-  });
-  const serialized = JSON.stringify(result);
+  assert.equal(typeof result.config.rewardProducts, "object");
+  assert.equal(typeof result.config.rewardProductStatuses, "object");
   assert.equal(serialized.includes("shpat_"), false);
   assert.equal(serialized.includes("storefront-secret"), false);
-  assert.equal(result.config.rewardProductStatuses[productGid], "storefront_auth_unavailable");
 });
