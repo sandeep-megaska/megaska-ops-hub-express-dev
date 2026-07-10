@@ -1,12 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { deterministicConfigHash, selectLoopDeskAppDiscountType, verifyStoredConfig, type AppDiscountType, type AutomaticDiscount } from "./discount-function-activation.server.ts";
+import { automaticDiscountInput, deterministicConfigHash, selectLoopDeskAppDiscountType, verifyStoredConfig, type AppDiscountType, type AutomaticDiscount } from "./discount-function-activation.server.ts";
 import type { LoopDeskDiscountFunctionConfig } from "./discount-function.ts";
 
 const config: LoopDeskDiscountFunctionConfig = { schemaVersion: 1, enabled: true, rules: [{ id: "a", enabled: true, priority: 1, triggerType: "always", rewardEnforcementType: "fixed_price", rewardVariantGid: "gid://shopify/ProductVariant/1", rewardProductGid: "gid://shopify/Product/1", fixedPriceAmount: 300 }] };
 const metafield = { value: JSON.stringify(config) };
 const functionType: AppDiscountType = { functionId: "gid://shopify/ShopifyFunction/selected", title: "LoopDesk Discount Function", discountClasses: ["PRODUCT"] };
+const productOrderFunctionType: AppDiscountType = { ...functionType, discountClasses: ["PRODUCT", "ORDER"] };
 
 test("deterministic config hashes ignore object key ordering", () => {
   const left: LoopDeskDiscountFunctionConfig = config;
@@ -25,6 +26,12 @@ test("selects a single exact-title PRODUCT candidate using functionId", () => {
 
 test("candidate without PRODUCT returns wrong_discount_class", () => {
   const result = selectLoopDeskAppDiscountType([{ functionId: "order-only", title: "LoopDesk Discount Function", discountClasses: ["ORDER"] }]);
+  assert.equal(result.selected, null);
+  assert.equal(result.reason, "wrong_discount_class");
+});
+
+test("candidate with missing discount classes returns wrong_discount_class", () => {
+  const result = selectLoopDeskAppDiscountType([{ functionId: "missing-classes", title: "LoopDesk Discount Function" }]);
   assert.equal(result.selected, null);
   assert.equal(result.reason, "wrong_discount_class");
 });
@@ -48,6 +55,34 @@ test("selection does not depend on functionHandle", () => {
   const result = selectLoopDeskAppDiscountType([{ functionId: "no-handle", title: "LoopDesk Promotions", discountClasses: ["PRODUCT"] }]);
   assert.equal(result.reason, null);
   assert.equal(result.selected?.functionId, "no-handle");
+});
+
+test("automatic discount create input includes Shopify Function discount classes and startsAt", () => {
+  const input = automaticDiscountInput(productOrderFunctionType, config, true);
+  assert.deepEqual(input.discountClasses, ["PRODUCT", "ORDER"]);
+  assert.equal(input.functionId, productOrderFunctionType.functionId);
+  assert.equal(typeof input.startsAt, "string");
+  assert.deepEqual(input.combinesWith, { orderDiscounts: true, productDiscounts: true, shippingDiscounts: true });
+  assert.deepEqual(input.metafields, [{ namespace: "loopdesk", key: "discount_function_config", type: "json", value: JSON.stringify(config) }]);
+});
+
+test("automatic discount update input includes Shopify Function discount classes without startsAt", () => {
+  const input = automaticDiscountInput(productOrderFunctionType, config);
+  assert.deepEqual(input.discountClasses, ["PRODUCT", "ORDER"]);
+  assert.equal(input.functionId, productOrderFunctionType.functionId);
+  assert.equal("startsAt" in input, false);
+  assert.deepEqual(input.combinesWith, { orderDiscounts: true, productDiscounts: true, shippingDiscounts: true });
+  assert.deepEqual(input.metafields, [{ namespace: "loopdesk", key: "discount_function_config", type: "json", value: JSON.stringify(config) }]);
+});
+
+test("automatic discount input blocks Function classes without PRODUCT", () => {
+  assert.throws(() => automaticDiscountInput({ ...functionType, discountClasses: ["ORDER"] }, config), /wrong_discount_class/);
+});
+
+test("automatic discount input does not send empty or missing class lists to Shopify", () => {
+  assert.throws(() => automaticDiscountInput({ ...functionType, discountClasses: [] }, config), /wrong_discount_class/);
+  assert.throws(() => automaticDiscountInput({ ...functionType, discountClasses: undefined }, config), /wrong_discount_class/);
+  assert.throws(() => automaticDiscountInput({ ...functionType, discountClasses: ["UNSUPPORTED"] }, config), /wrong_discount_class/);
 });
 
 test("automatic discount with matching functionId passes Function identity verification", () => {

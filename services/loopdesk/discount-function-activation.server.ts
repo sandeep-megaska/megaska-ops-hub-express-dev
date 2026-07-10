@@ -9,6 +9,7 @@ import { canonicalizeProductVariantGid, compileLoopDeskDiscountFunctionConfig, i
 const DISCOUNT_TITLE = "LoopDesk Promotions";
 const FUNCTION_ARTIFACT_PATH = path.join(process.cwd(), "extensions", "loopdesk-discount-function", "target", "wasm32-unknown-unknown", "release", "loopdesk_discount_function.wasm");
 const VALID_STATUSES = new Set(["ACTIVE", "SCHEDULED"]);
+const SUPPORTED_DISCOUNT_CLASSES = new Set(["PRODUCT", "ORDER", "SHIPPING"]);
 
 type UserError = { field?: string[] | null; message?: string | null };
 type DiscountMetafieldSchemaType = { name?: string | null; fields?: Array<{ name?: string | null }> | null } | null;
@@ -112,10 +113,14 @@ export function selectLoopDeskAppDiscountType(types: AppDiscountType[]) {
   const broadLoopDesk = types.filter((type) => /LoopDesk/i.test(`${type.title} ${type.description || ""}`));
   const candidates = exactFunctionTitle.length ? exactFunctionTitle : exactDiscountTitle.length ? exactDiscountTitle : broadLoopDesk;
   if (!candidates.length) return { selected: null, reason: "missing_function" };
-  const productCandidates = candidates.filter((type) => type.discountClasses?.includes("PRODUCT"));
+  const productCandidates = candidates.filter((type) => normalizeDiscountClasses(type).includes("PRODUCT"));
   if (!productCandidates.length) return { selected: null, reason: "wrong_discount_class", candidate: candidates[0] };
   if (productCandidates.length > 1) return { selected: null, reason: "ambiguous_function_identity", candidates: productCandidates };
   return { selected: productCandidates[0], reason: null };
+}
+
+export function normalizeDiscountClasses(functionType: Pick<AppDiscountType, "discountClasses">) {
+  return Array.from(new Set((functionType.discountClasses || []).filter((discountClass): discountClass is string => SUPPORTED_DISCOUNT_CLASSES.has(discountClass))));
 }
 
 function isMetafieldSchemaError(error: unknown) {
@@ -153,8 +158,10 @@ async function findExistingLoopDeskDiscounts(shopDomain: string, shopId: string,
   return { selected: identityMatches[0] || null, duplicates: identityMatches.length > 1 ? identityMatches.map((node) => node.id) : [], titleOnlyCount: titleOnly.length };
 }
 
-function automaticDiscountInput(functionType: AppDiscountType, config: LoopDeskDiscountFunctionConfig, includeStartsAt = false) {
-  return { title: DISCOUNT_TITLE, functionId: functionType.functionId, ...(includeStartsAt ? { startsAt: new Date().toISOString() } : {}), combinesWith: { orderDiscounts: true, productDiscounts: true, shippingDiscounts: true }, metafields: configMetafield(config) };
+export function automaticDiscountInput(functionType: AppDiscountType, config: LoopDeskDiscountFunctionConfig, includeStartsAt = false) {
+  const discountClasses = normalizeDiscountClasses(functionType);
+  if (!discountClasses.includes("PRODUCT")) throw new Error("wrong_discount_class");
+  return { title: DISCOUNT_TITLE, functionId: functionType.functionId, discountClasses, ...(includeStartsAt ? { startsAt: new Date().toISOString() } : {}), combinesWith: { orderDiscounts: true, productDiscounts: true, shippingDiscounts: true }, metafields: configMetafield(config) };
 }
 
 async function createAutomaticDiscount(shopDomain: string, shopId: string, functionType: AppDiscountType, config: LoopDeskDiscountFunctionConfig) {
