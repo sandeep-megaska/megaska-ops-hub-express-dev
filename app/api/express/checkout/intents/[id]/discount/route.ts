@@ -1,3 +1,4 @@
+import { Prisma } from "../../../../../../../generated/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionTokenFromRequest } from "../../../../../../../services/auth/session";
 import { withCors, handleOptions } from "../../../../../_lib/cors";
@@ -21,6 +22,13 @@ function optionalString(value: unknown) {
   const normalized = typeof value === "string" ? value.trim() : "";
 
   return normalized || null;
+}
+
+function nullableJsonInput(value: unknown): Prisma.NullableJsonNullValueInput | Prisma.InputJsonValue | undefined {
+  if (value === undefined) return undefined;
+  if (value === null) return Prisma.JsonNull;
+
+  return value as Prisma.InputJsonValue;
 }
 
 function integerPaise(value: unknown, field: string) {
@@ -132,7 +140,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
   }
 
   const cartSnapshot = body.cartSnapshot === undefined ? editable.intent.cartSnapshot : body.cartSnapshot;
-  const rawShopifyPayload = body.rawShopifyPayload ?? null;
+  const rawShopifyPayload = nullableJsonInput(body.rawShopifyPayload ?? null);
 
   const result = await prisma.$transaction(async (tx) => {
     await tx.expressCheckoutDiscount.deleteMany({
