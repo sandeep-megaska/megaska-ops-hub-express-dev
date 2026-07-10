@@ -11,13 +11,13 @@ const productOrderFunctionType: AppDiscountType = { ...functionType, discountCla
 
 function matchingDiscountNode(overrides: Partial<AutomaticDiscount["automaticDiscount"]> = {}, metafieldValue = metafield.value): AutomaticDiscount {
   return {
-    id: "gid://shopify/DiscountAutomaticNode/1629508862250",
+    id: "gid://shopify/DiscountAutomaticNode/test-current",
     metafield: { value: metafieldValue },
     automaticDiscount: {
       __typename: "DiscountAutomaticApp",
       title: "LoopDesk Promotions",
       status: "ACTIVE",
-      discountId: "gid://shopify/DiscountAutomaticNode/1629508862250",
+      discountId: "gid://shopify/DiscountAutomaticNode/test-current",
       appDiscountType: { functionId: functionType.functionId },
       ...overrides,
     },

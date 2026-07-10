@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import type { NextRequest } from "next/server";
 import { getShopByDomain, normalizeShopDomain, type ShopRow } from "./shop";
+import { ShopIdentityResolutionError } from "./shop-identity";
 
 export type AdminShopSearchParams = {
   shop?: string | string[];
@@ -29,7 +30,7 @@ function firstParam(value: string | string[] | null | undefined) {
 }
 
 function isInstalledShop(shop: ShopRow | null) {
-  return Boolean(shop?.id && shop.isActive && !shop.uninstalledAt);
+  return Boolean(shop?.id && shop.isActive && !shop.uninstalledAt && (shop.accessToken || shop.accessTokenEncrypted));
 }
 
 function isValidShopifyShopDomain(shopDomain: string) {
@@ -183,6 +184,21 @@ export async function resolveAdminShopFromSearchParams(
   try {
     shop = await getShopByDomain(shopDomain);
   } catch (error) {
+    if (error instanceof ShopIdentityResolutionError) {
+      logAdminShopResolutionFailure(error.code, {
+        shopDomain,
+        status: error.status,
+        debugContext: error.debugContext,
+      });
+      return {
+        shop: null,
+        shopDomain,
+        error: error.message,
+        hmacVerified,
+        resolutionSources,
+      };
+    }
+
     logAdminShopResolutionFailure("database_unavailable", {
       shopDomain,
       error: error instanceof Error ? error.message : "Unknown database error",
