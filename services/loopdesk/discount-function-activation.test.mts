@@ -1,13 +1,51 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { automaticDiscountDiscoveryCandidates, automaticDiscountInput, classifyExactTitleAutomaticDiscounts, deterministicConfigHash, publicationRecoveryHint, selectLoopDeskAppDiscountType, verifyStoredConfig, type AppDiscountType, type AutomaticDiscount } from "./discount-function-activation.server.ts";
+import { automaticDiscountDiscoveryCandidates, automaticDiscountInput, classifyExactTitleAutomaticDiscounts, deterministicConfigHash, projectLoopDeskPromotionPublicationVerification, publicationRecoveryHint, selectLoopDeskAppDiscountType, verifyStoredConfig, type AppDiscountType, type AutomaticDiscount } from "./discount-function-activation.server.ts";
 import type { LoopDeskDiscountFunctionConfig } from "./discount-function.ts";
 
 const config: LoopDeskDiscountFunctionConfig = { schemaVersion: 1, enabled: true, rules: [{ id: "a", enabled: true, priority: 1, triggerType: "always", rewardEnforcementType: "fixed_price", rewardVariantGid: "gid://shopify/ProductVariant/1", rewardProductGid: "gid://shopify/Product/1", fixedPriceAmount: 300 }] };
 const metafield = { value: JSON.stringify(config) };
 const functionType: AppDiscountType = { functionId: "gid://shopify/ShopifyFunction/selected", title: "LoopDesk Discount Function", discountClasses: ["PRODUCT"] };
 const productOrderFunctionType: AppDiscountType = { ...functionType, discountClasses: ["PRODUCT", "ORDER"] };
+
+function matchingDiscountNode(overrides: Partial<AutomaticDiscount["automaticDiscount"]> = {}, metafieldValue = metafield.value): AutomaticDiscount {
+  return {
+    id: "gid://shopify/DiscountAutomaticNode/1629508862250",
+    metafield: { value: metafieldValue },
+    automaticDiscount: {
+      __typename: "DiscountAutomaticApp",
+      title: "LoopDesk Promotions",
+      status: "ACTIVE",
+      discountId: "gid://shopify/DiscountAutomaticNode/1629508862250",
+      appDiscountType: { functionId: functionType.functionId },
+      ...overrides,
+    },
+  };
+}
+
+function compactFromShared(result: ReturnType<typeof projectLoopDeskPromotionPublicationVerification>) {
+  return {
+    ok: result.synchronized,
+    synchronized: result.synchronized,
+    storedConfigHash: result.verification.storedConfigHash,
+    automaticDiscountId: result.automaticDiscount?.automaticDiscount?.discountId || result.automaticDiscount?.id || null,
+    activeAutomaticDiscount: result.activeAutomaticDiscount,
+    automaticDiscountStatus: result.automaticDiscount?.automaticDiscount?.status || null,
+    blockingReasons: result.blockingReasons,
+  };
+}
+
+function diagnosticsFromShared(result: ReturnType<typeof projectLoopDeskPromotionPublicationVerification>) {
+  return {
+    ok: result.synchronized,
+    synchronized: result.synchronized,
+    storedConfigHash: result.verification.storedConfigHash,
+    matchingAutomaticDiscount: result.automaticDiscount,
+    automaticDiscountStatus: result.automaticDiscount?.automaticDiscount?.status || null,
+    blockingReasons: result.blockingReasons,
+  };
+}
 
 test("deterministic config hashes ignore object key ordering", () => {
   const left: LoopDeskDiscountFunctionConfig = config;
@@ -90,6 +128,61 @@ test("automatic discount with matching functionId passes Function identity verif
   const result = verifyStoredConfig(node, functionType, config);
   assert.equal(result.ok, true);
   assert.deepEqual(result.errors, []);
+});
+
+test("shared publication verification projects synchronized true to compact status and diagnostics", () => {
+  const selected = matchingDiscountNode();
+  const result = projectLoopDeskPromotionPublicationVerification({
+    shopId: "shop",
+    shopDomain: "megaskastore.myshopify.com",
+    config,
+    functionType,
+    existing: { selected, duplicates: [], titleOnlyCount: 0, identityMatches: [selected], titleCollisions: [], automaticDiscountTitleCollisions: [] },
+  });
+  const compact = compactFromShared(result);
+  const diagnostics = diagnosticsFromShared(result);
+  assert.equal(compact.synchronized, true);
+  assert.equal(diagnostics.synchronized, true);
+  assert.equal(compact.activeAutomaticDiscount, true);
+  assert.equal(compact.automaticDiscountStatus, "ACTIVE");
+  assert.equal(compact.storedConfigHash, result.compiledConfigHash);
+  assert.deepEqual(compact.blockingReasons, []);
+  assert.deepEqual(diagnostics.blockingReasons, []);
+  assert.equal(diagnostics.synchronized, true);
+  assert.equal(compact.synchronized, diagnostics.synchronized);
+});
+
+test("shared publication verification reports stale_metafield in compact status and diagnostics", () => {
+  const staleConfig: LoopDeskDiscountFunctionConfig = { ...config, enabled: false };
+  const selected = matchingDiscountNode({}, JSON.stringify(staleConfig));
+  const result = projectLoopDeskPromotionPublicationVerification({
+    config,
+    functionType,
+    existing: { selected, duplicates: [], titleOnlyCount: 0, identityMatches: [selected], titleCollisions: [], automaticDiscountTitleCollisions: [] },
+  });
+  assert.ok(compactFromShared(result).blockingReasons.includes("stale_metafield"));
+  assert.ok(diagnosticsFromShared(result).blockingReasons.includes("stale_metafield"));
+});
+
+test("shared publication verification reports missing_automatic_discount in compact status and diagnostics", () => {
+  const result = projectLoopDeskPromotionPublicationVerification({
+    config,
+    functionType,
+    existing: { selected: null, duplicates: [], titleOnlyCount: 0, identityMatches: [], titleCollisions: [], automaticDiscountTitleCollisions: [] },
+  });
+  assert.ok(compactFromShared(result).blockingReasons.includes("missing_automatic_discount"));
+  assert.ok(diagnosticsFromShared(result).blockingReasons.includes("missing_automatic_discount"));
+});
+
+test("compact status cannot report missing_automatic_discount when shared resolver selected a matching discount", () => {
+  const selected = matchingDiscountNode();
+  const result = projectLoopDeskPromotionPublicationVerification({
+    config,
+    functionType,
+    existing: { selected, duplicates: [], titleOnlyCount: 0, identityMatches: [selected], titleCollisions: [], automaticDiscountTitleCollisions: [] },
+  });
+  assert.equal(compactFromShared(result).automaticDiscountId, selected.automaticDiscount?.discountId);
+  assert.equal(compactFromShared(result).blockingReasons.includes("missing_automatic_discount"), false);
 });
 
 test("mismatched automatic-discount functionId returns function_identity_mismatch", () => {
@@ -313,4 +406,14 @@ test("publication diagnostics audit does not invoke create or update mutations",
   assert.equal(diagnosticsSource.includes("createAutomaticDiscount("), false);
   assert.equal(diagnosticsSource.includes("updateAutomaticDiscount("), false);
   assert.match(diagnosticsSource, /automaticDiscountDiscoveryDiagnostics/);
+});
+
+test("compact status and diagnostics share the resolver instead of legacy automaticDiscountNodes discovery", () => {
+  const source = readFileSync(new URL("./discount-function-activation.server.ts", import.meta.url), "utf8");
+  const statusSource = source.slice(source.indexOf("export async function getLoopDeskPromotionPublicationStatus"), source.indexOf("export async function getLoopDeskPromotionPublicationDiagnostics"));
+  const diagnosticsSource = source.slice(source.indexOf("export async function getLoopDeskPromotionPublicationDiagnostics"), source.indexOf("export const activateLoopDeskDiscountFunction"));
+  assert.match(statusSource, /resolveLoopDeskPromotionPublicationVerification/);
+  assert.match(diagnosticsSource, /resolveLoopDeskPromotionPublicationVerification/);
+  assert.doesNotMatch(statusSource, /queryAutomaticDiscountsByExactTitle|automaticDiscountNodes/);
+  assert.doesNotMatch(diagnosticsSource, /queryAutomaticDiscountsByExactTitle|automaticDiscountNodes/);
 });
