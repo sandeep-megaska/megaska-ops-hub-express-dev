@@ -46,6 +46,47 @@ export type AutomaticDiscountDiscoveryCandidate = {
   };
 };
 export type DiscountNodesDiscoveryCandidate = AutomaticDiscountDiscoveryCandidate;
+type RawDiscountNodeShapeDiagnostics = {
+  nodeId: string | null;
+  outerTypename: string | null;
+  outerKeys: string[];
+  hasDiscountProperty: boolean;
+  hasAutomaticDiscountProperty: boolean;
+  dynamicDiscountFieldName: string | null;
+  dynamicDiscountFieldPresent: boolean;
+  dynamicDiscountFieldKeys: string[];
+  dynamicDiscountTypename: string | null;
+  nestedAutomaticDiscountKeys: string[];
+  nestedAutomaticDiscountTypename: string | null;
+};
+type DiscountNodeNormalizationComparison = {
+  nodeId: string | null;
+  rawDetectedTypename: string | null;
+  rawDetectedTitlePresent: boolean;
+  rawDetectedStatusPresent: boolean;
+  rawDetectedDiscountIdPresent: boolean;
+  rawDetectedFunctionIdPresent: boolean;
+  normalizedTypename: string | null;
+  normalizedTitlePresent: boolean;
+  normalizedStatusPresent: boolean;
+  normalizedDiscountIdPresent: boolean;
+  normalizedFunctionIdPresent: boolean;
+};
+type DiscountNodesQueryShapeDiagnostics = {
+  selectedDiscountFieldName: string | null;
+  discountNodeFieldNames: string[];
+  discountNodeFieldReturnTypes: Array<{ name: string; namedType: string | null }>;
+  discountUnionPossibleTypes: string[];
+  discountAutomaticNodeFieldNames: string[];
+  discountAutomaticAppFieldNames: string[];
+};
+type DiscountNodesQueryFingerprint = {
+  operationName: "LoopDeskDiscountNodes";
+  mode: "filtered" | "unfiltered";
+  includesDiscountAutomaticNodeFragment: boolean;
+  includesDiscountAutomaticAppFragment: boolean;
+  selectedFieldName: string | null;
+};
 export type DiscountNodesDiscoveryDiagnostics = {
   pagesRead: number;
   edgesRead: number;
@@ -57,13 +98,19 @@ export type DiscountNodesDiscoveryDiagnostics = {
     pagesRead: number;
     edgesRead: number;
     candidateNodeIds: string[];
+    rawShapeCounts: Record<string, number>;
   };
   unfilteredFallback: {
     attempted: boolean;
     pagesRead: number;
     edgesRead: number;
     candidateNodeIds: string[];
+    rawShapeCounts: Record<string, number>;
   };
+  queryShapeDiagnostics: DiscountNodesQueryShapeDiagnostics;
+  queryFingerprints: DiscountNodesQueryFingerprint[];
+  rawNodeShapes: RawDiscountNodeShapeDiagnostics[];
+  normalizationComparisons: DiscountNodeNormalizationComparison[];
   totalCandidatesInspected: number;
   selectedAutomaticDiscountId: string | null;
   stoppedBecause: "found_identity" | "end_of_connection" | "missing_cursor" | "page_limit";
@@ -301,7 +348,7 @@ type DiscountNode = {
   metafield?: { value?: string | null } | null;
   discount?: AutomaticDiscount["automaticDiscount"];
 };
-type DiscountNodesSchema = { schema?: { mutationType?: { fields?: GraphqlField[] | null } | null } | null; queryRoot?: { fields?: GraphqlField[] | null } | null; discountNode?: GraphqlType | null; discountNodeDiscount?: GraphqlType | null; discountAutomaticApp?: GraphqlType | null; appDiscountType?: GraphqlType | null };
+type DiscountNodesSchema = { schema?: { mutationType?: { fields?: GraphqlField[] | null } | null } | null; queryRoot?: { fields?: GraphqlField[] | null } | null; discountNode?: GraphqlType | null; discountNodeDiscount?: GraphqlType | null; discountAutomaticNode?: GraphqlType | null; discountAutomaticApp?: GraphqlType | null; appDiscountType?: GraphqlType | null };
 
 async function introspectDiscountNodesSchema(shopDomain: string, shopId: string) {
   return shopifyAdminGraphql<DiscountNodesSchema>(shopDomain, `query LoopDeskDiscountNodesSchema {
@@ -309,6 +356,7 @@ async function introspectDiscountNodesSchema(shopDomain: string, shopId: string)
     queryRoot: __type(name: "QueryRoot") { fields { name args { name type { kind name ofType { kind name ofType { kind name } } } } type { kind name ofType { kind name ofType { kind name } } } } }
     discountNode: __type(name: "DiscountNode") { fields { name type { kind name ofType { kind name ofType { kind name } } } } }
     discountNodeDiscount: __type(name: "Discount") { kind name possibleTypes { name } fields { name type { kind name ofType { kind name ofType { kind name } } } } }
+    discountAutomaticNode: __type(name: "DiscountAutomaticNode") { fields { name type { kind name ofType { kind name ofType { kind name } } } } }
     discountAutomaticApp: __type(name: "DiscountAutomaticApp") { fields { name type { kind name ofType { kind name ofType { kind name } } } } }
     appDiscountType: __type(name: "AppDiscountType") { fields { name type { kind name ofType { kind name ofType { kind name } } } } }
   }`, {}, { shopId });
@@ -358,15 +406,106 @@ function normalizeDiscountNode(node: DiscountNode, discountFieldName: string): A
   return { id: node.id, metafield: node.metafield || null, automaticDiscount: discount };
 }
 
-function emptyDiscountNodesDiscoveryDiagnostics(queryArgumentSupported: boolean): DiscountNodesDiscoveryDiagnostics {
+
+function sortedKeys(value: unknown): string[] {
+  return value && typeof value === "object" ? Object.keys(value as Record<string, unknown>).filter((key) => !/token/i.test(key)).sort() : [];
+}
+
+function objectField(value: unknown, fieldName: string | null | undefined): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || !fieldName) return null;
+  const child = (value as Record<string, unknown>)[fieldName];
+  return child && typeof child === "object" ? child as Record<string, unknown> : null;
+}
+
+function detectRawDiscountPayload(node: unknown, dynamicFieldName: string | null): Record<string, unknown> | null {
+  const directDiscount = objectField(node, "discount");
+  const directAutomaticDiscount = objectField(node, "automaticDiscount");
+  const dynamicDiscount = objectField(node, dynamicFieldName);
+  const nestedAutomaticDiscount = objectField(dynamicDiscount, "automaticDiscount");
+  const dynamicLooksLikeDiscount = Boolean(dynamicDiscount && (["title", "status", "discountId", "appDiscountType"].some((key) => Object.prototype.hasOwnProperty.call(dynamicDiscount, key)) || dynamicDiscount.__typename === "DiscountAutomaticApp"));
+  return directDiscount || directAutomaticDiscount || (dynamicLooksLikeDiscount ? dynamicDiscount : null) || nestedAutomaticDiscount || null;
+}
+
+export function discountNodeRawShapeDiagnostics(node: unknown, dynamicFieldName: string | null): RawDiscountNodeShapeDiagnostics {
+  const record = node && typeof node === "object" ? node as Record<string, unknown> : {};
+  const dynamicDiscount = objectField(record, dynamicFieldName);
+  const nestedAutomaticDiscount = objectField(dynamicDiscount, "automaticDiscount");
+  return {
+    nodeId: typeof record.id === "string" ? record.id : null,
+    outerTypename: typeof record.__typename === "string" ? record.__typename : null,
+    outerKeys: sortedKeys(record),
+    hasDiscountProperty: Object.prototype.hasOwnProperty.call(record, "discount"),
+    hasAutomaticDiscountProperty: Object.prototype.hasOwnProperty.call(record, "automaticDiscount"),
+    dynamicDiscountFieldName: dynamicFieldName,
+    dynamicDiscountFieldPresent: Boolean(dynamicFieldName && Object.prototype.hasOwnProperty.call(record, dynamicFieldName)),
+    dynamicDiscountFieldKeys: sortedKeys(dynamicDiscount),
+    dynamicDiscountTypename: typeof dynamicDiscount?.__typename === "string" ? dynamicDiscount.__typename : null,
+    nestedAutomaticDiscountKeys: sortedKeys(nestedAutomaticDiscount),
+    nestedAutomaticDiscountTypename: typeof nestedAutomaticDiscount?.__typename === "string" ? nestedAutomaticDiscount.__typename : null,
+  };
+}
+
+function rawShapeLabel(shape: RawDiscountNodeShapeDiagnostics): string {
+  if (shape.hasDiscountProperty) return "discount_direct";
+  if (shape.hasAutomaticDiscountProperty) return "automatic_discount_direct";
+  if (shape.dynamicDiscountFieldPresent && shape.nestedAutomaticDiscountKeys.length) return "dynamic_field_nested_automatic_discount";
+  if (shape.dynamicDiscountFieldPresent) return "dynamic_field_direct";
+  return "unknown_shape";
+}
+
+export function discountNodeNormalizationComparison(rawNode: unknown, normalizedNode: AutomaticDiscount, dynamicFieldName: string | null): DiscountNodeNormalizationComparison {
+  const raw = detectRawDiscountPayload(rawNode, dynamicFieldName);
+  const normalized = normalizedNode.automaticDiscount || null;
+  return {
+    nodeId: typeof (rawNode as { id?: unknown } | null)?.id === "string" ? (rawNode as { id: string }).id : normalizedNode.id || null,
+    rawDetectedTypename: typeof raw?.__typename === "string" ? raw.__typename : null,
+    rawDetectedTitlePresent: Boolean(raw && Object.prototype.hasOwnProperty.call(raw, "title")),
+    rawDetectedStatusPresent: Boolean(raw && Object.prototype.hasOwnProperty.call(raw, "status")),
+    rawDetectedDiscountIdPresent: Boolean(raw && Object.prototype.hasOwnProperty.call(raw, "discountId")),
+    rawDetectedFunctionIdPresent: Boolean(objectField(raw, "appDiscountType") && Object.prototype.hasOwnProperty.call(objectField(raw, "appDiscountType"), "functionId")),
+    normalizedTypename: normalized?.__typename || null,
+    normalizedTitlePresent: Boolean(normalized && Object.prototype.hasOwnProperty.call(normalized, "title")),
+    normalizedStatusPresent: Boolean(normalized && Object.prototype.hasOwnProperty.call(normalized, "status")),
+    normalizedDiscountIdPresent: Boolean(normalized && Object.prototype.hasOwnProperty.call(normalized, "discountId")),
+    normalizedFunctionIdPresent: Boolean(normalized?.appDiscountType && Object.prototype.hasOwnProperty.call(normalized.appDiscountType, "functionId")),
+  };
+}
+
+function discountNodesQueryShapeDiagnostics(schema: DiscountNodesSchema, selectedDiscountFieldName: string | null): DiscountNodesQueryShapeDiagnostics {
+  const discountNodeFields = schema.discountNode?.fields || [];
+  return {
+    selectedDiscountFieldName,
+    discountNodeFieldNames: discountNodeFields.map((field) => field.name).filter((name): name is string => Boolean(name)).sort(),
+    discountNodeFieldReturnTypes: discountNodeFields.map((field) => ({ name: field.name || "", namedType: namedTypeName(field.type) })).filter((field) => Boolean(field.name)).sort((a, b) => a.name.localeCompare(b.name)),
+    discountUnionPossibleTypes: (schema.discountNodeDiscount?.possibleTypes || []).map((type) => type?.name).filter((name): name is string => Boolean(name)).sort(),
+    discountAutomaticNodeFieldNames: (schema.discountAutomaticNode?.fields || []).map((field) => field.name).filter((name): name is string => Boolean(name)).sort(),
+    discountAutomaticAppFieldNames: (schema.discountAutomaticApp?.fields || []).map((field) => field.name).filter((name): name is string => Boolean(name)).sort(),
+  };
+}
+
+function discountNodesQueryFingerprint(discountNodesNodeFields: string, mode: "filtered" | "unfiltered", selectedFieldName: string | null): DiscountNodesQueryFingerprint {
+  return {
+    operationName: "LoopDeskDiscountNodes",
+    mode,
+    includesDiscountAutomaticNodeFragment: new RegExp("\\.\\.\\.\\s+on\\s+DiscountAutomaticNode\\b").test(discountNodesNodeFields),
+    includesDiscountAutomaticAppFragment: new RegExp("\\.\\.\\.\\s+on\\s+DiscountAutomaticApp\\b").test(discountNodesNodeFields),
+    selectedFieldName,
+  };
+}
+
+function emptyDiscountNodesDiscoveryDiagnostics(queryArgumentSupported: boolean, queryShapeDiagnostics: DiscountNodesQueryShapeDiagnostics): DiscountNodesDiscoveryDiagnostics {
   return {
     pagesRead: 0,
     edgesRead: 0,
     candidateNodeIds: [],
     candidates: [],
     queryArgumentSupported,
-    filteredSearch: { attempted: false, pagesRead: 0, edgesRead: 0, candidateNodeIds: [] },
-    unfilteredFallback: { attempted: false, pagesRead: 0, edgesRead: 0, candidateNodeIds: [] },
+    filteredSearch: { attempted: false, pagesRead: 0, edgesRead: 0, candidateNodeIds: [], rawShapeCounts: {} },
+    unfilteredFallback: { attempted: false, pagesRead: 0, edgesRead: 0, candidateNodeIds: [], rawShapeCounts: {} },
+    queryShapeDiagnostics,
+    queryFingerprints: [],
+    rawNodeShapes: [],
+    normalizationComparisons: [],
     totalCandidatesInspected: 0,
     selectedAutomaticDiscountId: null,
     stoppedBecause: "end_of_connection",
@@ -376,18 +515,27 @@ function emptyDiscountNodesDiscoveryDiagnostics(queryArgumentSupported: boolean)
 function recordDiscountNodesPageDiagnostics(
   diagnostics: DiscountNodesDiscoveryDiagnostics,
   stage: "filteredSearch" | "unfilteredFallback",
+  rawNodes: DiscountNode[],
   pageNodes: AutomaticDiscount[],
+  discountFieldName: string,
 ) {
   const pageCandidates = automaticDiscountDiscoveryCandidates(pageNodes);
   const pageCandidateNodeIds = pageCandidates.map((candidate) => candidate.nodeId).filter((id): id is string => Boolean(id));
+  const rawShapes = rawNodes.map((node) => discountNodeRawShapeDiagnostics(node, discountFieldName));
   diagnostics.pagesRead += 1;
   diagnostics.edgesRead += pageNodes.length;
   diagnostics.candidates.push(...pageCandidates);
   diagnostics.candidateNodeIds.push(...pageCandidateNodeIds);
+  diagnostics.rawNodeShapes.push(...rawShapes);
+  diagnostics.normalizationComparisons.push(...rawNodes.map((node, index) => discountNodeNormalizationComparison(node, pageNodes[index], discountFieldName)));
   diagnostics.totalCandidatesInspected = diagnostics.candidates.length;
   diagnostics[stage].pagesRead += 1;
   diagnostics[stage].edgesRead += pageNodes.length;
   diagnostics[stage].candidateNodeIds.push(...pageCandidateNodeIds);
+  for (const shape of rawShapes) {
+    const label = rawShapeLabel(shape);
+    diagnostics[stage].rawShapeCounts[label] = (diagnostics[stage].rawShapeCounts[label] || 0) + 1;
+  }
 }
 
 async function queryDiscountNodesPage(shopDomain: string, shopId: string, discountNodesNodeFields: string, after: string | null, query: string | null) {
@@ -413,11 +561,12 @@ export async function queryLoopDeskDiscountNodes(shopDomain: string, shopId: str
   }
   const discountNodesNodeFields = discountNodeFields(discountFieldName, discountNodeHasMetafield);
   const queryArgumentSupported = hasDiscountNodesQueryArgument(schema);
-  const diagnostics = emptyDiscountNodesDiscoveryDiagnostics(queryArgumentSupported);
+  const diagnostics = emptyDiscountNodesDiscoveryDiagnostics(queryArgumentSupported, discountNodesQueryShapeDiagnostics(schema, discountFieldName));
   const nodes: AutomaticDiscount[] = [];
 
   const runStage = async (stage: "filteredSearch" | "unfilteredFallback", query: string | null) => {
     diagnostics[stage].attempted = true;
+    diagnostics.queryFingerprints.push(discountNodesQueryFingerprint(discountNodesNodeFields, stage === "filteredSearch" ? "filtered" : "unfiltered", discountFieldName));
     let after: string | null = null;
     let pagesRead = 0;
     do {
@@ -428,8 +577,9 @@ export async function queryLoopDeskDiscountNodes(shopDomain: string, shopId: str
       const data = await queryDiscountNodesPage(shopDomain, shopId, discountNodesNodeFields, after, query);
       pagesRead += 1;
       const connection: DiscountNodesConnection = data.discountNodes;
-      const pageNodes = (connection?.edges || []).map((edge) => edge?.node).filter((node): node is DiscountNode => Boolean(node)).map((node) => normalizeDiscountNode(node, discountFieldName));
-      recordDiscountNodesPageDiagnostics(diagnostics, stage, pageNodes);
+      const rawNodes = (connection?.edges || []).map((edge) => edge?.node).filter((node): node is DiscountNode => Boolean(node));
+      const pageNodes = rawNodes.map((node) => normalizeDiscountNode(node, discountFieldName));
+      recordDiscountNodesPageDiagnostics(diagnostics, stage, rawNodes, pageNodes, discountFieldName);
       nodes.push(...exactTitleNodes(pageNodes));
       const classified = classifyExactTitleAutomaticDiscounts(nodes, functionType);
       if (classified.identityMatches.length) {

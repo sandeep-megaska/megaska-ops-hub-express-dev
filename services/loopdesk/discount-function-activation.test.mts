@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { automaticDiscountDiscoveryCandidates, automaticDiscountInput, classifyExactTitleAutomaticDiscounts, deterministicConfigHash, publicationRecoveryHint, selectLoopDeskAppDiscountType, verifyStoredConfig, type AppDiscountType, type AutomaticDiscount } from "./discount-function-activation.server.ts";
+import { automaticDiscountDiscoveryCandidates, automaticDiscountInput, classifyExactTitleAutomaticDiscounts, deterministicConfigHash, discountNodeNormalizationComparison, discountNodeRawShapeDiagnostics, publicationRecoveryHint, selectLoopDeskAppDiscountType, verifyStoredConfig, type AppDiscountType, type AutomaticDiscount } from "./discount-function-activation.server.ts";
 import type { LoopDeskDiscountFunctionConfig } from "./discount-function.ts";
 
 const config: LoopDeskDiscountFunctionConfig = { schemaVersion: 1, enabled: true, rules: [{ id: "a", enabled: true, priority: 1, triggerType: "always", rewardEnforcementType: "fixed_price", rewardVariantGid: "gid://shopify/ProductVariant/1", rewardProductGid: "gid://shopify/Product/1", fixedPriceAmount: 300 }] };
@@ -307,11 +307,61 @@ test("discovery diagnostics exclude raw metafield values", () => {
   assert.equal("metafield" in candidate, false);
 });
 
+
+test("raw discountNodes diagnostics identify node.discount shape", () => {
+  const node = { id: "node-discount", discount: { __typename: "DiscountAutomaticApp", title: "LoopDesk Promotions", status: "ACTIVE", discountId: "discount", appDiscountType: { functionId: functionType.functionId } } };
+  const shape = discountNodeRawShapeDiagnostics(node, "discount");
+  assert.equal(shape.nodeId, "node-discount");
+  assert.equal(shape.hasDiscountProperty, true);
+  assert.deepEqual(shape.dynamicDiscountFieldKeys, ["__typename", "appDiscountType", "discountId", "status", "title"]);
+});
+
+test("raw discountNodes diagnostics identify node.automaticDiscount shape", () => {
+  const node = { id: "node-automatic", automaticDiscount: { __typename: "DiscountAutomaticApp", title: "LoopDesk Promotions" } };
+  const shape = discountNodeRawShapeDiagnostics(node, "discount");
+  assert.equal(shape.hasAutomaticDiscountProperty, true);
+  assert.equal(shape.dynamicDiscountFieldPresent, false);
+});
+
+test("raw discountNodes diagnostics identify dynamic nested automaticDiscount shape", () => {
+  const node = { id: "node-nested", discountNode: { __typename: "DiscountAutomaticNode", automaticDiscount: { __typename: "DiscountAutomaticApp", title: "LoopDesk Promotions", status: "ACTIVE" } } };
+  const shape = discountNodeRawShapeDiagnostics(node, "discountNode");
+  assert.equal(shape.dynamicDiscountFieldPresent, true);
+  assert.equal(shape.dynamicDiscountTypename, "DiscountAutomaticNode");
+  assert.deepEqual(shape.nestedAutomaticDiscountKeys, ["__typename", "status", "title"]);
+  assert.equal(shape.nestedAutomaticDiscountTypename, "DiscountAutomaticApp");
+  const comparison = discountNodeNormalizationComparison(node, { id: "node-nested", automaticDiscount: null }, "discountNode");
+  assert.equal(comparison.rawDetectedTitlePresent, true);
+  assert.equal(comparison.rawDetectedStatusPresent, true);
+});
+
+test("raw normalization comparison detects fields even when current normalization loses them", () => {
+  const rawNode = { id: "node-lost", automaticDiscount: { __typename: "DiscountAutomaticApp", title: "LoopDesk Promotions", status: "ACTIVE", discountId: "discount-lost", appDiscountType: { functionId: functionType.functionId } } };
+  const normalized: AutomaticDiscount = { id: "node-lost", automaticDiscount: null };
+  const comparison = discountNodeNormalizationComparison(rawNode, normalized, "discount");
+  assert.equal(comparison.rawDetectedTitlePresent, true);
+  assert.equal(comparison.rawDetectedStatusPresent, true);
+  assert.equal(comparison.rawDetectedDiscountIdPresent, true);
+  assert.equal(comparison.rawDetectedFunctionIdPresent, true);
+  assert.equal(comparison.normalizedTitlePresent, false);
+  assert.equal(comparison.normalizedFunctionIdPresent, false);
+});
+
+test("raw discountNodes diagnostics do not include metafield values or token fields", () => {
+  const node = { id: "node-sensitive", token: "secret-token", metafield: { value: "secret-metafield" }, discount: { __typename: "DiscountAutomaticApp", title: "LoopDesk Promotions" } };
+  const shape = discountNodeRawShapeDiagnostics(node, "discount");
+  const serialized = JSON.stringify(shape);
+  assert.equal(serialized.includes("secret-metafield"), false);
+  assert.equal(serialized.includes("secret-token"), false);
+  assert.equal(serialized.includes("value"), false);
+});
+
 test("publication diagnostics audit does not invoke create or update mutations", () => {
   const source = readFileSync(new URL("./discount-function-activation.server.ts", import.meta.url), "utf8");
   const diagnosticsSource = source.slice(source.indexOf("export async function getLoopDeskPromotionPublicationDiagnostics"), source.indexOf("export const activateLoopDeskDiscountFunction"));
   assert.equal(diagnosticsSource.includes("createAutomaticDiscount("), false);
   assert.equal(diagnosticsSource.includes("updateAutomaticDiscount("), false);
+  assert.equal(diagnosticsSource.includes("mutation "), false);
   assert.match(diagnosticsSource, /automaticDiscountDiscoveryDiagnostics/);
 });
 
@@ -320,9 +370,12 @@ test("discountNodes discovery has filtered fast path and unfiltered fallback dia
   const discoverySource = source.slice(source.indexOf("export async function queryLoopDeskDiscountNodes"), source.indexOf("async function hydrateSelectedDiscountMetafield"));
   assert.match(discoverySource, /runStage\("filteredSearch", automaticDiscountTitleQuery\(DISCOUNT_TITLE\)\)/);
   assert.match(discoverySource, /runStage\("unfilteredFallback", null\)/);
-  assert.match(source, /filteredSearch:\s*\{ attempted: false, pagesRead: 0, edgesRead: 0, candidateNodeIds: \[\] \}/);
-  assert.match(source, /unfilteredFallback:\s*\{ attempted: false, pagesRead: 0, edgesRead: 0, candidateNodeIds: \[\] \}/);
+  assert.match(source, /filteredSearch:\s*\{ attempted: false, pagesRead: 0, edgesRead: 0, candidateNodeIds: \[\], rawShapeCounts: \{\} \}/);
+  assert.match(source, /unfilteredFallback:\s*\{ attempted: false, pagesRead: 0, edgesRead: 0, candidateNodeIds: \[\], rawShapeCounts: \{\} \}/);
   assert.match(source, /selectedAutomaticDiscountId: null/);
+  assert.match(source, /rawShapeCounts: \{\}/);
+  assert.match(source, /rawNodeShapes: \[\]/);
+  assert.match(source, /normalizationComparisons: \[\]/);
   assert.match(source, /totalCandidatesInspected/);
 });
 
@@ -338,6 +391,19 @@ test("discountNodes fallback remains bounded and reports page limit", () => {
   assert.match(source, /const MAX_DISCOUNT_NODE_PAGES = 20/);
   assert.match(source, /pagesRead >= MAX_DISCOUNT_NODE_PAGES/);
   assert.match(source, /diagnostics\.stoppedBecause = "page_limit"/);
+});
+
+
+test("production discountNodes normalization and matching remain unchanged", () => {
+  const source = readFileSync(new URL("./discount-function-activation.server.ts", import.meta.url), "utf8");
+  const normalizeSource = source.slice(source.indexOf("function normalizeDiscountNode"), source.indexOf("function sortedKeys"));
+  assert.match(normalizeSource, /node\.discount \|\|/);
+  assert.match(normalizeSource, /\[discountFieldName\] \|\| null/);
+  assert.doesNotMatch(normalizeSource, /automaticDiscount\}\s*\)/);
+  const identitySource = source.slice(source.indexOf("function isIdentityMatch"), source.indexOf("function exactTitleNodes"));
+  assert.match(identitySource, /__typename === "DiscountAutomaticApp"/);
+  assert.match(identitySource, /discount\.title === DISCOUNT_TITLE/);
+  assert.match(identitySource, /appDiscountType\?\.functionId === functionType\.functionId/);
 });
 
 test("discountNodes identity matching requires app discount, exact title, and function id", () => {
