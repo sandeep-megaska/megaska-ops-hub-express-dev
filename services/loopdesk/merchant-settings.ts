@@ -1,6 +1,7 @@
 import { prisma } from "../db/prisma";
 import { getDelhiveryRuntimeConfig, type DelhiveryPublicRuntimeConfig } from "../delhivery/config";
 import { getPromotionRulesConfig, PROMOTION_RULES_CONFIG_MODULE_KEY } from "../promotion-rules/config";
+import { getLoopDeskPromotionPublicationStatus } from "./discount-function-activation.server";
 import { getRazorpayRuntimeConfig, type RazorpayPublicRuntimeConfig } from "../razorpay/config";
 
 export const LOOPDESK_RUNTIME_CONFIG_MODULE_KEY = "loopdesk_runtime_config";
@@ -565,12 +566,13 @@ export async function updateCartIntelligenceSettings(shopId: string, patch: unkn
 }
 
 export async function getLoopDeskRuntimeConfig(shopId: string, shopDomain?: string | null) {
-  const [settings, cartIntelligence, promotionRulesConfig, delhivery, razorpay] = await Promise.all([
+  const [settings, cartIntelligence, promotionRulesConfig, delhivery, razorpay, promotionPublication] = await Promise.all([
     getLoopDeskMerchantSettings(shopId),
     getCartIntelligenceSettings(shopId),
     getPromotionRulesConfig(shopId, shopDomain),
     getDelhiveryRuntimeConfig(shopId),
     getRazorpayRuntimeConfig(shopId),
+    shopDomain ? getLoopDeskPromotionPublicationStatus({ shopId, shopDomain }).catch((error) => ({ ok: false, synchronized: false, message: error instanceof Error ? error.message : "Publication diagnostics unavailable." })) : Promise.resolve({ ok: false, synchronized: false, message: "Shop domain unavailable." }),
   ]);
   console.info("[LoopDesk Runtime Config] promotion rules projection", {
     shopId,
@@ -584,8 +586,8 @@ export async function getLoopDeskRuntimeConfig(shopId: string, shopDomain?: stri
   return {
     ...toLoopDeskPublicRuntimeConfig(settings),
     cartIntelligence: toCartIntelligencePublicRuntimeConfig(cartIntelligence),
-    promotion_rules_config: promotionRulesConfig,
-    promotionRules: promotionRulesConfig,
+    promotion_rules_config: { ...promotionRulesConfig, publication: promotionPublication },
+    promotionRules: { ...promotionRulesConfig, publication: promotionPublication },
     delhivery,
     razorpay,
   };

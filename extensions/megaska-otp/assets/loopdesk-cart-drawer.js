@@ -230,7 +230,8 @@
       enabled: bool(raw.enabled, false),
       maxVisibleOffers: Math.max(1, Math.min(20, Number(raw.maxVisibleOffers) || 1)),
       conflictStrategy: raw.conflictStrategy === "priority_first" ? "priority_first" : "priority_first",
-      rules: Array.isArray(raw.rules) ? raw.rules : []
+      rules: Array.isArray(raw.rules) ? raw.rules : [],
+      publication: isPlainObject(raw.publication) ? raw.publication : { synchronized: false }
     };
   }
 
@@ -1012,6 +1013,11 @@
     return { value: "", source: "unavailable", resolved: null };
   }
 
+  function hasSynchronizedPromotionPublication() {
+    var publication = normalizePromotionConfig(config.promotion_rules_config || config.promotionRules).publication;
+    return Boolean(publication && publication.synchronized === true && publication.activeAutomaticDiscount === true && publication.productCapability !== false);
+  }
+
   function renderPromotionOffers(cart) {
     var offers = getEligiblePromotionRules(cart, "drawer", new Date());
     if (!offers.length) return "";
@@ -1022,6 +1028,7 @@
       var offerVariantGid = resolvePromotionOfferVariantGid(reward);
       var offerQuantity = promotionOfferRemainingQuantity(cart, rule, offerVariantGid);
       var adding = state.offerAdding === String(rule.id || offerVariantGid);
+      var synchronized = hasSynchronizedPromotionPublication();
       var image = display.imageOverrideUrl || product.imageUrl || product.image || "";
       var title = product.title || rule.name || "Offer product";
       var resolvedOfferPrice = resolvePromotionOfferPriceDisplay(display, reward, rule, cart, offerQuantity);
@@ -1032,7 +1039,8 @@
       var displayPriceSource = offerPrice ? resolvedOfferPrice.source : "unavailable";
       var pricing = offerPrice ? '<div class="loopdesk-cart-drawer__offer-prices" data-loopdesk-display-price-source="' + escapeHtml(displayPriceSource) + '" data-loopdesk-compare-price-source="' + escapeHtml(comparePriceSource) + '"><span>Get it for ' + escapeHtml(offerPrice) + '</span>' + (comparePrice ? '<s aria-label="Usually ' + escapeHtml(comparePrice) + '">Usually ' + escapeHtml(comparePrice) + '</s>' : '') + '</div>' : '';
       var deferred = reward.requiresDiscountEnforcement ? ' data-loopdesk-promotion-enforcement="deferred"' : '';
-      return ['<article class="loopdesk-cart-drawer__offer" data-loopdesk-promotion-rule="' + escapeHtml(rule.id || '') + '"' + deferred + '>', display.badge ? '<div class="loopdesk-cart-drawer__offer-badge">' + escapeHtml(display.badge) + '</div>' : '', '<div class="loopdesk-cart-drawer__offer-content">', image ? '<img class="loopdesk-cart-drawer__offer-image" src="' + escapeHtml(image) + '" alt="' + escapeHtml(title) + '" loading="lazy">' : '<div class="loopdesk-cart-drawer__offer-image loopdesk-cart-drawer__offer-image--placeholder"></div>', '<div class="loopdesk-cart-drawer__offer-copy"><h3>' + escapeHtml(display.heading || rule.name || 'Special offer') + '</h3>', display.description ? '<p>' + escapeHtml(display.description) + '</p>' : '', '<strong>' + escapeHtml(title) + '</strong>' + pricing + '</div></div>', state.offerError ? '<div class="loopdesk-cart-drawer__offer-error" role="alert">' + escapeHtml(state.offerError) + '</div>' : '', '<button type="button" class="loopdesk-cart-drawer__offer-cta" data-loopdesk-offer-add data-loopdesk-offer-key="' + escapeHtml(rule.id || offerVariantGid) + '" data-loopdesk-offer-variant="' + escapeHtml(offerVariantGid) + '" data-loopdesk-offer-quantity="' + escapeHtml(offerQuantity) + '"' + (adding ? ' disabled aria-busy="true"' : '') + '>' + escapeHtml(adding ? 'Adding…' : display.ctaLabel || 'Add offer') + '</button></article>'].join('');
+      var unavailable = synchronized ? '' : '<p class="loopdesk-cart-drawer__offer-unavailable">Offer unavailable until Shopify discount sync completes.</p>';
+      return ['<article class="loopdesk-cart-drawer__offer" data-loopdesk-promotion-rule="' + escapeHtml(rule.id || '') + '"' + deferred + '>', display.badge ? '<div class="loopdesk-cart-drawer__offer-badge">' + escapeHtml(display.badge) + '</div>' : '', '<div class="loopdesk-cart-drawer__offer-content">', image ? '<img class="loopdesk-cart-drawer__offer-image" src="' + escapeHtml(image) + '" alt="' + escapeHtml(title) + '" loading="lazy">' : '<div class="loopdesk-cart-drawer__offer-image loopdesk-cart-drawer__offer-image--placeholder"></div>', '<div class="loopdesk-cart-drawer__offer-copy"><h3>' + escapeHtml(display.heading || rule.name || 'Special offer') + '</h3>', display.description ? '<p>' + escapeHtml(display.description) + '</p>' : '', '<strong>' + escapeHtml(title) + '</strong>' + pricing + unavailable + '</div></div>', state.offerError ? '<div class="loopdesk-cart-drawer__offer-error" role="alert">' + escapeHtml(state.offerError) + '</div>' : '', '<button type="button" class="loopdesk-cart-drawer__offer-cta" data-loopdesk-offer-add data-loopdesk-offer-key="' + escapeHtml(rule.id || offerVariantGid) + '" data-loopdesk-offer-variant="' + escapeHtml(offerVariantGid) + '" data-loopdesk-offer-quantity="' + escapeHtml(offerQuantity) + '"' + (adding || !synchronized ? ' disabled' + (adding ? ' aria-busy="true"' : '') : '') + '>' + escapeHtml(adding ? 'Adding…' : (synchronized ? (display.ctaLabel || 'Add offer') : 'Unavailable')) + '</button></article>'].join('');
     }).join('') + '</section>';
   }
 
@@ -1053,6 +1061,7 @@
   }
 
   function loopdeskOfferHandoffPayload(cart) {
+    if (!hasSynchronizedPromotionPublication()) return null;
     var vm = promotionViewModel(cart || state.cart || {});
     var totals = vm && vm.totals ? vm.totals : null;
     var offerDiscount = Number(totals && totals.promotionDiscountTotal);
@@ -1199,8 +1208,6 @@
     }
     var totalDiscount = moneyValue(pricing && pricing.totalDiscount);
     if (totalDiscount > 0) return '<div><span>Discounts</span><strong>-' + escapeHtml(money(totalDiscount, currency)) + '</strong></div>';
-    var offerTotals = offerViewModel && offerViewModel.totals ? offerViewModel.totals : null;
-    if (offerTotals && offerTotals.promotionDiscountTotal > 0) return '<div><span>Promotion estimate</span><strong>-' + escapeHtml(money(offerTotals.promotionDiscountTotal, currency)) + '</strong></div><p>Estimate only — Shopify totals update after refresh.</p>';
     return "";
   }
 
@@ -1269,6 +1276,18 @@
     restoreLoopDeskBodyLock();
   }
 
+
+  function applyShopifyDiscountCode(code) {
+    return fetch("/cart/update.js", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ discount: String(code || "").trim() }) }).then(function (response) { if (!response.ok) throw new Error("Unable to update discount (" + response.status + ")"); return response.json().catch(function () { return null; }); });
+  }
+  function removeShopifyDiscountCode() { return applyShopifyDiscountCode(""); }
+  function readShopifyDiscountState(cart) {
+    var source = cart || state.cart || {};
+    var pricing = normalizeShopifyPricing(source);
+    return { cart: source, pricing: pricing, codes: pricing && Array.isArray(pricing.discountCodes) ? pricing.discountCodes : [] };
+  }
+  window.LoopDeskShopifyDiscountSession = Object.assign({}, window.LoopDeskShopifyDiscountSession || {}, { applyShopifyDiscountCode: applyShopifyDiscountCode, removeShopifyDiscountCode: removeShopifyDiscountCode, readShopifyDiscountState: readShopifyDiscountState });
+
   function fetchCart() {
     state.loading = true;
     state.error = "";
@@ -1278,7 +1297,7 @@
         if (!response.ok) throw new Error("Cart request failed");
         return response.json();
       })
-      .then(function (cart) { state.cart = cart; state.pricing = normalizeShopifyPricing(cart); })
+      .then(function (cart) { state.cart = cart; state.pricing = normalizeShopifyPricing(cart); if (!Number(cart && cart.item_count || 0)) removeShopifyDiscountCode().catch(function () {}); })
       .catch(function (error) {
         state.error = error && error.message ? error.message : "Cart request failed";
       })
@@ -1500,7 +1519,7 @@
     };
     clearLocalCartDrawerErrors();
     closeDrawerForCheckoutHandoff();
-    var loopdeskOfferPricing = loopdeskOfferHandoffPayload(state.cart);
+    var loopdeskOfferPricing = null;
     debugLog("OTP/checkout handoff started", { source: checkoutSource, loopdeskOfferPricing: loopdeskOfferPricing }, true);
     if (window.MegaskaExpressCheckout && typeof window.MegaskaExpressCheckout.open === "function") {
       debugLog("Express modal API present", { source: checkoutSource });

@@ -60,40 +60,7 @@ function stringOrNull(value: unknown) {
 
 
 
-function asRecord(value: unknown) {
-  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
-}
 
-
-function validLoopDeskOfferPricing(value: unknown) {
-  const payload = asRecord(value);
-  if (!payload) return null;
-
-  const discount = Math.round(Number(payload.loopdeskOfferDiscountAmountPaise || 0));
-  const adjustedTotal = Math.round(Number(payload.loopdeskOfferAdjustedTotalAmountPaise));
-  const baseSubtotal = Math.round(Number(payload.loopdeskOfferBaseSubtotalAmountPaise));
-
-  if (!(discount > 0) || !(adjustedTotal >= 0) || !(baseSubtotal > 0) || adjustedTotal > baseSubtotal) return null;
-
-  return {
-    loopdeskOfferDiscountAmountPaise: discount,
-    loopdeskOfferAdjustedTotalAmountPaise: adjustedTotal,
-    loopdeskOfferBaseSubtotalAmountPaise: baseSubtotal,
-  };
-}
-
-function preserveLoopDeskOfferPricing(cartSnapshot: unknown, body: Record<string, unknown>) {
-  const snapshot = asRecord(cartSnapshot);
-  const snapshotHandoff = validLoopDeskOfferPricing(snapshot?.loopdeskOfferPricing);
-  const bodyHandoff = validLoopDeskOfferPricing(body.loopdeskOfferPricing);
-
-  if (!snapshot || snapshotHandoff || !bodyHandoff) return cartSnapshot;
-
-  return {
-    ...snapshot,
-    loopdeskOfferPricing: bodyHandoff,
-  };
-}
 
 function firstIntentAddress(intent: { addressSnapshots?: Array<Record<string, unknown>> } | null | undefined) {
   const address = Array.isArray(intent?.addressSnapshots) ? intent.addressSnapshots[0] : null;
@@ -236,7 +203,7 @@ export async function POST(req: NextRequest) {
     reuseConditions.push({ shopifyCartId });
   }
 
-  const cartSnapshot = body.cartSnapshot === undefined ? undefined : preserveLoopDeskOfferPricing(body.cartSnapshot, body);
+  const cartSnapshot = body.cartSnapshot;
   // Express Checkout now receives product pricing from the Shopify Ajax cart read model.
   // Shipping, COD, and store credit remain separate adjustments; no local coupon resolver runs here.
 
