@@ -27,7 +27,7 @@ export type StorefrontPromotionProduct = {
   variantsTruncated?: boolean;
 };
 export type StorefrontPromotionProductLookup = { status: StorefrontPromotionProductStatus; product: StorefrontPromotionProduct | null; diagnostics?: PromotionStorefrontProductLookupDiagnostics };
-export type PromotionStorefrontProductLookupDiagnostics = { credentialSource?: string | null; hasStorefrontToken?: boolean; lookupTransport?: "public_product_json"; publicProductHttpStatus?: number; fallbackAttempted?: boolean; fallbackSucceeded?: boolean };
+export type PromotionStorefrontProductLookupDiagnostics = { credentialSource?: string | null; hasStorefrontToken?: boolean; lookupTransport?: "public_product_json"; publicProductHttpStatus?: number; fallbackAttempted?: boolean; fallbackSucceeded?: boolean; requestedOrigin?: string | null; finalOrigin?: string | null; approvedHosts?: string[]; redirectCount?: number; redirectChainHosts?: string[]; failureReason?: "redirect_loop" | "too_many_redirects" | "cross_tenant_redirect" | "invalid_redirect" | "network_error" | "timeout" };
 export type PromotionStorefrontProductDiagnostics = {
   requestedProductGids: string[];
   resolvedProductGids: string[];
@@ -36,7 +36,8 @@ export type PromotionStorefrontProductDiagnostics = {
   variantCountsByProduct: Record<string, number>;
 };
 
-type Fetcher = (input: { shopDomain: string; productGid: string; handle?: string | null }) => Promise<StorefrontPromotionProductLookup>;
+type PublicProductJsonInput = { shopDomain: string; primaryDomain?: string | null; myshopifyDomain?: string | null; productGid: string; handle?: string | null };
+type Fetcher = (input: PublicProductJsonInput) => Promise<StorefrontPromotionProductLookup>;
 
 function scheduled(rule: PromotionRule, now: Date) {
   const scheduleConfig = rule.schedule || { alwaysActive: true, startAt: null, endAt: null };
@@ -106,26 +107,81 @@ type AjaxProduct = {
 };
 
 const PUBLIC_PRODUCT_JSON_TIMEOUT_MS = 5_000;
+const MAX_PUBLIC_PRODUCT_JSON_REDIRECTS = 5;
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 
-function diagnostics(publicProductHttpStatus?: number): PromotionStorefrontProductLookupDiagnostics {
-  return { credentialSource: null, hasStorefrontToken: false, lookupTransport: "public_product_json", ...(publicProductHttpStatus ? { publicProductHttpStatus } : {}), fallbackAttempted: false, fallbackSucceeded: false };
+type PublicProductFailureReason = NonNullable<PromotionStorefrontProductLookupDiagnostics["failureReason"]>;
+type PublicProductAttemptResult = { response: Response; finalUrl: URL; redirectCount: number; redirectChainHosts: string[] };
+
+function diagnostics(input: Partial<PromotionStorefrontProductLookupDiagnostics> = {}): PromotionStorefrontProductLookupDiagnostics {
+  return { credentialSource: null, hasStorefrontToken: false, lookupTransport: "public_product_json", fallbackAttempted: false, fallbackSucceeded: false, ...input };
 }
 
-function safeShopHostname(shopDomain: string) {
-  const hostname = String(shopDomain || "").trim().toLowerCase().replace(/^https?:\/\//, "").split("/")[0];
-  if (!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(hostname)) return null;
+function normalizeApprovedHostname(domain: string | null | undefined) {
+  const value = String(domain || "").trim().toLowerCase();
+  if (!value) return null;
+  const withoutProtocol = value.replace(/^https?:\/\//, "");
+  const hostname = withoutProtocol.split("/")[0]?.split("?")[0]?.split("#")[0]?.replace(/\.$/, "") || "";
+  if (!hostname || hostname.length > 253) return null;
+  if (hostname === "localhost" || hostname.includes(":")) return null;
+  if (!/^[a-z0-9.-]+$/.test(hostname)) return null;
+  const labels = hostname.split(".");
+  if (labels.length < 2) return null;
+  if (!labels.every((label) => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label))) return null;
   return hostname;
 }
 
-function publicProductUrl(shopDomain: string, handle: string) {
-  const hostname = safeShopHostname(shopDomain);
-  if (!hostname) return null;
+function approvedHostsFromShop(input: { primaryDomain?: string | null; myshopifyDomain?: string | null; shopDomain: string }) {
+  return Array.from(new Set([input.primaryDomain, input.myshopifyDomain, input.shopDomain].map(normalizeApprovedHostname).filter(Boolean) as string[]));
+}
+
+function publicProductUrl(hostname: string, handle: string) {
   return new URL(`/products/${encodeURIComponent(handle)}.js`, `https://${hostname}`);
 }
 
-function isSameApprovedHost(url: URL, shopDomain: string) {
-  const hostname = safeShopHostname(shopDomain);
-  return Boolean(hostname && url.protocol === "https:" && url.hostname.toLowerCase() === hostname);
+function isApprovedHttpsUrl(url: URL, approvedHosts: Set<string>) {
+  return url.protocol === "https:" && approvedHosts.has(url.hostname.toLowerCase());
+}
+
+function publicProductFailure(message: PublicProductFailureReason) {
+  const error = new Error(message) as Error & { failureReason: PublicProductFailureReason };
+  error.failureReason = message;
+  return error;
+}
+
+function failureReasonFromError(error: unknown): PublicProductFailureReason {
+  const explicit = (error as { failureReason?: PublicProductFailureReason } | null)?.failureReason;
+  if (explicit) return explicit;
+  const name = (error as { name?: string } | null)?.name;
+  const message = error instanceof Error ? error.message : String(error || "");
+  if (name === "AbortError" || /abort|timeout/i.test(message)) return "timeout";
+  return "network_error";
+}
+
+async function fetchApprovedPublicJson(url: URL, approvedHosts: Set<string>, signal: AbortSignal): Promise<PublicProductAttemptResult> {
+  const visitedUrls = new Set<string>();
+  const redirectChainHosts: string[] = [];
+  let currentUrl = url;
+  for (let redirectCount = 0; ; redirectCount += 1) {
+    if (!isApprovedHttpsUrl(currentUrl, approvedHosts)) throw publicProductFailure("cross_tenant_redirect");
+    const current = currentUrl.toString();
+    if (visitedUrls.has(current)) throw publicProductFailure("redirect_loop");
+    visitedUrls.add(current);
+    const response = await fetch(currentUrl, { method: "GET", redirect: "manual", signal, headers: { Accept: "application/json" } });
+    if (!REDIRECT_STATUSES.has(response.status)) return { response, finalUrl: currentUrl, redirectCount, redirectChainHosts };
+    if (redirectCount >= MAX_PUBLIC_PRODUCT_JSON_REDIRECTS) throw publicProductFailure("too_many_redirects");
+    const location = response.headers.get("location");
+    if (!location) throw publicProductFailure("invalid_redirect");
+    let nextUrl: URL;
+    try {
+      nextUrl = new URL(location, currentUrl);
+    } catch {
+      throw publicProductFailure("invalid_redirect");
+    }
+    if (!isApprovedHttpsUrl(nextUrl, approvedHosts)) throw publicProductFailure("cross_tenant_redirect");
+    redirectChainHosts.push(nextUrl.hostname.toLowerCase());
+    currentUrl = nextUrl;
+  }
 }
 
 function moneyFromAjax(value: unknown, currencyCode: string): Money {
@@ -185,52 +241,59 @@ function normalizeAjaxProduct(productGid: string, raw: AjaxProduct): StorefrontP
   };
 }
 
-async function fetchSameShopPublicJson(url: URL, shopDomain: string, signal: AbortSignal, redirects = 0): Promise<Response> {
-  const response = await fetch(url, { method: "GET", redirect: "manual", signal, headers: { Accept: "application/json" } });
-  if (![301, 302, 303, 307, 308].includes(response.status)) return response;
-  if (redirects >= 3) throw new Error("too_many_redirects");
-  const location = response.headers.get("location");
-  if (!location) throw new Error("invalid_redirect");
-  const nextUrl = new URL(location, url);
-  if (!isSameApprovedHost(nextUrl, shopDomain)) throw new Error("cross_domain_redirect");
-  return fetchSameShopPublicJson(nextUrl, shopDomain, signal, redirects + 1);
-}
-
-export async function fetchPublicProductJson(input: { shopDomain: string; productGid: string; handle?: string | null }): Promise<StorefrontPromotionProductLookup> {
+export async function fetchPublicProductJson(input: PublicProductJsonInput): Promise<StorefrontPromotionProductLookup> {
   const productGid = canonicalProductGid(input.productGid);
   const handle = String(input.handle || "").trim();
-  if (!productGid) return { status: "invalid_product_gid", product: null, diagnostics: diagnostics() };
-  if (!handle) return { status: "missing_handle", product: null, diagnostics: diagnostics() };
-  const url = publicProductUrl(input.shopDomain, handle);
-  if (!url) return { status: "query_failed", product: null, diagnostics: diagnostics() };
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), PUBLIC_PRODUCT_JSON_TIMEOUT_MS);
-  try {
-    const response = await fetchSameShopPublicJson(url, input.shopDomain, controller.signal);
-    if (response.status === 404) return { status: "not_found", product: null, diagnostics: diagnostics(404) };
-    if (!response.ok) return { status: "query_failed", product: null, diagnostics: diagnostics(response.status) };
-    const raw = (await response.json()) as AjaxProduct;
-    const returnedId = String(raw.id || "").trim();
-    if (returnedId !== numericId(productGid)) {
-      console.warn("[LoopDesk Promotion Products] Public product identity mismatch", { shopDomain: safeShopHostname(input.shopDomain), configuredProductId: numericId(productGid), returnedProductId: returnedId || null });
-      return { status: "product_identity_mismatch", product: null, diagnostics: diagnostics(response.status) };
+  const approvedHosts = approvedHostsFromShop(input);
+  const originCandidates = approvedHosts.filter((host) => [normalizeApprovedHostname(input.primaryDomain), normalizeApprovedHostname(input.myshopifyDomain), normalizeApprovedHostname(input.shopDomain)].includes(host));
+  const baseDiagnostics = { approvedHosts };
+  if (!productGid) return { status: "invalid_product_gid", product: null, diagnostics: diagnostics(baseDiagnostics) };
+  if (!handle) return { status: "missing_handle", product: null, diagnostics: diagnostics(baseDiagnostics) };
+  if (!originCandidates.length) return { status: "query_failed", product: null, diagnostics: diagnostics({ ...baseDiagnostics, failureReason: "cross_tenant_redirect" }) };
+
+  const approvedHostSet = new Set(approvedHosts);
+  let fallbackAttempted = false;
+  let lastDiagnostics = diagnostics(baseDiagnostics);
+  for (const origin of originCandidates) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), PUBLIC_PRODUCT_JSON_TIMEOUT_MS);
+    try {
+      const result = await fetchApprovedPublicJson(publicProductUrl(origin, handle), approvedHostSet, controller.signal);
+      const attemptDiagnostics = diagnostics({ ...baseDiagnostics, requestedOrigin: origin, finalOrigin: result.finalUrl.hostname.toLowerCase(), redirectCount: result.redirectCount, redirectChainHosts: result.redirectChainHosts, publicProductHttpStatus: result.response.status, fallbackAttempted, fallbackSucceeded: fallbackAttempted });
+      if (result.response.status === 404) {
+        lastDiagnostics = attemptDiagnostics;
+        if (originCandidates.indexOf(origin) < originCandidates.length - 1) { fallbackAttempted = true; continue; }
+        return { status: "not_found", product: null, diagnostics: attemptDiagnostics };
+      }
+      if (!result.response.ok) return { status: "query_failed", product: null, diagnostics: attemptDiagnostics };
+      const raw = (await result.response.json()) as AjaxProduct;
+      const returnedId = String(raw.id || "").trim();
+      if (returnedId !== numericId(productGid)) {
+        console.warn("[LoopDesk Promotion Products] Public product identity mismatch", { requestedOrigin: origin, finalOrigin: attemptDiagnostics.finalOrigin, configuredProductId: numericId(productGid), returnedProductId: returnedId || null });
+        return { status: "product_identity_mismatch", product: null, diagnostics: attemptDiagnostics };
+      }
+      const product = normalizeAjaxProduct(productGid, raw);
+      if (!product) return { status: "query_failed", product: null, diagnostics: attemptDiagnostics };
+      return { status: product.availableForSale ? "ready" : "unavailable", product, diagnostics: attemptDiagnostics };
+    } catch (error) {
+      const failureReason = failureReasonFromError(error);
+      lastDiagnostics = diagnostics({ ...baseDiagnostics, requestedOrigin: origin, fallbackAttempted, failureReason });
+      const canFallback = ["network_error", "timeout"].includes(failureReason) && originCandidates.indexOf(origin) < originCandidates.length - 1;
+      if (canFallback) { fallbackAttempted = true; clearTimeout(timeout); continue; }
+      console.warn("[LoopDesk Promotion Products] Public product JSON lookup failed", { requestedOrigin: origin, approvedHosts, productGid, status: "query_failed", failureReason });
+      return { status: "query_failed", product: null, diagnostics: lastDiagnostics };
+    } finally {
+      clearTimeout(timeout);
     }
-    const product = normalizeAjaxProduct(productGid, raw);
-    if (!product) return { status: "query_failed", product: null, diagnostics: diagnostics(response.status) };
-    return { status: product.availableForSale ? "ready" : "unavailable", product, diagnostics: diagnostics(response.status) };
-  } catch (error) {
-    console.warn("[LoopDesk Promotion Products] Public product JSON lookup failed", { shopDomain: safeShopHostname(input.shopDomain), productGid, status: "query_failed", message: error instanceof Error ? error.message : String(error || "unknown") });
-    return { status: "query_failed", product: null, diagnostics: diagnostics() };
-  } finally {
-    clearTimeout(timeout);
   }
+  return { status: "query_failed", product: null, diagnostics: lastDiagnostics };
 }
 
-export async function enrichPromotionRulesWithStorefrontProducts(input: { shopId: string; shopDomain: string; config: PromotionRulesConfig; now?: Date; fetcher?: Fetcher }) {
+export async function enrichPromotionRulesWithStorefrontProducts(input: { shopId: string; shopDomain: string; primaryDomain?: string | null; myshopifyDomain?: string | null; config: PromotionRulesConfig; now?: Date; fetcher?: Fetcher }) {
   const fetcher = input.fetcher || fetchPublicProductJson;
   const requestedProductGids = selectPromotionRewardProductGids(input.config, input.now);
   const handlesByGid = rewardProductHandlesByGid(input.config, input.now);
-  const entries = await Promise.all(requestedProductGids.map(async (productGid) => [productGid, await fetcher({ shopDomain: input.shopDomain, productGid, handle: handlesByGid[productGid] })] as const));
+  const entries = await Promise.all(requestedProductGids.map(async (productGid) => [productGid, await fetcher({ shopDomain: input.shopDomain, primaryDomain: input.primaryDomain, myshopifyDomain: input.myshopifyDomain, productGid, handle: handlesByGid[productGid] })] as const));
   const byGid = Object.fromEntries(entries) as Record<string, StorefrontPromotionProductLookup>;
   const rewardProducts: Record<string, StorefrontPromotionProduct> = {};
   const rewardProductStatuses: Record<string, StorefrontPromotionProductStatus> = {};
@@ -246,6 +309,6 @@ export async function enrichPromotionRulesWithStorefrontProducts(input: { shopId
     productCount: Object.keys(rewardProducts).length,
     variantCountsByProduct: Object.fromEntries(Object.entries(rewardProducts).map(([gid, product]) => [gid, product.variants.length])),
   };
-  console.info("[LoopDesk Promotion Products] public product projection", { shopId: input.shopId, shopDomain: input.shopDomain, credentialSources: Object.fromEntries(entries.map(([gid, lookup]) => [gid, lookup.diagnostics?.credentialSource || null])), hasStorefrontToken: Object.fromEntries(entries.map(([gid, lookup]) => [gid, Boolean(lookup.diagnostics?.hasStorefrontToken)])), lookupTransports: Object.fromEntries(entries.map(([gid, lookup]) => [gid, lookup.diagnostics?.lookupTransport || null])), publicProductHttpStatuses: Object.fromEntries(entries.map(([gid, lookup]) => [gid, lookup.diagnostics?.publicProductHttpStatus || null])), fallbackAttempted: Object.fromEntries(entries.map(([gid, lookup]) => [gid, Boolean(lookup.diagnostics?.fallbackAttempted)])), fallbackSucceeded: Object.fromEntries(entries.map(([gid, lookup]) => [gid, Boolean(lookup.diagnostics?.fallbackSucceeded)])), ...diagnostics });
+  console.info("[LoopDesk Promotion Products] public product projection", { shopId: input.shopId, shopDomain: input.shopDomain, credentialSources: Object.fromEntries(entries.map(([gid, lookup]) => [gid, lookup.diagnostics?.credentialSource || null])), hasStorefrontToken: Object.fromEntries(entries.map(([gid, lookup]) => [gid, Boolean(lookup.diagnostics?.hasStorefrontToken)])), lookupTransports: Object.fromEntries(entries.map(([gid, lookup]) => [gid, lookup.diagnostics?.lookupTransport || null])), publicProductHttpStatuses: Object.fromEntries(entries.map(([gid, lookup]) => [gid, lookup.diagnostics?.publicProductHttpStatus || null])), failureReasons: Object.fromEntries(entries.map(([gid, lookup]) => [gid, lookup.diagnostics?.failureReason || null])), requestedOrigins: Object.fromEntries(entries.map(([gid, lookup]) => [gid, lookup.diagnostics?.requestedOrigin || null])), finalOrigins: Object.fromEntries(entries.map(([gid, lookup]) => [gid, lookup.diagnostics?.finalOrigin || null])), redirectCounts: Object.fromEntries(entries.map(([gid, lookup]) => [gid, lookup.diagnostics?.redirectCount || 0])), fallbackAttempted: Object.fromEntries(entries.map(([gid, lookup]) => [gid, Boolean(lookup.diagnostics?.fallbackAttempted)])), fallbackSucceeded: Object.fromEntries(entries.map(([gid, lookup]) => [gid, Boolean(lookup.diagnostics?.fallbackSucceeded)])), ...diagnostics });
   return { config: { ...input.config, rewardProducts, rewardProductStatuses }, diagnostics };
 }

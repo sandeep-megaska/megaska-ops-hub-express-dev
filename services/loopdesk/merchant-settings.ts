@@ -566,11 +566,11 @@ export async function updateCartIntelligenceSettings(shopId: string, patch: unkn
   return next;
 }
 
-export async function getLoopDeskRuntimeConfig(shopId: string, shopDomain?: string | null) {
+export async function getLoopDeskRuntimeConfig(shopId: string, shopDomain?: string | null, shopDomains?: { primaryDomain?: string | null; myshopifyDomain?: string | null }) {
   const [settings, cartIntelligence, promotionRulesConfig, delhivery, razorpay, promotionPublication] = await Promise.all([
     getLoopDeskMerchantSettings(shopId),
     getCartIntelligenceSettings(shopId),
-    getPromotionRulesConfig(shopId, shopDomain).then((config) => shopDomain ? enrichPromotionRulesWithStorefrontProducts({ shopId, shopDomain, config }).then((result) => result.config) : config),
+    getPromotionRulesConfig(shopId, shopDomain).then((config) => shopDomain ? enrichPromotionRulesWithStorefrontProducts({ shopId, shopDomain, primaryDomain: shopDomains?.primaryDomain, myshopifyDomain: shopDomains?.myshopifyDomain, config }).then((result) => result.config) : config),
     getDelhiveryRuntimeConfig(shopId),
     getRazorpayRuntimeConfig(shopId),
     shopDomain ? getLoopDeskPromotionPublicationStatus({ shopId, shopDomain }).catch((error) => ({ ok: false, synchronized: false, message: error instanceof Error ? error.message : "Publication diagnostics unavailable." })) : Promise.resolve({ ok: false, synchronized: false, message: "Shop domain unavailable." }),
