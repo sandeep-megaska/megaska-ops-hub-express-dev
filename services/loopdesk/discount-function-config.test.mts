@@ -136,6 +136,34 @@ test("compiler gate skips unsupported Rust Function triggers instead of publishi
   assert.equal(compilePromotionRuleEnforcementRule(rule), null);
 });
 
+test("current snowboard rule compiles to fixed_price 300 quantity 1 canonical variant GID and supported trigger", () => {
+  const rule = normalizePromotionRule({
+    id: "snowboard-300",
+    name: "Snowboard ₹300",
+    enabled: true,
+    priority: 1,
+    status: "active",
+    eligibility: { triggers: [{ type: "cart_contains_variant", variantGid: "1234567890", value: "1234567890" }] },
+    reward: {
+      type: "offer_product",
+      productGid: "gid://shopify/Product/987654321",
+      variantGid: "1234567890",
+      quantity: 1,
+      discount: { type: "fixed_price", value: 300 },
+    },
+    display: { heading: "Snowboard offer", ctaLabel: "Add offer" },
+  });
+
+  const compiled = compilePromotionRuleEnforcementRule(rule);
+
+  assert.equal(compiled?.rewardEnforcementType, "fixed_price");
+  assert.equal(compiled?.fixedPriceAmount, 300);
+  assert.equal(compiled?.quantity, 1);
+  assert.equal(compiled?.rewardVariantGid, "gid://shopify/ProductVariant/1234567890");
+  assert.equal(compiled?.triggerType, "cart_contains_variant");
+  assert.equal(compiled?.triggerValue, "gid://shopify/ProductVariant/1234567890");
+});
+
 test("compiler emits disabled empty config shape when no executable active rules exist", () => {
   const compiled = [
     normalizePromotionRule({ id: "draft", enabled: true, status: "draft", reward: { variantGid: "gid://shopify/ProductVariant/1", discount: { type: "fixed_price", value: 300 } }, display: { heading: "Offer", ctaLabel: "Add offer" } }),

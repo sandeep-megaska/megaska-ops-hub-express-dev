@@ -9,12 +9,15 @@ test("deterministic config hashes ignore object key ordering", () => {
   assert.equal(deterministicConfigHash(left), deterministicConfigHash(right));
 });
 
-test("app discount type selection requires unique PRODUCT-capable Function identity", () => {
+test("app discount type selection requires exact PRODUCT-capable Function handle", () => {
   assert.equal(selectLoopDeskAppDiscountType([]).selected, null);
-  assert.match(selectLoopDeskAppDiscountType([{ functionId: "1", functionHandle: "loopdesk-discount-function", title: "LoopDesk Discount Function", discountClasses: ["ORDER"] }]).reason || "", /PRODUCT/);
-  assert.match(selectLoopDeskAppDiscountType([
+  assert.equal(selectLoopDeskAppDiscountType([{ functionId: "1", functionHandle: "loopdesk-discount-function", title: "LoopDesk Discount Function", discountClasses: ["ORDER"] }]).reason, "wrong_discount_class");
+  assert.equal(selectLoopDeskAppDiscountType([
     { functionId: "1", functionHandle: "loopdesk-discount-function", title: "LoopDesk Discount Function", discountClasses: ["PRODUCT"] },
     { functionId: "2", functionHandle: "loopdesk-discount-function", title: "LoopDesk Discount Function", discountClasses: ["PRODUCT"] },
-  ]).reason || "", /Duplicate/);
+  ]).selected?.functionId, "1");
+  assert.equal(selectLoopDeskAppDiscountType([
+    { functionId: "broad-title", title: "LoopDesk Discount Function", discountClasses: ["PRODUCT"] },
+  ]).selected, null);
   assert.equal(selectLoopDeskAppDiscountType([{ functionId: "1", functionHandle: "loopdesk-discount-function", title: "LoopDesk Discount Function", discountClasses: ["PRODUCT"] }]).selected?.functionId, "1");
 });
