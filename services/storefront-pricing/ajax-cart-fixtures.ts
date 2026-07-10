@@ -1,0 +1,10 @@
+const baseItem = { id: 1, key: "line-1", variant_id: 11, product_id: 111, quantity: 1, title: "Full price", original_line_price: 10000, discounted_price: 10000, final_line_price: 10000, discounts: [] };
+
+export const ajaxCartPricingFixtures = {
+  noDiscount: { token: "cart-token", currency: "INR", item_count: 1, items: [baseItem], original_total_price: 10000, items_subtotal_price: 10000, total_discount: 0, total_price: 10000 },
+  productAppDiscount: { token: "cart-token", currency: "INR", item_count: 1, items: [{ ...baseItem, original_line_price: 10000, final_line_price: 7000, discounted_price: 7000, discounts: [{ amount: 3000, title: "LoopDesk offer" }] }], original_total_price: 10000, items_subtotal_price: 7000, total_discount: 3000, total_price: 7000 },
+  shopifyCodeDiscount: { token: "cart-token", currency: "INR", item_count: 1, cart_level_discount_applications: [{ title: "SAVE10", code: "SAVE10" }], items: [{ ...baseItem, final_line_price: 9000, discounted_price: 9000, discounts: [{ amount: 1000, title: "SAVE10", code: "SAVE10" }] }], original_total_price: 10000, items_subtotal_price: 9000, total_discount: 1000, total_price: 9000 },
+  combinedDiscounts: { token: "cart-token", currency: "INR", item_count: 1, cart_level_discount_applications: [{ code: "SAVE10" }], items: [{ ...baseItem, final_line_price: 6000, discounted_price: 6000, discounts: [{ amount: 3000, title: "LoopDesk offer" }, { amount: 1000, title: "SAVE10", code: "SAVE10" }] }], original_total_price: 10000, items_subtotal_price: 6000, total_discount: 4000, total_price: 6000 },
+  couponRemoved: { token: "cart-token", currency: "INR", item_count: 1, cart_level_discount_applications: [], items: [baseItem], original_total_price: 10000, items_subtotal_price: 10000, total_discount: 0, total_price: 10000 },
+  multiLine: { token: "cart-token", currency: "INR", item_count: 3, items: [baseItem, { ...baseItem, id: 2, key: "line-2", quantity: 2, original_line_price: 5000, discounted_price: 2500, final_line_price: 5000 }], original_total_price: 15000, items_subtotal_price: 15000, total_discount: 0, total_price: 15000 },
+} as const;
