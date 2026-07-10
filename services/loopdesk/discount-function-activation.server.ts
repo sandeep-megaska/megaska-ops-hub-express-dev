@@ -26,6 +26,8 @@ export type AutomaticDiscount = {
   } | null;
 };
 type AutomaticDiscountResult = { discountId?: string | null; title?: string | null; status?: string | null } | null | undefined;
+export type AutomaticDiscountTitleCollision = { id: string; typename: string | null; title: string | null; status: string | null; functionId: string | null };
+type ExactTitleAutomaticDiscountsResult = { selected: AutomaticDiscount | null; duplicates: string[]; titleOnlyCount: number; identityMatches: AutomaticDiscount[]; titleCollisions: AutomaticDiscount[]; automaticDiscountTitleCollisions: AutomaticDiscountTitleCollision[] };
 
 export type PublicationRecoveryHint = { required: boolean; action: "none" | "publish" | "resolve_duplicates" | "resolve_ambiguity" | "fix_configuration"; message: string };
 
@@ -49,6 +51,7 @@ type PublicationDiagnostics = {
   automaticDiscountStatus: string | null;
   duplicateAutomaticDiscountIds: string[];
   titleOnlyAutomaticDiscountCount: number;
+  automaticDiscountTitleCollisions: AutomaticDiscountTitleCollision[];
   metafieldRawValue: string | null;
   metafieldParsed: LoopDeskDiscountFunctionConfig | null;
   metafieldUpdated: boolean;
@@ -70,6 +73,7 @@ type PublicationDiagnostics = {
 export function publicationRecoveryHint(blockingReasons: string[]): PublicationRecoveryHint {
   const uniqueReasons = Array.from(new Set(blockingReasons));
   if (uniqueReasons.includes("duplicate_automatic_discounts")) return { required: true, action: "resolve_duplicates", message: "Multiple LoopDesk automatic app discounts match the deployed function. Deactivate or remove duplicates, then publish again." };
+  if (uniqueReasons.includes("automatic_discount_title_collision")) return { required: true, action: "resolve_ambiguity", message: "An automatic discount titled LoopDesk Promotions already exists but is not linked to the deployed LoopDesk Function. Inspect the existing discount in Shopify Admin, then rename, deactivate, or remove it before publishing again." };
   if (uniqueReasons.includes("ambiguous_title_only_discounts")) return { required: true, action: "resolve_ambiguity", message: "A LoopDesk-titled automatic discount exists but is not linked to the deployed function. Resolve the old discount, then publish again." };
   if (uniqueReasons.includes("missing_automatic_discount") || uniqueReasons.includes("stale_metafield") || uniqueReasons.includes("missing_or_invalid_metafield") || uniqueReasons.includes("inactive_discount")) return { required: true, action: "publish", message: "Publish LoopDesk promotions to create or update the Shopify automatic app discount for the deployed function." };
   if (uniqueReasons.length) return { required: true, action: "fix_configuration", message: `Resolve publication blockers first: ${uniqueReasons.join(", ")}.` };
@@ -159,15 +163,88 @@ async function assertAutomaticDiscountNodeMetafieldReadable(shopDomain: string, 
   }
 }
 
-async function findExistingLoopDeskDiscounts(shopDomain: string, shopId: string, functionType: AppDiscountType) {
-  const data = await shopifyAdminGraphql<{ automaticDiscountNodes: { edges: Array<{ node: AutomaticDiscount }> } }>(shopDomain, `query LoopDeskAutomaticDiscounts { automaticDiscountNodes(first: 100) { edges { node { id metafield(namespace: "loopdesk", key: "discount_function_config") { value } automaticDiscount { __typename ... on DiscountAutomaticApp { title status discountId appDiscountType { functionId } } } } } } }`, {}, { shopId }).catch(async (error: unknown) => {
+function automaticDiscountTitleQuery(title: string) {
+  return `title:"${title.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
+const AUTOMATIC_DISCOUNT_NODE_FIELDS = `
+  edges {
+    node {
+      id
+      metafield(namespace: "loopdesk", key: "discount_function_config") { value }
+      automaticDiscount {
+        __typename
+        ... on DiscountAutomaticApp { title status discountId appDiscountType { functionId } }
+        ... on DiscountAutomaticBasic { title status }
+        ... on DiscountAutomaticBxgy { title status }
+        ... on DiscountAutomaticFreeShipping { title status }
+      }
+    }
+  }
+  pageInfo { hasNextPage endCursor }
+`;
+
+type AutomaticDiscountConnection = { edges?: Array<{ node: AutomaticDiscount }>; pageInfo?: { hasNextPage?: boolean; endCursor?: string | null } };
+
+function isIdentityMatch(node: AutomaticDiscount, functionType: AppDiscountType) {
+  const discount = node.automaticDiscount;
+  return discount?.__typename === "DiscountAutomaticApp" && discount.appDiscountType?.functionId === functionType.functionId;
+}
+
+function exactTitleNodes(nodes: AutomaticDiscount[]) {
+  return nodes.filter((node) => node.automaticDiscount?.title === DISCOUNT_TITLE);
+}
+
+export function classifyExactTitleAutomaticDiscounts(nodes: AutomaticDiscount[], functionType: AppDiscountType): ExactTitleAutomaticDiscountsResult {
+  const exactMatches = exactTitleNodes(nodes);
+  const identityMatches = exactMatches.filter((node) => isIdentityMatch(node, functionType));
+  const titleCollisions = exactMatches.filter((node) => !identityMatches.includes(node));
+  return {
+    selected: identityMatches[0] || null,
+    duplicates: identityMatches.length > 1 ? identityMatches.map((node) => node.id) : [],
+    titleOnlyCount: titleCollisions.length,
+    identityMatches,
+    titleCollisions,
+    automaticDiscountTitleCollisions: titleCollisions.map((node) => ({
+      id: node.id,
+      typename: node.automaticDiscount?.__typename || null,
+      title: node.automaticDiscount?.title || null,
+      status: node.automaticDiscount?.status || null,
+      functionId: node.automaticDiscount?.appDiscountType?.functionId || null,
+    })),
+  };
+}
+
+export async function queryAutomaticDiscountsByExactTitle(shopDomain: string, shopId: string, functionType: AppDiscountType) {
+  const query = automaticDiscountTitleQuery(DISCOUNT_TITLE);
+  const searched = await shopifyAdminGraphql<{ automaticDiscountNodes: AutomaticDiscountConnection }>(shopDomain, `query LoopDeskAutomaticDiscountsByExactTitle($query: String!) { automaticDiscountNodes(first: 50, query: $query) { ${AUTOMATIC_DISCOUNT_NODE_FIELDS} } }`, { query }, { shopId }).catch(async (error: unknown) => {
     if (isMetafieldSchemaError(error)) await assertAutomaticDiscountNodeMetafieldReadable(shopDomain, shopId);
     throw error;
   });
-  const nodes = data.automaticDiscountNodes?.edges?.map((edge) => edge.node).filter((node) => node.automaticDiscount?.__typename === "DiscountAutomaticApp") || [];
-  const identityMatches = nodes.filter((node) => node.automaticDiscount?.appDiscountType?.functionId === functionType.functionId);
-  const titleOnly = nodes.filter((node) => node.automaticDiscount?.title === DISCOUNT_TITLE && !identityMatches.includes(node));
-  return { selected: identityMatches[0] || null, duplicates: identityMatches.length > 1 ? identityMatches.map((node) => node.id) : [], titleOnlyCount: titleOnly.length };
+  let nodes = exactTitleNodes(searched.automaticDiscountNodes?.edges?.map((edge) => edge.node) || []);
+  if (!nodes.length) nodes = await queryAutomaticDiscountsByExactTitleFallback(shopDomain, shopId);
+  return classifyExactTitleAutomaticDiscounts(nodes, functionType);
+}
+
+async function queryAutomaticDiscountsByExactTitleFallback(shopDomain: string, shopId: string) {
+  const exactMatches: AutomaticDiscount[] = [];
+  let after: string | null = null;
+  do {
+    const data: { automaticDiscountNodes: AutomaticDiscountConnection } = await shopifyAdminGraphql<{ automaticDiscountNodes: AutomaticDiscountConnection }>(shopDomain, `query LoopDeskAutomaticDiscountsByExactTitleFallback($after: String) { automaticDiscountNodes(first: 100, after: $after) { ${AUTOMATIC_DISCOUNT_NODE_FIELDS} } }`, { after }, { shopId }).catch(async (error: unknown) => {
+      if (isMetafieldSchemaError(error)) await assertAutomaticDiscountNodeMetafieldReadable(shopDomain, shopId);
+      throw error;
+    });
+    const connection: AutomaticDiscountConnection = data.automaticDiscountNodes;
+    exactMatches.push(...exactTitleNodes(connection?.edges?.map((edge) => edge.node) || []));
+    if (exactMatches.length) break;
+    after = connection?.pageInfo?.endCursor || null;
+    if (!connection?.pageInfo?.hasNextPage) break;
+  } while (after);
+  return exactMatches;
+}
+
+async function findExistingLoopDeskDiscounts(shopDomain: string, shopId: string, functionType: AppDiscountType) {
+  return queryAutomaticDiscountsByExactTitle(shopDomain, shopId, functionType);
 }
 
 export function automaticDiscountInput(functionType: AppDiscountType, config: LoopDeskDiscountFunctionConfig, includeStartsAt = false) {
@@ -221,7 +298,7 @@ export async function publishLoopDeskPromotions(input: { shopId: string; shopDom
   const buildArtifactValidation = validateLoopDeskDiscountFunctionBuildArtifact();
   const config = await compileLoopDeskDiscountFunctionConfig(input.shopId, input.shopDomain);
   const preflight = await promotionPublicationPreflight(input.shopId, input.shopDomain, config);
-  const diagnostics: PublicationDiagnostics = { localCompiledConfig: config, functionFound: false, functionId: null, functionHandle: null, deployedFunction: null, functionIdentityMatch: false, automaticDiscount: "not-run", automaticDiscountId: null, automaticDiscountTitle: null, automaticDiscountStatus: null, duplicateAutomaticDiscountIds: [], titleOnlyAutomaticDiscountCount: 0, metafieldRawValue: null, metafieldParsed: null, metafieldUpdated: false, rulesCompiledCount: config.rules.length, compiledRewardTypes: Array.from(new Set(config.rules.map((rule) => rule.rewardEnforcementType))).sort(), fixedPriceRulesCompiledCount: config.rules.filter((rule) => rule.rewardEnforcementType === "fixed_price").length, percentageRulesCompiledCount: config.rules.filter((rule) => rule.rewardEnforcementType === "percentage").length, fixedAmountRulesCompiledCount: config.rules.filter((rule) => rule.rewardEnforcementType === "fixed_amount").length, buildArtifactPresent: buildArtifactValidation.ok, activationStatus: "blocked", synchronized: false, compiledConfigHash: deterministicConfigHash(config), storedConfigHash: null, blockingReasons: [...preflight.blockingReasons], verification: { ok: false, errors: [], storedConfigHash: null } };
+  const diagnostics: PublicationDiagnostics = { localCompiledConfig: config, functionFound: false, functionId: null, functionHandle: null, deployedFunction: null, functionIdentityMatch: false, automaticDiscount: "not-run", automaticDiscountId: null, automaticDiscountTitle: null, automaticDiscountStatus: null, duplicateAutomaticDiscountIds: [], titleOnlyAutomaticDiscountCount: 0, automaticDiscountTitleCollisions: [], metafieldRawValue: null, metafieldParsed: null, metafieldUpdated: false, rulesCompiledCount: config.rules.length, compiledRewardTypes: Array.from(new Set(config.rules.map((rule) => rule.rewardEnforcementType))).sort(), fixedPriceRulesCompiledCount: config.rules.filter((rule) => rule.rewardEnforcementType === "fixed_price").length, percentageRulesCompiledCount: config.rules.filter((rule) => rule.rewardEnforcementType === "percentage").length, fixedAmountRulesCompiledCount: config.rules.filter((rule) => rule.rewardEnforcementType === "fixed_amount").length, buildArtifactPresent: buildArtifactValidation.ok, activationStatus: "blocked", synchronized: false, compiledConfigHash: deterministicConfigHash(config), storedConfigHash: null, blockingReasons: [...preflight.blockingReasons], verification: { ok: false, errors: [], storedConfigHash: null } };
   // Publication validates the deployed Shopify Function identity via Admin GraphQL.
   // A local WASM artifact is diagnostic-only because Vercel/Next.js runtime deployments do not own Shopify Function publication.
 
@@ -246,8 +323,9 @@ export async function publishLoopDeskPromotions(input: { shopId: string; shopDom
   }
   diagnostics.duplicateAutomaticDiscountIds = existing.duplicates;
   diagnostics.titleOnlyAutomaticDiscountCount = existing.titleOnlyCount;
+  diagnostics.automaticDiscountTitleCollisions = existing.automaticDiscountTitleCollisions;
   if (existing.duplicates.length) diagnostics.blockingReasons.push("duplicate_automatic_discounts");
-  if (!existing.selected && existing.titleOnlyCount > 0) diagnostics.blockingReasons.push("ambiguous_title_only_discounts");
+  if (!existing.selected && existing.titleOnlyCount > 0) diagnostics.blockingReasons.push("automatic_discount_title_collision");
   if (diagnostics.blockingReasons.length) return { ok: false, diagnostics, config, message: `Publication blocked: ${diagnostics.blockingReasons.join(", ")}` };
 
   let automaticDiscount: AutomaticDiscountResult;
@@ -318,6 +396,7 @@ export async function getLoopDeskPromotionPublicationStatus(input: { shopId: str
   const fixedPriceRulesCompiledCount = config.rules.filter((rule) => rule.rewardEnforcementType === "fixed_price").length;
   const blockingReasons = [...verified.errors];
   if (existing.duplicates.length) blockingReasons.push("duplicate_automatic_discounts");
+  if (existing.titleOnlyCount > 0 && !existing.selected) blockingReasons.push("automatic_discount_title_collision");
   if (!activeAutomaticDiscount) blockingReasons.push("inactive_discount");
   if (fixedPriceRulesCompiledCount <= 0) blockingReasons.push("no_fixed_price_rules");
   const synchronized = Boolean(verified.ok && activeAutomaticDiscount && fixedPriceRulesCompiledCount > 0 && !existing.duplicates.length);
@@ -335,6 +414,7 @@ export async function getLoopDeskPromotionPublicationDiagnostics(input: { shopId
   let automaticDiscount: AutomaticDiscount | null = null;
   let duplicates: string[] = [];
   let titleOnlyAutomaticDiscountCount = 0;
+  let automaticDiscountTitleCollisions: AutomaticDiscountTitleCollision[] = [];
   let verified = { ok: false, errors: functionType ? ["missing_automatic_discount"] : blockingReasons, storedConfigHash: null as string | null, metafieldRawValue: null as string | null, metafieldParsed: null as LoopDeskDiscountFunctionConfig | null };
   if (functionType) {
     const existing = await findExistingLoopDeskDiscounts(input.shopDomain, input.shopId, functionType).catch((error: unknown) => {
@@ -355,6 +435,7 @@ export async function getLoopDeskPromotionPublicationDiagnostics(input: { shopId
         matchingAutomaticDiscount: null,
         duplicateAutomaticDiscountIds: [],
         titleOnlyAutomaticDiscountCount: 0,
+        automaticDiscountTitleCollisions: [],
         metafieldRawValue: null,
         metafieldParsed: null,
         storedConfigHash: null,
@@ -367,8 +448,9 @@ export async function getLoopDeskPromotionPublicationDiagnostics(input: { shopId
     automaticDiscount = existing.selected;
     duplicates = existing.duplicates;
     titleOnlyAutomaticDiscountCount = existing.titleOnlyCount;
+    automaticDiscountTitleCollisions = existing.automaticDiscountTitleCollisions;
     if (duplicates.length) blockingReasons.push("duplicate_automatic_discounts");
-    if (!existing.selected && existing.titleOnlyCount > 0) blockingReasons.push("ambiguous_title_only_discounts");
+    if (!existing.selected && existing.titleOnlyCount > 0) blockingReasons.push("automatic_discount_title_collision");
     verified = existing.selected ? verifyStoredConfig(existing.selected, functionType, config) : verified;
     blockingReasons.push(...verified.errors);
   }
@@ -387,6 +469,7 @@ export async function getLoopDeskPromotionPublicationDiagnostics(input: { shopId
     matchingAutomaticDiscount: automaticDiscount,
     duplicateAutomaticDiscountIds: duplicates,
     titleOnlyAutomaticDiscountCount,
+    automaticDiscountTitleCollisions,
     metafieldRawValue: verified.metafieldRawValue,
     metafieldParsed: verified.metafieldParsed,
     storedConfigHash: verified.storedConfigHash,
