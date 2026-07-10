@@ -10,7 +10,8 @@ export async function GET(req: NextRequest) {
   if (!resolved.shop?.id) return NextResponse.json({ ok: false, error: formatAdminShopResolutionError(resolved) }, { status: 401 });
 
   try {
-    const diagnostics = await getLoopDeskPromotionPublicationDiagnostics({ shopId: resolved.shop.id, shopDomain: resolved.shop.shopDomain });
+    const canonicalShopDomain = resolved.shop.myshopifyDomain || resolved.shop.shopDomain;
+    const diagnostics = await getLoopDeskPromotionPublicationDiagnostics({ shopId: resolved.shop.id, shopDomain: canonicalShopDomain, identityDebug: { caller: "admin_diagnostics", requestedShopDomain: resolved.shopDomain, normalizedShopDomain: resolved.shopDomain, shopDomain: resolved.shop.shopDomain, myshopifyDomain: resolved.shop.myshopifyDomain, primaryDomain: resolved.shop.primaryDomain, hasAdminAccessToken: Boolean(resolved.shop.accessToken || resolved.shop.accessTokenEncrypted) } });
     return NextResponse.json(diagnostics, { status: diagnostics.ok ? 200 : 409 });
   } catch (error) {
     return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : "Publication diagnostics failed." }, { status: 500 });
@@ -22,7 +23,8 @@ export async function POST(req: NextRequest) {
   if (!resolved.shop?.id) return NextResponse.json({ ok: false, error: formatAdminShopResolutionError(resolved) }, { status: 401 });
 
   try {
-    const result = await publishLoopDeskPromotions({ shopId: resolved.shop.id, shopDomain: resolved.shop.shopDomain });
+    const canonicalShopDomain = resolved.shop.myshopifyDomain || resolved.shop.shopDomain;
+    const result = await publishLoopDeskPromotions({ shopId: resolved.shop.id, shopDomain: canonicalShopDomain });
     return NextResponse.json(result, { status: result.ok ? 200 : 409 });
   } catch (error) {
     return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : "Publication diagnostics failed." }, { status: 502 });

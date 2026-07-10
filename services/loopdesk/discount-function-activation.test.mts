@@ -417,3 +417,23 @@ test("compact status and diagnostics share the resolver instead of legacy automa
   assert.doesNotMatch(statusSource, /queryAutomaticDiscountsByExactTitle|automaticDiscountNodes/);
   assert.doesNotMatch(diagnosticsSource, /queryAutomaticDiscountsByExactTitle|automaticDiscountNodes/);
 });
+
+test("admin and storefront shared projection cannot report missing automatic discount for the same canonical matching discount", () => {
+  const canonicalShopId = "shop_canonical";
+  const canonicalShopDomain = "megaskastore.myshopify.com";
+  const result = projectLoopDeskPromotionPublicationVerification({
+    shopId: canonicalShopId,
+    shopDomain: canonicalShopDomain,
+    config,
+    functionType,
+    appDiscountTypes: [functionType],
+    existing: { selected: matchingDiscountNode(), duplicates: [], titleOnlyCount: 0, identityMatches: [matchingDiscountNode()], titleCollisions: [], automaticDiscountTitleCollisions: [] },
+  });
+  const admin = diagnosticsFromShared(result);
+  const storefront = compactFromShared(result);
+  assert.equal(result.shopId, canonicalShopId);
+  assert.equal(result.shopDomain, canonicalShopDomain);
+  assert.equal(admin.matchingAutomaticDiscount?.automaticDiscount?.discountId, "gid://shopify/DiscountAutomaticNode/1629508862250");
+  assert.equal(storefront.automaticDiscountId, "gid://shopify/DiscountAutomaticNode/1629508862250");
+  assert.equal(storefront.blockingReasons.includes("missing_automatic_discount"), false);
+});

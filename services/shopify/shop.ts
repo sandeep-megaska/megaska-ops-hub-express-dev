@@ -1,12 +1,16 @@
 import type { NextRequest } from "next/server";
 import { prisma } from "../db/prisma";
 import { decryptShopifyToken } from "./token-crypto";
+import { AmbiguousShopInstallationError, isMyshopifyDomain, normalizeShopDomain, selectCanonicalShopCandidate } from "./shop-identity";
+export { isMyshopifyDomain, normalizeShopDomain, selectCanonicalShopCandidate } from "./shop-identity";
 
 export type ResolvedShopConfig = {
   id: string | null;
   shopDomain: string;
   accessToken: string | null;
   storefrontAccessToken: string | null;
+  myshopifyDomain?: string | null;
+  primaryDomain?: string | null;
 };
 
 export type ShopRow = {
@@ -37,14 +41,6 @@ export class ShopResolutionError extends Error {
 
 function trimEnv(name: string) {
   return String(process.env[name] || "").trim();
-}
-
-export function normalizeShopDomain(input: string | null | undefined) {
-  return String(input || "")
-    .trim()
-    .replace(/^https?:\/\//, "")
-    .replace(/\/$/, "")
-    .toLowerCase();
 }
 
 function domainFamily(shopDomain: string) {
@@ -80,6 +76,18 @@ export function getShopDomainFromRequest(req: NextRequest) {
   return "";
 }
 
+
+function shopRowToResolved(shop: ShopRow): ResolvedShopConfig {
+  return {
+    id: shop.id,
+    shopDomain: shop.shopDomain,
+    myshopifyDomain: shop.myshopifyDomain,
+    primaryDomain: shop.primaryDomain,
+    accessToken: shop.accessToken || decryptShopifyToken(shop.accessTokenEncrypted),
+    storefrontAccessToken: shop.storefrontAccessToken || decryptShopifyToken(shop.storefrontTokenEncrypted),
+  };
+}
+
 export async function getShopByDomain(shopDomain: string) {
   const normalized = normalizeShopDomain(shopDomain);
   if (!normalized) return null;
@@ -102,23 +110,31 @@ export async function getShopByDomain(shopDomain: string) {
     family
   );
 
-  if (rows.length > 1) {
-    console.warn("[Shop Resolver] duplicate shop domain candidates", {
-      requestedShopDomain: normalized,
-      candidateCount: rows.length,
-      selectedShopId: rows[0]?.id || null,
-      candidates: rows.map((row) => ({
-        id: row.id,
-        shopDomain: row.shopDomain,
-        myshopifyDomain: row.myshopifyDomain,
-        primaryDomain: row.primaryDomain,
-        isActive: row.isActive,
-        installationStatus: row.installationStatus,
-      })),
-    });
+  try {
+    const selected = selectCanonicalShopCandidate(rows, normalized);
+    if (rows.length > 1) {
+      console.warn("[Shop Resolver] duplicate shop domain candidates", {
+        requestedShopDomain: normalized,
+        candidateCount: rows.length,
+        selectedShopId: selected?.id || null,
+        candidates: rows.map((row) => ({
+          id: row.id,
+          shopDomain: row.shopDomain,
+          myshopifyDomain: row.myshopifyDomain,
+          primaryDomain: row.primaryDomain,
+          isActive: row.isActive,
+          installationStatus: row.installationStatus,
+          hasAdminAccessToken: Boolean(row.accessToken || row.accessTokenEncrypted),
+        })),
+      });
+    }
+    return selected;
+  } catch (error) {
+    if (error instanceof AmbiguousShopInstallationError) {
+      console.warn("[Shop Resolver] ambiguous shop installation", { requestedShopDomain: normalized, candidateIds: rows.map((row) => row.id) });
+    }
+    throw error instanceof AmbiguousShopInstallationError ? new ShopResolutionError(409, error.message) : error;
   }
-
-  return rows[0] || null;
 }
 
 export async function getDefaultShopFromConfig() {
@@ -141,7 +157,7 @@ export async function getDefaultShopFromConfig() {
        "storefrontAccessToken" = COALESCE(EXCLUDED."storefrontAccessToken", "Shop"."storefrontAccessToken"),
        "isActive" = true,
        "updatedAt" = NOW()
-     RETURNING "id", "shopDomain", "accessToken", "accessTokenEncrypted", "storefrontAccessToken", "storefrontTokenEncrypted", "scopes", "isActive", "installedAt", "uninstalledAt", "myshopifyDomain", "installationStatus"`,
+     RETURNING "id", "shopDomain", "accessToken", "accessTokenEncrypted", "storefrontAccessToken", "storefrontTokenEncrypted", "scopes", "isActive", "installedAt", "uninstalledAt", "myshopifyDomain", "primaryDomain", "installationStatus"`,
     envDomain,
     envAdminToken,
     envStorefrontToken
@@ -155,30 +171,45 @@ export async function resolveShopConfig(
 ): Promise<ResolvedShopConfig> {
   const normalizedPreferred = normalizeShopDomain(preferredShopDomain);
   if (normalizedPreferred) {
-    const shop = await getShopByDomain(normalizedPreferred);
-    if (shop) {
-      return {
-        id: shop.id,
-        shopDomain: shop.shopDomain,
-        accessToken: shop.accessToken || decryptShopifyToken(shop.accessTokenEncrypted),
-        storefrontAccessToken: shop.storefrontAccessToken || decryptShopifyToken(shop.storefrontTokenEncrypted),
-      };
+    const family = domainFamily(normalizedPreferred);
+    const rows = await prisma.$queryRawUnsafe<ShopRow[]>(
+      `SELECT "id", "shopDomain", "accessToken", "accessTokenEncrypted", "storefrontAccessToken", "storefrontTokenEncrypted", "scopes", "isActive", "installedAt", "uninstalledAt", "myshopifyDomain", "primaryDomain", "installationStatus"
+       FROM "Shop"
+       WHERE "shopDomain" = $1
+          OR "myshopifyDomain" = $1
+          OR "primaryDomain" = $1
+          OR replace(regexp_replace(COALESCE("shopDomain", ''), '^www\\.', ''), '.myshopify.com', '') = $2
+          OR replace(regexp_replace(COALESCE("myshopifyDomain", ''), '^www\\.', ''), '.myshopify.com', '') = $2
+          OR replace(regexp_replace(COALESCE("primaryDomain", ''), '^www\\.', ''), '.myshopify.com', '') = $2`,
+      normalizedPreferred,
+      family
+    );
+    try {
+      const canonicalShop = selectCanonicalShopCandidate(rows, normalizedPreferred);
+      if (canonicalShop) return shopRowToResolved(canonicalShop);
+    } catch (error) {
+      if (error instanceof AmbiguousShopInstallationError) {
+        console.warn("[Shop Resolver] ambiguous shop installation", { requestedShopDomain: normalizedPreferred, candidateIds: rows.map((row) => row.id) });
+      }
+      throw error instanceof AmbiguousShopInstallationError ? new ShopResolutionError(409, error.message) : error;
+    }
+    if (rows.length) {
+      console.warn("[Shop Resolver] unable to select canonical shop installation", { requestedShopDomain: normalizedPreferred, candidateIds: rows.map((row) => row.id) });
+      throw new ShopResolutionError(409, "ambiguous_shop_installation");
     }
   }
 
   const defaultShop = await getDefaultShopFromConfig();
   if (defaultShop) {
-    return {
-      id: defaultShop.id,
-      shopDomain: defaultShop.shopDomain,
-      accessToken: defaultShop.accessToken || decryptShopifyToken(defaultShop.accessTokenEncrypted),
-      storefrontAccessToken: defaultShop.storefrontAccessToken || decryptShopifyToken(defaultShop.storefrontTokenEncrypted),
-    };
+    return shopRowToResolved(defaultShop);
   }
 
+  const envShopDomain = normalizeShopDomain(trimEnv("SHOPIFY_STORE_DOMAIN"));
   return {
     id: null,
-    shopDomain: normalizeShopDomain(trimEnv("SHOPIFY_STORE_DOMAIN")),
+    shopDomain: envShopDomain,
+    myshopifyDomain: isMyshopifyDomain(envShopDomain) ? envShopDomain : null,
+    primaryDomain: null,
     accessToken: trimEnv("SHOPIFY_ADMIN_ACCESS_TOKEN") || null,
     storefrontAccessToken: trimEnv("SHOPIFY_STOREFRONT_ACCESS_TOKEN") || null,
   };

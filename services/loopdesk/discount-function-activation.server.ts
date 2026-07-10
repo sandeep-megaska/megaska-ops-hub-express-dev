@@ -119,6 +119,8 @@ type PublicationDiagnostics = {
   discountNodesDiscoveryDiagnostics?: DiscountNodesDiscoveryDiagnostics;
 };
 
+type PublicationIdentityDebug = { caller?: string; requestedShopDomain?: string | null; normalizedShopDomain?: string | null; shopDomain?: string | null; myshopifyDomain?: string | null; primaryDomain?: string | null; hasAdminAccessToken?: boolean };
+
 type PublicationVerificationResult = {
   shopId: string;
   shopDomain: string;
@@ -512,15 +514,20 @@ function shouldLogPublicationVerification() {
   return process.env.LOOPDESK_PUBLICATION_DEBUG === "1" || process.env.LOOPDESK_PUBLICATION_DEBUG === "true";
 }
 
-function logPublicationVerificationProjection(label: "admin_diagnostics" | "storefront_runtime", result: PublicationVerificationResult) {
+function logPublicationVerificationProjection(label: "admin_diagnostics" | "storefront_runtime", result: PublicationVerificationResult, identityDebug?: PublicationIdentityDebug) {
   if (!shouldLogPublicationVerification()) return;
   console.info("[LoopDesk Publication Verification]", {
     caller: label,
+    requestedShopDomain: identityDebug?.requestedShopDomain ?? null,
+    normalizedShopDomain: identityDebug?.normalizedShopDomain ?? null,
     shopId: result.shopId,
-    shopDomain: result.shopDomain,
+    shopDomain: identityDebug?.shopDomain ?? result.shopDomain,
+    myshopifyDomain: identityDebug?.myshopifyDomain ?? null,
+    primaryDomain: identityDebug?.primaryDomain ?? null,
+    hasAdminAccessToken: identityDebug?.hasAdminAccessToken ?? null,
     compiledConfigHash: result.compiledConfigHash,
-    functionId: result.functionType?.functionId || null,
-    automaticDiscountId: result.automaticDiscount?.automaticDiscount?.discountId || result.automaticDiscount?.id || null,
+    selectedFunctionId: result.functionType?.functionId || null,
+    selectedAutomaticDiscountId: result.automaticDiscount?.automaticDiscount?.discountId || result.automaticDiscount?.id || null,
     synchronized: result.synchronized,
     blockingReasons: result.blockingReasons,
   });
@@ -748,15 +755,15 @@ async function promotionPublicationPreflight(shopId: string, shopDomain: string,
   return { blockingReasons: Array.from(new Set(blockingReasons)) };
 }
 
-export async function getLoopDeskPromotionPublicationStatus(input: { shopId: string; shopDomain: string }) {
+export async function getLoopDeskPromotionPublicationStatus(input: { shopId: string; shopDomain: string; identityDebug?: PublicationIdentityDebug }) {
   const result = await resolveLoopDeskPromotionPublicationVerification(input);
-  logPublicationVerificationProjection("storefront_runtime", result);
+  logPublicationVerificationProjection("storefront_runtime", result, input.identityDebug);
   return compactPublicationStatus(result);
 }
 
-export async function getLoopDeskPromotionPublicationDiagnostics(input: { shopId: string; shopDomain: string }) {
+export async function getLoopDeskPromotionPublicationDiagnostics(input: { shopId: string; shopDomain: string; identityDebug?: PublicationIdentityDebug }) {
   const result = await resolveLoopDeskPromotionPublicationVerification(input);
-  logPublicationVerificationProjection("admin_diagnostics", result);
+  logPublicationVerificationProjection("admin_diagnostics", result, input.identityDebug);
   return {
     ok: result.synchronized,
     shopDomain: input.shopDomain,

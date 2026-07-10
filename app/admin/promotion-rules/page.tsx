@@ -116,11 +116,12 @@ export default async function PromotionRulesPage({ searchParams }: PageProps) {
   const resolved = await resolveAdminShopFromSearchParams(params);
   if (!resolved.shop?.id) return <main className="mx-auto max-w-3xl p-8"><div className={cardClass}><h1 className="text-2xl font-semibold">Promotion Rules</h1><p className="mt-3 text-sm text-red-700">{params.error || formatAdminShopResolutionError(resolved)}</p></div></main>;
   const shop = resolved.shop;
-  const config = await getPromotionRulesConfig(shop.id, shop.shopDomain);
-  const publicationDiagnostics = await getLoopDeskPromotionPublicationDiagnostics({ shopId: shop.id, shopDomain: shop.shopDomain }).catch((error) => ({ ok: false, synchronized: false, blockingReasons: [error instanceof Error ? error.message : "diagnostics_unavailable"], compiledConfigHash: null, storedConfigHash: null, automaticDiscountStatus: null, recoveryHint: null }));
+  const canonicalShopDomain = shop.myshopifyDomain || shop.shopDomain;
+  const config = await getPromotionRulesConfig(shop.id, canonicalShopDomain);
+  const publicationDiagnostics = await getLoopDeskPromotionPublicationDiagnostics({ shopId: shop.id, shopDomain: canonicalShopDomain, identityDebug: { caller: "admin_diagnostics", requestedShopDomain: resolved.shopDomain, normalizedShopDomain: resolved.shopDomain, shopDomain: shop.shopDomain, myshopifyDomain: shop.myshopifyDomain, primaryDomain: shop.primaryDomain, hasAdminAccessToken: Boolean(shop.accessToken || shop.accessTokenEncrypted) } }).catch((error) => ({ ok: false, synchronized: false, blockingReasons: [error instanceof Error ? error.message : "diagnostics_unavailable"], compiledConfigHash: null, storedConfigHash: null, automaticDiscountStatus: null, recoveryHint: null }));
   const createRuleHref = withEmbeddedContext("/admin/promotion-rules", params, { shop: shop.shopDomain, rule: null, saved: null, error: null });
   const selected = config.rules.find((rule) => rule.id === params.rule) || normalizePromotionRule({ id: "new_rule", name: "", display: { ctaLabel: "Add offer" } });
-  const action = savePromotionRules.bind(null, shop.id, shop.shopDomain);
+  const action = savePromotionRules.bind(null, shop.id, canonicalShopDomain);
   const trigger = selected.eligibility.triggers[0];
   const emptyResource: PromotionResourceMetadata = { id: "", gid: "", title: "", image: "", imageUrl: "", handle: "" };
   const triggerProduct = trigger.product || { ...emptyResource, gid: trigger.productGid || "" };
