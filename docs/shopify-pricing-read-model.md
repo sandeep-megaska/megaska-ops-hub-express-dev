@@ -44,3 +44,40 @@ Have the drawer refresh Shopify cart state after LoopDesk cart mutations, call `
 ### CONFIG-4.3 Express Checkout consumption
 
 Have Express Checkout receive or refresh the same read model before payment method presentation. Use `finalTotal` exactly as Shopify provides it when available; do not subtract discounts locally. Treat shipping and tax as unavailable until the selected source exposes them for the checkout context.
+
+## CONFIG-4.2 real-store `/cart.js` validation checklist
+
+Actual production/staging store captures must be taken before enabling the drawer pricing path for a merchant because Shopify is the only pricing authority. Use the browser Network panel or:
+
+```js
+await fetch('/cart.js', { credentials: 'same-origin', headers: { Accept: 'application/json' } }).then((r) => r.json())
+```
+
+Capture and archive the JSON payloads for these six states:
+
+| Scenario | Evidence to confirm | Expected drawer behavior |
+| --- | --- | --- |
+| No discount | `items[].discounts` absent/empty, `total_discount = 0`, `total_price = original_total_price` | Render Shopify original/final totals with no discount row. |
+| LoopDesk Discount Function only | Shopify must reduce `items[].final_line_price`, `total_discount`, and `total_price`; line allocation may appear in `items[].discounts` when Shopify exposes it | Render Shopify final line totals and either detailed allocation rows or aggregate `Discounts`. |
+| Shopify code only | Code/title may appear in `cart_level_discount_applications`; line detail may appear in `items[].discounts` | Render exposed code labels only; otherwise aggregate `Discounts`. |
+| LoopDesk Function + Shopify code | `total_discount` and `total_price` must already include both discounts | Render Shopify's combined result; never stack locally. |
+| Coupon removed | `cart_level_discount_applications` clears and `total_discount`/`total_price` move back to Shopify's current authoritative values | Remove code labels and update totals after refresh. |
+| Multiple cart lines | Each `items[]` row includes authoritative `original_line_price` and `final_line_price` | Render per-line Shopify original/final totals and allocations by matching line key/variant. |
+
+Observed Ajax Cart capability for this implementation:
+
+- `items[].discounts`: contains detailed allocation labels/amounts only when Shopify exposes them. Do not fabricate attribution when absent.
+- `items[].final_line_price`: authoritative discounted line total after Shopify applies all eligible native/function/code discounts.
+- `total_discount`: authoritative aggregate discount when detailed allocation rows are missing.
+- `total_price`: authoritative final cart total for the drawer.
+
+If the LoopDesk Function scenario does not reduce `final_line_price`, `total_discount`, and `total_price`, stop rollout for that merchant and fix the Discount Function publication/execution path. The drawer must not compensate with Promotion View Model math.
+
+## CONFIG-4.2 UAT instructions
+
+1. Publish the theme extension assets including `loopdesk-shopify-pricing.js`, `loopdesk-promotion-pricing.js`, and `loopdesk-cart-drawer.js`.
+2. In a storefront browser session, enable `window.LOOPDESK_CART_DRAWER_DEBUG = true` and open the LoopDesk drawer.
+3. For each validation scenario above, perform the cart mutation once and verify the Network panel shows a single `/cart.js` read for the refresh.
+4. Compare drawer line totals, subtotal, discount rows, and final total to the captured `/cart.js` fields.
+5. Verify any Promotion View Model output remains limited to offer cards, badges, eligibility/CTA copy, or clearly labelled estimates before Shopify refresh.
+6. Remove a coupon and confirm the next `/cart.js` response removes/updates code labels and totals in the drawer without navigating to `/cart`.

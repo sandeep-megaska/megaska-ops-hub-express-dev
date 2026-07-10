@@ -53,11 +53,12 @@ assert.match(rewardLineMatching[0], /sameShopifyId\(item\.variant_id, offerVaria
 assert.match(rewardLineMatching[0], /rule\.enabled !== true \|\| rule\.status !== "active" \|\| !isPromotionScheduled/, "reward line matching should require active scheduled rules");
 assert.match(source, /function triggerMatchesRewardLine\(trigger, cart, item\)[\s\S]*cartWithoutItem\(cart, item\)/, "reward line trigger checks should not let the reward-only line satisfy product or variant triggers");
 assert.match(source, /function rewardLinePriceHtml\(item, cart, viewModel\)[\s\S]*Promotion applies to [\s\S]*Discount applied at checkout/, "reward cart lines should show checkout-discount and quantity-cap messaging");
-assert.match(source, /elements\.subtotal\.textContent = money\(cartRawSubtotal\(cart\), cart && cart\.currency\);/, "subtotal should keep using the raw Shopify subtotal and not an estimated promotional total");
-assert.match(source, /Estimated after offer/, "drawer subtotal area should add a clearly labeled estimated-after-offer line");
+assert.match(source, /state\.pricing = normalizeShopifyPricing\(cart\);/, "drawer should derive normalized Shopify pricing from the same /cart.js response");
+assert.match(source, /var subtotal = moneyValue\(pricing && pricing\.originalSubtotal\);[\s\S]*if \(subtotal === null\) subtotal = cartRawSubtotal\(cart\);/, "subtotal should prefer normalized Shopify pricing and fall back to raw cart money");
+assert.match(source, /Promotion estimate[\s\S]*Estimate only/, "drawer fallback estimate must be clearly labelled");
 assert.match(css, /\.loopdesk-cart-drawer__reward-price[\s\S]*\.loopdesk-cart-drawer__reward-note/, "reward line display styles should exist");
 
-assert.match(source, /var offerViewModel = promotionViewModel\(cart \|\| \{\}\);[\s\S]*renderLines\(cart, offerViewModel\)[\s\S]*offerTotals = offerViewModel && offerViewModel\.totals/, "drawer render should pass the live render cart into one promotion VM used by lines and totals");
+assert.match(source, /var offerViewModel = promotionViewModel\(cart \|\| \{\}\);[\s\S]*renderLines\(cart, offerViewModel\)[\s\S]*renderDiscountSummary\(pricing, cart, offerViewModel\)/, "drawer render should pass the live render cart into one promotion VM used by lines and fallback estimates");
 assert.match(source, /cartItemCount: Array\.isArray\(cart && cart\.items\) \? cart\.items\.length : 0,[\s\S]*rulesCount: rules\.length,[\s\S]*hasPromotion:/, "drawer promotion VM diagnostics should report cart item count, rules count, and promotion status when debug is enabled");
 
 assert.match(source, /function loopdeskOfferHandoffPayload\(cart\) \{[\s\S]*loopdeskOfferDiscountAmountPaise:[\s\S]*loopdeskOfferAdjustedTotalAmountPaise:[\s\S]*loopdeskOfferBaseSubtotalAmountPaise:/, "drawer should build an Express Checkout handoff payload from Promotion VM totals");
