@@ -8,6 +8,7 @@ import {
   requireExpressCheckoutShop,
 } from "../../../../../lib/express-checkout/safety";
 import { getExpressCheckoutSettings } from "../../../../../services/express-checkout/settings";
+import { calculateExpressCheckoutDiscount } from "../../../../../services/express-checkout/discounts";
 import {
   attachAddressSnapshotToIntent,
   customerProfileToExpressAddress,
@@ -144,18 +145,6 @@ function firstIntentAddress(intent: { addressSnapshots?: Array<Record<string, un
   };
 }
 
-function calculateKnownDiscount(code: string | null, subtotalAmountPaise: number, fallbackDiscountAmountPaise: number) {
-  if (!code) return null;
-  const normalizedCode = code.trim().toUpperCase();
-
-  if (fallbackDiscountAmountPaise > 0) {
-    const discountAmountPaise = Math.min(subtotalAmountPaise, fallbackDiscountAmountPaise);
-    return { code: normalizedCode, title: "Discount", discountAmountPaise, rawShopifyPayload: { discountCode: normalizedCode, discountType: "FIXED_AMOUNT", discountValue: discountAmountPaise, discountAmountPaise, source: "cart_snapshot" } };
-  }
-
-  return null;
-}
-
 
 function nullableJsonInput(value: unknown): Prisma.NullableJsonNullValueInput | Prisma.InputJsonValue | undefined {
   if (value === undefined) return undefined;
@@ -285,11 +274,11 @@ export async function POST(req: NextRequest) {
   const cartSnapshot = body.cartSnapshot === undefined ? undefined : preserveLoopDeskOfferPricing(body.cartSnapshot, body);
   const couponBasePaise = couponBaseAmountPaise(paiseValues.subtotalAmountPaise, cartSnapshot, body);
 
-  const capturedDiscount = calculateKnownDiscount(
-    extractDiscountCode(cartSnapshot, body),
-    couponBasePaise,
-    paiseValues.discountAmountPaise
-  );
+  const capturedDiscount = calculateExpressCheckoutDiscount({
+    code: extractDiscountCode(cartSnapshot, body),
+    couponBaseAmountPaise: couponBasePaise,
+    fallbackDiscountAmountPaise: paiseValues.discountAmountPaise,
+  });
 
   if (capturedDiscount) {
     paiseValues.discountAmountPaise = capturedDiscount.discountAmountPaise;

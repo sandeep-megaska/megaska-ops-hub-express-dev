@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSessionTokenFromRequest } from "../../../../../../../services/auth/session";
 import { withCors, handleOptions } from "../../../../../_lib/cors";
 import { prisma } from "../../../../../../../services/db/prisma";
+import { calculateExpressCheckoutDiscount } from "../../../../../../../services/express-checkout/discounts";
 import {
   requireCustomerSessionForShop,
   requireExpressCheckoutShop,
@@ -61,58 +62,6 @@ function integerPaise(value: unknown, field: string) {
 }
 
 
-type DiscountCalculation = {
-  code: string;
-  title: string;
-  discountAmountPaise: number;
-  rawShopifyPayload: Prisma.InputJsonObject;
-};
-
-function calculateKnownDiscount(input: { code: string; subtotalAmountPaise: number; requestedDiscountAmountPaise?: number; rawShopifyPayload?: unknown }): DiscountCalculation | null {
-  const code = input.code.trim().toUpperCase();
-  const requested = Math.max(0, Math.floor(Number(input.requestedDiscountAmountPaise || 0)));
-
-  if (code === "MEGA15") {
-    const discountAmountPaise = Math.min(
-      input.subtotalAmountPaise,
-      Math.round(input.subtotalAmountPaise * 0.15)
-    );
-
-    return {
-      code,
-      title: "15% OFF",
-      discountAmountPaise,
-      rawShopifyPayload: {
-        discountCode: code,
-        discountType: "PERCENTAGE",
-        discountValue: 15,
-        discountAmountPaise,
-        source: "megaska_known_coupon",
-        upstream: (input.rawShopifyPayload ?? null) as Prisma.InputJsonValue | null,
-      },
-    };
-  }
-
-  if (requested > 0) {
-    const discountAmountPaise = Math.min(input.subtotalAmountPaise, requested);
-
-    return {
-      code,
-      title: "Discount",
-      discountAmountPaise,
-      rawShopifyPayload: {
-        discountCode: code,
-        discountType: "FIXED_AMOUNT",
-        discountValue: discountAmountPaise,
-        discountAmountPaise,
-        source: "client_supplied_validated_amount",
-        upstream: (input.rawShopifyPayload ?? null) as Prisma.InputJsonValue | null,
-      },
-    };
-  }
-
-  return null;
-}
 
 function recalculateTotal(intent: {
   subtotalAmountPaise: number;
@@ -210,10 +159,10 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     return jsonWithCors(req, { ok: false, error: discountAmount.error }, { status: 400 });
   }
 
-  const calculatedDiscount = calculateKnownDiscount({
+  const calculatedDiscount = calculateExpressCheckoutDiscount({
     code,
-    subtotalAmountPaise: couponBaseAmountPaise(editable.intent),
-    requestedDiscountAmountPaise: discountAmount.value,
+    couponBaseAmountPaise: couponBaseAmountPaise(editable.intent),
+    fallbackDiscountAmountPaise: discountAmount.value,
     rawShopifyPayload: body.rawShopifyPayload,
   });
 
