@@ -18,7 +18,6 @@ import {
   formatAdminShopResolutionError,
   resolveAdminShopFromSearchParams,
 } from "../../../services/shopify/admin-shop-context";
-import { embeddedContextFromFormData, embeddedContextHiddenInputs, withEmbeddedContext } from "../promotion-rules/embedded-query";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,6 +33,33 @@ type PageProps = {
     error?: string;
   }>;
 };
+
+
+type EmbeddedContextInput = { shop?: string; host?: string; embedded?: string; saved?: string | null; error?: string | null };
+
+function embeddedContextFromFormData(formData: FormData) {
+  const params = new URLSearchParams();
+  for (const [key, value] of formData.entries()) {
+    if (!key.startsWith("embeddedContext:")) continue;
+    const paramKey = key.slice("embeddedContext:".length);
+    if (typeof value === "string" && value) params.set(paramKey, value);
+  }
+  return params;
+}
+
+function embeddedContextHiddenInputs(params: EmbeddedContextInput) {
+  return Object.entries(params).filter((entry): entry is [string, string] => Boolean(entry[1]));
+}
+
+function withEmbeddedContext(pathname: string, params: EmbeddedContextInput, overrides: EmbeddedContextInput = {}) {
+  const next = new URLSearchParams();
+  for (const [key, value] of Object.entries({ ...params, ...overrides })) {
+    if (value === null || value === undefined || value === "") continue;
+    next.set(key, value);
+  }
+  const query = next.toString();
+  return query ? `${pathname}?${query}` : pathname;
+}
 
 const SHOP_UNRESOLVED_MESSAGE =
   "Unable to resolve shop. Open this page from Shopify admin or add a shop query parameter.";

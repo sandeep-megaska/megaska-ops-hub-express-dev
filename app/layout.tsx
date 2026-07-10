@@ -79,12 +79,6 @@ export default function RootLayout({
                     >
                       Merchant Settings
                     </AdminNavLink>
-                    <AdminNavLink
-                      href="/admin/promotion-rules"
-                      className="mk-nav-link"
-                    >
-                      Promotion Rules
-                    </AdminNavLink>
                   </nav>
                 </Suspense>
 
