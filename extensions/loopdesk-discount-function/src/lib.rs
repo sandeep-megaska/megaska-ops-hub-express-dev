@@ -418,6 +418,28 @@ mod tests {
         assert_eq!(operations[0].value, DiscountValue::FixedAmountEach(75.0));
     }
 
+
+    #[test]
+    fn fixed_price_three_hundred_on_six_hundred_rupee_reward_line_discounts_three_hundred() {
+        let operations = evaluate(
+            &[
+                cart_line(TRIGGER_VARIANT_GID, 1, 600.0),
+                cart_line(REWARD_VARIANT_GID, 1, 600.0),
+            ],
+            &[rule(|rule| {
+                rule.reward_enforcement_type = "fixed_price".to_string();
+                rule.fixed_price_amount = Some(300.0);
+                rule.percentage_value = None;
+                rule.quantity = Some(1);
+            })],
+        );
+
+        assert_eq!(operations.len(), 1);
+        assert_eq!(operations[0].variant_gid, REWARD_VARIANT_GID);
+        assert_eq!(operations[0].quantity, 1);
+        assert_eq!(operations[0].value, DiscountValue::FixedAmountEach(300.0));
+    }
+
     #[test]
     fn fixed_amount_applies_correct_amount_to_capped_reward_line() {
         let operations = evaluate(

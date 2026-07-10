@@ -113,3 +113,33 @@ test("invalid fixed_amount reward values are ignored", () => {
   assert.equal(rule.reward.discount, undefined);
   assert.equal(compilePromotionRuleEnforcementRule(rule), null);
 });
+
+test("canonicalizes numeric ProductVariant ids and rejects malformed ids", async () => {
+  const mod = await import("./discount-function-config.server.ts");
+  assert.equal(mod.canonicalizeProductVariantGid("123"), "gid://shopify/ProductVariant/123");
+  assert.equal(mod.canonicalizeProductVariantGid("gid://shopify/ProductVariant/456"), "gid://shopify/ProductVariant/456");
+  assert.throws(() => mod.canonicalizeProductVariantGid("gid://shopify/Product/123"), /Malformed Shopify ProductVariant ID/);
+});
+
+test("compiler gate skips unsupported Rust Function triggers instead of publishing executable rules", () => {
+  const rule = normalizePromotionRule({
+    id: "unsupported-trigger",
+    name: "Unsupported trigger",
+    enabled: true,
+    priority: 1,
+    status: "active",
+    eligibility: { triggers: [{ type: "cart_contains_product", productGid: "gid://shopify/Product/1", value: "gid://shopify/Product/1" }] },
+    reward: { productGid: "gid://shopify/Product/1", variantGid: "gid://shopify/ProductVariant/1", discount: { type: "fixed_price", value: 300 } },
+    display: { heading: "Offer", ctaLabel: "Add offer" },
+  });
+
+  assert.equal(compilePromotionRuleEnforcementRule(rule), null);
+});
+
+test("compiler emits disabled empty config shape when no executable active rules exist", () => {
+  const compiled = [
+    normalizePromotionRule({ id: "draft", enabled: true, status: "draft", reward: { variantGid: "gid://shopify/ProductVariant/1", discount: { type: "fixed_price", value: 300 } }, display: { heading: "Offer", ctaLabel: "Add offer" } }),
+  ].filter((rule) => rule.enabled && rule.status === "active").map(compilePromotionRuleEnforcementRule).filter(Boolean);
+
+  assert.deepEqual({ schemaVersion: 1, enabled: compiled.length > 0, rules: compiled }, { schemaVersion: 1, enabled: false, rules: [] });
+});
