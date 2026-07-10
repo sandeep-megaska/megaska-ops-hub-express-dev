@@ -243,3 +243,100 @@ test("runtime enrichment does not calculate cart totals or discounts and keeps s
   assert.equal(serialized.includes("shpat_"), false);
   assert.equal(serialized.includes("storefront-secret"), false);
 });
+
+test("public product JSON prefers primary domain over myshopify and sends no credentials", async () => {
+  let requested: { url: string; init?: RequestInit } | null = null;
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    requested = { url: String(input), init };
+    return jsonResponse(ajaxProduct());
+  }) as typeof fetch;
+  const result = await fetchPublicProductJson({ shopDomain: "demo.myshopify.com", primaryDomain: "https://store.example.com/path", myshopifyDomain: "demo.myshopify.com", productGid, handle: "offered-product" });
+  assert.equal(result.status, "ready");
+  const primaryRequest = requested as { url: string; init?: RequestInit };
+  assert.equal(primaryRequest.url, "https://store.example.com/products/offered-product.js");
+  const headers = JSON.stringify(primaryRequest.init?.headers || {});
+  assert.equal(headers.includes("Cookie"), false);
+  assert.equal(headers.includes("Authorization"), false);
+  assert.equal(headers.includes("X-Shopify-Storefront-Access-Token"), false);
+});
+
+test("approved redirects between myshopify and primary domains succeed including relative locations", async () => {
+  const requests: string[] = [];
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    requests.push(String(input));
+    if (requests.length === 1) return new Response(null, { status: 302, headers: { location: "https://store.example.com/products/offered-product.js" } });
+    return jsonResponse(ajaxProduct());
+  }) as typeof fetch;
+  let result = await fetchPublicProductJson({ shopDomain: "store.example.com", myshopifyDomain: "store.example.com", primaryDomain: "demo.myshopify.com", productGid, handle: "offered-product" });
+  assert.equal(result.status, "ready");
+  assert.equal(requests[0], "https://demo.myshopify.com/products/offered-product.js");
+  assert.equal(result.diagnostics?.finalOrigin, "store.example.com");
+
+  requests.length = 0;
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    requests.push(String(input));
+    if (requests.length === 1) return new Response(null, { status: 302, headers: { location: "/products/offered-product.js" } });
+    return jsonResponse(ajaxProduct());
+  }) as typeof fetch;
+  result = await fetchPublicProductJson({ shopDomain: "demo.myshopify.com", myshopifyDomain: "demo.myshopify.com", primaryDomain: "store.example.com", productGid, handle: "offered-product" });
+  assert.equal(result.status, "ready");
+  assert.equal(requests[0], "https://store.example.com/products/offered-product.js");
+});
+
+test("redirect to unrelated tenant domain is rejected", async () => {
+  globalThis.fetch = (async () => new Response(null, { status: 302, headers: { location: "https://tenant-b.example.com/products/offered-product.js" } })) as typeof fetch;
+  const result = await fetchPublicProductJson({ shopDomain: "tenant-a.myshopify.com", myshopifyDomain: "tenant-a.myshopify.com", primaryDomain: "tenant-a.example.com", productGid, handle: "offered-product" });
+  assert.equal(result.status, "query_failed");
+  assert.equal(result.diagnostics?.failureReason, "cross_tenant_redirect");
+});
+
+test("redirect loops and excessive redirects are diagnosed", async () => {
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    const url = String(input);
+    const next = url.includes("a.example.com") ? "https://b.example.com/products/offered-product.js" : "https://a.example.com/products/offered-product.js";
+    return new Response(null, { status: 302, headers: { location: next } });
+  }) as typeof fetch;
+  let result = await fetchPublicProductJson({ shopDomain: "a.example.com", primaryDomain: "a.example.com", myshopifyDomain: "b.example.com", productGid, handle: "offered-product" });
+  assert.equal(result.status, "query_failed");
+  assert.equal(result.diagnostics?.failureReason, "redirect_loop");
+
+  globalThis.fetch = (async () => new Response(null, { status: 302, headers: { location: "https://a.example.com/products/offered-product.js" } })) as typeof fetch;
+  result = await fetchPublicProductJson({ shopDomain: "a.example.com", productGid, handle: "offered-product" });
+  assert.equal(result.diagnostics?.failureReason, "redirect_loop");
+
+  let count = 0;
+  globalThis.fetch = (async () => new Response(null, { status: 302, headers: { location: `https://a.example.com/products/offered-product.js?r=${++count}` } })) as typeof fetch;
+  result = await fetchPublicProductJson({ shopDomain: "a.example.com", productGid, handle: "offered-product" });
+  assert.equal(result.status, "query_failed");
+  assert.equal(result.diagnostics?.failureReason, "too_many_redirects");
+});
+
+test("primary network and 404 failures fall back once but identity mismatch does not", async () => {
+  const requests: string[] = [];
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    requests.push(String(input));
+    if (requests.length === 1) throw new Error("ENOTFOUND");
+    return jsonResponse(ajaxProduct());
+  }) as typeof fetch;
+  let result = await fetchPublicProductJson({ shopDomain: "demo.myshopify.com", primaryDomain: "store.example.com", myshopifyDomain: "demo.myshopify.com", productGid, handle: "offered-product" });
+  assert.equal(result.status, "ready");
+  assert.equal(requests.length, 2);
+  assert.equal(result.diagnostics?.fallbackAttempted, true);
+  assert.equal(result.diagnostics?.fallbackSucceeded, true);
+
+  requests.length = 0;
+  globalThis.fetch = (async (input: string | URL | Request) => { requests.push(String(input)); return jsonResponse(ajaxProduct({ id: 111 })); }) as typeof fetch;
+  result = await fetchPublicProductJson({ shopDomain: "demo.myshopify.com", primaryDomain: "store.example.com", myshopifyDomain: "demo.myshopify.com", productGid, handle: "offered-product" });
+  assert.equal(result.status, "product_identity_mismatch");
+  assert.equal(requests.length, 1);
+
+  requests.length = 0;
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    requests.push(String(input));
+    if (requests.length === 1) return new Response("not found", { status: 404 });
+    return jsonResponse(ajaxProduct());
+  }) as typeof fetch;
+  result = await fetchPublicProductJson({ shopDomain: "demo.myshopify.com", primaryDomain: "store.example.com", myshopifyDomain: "demo.myshopify.com", productGid, handle: "offered-product" });
+  assert.equal(result.status, "ready");
+  assert.equal(requests.length, 2);
+});
