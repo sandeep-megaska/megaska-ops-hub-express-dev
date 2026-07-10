@@ -27,6 +27,8 @@ export type AutomaticDiscount = {
 };
 type AutomaticDiscountResult = { discountId?: string | null; title?: string | null; status?: string | null } | null | undefined;
 
+export type PublicationRecoveryHint = { required: boolean; action: "none" | "publish" | "resolve_duplicates" | "resolve_ambiguity" | "fix_configuration"; message: string };
+
 class DiscountMetafieldReadUnsupportedError extends Error {
   constructor() {
     super("discount_metafield_read_unsupported");
@@ -61,8 +63,18 @@ type PublicationDiagnostics = {
   compiledConfigHash: string;
   storedConfigHash: string | null;
   blockingReasons: string[];
+  recoveryHint?: PublicationRecoveryHint;
   verification: { ok: boolean; errors: string[]; storedConfigHash: string | null };
 };
+
+export function publicationRecoveryHint(blockingReasons: string[]): PublicationRecoveryHint {
+  const uniqueReasons = Array.from(new Set(blockingReasons));
+  if (uniqueReasons.includes("duplicate_automatic_discounts")) return { required: true, action: "resolve_duplicates", message: "Multiple LoopDesk automatic app discounts match the deployed function. Deactivate or remove duplicates, then publish again." };
+  if (uniqueReasons.includes("ambiguous_title_only_discounts")) return { required: true, action: "resolve_ambiguity", message: "A LoopDesk-titled automatic discount exists but is not linked to the deployed function. Resolve the old discount, then publish again." };
+  if (uniqueReasons.includes("missing_automatic_discount") || uniqueReasons.includes("stale_metafield") || uniqueReasons.includes("missing_or_invalid_metafield") || uniqueReasons.includes("inactive_discount")) return { required: true, action: "publish", message: "Publish LoopDesk promotions to create or update the Shopify automatic app discount for the deployed function." };
+  if (uniqueReasons.length) return { required: true, action: "fix_configuration", message: `Resolve publication blockers first: ${uniqueReasons.join(", ")}.` };
+  return { required: false, action: "none", message: "LoopDesk promotions are synchronized." };
+}
 
 function userErrorsMessage(errors: UserError[] | undefined) {
   return (errors || []).map((error) => `${error.field?.join(".") || "discount"}: ${error.message || "Unknown Shopify error"}`).join("; ");
@@ -269,6 +281,7 @@ export async function publishLoopDeskPromotions(input: { shopId: string; shopDom
   diagnostics.blockingReasons.push(...verified.errors);
   diagnostics.synchronized = verified.ok;
   diagnostics.activationStatus = verified.ok ? "activated" : "blocked";
+  diagnostics.recoveryHint = publicationRecoveryHint(diagnostics.blockingReasons);
   return { ok: verified.ok, diagnostics, config, message: verified.ok ? (existing.selected?.id ? "LoopDesk automatic discount updated idempotently." : "LoopDesk automatic discount created.") : `LoopDesk automatic discount saved but verification failed: ${verified.errors.join(", ")}` };
 }
 
@@ -290,7 +303,7 @@ export async function getLoopDeskPromotionPublicationStatus(input: { shopId: str
   const functionType = selectedResult.selected;
   if (!functionType) {
     const blockingReasons = [selectedResult.reason || "missing_function"];
-    return { ok: false, synchronized: false, message: blockingReasons.join(", "), compiledConfigHash: deterministicConfigHash(config), storedConfigHash: null, functionHandle: null, functionId: null, automaticDiscountId: null, activeAutomaticDiscount: false, automaticDiscountStatus: null, blockingReasons, fixedPriceRulesCompiledCount: config.rules.filter((rule) => rule.rewardEnforcementType === "fixed_price").length };
+    return { ok: false, synchronized: false, message: blockingReasons.join(", "), compiledConfigHash: deterministicConfigHash(config), storedConfigHash: null, functionHandle: null, functionId: null, automaticDiscountId: null, activeAutomaticDiscount: false, automaticDiscountStatus: null, blockingReasons, fixedPriceRulesCompiledCount: config.rules.filter((rule) => rule.rewardEnforcementType === "fixed_price").length, recoveryHint: publicationRecoveryHint(blockingReasons) };
   }
   const existing = await findExistingLoopDeskDiscounts(input.shopDomain, input.shopId, functionType).catch((error: unknown) => {
     if (error instanceof DiscountMetafieldReadUnsupportedError) return null;
@@ -298,7 +311,7 @@ export async function getLoopDeskPromotionPublicationStatus(input: { shopId: str
   });
   if (!existing) {
     const blockingReasons = ["discount_metafield_read_unsupported"];
-    return { ok: false, synchronized: false, message: blockingReasons.join(", "), compiledConfigHash: deterministicConfigHash(config), storedConfigHash: null, functionHandle: null, functionId: functionType.functionId || null, automaticDiscountId: null, activeAutomaticDiscount: false, automaticDiscountStatus: null, blockingReasons, fixedPriceRulesCompiledCount: config.rules.filter((rule) => rule.rewardEnforcementType === "fixed_price").length };
+    return { ok: false, synchronized: false, message: blockingReasons.join(", "), compiledConfigHash: deterministicConfigHash(config), storedConfigHash: null, functionHandle: null, functionId: functionType.functionId || null, automaticDiscountId: null, activeAutomaticDiscount: false, automaticDiscountStatus: null, blockingReasons, fixedPriceRulesCompiledCount: config.rules.filter((rule) => rule.rewardEnforcementType === "fixed_price").length, recoveryHint: publicationRecoveryHint(blockingReasons) };
   }
   const verified = existing.selected ? verifyStoredConfig(existing.selected, functionType, config) : { ok: false, errors: ["missing_automatic_discount"], storedConfigHash: null, metafieldRawValue: null, metafieldParsed: null };
   const activeAutomaticDiscount = Boolean(existing.selected?.automaticDiscount?.status && VALID_STATUSES.has(existing.selected.automaticDiscount.status));
@@ -308,7 +321,7 @@ export async function getLoopDeskPromotionPublicationStatus(input: { shopId: str
   if (!activeAutomaticDiscount) blockingReasons.push("inactive_discount");
   if (fixedPriceRulesCompiledCount <= 0) blockingReasons.push("no_fixed_price_rules");
   const synchronized = Boolean(verified.ok && activeAutomaticDiscount && fixedPriceRulesCompiledCount > 0 && !existing.duplicates.length);
-  return { ok: synchronized, synchronized, message: synchronized ? "LoopDesk automatic discount is synchronized." : blockingReasons.join(", "), compiledConfigHash: deterministicConfigHash(config), storedConfigHash: verified.storedConfigHash, functionHandle: null, functionId: functionType.functionId || null, productCapability: functionType.discountClasses?.includes("PRODUCT") || false, automaticDiscountId: existing.selected?.automaticDiscount?.discountId || existing.selected?.id || null, activeAutomaticDiscount, automaticDiscountStatus: existing.selected?.automaticDiscount?.status || null, blockingReasons, fixedPriceRulesCompiledCount };
+  return { ok: synchronized, synchronized, message: synchronized ? "LoopDesk automatic discount is synchronized." : blockingReasons.join(", "), compiledConfigHash: deterministicConfigHash(config), storedConfigHash: verified.storedConfigHash, functionHandle: null, functionId: functionType.functionId || null, productCapability: functionType.discountClasses?.includes("PRODUCT") || false, automaticDiscountId: existing.selected?.automaticDiscount?.discountId || existing.selected?.id || null, activeAutomaticDiscount, automaticDiscountStatus: existing.selected?.automaticDiscount?.status || null, blockingReasons, fixedPriceRulesCompiledCount, recoveryHint: publicationRecoveryHint(blockingReasons) };
 }
 
 export async function getLoopDeskPromotionPublicationDiagnostics(input: { shopId: string; shopDomain: string }) {
@@ -348,6 +361,7 @@ export async function getLoopDeskPromotionPublicationDiagnostics(input: { shopId
         synchronized: false,
         automaticDiscountStatus: null,
         blockingReasons: uniqueBlockingReasons,
+        recoveryHint: publicationRecoveryHint(uniqueBlockingReasons),
       };
     }
     automaticDiscount = existing.selected;
@@ -379,6 +393,7 @@ export async function getLoopDeskPromotionPublicationDiagnostics(input: { shopId
     synchronized,
     automaticDiscountStatus: automaticDiscount?.automaticDiscount?.status || null,
     blockingReasons: uniqueBlockingReasons,
+    recoveryHint: publicationRecoveryHint(uniqueBlockingReasons),
   };
 }
 
