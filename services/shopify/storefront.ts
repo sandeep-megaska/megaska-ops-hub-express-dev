@@ -79,7 +79,7 @@ type StorefrontRequestOptions = {
   shopDomain?: string | null;
 };
 
-async function storefrontGraphql<T>(
+export async function storefrontGraphql<T>(
   query: string,
   variables?: Record<string, unknown>,
   options?: StorefrontRequestOptions
