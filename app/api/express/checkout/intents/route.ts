@@ -95,11 +95,11 @@ function preserveLoopDeskOfferPricing(cartSnapshot: unknown, body: Record<string
   };
 }
 
-function effectiveSubtotalFromHandoff(cartSnapshot: unknown, body: Record<string, unknown>) {
+function couponBaseAmountPaise(subtotalAmountPaise: number, cartSnapshot: unknown, body: Record<string, unknown>) {
   const snapshot = asRecord(cartSnapshot);
   const handoff = validLoopDeskOfferPricing(snapshot?.loopdeskOfferPricing) || validLoopDeskOfferPricing(body.loopdeskOfferPricing);
 
-  return handoff ? handoff.loopdeskOfferAdjustedTotalAmountPaise : null;
+  return handoff ? handoff.loopdeskOfferAdjustedTotalAmountPaise : subtotalAmountPaise;
 }
 
 function extractDiscountCode(cartSnapshot: unknown, body: Record<string, unknown>) {
@@ -283,15 +283,11 @@ export async function POST(req: NextRequest) {
   }
 
   const cartSnapshot = body.cartSnapshot === undefined ? undefined : preserveLoopDeskOfferPricing(body.cartSnapshot, body);
-  const effectiveSubtotalAmountPaise = effectiveSubtotalFromHandoff(cartSnapshot, body);
-
-  if (effectiveSubtotalAmountPaise !== null) {
-    paiseValues.subtotalAmountPaise = effectiveSubtotalAmountPaise;
-  }
+  const couponBasePaise = couponBaseAmountPaise(paiseValues.subtotalAmountPaise, cartSnapshot, body);
 
   const capturedDiscount = calculateKnownDiscount(
     extractDiscountCode(cartSnapshot, body),
-    paiseValues.subtotalAmountPaise,
+    couponBasePaise,
     paiseValues.discountAmountPaise
   );
 
@@ -299,10 +295,10 @@ export async function POST(req: NextRequest) {
     paiseValues.discountAmountPaise = capturedDiscount.discountAmountPaise;
   }
 
-  if (effectiveSubtotalAmountPaise !== null || capturedDiscount) {
+  if (couponBasePaise !== paiseValues.subtotalAmountPaise || capturedDiscount) {
     paiseValues.totalAmountPaise = Math.max(
       0,
-      paiseValues.subtotalAmountPaise + paiseValues.shippingAmountPaise + paiseValues.codFeeAmountPaise - paiseValues.discountAmountPaise
+      couponBasePaise + paiseValues.shippingAmountPaise + paiseValues.codFeeAmountPaise - paiseValues.discountAmountPaise
     );
   }
 

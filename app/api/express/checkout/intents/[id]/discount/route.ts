@@ -251,7 +251,6 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
         customerProfileId: editable.customerProfileId,
       },
       data: {
-        subtotalAmountPaise: couponBaseAmountPaise(editable.intent),
         discountAmountPaise: calculatedDiscount.discountAmountPaise,
         totalAmountPaise,
         status: "DISCOUNT_APPLIED",
@@ -298,7 +297,6 @@ export async function DELETE(req: NextRequest, context: { params: Promise<{ id: 
         customerProfileId: editable.customerProfileId,
       },
       data: {
-        subtotalAmountPaise: couponBaseAmountPaise(editable.intent),
         discountAmountPaise: 0,
         totalAmountPaise,
         ...(editable.intent.status === "DISCOUNT_APPLIED" ? { status: "ADDRESS_CAPTURED" } : {}),
