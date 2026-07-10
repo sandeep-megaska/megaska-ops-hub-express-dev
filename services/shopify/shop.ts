@@ -1,36 +1,37 @@
 import type { NextRequest } from "next/server";
 import { prisma } from "../db/prisma";
 import { decryptShopifyToken } from "./token-crypto";
-import {
-  buildShopResolutionDebugContext,
-  normalizeShopDomain,
-  selectCanonicalShopCandidate,
-  ShopIdentityResolutionError,
-  type ShopIdentityRow,
-} from "./shop-identity";
 
 export type ResolvedShopConfig = {
   id: string | null;
   shopDomain: string;
-  myshopifyDomain: string | null;
-  primaryDomain: string | null;
   accessToken: string | null;
-  accessTokenEncrypted: string | null;
-  accessTokenDirect: string | null;
   storefrontAccessToken: string | null;
 };
 
-export type ShopRow = ShopIdentityRow & {
+export type ShopRow = {
+  id: string;
   shopDomain: string;
+  accessToken: string | null;
+  accessTokenEncrypted: string | null;
   storefrontAccessToken: string | null;
   storefrontTokenEncrypted: string | null;
   scopes: string | null;
+  isActive: boolean;
+  myshopifyDomain: string | null;
+  primaryDomain: string | null;
+  installationStatus: string | null;
+  installedAt: Date | null;
+  uninstalledAt: Date | null;
 };
 
-export class ShopResolutionError extends ShopIdentityResolutionError {
-  constructor(status: number, message: string, code = "shop_resolution_error") {
-    super(code, message, status);
+export class ShopResolutionError extends Error {
+  status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
     this.name = "ShopResolutionError";
+    this.status = status;
   }
 }
 
@@ -38,7 +39,13 @@ function trimEnv(name: string) {
   return String(process.env[name] || "").trim();
 }
 
-export { normalizeShopDomain } from "./shop-identity";
+export function normalizeShopDomain(input: string | null | undefined) {
+  return String(input || "")
+    .trim()
+    .replace(/^https?:\/\//, "")
+    .replace(/\/$/, "")
+    .toLowerCase();
+}
 
 function domainFamily(shopDomain: string) {
   return normalizeShopDomain(shopDomain)
@@ -73,12 +80,12 @@ export function getShopDomainFromRequest(req: NextRequest) {
   return "";
 }
 
-export async function queryShopIdentityCandidates(requestedDomain: string) {
-  const normalized = normalizeShopDomain(requestedDomain);
-  if (!normalized) return [];
+export async function getShopByDomain(shopDomain: string) {
+  const normalized = normalizeShopDomain(shopDomain);
+  if (!normalized) return null;
   const family = domainFamily(normalized);
 
-  return prisma.$queryRawUnsafe<ShopRow[]>(
+  const rows = await prisma.$queryRawUnsafe<ShopRow[]>(
     `SELECT "id", "shopDomain", "accessToken", "accessTokenEncrypted", "storefrontAccessToken", "storefrontTokenEncrypted", "scopes", "isActive", "installedAt", "uninstalledAt", "myshopifyDomain", "primaryDomain", "installationStatus"
      FROM "Shop"
      WHERE "shopDomain" = $1
@@ -87,37 +94,31 @@ export async function queryShopIdentityCandidates(requestedDomain: string) {
         OR replace(regexp_replace(COALESCE("shopDomain", ''), '^www\\.', ''), '.myshopify.com', '') = $2
         OR replace(regexp_replace(COALESCE("myshopifyDomain", ''), '^www\\.', ''), '.myshopify.com', '') = $2
         OR replace(regexp_replace(COALESCE("primaryDomain", ''), '^www\\.', ''), '.myshopify.com', '') = $2
-     ORDER BY CASE WHEN "myshopifyDomain" = $1 THEN 0 WHEN "shopDomain" = $1 THEN 1 WHEN "primaryDomain" = $1 THEN 2 ELSE 3 END,
+     ORDER BY CASE WHEN "shopDomain" = $1 THEN 0 WHEN "myshopifyDomain" = $1 THEN 1 WHEN "primaryDomain" = $1 THEN 2 ELSE 3 END,
        CASE WHEN "installationStatus" = 'ACTIVE' THEN 0 ELSE 1 END,
        "updatedAt" DESC
-     LIMIT 10`,
+     LIMIT 5`,
     normalized,
     family
   );
-}
 
-export async function resolveCanonicalShopInstallation(requestedDomain: string) {
-  const normalized = normalizeShopDomain(requestedDomain);
-  if (!normalized) return null;
-
-  const candidates = await queryShopIdentityCandidates(normalized);
-  const selected = selectCanonicalShopCandidate(normalized, candidates);
-
-  if (candidates.length > 1) {
-    console.warn("[Shop Resolver] duplicate shop identity candidates",
-      buildShopResolutionDebugContext(normalized, candidates, selected.id));
+  if (rows.length > 1) {
+    console.warn("[Shop Resolver] duplicate shop domain candidates", {
+      requestedShopDomain: normalized,
+      candidateCount: rows.length,
+      selectedShopId: rows[0]?.id || null,
+      candidates: rows.map((row) => ({
+        id: row.id,
+        shopDomain: row.shopDomain,
+        myshopifyDomain: row.myshopifyDomain,
+        primaryDomain: row.primaryDomain,
+        isActive: row.isActive,
+        installationStatus: row.installationStatus,
+      })),
+    });
   }
 
-  return selected;
-}
-
-export async function getShopByDomain(shopDomain: string) {
-  try {
-    return await resolveCanonicalShopInstallation(shopDomain);
-  } catch (error) {
-    if (error instanceof ShopIdentityResolutionError && error.code === "shop_identity_not_found") return null;
-    throw error;
-  }
+  return rows[0] || null;
 }
 
 export async function getDefaultShopFromConfig() {
@@ -140,7 +141,7 @@ export async function getDefaultShopFromConfig() {
        "storefrontAccessToken" = COALESCE(EXCLUDED."storefrontAccessToken", "Shop"."storefrontAccessToken"),
        "isActive" = true,
        "updatedAt" = NOW()
-     RETURNING "id", "shopDomain", "accessToken", "accessTokenEncrypted", "storefrontAccessToken", "storefrontTokenEncrypted", "scopes", "isActive", "installedAt", "uninstalledAt", "myshopifyDomain", "primaryDomain", "installationStatus"`,
+     RETURNING "id", "shopDomain", "accessToken", "accessTokenEncrypted", "storefrontAccessToken", "storefrontTokenEncrypted", "scopes", "isActive", "installedAt", "uninstalledAt", "myshopifyDomain", "installationStatus"`,
     envDomain,
     envAdminToken,
     envStorefrontToken
@@ -149,43 +150,36 @@ export async function getDefaultShopFromConfig() {
   return rows[0] || null;
 }
 
-export function shopRowToResolved(row: ShopRow): ResolvedShopConfig {
-  return {
-    id: row.id,
-    shopDomain: row.shopDomain,
-    myshopifyDomain: row.myshopifyDomain,
-    primaryDomain: row.primaryDomain,
-    accessToken: row.accessToken || decryptShopifyToken(row.accessTokenEncrypted),
-    accessTokenEncrypted: row.accessTokenEncrypted,
-    accessTokenDirect: row.accessToken,
-    storefrontAccessToken: row.storefrontAccessToken || decryptShopifyToken(row.storefrontTokenEncrypted),
-  };
-}
-
-export function canonicalPublicationShopDomain(shop: Pick<ResolvedShopConfig | ShopRow, "myshopifyDomain" | "shopDomain">) {
-  return normalizeShopDomain(shop.myshopifyDomain || shop.shopDomain);
-}
-
 export async function resolveShopConfig(
   preferredShopDomain?: string | null
 ): Promise<ResolvedShopConfig> {
   const normalizedPreferred = normalizeShopDomain(preferredShopDomain);
   if (normalizedPreferred) {
-    const shop = await resolveCanonicalShopInstallation(normalizedPreferred);
-    if (shop) return shopRowToResolved(shop);
+    const shop = await getShopByDomain(normalizedPreferred);
+    if (shop) {
+      return {
+        id: shop.id,
+        shopDomain: shop.shopDomain,
+        accessToken: shop.accessToken || decryptShopifyToken(shop.accessTokenEncrypted),
+        storefrontAccessToken: shop.storefrontAccessToken || decryptShopifyToken(shop.storefrontTokenEncrypted),
+      };
+    }
   }
 
   const defaultShop = await getDefaultShopFromConfig();
-  if (defaultShop) return shopRowToResolved(defaultShop);
+  if (defaultShop) {
+    return {
+      id: defaultShop.id,
+      shopDomain: defaultShop.shopDomain,
+      accessToken: defaultShop.accessToken || decryptShopifyToken(defaultShop.accessTokenEncrypted),
+      storefrontAccessToken: defaultShop.storefrontAccessToken || decryptShopifyToken(defaultShop.storefrontTokenEncrypted),
+    };
+  }
 
   return {
     id: null,
     shopDomain: normalizeShopDomain(trimEnv("SHOPIFY_STORE_DOMAIN")),
-    myshopifyDomain: null,
-    primaryDomain: null,
     accessToken: trimEnv("SHOPIFY_ADMIN_ACCESS_TOKEN") || null,
-    accessTokenEncrypted: null,
-    accessTokenDirect: trimEnv("SHOPIFY_ADMIN_ACCESS_TOKEN") || null,
     storefrontAccessToken: trimEnv("SHOPIFY_STOREFRONT_ACCESS_TOKEN") || null,
   };
 }
