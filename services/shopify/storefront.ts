@@ -1,9 +1,16 @@
 import { normalizeShopDomain, resolveShopConfig } from "./shop-resolver";
 const SHOPIFY_API_VERSION = "2026-01";
 
-type StorefrontGraphqlEnvelope<T> = {
+export type StorefrontGraphqlEnvelope<T> = {
   data?: T;
   errors?: Array<{ message?: string }>;
+  extensions?: {
+    credentialSource?: string;
+    hasStorefrontToken?: boolean;
+    storefrontHttpStatus?: number;
+    shopId?: string | null;
+    shopDomain?: string;
+  };
 };
 
 function absolutizeCheckoutUrl(
@@ -77,6 +84,7 @@ function isConfigured() {
 
 type StorefrontRequestOptions = {
   shopDomain?: string | null;
+  shopId?: string | null;
 };
 
 export async function storefrontGraphql<T>(
@@ -84,13 +92,20 @@ export async function storefrontGraphql<T>(
   variables?: Record<string, unknown>,
   options?: StorefrontRequestOptions
 ): Promise<StorefrontGraphqlEnvelope<T>> {
-  const shopConfig = await resolveShopConfig(normalizeShopDomain(options?.shopDomain));
+  const shopConfig = await resolveShopConfig(normalizeShopDomain(options?.shopDomain), options?.shopId);
   const shopDomain = shopConfig.shopDomain;
-  const token = shopConfig.storefrontAccessToken || String(process.env.SHOPIFY_STOREFRONT_ACCESS_TOKEN || "").trim();
+  const token = shopConfig.storefrontAccessToken;
+  const extensions = {
+    credentialSource: shopConfig.storefrontCredentialSource,
+    hasStorefrontToken: Boolean(token),
+    shopId: shopConfig.id,
+    shopDomain,
+  };
 
   if (!shopDomain || !token) {
     return {
-      errors: [{ message: "Storefront API is not configured" }],
+      errors: [{ message: "Storefront API credentials are not configured" }],
+      extensions,
     };
   }
 
@@ -109,10 +124,11 @@ export async function storefrontGraphql<T>(
   if (!response.ok) {
     return {
       errors: [{ message: `Storefront API request failed (${response.status})` }],
+      extensions: { ...extensions, storefrontHttpStatus: response.status },
     };
   }
 
-  return (await response.json()) as StorefrontGraphqlEnvelope<T>;
+  return { ...((await response.json()) as StorefrontGraphqlEnvelope<T>), extensions: { ...extensions, storefrontHttpStatus: response.status } };
 }
 
 export function isShopifyStorefrontConfigured() {
