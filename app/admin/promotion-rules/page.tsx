@@ -150,6 +150,7 @@ export default async function PromotionRulesPage({ searchParams }: PageProps) {
           <p className="mt-1">Automatic discount status: {publicationDiagnostics.automaticDiscountStatus || "not found"}</p>
           <p className="mt-1">Compiled hash: {publicationDiagnostics.compiledConfigHash || "unavailable"}</p>
           <p className="mt-1">Stored hash: {publicationDiagnostics.storedConfigHash || "unavailable"}</p>
+          {publicationDiagnostics.recoveryHint?.message ? <p className="mt-3 rounded-lg border border-amber-200 bg-white/70 p-3 font-medium">Recommended action: {publicationDiagnostics.recoveryHint.message}</p> : null}
           <div className="mt-3">
             <p className="font-semibold">Blocking reasons</p>
             {publicationDiagnostics.blockingReasons?.length ? <ul className="mt-1 list-disc pl-5">{publicationDiagnostics.blockingReasons.map((reason) => <li key={reason}><code>{reason}</code></li>)}</ul> : <p className="mt-1">None.</p>}

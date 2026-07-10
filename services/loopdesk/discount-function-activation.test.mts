@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { automaticDiscountInput, deterministicConfigHash, selectLoopDeskAppDiscountType, verifyStoredConfig, type AppDiscountType, type AutomaticDiscount } from "./discount-function-activation.server.ts";
+import { automaticDiscountInput, deterministicConfigHash, publicationRecoveryHint, selectLoopDeskAppDiscountType, verifyStoredConfig, type AppDiscountType, type AutomaticDiscount } from "./discount-function-activation.server.ts";
 import type { LoopDeskDiscountFunctionConfig } from "./discount-function.ts";
 
 const config: LoopDeskDiscountFunctionConfig = { schemaVersion: 1, enabled: true, rules: [{ id: "a", enabled: true, priority: 1, triggerType: "always", rewardEnforcementType: "fixed_price", rewardVariantGid: "gid://shopify/ProductVariant/1", rewardProductGid: "gid://shopify/Product/1", fixedPriceAmount: 300 }] };
@@ -156,4 +156,18 @@ test("automatic discount GraphQL fragments do not request metafield from Discoun
     const followingTemplateSource = source.slice(occurrence.index, source.indexOf("`", occurrence.index));
     assert.equal(followingTemplateSource.includes("metafield("), false);
   }
+});
+
+
+test("publication recovery hint recommends publish for missing automatic discounts", () => {
+  const hint = publicationRecoveryHint(["missing_automatic_discount"]);
+  assert.equal(hint.required, true);
+  assert.equal(hint.action, "publish");
+  assert.match(hint.message, /create or update/);
+});
+
+test("publication recovery hint prioritizes duplicate discount cleanup", () => {
+  const hint = publicationRecoveryHint(["missing_automatic_discount", "duplicate_automatic_discounts"]);
+  assert.equal(hint.required, true);
+  assert.equal(hint.action, "resolve_duplicates");
 });
