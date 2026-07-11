@@ -53,8 +53,12 @@ export type PromotionClientValidationInput = {
   status?: PromotionRuleStatus;
 };
 
+function blankOptionalDateToNull(value: PromotionClientValidationInput["startsAt"]) {
+  return typeof value === "string" && value.trim() === "" ? null : value;
+}
+
 export function validatePromotionFormClient(input: PromotionClientValidationInput) {
-  const result = validatePromotionRule(input);
+  const result = validatePromotionRule({ ...input, startsAt: blankOptionalDateToNull(input.startsAt), endsAt: blankOptionalDateToNull(input.endsAt) });
   const errors = [...result.errors];
   if (input.triggerReferences.length === 0) errors.push({ field: "triggerReferences", message: "Select at least one trigger before saving or activating." });
   return { valid: errors.length === 0, errors: errors.map((error) => ({ ...error, label: friendlyPromotionFieldLabel(error.field) })) };

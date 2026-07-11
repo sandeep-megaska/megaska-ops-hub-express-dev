@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 type PromotionEmbeddedContext = { shop?: string | string[]; shopify_shop?: string | string[]; host?: string | string[]; embedded?: string | string[] };
 function first(value: string | string[] | undefined) { return Array.isArray(value) ? value[0] || "" : value || ""; }
@@ -19,3 +20,18 @@ test("archive redirect preserves embedded context", () => { assert.equal(buildPr
 test("shopify_shop input can be resolved and canonicalized to shop", () => { const context = promotionEmbeddedContext({ shopify_shop: "input.myshopify.com", host: "admin-host", embedded: "1" }, "canon.myshopify.com"); assert.deepEqual(context, { shop: "canon.myshopify.com", shopify_shop: "input.myshopify.com", host: "admin-host", embedded: "1" }); });
 test("no cross-tenant mutation is possible", () => { assert.equal(verifyPromotionActionTenant("shop-a", "shop-a"), true); assert.equal(verifyPromotionActionTenant("shop-b", "shop-a"), false); });
 test("missing all context still returns safe unresolved-shop path", () => { assert.equal(buildPromotionAdminUrl("/admin/promotions", promotionEmbeddedContext({})), "/admin/promotions"); });
+
+test("promotion action parses numeric, decimal, and UTC schedule FormData fields before repository calls", () => {
+  const action = readFileSync(new URL("./admin-actions.server.ts", import.meta.url), "utf8");
+  assert.match(action, /function integerValue/);
+  assert.match(action, /Number\.isInteger\(value\)/);
+  assert.doesNotMatch(action, /parseInt/);
+  assert.match(action, /priority: integerValue\(formData, "priority", 0\)/);
+  assert.match(action, /minimumTriggerQuantity: integerValue\(formData, "minimumTriggerQuantity", 1\)/);
+  assert.match(action, /maximumRewardQuantity: integerValue\(formData, "maximumRewardQuantity", 1\)/);
+  assert.match(action, /function decimalValue/);
+  assert.match(action, /minimumCartSubtotal: decimalValue\(formData, "minimumCartSubtotal", null\)/);
+  assert.match(action, /rewardValue: decimalValue\(formData, "rewardValue", undefined\)/);
+  assert.match(action, /startsAt: optionalUtcDate\(formData, "startsAtUtc", "startsAt"\)/);
+  assert.match(action, /endsAt: optionalUtcDate\(formData, "endsAtUtc", "endsAt"\)/);
+});
