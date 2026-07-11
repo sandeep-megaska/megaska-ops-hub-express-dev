@@ -1,9 +1,50 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { friendlyPromotionFieldLabel, promotionActivationReadiness, rewardValueLabel, validatePromotionFormClient } from "./form-validation.ts";
+import { friendlyPromotionFieldLabel, promotionActivationReadiness, promotionClientFormValuesToValidationInput, rewardValueLabel, validatePromotionFormClient } from "./form-validation.ts";
 
 const valid = { name: "Rule", triggerType: "PRODUCT" as const, triggerReferences: [{ sourceType: "PRODUCT" as const, referenceGid: "gid://shopify/Product/1" }], offerProductGid: "gid://shopify/Product/2", minimumTriggerQuantity: 1, maximumRewardQuantity: 1, rewardType: "PERCENTAGE_OFF" as const, rewardValue: "10" };
+
+
+test("client form validation adapter normalizes numeric input strings", () => {
+  const input = promotionClientFormValuesToValidationInput({
+    name: "Rule",
+    priority: "2",
+    triggerType: "PRODUCT",
+    triggerReferences: [{ sourceType: "PRODUCT", referenceGid: "gid://shopify/Product/1" }],
+    offerProductGid: "gid://shopify/Product/2",
+    minimumTriggerQuantity: "1",
+    maximumRewardQuantity: "1",
+    rewardType: "PERCENTAGE_OFF",
+    rewardValue: "50",
+    startsAt: "",
+    endsAt: "",
+  });
+
+  assert.equal(input.priority, 2);
+  assert.equal(input.minimumTriggerQuantity, 1);
+  assert.equal(input.maximumRewardQuantity, 1);
+  assert.equal(input.rewardValue, 50);
+  assert.equal(validatePromotionFormClient(input).valid, true);
+});
+
+test("client form validation adapter preserves strict numeric failures", () => {
+  const input = promotionClientFormValuesToValidationInput({
+    name: "Rule",
+    priority: "2.5",
+    triggerType: "PRODUCT",
+    triggerReferences: [{ sourceType: "PRODUCT", referenceGid: "gid://shopify/Product/1" }],
+    offerProductGid: "gid://shopify/Product/2",
+    minimumTriggerQuantity: "1",
+    maximumRewardQuantity: "1",
+    rewardType: "PERCENTAGE_OFF",
+    rewardValue: "not numeric",
+  });
+  const result = validatePromotionFormClient(input);
+
+  assert.equal(result.errors.some((e) => e.field === "priority"), true);
+  assert.equal(result.errors.some((e) => e.field === "rewardValue"), true);
+});
 
 test("reward label changes by reward type", () => {
   assert.equal(rewardValueLabel("PERCENTAGE_OFF"), "Discount percentage");
@@ -67,6 +108,9 @@ test("no currency symbol hard-coding", () => {
 
 test("Resource Picker selections and embedded context are preserved", () => {
   const form = readFileSync(new URL("../../app/admin/promotions/PromotionForm.tsx", import.meta.url), "utf8");
+  assert.match(form, /promotionClientFormValuesToValidationInput/);
+  assert.doesNotMatch(form, /validatePromotionFormClient\(\{ \.\.\.values/);
+  assert.match(form, /dirty \? initial : saveState/);
   assert.match(form, /triggerReferencesValue/);
   assert.match(form, /offerProductTitle/);
   assert.match(form, /shopify_shop/);

@@ -4,7 +4,7 @@ import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { archivePromotionRuleAction, changePromotionStatusAction, createPromotionDraftAction, updatePromotionDraftAction, type PromotionActionState } from "../../../services/promotions/admin-actions.server";
 import type { PromotionEmbeddedContext } from "../../../services/promotions/admin-context";
 import type { PromotionRewardType, PromotionRuleStatus, PromotionTriggerType } from "../../../services/promotions/domain";
-import { friendlyPromotionFieldLabel, promotionActivationReadiness, promotionTextLimits, rewardValueHelp, rewardValueLabel, validatePromotionFormClient } from "../../../services/promotions/form-validation";
+import { friendlyPromotionFieldLabel, promotionActivationReadiness, promotionClientFormValuesToValidationInput, promotionTextLimits, rewardValueHelp, rewardValueLabel, validatePromotionFormClient } from "../../../services/promotions/form-validation";
 import type { PromotionRuleRecord } from "../../../services/promotions/repository.server";
 import { normalizeProductTypeEntry, productTypesToTriggerReferences, selectedToTriggerReferences, type ProductTypeSelection, type SelectedResource } from "../../../services/promotions/resource-picker";
 import ProductTypeEditor from "./ProductTypeEditor";
@@ -55,8 +55,26 @@ export default function PromotionForm({ shopId, embeddedContext, rule }: { shopI
   const disabled = rule?.status === "ARCHIVED";
   const triggerReferences = useMemo(() => triggerType === "PRODUCT" ? selectedToTriggerReferences(productTriggers, triggerType) : triggerType === "COLLECTION" ? selectedToTriggerReferences(collectionTriggers, triggerType) : productTypesToTriggerReferences(typeTriggers), [collectionTriggers, productTriggers, triggerType, typeTriggers]);
   const triggerReferencesValue = useMemo(() => JSON.stringify(triggerReferences), [triggerReferences]);
-  const client = validatePromotionFormClient({ ...values, triggerType, triggerReferences, offerProductGid: offerProduct[0]?.gid || "", minimumTriggerQuantity: Number(values.minimumTriggerQuantity), maximumRewardQuantity: Number(values.maximumRewardQuantity), rewardType: values.rewardType, rewardValue: values.rewardValue, status: rule?.status });
-  const readiness = promotionActivationReadiness({ ...values, triggerType, triggerReferences, offerProductGid: offerProduct[0]?.gid || "", minimumTriggerQuantity: Number(values.minimumTriggerQuantity), maximumRewardQuantity: Number(values.maximumRewardQuantity), rewardType: values.rewardType, rewardValue: values.rewardValue, status: rule?.status });
+  const validationInput = promotionClientFormValuesToValidationInput({
+    name: values.name,
+    priority: values.priority,
+    triggerType,
+    triggerReferences,
+    offerProductGid: offerProduct[0]?.gid || "",
+    minimumTriggerQuantity: values.minimumTriggerQuantity,
+    maximumRewardQuantity: values.maximumRewardQuantity,
+    rewardType: values.rewardType,
+    rewardValue: values.rewardValue,
+    startsAt: values.startsAt,
+    endsAt: values.endsAt,
+    heading: values.heading,
+    badgeText: values.badgeText,
+    customerMessage: values.customerMessage,
+    ctaText: values.ctaText,
+    status: rule?.status,
+  });
+  const client = validatePromotionFormClient(validationInput);
+  const readiness = promotionActivationReadiness(validationInput);
   const errorsByField = new Map<string, FieldError>(client.errors.map((e) => [e.field, e]));
   const action = rule ? statusAction(rule.status) : null;
   useEffect(() => { const onBeforeUnload = (event: BeforeUnloadEvent) => { if (!dirty) return; event.preventDefault(); event.returnValue = ""; }; window.addEventListener("beforeunload", onBeforeUnload); return () => window.removeEventListener("beforeunload", onBeforeUnload); }, [dirty]);
@@ -66,7 +84,7 @@ export default function PromotionForm({ shopId, embeddedContext, rule }: { shopI
   function switchTriggerType(next: PromotionTriggerType) { if (next === triggerType) return; const hasSelections = productTriggers.length > 0 || collectionTriggers.length > 0 || typeTriggers.length > 0; if (hasSelections && !window.confirm("Changing trigger type clears incompatible trigger selections. Continue?")) return; setDirty(true); setTriggerType(next); setProductTriggers([]); setCollectionTriggers([]); setTypeTriggers([]); }
   function err(field: string) { return errorsByField.get(field)?.message; }
   return <div className="space-y-4">
-    <Result state={saveState} /><Result state={statusState} /><Result state={archiveState} />
+    <Result state={dirty ? initial : saveState} /><Result state={dirty ? initial : statusState} /><Result state={dirty ? initial : archiveState} />
     {client.errors.length ? <div role="alert" aria-live="polite" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800"><p className="font-semibold">Review these fields before saving.</p><ul className="mt-2 list-disc pl-5">{client.errors.map((e) => <li key={`${e.field}:${e.message}`}>{e.label}: {e.message}</li>)}</ul></div> : null}
     {disabled ? <p role="alert" className="rounded-lg bg-gray-100 p-3 text-sm font-medium text-gray-700">This rule is archived and cannot be edited or reactivated.</p> : null}
     <PromotionReadinessChecklist items={readiness} />
