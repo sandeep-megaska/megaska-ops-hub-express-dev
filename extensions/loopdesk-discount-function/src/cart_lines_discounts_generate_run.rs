@@ -1,7 +1,8 @@
 use shopify_function::prelude::*;
 use shopify_function::Result;
 
-use crate::{config, eligibility, rewards, schema};
+use crate::schema;
+use crate::{config, eligibility, rewards};
 
 #[shopify_function]
 pub fn cart_lines_discounts_generate_run(
