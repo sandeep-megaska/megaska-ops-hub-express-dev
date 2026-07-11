@@ -56,15 +56,13 @@ impl Cart {
                     marker_rule: l
                         .promotion_rule_id()
                         .as_ref()
-                        .and_then(|a| a.value().as_ref())
-                        .filter(|v| !v.trim().is_empty())
-                        .map(|v| (*v).clone()),
+                        .and_then(|a| a.value().cloned())
+                        .filter(|v| !v.trim().is_empty()),
                     marker_version: l
                         .promotion_compilation_version()
                         .as_ref()
-                        .and_then(|a| a.value().as_ref())
-                        .filter(|v| !v.trim().is_empty())
-                        .map(|v| (*v).clone()),
+                        .and_then(|a| a.value().cloned())
+                        .filter(|v| !v.trim().is_empty()),
                     index,
                 })
             })
