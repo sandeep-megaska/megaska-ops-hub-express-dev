@@ -2,6 +2,7 @@
 
 import { useActionState, useMemo, useState } from "react";
 import { archivePromotionRuleAction, changePromotionStatusAction, createPromotionDraftAction, updatePromotionDraftAction, type PromotionActionState } from "../../../services/promotions/admin-actions.server";
+import type { PromotionEmbeddedContext } from "../../../services/promotions/admin-actions.server";
 import type { PromotionTriggerType } from "../../../services/promotions/domain";
 import type { PromotionRuleRecord } from "../../../services/promotions/repository.server";
 import { normalizeProductTypeEntry, type ProductTypeSelection, type SelectedResource } from "../../../services/promotions/resource-picker";
@@ -20,7 +21,17 @@ function resourceSelections(rule: PromotionRuleRecord | null | undefined, type: 
 function productTypes(rule: PromotionRuleRecord | null | undefined): ProductTypeSelection[] { return rule?.triggerReferences?.filter((r) => r.sourceType === "PRODUCT_TYPE").map((r) => normalizeProductTypeEntry(r.referenceValue || r.displayTitle || r.normalizedValue || "")).filter((item): item is ProductTypeSelection => Boolean(item)) ?? []; }
 function offer(rule: PromotionRuleRecord | null | undefined): SelectedResource[] { return rule?.offerProductGid ? [{ gid: rule.offerProductGid, title: rule.offerProductTitle || rule.offerProductGid, handle: rule.offerProductHandle || null, imageUrl: rule.offerProductImageUrl || null, resourceType: "PRODUCT" }] : []; }
 
-export default function PromotionForm({ shopDomain, rule }: { shopDomain: string; rule?: PromotionRuleRecord | null }) {
+function EmbeddedInputs({ shopId, context }: { shopId: string; context: PromotionEmbeddedContext }) {
+  return <>
+    <input type="hidden" name="shopId" value={shopId} />
+    <input type="hidden" name="shop" value={String(context.shop || "")} />
+    <input type="hidden" name="shopify_shop" value={String(context.shopify_shop || "")} />
+    <input type="hidden" name="host" value={String(context.host || "")} />
+    <input type="hidden" name="embedded" value={String(context.embedded || "")} />
+  </>;
+}
+
+export default function PromotionForm({ shopId, embeddedContext, rule }: { shopId: string; shopDomain: string; embeddedContext: PromotionEmbeddedContext; rule?: PromotionRuleRecord | null }) {
   const [saveState, saveAction] = useActionState(rule ? updatePromotionDraftAction : createPromotionDraftAction, initial);
   const [statusState, statusAction] = useActionState(changePromotionStatusAction, initial);
   const [archiveState, archiveAction] = useActionState(archivePromotionRuleAction, initial);
@@ -44,7 +55,7 @@ export default function PromotionForm({ shopDomain, rule }: { shopDomain: string
   return <div className="space-y-4">
     <Errors state={saveState} /><Errors state={statusState} /><Errors state={archiveState} />
     <form action={saveAction} className="space-y-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-      <input type="hidden" name="shop" value={shopDomain} /><input type="hidden" name="id" value={rule?.id || ""} />
+      <EmbeddedInputs shopId={shopId} context={embeddedContext} /><input type="hidden" name="id" value={rule?.id || ""} />
       <input type="hidden" name="triggerReferences" value={triggerReferencesValue} />
       <input type="hidden" name="offerProductGid" value={offerProduct[0]?.gid || ""} />
       <input type="hidden" name="offerProductTitle" value={offerProduct[0]?.title || ""} />
@@ -74,6 +85,6 @@ export default function PromotionForm({ shopDomain, rule }: { shopDomain: string
       <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800">Execution setup pending. Not compiled.</p>
       <button disabled={disabled} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:bg-gray-300">Save draft</button>
     </form>
-    {rule ? <div className="flex gap-3"><form action={statusAction}><input type="hidden" name="shop" value={shopDomain} /><input type="hidden" name="id" value={rule.id} /><input type="hidden" name="status" value={rule.status === "ACTIVE" ? "PAUSED" : "ACTIVE"} /><button disabled={disabled} className="rounded-lg border px-4 py-2 text-sm">{rule.status === "ACTIVE" ? "Pause" : "Activate"}</button></form><form action={archiveAction}><input type="hidden" name="shop" value={shopDomain} /><input type="hidden" name="id" value={rule.id} /><button disabled={disabled} className="rounded-lg border border-red-300 px-4 py-2 text-sm text-red-700">Archive</button></form></div> : null}
+    {rule ? <div className="flex gap-3"><form action={statusAction}><EmbeddedInputs shopId={shopId} context={embeddedContext} /><input type="hidden" name="id" value={rule.id} /><input type="hidden" name="status" value={rule.status === "ACTIVE" ? "PAUSED" : "ACTIVE"} /><button disabled={disabled} className="rounded-lg border px-4 py-2 text-sm">{rule.status === "ACTIVE" ? "Pause" : "Activate"}</button></form><form action={archiveAction}><EmbeddedInputs shopId={shopId} context={embeddedContext} /><input type="hidden" name="id" value={rule.id} /><button disabled={disabled} className="rounded-lg border border-red-300 px-4 py-2 text-sm text-red-700">Archive</button></form></div> : null}
   </div>;
 }
