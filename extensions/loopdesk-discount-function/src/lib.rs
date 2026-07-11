@@ -6,10 +6,17 @@ pub mod rewards;
 pub mod schema;
 
 pub use cart_lines_discounts_generate_run::run;
+
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::schema::*;
+    use crate::{
+        cart_lines_discounts_generate_run::run,
+        schema::{
+            cart_lines_discounts_generate_run::Input as FunctionInput,
+            CartLinesDiscountsGenerateRunResult, CartOperation, ProductDiscountCandidate,
+            ProductDiscountCandidateTarget, ProductDiscountCandidateValue,
+        },
+    };
     use serde_json::json;
 
     fn cfg(reward: &str) -> String {
@@ -61,12 +68,9 @@ mod tests {
         })
     }
 
-    fn input(
-        config: Option<String>,
-        classes: Vec<&str>,
-        offer_qty: i64,
-    ) -> cart_lines_discounts_generate_run::Input {
-        serde_json::from_value(input_json(config, classes, offer_qty, Some("7"))).unwrap()
+    fn input(config: Option<String>, classes: Vec<&str>, offer_qty: i64) -> FunctionInput {
+        serde_json::from_value(input_json(config, classes, offer_qty, Some("7")))
+            .expect("valid Shopify Function test input")
     }
 
     fn candidates(r: CartLinesDiscountsGenerateRunResult) -> Vec<ProductDiscountCandidate> {
@@ -78,14 +82,14 @@ mod tests {
 
     #[test]
     fn missing_config_empty() {
-        assert!(run(input(None, vec!["PRODUCT"], 1)).operations.is_empty())
+        assert!(run(input(None, vec!["PRODUCT"], 1)).operations.is_empty());
     }
 
     #[test]
     fn malformed_config_empty() {
         assert!(run(input(Some("{bad".into()), vec!["PRODUCT"], 1))
             .operations
-            .is_empty())
+            .is_empty());
     }
 
     #[test]
@@ -98,7 +102,7 @@ mod tests {
             1
         ))
         .operations
-        .is_empty())
+        .is_empty());
     }
 
     #[test]
@@ -113,7 +117,7 @@ mod tests {
             )))
             .len(),
             1
-        )
+        );
     }
 
     #[test]
@@ -128,7 +132,7 @@ mod tests {
         assert!(matches!(
             c[0].value,
             ProductDiscountCandidateValue::FixedAmount(_)
-        ))
+        ));
     }
 
     #[test]
@@ -143,21 +147,22 @@ mod tests {
         assert!(matches!(
             c[0].value,
             ProductDiscountCandidateValue::FixedAmount(_)
-        ))
+        ));
     }
 
     #[test]
     fn missing_compilation_version_empty() {
         let config = cfg(r#"{"type":"PERCENTAGE_OFF","value":"10","maximumQuantity":1}"#)
-            .replace(r#","compilationVersion":7"#, "");
+            .replace(r#", "compilationVersion":7"#, "")
+            .replace(r#",\"compilationVersion\":7"#, "");
         assert!(run(input(Some(config), vec!["PRODUCT"], 1))
             .operations
-            .is_empty())
+            .is_empty());
     }
 
     #[test]
     fn wrong_compilation_empty() {
-        let i: cart_lines_discounts_generate_run::Input = serde_json::from_value(input_json(
+        let i: FunctionInput = serde_json::from_value(input_json(
             Some(cfg(
                 r#"{"type":"PERCENTAGE_OFF","value":"10","maximumQuantity":1}"#,
             )),
@@ -165,8 +170,8 @@ mod tests {
             1,
             Some("8"),
         ))
-        .unwrap();
-        assert!(run(i).operations.is_empty())
+        .expect("valid Shopify Function test input");
+        assert!(run(i).operations.is_empty());
     }
 
     #[test]
@@ -179,6 +184,6 @@ mod tests {
             5,
         )));
         let ProductDiscountCandidateTarget::CartLine(t) = &c[0].targets[0];
-        assert_eq!(t.quantity, Some(2))
+        assert_eq!(t.quantity, Some(2));
     }
 }
