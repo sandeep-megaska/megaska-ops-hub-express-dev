@@ -1,3 +1,4 @@
+use shopify_function::prelude as shopify_prelude;
 use std::cmp::Ordering;
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Decimal {
@@ -49,6 +50,10 @@ impl Decimal {
             units: w.checked_mul(1_000_000)?.checked_add(fv)?,
         })
     }
+
+    pub fn parse_shopify(value: &shopify_prelude::Decimal) -> Option<Self> {
+        Self::parse(&value.as_f64().to_string())
+    }
     pub fn zero() -> Self {
         Self {
             neg: false,
@@ -89,6 +94,9 @@ impl Decimal {
                 f
             )
         }
+    }
+    pub fn to_shopify_decimal(&self) -> Option<shopify_prelude::Decimal> {
+        Some(shopify_prelude::Decimal(self.to_shopify().parse().ok()?))
     }
 }
 impl Ord for Decimal {
