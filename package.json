@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "vercel-build": "rm -rf node_modules/.prisma && npx prisma generate && next build",
+    "vercel-build": "rm -rf generated/prisma node_modules/.prisma && npx prisma generate && next build",
     "start": "next start",
     "lint": "eslint",
     "prisma:generate": "prisma generate",
