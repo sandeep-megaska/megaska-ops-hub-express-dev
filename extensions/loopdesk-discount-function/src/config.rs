@@ -89,8 +89,7 @@ fn parse_rule(s: &str) -> Result<FunctionRule, ()> {
     Ok(FunctionRule {
         schema_version: num(s, "schemaVersion").ok_or(())? as u32,
         rule_id: string(s, "ruleId").ok_or(())?,
-        compilation_version: num(s, "compilationVersion")
-            .unwrap_or_else(|| num(s, "configurationVersion").unwrap_or(1)),
+        compilation_version: num(s, "compilationVersion").ok_or(())?,
         status: match string(s, "status").ok_or(())?.as_str() {
             "ACTIVE" => RuleStatus::Active,
             "PAUSED" => RuleStatus::Paused,

@@ -30,7 +30,7 @@ Unit tests cover PRODUCT class gating, malformed configuration, percentage, fixe
 
 - `cargo fmt --check`: passed.
 - `cargo test`: passed, 8 tests.
-- `cargo build --target=wasm32-wasip1 --release`: failed because the `wasm32-wasip1` Rust standard library target is not installed in the container.
+- `cargo build --target=wasm32-unknown-unknown --release`: failed because the `wasm32-unknown-unknown` Rust standard library target is not installed in the container.
 - `shopify app function build --config shopify.app.megaska-ops-hub-express-dev.toml`: failed because `shopify` CLI is not installed.
 - `npm run lint`: failed on existing repository lint errors outside this phase.
 - `npm run typecheck`: failed on existing Prisma/generated type mismatches outside this phase.

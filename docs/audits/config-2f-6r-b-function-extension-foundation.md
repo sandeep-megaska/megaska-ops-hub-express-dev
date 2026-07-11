@@ -14,9 +14,9 @@
 - Merchant-readable name: `LoopDesk Promotions`.
 - API version: `2026-04`.
 - Function target: `cart.lines.discounts.generate.run` only.
-- Rust/WASM target: `wasm32-wasip1`.
-- Build command: `cargo build --target=wasm32-wasip1 --release`.
-- Configured WASM path: `target/wasm32-wasip1/release/loopdesk_discount_function.wasm` because Cargo normalizes the hyphenated package name to an underscored artifact name.
+- Rust/WASM target: `wasm32-unknown-unknown`.
+- Build command: `cargo build --target=wasm32-unknown-unknown --release`.
+- Configured WASM path: `target/wasm32-unknown-unknown/release/loopdesk_discount_function.wasm` because Cargo normalizes the hyphenated package name to an underscored artifact name.
 
 ## Configuration metafield
 
@@ -47,8 +47,8 @@ The Function checks for the `PRODUCT` discount class, parses the optional config
 - `shopify version`: failed; Shopify CLI is not installed in the environment.
 - `cargo fmt --check`: passed.
 - `cargo test`: passed.
-- `rustup target add wasm32-wasip1`: failed because the environment could not download `rust-std-wasm32-wasip1` through the network tunnel.
-- `cargo build --target=wasm32-wasip1 --release`: not completed because the required Rust standard library target could not be installed in this environment.
+- `rustup target add wasm32-unknown-unknown`: failed because the environment could not download `rust-std-wasm32-unknown-unknown` through the network tunnel.
+- `cargo build --target=wasm32-unknown-unknown --release`: not completed because the required Rust standard library target could not be installed in this environment.
 - `cargo build --release`: passed for the native release artifact.
 - `shopify app function build`: not run successfully because the Shopify CLI is not installed.
 - `npm run lint`: failed on pre-existing repository lint errors outside this phase, including generated Prisma output and unrelated app/service files.
