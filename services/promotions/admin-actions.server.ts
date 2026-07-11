@@ -11,8 +11,24 @@ export type PromotionActionState = { ok: boolean; message?: string; errors?: { f
 const SHOP_ERROR = "Unable to resolve shop context for this promotion action.";
 
 function stringValue(formData: FormData, name: string) { return String(formData.get(name) ?? "").trim(); }
-function numberValue(formData: FormData, name: string, fallback: number) { const value = Number(stringValue(formData, name)); return Number.isFinite(value) ? value : fallback; }
-function optionalDate(formData: FormData, name: string) { const value = stringValue(formData, name); return value ? new Date(value) : null; }
+function integerValue(formData: FormData, name: string, fallback: number) {
+  const raw = stringValue(formData, name);
+  if (!raw) return fallback;
+  const value = Number(raw);
+  return Number.isInteger(value) ? value : raw;
+}
+function decimalValue(formData: FormData, name: string, blankValue: null | undefined = null) {
+  const raw = stringValue(formData, name);
+  if (!raw) return blankValue;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : raw;
+}
+function optionalUtcDate(formData: FormData, utcName: string, legacyName: string) {
+  const raw = formData.has(utcName) ? stringValue(formData, utcName) : stringValue(formData, legacyName);
+  if (!raw) return null;
+  const date = new Date(raw);
+  return Number.isNaN(date.getTime()) ? raw : date.toISOString();
+}
 function boolValue(formData: FormData, name: string) { return formData.get(name) === "on"; }
 function actionContext(formData: FormData): PromotionEmbeddedContext { return { shop: stringValue(formData, "shop"), shopify_shop: stringValue(formData, "shopify_shop"), host: stringValue(formData, "host"), embedded: stringValue(formData, "embedded") }; }
 function actionUrl(formData: FormData, path: string, extra: Record<string, string | undefined> = {}) { return buildPromotionAdminUrl(path, promotionEmbeddedContext(actionContext(formData), stringValue(formData, "shop")), extra); }
@@ -37,7 +53,7 @@ async function shop(formData: FormData) {
   return resolved.shop;
 }
 function input(formData: FormData): Omit<PromotionRuleWriteInput, "shopId"> {
-  return { name: stringValue(formData, "name"), description: stringValue(formData, "description") || null, triggerType: stringValue(formData, "triggerType") as PromotionTriggerType, triggerMatchMode: stringValue(formData, "triggerMatchMode") as PromotionTriggerMatchMode, minimumTriggerQuantity: numberValue(formData, "minimumTriggerQuantity", 1), minimumCartSubtotal: stringValue(formData, "minimumCartSubtotal") || null, offerProductGid: stringValue(formData, "offerProductGid"), offerProductTitle: stringValue(formData, "offerProductTitle") || null, offerProductHandle: stringValue(formData, "offerProductHandle") || null, offerProductImageUrl: stringValue(formData, "offerProductImageUrl") || null, rewardType: stringValue(formData, "rewardType") as PromotionRewardType, rewardValue: stringValue(formData, "rewardValue"), maximumRewardQuantity: numberValue(formData, "maximumRewardQuantity", 1), priority: numberValue(formData, "priority", 0), startsAt: optionalDate(formData, "startsAt"), endsAt: optionalDate(formData, "endsAt"), combinesWithProductDiscounts: boolValue(formData, "combinesWithProductDiscounts"), combinesWithOrderDiscounts: boolValue(formData, "combinesWithOrderDiscounts"), combinesWithShippingDiscounts: boolValue(formData, "combinesWithShippingDiscounts"), heading: stringValue(formData, "heading") || null, badgeText: stringValue(formData, "badgeText") || null, customerMessage: stringValue(formData, "customerMessage") || null, ctaText: stringValue(formData, "ctaText") || null, triggerReferences: references(formData), actor: { actorType: "ADMIN" } };
+  return { name: stringValue(formData, "name"), description: stringValue(formData, "description") || null, triggerType: stringValue(formData, "triggerType") as PromotionTriggerType, triggerMatchMode: stringValue(formData, "triggerMatchMode") as PromotionTriggerMatchMode, minimumTriggerQuantity: integerValue(formData, "minimumTriggerQuantity", 1) as number, minimumCartSubtotal: decimalValue(formData, "minimumCartSubtotal", null), offerProductGid: stringValue(formData, "offerProductGid"), offerProductTitle: stringValue(formData, "offerProductTitle") || null, offerProductHandle: stringValue(formData, "offerProductHandle") || null, offerProductImageUrl: stringValue(formData, "offerProductImageUrl") || null, rewardType: stringValue(formData, "rewardType") as PromotionRewardType, rewardValue: decimalValue(formData, "rewardValue", undefined) ?? "", maximumRewardQuantity: integerValue(formData, "maximumRewardQuantity", 1) as number, priority: integerValue(formData, "priority", 0) as number, startsAt: optionalUtcDate(formData, "startsAtUtc", "startsAt") as unknown as Date | null, endsAt: optionalUtcDate(formData, "endsAtUtc", "endsAt") as unknown as Date | null, combinesWithProductDiscounts: boolValue(formData, "combinesWithProductDiscounts"), combinesWithOrderDiscounts: boolValue(formData, "combinesWithOrderDiscounts"), combinesWithShippingDiscounts: boolValue(formData, "combinesWithShippingDiscounts"), heading: stringValue(formData, "heading") || null, badgeText: stringValue(formData, "badgeText") || null, customerMessage: stringValue(formData, "customerMessage") || null, ctaText: stringValue(formData, "ctaText") || null, triggerReferences: references(formData), actor: { actorType: "ADMIN" } };
 }
 function state(error: unknown): PromotionActionState { if (error instanceof PromotionRuleValidationError) return { ok: false, errors: error.errors, message: "Fix the promotion fields and try again." }; if (error instanceof PromotionRuleTransitionError) return { ok: false, message: error.message }; return { ok: false, message: error instanceof Error ? error.message : "Promotion action failed." }; }
 

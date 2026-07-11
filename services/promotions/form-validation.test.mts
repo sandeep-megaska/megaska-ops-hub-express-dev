@@ -51,3 +51,30 @@ test("Resource Picker selections and embedded context are preserved", () => {
   assert.match(form, /shopify_shop/);
   assert.match(form, /host/);
 });
+
+test("blank optional schedule fields are valid for form validation and readiness", () => {
+  const result = validatePromotionFormClient({ ...valid, startsAt: "", endsAt: "" });
+  assert.equal(result.errors.some((e) => e.field === "startsAt" || e.field === "endsAt"), false);
+  assert.equal(promotionActivationReadiness({ ...valid, startsAt: "", endsAt: "" }).find((i) => i.key === "schedule")?.complete, true);
+});
+
+test("invalid nonblank schedule field is rejected", () => {
+  const result = validatePromotionFormClient({ ...valid, startsAt: "2026-07-12T00:00", endsAt: "not-a-date" });
+  assert.equal(result.errors.some((e) => e.field === "endsAt"), true);
+});
+
+test("schedule order accepts end after start and rejects end before start", () => {
+  assert.equal(validatePromotionFormClient({ ...valid, startsAt: "2026-07-11T00:00:00.000Z", endsAt: "2026-07-12T00:00:00.000Z" }).valid, true);
+  assert.equal(validatePromotionFormClient({ ...valid, startsAt: "2026-07-12T00:00:00.000Z", endsAt: "2026-07-11T00:00:00.000Z" }).errors.some((e) => e.field === "endsAt"), true);
+});
+
+test("PromotionForm submits UTC hidden schedule values and renders stored dates locally", () => {
+  const form = readFileSync(new URL("../../app/admin/promotions/PromotionForm.tsx", import.meta.url), "utf8");
+  assert.match(form, /function dateValue/);
+  assert.match(form, /getFullYear\(\)/);
+  assert.match(form, /getHours\(\)/);
+  assert.match(form, /function localDateTimeToUtc/);
+  assert.match(form, /toISOString\(\)/);
+  assert.match(form, /name="startsAtUtc"/);
+  assert.match(form, /name="endsAtUtc"/);
+});
