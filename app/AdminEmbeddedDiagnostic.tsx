@@ -29,19 +29,19 @@ export default function AdminEmbeddedDiagnostic() {
   if (!status) return null;
 
   return (
-    <aside className="rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs leading-5 text-blue-950">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="font-semibold">Embedded admin diagnostic</p>
-        <button type="button" onClick={testResourcePicker} className="rounded-lg border border-blue-200 bg-white px-2 py-1 font-medium text-blue-950">
+    <aside className="min-w-0 max-w-full overflow-hidden rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs leading-5 text-blue-950">
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+        <p className="min-w-0 break-words [overflow-wrap:anywhere] font-semibold">Embedded admin diagnostic</p>
+        <button type="button" onClick={testResourcePicker} className="shrink-0 rounded-lg border border-blue-200 bg-white px-2 py-1 font-medium text-blue-950">
           Test Resource Picker
         </button>
       </div>
-      <p>shop present: {yesNo(status.shopPresent)}; host present: {yesNo(status.hostPresent)}; API key present: {yesNo(status.apiKeyPresent)}; API key meta present: {yesNo(status.apiKeyMetaPresent)}; API key meta content length: {status.apiKeyMetaContentLength}; App Bridge script tag present: {yesNo(status.appBridgeScriptTagPresent)}; App Bridge script loaded event fired: {yesNo(status.appBridgeScriptLoadedEventFired)}; window.shopify present: {yesNo(status.shopifyGlobalPresent)}; typeof window.shopify.resourcePicker: {status.resourcePickerType}; App Bridge initialized: {yesNo(status.appBridgeInitialized)}; Resource Picker available: {yesNo(status.resourcePickerAvailable)}.</p>
-      {status.appBridgeScriptError ? <p className="mt-1 text-red-900">Script load error: {status.appBridgeScriptError}</p> : null}
-      <p>App Bridge script diagnostics: {status.appBridgeScriptDiagnostics}</p>
-      <p>current route: {status.currentRoute || "—"}</p>
-      {!status.appBridgeInitialized ? <p className="mt-1 text-amber-900">Fallback: admin pages remain usable, but Shopify embedded features need a valid Admin launch URL and API key.</p> : null}
-      {message ? <p className="mt-1 font-medium">{message}</p> : null}
+      <p className="min-w-0 break-words [overflow-wrap:anywhere]">shop present: {yesNo(status.shopPresent)}; host present: {yesNo(status.hostPresent)}; API key present: {yesNo(status.apiKeyPresent)}; API key meta present: {yesNo(status.apiKeyMetaPresent)}; API key meta content length: {status.apiKeyMetaContentLength}; App Bridge script tag present: {yesNo(status.appBridgeScriptTagPresent)}; App Bridge script loaded event fired: {yesNo(status.appBridgeScriptLoadedEventFired)}; window.shopify present: {yesNo(status.shopifyGlobalPresent)}; typeof window.shopify.resourcePicker: {status.resourcePickerType}; App Bridge initialized: {yesNo(status.appBridgeInitialized)}; Resource Picker available: {yesNo(status.resourcePickerAvailable)}.</p>
+      {status.appBridgeScriptError ? <p className="mt-1 min-w-0 break-all whitespace-normal text-red-900">Script load error: {status.appBridgeScriptError}</p> : null}
+      <p className="min-w-0 break-all whitespace-normal font-mono text-[11px]">App Bridge script diagnostics: {status.appBridgeScriptDiagnostics}</p>
+      <p className="min-w-0 break-all whitespace-normal font-mono text-[11px]">current route: {status.currentRoute || "—"}</p>
+      {!status.appBridgeInitialized ? <p className="mt-1 min-w-0 break-words [overflow-wrap:anywhere] text-amber-900">Fallback: admin pages remain usable, but Shopify embedded features need a valid Admin launch URL and API key.</p> : null}
+      {message ? <p className="mt-1 min-w-0 break-all whitespace-normal font-medium">{message}</p> : null}
     </aside>
   );
 }
