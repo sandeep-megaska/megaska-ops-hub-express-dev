@@ -1,0 +1,30 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import type { PromotionRewardType, PromotionRuleStatus, PromotionTriggerMatchMode, PromotionTriggerReferenceInput, PromotionTriggerType } from "./domain.ts";
+import { archivePromotionRule, changePromotionRuleStatus, createPromotionRule, getPromotionRuleById, PromotionRuleNotFoundError, PromotionRuleTransitionError, PromotionRuleValidationError, updatePromotionRule, type PromotionRuleWriteInput } from "./repository.server.ts";
+import { resolveAdminShopFromSearchParams } from "../shopify/admin-shop-context";
+
+export type PromotionActionState = { ok: boolean; message?: string; errors?: { field: string; message: string }[] };
+const SHOP_ERROR = "Unable to resolve shop context for this promotion action.";
+
+function stringValue(formData: FormData, name: string) { return String(formData.get(name) ?? "").trim(); }
+function numberValue(formData: FormData, name: string, fallback: number) { const value = Number(stringValue(formData, name)); return Number.isFinite(value) ? value : fallback; }
+function optionalDate(formData: FormData, name: string) { const value = stringValue(formData, name); return value ? new Date(value) : null; }
+function boolValue(formData: FormData, name: string) { return formData.get(name) === "on"; }
+function embedded(formData: FormData) { const shop = stringValue(formData, "shop"); return shop ? `?shop=${encodeURIComponent(shop)}` : ""; }
+function references(formData: FormData): PromotionTriggerReferenceInput[] {
+  const triggerType = stringValue(formData, "triggerType") as PromotionTriggerType;
+  return stringValue(formData, "triggerReferences").split(/\r?\n/).map((v) => v.trim()).filter(Boolean).map((value) => triggerType === "PRODUCT_TYPE" ? { sourceType: triggerType, referenceValue: value, normalizedValue: value.toLowerCase() } : { sourceType: triggerType, referenceGid: value });
+}
+async function shop(formData: FormData) { const resolved = await resolveAdminShopFromSearchParams({ shop: stringValue(formData, "shop") }); if (!resolved.shop?.id) throw new Error(SHOP_ERROR); return resolved.shop; }
+function input(formData: FormData): Omit<PromotionRuleWriteInput, "shopId"> {
+  return { name: stringValue(formData, "name"), description: stringValue(formData, "description") || null, triggerType: stringValue(formData, "triggerType") as PromotionTriggerType, triggerMatchMode: stringValue(formData, "triggerMatchMode") as PromotionTriggerMatchMode, minimumTriggerQuantity: numberValue(formData, "minimumTriggerQuantity", 1), minimumCartSubtotal: stringValue(formData, "minimumCartSubtotal") || null, offerProductGid: stringValue(formData, "offerProductGid"), offerProductTitle: stringValue(formData, "offerProductTitle") || null, rewardType: stringValue(formData, "rewardType") as PromotionRewardType, rewardValue: stringValue(formData, "rewardValue"), maximumRewardQuantity: numberValue(formData, "maximumRewardQuantity", 1), priority: numberValue(formData, "priority", 0), startsAt: optionalDate(formData, "startsAt"), endsAt: optionalDate(formData, "endsAt"), combinesWithProductDiscounts: boolValue(formData, "combinesWithProductDiscounts"), combinesWithOrderDiscounts: boolValue(formData, "combinesWithOrderDiscounts"), combinesWithShippingDiscounts: boolValue(formData, "combinesWithShippingDiscounts"), heading: stringValue(formData, "heading") || null, badgeText: stringValue(formData, "badgeText") || null, customerMessage: stringValue(formData, "customerMessage") || null, ctaText: stringValue(formData, "ctaText") || null, triggerReferences: references(formData), actor: { actorType: "ADMIN" } };
+}
+function state(error: unknown): PromotionActionState { if (error instanceof PromotionRuleValidationError) return { ok: false, errors: error.errors, message: "Fix the promotion fields and try again." }; if (error instanceof PromotionRuleTransitionError) return { ok: false, message: error.message }; return { ok: false, message: error instanceof Error ? error.message : "Promotion action failed." }; }
+
+export async function createPromotionDraftAction(_prev: PromotionActionState, formData: FormData): Promise<PromotionActionState> { try { const s = await shop(formData); const created = await createPromotionRule({ shopId: s.id, ...input(formData), status: "DRAFT" }); revalidatePath("/admin/promotions"); redirect(`/admin/promotions/${created.id}${embedded(formData)}`); } catch (e) { if ((e as Error & { digest?: string }).digest?.startsWith("NEXT_REDIRECT")) throw e; return state(e); } }
+export async function updatePromotionDraftAction(_prev: PromotionActionState, formData: FormData): Promise<PromotionActionState> { try { const s = await shop(formData); const id = stringValue(formData, "id"); await updatePromotionRule(s.id, id, input(formData)); revalidatePath(`/admin/promotions/${id}`); return { ok: true, message: "Draft saved. Execution setup pending." }; } catch (e) { return state(e); } }
+export async function changePromotionStatusAction(_prev: PromotionActionState, formData: FormData): Promise<PromotionActionState> { try { const s = await shop(formData); const id = stringValue(formData, "id"); await getPromotionRuleById(s.id, id); await changePromotionRuleStatus(s.id, id, stringValue(formData, "status") as PromotionRuleStatus, { actor: { actorType: "ADMIN" } }); revalidatePath(`/admin/promotions/${id}`); return { ok: true, message: "Status updated. Not compiled." }; } catch (e) { if (e instanceof PromotionRuleNotFoundError) return { ok: false, message: "Promotion rule was not found." }; return state(e); } }
+export async function archivePromotionRuleAction(_prev: PromotionActionState, formData: FormData): Promise<PromotionActionState> { try { const s = await shop(formData); const id = stringValue(formData, "id"); await archivePromotionRule(s.id, id, { actor: { actorType: "ADMIN" } }); revalidatePath("/admin/promotions"); redirect(`/admin/promotions${embedded(formData)}&status=ARCHIVED`); } catch (e) { if ((e as Error & { digest?: string }).digest?.startsWith("NEXT_REDIRECT")) throw e; return state(e); } }
