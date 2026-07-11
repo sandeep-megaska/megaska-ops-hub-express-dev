@@ -7,5 +7,4 @@ edition = "2021"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-
-[dev-dependencies]
+shopify_function = { path = "vendor/shopify_function" }
