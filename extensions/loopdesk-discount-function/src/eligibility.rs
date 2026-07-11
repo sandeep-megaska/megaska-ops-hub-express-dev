@@ -36,8 +36,7 @@ impl Cart {
             .iter()
             .enumerate()
             .filter_map(|(index, l)| {
-                let quantity = i64::from(*l.quantity());
-                if quantity <= 0 {
+                if *l.quantity() <= 0 {
                     return None;
                 }
                 let (parent_product_gid, _variant) = match l.merchandise() {
@@ -49,7 +48,7 @@ impl Cart {
                 }
                 Some(Line {
                     id: l.id().clone(),
-                    quantity,
+                    quantity: i64::from(*l.quantity()),
                     unit_amount: Decimal::parse_shopify(
                         l.cost().amount_per_quantity().amount(),
                     )?,
@@ -58,14 +57,14 @@ impl Cart {
                         .promotion_rule_id()
                         .as_ref()
                         .and_then(|a| a.value().as_ref())
-                        .cloned()
-                        .filter(|v| !v.trim().is_empty()),
+                        .filter(|v| !v.trim().is_empty())
+                        .cloned(),
                     marker_version: l
                         .promotion_compilation_version()
                         .as_ref()
                         .and_then(|a| a.value().as_ref())
-                        .cloned()
-                        .filter(|v| !v.trim().is_empty()),
+                        .filter(|v| !v.trim().is_empty())
+                        .cloned(),
                     index,
                 })
             })
