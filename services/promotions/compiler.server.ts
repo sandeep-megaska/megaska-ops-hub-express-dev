@@ -1,0 +1,71 @@
+import { compilePromotionRule as buildPromotionPayloads } from "./compiler-payload.ts";
+import { PROMOTION_COMPILER_SCHEMA_VERSION, type PromotionCompilerResult, type PromotionCompilerRuleInput, type PromotionSourceMembershipGroup } from "./compiler-domain.ts";
+import { sha256Hex } from "./compiler-hash.ts";
+import { resolvePromotionTriggerGroups } from "./catalogue.server.ts";
+import type { CatalogueResolutionOptions } from "./catalogue.server.ts";
+import type { PromotionCompilationReason, PromotionTriggerType } from "./domain.ts";
+import { validatePromotionRule } from "./validation.ts";
+
+type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
+type Rule = PromotionCompilerRuleInput & { name: string; currentCompilationId?: string | null; compiledAt?: Date | null; currentCompilation?: Compilation | null };
+type Compilation = { id: string; promotionRuleId: string; version: number; status: string; reason: string; sourceHash: string; compiledHash?: string | null; triggerType: PromotionTriggerType; membershipCount: number; completedAt?: Date | null };
+type Db = {
+  promotionRule: { findFirst(args: object): Promise<Rule | null>; update(args: object): Promise<Rule> };
+  promotionCompilation: { findFirst(args: object): Promise<Compilation | null>; create(args: object): Promise<Compilation>; update(args: object): Promise<Compilation>; updateMany(args: object): Promise<{ count: number }> };
+  promotionCompiledMembership: { createMany(args: object): Promise<{ count: number }> };
+  promotionAuditLog: { create(args: object): Promise<unknown> };
+  $transaction<T>(fn: (tx: Db) => Promise<T>): Promise<T>;
+};
+
+type Clock = { now(): Date };
+type CompileInput = { shopId: string; shopDomain?: string | null; promotionRuleId: string; reason: PromotionCompilationReason };
+type Deps = { database?: Db; catalogueResolver?: typeof resolvePromotionTriggerGroups; clock?: Clock; payloadCompiler?: typeof buildPromotionPayloads; hashBuilder?: typeof sha256Hex; catalogueOptions?: Omit<CatalogueResolutionOptions, "shopDomain"> };
+export type PromotionCompilationErrorCode = "RULE_NOT_COMPILABLE" | "RULE_VALIDATION_FAILED" | "SOURCE_CHANGED_DURING_COMPILATION" | "CATALOGUE_RESOLUTION_FAILED" | "EMPTY_TRIGGER_MEMBERSHIP" | "PAYLOAD_GENERATION_FAILED" | "VERSION_ALLOCATION_CONFLICT" | "PERSISTENCE_FAILED";
+export class PromotionCompilationError extends Error { readonly code: PromotionCompilationErrorCode; constructor(code: PromotionCompilationErrorCode, message: string) { super(message); this.name = "PromotionCompilationError"; this.code = code; } }
+
+async function defaultDb() { const mod = await import("../db/prisma.ts"); return mod.prisma as unknown as Db; }
+const actor = { actorType: "SYSTEM", actorId: null as string | null };
+function safe(value: unknown): Json { if (value == null || ["string", "number", "boolean"].includes(typeof value)) return value as Json; if (value instanceof Date) return value.toISOString(); if (Array.isArray(value)) return value.slice(0, 50).map(safe); if (typeof value === "object") return Object.fromEntries(Object.entries(value).filter(([k]) => !/token|authorization|secret|password|response|stack|sql|customer/i.test(k)).slice(0, 50).map(([k, v]) => [k, safe(v)])) as Json; return String(value); }
+function message(code: PromotionCompilationErrorCode) { return ({ RULE_NOT_COMPILABLE: "Promotion rule is not compilable.", RULE_VALIDATION_FAILED: "Promotion rule validation failed.", SOURCE_CHANGED_DURING_COMPILATION: "Promotion rule changed while compiling. Please retry.", CATALOGUE_RESOLUTION_FAILED: "Promotion catalogue could not be resolved.", EMPTY_TRIGGER_MEMBERSHIP: "Promotion triggers did not resolve to any products.", PAYLOAD_GENERATION_FAILED: "Promotion payload could not be generated.", VERSION_ALLOCATION_CONFLICT: "Promotion compilation version could not be reserved. Please retry.", PERSISTENCE_FAILED: "Promotion compilation could not be saved." } satisfies Record<PromotionCompilationErrorCode, string>)[code]; }
+function asRuleInput(rule: Rule, groups?: PromotionSourceMembershipGroup[]): PromotionCompilerRuleInput { return { ...rule, triggerReferences: groups ? groups.map((g) => ({ id: g.sourceReferenceId, sourceType: g.sourceType, referenceGid: g.sourceGid, referenceValue: g.sourceValue, normalizedValue: g.sourceValue })) : rule.triggerReferences }; }
+function sourceHash(rule: Rule, compiler: typeof buildPromotionPayloads) { return compiler(asRuleInput(rule)).hashes.sourceHash; }
+function sortedUnique(groups: PromotionSourceMembershipGroup[]) { return [...new Set(groups.flatMap((g) => g.productGids))].sort(); }
+function compiledHash(storefrontHash: string, functionHash: string, productGids: string[], hash: typeof sha256Hex) { return hash({ schemaVersion: PROMOTION_COMPILER_SCHEMA_VERSION, storefrontHash, functionHash, productGids }); }
+function terminal(status: "FAILED" | "SUPERSEDED") { return status; }
+async function audit(database: Db, shopId: string, ruleId: string, action: string, metadata: unknown) { await database.promotionAuditLog.create({ data: { shopId, promotionRuleId: ruleId, action, ...actor, previousState: null, nextState: null, metadata: safe(metadata) } }); }
+async function loadRule(database: Db, shopId: string, id: string) { return database.promotionRule.findFirst({ where: { id, shopId }, include: { triggerReferences: { orderBy: { position: "asc" } }, currentCompilation: true } }); }
+function ensureCompilable(rule: Rule) { if (rule.status !== "ACTIVE" && rule.status !== "PAUSED") throw new PromotionCompilationError("RULE_NOT_COMPILABLE", message("RULE_NOT_COMPILABLE")); const result = validatePromotionRule(rule as Parameters<typeof validatePromotionRule>[0]); if (!result.valid) throw new PromotionCompilationError("RULE_VALIDATION_FAILED", message("RULE_VALIDATION_FAILED")); }
+function uniqueConflict(error: unknown) { return typeof error === "object" && error != null && ("code" in error ? (error as { code?: string }).code === "P2002" : /unique/i.test(String((error as { message?: unknown }).message ?? error))); }
+async function reserve(database: Db, rule: Rule, reason: PromotionCompilationReason, initialSourceHash: string) { for (let i = 0; i < 3; i += 1) { try { return await database.$transaction(async (tx) => { const latest = await tx.promotionCompilation.findFirst({ where: { promotionRuleId: rule.id }, orderBy: { version: "desc" } }); return tx.promotionCompilation.create({ data: { promotionRuleId: rule.id, version: (latest?.version ?? 0) + 1, status: "PENDING", reason, sourceHash: initialSourceHash, triggerType: rule.triggerType, membershipCount: 0 } }); }); } catch (error) { if (!uniqueConflict(error) || i === 2) throw new PromotionCompilationError("VERSION_ALLOCATION_CONFLICT", message("VERSION_ALLOCATION_CONFLICT")); } } throw new PromotionCompilationError("VERSION_ALLOCATION_CONFLICT", message("VERSION_ALLOCATION_CONFLICT")); }
+async function fail(database: Db, shopId: string, ruleId: string, compilation: Compilation | null, code: PromotionCompilationErrorCode, details: unknown, clock: Clock) { if (compilation) await database.promotionCompilation.update({ where: { id: compilation.id }, data: { status: terminal("FAILED"), errorCode: code, errorMessage: message(code), completedAt: clock.now(), diagnosticPayload: safe({ code, details }) } }); await audit(database, shopId, ruleId, "PROMOTION_COMPILATION_FAILED", { compilationId: compilation?.id, version: compilation?.version, code }); }
+
+export async function compilePromotionRule(input: CompileInput, deps: Deps = {}) {
+  const database = deps.database ?? await defaultDb(); const clock = deps.clock ?? { now: () => new Date() }; const payloadCompiler = deps.payloadCompiler ?? buildPromotionPayloads; const hashBuilder = deps.hashBuilder ?? sha256Hex; const catalogueResolver = deps.catalogueResolver ?? resolvePromotionTriggerGroups;
+  let compilation: Compilation | null = null;
+  try {
+    const rule = await loadRule(database, input.shopId, input.promotionRuleId); if (!rule) throw new PromotionCompilationError("RULE_NOT_COMPILABLE", message("RULE_NOT_COMPILABLE"));
+    ensureCompilable(rule);
+    const initialSourceHash = sourceHash(rule, payloadCompiler);
+    compilation = await reserve(database, rule, input.reason, initialSourceHash);
+    await audit(database, input.shopId, rule.id, "PROMOTION_COMPILATION_STARTED", { compilationId: compilation.id, version: compilation.version, reason: input.reason, sourceHash: initialSourceHash });
+    await database.promotionCompilation.update({ where: { id: compilation.id, status: "PENDING" }, data: { status: "COMPILING", startedAt: clock.now() } });
+    let groups: PromotionSourceMembershipGroup[];
+    try { groups = (await catalogueResolver(rule, { ...deps.catalogueOptions, shopDomain: input.shopDomain ?? null })).sourceGroups; } catch (error) { throw new PromotionCompilationError("CATALOGUE_RESOLUTION_FAILED", message("CATALOGUE_RESOLUTION_FAILED")); }
+    const fresh = await loadRule(database, input.shopId, input.promotionRuleId); if (!fresh) throw new PromotionCompilationError("SOURCE_CHANGED_DURING_COMPILATION", message("SOURCE_CHANGED_DURING_COMPILATION"));
+    if (sourceHash(fresh, payloadCompiler) !== initialSourceHash) throw new PromotionCompilationError("SOURCE_CHANGED_DURING_COMPILATION", message("SOURCE_CHANGED_DURING_COMPILATION"));
+    let result: PromotionCompilerResult;
+    try { result = payloadCompiler(asRuleInput(fresh, groups)); } catch { throw new PromotionCompilationError("PAYLOAD_GENERATION_FAILED", message("PAYLOAD_GENERATION_FAILED")); }
+    const productGids = sortedUnique(groups); if (productGids.length === 0) throw new PromotionCompilationError("EMPTY_TRIGGER_MEMBERSHIP", message("EMPTY_TRIGGER_MEMBERSHIP"));
+    const overallHash = compiledHash(result.hashes.storefrontHash, result.hashes.functionHash, productGids, hashBuilder);
+    const current = fresh.currentCompilation;
+    if (current?.status === "READY" && current.compiledHash === overallHash) { await database.promotionCompilation.update({ where: { id: compilation.id }, data: { status: terminal("SUPERSEDED"), compiledHash: overallHash, storefrontPayload: safe(result.storefrontPayload), functionPayload: safe(result.functionPayload), diagnosticPayload: safe({ ...result.diagnostics, membershipCount: productGids.length, noop: true }), membershipCount: productGids.length, completedAt: clock.now() } }); await audit(database, input.shopId, fresh.id, "PROMOTION_COMPILATION_NOOP", { compilationId: compilation.id, version: compilation.version, reason: input.reason, sourceHash: initialSourceHash, compiledHash: overallHash, membershipCount: productGids.length }); return { status: "NOOP" as const, compilationId: compilation.id, currentCompilationId: current.id, version: compilation.version, compiledHash: overallHash } }
+    const provenance = new Map<string, { productGid: string; sourceReferenceId: string; sourceType: PromotionTriggerType }>();
+    for (const candidate of groups.flatMap((g) => g.productGids.map((productGid) => ({ productGid, sourceReferenceId: g.sourceReferenceId, sourceType: g.sourceType })) ).sort((a, b) => `${a.productGid}:${a.sourceType}:${a.sourceReferenceId}`.localeCompare(`${b.productGid}:${b.sourceType}:${b.sourceReferenceId}`))) if (!provenance.has(candidate.productGid)) provenance.set(candidate.productGid, candidate);
+    const previousCurrentReadyId = current?.status === "READY" ? current.id : null;
+    const completedAt = clock.now();
+    await database.$transaction(async (tx) => { const latest = await loadRule(tx, input.shopId, input.promotionRuleId); if (!latest || sourceHash(latest, payloadCompiler) !== initialSourceHash) throw new PromotionCompilationError("SOURCE_CHANGED_DURING_COMPILATION", message("SOURCE_CHANGED_DURING_COMPILATION")); const updated = await tx.promotionCompilation.updateMany({ where: { id: compilation!.id, status: "COMPILING" }, data: { status: "READY", sourceHash: initialSourceHash, compiledHash: overallHash, storefrontPayload: safe(result.storefrontPayload), functionPayload: safe(result.functionPayload), diagnosticPayload: safe({ ...result.diagnostics, membershipCount: productGids.length }), membershipCount: productGids.length, completedAt } }); if (updated.count !== 1) throw new PromotionCompilationError("PERSISTENCE_FAILED", message("PERSISTENCE_FAILED")); await tx.promotionCompiledMembership.createMany({ data: [...provenance.values()].map((m) => ({ promotionCompilationId: compilation!.id, ...m })), skipDuplicates: true }); if (latest.currentCompilationId) await tx.promotionCompilation.updateMany({ where: { id: latest.currentCompilationId, status: "READY" }, data: { status: "SUPERSEDED", completedAt } }); await tx.promotionRule.update({ where: { id: latest.id, shopId: input.shopId }, data: { currentCompilationId: compilation!.id, compiledAt: completedAt } }); });
+    if (previousCurrentReadyId) await audit(database, input.shopId, fresh.id, "PROMOTION_COMPILATION_SUPERSEDED", { compilationId: previousCurrentReadyId, replacementCompilationId: compilation.id });
+    await audit(database, input.shopId, fresh.id, "PROMOTION_COMPILATION_READY", { compilationId: compilation.id, version: compilation.version, reason: input.reason, sourceHash: initialSourceHash, compiledHash: overallHash, membershipCount: productGids.length });
+    return { status: "READY" as const, compilationId: compilation.id, version: compilation.version, compiledHash: overallHash, membershipCount: productGids.length };
+  } catch (error) { const code = error instanceof PromotionCompilationError ? error.code : "PERSISTENCE_FAILED"; await fail(database, input.shopId, input.promotionRuleId, compilation, code, error, clock); throw error instanceof PromotionCompilationError ? error : new PromotionCompilationError(code, message(code)); }
+}
