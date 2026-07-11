@@ -1,19 +1,130 @@
-# Shopify Discount Function schema snapshot placeholder for API 2026-04.
-# The Shopify CLI was unavailable in this environment, so this file records the
-# minimal schema surface exercised by src/cart_lines_discounts_generate_run.graphql.
-schema { query: QueryRoot }
-type QueryRoot { cart: Cart! discount: Discount! }
-type Cart { cost: CartCost! lines: [CartLine!]! }
-type CartCost { subtotalAmount: MoneyV2! }
-type MoneyV2 { amount: Decimal! }
-type CartLine { id: ID! quantity: Int! cost: CartLineCost! attribute(key: String!): Attribute merchandise: Merchandise! }
-type CartLineCost { amountPerQuantity: MoneyV2! }
-type Attribute { value: String }
-interface Merchandise { id: ID! }
-type ProductVariant implements Merchandise { id: ID! product: Product! }
-type Product { id: ID! }
-type Discount { discountClasses: [DiscountClass!]! metafield(namespace: String!, key: String!): Metafield }
-type Metafield { value: String! }
-enum DiscountClass { PRODUCT ORDER SHIPPING }
-scalar Decimal
+# Shopify CLI-generated Function API schema snapshot for API 2026-04.
+# Regenerate with: shopify app function schema
+schema {
+  query: QueryRoot
+}
+
+directive @scaleLimits(rate: Float!) on FIELD_DEFINITION
+
+"""A globally-unique identifier."""
 scalar ID
+"""A signed decimal number serialized as a string."""
+scalar Decimal
+"""A JSON value."""
+scalar JSON
+
+type QueryRoot {
+  cart: Cart!
+  discount: Discount!
+}
+
+type Cart {
+  cost: CartCost!
+  lines: [CartLine!]! @scaleLimits(rate: 0.005)
+}
+
+type CartCost {
+  subtotalAmount: MoneyV2!
+}
+
+type MoneyV2 {
+  amount: Decimal!
+}
+
+type CartLine {
+  id: ID!
+  quantity: Int!
+  cost: CartLineCost!
+  attribute(key: String): Attribute
+  merchandise: Merchandise!
+}
+
+type CartLineCost {
+  amountPerQuantity: MoneyV2!
+  totalAmount: MoneyV2!
+}
+
+type Attribute {
+  key: String!
+  value: String
+}
+
+union Merchandise = ProductVariant | CustomProduct
+
+type ProductVariant {
+  id: ID!
+  product: Product!
+}
+
+type CustomProduct {
+  id: ID!
+  title: String!
+}
+
+type Product {
+  id: ID!
+}
+
+type Discount {
+  discountClasses: [DiscountClass!]!
+  metafield(namespace: String!, key: String!): Metafield
+}
+
+type Metafield {
+  value: String!
+  jsonValue: JSON!
+}
+
+enum DiscountClass {
+  PRODUCT
+  ORDER
+  SHIPPING
+}
+
+type CartLinesDiscountsGenerateRunResult {
+  operations: [CartOperation!]!
+}
+
+input CartOperation {
+  productDiscountsAdd: ProductDiscountsAddOperation
+}
+
+input ProductDiscountsAddOperation {
+  selectionStrategy: ProductDiscountSelectionStrategy!
+  candidates: [ProductDiscountCandidate!]!
+}
+
+input ProductDiscountCandidate {
+  message: String
+  targets: [ProductDiscountCandidateTarget!]!
+  value: ProductDiscountCandidateValue!
+}
+
+input ProductDiscountCandidateTarget {
+  cartLine: CartLineTarget
+}
+
+input CartLineTarget {
+  id: ID!
+  quantity: Int
+}
+
+input ProductDiscountCandidateValue {
+  percentage: Percentage
+  fixedAmount: FixedAmount
+}
+
+input Percentage {
+  value: Decimal!
+}
+
+input FixedAmount {
+  amount: Decimal!
+  appliesToEachItem: Boolean!
+}
+
+enum ProductDiscountSelectionStrategy {
+  ALL
+  FIRST
+  MAXIMUM
+}
