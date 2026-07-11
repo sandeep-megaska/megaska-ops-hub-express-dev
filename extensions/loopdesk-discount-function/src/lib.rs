@@ -90,6 +90,17 @@ mod tests {
     }
 
     #[test]
+    fn shared_typescript_fixture_parses() {
+        let raw = include_str!("../../../shared/fixtures/loopdesk-function-configuration.json");
+        let cfg =
+            parse_config(raw).expect("shared fixture should satisfy the strict Function parser");
+        assert_eq!(cfg.schema_version, 1);
+        assert_eq!(cfg.configuration_version, 1);
+        assert_eq!(cfg.rules.len(), 1);
+        assert_eq!(cfg.rules[0].compilation_version, 3);
+    }
+
+    #[test]
     fn missing_compilation_version_fails_closed() {
         let raw = r#"{
             "schemaVersion":1,

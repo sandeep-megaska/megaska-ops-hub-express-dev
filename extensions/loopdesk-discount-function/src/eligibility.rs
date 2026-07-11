@@ -49,9 +49,7 @@ impl Cart {
                 Some(Line {
                     id: l.id().clone(),
                     quantity: i64::from(*l.quantity()),
-                    unit_amount: Decimal::parse_shopify(
-                        l.cost().amount_per_quantity().amount(),
-                    )?,
+                    unit_amount: Decimal::parse_shopify(l.cost().amount_per_quantity().amount())?,
                     product_gid: parent_product_gid.to_string(),
                     marker_rule: l
                         .promotion_rule_id()
