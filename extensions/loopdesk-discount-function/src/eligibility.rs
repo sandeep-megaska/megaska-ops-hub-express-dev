@@ -23,7 +23,7 @@ pub fn product_gid(s: &str) -> bool {
 }
 impl Cart {
     pub fn from_input(input: &schema::Input) -> Self {
-        let subtotal = Decimal::parse(&input.cart.cost.subtotal_amount.amount);
+        let subtotal = Decimal::parse_shopify(&input.cart.cost.subtotal_amount.amount);
         let lines = input
             .cart
             .lines
@@ -44,8 +44,8 @@ impl Cart {
                 }
                 Some(Line {
                     id: l.id.clone(),
-                    quantity: l.quantity,
-                    unit_amount: Decimal::parse(&l.cost.amount_per_quantity.amount)?,
+                    quantity: l.quantity.into(),
+                    unit_amount: Decimal::parse_shopify(&l.cost.amount_per_quantity.amount)?,
                     product_gid: parent_product_gid,
                     marker_rule: l
                         .promotion_rule_id

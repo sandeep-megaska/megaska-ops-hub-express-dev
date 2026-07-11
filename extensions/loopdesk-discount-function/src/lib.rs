@@ -10,17 +10,18 @@ pub use cart_lines_discounts_generate_run::run;
 mod tests {
     use super::*;
     use crate::schema::*;
+    use shopify_function::prelude::Decimal as ShopifyDecimal;
     fn cfg(reward: &str) -> String {
         format!(
             r#"{{"schemaVersion":1,"configurationVersion":1,"configurationHash":"h","rules":[{{"schemaVersion":1,"ruleId":"r1","compilationVersion":7,"status":"ACTIVE","priority":1,"trigger":{{"type":"PRODUCT","matchMode":"ANY","minimumQuantity":2,"minimumCartSubtotal":null,"sourceGroups":[{{"sourceReferenceId":"s","sourceType":"PRODUCT","sourceGid":"gid://shopify/Product/1","productGids":["gid://shopify/Product/1"],"unresolved":false}}]}},"offer":{{"productGid":"gid://shopify/Product/2"}},"reward":{reward}}}]}}"#
         )
     }
-    fn input(config: Option<String>, classes: Vec<DiscountClass>, offer_qty: i64) -> Input {
+    fn input(config: Option<String>, classes: Vec<DiscountClass>, offer_qty: i32) -> Input {
         Input {
             cart: Cart {
                 cost: CartCost {
                     subtotal_amount: MoneyV2 {
-                        amount: "100.00".into(),
+                        amount: ShopifyDecimal(100.00),
                     },
                 },
                 lines: vec![
@@ -29,7 +30,7 @@ mod tests {
                         quantity: 2,
                         cost: CartLineCost {
                             amount_per_quantity: MoneyV2 {
-                                amount: "50.00".into(),
+                                amount: ShopifyDecimal(50.00),
                             },
                         },
                         promotion_rule_id: None,
@@ -46,7 +47,7 @@ mod tests {
                         quantity: offer_qty,
                         cost: CartLineCost {
                             amount_per_quantity: MoneyV2 {
-                                amount: "20.00".into(),
+                                amount: ShopifyDecimal(20.00),
                             },
                         },
                         promotion_rule_id: Some(Attribute {
@@ -126,7 +127,7 @@ mod tests {
             1,
         )));
         if let ProductDiscountCandidateValue::FixedAmount(f) = &c[0].value {
-            assert_eq!(f.amount, "5")
+            assert_eq!(f.amount.as_f64(), 5.0)
         } else {
             panic!("wrong")
         }
@@ -155,7 +156,9 @@ mod tests {
     fn missing_compilation_version_empty() {
         let config = cfg(r#"{"type":"PERCENTAGE_OFF","value":"10","maximumQuantity":1}"#)
             .replace(r#","compilationVersion":7"#, "");
-        assert!(run(input(Some(config), vec![DiscountClass::Product], 1)).operations.is_empty())
+        assert!(run(input(Some(config), vec![DiscountClass::Product], 1))
+            .operations
+            .is_empty())
     }
 
     #[test]

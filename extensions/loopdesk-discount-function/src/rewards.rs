@@ -19,7 +19,7 @@ pub fn candidate(
                 return None;
             }
             schema::ProductDiscountCandidateValue::Percentage(schema::Percentage {
-                value: v.to_shopify(),
+                value: v.to_shopify_decimal()?,
             })
         }
         RewardType::FixedAmountOff => {
@@ -28,7 +28,7 @@ pub fn candidate(
                 return None;
             }
             schema::ProductDiscountCandidateValue::FixedAmount(schema::FixedAmount {
-                amount: v.to_shopify(),
+                amount: v.to_shopify_decimal()?,
                 applies_to_each_item: true,
             })
         }
@@ -42,7 +42,7 @@ pub fn candidate(
                 return None;
             }
             schema::ProductDiscountCandidateValue::FixedAmount(schema::FixedAmount {
-                amount: d.to_shopify(),
+                amount: d.to_shopify_decimal()?,
                 applies_to_each_item: true,
             })
         }
