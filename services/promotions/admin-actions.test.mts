@@ -27,11 +27,12 @@ test("promotion action parses numeric, decimal, and UTC schedule FormData fields
   assert.match(action, /Number\.isInteger\(value\)/);
   assert.doesNotMatch(action, /parseInt/);
   assert.match(action, /priority: integerValue\(formData, "priority", 0\)/);
+  assert.match(action, /return Number\.isInteger\(value\) \? value : Number\.NaN/);
   assert.match(action, /minimumTriggerQuantity: integerValue\(formData, "minimumTriggerQuantity", 1\)/);
   assert.match(action, /maximumRewardQuantity: integerValue\(formData, "maximumRewardQuantity", 1\)/);
   assert.match(action, /function decimalValue/);
   assert.match(action, /minimumCartSubtotal: decimalValue\(formData, "minimumCartSubtotal", null\)/);
-  assert.match(action, /rewardValue: decimalValue\(formData, "rewardValue", undefined\)/);
+  assert.match(action, /rewardValue: decimalValue\(formData, "rewardValue", Number\.NaN\)/);
   assert.match(action, /startsAt: optionalUtcDate\(formData, "startsAtUtc", "startsAt"\)/);
   assert.match(action, /endsAt: optionalUtcDate\(formData, "endsAtUtc", "endsAt"\)/);
 });

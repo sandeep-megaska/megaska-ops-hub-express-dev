@@ -21,6 +21,27 @@ test("activation readiness complete", () => assert.equal(promotionActivationRead
 test("activation readiness incomplete", () => assert.equal(promotionActivationReadiness({ ...valid, name: "", triggerReferences: [], offerProductGid: "", rewardValue: 101 }).some((i) => !i.complete), true));
 test("friendly field-label mapping", () => assert.equal(friendlyPromotionFieldLabel("offerProductGid"), "Offer product"));
 
+
+test("numeric strings and reward values validate with strict reward policies", () => {
+  assert.equal(validatePromotionFormClient({ ...valid, rewardValue: "50" }).valid, true);
+  assert.equal(validatePromotionFormClient({ ...valid, rewardValue: "12.50" }).valid, true);
+  assert.equal(validatePromotionFormClient({ ...valid, rewardValue: "abc" }).errors.some((e) => e.field === "rewardValue"), true);
+  assert.equal(validatePromotionFormClient({ ...valid, rewardValue: "" }).errors.some((e) => e.field === "rewardValue"), true);
+  assert.equal(validatePromotionFormClient({ ...valid, rewardType: "PERCENTAGE_OFF", rewardValue: "0" }).valid, false);
+  assert.equal(validatePromotionFormClient({ ...valid, rewardType: "PERCENTAGE_OFF", rewardValue: "100" }).valid, true);
+  assert.equal(validatePromotionFormClient({ ...valid, rewardType: "PERCENTAGE_OFF", rewardValue: "100.01" }).valid, false);
+  assert.equal(validatePromotionFormClient({ ...valid, rewardType: "FIXED_AMOUNT_OFF", rewardValue: "0" }).valid, false);
+  assert.equal(validatePromotionFormClient({ ...valid, rewardType: "FIXED_PRICE", rewardValue: "0" }).valid, true);
+});
+
+test("optional schedule combinations remain independently optional", () => {
+  assert.equal(validatePromotionFormClient({ ...valid, startsAt: "", endsAt: null }).valid, true);
+  assert.equal(validatePromotionFormClient({ ...valid, startsAt: "2026-07-11T00:00:00.000Z", endsAt: "" }).valid, true);
+  assert.equal(validatePromotionFormClient({ ...valid, startsAt: null, endsAt: "2026-07-12T00:00:00.000Z" }).valid, true);
+  assert.equal(validatePromotionFormClient({ ...valid, startsAt: "2026-07-11T00:00:00.000Z", endsAt: "2026-07-12T00:00:00.000Z" }).valid, true);
+  assert.equal(validatePromotionFormClient({ ...valid, startsAt: "2026-07-12T00:00:00.000Z", endsAt: "2026-07-11T00:00:00.000Z" }).errors.some((e) => e.field === "endsAt"), true);
+});
+
 test("form implements archived read-only behavior and correct status buttons", () => {
   const form = readFileSync(new URL("../../app/admin/promotions/PromotionForm.tsx", import.meta.url), "utf8");
   assert.match(form, /This rule is archived and cannot be edited or reactivated/);
@@ -77,4 +98,7 @@ test("PromotionForm submits UTC hidden schedule values and renders stored dates 
   assert.match(form, /toISOString\(\)/);
   assert.match(form, /name="startsAtUtc"/);
   assert.match(form, /name="endsAtUtc"/);
+  assert.match(form, /Leave blank to start immediately once the promotion is available\./);
+  assert.match(form, /Leave blank for no expiry date\./);
+  assert.match(form, /No end date/);
 });

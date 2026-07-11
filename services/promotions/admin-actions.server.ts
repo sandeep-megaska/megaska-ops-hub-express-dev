@@ -11,17 +11,17 @@ export type PromotionActionState = { ok: boolean; message?: string; errors?: { f
 const SHOP_ERROR = "Unable to resolve shop context for this promotion action.";
 
 function stringValue(formData: FormData, name: string) { return String(formData.get(name) ?? "").trim(); }
-function integerValue(formData: FormData, name: string, fallback: number) {
+function integerValue(formData: FormData, name: string, fallback: number | undefined) {
   const raw = stringValue(formData, name);
   if (!raw) return fallback;
   const value = Number(raw);
-  return Number.isInteger(value) ? value : raw;
+  return Number.isInteger(value) ? value : Number.NaN;
 }
-function decimalValue(formData: FormData, name: string, blankValue: null | undefined = null) {
+function decimalValue<T extends number | null | undefined>(formData: FormData, name: string, blankValue: T): number | T {
   const raw = stringValue(formData, name);
   if (!raw) return blankValue;
   const value = Number(raw);
-  return Number.isFinite(value) ? value : raw;
+  return Number.isFinite(value) ? value : Number.NaN;
 }
 function optionalUtcDate(formData: FormData, utcName: string, legacyName: string) {
   const raw = formData.has(utcName) ? stringValue(formData, utcName) : stringValue(formData, legacyName);
@@ -53,7 +53,7 @@ async function shop(formData: FormData) {
   return resolved.shop;
 }
 function input(formData: FormData): Omit<PromotionRuleWriteInput, "shopId"> {
-  return { name: stringValue(formData, "name"), description: stringValue(formData, "description") || null, triggerType: stringValue(formData, "triggerType") as PromotionTriggerType, triggerMatchMode: stringValue(formData, "triggerMatchMode") as PromotionTriggerMatchMode, minimumTriggerQuantity: integerValue(formData, "minimumTriggerQuantity", 1) as number, minimumCartSubtotal: decimalValue(formData, "minimumCartSubtotal", null), offerProductGid: stringValue(formData, "offerProductGid"), offerProductTitle: stringValue(formData, "offerProductTitle") || null, offerProductHandle: stringValue(formData, "offerProductHandle") || null, offerProductImageUrl: stringValue(formData, "offerProductImageUrl") || null, rewardType: stringValue(formData, "rewardType") as PromotionRewardType, rewardValue: decimalValue(formData, "rewardValue", undefined) ?? "", maximumRewardQuantity: integerValue(formData, "maximumRewardQuantity", 1) as number, priority: integerValue(formData, "priority", 0) as number, startsAt: optionalUtcDate(formData, "startsAtUtc", "startsAt") as unknown as Date | null, endsAt: optionalUtcDate(formData, "endsAtUtc", "endsAt") as unknown as Date | null, combinesWithProductDiscounts: boolValue(formData, "combinesWithProductDiscounts"), combinesWithOrderDiscounts: boolValue(formData, "combinesWithOrderDiscounts"), combinesWithShippingDiscounts: boolValue(formData, "combinesWithShippingDiscounts"), heading: stringValue(formData, "heading") || null, badgeText: stringValue(formData, "badgeText") || null, customerMessage: stringValue(formData, "customerMessage") || null, ctaText: stringValue(formData, "ctaText") || null, triggerReferences: references(formData), actor: { actorType: "ADMIN" } };
+  return { name: stringValue(formData, "name"), description: stringValue(formData, "description") || null, triggerType: stringValue(formData, "triggerType") as PromotionTriggerType, triggerMatchMode: stringValue(formData, "triggerMatchMode") as PromotionTriggerMatchMode, minimumTriggerQuantity: integerValue(formData, "minimumTriggerQuantity", 1) as number, minimumCartSubtotal: decimalValue(formData, "minimumCartSubtotal", null), offerProductGid: stringValue(formData, "offerProductGid"), offerProductTitle: stringValue(formData, "offerProductTitle") || null, offerProductHandle: stringValue(formData, "offerProductHandle") || null, offerProductImageUrl: stringValue(formData, "offerProductImageUrl") || null, rewardType: stringValue(formData, "rewardType") as PromotionRewardType, rewardValue: decimalValue(formData, "rewardValue", Number.NaN), maximumRewardQuantity: integerValue(formData, "maximumRewardQuantity", 1) as number, priority: integerValue(formData, "priority", 0) as number, startsAt: optionalUtcDate(formData, "startsAtUtc", "startsAt") as unknown as Date | null, endsAt: optionalUtcDate(formData, "endsAtUtc", "endsAt") as unknown as Date | null, combinesWithProductDiscounts: boolValue(formData, "combinesWithProductDiscounts"), combinesWithOrderDiscounts: boolValue(formData, "combinesWithOrderDiscounts"), combinesWithShippingDiscounts: boolValue(formData, "combinesWithShippingDiscounts"), heading: stringValue(formData, "heading") || null, badgeText: stringValue(formData, "badgeText") || null, customerMessage: stringValue(formData, "customerMessage") || null, ctaText: stringValue(formData, "ctaText") || null, triggerReferences: references(formData), actor: { actorType: "ADMIN" } };
 }
 function state(error: unknown): PromotionActionState { if (error instanceof PromotionRuleValidationError) return { ok: false, errors: error.errors, message: "Fix the promotion fields and try again." }; if (error instanceof PromotionRuleTransitionError) return { ok: false, message: error.message }; return { ok: false, message: error instanceof Error ? error.message : "Promotion action failed." }; }
 
