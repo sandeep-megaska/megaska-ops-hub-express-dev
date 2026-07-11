@@ -2,7 +2,7 @@
 
 import { useActionState, useMemo, useState } from "react";
 import { archivePromotionRuleAction, changePromotionStatusAction, createPromotionDraftAction, updatePromotionDraftAction, type PromotionActionState } from "../../../services/promotions/admin-actions.server";
-import type { PromotionEmbeddedContext } from "../../../services/promotions/admin-actions.server";
+import type { PromotionEmbeddedContext } from "../../../services/promotions/admin-context";
 import type { PromotionTriggerType } from "../../../services/promotions/domain";
 import type { PromotionRuleRecord } from "../../../services/promotions/repository.server";
 import { normalizeProductTypeEntry, type ProductTypeSelection, type SelectedResource } from "../../../services/promotions/resource-picker";
