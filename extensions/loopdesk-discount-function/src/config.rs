@@ -22,13 +22,23 @@ pub struct FunctionRule {
 }
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum RuleStatus { Active, Paused }
+pub enum RuleStatus {
+    Active,
+    Paused,
+}
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum MatchMode { Any, All }
+pub enum MatchMode {
+    Any,
+    All,
+}
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum RewardType { PercentageOff, FixedAmountOff, FixedPrice }
+pub enum RewardType {
+    PercentageOff,
+    FixedAmountOff,
+    FixedPrice,
+}
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct TriggerConfig {
@@ -50,7 +60,9 @@ pub struct SourceGroup {
 }
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct OfferConfig { pub product_gid: String }
+pub struct OfferConfig {
+    pub product_gid: String,
+}
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct RewardConfig {
@@ -69,6 +81,8 @@ impl FunctionRule {
 }
 pub fn parse_config(raw: &str) -> Result<FunctionConfig, ()> {
     let cfg: FunctionConfig = serde_json::from_str(raw).map_err(|_| ())?;
-    if cfg.schema_version != 1 { return Err(()); }
+    if cfg.schema_version != 1 {
+        return Err(());
+    }
     Ok(cfg)
 }
