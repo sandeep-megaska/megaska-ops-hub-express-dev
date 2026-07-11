@@ -152,6 +152,15 @@ mod tests {
         )
     }
     #[test]
+    fn missing_rule_compilation_version_empty() {
+        let config = cfg(r#"{"type":"PERCENTAGE_OFF","value":"10","maximumQuantity":1}"#)
+            .replace(r#","compilationVersion":7"#, "");
+        assert!(run(input(Some(config), vec![DiscountClass::Product], 1))
+            .operations
+            .is_empty())
+    }
+
+    #[test]
     fn wrong_compilation_empty() {
         let mut i = input(
             Some(cfg(

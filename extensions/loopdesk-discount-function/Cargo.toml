@@ -8,3 +8,4 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 shopify_function = { path = "vendor/shopify_function" }
+serde_json = { path = "vendor/serde_json" }

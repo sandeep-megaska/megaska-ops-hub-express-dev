@@ -6,8 +6,13 @@ version = 4
 name = "loopdesk-discount-function"
 version = "0.1.0"
 dependencies = [
+ "serde_json",
  "shopify_function",
 ]
+
+[[package]]
+name = "serde_json"
+version = "1.0.0-local"
 
 [[package]]
 name = "shopify_function"
