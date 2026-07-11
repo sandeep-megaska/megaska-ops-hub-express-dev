@@ -1,5 +1,6 @@
 import type { PromotionRuleStatus } from "./domain.ts";
 import { listPromotionRules, type PromotionRuleRecord } from "./repository.server.ts";
+import { getPromotionListCompilationReadModels, type PromotionAdminExecutionCode, type PromotionAdminTone } from "./compiler-admin-read-model.server.ts";
 
 export type PromotionAdminStatusFilter = PromotionRuleStatus | "ALL";
 
@@ -13,7 +14,10 @@ export type PromotionAdminListItem = {
   priority: number;
   scheduleLabel: string;
   updatedLabel: string;
-  executionLabel: "Not compiled" | "Execution setup pending";
+  executionLabel: string;
+  executionStatus: PromotionAdminExecutionCode;
+  executionTone: PromotionAdminTone;
+  executionSecondaryText?: string;
 };
 
 export function formatPromotionReward(rule: Pick<PromotionRuleRecord, "rewardType" | "rewardValue">) {
@@ -29,7 +33,7 @@ export function formatPromotionSchedule(rule: Pick<PromotionRuleRecord, "startsA
   return `${start} → ${end}`;
 }
 
-export function toPromotionAdminListItem(rule: PromotionRuleRecord): PromotionAdminListItem {
+export function toPromotionAdminListItem(rule: PromotionRuleRecord, execution?: { code: PromotionAdminExecutionCode; label: string; tone: PromotionAdminTone; secondaryText?: string }): PromotionAdminListItem {
   return {
     id: rule.id,
     name: rule.name || "Untitled promotion",
@@ -40,7 +44,10 @@ export function toPromotionAdminListItem(rule: PromotionRuleRecord): PromotionAd
     priority: rule.priority,
     scheduleLabel: formatPromotionSchedule(rule),
     updatedLabel: rule.updatedAt ? new Date(rule.updatedAt).toLocaleString("en-IN") : "Not updated yet",
-    executionLabel: rule.currentCompilationId ? "Execution setup pending" : "Not compiled",
+    executionLabel: execution?.label ?? "Not compiled",
+    executionStatus: execution?.code ?? "NOT_COMPILED",
+    executionTone: execution?.tone ?? "neutral",
+    executionSecondaryText: execution?.secondaryText,
   };
 }
 
@@ -52,7 +59,7 @@ export async function getPromotionAdminListReadModel(
   const status = options.status ?? "ALL";
   const includeArchived = status === "ARCHIVED";
   const rules = await listPromotionRules(shopId, { includeArchived }, database as never);
-  return rules
-    .filter((rule) => status === "ALL" || rule.status === status)
-    .map(toPromotionAdminListItem);
+  const filtered = rules.filter((rule) => status === "ALL" || rule.status === status);
+  const executions = await getPromotionListCompilationReadModels(shopId, filtered.map((rule) => rule.id), database as never);
+  return filtered.map((rule) => toPromotionAdminListItem(rule, executions.get(rule.id)));
 }

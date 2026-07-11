@@ -3,6 +3,9 @@ import { promotionEmbeddedContext, type PromotionEmbeddedContext } from "../../.
 import { getPromotionRuleById, PromotionRuleNotFoundError } from "../../../../services/promotions/repository.server";
 import { formatAdminShopResolutionError, resolveAdminShopFromSearchParams } from "../../../../services/shopify/admin-shop-context";
 import PromotionForm from "../PromotionForm";
+import { getPromotionCompilationReadModel } from "../../../../services/promotions/compiler-admin-read-model.server";
+import PromotionExecutionStatus from "../PromotionExecutionStatus";
+import PromotionCompilationHistory from "../PromotionCompilationHistory";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,5 +25,7 @@ export default async function EditPromotionPage({ params, searchParams }: PagePr
     throw error;
   });
 
-  return <main className="space-y-6"><div><h1 className="text-2xl font-semibold">Edit promotion</h1><p className="text-sm text-gray-500">Status: {rule.status}. Execution setup pending. Not compiled.</p></div><PromotionForm shopId={resolved.shop.id} shopDomain={resolved.shop.shopDomain} embeddedContext={promotionEmbeddedContext(sp, resolved.shop.shopDomain)} rule={rule} /></main>;
+  const execution = await getPromotionCompilationReadModel(resolved.shop.id, id, { historyLimit: 10 });
+  const context = promotionEmbeddedContext(sp, resolved.shop.shopDomain);
+  return <main className="space-y-6"><div><h1 className="text-2xl font-semibold">Edit promotion</h1><p className="text-sm text-gray-500">Status: {rule.status}. Compilation: {execution.label}.</p></div><PromotionExecutionStatus model={execution} ruleStatus={rule.status} /><PromotionForm shopId={resolved.shop.id} shopDomain={resolved.shop.shopDomain} embeddedContext={context} rule={rule} execution={execution} /><PromotionCompilationHistory model={execution} /></main>;
 }
