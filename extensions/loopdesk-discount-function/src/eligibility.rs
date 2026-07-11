@@ -46,7 +46,7 @@ impl Cart {
                     id: l.id.clone(),
                     quantity: l.quantity,
                     unit_amount: Decimal::parse(&l.cost.amount_per_quantity.amount)?,
-                    product_gid: parent_product_gid,
+                    product_gid: parent_product_gid.to_string(),
                     marker_rule: l
                         .promotion_rule_id
                         .as_ref()

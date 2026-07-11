@@ -11,6 +11,6 @@ handle = "loopdesk-discount-function"
   export = "cart_lines_discounts_generate_run"
 
   [extensions.build]
-  command = "cargo build --target=wasm32-wasip1 --release"
-  path = "target/wasm32-wasip1/release/loopdesk_discount_function.wasm"
+  command = "cargo build --target=wasm32-unknown-unknown --release"
+  path = "target/wasm32-unknown-unknown/release/loopdesk_discount_function.wasm"
   watch = ["src/**/*.rs"]

@@ -152,6 +152,12 @@ mod tests {
         )
     }
     #[test]
+    fn missing_config_empty() {
+        assert!(run(input(None, vec![DiscountClass::Product], 1))
+            .operations
+            .is_empty())
+    }
+    #[test]
     fn wrong_compilation_empty() {
         let mut i = input(
             Some(cfg(
