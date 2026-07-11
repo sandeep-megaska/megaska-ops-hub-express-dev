@@ -14,18 +14,18 @@ pub fn run(
     input: schema::cart_lines_discounts_generate_run::Input,
 ) -> schema::CartLinesDiscountsGenerateRunResult {
     if !input
-        .discount
-        .discount_classes
+        .discount()
+        .discount_classes()
         .iter()
         .any(|c| matches!(c, schema::DiscountClass::Product))
     {
         return empty_result();
     }
     let Some(raw) = input
-        .discount
-        .configuration
+        .discount()
+        .configuration()
         .as_ref()
-        .map(|m| m.value.as_str())
+        .map(|m| m.value().as_str())
         .filter(|v| !v.trim().is_empty())
     else {
         return empty_result();
@@ -60,7 +60,7 @@ pub fn run(
         empty_result()
     } else {
         schema::CartLinesDiscountsGenerateRunResult {
-            operations: vec![schema::Operation::ProductDiscountsAdd(
+            operations: vec![schema::CartOperation::ProductDiscountsAdd(
                 schema::ProductDiscountsAddOperation {
                     selection_strategy: schema::ProductDiscountSelectionStrategy::All,
                     candidates,

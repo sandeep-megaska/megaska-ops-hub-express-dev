@@ -1,3 +1,4 @@
+use crate::schema::cart_lines_discounts_generate_run::input::cart::lines::Merchandise;
 use crate::{config::*, decimal::Decimal, schema};
 #[derive(Clone, Debug)]
 pub struct Line {
@@ -22,40 +23,38 @@ pub fn product_gid(s: &str) -> bool {
         .is_some_and(|v| !v.is_empty() && v.chars().all(|c| c.is_ascii_digit()))
 }
 impl Cart {
-    pub fn from_input(input: &schema::Input) -> Self {
-        let subtotal = Decimal::parse(&input.cart.cost.subtotal_amount.amount);
+    pub fn from_input(input: &schema::cart_lines_discounts_generate_run::Input) -> Self {
+        let subtotal = Decimal::parse(input.cart().cost().subtotal_amount().amount());
         let lines = input
-            .cart
-            .lines
+            .cart()
+            .lines()
             .iter()
             .enumerate()
             .filter_map(|(index, l)| {
-                if l.quantity <= 0 {
+                if *l.quantity() <= 0 {
                     return None;
                 }
-                let (parent_product_gid, _variant) = match &l.merchandise {
-                    schema::Merchandise::ProductVariant { id, product } => {
-                        (product.id.clone(), id.clone())
-                    }
+                let (parent_product_gid, _variant) = match l.merchandise() {
+                    Merchandise::ProductVariant(variant) => (variant.product().id(), variant.id()),
                     _ => return None,
                 };
                 if !product_gid(&parent_product_gid) {
                     return None;
                 }
                 Some(Line {
-                    id: l.id.clone(),
-                    quantity: l.quantity,
-                    unit_amount: Decimal::parse(&l.cost.amount_per_quantity.amount)?,
-                    product_gid: parent_product_gid,
+                    id: l.id().clone(),
+                    quantity: *l.quantity(),
+                    unit_amount: Decimal::parse(l.cost().amount_per_quantity().amount())?,
+                    product_gid: parent_product_gid.to_string(),
                     marker_rule: l
-                        .promotion_rule_id
+                        .promotion_rule_id()
                         .as_ref()
-                        .and_then(|a| a.value.clone())
+                        .and_then(|a| a.value().clone())
                         .filter(|v| !v.trim().is_empty()),
                     marker_version: l
-                        .promotion_compilation_version
+                        .promotion_compilation_version()
                         .as_ref()
-                        .and_then(|a| a.value.clone())
+                        .and_then(|a| a.value().clone())
                         .filter(|v| !v.trim().is_empty()),
                     index,
                 })

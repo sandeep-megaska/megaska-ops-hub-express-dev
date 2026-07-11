@@ -90,6 +90,9 @@ impl Decimal {
             )
         }
     }
+    pub fn to_shopify_decimal(&self) -> Option<crate::schema::Decimal> {
+        self.to_shopify().parse().ok()
+    }
 }
 impl Ord for Decimal {
     fn cmp(&self, o: &Self) -> Ordering {
