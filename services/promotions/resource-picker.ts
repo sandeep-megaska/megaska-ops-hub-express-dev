@@ -4,17 +4,18 @@ import type { PromotionTriggerType } from "./domain.ts";
 export type PickerResourceType = "product" | "collection";
 export type ShopifyPickerImage = { url?: string | null; originalSrc?: string | null };
 export type ShopifyPickerResource = { id?: string | null; title?: string | null; handle?: string | null; image?: ShopifyPickerImage | null; images?: ShopifyPickerImage[] | null; variants?: unknown[] };
-export type SelectedResource = { gid: string; title: string; handle: string | null; imageUrl: string | null; resourceType: "PRODUCT" | "COLLECTION" };
+export type NormalizedPickerResource = { gid: string; title: string | null; handle: string | null; imageUrl: string | null };
+export type SelectedResource = NormalizedPickerResource & { resourceType: "PRODUCT" | "COLLECTION" };
 export type ProductTypeSelection = { value: string; normalizedValue: string; displayTitle: string };
 
 export function imageUrl(resource: ShopifyPickerResource) {
-  return resource.image?.url || resource.image?.originalSrc || resource.images?.[0]?.url || resource.images?.[0]?.originalSrc || null;
+  return resource.image?.originalSrc || resource.image?.url || resource.images?.[0]?.originalSrc || resource.images?.[0]?.url || null;
 }
 
-function normalizeResource(resource: ShopifyPickerResource, type: "PRODUCT" | "COLLECTION"): SelectedResource | null {
+export function normalizePickerResource(resource: ShopifyPickerResource, type: "PRODUCT" | "COLLECTION"): SelectedResource | null {
   const gid = type === "PRODUCT" ? normalizeShopifyProductGid(resource.id) : normalizeShopifyCollectionGid(resource.id);
   if (!gid) return null;
-  return { gid, title: resource.title?.trim() || gid, handle: resource.handle?.trim() || null, imageUrl: imageUrl(resource), resourceType: type };
+  return { gid, title: resource.title?.trim() || null, handle: resource.handle?.trim() || null, imageUrl: imageUrl(resource), resourceType: type };
 }
 
 export function normalizePickerResources(resources: ShopifyPickerResource[] | ShopifyPickerResource | undefined, type: "PRODUCT" | "COLLECTION") {
@@ -23,7 +24,7 @@ export function normalizePickerResources(resources: ShopifyPickerResource[] | Sh
   const seen = new Set<string>();
   const selected: SelectedResource[] = [];
   for (const resource of list) {
-    const normalized = normalizeResource(resource, type);
+    const normalized = normalizePickerResource(resource, type);
     if (!normalized || seen.has(normalized.gid)) continue;
     seen.add(normalized.gid);
     selected.push(normalized);
@@ -36,8 +37,10 @@ export function normalizeOfferProduct(resources: ShopifyPickerResource[] | Shopi
   return selected === undefined ? undefined : selected[0] ?? null;
 }
 
+const productFilter = { variants: false, draft: false, archived: false } as const;
+
 export function productTriggerPickerOptions(selectionIds: string[] = []) {
-  return { type: "product", action: "select", multiple: true, selectionIds: selectionIds.map((id) => ({ id })), showVariants: false, filter: { archived: false } } as const;
+  return { type: "product", action: "select", multiple: true, selectionIds: selectionIds.map((id) => ({ id })), filter: productFilter } as const;
 }
 
 export function collectionTriggerPickerOptions(selectionIds: string[] = []) {
@@ -45,7 +48,7 @@ export function collectionTriggerPickerOptions(selectionIds: string[] = []) {
 }
 
 export function offerProductPickerOptions(selectionId?: string | null) {
-  return { type: "product", action: "select", multiple: false, selectionIds: selectionId ? [{ id: selectionId }] : [], showVariants: false, filter: { archived: false } } as const;
+  return { type: "product", action: "select", multiple: false, selectionIds: selectionId ? [{ id: selectionId }] : [], filter: productFilter } as const;
 }
 
 export function normalizeProductTypeEntry(value: string): ProductTypeSelection | null {

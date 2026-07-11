@@ -5,7 +5,7 @@ import { archivePromotionRuleAction, changePromotionStatusAction, createPromotio
 import type { PromotionEmbeddedContext } from "../../../services/promotions/admin-context";
 import type { PromotionTriggerType } from "../../../services/promotions/domain";
 import type { PromotionRuleRecord } from "../../../services/promotions/repository.server";
-import { normalizeProductTypeEntry, type ProductTypeSelection, type SelectedResource } from "../../../services/promotions/resource-picker";
+import { normalizeProductTypeEntry, productTypesToTriggerReferences, selectedToTriggerReferences, type ProductTypeSelection, type SelectedResource } from "../../../services/promotions/resource-picker";
 import ProductTypeEditor from "./ProductTypeEditor";
 import PromotionResourcePickerField from "./PromotionResourcePickerField";
 
@@ -17,9 +17,9 @@ function Field({ label, name, defaultValue, type = "text", help }: { label: stri
 }
 function Errors({ state }: { state: PromotionActionState }) { return !state.message && !state.errors?.length ? null : <div className={`rounded-lg border p-3 text-sm ${state.ok ? "border-green-200 bg-green-50 text-green-800" : "border-red-200 bg-red-50 text-red-800"}`}><p>{state.message}</p>{state.errors?.length ? <ul className="mt-2 list-disc pl-5">{state.errors.map((e) => <li key={`${e.field}:${e.message}`}>{e.field}: {e.message}</li>)}</ul> : null}</div>; }
 function dateValue(value?: Date | string | null) { return value ? new Date(value).toISOString().slice(0, 16) : ""; }
-function resourceSelections(rule: PromotionRuleRecord | null | undefined, type: "PRODUCT" | "COLLECTION"): SelectedResource[] { return rule?.triggerReferences?.filter((r) => r.sourceType === type && r.referenceGid).map((r) => ({ gid: r.referenceGid!, title: r.displayTitle || r.referenceGid!, handle: r.displayHandle || null, imageUrl: r.displayImageUrl || null, resourceType: type })) ?? []; }
+function resourceSelections(rule: PromotionRuleRecord | null | undefined, type: "PRODUCT" | "COLLECTION"): SelectedResource[] { return rule?.triggerReferences?.filter((r) => r.sourceType === type && r.referenceGid).map((r) => ({ gid: r.referenceGid!, title: r.displayTitle || null, handle: r.displayHandle || null, imageUrl: r.displayImageUrl || null, resourceType: type })) ?? []; }
 function productTypes(rule: PromotionRuleRecord | null | undefined): ProductTypeSelection[] { return rule?.triggerReferences?.filter((r) => r.sourceType === "PRODUCT_TYPE").map((r) => normalizeProductTypeEntry(r.referenceValue || r.displayTitle || r.normalizedValue || "")).filter((item): item is ProductTypeSelection => Boolean(item)) ?? []; }
-function offer(rule: PromotionRuleRecord | null | undefined): SelectedResource[] { return rule?.offerProductGid ? [{ gid: rule.offerProductGid, title: rule.offerProductTitle || rule.offerProductGid, handle: rule.offerProductHandle || null, imageUrl: rule.offerProductImageUrl || null, resourceType: "PRODUCT" }] : []; }
+function offer(rule: PromotionRuleRecord | null | undefined): SelectedResource[] { return rule?.offerProductGid ? [{ gid: rule.offerProductGid, title: rule.offerProductTitle || null, handle: rule.offerProductHandle || null, imageUrl: rule.offerProductImageUrl || null, resourceType: "PRODUCT" }] : []; }
 
 function EmbeddedInputs({ shopId, context }: { shopId: string; context: PromotionEmbeddedContext }) {
   return <>
@@ -42,9 +42,9 @@ export default function PromotionForm({ shopId, embeddedContext, rule }: { shopI
   const [offerProduct, setOfferProduct] = useState(() => offer(rule));
   const disabled = rule?.status === "ARCHIVED";
   const triggerReferencesValue = useMemo(() => {
-    if (triggerType === "PRODUCT") return productTriggers.map((r) => r.gid).join("\n");
-    if (triggerType === "COLLECTION") return collectionTriggers.map((r) => r.gid).join("\n");
-    return typeTriggers.map((r) => r.value).join("\n");
+    if (triggerType === "PRODUCT") return JSON.stringify(selectedToTriggerReferences(productTriggers, triggerType));
+    if (triggerType === "COLLECTION") return JSON.stringify(selectedToTriggerReferences(collectionTriggers, triggerType));
+    return JSON.stringify(productTypesToTriggerReferences(typeTriggers));
   }, [collectionTriggers, productTriggers, triggerType, typeTriggers]);
   function switchTriggerType(next: PromotionTriggerType) {
     if (next === triggerType) return;

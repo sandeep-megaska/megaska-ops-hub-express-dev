@@ -18,7 +18,16 @@ function actionContext(formData: FormData): PromotionEmbeddedContext { return { 
 function actionUrl(formData: FormData, path: string, extra: Record<string, string | undefined> = {}) { return buildPromotionAdminUrl(path, promotionEmbeddedContext(actionContext(formData), stringValue(formData, "shop")), extra); }
 function references(formData: FormData): PromotionTriggerReferenceInput[] {
   const triggerType = stringValue(formData, "triggerType") as PromotionTriggerType;
-  return stringValue(formData, "triggerReferences").split(/\r?\n/).map((v) => v.trim()).filter(Boolean).map((value) => triggerType === "PRODUCT_TYPE" ? { sourceType: triggerType, referenceValue: value, normalizedValue: value.toLowerCase() } : { sourceType: triggerType, referenceGid: value });
+  const raw = stringValue(formData, "triggerReferences");
+  if (raw.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(raw) as PromotionTriggerReferenceInput[];
+      if (Array.isArray(parsed)) return parsed.filter((reference) => reference.sourceType === triggerType);
+    } catch {
+      // Fall back to the legacy newline format below so validation remains authoritative.
+    }
+  }
+  return raw.split(/\r?\n/).map((v) => v.trim()).filter(Boolean).map((value) => triggerType === "PRODUCT_TYPE" ? { sourceType: triggerType, referenceValue: value, normalizedValue: value.toLowerCase() } : { sourceType: triggerType, referenceGid: value });
 }
 async function shop(formData: FormData) {
   const resolved = await resolveAdminShopFromSearchParams(actionContext(formData));
@@ -28,7 +37,7 @@ async function shop(formData: FormData) {
   return resolved.shop;
 }
 function input(formData: FormData): Omit<PromotionRuleWriteInput, "shopId"> {
-  return { name: stringValue(formData, "name"), description: stringValue(formData, "description") || null, triggerType: stringValue(formData, "triggerType") as PromotionTriggerType, triggerMatchMode: stringValue(formData, "triggerMatchMode") as PromotionTriggerMatchMode, minimumTriggerQuantity: numberValue(formData, "minimumTriggerQuantity", 1), minimumCartSubtotal: stringValue(formData, "minimumCartSubtotal") || null, offerProductGid: stringValue(formData, "offerProductGid"), offerProductTitle: stringValue(formData, "offerProductTitle") || null, rewardType: stringValue(formData, "rewardType") as PromotionRewardType, rewardValue: stringValue(formData, "rewardValue"), maximumRewardQuantity: numberValue(formData, "maximumRewardQuantity", 1), priority: numberValue(formData, "priority", 0), startsAt: optionalDate(formData, "startsAt"), endsAt: optionalDate(formData, "endsAt"), combinesWithProductDiscounts: boolValue(formData, "combinesWithProductDiscounts"), combinesWithOrderDiscounts: boolValue(formData, "combinesWithOrderDiscounts"), combinesWithShippingDiscounts: boolValue(formData, "combinesWithShippingDiscounts"), heading: stringValue(formData, "heading") || null, badgeText: stringValue(formData, "badgeText") || null, customerMessage: stringValue(formData, "customerMessage") || null, ctaText: stringValue(formData, "ctaText") || null, triggerReferences: references(formData), actor: { actorType: "ADMIN" } };
+  return { name: stringValue(formData, "name"), description: stringValue(formData, "description") || null, triggerType: stringValue(formData, "triggerType") as PromotionTriggerType, triggerMatchMode: stringValue(formData, "triggerMatchMode") as PromotionTriggerMatchMode, minimumTriggerQuantity: numberValue(formData, "minimumTriggerQuantity", 1), minimumCartSubtotal: stringValue(formData, "minimumCartSubtotal") || null, offerProductGid: stringValue(formData, "offerProductGid"), offerProductTitle: stringValue(formData, "offerProductTitle") || null, offerProductHandle: stringValue(formData, "offerProductHandle") || null, offerProductImageUrl: stringValue(formData, "offerProductImageUrl") || null, rewardType: stringValue(formData, "rewardType") as PromotionRewardType, rewardValue: stringValue(formData, "rewardValue"), maximumRewardQuantity: numberValue(formData, "maximumRewardQuantity", 1), priority: numberValue(formData, "priority", 0), startsAt: optionalDate(formData, "startsAt"), endsAt: optionalDate(formData, "endsAt"), combinesWithProductDiscounts: boolValue(formData, "combinesWithProductDiscounts"), combinesWithOrderDiscounts: boolValue(formData, "combinesWithOrderDiscounts"), combinesWithShippingDiscounts: boolValue(formData, "combinesWithShippingDiscounts"), heading: stringValue(formData, "heading") || null, badgeText: stringValue(formData, "badgeText") || null, customerMessage: stringValue(formData, "customerMessage") || null, ctaText: stringValue(formData, "ctaText") || null, triggerReferences: references(formData), actor: { actorType: "ADMIN" } };
 }
 function state(error: unknown): PromotionActionState { if (error instanceof PromotionRuleValidationError) return { ok: false, errors: error.errors, message: "Fix the promotion fields and try again." }; if (error instanceof PromotionRuleTransitionError) return { ok: false, message: error.message }; return { ok: false, message: error instanceof Error ? error.message : "Promotion action failed." }; }
 
