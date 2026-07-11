@@ -143,6 +143,13 @@ mod tests {
         let ProductDiscountCandidateTarget::CartLine(t) = &c[0].targets[0];
         assert_eq!(t.quantity, Some(2))
     }
+
+    #[test]
+    fn missing_config_returns_empty() {
+        assert!(run(input(None, vec![DiscountClass::Product], 1))
+            .operations
+            .is_empty())
+    }
     #[test]
     fn malformed_config_empty() {
         assert!(
