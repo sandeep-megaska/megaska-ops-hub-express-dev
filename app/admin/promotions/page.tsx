@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { formatAdminShopResolutionError, resolveAdminShopFromSearchParams } from "../../../services/shopify/admin-shop-context";
-import { buildPromotionAdminUrl, promotionEmbeddedContext, type PromotionEmbeddedContext } from "../../../services/promotions/admin-actions.server";
+import { buildPromotionAdminUrl, promotionEmbeddedContext, type PromotionEmbeddedContext } from "../../../services/promotions/admin-context";
 import { getPromotionAdminListReadModel, type PromotionAdminStatusFilter } from "../../../services/promotions/admin-read-model.server";
 
 export const runtime = "nodejs";

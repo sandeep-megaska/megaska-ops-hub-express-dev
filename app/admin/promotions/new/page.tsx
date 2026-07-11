@@ -1,5 +1,5 @@
 import { formatAdminShopResolutionError, resolveAdminShopFromSearchParams } from "../../../../services/shopify/admin-shop-context";
-import { promotionEmbeddedContext, type PromotionEmbeddedContext } from "../../../../services/promotions/admin-actions.server";
+import { promotionEmbeddedContext, type PromotionEmbeddedContext } from "../../../../services/promotions/admin-context";
 import PromotionForm from "../PromotionForm";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
