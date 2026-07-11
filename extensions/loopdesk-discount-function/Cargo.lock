@@ -5,3 +5,17 @@ version = 4
 [[package]]
 name = "loopdesk-discount-function"
 version = "0.1.0"
+dependencies = [
+ "shopify_function",
+]
+
+[[package]]
+name = "shopify_function"
+version = "0.0.0-local"
+dependencies = [
+ "shopify_function_macros",
+]
+
+[[package]]
+name = "shopify_function_macros"
+version = "0.0.0-local"

@@ -1,0 +1,7 @@
+[package]
+name = "shopify_function"
+version = "0.0.0-local"
+edition = "2021"
+
+[dependencies]
+shopify_function_macros = { path = "../shopify_function_macros" }

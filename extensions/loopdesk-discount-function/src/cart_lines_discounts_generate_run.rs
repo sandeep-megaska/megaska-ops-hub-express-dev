@@ -1,79 +1,75 @@
-#[derive(Clone, Debug, PartialEq)]
-pub struct Input {
-    pub cart: Cart,
-    pub discount: Discount,
+use shopify_function::prelude::*;
+use shopify_function::Result;
+
+use crate::{config, eligibility, rewards, schema};
+
+#[shopify_function]
+pub fn cart_lines_discounts_generate_run(
+    input: schema::cart_lines_discounts_generate_run::Input,
+) -> Result<schema::CartLinesDiscountsGenerateRunResult> {
+    Ok(run(input))
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct Cart {
-    pub cost: CartCost,
-    pub lines: Vec<CartLine>,
+pub fn run(
+    input: schema::cart_lines_discounts_generate_run::Input,
+) -> schema::CartLinesDiscountsGenerateRunResult {
+    if !input
+        .discount
+        .discount_classes
+        .iter()
+        .any(|c| matches!(c, schema::DiscountClass::Product))
+    {
+        return empty_result();
+    }
+    let Some(raw) = input
+        .discount
+        .configuration
+        .as_ref()
+        .map(|m| m.value.as_str())
+        .filter(|v| !v.trim().is_empty())
+    else {
+        return empty_result();
+    };
+    let Ok(cfg) = config::parse_config(raw) else {
+        return empty_result();
+    };
+    if cfg.schema_version != 1
+        || cfg.configuration_version == 0
+        || cfg.configuration_hash.trim().is_empty()
+        || cfg.rules.is_empty()
+    {
+        return empty_result();
+    }
+    let cart = eligibility::Cart::from_input(&input);
+    let mut candidates = Vec::new();
+    let mut claimed = std::collections::BTreeSet::new();
+    for rule in &cfg.rules {
+        if !rule.is_executable() || !eligibility::conditions_met(rule, &cart) {
+            continue;
+        }
+        let allocations = eligibility::allocations(rule, &cart, &claimed);
+        for allocation in allocations {
+            if let Some(candidate) = rewards::candidate(rule, allocation.line, allocation.quantity)
+            {
+                claimed.insert(allocation.line.id.clone());
+                candidates.push(candidate);
+            }
+        }
+    }
+    if candidates.is_empty() {
+        empty_result()
+    } else {
+        schema::CartLinesDiscountsGenerateRunResult {
+            operations: vec![schema::Operation::ProductDiscountsAdd(
+                schema::ProductDiscountsAddOperation {
+                    selection_strategy: schema::ProductDiscountSelectionStrategy::All,
+                    candidates,
+                },
+            )],
+        }
+    }
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct CartCost {
-    pub subtotal_amount: MoneyV2,
+fn empty_result() -> schema::CartLinesDiscountsGenerateRunResult {
+    schema::CartLinesDiscountsGenerateRunResult { operations: vec![] }
 }
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct MoneyV2 {
-    pub amount: String,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct CartLine {
-    pub id: String,
-    pub quantity: i64,
-    pub cost: CartLineCost,
-    pub promotion_rule_id: Option<Attribute>,
-    pub promotion_compilation_version: Option<Attribute>,
-    pub merchandise: Merchandise,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct CartLineCost {
-    pub amount_per_quantity: MoneyV2,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct Attribute {
-    pub value: Option<String>,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum Merchandise {
-    ProductVariant { id: String, product: Product },
-    Other,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct Product {
-    pub id: String,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct Discount {
-    pub discount_classes: Vec<DiscountClass>,
-    pub configuration: Option<Metafield>,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum DiscountClass {
-    Product,
-    Order,
-    Shipping,
-    Unknown,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct Metafield {
-    pub value: String,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct CartLinesDiscountsGenerateRunResult {
-    pub operations: Vec<Operation>,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum Operation {}

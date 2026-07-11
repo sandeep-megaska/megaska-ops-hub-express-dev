@@ -1,0 +1,7 @@
+[package]
+name = "shopify_function_macros"
+version = "0.0.0-local"
+edition = "2021"
+
+[lib]
+proc-macro = true
