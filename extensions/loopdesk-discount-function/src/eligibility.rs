@@ -58,13 +58,13 @@ impl Cart {
                         .as_ref()
                         .and_then(|a| a.value().as_ref())
                         .filter(|v| !v.trim().is_empty())
-                        .cloned(),
+                        .map(|v| (*v).clone()),
                     marker_version: l
                         .promotion_compilation_version()
                         .as_ref()
                         .and_then(|a| a.value().as_ref())
                         .filter(|v| !v.trim().is_empty())
-                        .cloned(),
+                        .map(|v| (*v).clone()),
                     index,
                 })
             })
