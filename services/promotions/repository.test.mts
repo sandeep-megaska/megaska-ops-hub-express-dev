@@ -3,6 +3,13 @@ import assert from "node:assert/strict";
 
 import { archivePromotionRule, changePromotionRuleStatus, createPromotionRule, getPromotionRuleById, listPromotionCompilations, listPromotionRules, PromotionRuleNotFoundError, PromotionRuleTransitionError, PromotionRuleValidationError, replacePromotionTriggerReferences, updatePromotionRule, type PromotionRuleRecord, type PromotionTriggerReferenceRecord } from "./repository.server.ts";
 
+
+class DecimalLike {
+  private readonly value: string;
+  constructor(value: string) { this.value = value; }
+  toString() { return this.value; }
+}
+
 const base = (shopId = "shop-a") => ({ shopId, name: "  Sock Offer  ", triggerType: "PRODUCT" as const, triggerReferences: [{ sourceType: "PRODUCT" as const, referenceGid: " 123 " }, { sourceType: "PRODUCT" as const, referenceGid: "gid://shopify/Product/123" }], offerProductGid: " 456 ", rewardType: "PERCENTAGE_OFF" as const, rewardValue: "10", minimumTriggerQuantity: 1, maximumRewardQuantity: 1, actor: { actorType: "USER", actorId: "u1" } });
 
 type Audit = { shopId: string; promotionRuleId: string; action: string; previousState?: unknown; nextState?: unknown };
@@ -70,6 +77,32 @@ test("valid and invalid status transitions plus activation validation", async ()
   await changePromotionRuleStatus("shop-a", rule.id, "PAUSED", {}, db as never); await changePromotionRuleStatus("shop-a", rule.id, "ACTIVE", {}, db as never); await archivePromotionRule("shop-a", rule.id, {}, db as never);
   await assert.rejects(() => changePromotionRuleStatus("shop-a", rule.id, "ACTIVE", {}, db as never), PromotionRuleTransitionError);
   const draft = await createPromotionRule({ ...base(), triggerReferences: [] }, db as never); await assert.rejects(() => changePromotionRuleStatus("shop-a", draft.id, "ACTIVE", {}, db as never), PromotionRuleValidationError);
+});
+
+
+test("activates database-loaded draft rules with Decimal-like reward values", async () => {
+  const { db, rule } = await seeded();
+  db.rules[0].rewardValue = new DecimalLike("50");
+  await changePromotionRuleStatus("shop-a", rule.id, "ACTIVE", {}, db as never);
+  assert.equal(db.rules[0].status, "ACTIVE");
+});
+
+test("keeps percentage range validation for Decimal-like reward values", async () => {
+  const { db, rule } = await seeded();
+  db.rules[0].rewardValue = new DecimalLike("150");
+  await assert.rejects(() => changePromotionRuleStatus("shop-a", rule.id, "ACTIVE", {}, db as never), PromotionRuleValidationError);
+  assert.equal(db.rules[0].status, "DRAFT");
+});
+
+test("normalizes Decimal-like reward values by reward type and minimum subtotal during updates", async () => {
+  const { db, rule } = await seeded();
+
+  await updatePromotionRule("shop-a", rule.id, { rewardType: "FIXED_AMOUNT_OFF", rewardValue: new DecimalLike("100") as never, minimumCartSubtotal: new DecimalLike("12.5000") }, db as never);
+  assert.equal(db.rules[0].rewardValue, 100);
+  assert.equal(db.rules[0].minimumCartSubtotal, 12.5);
+
+  await updatePromotionRule("shop-a", rule.id, { rewardType: "FIXED_PRICE", rewardValue: new DecimalLike("0") as never }, db as never);
+  assert.equal(db.rules[0].rewardValue, 0);
 });
 
 test("archive behavior, archived filtering, and include-archived listing", async () => {
