@@ -10,7 +10,7 @@ type AdminNavLinkProps = Omit<ComponentProps<typeof Link>, "href"> & {
 
 const EMBEDDED_CONTEXT_PARAMS = new Set(["shop", "shopify_shop", "host", "embedded"]);
 
-function hrefWithEmbeddedContext(href: string, currentParams: URLSearchParams | null) {
+export function hrefWithEmbeddedContext(href: string, currentParams: URLSearchParams | null) {
   if (!currentParams) return href;
   const [pathAndQuery, hash = ""] = href.split("#", 2);
   const [pathname, query = ""] = pathAndQuery.split("?", 2);

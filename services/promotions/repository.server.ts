@@ -1,4 +1,4 @@
-import { createRequire } from "node:module";
+import { prisma } from "../db/prisma.ts";
 import type { PromotionRewardType, PromotionRuleStatus, PromotionTriggerMatchMode, PromotionTriggerReferenceInput, PromotionTriggerType } from "./domain.ts";
 import { normalizeDate, normalizeOptionalText, normalizeProductType, normalizeRewardValue, normalizeShopifyCollectionGid, normalizeShopifyProductGid } from "./normalization.ts";
 import { validatePromotionRule } from "./validation.ts";
@@ -23,8 +23,7 @@ export type PromotionCompilationRecord = { id: string; promotionRuleId: string; 
 
 type Delegate<T> = { findFirst(args: object): Promise<T | null>; findMany(args: object): Promise<T[]>; create(args: object): Promise<T>; update(args: object): Promise<T>; deleteMany?(args: object): Promise<{ count: number }>; createMany?(args: object): Promise<{ count: number }> };
 type PromotionDb = { promotionRule: Delegate<PromotionRuleRecord>; promotionTriggerReference: Required<Pick<Delegate<PromotionTriggerReferenceRecord>, "deleteMany" | "createMany">>; promotionAuditLog: { create(args: object): Promise<unknown> }; promotionCompilation: Pick<Delegate<PromotionCompilationRecord>, "findMany">; $transaction<T>(fn: (tx: PromotionDb) => Promise<T>): Promise<T> };
-const require = createRequire(import.meta.url);
-const db = () => (require("../db/prisma.ts") as { prisma: unknown }).prisma as PromotionDb;
+const db = () => prisma as unknown as PromotionDb;
 
 export type PromotionRuleWriteInput = Omit<Partial<PromotionRuleRecord>, "id" | "shopId" | "createdAt" | "updatedAt" | "archivedAt" | "triggerReferences"> & { shopId: string; name: string; triggerType: PromotionTriggerType; triggerReferences?: PromotionTriggerReferenceInput[]; offerProductGid: string; rewardType: PromotionRewardType; rewardValue: string | number; actor?: Actor };
 export type PromotionRuleUpdateInput = Partial<Omit<PromotionRuleWriteInput, "shopId" | "actor">> & { actor?: Actor };
