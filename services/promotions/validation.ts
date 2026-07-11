@@ -1,0 +1,66 @@
+import type { PromotionRuleValidationInput, PromotionTriggerReferenceInput, PromotionValidationError, PromotionValidationResult } from "./domain.ts";
+import { normalizeDate, normalizeProductType, normalizeRewardValue, normalizeShopifyCollectionGid, normalizeShopifyProductGid } from "./normalization.ts";
+
+const TEXT_LIMITS = {
+  name: 120,
+  heading: 120,
+  badgeText: 60,
+  customerMessage: 240,
+  ctaText: 60,
+} as const;
+
+function add(errors: PromotionValidationError[], field: string, message: string) {
+  errors.push({ field, message });
+}
+
+export function validatePromotionTriggerReference(reference: PromotionTriggerReferenceInput): PromotionValidationResult {
+  const errors: PromotionValidationError[] = [];
+  if (reference.sourceType === "PRODUCT") {
+    if (!normalizeShopifyProductGid(reference.referenceGid)) add(errors, "referenceGid", "Product triggers require a canonical Shopify Product GID.");
+    if (reference.referenceGid && String(reference.referenceGid).includes("/ProductVariant/")) add(errors, "referenceGid", "Product triggers must not use variant GIDs.");
+  } else if (reference.sourceType === "COLLECTION") {
+    if (!normalizeShopifyCollectionGid(reference.referenceGid)) add(errors, "referenceGid", "Collection triggers require a canonical Shopify Collection GID.");
+  } else if (reference.sourceType === "PRODUCT_TYPE") {
+    if (!normalizeProductType(reference.referenceValue) || !normalizeProductType(reference.normalizedValue)) add(errors, "normalizedValue", "Product-type triggers require non-empty reference and normalized values.");
+  } else {
+    add(errors, "sourceType", "Unsupported promotion trigger type.");
+  }
+  return { valid: errors.length === 0, errors };
+}
+
+export function validatePromotionRule(input: PromotionRuleValidationInput): PromotionValidationResult {
+  const errors: PromotionValidationError[] = [];
+  const name = input.name.trim();
+  if (!name) add(errors, "name", "Name is required.");
+  if (name.length > TEXT_LIMITS.name) add(errors, "name", `Name must be ${TEXT_LIMITS.name} characters or fewer.`);
+  if (input.priority !== undefined && !Number.isInteger(input.priority)) add(errors, "priority", "Priority must be an integer.");
+  if (!Number.isInteger(input.minimumTriggerQuantity) || Number(input.minimumTriggerQuantity) < 1) add(errors, "minimumTriggerQuantity", "Minimum trigger quantity must be at least 1.");
+  if (!Number.isInteger(input.maximumRewardQuantity) || Number(input.maximumRewardQuantity) < 1) add(errors, "maximumRewardQuantity", "Maximum reward quantity must be at least 1.");
+  if (!normalizeShopifyProductGid(input.offerProductGid)) add(errors, "offerProductGid", "Offer product must be a canonical Shopify Product GID.");
+
+  const startsAt = normalizeDate(input.startsAt);
+  const endsAt = normalizeDate(input.endsAt);
+  if (input.startsAt != null && !startsAt) add(errors, "startsAt", "Start date must be a valid UTC DateTime.");
+  if (input.endsAt != null && !endsAt) add(errors, "endsAt", "End date must be a valid UTC DateTime.");
+  if (startsAt && endsAt && startsAt.getTime() >= endsAt.getTime()) add(errors, "endsAt", "End date must be after start date.");
+
+  const rewardValue = normalizeRewardValue(input.rewardValue);
+  if (rewardValue == null) add(errors, "rewardValue", "Reward value must be numeric.");
+  else if (input.rewardType === "PERCENTAGE_OFF" && (rewardValue <= 0 || rewardValue > 100)) add(errors, "rewardValue", "Percentage discounts must be greater than 0 and no more than 100.");
+  else if (input.rewardType === "FIXED_AMOUNT_OFF" && rewardValue <= 0) add(errors, "rewardValue", "Fixed amount discounts must be greater than 0.");
+  else if (input.rewardType === "FIXED_PRICE" && rewardValue < 0) add(errors, "rewardValue", "Fixed promotional prices must be zero or greater.");
+
+  for (const field of ["heading", "badgeText", "customerMessage", "ctaText"] as const) {
+    const value = input[field];
+    if (typeof value === "string" && value.trim().length > TEXT_LIMITS[field]) add(errors, field, `${field} must be ${TEXT_LIMITS[field]} characters or fewer.`);
+  }
+
+  const references = input.triggerReferences ?? [];
+  if (input.status === "ACTIVE" && references.length === 0) add(errors, "triggerReferences", "Active rules require at least one trigger reference.");
+  references.forEach((reference, index) => {
+    if (reference.sourceType !== input.triggerType) add(errors, `triggerReferences.${index}.sourceType`, "Trigger reference type must match the rule trigger type.");
+    validatePromotionTriggerReference(reference).errors.forEach((error) => add(errors, `triggerReferences.${index}.${error.field}`, error.message));
+  });
+
+  return { valid: errors.length === 0, errors };
+}

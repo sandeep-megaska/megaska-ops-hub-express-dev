@@ -89,7 +89,194 @@ model Shop {
   proxyRoutes           ShopProxyRoute[]
   installationEvents    ShopInstallationEvent[]
   recoveryTokens        CheckoutRecoveryToken[]
+  promotionRules        PromotionRule[]
+  promotionAuditLogs    PromotionAuditLog[]
 }
+enum PromotionRuleStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  ARCHIVED
+}
+
+enum PromotionTriggerType {
+  PRODUCT
+  COLLECTION
+  PRODUCT_TYPE
+}
+
+enum PromotionTriggerMatchMode {
+  ANY
+  ALL
+}
+
+enum PromotionRewardType {
+  PERCENTAGE_OFF
+  FIXED_AMOUNT_OFF
+  FIXED_PRICE
+}
+
+enum PromotionCompilationStatus {
+  PENDING
+  COMPILING
+  READY
+  FAILED
+  SUPERSEDED
+}
+
+enum PromotionCompilationReason {
+  RULE_CREATED
+  RULE_UPDATED
+  MANUAL_RECOMPILE
+  COLLECTION_CHANGED
+  PRODUCT_CHANGED
+  PRODUCT_TYPE_CHANGED
+  SCHEDULE_RECONCILIATION
+  SYSTEM_REPAIR
+}
+
+model PromotionRule {
+  id                            String                    @id @default(uuid())
+  shopId                        String
+  name                          String
+  description                   String?
+  status                        PromotionRuleStatus       @default(DRAFT)
+  priority                      Int                       @default(0)
+  triggerType                   PromotionTriggerType
+  triggerMatchMode              PromotionTriggerMatchMode @default(ANY)
+  minimumTriggerQuantity        Int                       @default(1)
+  minimumCartSubtotal           Decimal?                  @db.Decimal(18, 4)
+  offerProductGid               String
+  offerProductHandle            String?
+  offerProductTitle             String?
+  offerProductImageUrl          String?
+  rewardType                    PromotionRewardType
+  rewardValue                   Decimal                   @db.Decimal(18, 4)
+  maximumRewardQuantity         Int                       @default(1)
+  heading                       String?
+  badgeText                     String?
+  customerMessage               String?
+  ctaText                       String?
+  combinesWithProductDiscounts  Boolean                   @default(false)
+  combinesWithOrderDiscounts    Boolean                   @default(true)
+  combinesWithShippingDiscounts Boolean                   @default(true)
+  startsAt                      DateTime?
+  endsAt                        DateTime?
+  currentCompilationId          String?                   @unique
+  compiledAt                    DateTime?
+  createdByType                 String?
+  createdById                   String?
+  updatedByType                 String?
+  updatedById                   String?
+  archivedAt                    DateTime?
+  createdAt                     DateTime                  @default(now())
+  updatedAt                     DateTime                  @updatedAt
+
+  shop               Shop                        @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  triggerReferences  PromotionTriggerReference[]
+  compilations       PromotionCompilation[]      @relation("PromotionRuleCompilations")
+  auditLogs          PromotionAuditLog[]
+  currentCompilation PromotionCompilation?       @relation("PromotionRuleCurrentCompilation", fields: [currentCompilationId], references: [id], onDelete: SetNull)
+
+  @@index([shopId, status])
+  @@index([shopId, priority])
+  @@index([shopId, startsAt, endsAt])
+  @@index([shopId, triggerType])
+  @@index([shopId, offerProductGid])
+  @@index([shopId, archivedAt])
+}
+
+model PromotionTriggerReference {
+  id              String               @id @default(uuid())
+  promotionRuleId String
+  position        Int                  @default(0)
+  sourceType      PromotionTriggerType
+  referenceGid    String?
+  referenceValue  String?
+  normalizedValue String?
+  displayTitle    String?
+  displayHandle   String?
+  displayImageUrl String?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  promotionRule PromotionRule @relation(fields: [promotionRuleId], references: [id], onDelete: Cascade)
+
+  @@unique([promotionRuleId, sourceType, referenceGid])
+  @@unique([promotionRuleId, sourceType, normalizedValue])
+  @@index([promotionRuleId, position])
+  @@index([sourceType, referenceGid])
+  @@index([sourceType, normalizedValue])
+}
+
+model PromotionCompilation {
+  id                String                     @id @default(uuid())
+  promotionRuleId   String
+  version           Int
+  status            PromotionCompilationStatus @default(PENDING)
+  reason            PromotionCompilationReason
+  sourceHash        String
+  compiledHash      String?
+  triggerType       PromotionTriggerType
+  membershipCount   Int                        @default(0)
+  storefrontPayload Json?
+  functionPayload   Json?
+  diagnosticPayload Json?
+  errorCode         String?
+  errorMessage      String?
+  requestedAt       DateTime                   @default(now())
+  startedAt         DateTime?
+  completedAt       DateTime?
+  createdAt         DateTime                   @default(now())
+  updatedAt         DateTime                   @updatedAt
+
+  promotionRule  PromotionRule                 @relation("PromotionRuleCompilations", fields: [promotionRuleId], references: [id], onDelete: Cascade)
+  currentForRule PromotionRule?                @relation("PromotionRuleCurrentCompilation")
+  memberships    PromotionCompiledMembership[]
+
+  @@unique([promotionRuleId, version])
+  @@index([promotionRuleId, status])
+  @@index([status, requestedAt])
+  @@index([sourceHash])
+  @@index([compiledHash])
+}
+
+model PromotionCompiledMembership {
+  id                     String               @id @default(uuid())
+  promotionCompilationId String
+  productGid             String
+  sourceReferenceId      String?
+  sourceType             PromotionTriggerType
+  createdAt              DateTime             @default(now())
+
+  promotionCompilation PromotionCompilation @relation(fields: [promotionCompilationId], references: [id], onDelete: Cascade)
+
+  @@unique([promotionCompilationId, productGid])
+  @@index([promotionCompilationId])
+  @@index([productGid])
+  @@index([sourceType, productGid])
+}
+
+model PromotionAuditLog {
+  id              String   @id @default(uuid())
+  shopId          String
+  promotionRuleId String?
+  action          String
+  actorType       String
+  actorId         String?
+  previousState   Json?
+  nextState       Json?
+  metadata        Json?
+  createdAt       DateTime @default(now())
+
+  shop          Shop           @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  promotionRule PromotionRule? @relation(fields: [promotionRuleId], references: [id], onDelete: SetNull)
+
+  @@index([shopId, createdAt])
+  @@index([promotionRuleId, createdAt])
+  @@index([action, createdAt])
+}
+
 model AuthSession {
   id                  String   @id @default(uuid())
   customerProfileId   String
