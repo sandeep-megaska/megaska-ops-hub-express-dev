@@ -1,4 +1,5 @@
 api_version = "2026-04"
+uid = "fd7ac504-a401-ea17-d1d5-c493c138d06638c25881"
 
 [[extensions]]
 name = "LoopDesk Promotions"
@@ -11,6 +12,6 @@ handle = "loopdesk-discount-function"
   export = "cart_lines_discounts_generate_run"
 
   [extensions.build]
-  command = "cargo build --target=wasm32-wasip1 --release"
-  path = "target/wasm32-wasip1/release/loopdesk_discount_function.wasm"
+  command = "cargo build --target=wasm32-unknown-unknown --release"
+  path = "target/wasm32-unknown-unknown/release/loopdesk_discount_function.wasm"
   watch = ["src/**/*.rs"]

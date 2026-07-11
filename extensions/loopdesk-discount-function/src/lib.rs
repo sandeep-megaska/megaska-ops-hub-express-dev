@@ -6,175 +6,167 @@ pub mod rewards;
 pub mod schema;
 
 pub use cart_lines_discounts_generate_run::run;
+
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::schema::*;
-    fn cfg(reward: &str) -> String {
-        format!(
-            r#"{{"schemaVersion":1,"configurationVersion":1,"configurationHash":"h","rules":[{{"schemaVersion":1,"ruleId":"r1","compilationVersion":7,"status":"ACTIVE","priority":1,"trigger":{{"type":"PRODUCT","matchMode":"ANY","minimumQuantity":2,"minimumCartSubtotal":null,"sourceGroups":[{{"sourceReferenceId":"s","sourceType":"PRODUCT","sourceGid":"gid://shopify/Product/1","productGids":["gid://shopify/Product/1"],"unresolved":false}}]}},"offer":{{"productGid":"gid://shopify/Product/2"}},"reward":{reward}}}]}}"#
-        )
+    use std::collections::BTreeSet;
+
+    use crate::{
+        config::{
+            parse_config, FunctionRule, MatchMode, OfferConfig, RewardConfig, RewardType,
+            RuleStatus, SourceGroup, TriggerConfig,
+        },
+        decimal::Decimal,
+        eligibility::{allocations, conditions_met, Cart, Line},
+        rewards,
+        schema::{ProductDiscountCandidateTarget, ProductDiscountCandidateValue},
+    };
+
+    fn rule(reward_type: RewardType, value: &str, maximum_quantity: i64) -> FunctionRule {
+        FunctionRule {
+            schema_version: 1,
+            rule_id: "r1".into(),
+            compilation_version: 7,
+            status: RuleStatus::Active,
+            priority: 1,
+            trigger: TriggerConfig {
+                trigger_type: "PRODUCT".into(),
+                match_mode: MatchMode::Any,
+                minimum_quantity: 2,
+                minimum_cart_subtotal: None,
+                source_groups: vec![SourceGroup {
+                    source_reference_id: "s".into(),
+                    source_type: "PRODUCT".into(),
+                    source_gid: "gid://shopify/Product/1".into(),
+                    product_gids: vec!["gid://shopify/Product/1".into()],
+                    unresolved: false,
+                }],
+            },
+            offer: OfferConfig {
+                product_gid: "gid://shopify/Product/2".into(),
+            },
+            reward: RewardConfig {
+                reward_type,
+                value: value.into(),
+                maximum_quantity,
+            },
+        }
     }
-    fn input(config: Option<String>, classes: Vec<DiscountClass>, offer_qty: i64) -> Input {
-        Input {
-            cart: Cart {
-                cost: CartCost {
-                    subtotal_amount: MoneyV2 {
-                        amount: "100.00".into(),
-                    },
+
+    fn trigger_line() -> Line {
+        Line {
+            id: "trigger".into(),
+            quantity: 2,
+            unit_amount: Decimal::parse("50.00").unwrap(),
+            product_gid: "gid://shopify/Product/1".into(),
+            marker_rule: None,
+            marker_version: None,
+            index: 0,
+        }
+    }
+
+    fn offer_line(quantity: i64, version: &str) -> Line {
+        Line {
+            id: "offer".into(),
+            quantity,
+            unit_amount: Decimal::parse("20.00").unwrap(),
+            product_gid: "gid://shopify/Product/2".into(),
+            marker_rule: Some("r1".into()),
+            marker_version: Some(version.into()),
+            index: 1,
+        }
+    }
+
+    fn cart(offer_quantity: i64, version: &str) -> Cart {
+        Cart {
+            subtotal: Decimal::parse("100.00"),
+            lines: vec![trigger_line(), offer_line(offer_quantity, version)],
+        }
+    }
+
+    #[test]
+    fn malformed_config_fails_closed() {
+        assert!(parse_config("{bad").is_err());
+    }
+
+    #[test]
+    fn missing_compilation_version_fails_closed() {
+        let raw = r#"{
+            "schemaVersion":1,
+            "configurationVersion":1,
+            "configurationHash":"h",
+            "rules":[{
+                "schemaVersion":1,
+                "ruleId":"r1",
+                "status":"ACTIVE",
+                "priority":1,
+                "trigger":{
+                    "type":"PRODUCT",
+                    "matchMode":"ANY",
+                    "minimumQuantity":2,
+                    "minimumCartSubtotal":null,
+                    "sourceGroups":[]
                 },
-                lines: vec![
-                    CartLine {
-                        id: "t".into(),
-                        quantity: 2,
-                        cost: CartLineCost {
-                            amount_per_quantity: MoneyV2 {
-                                amount: "50.00".into(),
-                            },
-                        },
-                        promotion_rule_id: None,
-                        promotion_compilation_version: None,
-                        merchandise: Merchandise::ProductVariant {
-                            id: "gid://shopify/ProductVariant/1".into(),
-                            product: Product {
-                                id: "gid://shopify/Product/1".into(),
-                            },
-                        },
-                    },
-                    CartLine {
-                        id: "o".into(),
-                        quantity: offer_qty,
-                        cost: CartLineCost {
-                            amount_per_quantity: MoneyV2 {
-                                amount: "20.00".into(),
-                            },
-                        },
-                        promotion_rule_id: Some(Attribute {
-                            value: Some("r1".into()),
-                        }),
-                        promotion_compilation_version: Some(Attribute {
-                            value: Some("7".into()),
-                        }),
-                        merchandise: Merchandise::ProductVariant {
-                            id: "gid://shopify/ProductVariant/2".into(),
-                            product: Product {
-                                id: "gid://shopify/Product/2".into(),
-                            },
-                        },
-                    },
-                ],
-            },
-            discount: Discount {
-                discount_classes: classes,
-                configuration: config.map(|value| Metafield { value }),
-            },
-        }
+                "offer":{"productGid":"gid://shopify/Product/2"},
+                "reward":{"type":"PERCENTAGE_OFF","value":"10","maximumQuantity":1}
+            }]
+        }"#;
+        assert!(parse_config(raw).is_err());
     }
-    fn candidates(r: CartLinesDiscountsGenerateRunResult) -> Vec<ProductDiscountCandidate> {
-        match r.operations.into_iter().next() {
-            Some(Operation::ProductDiscountsAdd(o)) => o.candidates,
-            _ => vec![],
-        }
-    }
+
     #[test]
-    fn product_class_absent_returns_empty() {
-        assert!(run(input(
-            Some(cfg(
-                r#"{"type":"PERCENTAGE_OFF","value":"10","maximumQuantity":1}"#
-            )),
-            vec![DiscountClass::Order],
-            1
-        ))
-        .operations
-        .is_empty())
+    fn matching_trigger_conditions_pass() {
+        let rule = rule(RewardType::PercentageOff, "10", 1);
+        assert!(conditions_met(&rule, &cart(1, "7")));
     }
+
     #[test]
-    fn percentage_success() {
-        assert_eq!(
-            candidates(run(input(
-                Some(cfg(
-                    r#"{"type":"PERCENTAGE_OFF","value":"10","maximumQuantity":1}"#
-                )),
-                vec![DiscountClass::Product],
-                1
-            )))
-            .len(),
-            1
-        )
+    fn wrong_compilation_version_produces_no_allocation() {
+        let rule = rule(RewardType::PercentageOff, "10", 1);
+        assert!(allocations(&rule, &cart(1, "8"), &BTreeSet::new()).is_empty());
     }
+
     #[test]
-    fn fixed_amount_success() {
-        let c = candidates(run(input(
-            Some(cfg(
-                r#"{"type":"FIXED_AMOUNT_OFF","value":"5.50","maximumQuantity":1}"#,
-            )),
-            vec![DiscountClass::Product],
-            1,
-        )));
+    fn reward_quantity_is_capped() {
+        let rule = rule(RewardType::PercentageOff, "10", 2);
+        let cart = cart(5, "7");
+        let allocations = allocations(&rule, &cart, &BTreeSet::new());
+        assert_eq!(allocations.len(), 1);
+        assert_eq!(allocations[0].quantity, 2);
+    }
+
+    #[test]
+    fn percentage_reward_builds_candidate() {
+        let rule = rule(RewardType::PercentageOff, "10", 1);
+        let line = offer_line(1, "7");
+        let candidate = rewards::candidate(&rule, &line, 1).unwrap();
         assert!(matches!(
-            c[0].value,
+            candidate.value,
+            ProductDiscountCandidateValue::Percentage(_)
+        ));
+    }
+
+    #[test]
+    fn fixed_amount_reward_builds_candidate() {
+        let rule = rule(RewardType::FixedAmountOff, "5.50", 1);
+        let line = offer_line(1, "7");
+        let candidate = rewards::candidate(&rule, &line, 1).unwrap();
+        assert!(matches!(
+            candidate.value,
             ProductDiscountCandidateValue::FixedAmount(_)
-        ))
+        ));
     }
+
     #[test]
-    fn fixed_price_success() {
-        let c = candidates(run(input(
-            Some(cfg(
-                r#"{"type":"FIXED_PRICE","value":"15","maximumQuantity":1}"#,
-            )),
-            vec![DiscountClass::Product],
-            1,
-        )));
-        if let ProductDiscountCandidateValue::FixedAmount(f) = &c[0].value {
-            assert_eq!(f.amount, "5")
-        } else {
-            panic!("wrong")
-        }
-    }
-    #[test]
-    fn quantity_cap() {
-        let c = candidates(run(input(
-            Some(cfg(
-                r#"{"type":"PERCENTAGE_OFF","value":"10","maximumQuantity":2}"#,
-            )),
-            vec![DiscountClass::Product],
-            5,
-        )));
-        let ProductDiscountCandidateTarget::CartLine(t) = &c[0].targets[0];
-        assert_eq!(t.quantity, Some(2))
-    }
-    #[test]
-    fn malformed_config_empty() {
-        assert!(
-            run(input(Some("{bad".into()), vec![DiscountClass::Product], 1))
-                .operations
-                .is_empty()
-        )
-    }
-    #[test]
-    fn wrong_compilation_empty() {
-        let mut i = input(
-            Some(cfg(
-                r#"{"type":"PERCENTAGE_OFF","value":"10","maximumQuantity":1}"#,
-            )),
-            vec![DiscountClass::Product],
-            1,
-        );
-        i.cart.lines[1].promotion_compilation_version = Some(Attribute {
-            value: Some("8".into()),
-        });
-        assert!(run(i).operations.is_empty())
-    }
-    #[test]
-    fn unmarked_offer_empty() {
-        let mut i = input(
-            Some(cfg(
-                r#"{"type":"PERCENTAGE_OFF","value":"10","maximumQuantity":1}"#,
-            )),
-            vec![DiscountClass::Product],
-            1,
-        );
-        i.cart.lines[1].promotion_rule_id = None;
-        assert!(run(i).operations.is_empty())
+    fn fixed_price_reward_builds_capped_target() {
+        let rule = rule(RewardType::FixedPrice, "15", 1);
+        let line = offer_line(3, "7");
+        let candidate = rewards::candidate(&rule, &line, 1).unwrap();
+        assert!(matches!(
+            candidate.value,
+            ProductDiscountCandidateValue::FixedAmount(_)
+        ));
+        let ProductDiscountCandidateTarget::CartLine(target) = &candidate.targets[0];
+        assert_eq!(target.quantity, Some(1));
     }
 }

@@ -1,10 +1,14 @@
+use shopify_function::prelude::Decimal as ShopifyDecimal;
 use std::cmp::Ordering;
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Decimal {
     neg: bool,
     units: i128,
 }
+
 const SCALE: usize = 6;
+
 impl Decimal {
     pub fn parse(s: &str) -> Option<Self> {
         let s = s.trim();
@@ -41,7 +45,7 @@ impl Decimal {
         };
         let mut f = frac.to_string();
         while f.len() < SCALE {
-            f.push('0')
+            f.push('0');
         }
         let fv: i128 = if f.is_empty() { 0 } else { f.parse().ok()? };
         Some(Self {
@@ -49,18 +53,30 @@ impl Decimal {
             units: w.checked_mul(1_000_000)?.checked_add(fv)?,
         })
     }
+
+    pub fn parse_shopify(value: &ShopifyDecimal) -> Option<Self> {
+        let value = value.as_f64();
+        if !value.is_finite() {
+            return None;
+        }
+        Self::parse(&format!("{value:.6}"))
+    }
+
     pub fn zero() -> Self {
         Self {
             neg: false,
             units: 0,
         }
     }
+
     pub fn is_positive(&self) -> bool {
         !self.neg && self.units > 0
     }
+
     pub fn is_negative(&self) -> bool {
         self.neg && self.units > 0
     }
+
     pub fn sub(&self, other: &Self) -> Option<Self> {
         if self.neg || other.neg {
             return None;
@@ -73,6 +89,7 @@ impl Decimal {
             units: self.units - other.units,
         })
     }
+
     pub fn to_shopify(&self) -> String {
         let w = self.units / 1_000_000;
         let mut f = format!("{:06}", self.units % 1_000_000);
@@ -90,7 +107,16 @@ impl Decimal {
             )
         }
     }
+
+    pub fn to_shopify_decimal(&self) -> Option<ShopifyDecimal> {
+        let value = self.to_shopify().parse::<f64>().ok()?;
+        if !value.is_finite() {
+            return None;
+        }
+        Some(ShopifyDecimal(value))
+    }
 }
+
 impl Ord for Decimal {
     fn cmp(&self, o: &Self) -> Ordering {
         match (self.neg, o.neg) {
@@ -101,6 +127,7 @@ impl Ord for Decimal {
         }
     }
 }
+
 impl PartialOrd for Decimal {
     fn partial_cmp(&self, o: &Self) -> Option<Ordering> {
         Some(self.cmp(o))

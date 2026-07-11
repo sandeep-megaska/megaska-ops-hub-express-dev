@@ -19,7 +19,7 @@ pub fn candidate(
                 return None;
             }
             schema::ProductDiscountCandidateValue::Percentage(schema::Percentage {
-                value: v.to_shopify(),
+                value: v.to_shopify_decimal()?,
             })
         }
         RewardType::FixedAmountOff => {
@@ -27,10 +27,12 @@ pub fn candidate(
             if !v.is_positive() {
                 return None;
             }
-            schema::ProductDiscountCandidateValue::FixedAmount(schema::FixedAmount {
-                amount: v.to_shopify(),
-                applies_to_each_item: true,
-            })
+            schema::ProductDiscountCandidateValue::FixedAmount(
+                schema::ProductDiscountCandidateFixedAmount {
+                    amount: v.to_shopify_decimal()?,
+                    applies_to_each_item: Some(true),
+                },
+            )
         }
         RewardType::FixedPrice => {
             let fixed = Decimal::parse(&rule.reward.value)?;
@@ -41,14 +43,19 @@ pub fn candidate(
             if !d.is_positive() {
                 return None;
             }
-            schema::ProductDiscountCandidateValue::FixedAmount(schema::FixedAmount {
-                amount: d.to_shopify(),
-                applies_to_each_item: true,
-            })
+            schema::ProductDiscountCandidateValue::FixedAmount(
+                schema::ProductDiscountCandidateFixedAmount {
+                    amount: d.to_shopify_decimal()?,
+                    applies_to_each_item: Some(true),
+                },
+            )
         }
     };
+    let quantity = i32::try_from(quantity).ok()?;
     Some(schema::ProductDiscountCandidate {
+        associated_discount_code: None,
         message: Some("LoopDesk promotion".into()),
+        prerequisites: None,
         targets: vec![schema::ProductDiscountCandidateTarget::CartLine(
             schema::CartLineTarget {
                 id: line.id.clone(),
