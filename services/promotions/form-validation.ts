@@ -1,4 +1,4 @@
-import type { PromotionRewardType, PromotionRuleStatus, PromotionTriggerReferenceInput } from "./domain.ts";
+import type { PromotionRewardType, PromotionRuleStatus, PromotionTriggerReferenceInput, PromotionTriggerType } from "./domain.ts";
 import { validatePromotionRule } from "./validation.ts";
 
 export const promotionTextLimits = { heading: 120, badgeText: 60, customerMessage: 240, ctaText: 60 } as const;
@@ -37,7 +37,8 @@ export function rewardValueHelp(type: PromotionRewardType) {
 
 export type PromotionClientValidationInput = {
   name: string;
-  triggerType: "PRODUCT" | "COLLECTION" | "PRODUCT_TYPE";
+  priority?: number;
+  triggerType: PromotionTriggerType;
   triggerReferences: PromotionTriggerReferenceInput[];
   offerProductGid: string;
   minimumTriggerQuantity: number;
@@ -52,6 +53,51 @@ export type PromotionClientValidationInput = {
   ctaText?: string | null;
   status?: PromotionRuleStatus;
 };
+
+export type PromotionClientFormValidationValues = {
+  name: string;
+  priority: string;
+  triggerType: PromotionTriggerType;
+  triggerReferences: PromotionTriggerReferenceInput[];
+  offerProductGid: string;
+  minimumTriggerQuantity: string;
+  maximumRewardQuantity: string;
+  rewardType: PromotionRewardType;
+  rewardValue: string;
+  startsAt?: string | null;
+  endsAt?: string | null;
+  heading?: string | null;
+  badgeText?: string | null;
+  customerMessage?: string | null;
+  ctaText?: string | null;
+  status?: PromotionRuleStatus;
+};
+
+function numericFormValue(value: string) {
+  const trimmed = value.trim();
+  return trimmed === "" ? Number.NaN : Number(trimmed);
+}
+
+export function promotionClientFormValuesToValidationInput(input: PromotionClientFormValidationValues): PromotionClientValidationInput {
+  return {
+    name: input.name,
+    priority: numericFormValue(input.priority),
+    triggerType: input.triggerType,
+    triggerReferences: input.triggerReferences,
+    offerProductGid: input.offerProductGid,
+    minimumTriggerQuantity: numericFormValue(input.minimumTriggerQuantity),
+    maximumRewardQuantity: numericFormValue(input.maximumRewardQuantity),
+    rewardType: input.rewardType,
+    rewardValue: numericFormValue(input.rewardValue),
+    startsAt: input.startsAt,
+    endsAt: input.endsAt,
+    heading: input.heading,
+    badgeText: input.badgeText,
+    customerMessage: input.customerMessage,
+    ctaText: input.ctaText,
+    status: input.status,
+  };
+}
 
 function blankOptionalDateToNull(value: PromotionClientValidationInput["startsAt"]) {
   return typeof value === "string" && value.trim() === "" ? null : value;
