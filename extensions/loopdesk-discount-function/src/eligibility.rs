@@ -22,7 +22,7 @@ pub fn product_gid(s: &str) -> bool {
         .is_some_and(|v| !v.is_empty() && v.chars().all(|c| c.is_ascii_digit()))
 }
 impl Cart {
-    pub fn from_input(input: &schema::Input) -> Self {
+    pub fn from_input(input: &schema::cart_lines_discounts_generate_run::Input) -> Self {
         let subtotal = Decimal::parse(&input.cart.cost.subtotal_amount.amount);
         let lines = input
             .cart
