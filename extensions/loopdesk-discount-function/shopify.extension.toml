@@ -1,4 +1,5 @@
 api_version = "2026-04"
+uid = "fd7ac504-a401-ea17-d1d5-c493c138d06638c25881"
 
 [[extensions]]
 name = "LoopDesk Promotions"
