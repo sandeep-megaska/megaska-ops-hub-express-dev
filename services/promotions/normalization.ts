@@ -31,12 +31,31 @@ export function normalizeOptionalText(value: unknown): string | null {
   return trimmed ? trimmed : null;
 }
 
-export function normalizeRewardValue(value: unknown): number | null {
-  if (typeof value !== "string" && typeof value !== "number") return null;
-  const next = typeof value === "string" ? value.trim() : value;
-  if (next === "") return null;
-  const numeric = Number(next);
+function numericCandidate(value: unknown): string | number | null {
+  if (typeof value === "number") return value;
+  if (typeof value === "string") return value.trim();
+
+  if (value && typeof value === "object") {
+    try {
+      const text = String(value).trim();
+      if (text && text !== "[object Object]") return text;
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
+
+export function normalizeNumericValue(value: unknown): number | null {
+  const candidate = numericCandidate(value);
+  if (candidate === null || candidate === "") return null;
+  const numeric = Number(candidate);
   return Number.isFinite(numeric) ? numeric : null;
+}
+
+export function normalizeRewardValue(value: unknown): number | null {
+  return normalizeNumericValue(value);
 }
 
 export function normalizeDate(value: Date | string | null | undefined): Date | null {

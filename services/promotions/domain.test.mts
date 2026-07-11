@@ -17,8 +17,18 @@ test("normalizes product types with Unicode compatibility and case folding", () 
 });
 
 test("normalizes numeric reward values without inferring reward semantics", () => {
+  assert.equal(normalizeRewardValue(50), 50);
+  assert.equal(normalizeRewardValue("50"), 50);
+  assert.equal(normalizeRewardValue({ toString: () => "50" }), 50);
+  assert.equal(normalizeRewardValue({ toString: () => "12.5000" }), 12.5);
   assert.equal(normalizeRewardValue(" 40.50 "), 40.5);
+  assert.equal(normalizeRewardValue(""), null);
   assert.equal(normalizeRewardValue("not-money"), null);
+  assert.equal(normalizeRewardValue(Number.NaN), null);
+  assert.equal(normalizeRewardValue(Infinity), null);
+  assert.equal(normalizeRewardValue("-Infinity"), null);
+  assert.equal(normalizeRewardValue({}), null);
+  assert.equal(normalizeRewardValue({ toString: () => { throw new Error("boom"); } }), null);
 });
 
 test("validates trigger reference shape by trigger type", () => {
@@ -75,7 +85,11 @@ test("validates fixed reward types independently", () => {
     offerProductGid: "gid://shopify/Product/456",
     maximumRewardQuantity: 1,
   };
+  assert.equal(validatePromotionRule({ ...base, rewardType: "PERCENTAGE_OFF", rewardValue: { toString: () => "50" } as never }).valid, true);
+  assert.equal(validatePromotionRule({ ...base, rewardType: "PERCENTAGE_OFF", rewardValue: { toString: () => "150" } as never }).valid, false);
   assert.equal(validatePromotionRule({ ...base, rewardType: "FIXED_AMOUNT_OFF", rewardValue: 0 }).valid, false);
+  assert.equal(validatePromotionRule({ ...base, rewardType: "FIXED_AMOUNT_OFF", rewardValue: { toString: () => "100" } as never }).valid, true);
   assert.equal(validatePromotionRule({ ...base, rewardType: "FIXED_PRICE", rewardValue: 0 }).valid, true);
+  assert.equal(validatePromotionRule({ ...base, rewardType: "FIXED_PRICE", rewardValue: { toString: () => "0" } as never }).valid, true);
   assert.equal(validatePromotionRule({ ...base, rewardType: "FIXED_PRICE", rewardValue: -1 }).valid, false);
 });
