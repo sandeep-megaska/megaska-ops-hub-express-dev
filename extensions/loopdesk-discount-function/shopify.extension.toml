@@ -1,0 +1,16 @@
+api_version = "2026-04"
+
+[[extensions]]
+name = "LoopDesk Promotions"
+type = "function"
+handle = "loopdesk-discount-function"
+
+  [[extensions.targeting]]
+  target = "cart.lines.discounts.generate.run"
+  input_query = "src/cart_lines_discounts_generate_run.graphql"
+  export = "cart_lines_discounts_generate_run"
+
+  [extensions.build]
+  command = "cargo build --target=wasm32-wasip1 --release"
+  path = "target/wasm32-wasip1/release/loopdesk_discount_function.wasm"
+  watch = ["src/**/*.rs"]

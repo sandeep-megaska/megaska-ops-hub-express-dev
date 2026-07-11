@@ -1,0 +1,19 @@
+# Shopify Discount Function schema snapshot placeholder for API 2026-04.
+# The Shopify CLI was unavailable in this environment, so this file records the
+# minimal schema surface exercised by src/cart_lines_discounts_generate_run.graphql.
+schema { query: QueryRoot }
+type QueryRoot { cart: Cart! discount: Discount! }
+type Cart { cost: CartCost! lines: [CartLine!]! }
+type CartCost { subtotalAmount: MoneyV2! }
+type MoneyV2 { amount: Decimal! }
+type CartLine { id: ID! quantity: Int! cost: CartLineCost! attribute(key: String!): Attribute merchandise: Merchandise! }
+type CartLineCost { amountPerQuantity: MoneyV2! }
+type Attribute { value: String }
+interface Merchandise { id: ID! }
+type ProductVariant implements Merchandise { id: ID! product: Product! }
+type Product { id: ID! }
+type Discount { discountClasses: [DiscountClass!]! metafield(namespace: String!, key: String!): Metafield }
+type Metafield { value: String! }
+enum DiscountClass { PRODUCT ORDER SHIPPING }
+scalar Decimal
+scalar ID
