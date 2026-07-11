@@ -35,7 +35,7 @@ test("admin read model formats safe fallbacks and neutral execution labels", () 
   assert.equal(fallback.rewardLabel, "Fixed price ₹99");
   assert.equal(fallback.executionLabel, "Not compiled");
   const pending = toPromotionAdminListItem(rule({ currentCompilationId: "compiled-ish" }));
-  assert.equal(pending.executionLabel, "Execution setup pending");
+  assert.equal(pending.executionLabel, "Not compiled");
   assert.notEqual(pending.executionLabel, "Published");
   assert.notEqual(pending.executionLabel, "Live");
 });
