@@ -20,13 +20,13 @@ function db(overrides = {}) {
 
 function graphql(log: any[], options: { ambiguous?: boolean; badReadback?: boolean } = {}) {
   let discount: any = null;
-  const node = (id: string, badReadback = false) => ({ id, metafield: discount?.metafield ? (badReadback ? { ...discount.metafield, value: "{}" } : discount.metafield) : null, discount: { title: "LoopDesk Universal Promotions", status: "ACTIVE", discountClasses: ["PRODUCT"], appDiscountType: { functionId: "gid://shopify/AppFunction/1" } } });
+  const node = (id: string, badReadback = false) => ({ id, metafield: discount?.metafield ? (badReadback ? { ...discount.metafield, value: "{}" } : discount.metafield) : null, discount: { discountId: id, title: "LoopDesk Universal Promotions", status: "ACTIVE", discountClasses: ["PRODUCT"], appDiscountType: { functionId: "gid://shopify/AppFunction/1" } } });
   return async (query: string, variables: any) => {
     log.push({ query, variables });
-    if (query.includes("discountNodes")) return { discountNodes: { nodes: options.ambiguous ? [node("gid://shopify/DiscountAutomaticNode/1"), node("gid://shopify/DiscountAutomaticNode/2")] : discount ? [node(discount.id)] : [] } };
-    if (query.includes("discountAutomaticAppCreate")) { discount = { id: "gid://shopify/DiscountAutomaticNode/1", title: "LoopDesk Universal Promotions", discountClasses: ["PRODUCT"], appDiscountType: { functionId: "gid://shopify/AppFunction/1" } }; return { discountAutomaticAppCreate: { automaticAppDiscount: { title: discount.title, discountClasses: discount.discountClasses, appDiscountType: discount.appDiscountType }, userErrors: [] } }; }
+    if (query.includes("discountNodes")) return { discountNodes: { nodes: options.ambiguous ? [node("gid://shopify/DiscountNode/1"), node("gid://shopify/DiscountNode/2")] : discount ? [node(discount.id)] : [] } };
+    if (query.includes("discountAutomaticAppCreate")) { discount = { id: "gid://shopify/DiscountNode/1", title: "LoopDesk Universal Promotions", discountClasses: ["PRODUCT"], appDiscountType: { functionId: "gid://shopify/AppFunction/1" } }; return { discountAutomaticAppCreate: { automaticAppDiscount: { discountId: discount.id, title: discount.title, discountClasses: discount.discountClasses, appDiscountType: discount.appDiscountType }, userErrors: [] } }; }
     if (query.includes("metafieldsSet")) { discount.metafield = variables.metafields[0]; return { metafieldsSet: { metafields: [{ id: "mf1" }], userErrors: [] } }; }
-    if (query.includes("node")) return { node: discount ? node(discount.id, options.badReadback) : null };
+    if (query.includes("discountNode")) return { discountNode: discount ? node(variables.id, options.badReadback) : null };
     throw new Error("unexpected query");
   };
 }
@@ -40,12 +40,12 @@ test("sync creates discount, writes metafield by ownerId, verifies read-back, th
   assert.equal(createVars.title, "LoopDesk Universal Promotions");
   assert.deepEqual(createVars.discountClasses, ["PRODUCT"]);
   const metafield = log.find((c) => c.query.includes("metafieldsSet")).variables.metafields[0];
-  assert.equal(metafield.ownerId, "gid://shopify/DiscountAutomaticNode/1");
+  assert.equal(metafield.ownerId, "gid://shopify/DiscountNode/1");
   assert.equal(metafield.namespace, "$app:loopdesk-promotions");
   assert.equal(metafield.key, "function-config");
   assert.equal(metafield.type, "json");
   assert.deepEqual(JSON.parse(metafield.value), assembleFunctionConfiguration({ configurationVersion: 1, rules: [] }));
-  assert.equal(database.state.shopifyAutomaticDiscountId, "gid://shopify/DiscountAutomaticNode/1");
+  assert.equal(database.state.shopifyAutomaticDiscountId, "gid://shopify/DiscountNode/1");
 });
 
 test("sync rejects ambiguous canonical discount ownership matches", async () => {
