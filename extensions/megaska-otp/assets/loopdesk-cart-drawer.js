@@ -99,7 +99,7 @@
   if (!config.enabled || window.__LOOPDESK_CART_DRAWER_LOADED__) return;
   window.__LOOPDESK_CART_DRAWER_LOADED__ = true;
 
-  var state = { selectedOfferVariants: {}, offerProducts: {}, offerLoading: {}, open: false, loading: false, cart: null, error: "", hostMode: LOOPDESK_HOST_MODE, themeDrawer: null, fallbackReason: "", expressCheckoutLock: false, capability: null, drawerModeActive: false, neutralizedThemeDrawers: [], bodyLockSnapshot: null, removedThemeBodyClasses: [], cartTriggerTakeovers: [] };
+  var state = { selectedOfferVariants: {}, offerProducts: {}, offerLoading: {}, open: false, loading: false, cart: null, error: "", hostMode: LOOPDESK_HOST_MODE, themeDrawer: null, fallbackReason: "", expressCheckoutLock: false, capability: null, drawerModeActive: false, neutralizedThemeDrawers: [], bodyLockSnapshot: null, removedThemeBodyClasses: [], cartTriggerTakeovers: [], promotionRuntimeRefresh: { attempts: 0, maxAttempts: 3, inFlight: false, delayedTimer: null, cartNonEmptyAttempted: false } };
   var cartTriggerObserver = null;
   var cartTriggerTakeoverTimer = null;
   var suppressNextCartClickUntil = 0;
@@ -275,6 +275,86 @@
     if (diagnosticActions[key]) return;
     diagnosticActions[key] = true;
     debugLog(message, payload, force);
+  }
+
+
+  function hasPromotionRules() {
+    return Boolean(config.promotions && Array.isArray(config.promotions.rules) && config.promotions.rules.length > 0);
+  }
+
+  function getRuntimeShopDomain() {
+    var candidates = [
+      config && config.shop,
+      config && config.shopDomain,
+      config && config.general && config.general.shopDomain,
+      window.LoopDeskConfig && window.LoopDeskConfig.shop,
+      window.LoopDeskConfig && window.LoopDeskConfig.shopDomain,
+      window.LOOPDESK_CART_DRAWER_CONFIG && window.LOOPDESK_CART_DRAWER_CONFIG.shop,
+      window.LOOPDESK_CART_DRAWER_CONFIG && window.LOOPDESK_CART_DRAWER_CONFIG.shopDomain,
+      window.Shopify && window.Shopify.shop,
+      window.Shopify && window.Shopify.shopDomain
+    ];
+    for (var index = 0; index < candidates.length; index += 1) {
+      var value = typeof candidates[index] === "string" ? candidates[index].trim() : "";
+      if (value) return value;
+    }
+    return "";
+  }
+
+  function normalizeRuntimePromotions(promotions) {
+    return normalizeConfig({ promotions: promotions }).promotions;
+  }
+
+  function applyFreshRuntimePromotions(promotions) {
+    var normalizedPromotions = normalizeRuntimePromotions(promotions);
+    config.promotions = normalizedPromotions;
+    window.LoopDeskConfig = Object.assign({}, window.LoopDeskConfig || {}, config, { promotions: normalizedPromotions });
+    if (state.cart) ensureOfferProducts(eligiblePromotionRules(state.cart));
+    render();
+  }
+
+  function refreshPromotionRuntime(reason) {
+    if (hasPromotionRules()) return Promise.resolve(false);
+    if (state.promotionRuntimeRefresh.inFlight || state.promotionRuntimeRefresh.attempts >= state.promotionRuntimeRefresh.maxAttempts) return Promise.resolve(false);
+    var shopDomain = getRuntimeShopDomain();
+    if (!shopDomain || typeof window.fetch !== "function") return Promise.resolve(false);
+
+    state.promotionRuntimeRefresh.attempts += 1;
+    state.promotionRuntimeRefresh.inFlight = true;
+    var url = "/apps/megaska/api/runtime/config?shop=" + encodeURIComponent(shopDomain) + "&_loopdesk_runtime=" + Date.now();
+    debugLog("promotion runtime refresh started", { reason: reason, attempt: state.promotionRuntimeRefresh.attempts }, true);
+    return fetch(url, { credentials: "same-origin", cache: "no-store", headers: { Accept: "application/json" } })
+      .then(function (response) {
+        if (!response.ok) throw new Error("Promotion runtime request failed");
+        return response.json();
+      })
+      .then(function (payload) {
+        var freshConfig = payload && payload.config || {};
+        if (freshConfig.promotions && Array.isArray(freshConfig.promotions.rules)) {
+          applyFreshRuntimePromotions(freshConfig.promotions);
+          debugLog("promotion runtime refresh applied", { rules: config.promotions.rules.length }, true);
+          return true;
+        }
+        return false;
+      })
+      .catch(function () { return false; })
+      .finally(function () { state.promotionRuntimeRefresh.inFlight = false; });
+  }
+
+  function schedulePromotionRuntimeRefresh(reason, delay) {
+    if (hasPromotionRules()) return;
+    if (state.promotionRuntimeRefresh.delayedTimer || state.promotionRuntimeRefresh.attempts >= state.promotionRuntimeRefresh.maxAttempts) return;
+    state.promotionRuntimeRefresh.delayedTimer = window.setTimeout(function () {
+      state.promotionRuntimeRefresh.delayedTimer = null;
+      refreshPromotionRuntime(reason);
+    }, delay);
+  }
+
+  function maybeRefreshPromotionsForCart(cart) {
+    if (hasPromotionRules() || state.promotionRuntimeRefresh.cartNonEmptyAttempted) return;
+    if (!cart || Number(cart.item_count || 0) <= 0) return;
+    state.promotionRuntimeRefresh.cartNonEmptyAttempted = true;
+    refreshPromotionRuntime("cart-non-empty");
   }
 
   debugLog("config loaded", { drawerMode: config.cart.drawerMode, openAfterAddToCart: config.cart.openAfterAddToCart, expressCheckoutButtonEnabled: config.cart.expressCheckoutButtonEnabled, viewCartButtonEnabled: config.cart.viewCartButtonEnabled }, true);
@@ -938,7 +1018,7 @@
         if (!response.ok) throw new Error("Cart request failed");
         return response.json();
       })
-      .then(function (cart) { state.cart = cart; })
+      .then(function (cart) { state.cart = cart; maybeRefreshPromotionsForCart(cart); })
       .catch(function (error) {
         state.error = error && error.message ? error.message : "Cart request failed";
       })
@@ -1130,6 +1210,7 @@
     document.addEventListener("loopdesk:cart-drawer:open", function () { refreshAndMaybeOpen(true); });
     debugLog("selected drawer mode", { mode: config.cart.drawerMode, active: isLoopDeskDrawerActive() }, true);
     debugLog("capability result", getCapabilityResult(), true);
+    refreshPromotionRuntime("init").then(function (applied) { if (!applied && !hasPromotionRules()) schedulePromotionRuntimeRefresh("init-delayed", 750); });
     refreshAndMaybeOpen(false);
     scheduleCartTriggerTakeover("mount");
     observeCartTriggerTakeoverTargets();

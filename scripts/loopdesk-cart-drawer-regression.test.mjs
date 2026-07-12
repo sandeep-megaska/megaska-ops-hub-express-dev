@@ -50,4 +50,23 @@ assert.doesNotMatch(source, /Bag Exclusive|Special Offer|Complete your offer|Add
 assert.match(source, /offerConfirmationHtml\(cart, rule\)[\s\S]*original_line_price[\s\S]*final_line_price/, "discount confirmation should use Shopify cart response prices");
 assert.match(css, /\.loopdesk-cart-drawer__offer[\s\S]*\.loopdesk-cart-drawer__offer-savings/, "offer card and Shopify savings confirmation should be styled inside the existing drawer");
 
+const refreshRuntime = source.match(new RegExp('function refreshPromotionRuntime\\(reason\\) \\{[\\s\\S]*?\n  \\}\n\n  function schedulePromotionRuntimeRefresh'));
+assert.ok(refreshRuntime, "promotion runtime refresh helper should exist");
+assert.match(refreshRuntime[0], /\/apps\/megaska\/api\/runtime\/config\?shop=/, "empty promotion recovery should fetch the app-proxy runtime config endpoint");
+assert.match(refreshRuntime[0], /encodeURIComponent\(shopDomain\)[\s\S]*_loopdesk_runtime=" \+ Date\.now\(\)/, "runtime recovery should pass the shop domain and cache-busting timestamp");
+assert.match(refreshRuntime[0], /credentials: "same-origin", cache: "no-store"/, "runtime recovery should use same-origin credentials and no-store cache");
+assert.match(refreshRuntime[0], /freshConfig\.promotions && Array\.isArray\(freshConfig\.promotions\.rules\)[\s\S]*applyFreshRuntimePromotions\(freshConfig\.promotions\)/, "fresh runtime responses with promotion rules should replace the drawer promotion runtime");
+assert.match(refreshRuntime[0], /catch\(function \(\) \{ return false; \}\)[\s\S]*finally\(function \(\) \{ state\.promotionRuntimeRefresh\.inFlight = false; \}\)/, "runtime recovery failures should fail closed without setting cart errors");
+
+const applyFreshRuntime = source.match(new RegExp('function applyFreshRuntimePromotions\\(promotions\\) \\{[\\s\\S]*?\n  \\}'));
+assert.ok(applyFreshRuntime, "fresh promotion runtime apply helper should exist");
+assert.match(applyFreshRuntime[0], /config\.promotions = normalizedPromotions/, "closure-local drawer config should be updated with fresh promotions");
+assert.match(applyFreshRuntime[0], /window\.LoopDeskConfig = Object\.assign\([\s\S]*promotions: normalizedPromotions/, "window.LoopDeskConfig should be updated with the same fresh promotions");
+assert.match(applyFreshRuntime[0], /if \(state\.cart\) ensureOfferProducts\(eligiblePromotionRules\(state\.cart\)\);[\s\S]*render\(\);/, "fresh promotions should reevaluate the current cart, hydrate offers, and rerender");
+
+assert.match(source, /promotionRuntimeRefresh: \{ attempts: 0, maxAttempts: 3,[\s\S]*cartNonEmptyAttempted: false \}/, "promotion runtime recovery should have a bounded retry state");
+assert.match(source, /refreshPromotionRuntime\("init"\)\.then\(function \(applied\) \{ if \(!applied && !hasPromotionRules\(\)\) schedulePromotionRuntimeRefresh\("init-delayed", 750\); \}\);/, "drawer initialization should refresh empty promotions and schedule one delayed retry");
+assert.match(source, /function maybeRefreshPromotionsForCart\(cart\) \{[\s\S]*cartNonEmptyAttempted[\s\S]*Number\(cart\.item_count \|\| 0\) <= 0[\s\S]*refreshPromotionRuntime\("cart-non-empty"\);[\s\S]*\}/, "cart becoming non-empty should trigger one additional empty-promotion recovery attempt");
+assert.match(source, /then\(function \(cart\) \{ state\.cart = cart; maybeRefreshPromotionsForCart\(cart\); \}\)/, "normal cart fetch should remain operational and only opportunistically invoke promotion recovery");
+
 console.log("LoopDesk cart drawer CONFIG-2B regression checks passed");
