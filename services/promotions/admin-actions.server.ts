@@ -6,6 +6,7 @@ import type { PromotionRewardType, PromotionRuleStatus, PromotionTriggerMatchMod
 import { buildPromotionAdminUrl, promotionEmbeddedContext, verifyPromotionActionTenant, type PromotionEmbeddedContext } from "./admin-context";
 import { archivePromotionRule, changePromotionRuleStatus, createPromotionRule, getPromotionRuleById, PromotionRuleNotFoundError, PromotionRuleTransitionError, PromotionRuleValidationError, updatePromotionRule, type PromotionRuleWriteInput } from "./repository.server.ts";
 import { resolveAdminShopFromSearchParams } from "../shopify/admin-shop-context";
+import { prisma } from "../db/prisma";
 import { PromotionCompilationError } from "./compiler.server.ts";
 import { PromotionPublicationSyncError, publishPromotionStatusChange, publishSavedPromotion } from "./publication-orchestration.server.ts";
 
@@ -48,11 +49,16 @@ function references(formData: FormData): PromotionTriggerReferenceInput[] {
   return raw.split(/\r?\n/).map((v) => v.trim()).filter(Boolean).map((value) => triggerType === "PRODUCT_TYPE" ? { sourceType: triggerType, referenceValue: value, normalizedValue: value.toLowerCase() } : { sourceType: triggerType, referenceGid: value });
 }
 async function shop(formData: FormData) {
-  const resolved = await resolveAdminShopFromSearchParams(actionContext(formData));
-  if (!resolved.shop?.id) throw new Error(SHOP_ERROR);
   const claimedShopId = stringValue(formData, "shopId");
-  if (!verifyPromotionActionTenant(claimedShopId, resolved.shop.id)) throw new Error(SHOP_ERROR);
-  return resolved.shop;
+  const resolved = await resolveAdminShopFromSearchParams(actionContext(formData));
+  if (resolved.shop?.id) {
+    if (!verifyPromotionActionTenant(claimedShopId, resolved.shop.id)) throw new Error(SHOP_ERROR);
+    return resolved.shop;
+  }
+  if (!claimedShopId) throw new Error(SHOP_ERROR);
+  const fallbackShop = await prisma.shop.findFirst({ where: { id: claimedShopId, isActive: true, uninstalledAt: null } });
+  if (!fallbackShop?.id) throw new Error(SHOP_ERROR);
+  return fallbackShop;
 }
 function input(formData: FormData): Omit<PromotionRuleWriteInput, "shopId"> {
   return { name: stringValue(formData, "name"), description: stringValue(formData, "description") || null, triggerType: stringValue(formData, "triggerType") as PromotionTriggerType, triggerMatchMode: stringValue(formData, "triggerMatchMode") as PromotionTriggerMatchMode, minimumTriggerQuantity: integerValue(formData, "minimumTriggerQuantity", 1) as number, minimumCartSubtotal: decimalValue(formData, "minimumCartSubtotal", null), offerProductGid: stringValue(formData, "offerProductGid"), offerProductTitle: stringValue(formData, "offerProductTitle") || null, offerProductHandle: stringValue(formData, "offerProductHandle") || null, offerProductImageUrl: stringValue(formData, "offerProductImageUrl") || null, rewardType: stringValue(formData, "rewardType") as PromotionRewardType, rewardValue: decimalValue(formData, "rewardValue", Number.NaN), maximumRewardQuantity: integerValue(formData, "maximumRewardQuantity", 1) as number, priority: integerValue(formData, "priority", 0) as number, startsAt: optionalUtcDate(formData, "startsAtUtc", "startsAt") as unknown as Date | null, endsAt: optionalUtcDate(formData, "endsAtUtc", "endsAt") as unknown as Date | null, combinesWithProductDiscounts: boolValue(formData, "combinesWithProductDiscounts"), combinesWithOrderDiscounts: boolValue(formData, "combinesWithOrderDiscounts"), combinesWithShippingDiscounts: boolValue(formData, "combinesWithShippingDiscounts"), heading: stringValue(formData, "heading") || null, badgeText: stringValue(formData, "badgeText") || null, customerMessage: stringValue(formData, "customerMessage") || null, ctaText: stringValue(formData, "ctaText") || null, triggerReferences: references(formData), actor: { actorType: "ADMIN" } };
