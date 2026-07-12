@@ -256,6 +256,7 @@
         showSecureBadge: bool(checkout.showSecureBadge, DEFAULT_CONFIG.checkout.showSecureBadge),
         showTrustCopy: bool(checkout.showTrustCopy, DEFAULT_CONFIG.checkout.showTrustCopy)
       },
+      promotions: normalizePromotions(raw.promotions),
       enabled: bool(firstDefined(raw.enabled, legacy.enabled), DEFAULT_CONFIG.enabled),
       cartOwnershipMode: text(cart.cartOwnershipMode || legacy.cartOwnershipMode, DEFAULT_CONFIG.cartOwnershipMode)
     };
@@ -263,6 +264,29 @@
     if (Object.keys(legacy).length) configDiagnostics("legacy config merged", { keys: Object.keys(legacy) }, true);
     configDiagnostics("defaults applied", { merchantName: normalized.branding.merchantName }, true);
     return normalized;
+  }
+
+  function normalizePromotions(promotions) {
+    var rules = promotions && Array.isArray(promotions.rules) ? promotions.rules : [];
+    return {
+      rules: rules.map(function (rule) {
+        var presentation = isPlainObject(rule.presentation) ? rule.presentation : {};
+        var offer = isPlainObject(rule.offer) ? rule.offer : {};
+        return {
+          ruleId: nullableText(rule.ruleId),
+          priority: Number(rule.priority || 0),
+          offer: { productGid: nullableText(offer.productGid), title: nullableText(offer.title), handle: nullableText(offer.handle), imageUrl: safeLogoUrl(offer.imageUrl) },
+          reward: isPlainObject(rule.reward) ? rule.reward : {},
+          presentation: {
+            heading: nullableText(presentation.heading),
+            badgeText: nullableText(presentation.badgeText),
+            customerMessage: nullableText(presentation.customerMessage),
+            ctaText: nullableText(presentation.ctaText)
+          }
+        };
+      }).filter(function (rule) { return Boolean(rule.ruleId && rule.offer.productGid); })
+        .sort(function (a, b) { return a.priority - b.priority || String(a.ruleId).localeCompare(String(b.ruleId)); })
+    };
   }
 
   function debugLog(message, payload, force) {
@@ -707,13 +731,39 @@
     return "";
   }
 
+  function productGidFromCartItem(item) {
+    var id = item && (item.product_id || item.productId);
+    return id ? "gid://shopify/Product/" + String(id) : null;
+  }
+
+  function activePromotionForCart(cart) {
+    var rules = config.promotions && Array.isArray(config.promotions.rules) ? config.promotions.rules : [];
+    if (!cart || !cart.items || !cart.items.length || !rules.length) return null;
+    var cartProductGids = cart.items.map(productGidFromCartItem).filter(Boolean);
+    return rules.filter(function (rule) { return cartProductGids.indexOf(rule.offer.productGid) === -1; })[0] || null;
+  }
+
+  function renderPromotion(rule) {
+    if (!rule || !rule.presentation) return "";
+    var p = rule.presentation;
+    var parts = [];
+    if (p.badgeText) parts.push('<div class="loopdesk-cart-drawer__promotion-badge">' + escapeHtml(p.badgeText) + '</div>');
+    if (p.heading) parts.push('<strong class="loopdesk-cart-drawer__promotion-heading">' + escapeHtml(p.heading) + '</strong>');
+    if (p.customerMessage) parts.push('<p class="loopdesk-cart-drawer__promotion-message">' + escapeHtml(p.customerMessage) + '</p>');
+    if (p.ctaText && rule.offer.handle) parts.push('<a class="loopdesk-cart-drawer__promotion-cta" href="/products/' + encodeURIComponent(rule.offer.handle) + '" data-loopdesk-promotion-offer="' + escapeHtml(rule.offer.productGid) + '">' + escapeHtml(p.ctaText) + '</a>');
+    else if (p.ctaText) parts.push('<span class="loopdesk-cart-drawer__promotion-cta" data-loopdesk-promotion-offer="' + escapeHtml(rule.offer.productGid) + '">' + escapeHtml(p.ctaText) + '</span>');
+    if (!parts.length) return "";
+    return '<section class="loopdesk-cart-drawer__promotion" data-loopdesk-promotion-rule="' + escapeHtml(rule.ruleId) + '">' + parts.join("") + '</section>';
+  }
+
   function renderLines(cart) {
     if (state.loading) return '<div class="loopdesk-cart-drawer__loading"><span></span>' + escapeHtml(config.labels.loadingText) + '</div>';
     if (!cart || !cart.items || cart.items.length === 0) {
       return '<div class="loopdesk-cart-drawer__empty"><strong>Your cart is empty</strong><span>Add something you love and come back for express checkout.</span></div>';
     }
 
-    return cart.items.map(function (item, index) {
+    var promotionHtml = renderPromotion(activePromotionForCart(cart));
+    var linesHtml = cart.items.map(function (item, index) {
       var variant = item.variant_title && item.variant_title !== "Default Title" ? '<div class="loopdesk-cart-drawer__variant">' + escapeHtml(item.variant_title) + "</div>" : "";
       var image = getItemImage(item);
       return [
@@ -726,6 +776,7 @@
         "</article>",
       ].join("");
     }).join("");
+    return promotionHtml + linesHtml;
   }
 
   function render() {

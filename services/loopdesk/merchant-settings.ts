@@ -77,7 +77,19 @@ export type LoopDeskPublicRuntimeConfig = Pick<
   cartIntelligence?: CartIntelligencePublicRuntimeConfig;
   delhivery?: DelhiveryPublicRuntimeConfig;
   razorpay?: RazorpayPublicRuntimeConfig;
+  promotions?: LoopDeskPromotionRuntimeConfig;
 };
+
+export type LoopDeskPromotionRuntimeRule = {
+  ruleId: string;
+  compilationVersion: number;
+  priority: number;
+  offer: { productGid: string; title?: string; handle?: string; imageUrl?: string };
+  reward: { type: string; value: string; maximumQuantity: number };
+  presentation?: { heading?: string; badgeText?: string; customerMessage?: string; ctaText?: string };
+};
+
+export type LoopDeskPromotionRuntimeConfig = { rules: LoopDeskPromotionRuntimeRule[] };
 
 type ShopModuleConfigDelegate = {
   findUnique(args: {
@@ -94,6 +106,25 @@ type ShopModuleConfigDelegate = {
     };
     update: { enabled: boolean; config: LoopDeskMerchantSettings | CartIntelligenceSettings };
   }): Promise<{ id: string; config: unknown; enabled: boolean }>;
+};
+
+type PromotionRuleDelegate = {
+  findMany(args: object): Promise<Array<{
+    id: string;
+    priority: number;
+    offerProductGid: string;
+    offerProductTitle: string | null;
+    offerProductHandle: string | null;
+    offerProductImageUrl: string | null;
+    rewardType: string;
+    rewardValue: unknown;
+    maximumRewardQuantity: number;
+    heading: string | null;
+    badgeText: string | null;
+    customerMessage: string | null;
+    ctaText: string | null;
+    currentCompilation: { version: number; status: string } | null;
+  }>>;
 };
 
 type ShopDelegate = {
@@ -117,6 +148,7 @@ function db() {
   return prisma as unknown as {
     shopModuleConfig: ShopModuleConfigDelegate;
     shop: ShopDelegate;
+    promotionRule: PromotionRuleDelegate;
   };
 }
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -563,13 +595,56 @@ export async function updateCartIntelligenceSettings(shopId: string, patch: unkn
   return next;
 }
 
+function optionalRuntimeText(value: unknown) {
+  const next = typeof value === "string" ? stripHtml(value).trim() : "";
+  return next || undefined;
+}
+
+function compactRecord<T extends Record<string, unknown>>(record: T) {
+  return Object.fromEntries(Object.entries(record).filter(([, value]) => value !== undefined && value !== null && value !== "")) as Partial<T>;
+}
+
+export async function getPromotionRuntimeConfig(shopId: string): Promise<LoopDeskPromotionRuntimeConfig> {
+  const rules = await db().promotionRule.findMany({
+    where: { shopId, status: "ACTIVE", archivedAt: null, currentCompilation: { is: { status: "READY" } } },
+    include: { currentCompilation: { select: { version: true, status: true } } },
+    orderBy: [{ priority: "asc" }, { id: "asc" }],
+  });
+  return {
+    rules: rules
+      .filter((rule) => rule.currentCompilation?.status === "READY" && Number.isInteger(rule.currentCompilation.version) && rule.currentCompilation.version > 0)
+      .map((rule) => {
+        const presentation = compactRecord({
+          heading: optionalRuntimeText(rule.heading),
+          badgeText: optionalRuntimeText(rule.badgeText),
+          customerMessage: optionalRuntimeText(rule.customerMessage),
+          ctaText: optionalRuntimeText(rule.ctaText),
+        });
+        return {
+          ruleId: rule.id,
+          compilationVersion: rule.currentCompilation!.version,
+          priority: rule.priority,
+          offer: compactRecord({
+            productGid: rule.offerProductGid,
+            title: optionalRuntimeText(rule.offerProductTitle),
+            handle: optionalRuntimeText(rule.offerProductHandle),
+            imageUrl: optionalRuntimeText(rule.offerProductImageUrl),
+          }) as LoopDeskPromotionRuntimeRule["offer"],
+          reward: { type: rule.rewardType, value: String(rule.rewardValue), maximumQuantity: rule.maximumRewardQuantity },
+          ...(Object.keys(presentation).length ? { presentation } : {}),
+        };
+      }),
+  };
+}
+
 export async function getLoopDeskRuntimeConfig(shopId: string) {
-  const [settings, cartIntelligence, delhivery, razorpay] = await Promise.all([
+  const [settings, cartIntelligence, delhivery, razorpay, promotions] = await Promise.all([
     getLoopDeskMerchantSettings(shopId),
     getCartIntelligenceSettings(shopId),
     getDelhiveryRuntimeConfig(shopId),
     getRazorpayRuntimeConfig(shopId),
+    getPromotionRuntimeConfig(shopId),
   ]);
-  return { ...toLoopDeskPublicRuntimeConfig(settings), cartIntelligence: toCartIntelligencePublicRuntimeConfig(cartIntelligence), delhivery, razorpay };
+  return { ...toLoopDeskPublicRuntimeConfig(settings), cartIntelligence: toCartIntelligencePublicRuntimeConfig(cartIntelligence), delhivery, razorpay, promotions };
 }
 export const normalizeLoopDeskRuntimeConfig = normalizeLoopDeskMerchantSettings;

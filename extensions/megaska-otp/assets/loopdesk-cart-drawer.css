@@ -421,3 +421,48 @@ body.loopdesk-cart-drawer-is-open #loopdesk-cart-drawer-root .loopdesk-cart-draw
   pointer-events: none !important;
   opacity: 0 !important;
 }
+
+.loopdesk-cart-drawer__promotion {
+  display: grid;
+  gap: 0.45rem;
+  margin-bottom: 0.85rem;
+  padding: 0.9rem;
+  border: 1px solid color-mix(in srgb, var(--loopdesk-primary, #111827) 18%, transparent);
+  border-radius: calc(var(--loopdesk-radius, 16px) * 0.75);
+  background: color-mix(in srgb, var(--loopdesk-accent, #2563eb) 8%, #ffffff);
+}
+
+.loopdesk-cart-drawer__promotion-badge {
+  width: fit-content;
+  border-radius: 999px;
+  background: var(--loopdesk-primary, #111827);
+  color: #ffffff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 0.22rem 0.55rem;
+}
+
+.loopdesk-cart-drawer__promotion-heading {
+  color: var(--loopdesk-text, #111827);
+  font-size: 0.95rem;
+}
+
+.loopdesk-cart-drawer__promotion-message {
+  color: color-mix(in srgb, var(--loopdesk-text, #111827) 76%, transparent);
+  font-size: 0.84rem;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.loopdesk-cart-drawer__promotion-cta {
+  justify-self: start;
+  border: 0;
+  border-radius: 999px;
+  background: var(--loopdesk-accent, #2563eb);
+  color: #ffffff;
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 700;
+  padding: 0.42rem 0.75rem;
+}

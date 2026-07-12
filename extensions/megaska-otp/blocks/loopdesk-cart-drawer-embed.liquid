@@ -44,6 +44,7 @@
           labels: Object.assign({}, (window.LoopDeskConfig && window.LoopDeskConfig.labels) || {}, payload.config.labels || {}),
           cart: Object.assign({}, (window.LoopDeskConfig && window.LoopDeskConfig.cart) || {}, payload.config.cart || {}),
           checkout: Object.assign({}, (window.LoopDeskConfig && window.LoopDeskConfig.checkout) || {}, payload.config.checkout || {}),
+          promotions: payload.config.promotions || (window.LoopDeskConfig && window.LoopDeskConfig.promotions),
           shopDomain: shopDomain
         });
         window.LOOPDESK_CART_DRAWER_CONFIG = Object.assign({}, window.LOOPDESK_CART_DRAWER_CONFIG || {}, {
