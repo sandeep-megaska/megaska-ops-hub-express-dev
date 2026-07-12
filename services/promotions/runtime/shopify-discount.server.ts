@@ -2,37 +2,38 @@ import { LOOPDESK_AUTOMATIC_DISCOUNT_TITLE, LOOPDESK_FUNCTION_HANDLE, LOOPDESK_F
 
 export type ShopifyGraphql = <T>(query: string, variables?: Record<string, unknown>, options?: { shopDomain?: string | null }) => Promise<T>;
 export type DiscountSnapshot = { id: string; title?: string | null; status?: string | null; discountClasses?: string[] | null; appDiscountType?: { appKey?: string | null; functionId?: string | null } | null; metafield?: { namespace: string; key: string; type: string; value: string } | null };
-type DiscountAutomaticNodeResponse = { id: string; metafield?: DiscountSnapshot["metafield"]; discount?: Omit<DiscountSnapshot, "id" | "metafield"> | null };
+export type DiscountNodeResponse = { id: string; metafield?: DiscountSnapshot["metafield"]; discount?: { discountId?: string | null; title?: string | null; status?: string | null; discountClasses?: string[] | null; appDiscountType?: { appKey?: string | null; functionId?: string | null } | null } | null };
 
 function userErrors(errors: Array<{ message?: string; field?: string[] }> | undefined) { if (errors?.length) throw new Error(errors.map((e) => e.message || e.field?.join(".") || "Shopify user error").join("; ")); }
 
-const nodeDiscountSelection = `id metafield(namespace: "${LOOPDESK_FUNCTION_METAFIELD_NAMESPACE}", key: "${LOOPDESK_FUNCTION_METAFIELD_KEY}") { namespace key type value } discount { ... on DiscountAutomaticApp { title status discountClasses appDiscountType { appKey functionId } } }`;
-const appDiscountSelection = `title status discountClasses appDiscountType { appKey functionId }`;
+const nodeDiscountSelection = `id metafield(namespace: "${LOOPDESK_FUNCTION_METAFIELD_NAMESPACE}", key: "${LOOPDESK_FUNCTION_METAFIELD_KEY}") { namespace key type value } discount { ... on DiscountAutomaticApp { discountId title status discountClasses appDiscountType { appKey functionId } } }`;
+const appDiscountSelection = `discountId title status discountClasses appDiscountType { appKey functionId }`;
 
-function flattenDiscountNode(node: DiscountAutomaticNodeResponse | null | undefined): DiscountSnapshot | null {
+function flattenDiscountNode(node: DiscountNodeResponse | null | undefined): DiscountSnapshot | null {
   if (!node?.id || !node.discount) return null;
   return { id: node.id, metafield: node.metafield ?? null, title: node.discount.title, status: node.discount.status, discountClasses: node.discount.discountClasses, appDiscountType: node.discount.appDiscountType };
 }
 
 export async function readAutomaticDiscount(graphql: ShopifyGraphql, shopDomain: string | null, id: string) {
-  const data = await graphql<{ node: DiscountAutomaticNodeResponse | null }>(`query LoopDeskDiscount($id: ID!) { node(id: $id) { ... on DiscountAutomaticNode { ${nodeDiscountSelection} } } }`, { id }, { shopDomain });
-  return flattenDiscountNode(data.node);
+  const data = await graphql<{ discountNode: DiscountNodeResponse | null }>(`query LoopDeskDiscount($id: ID!) { discountNode(id: $id) { ${nodeDiscountSelection} } }`, { id }, { shopDomain });
+  return flattenDiscountNode(data.discountNode);
 }
 
 export async function findCanonicalAutomaticDiscount(graphql: ShopifyGraphql, shopDomain: string | null) {
-  const data = await graphql<{ discountNodes: { nodes: DiscountAutomaticNodeResponse[] } }>(`query LoopDeskDiscountSearch($query: String!) { discountNodes(first: 25, query: $query) { nodes { ${nodeDiscountSelection} } } }`, { query: `title:'${LOOPDESK_AUTOMATIC_DISCOUNT_TITLE}'` }, { shopDomain });
+  const data = await graphql<{ discountNodes: { nodes: DiscountNodeResponse[] } }>(`query LoopDeskDiscountSearch($query: String!) { discountNodes(first: 25, query: $query) { nodes { ${nodeDiscountSelection} } } }`, { query: `title:'${LOOPDESK_AUTOMATIC_DISCOUNT_TITLE}'` }, { shopDomain });
   const matches = data.discountNodes.nodes.map(flattenDiscountNode).filter((discount): discount is DiscountSnapshot => discount?.title === LOOPDESK_AUTOMATIC_DISCOUNT_TITLE);
   if (matches.length > 1) throw new Error("Multiple LoopDesk automatic discounts match the canonical title; ownership is ambiguous.");
   return matches[0] ?? null;
 }
 
 export async function createAutomaticDiscount(graphql: ShopifyGraphql, shopDomain: string | null, startsAt: string) {
-  const data = await graphql<{ discountAutomaticAppCreate: { automaticAppDiscount?: Omit<DiscountSnapshot, "id" | "metafield"> | null; userErrors: Array<{ message?: string; field?: string[] }> } }>(`mutation LoopDeskCreateDiscount($automaticAppDiscount: DiscountAutomaticAppInput!) { discountAutomaticAppCreate(automaticAppDiscount: $automaticAppDiscount) { automaticAppDiscount { ${appDiscountSelection} } userErrors { field message } } }`, { automaticAppDiscount: { title: LOOPDESK_AUTOMATIC_DISCOUNT_TITLE, functionHandle: LOOPDESK_FUNCTION_HANDLE, startsAt, discountClasses: ["PRODUCT"] } }, { shopDomain });
+  const data = await graphql<{ discountAutomaticAppCreate: { automaticAppDiscount?: DiscountNodeResponse["discount"] | null; userErrors: Array<{ message?: string; field?: string[] }> } }>(`mutation LoopDeskCreateDiscount($automaticAppDiscount: DiscountAutomaticAppInput!) { discountAutomaticAppCreate(automaticAppDiscount: $automaticAppDiscount) { automaticAppDiscount { ${appDiscountSelection} } userErrors { field message } } }`, { automaticAppDiscount: { title: LOOPDESK_AUTOMATIC_DISCOUNT_TITLE, functionHandle: LOOPDESK_FUNCTION_HANDLE, startsAt, discountClasses: ["PRODUCT"] } }, { shopDomain });
   userErrors(data.discountAutomaticAppCreate.userErrors);
   const discount = data.discountAutomaticAppCreate.automaticAppDiscount;
   if (!discount) throw new Error("Shopify did not return a created automatic discount.");
   if (discount.title !== LOOPDESK_AUTOMATIC_DISCOUNT_TITLE) throw new Error("Shopify returned an automatic discount with an unexpected title.");
-  const snapshot = await findCanonicalAutomaticDiscount(graphql, shopDomain);
+  if (!discount.discountId) throw new Error("Shopify did not return the created automatic discount node owner ID.");
+  const snapshot = await readAutomaticDiscount(graphql, shopDomain, discount.discountId);
   if (!snapshot?.id) throw new Error("Shopify did not return the created automatic discount node owner ID.");
   return snapshot;
 }
