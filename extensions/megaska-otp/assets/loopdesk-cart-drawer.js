@@ -99,7 +99,7 @@
   if (!config.enabled || window.__LOOPDESK_CART_DRAWER_LOADED__) return;
   window.__LOOPDESK_CART_DRAWER_LOADED__ = true;
 
-  var state = { open: false, loading: false, cart: null, error: "", hostMode: LOOPDESK_HOST_MODE, themeDrawer: null, fallbackReason: "", expressCheckoutLock: false, capability: null, drawerModeActive: false, neutralizedThemeDrawers: [], bodyLockSnapshot: null, removedThemeBodyClasses: [], cartTriggerTakeovers: [] };
+  var state = { selectedOfferVariants: {}, offerProducts: {}, offerLoading: {}, open: false, loading: false, cart: null, error: "", hostMode: LOOPDESK_HOST_MODE, themeDrawer: null, fallbackReason: "", expressCheckoutLock: false, capability: null, drawerModeActive: false, neutralizedThemeDrawers: [], bodyLockSnapshot: null, removedThemeBodyClasses: [], cartTriggerTakeovers: [] };
   var cartTriggerObserver = null;
   var cartTriggerTakeoverTimer = null;
   var suppressNextCartClickUntil = 0;
@@ -257,7 +257,8 @@
         showTrustCopy: bool(checkout.showTrustCopy, DEFAULT_CONFIG.checkout.showTrustCopy)
       },
       enabled: bool(firstDefined(raw.enabled, legacy.enabled), DEFAULT_CONFIG.enabled),
-      cartOwnershipMode: text(cart.cartOwnershipMode || legacy.cartOwnershipMode, DEFAULT_CONFIG.cartOwnershipMode)
+      cartOwnershipMode: text(cart.cartOwnershipMode || legacy.cartOwnershipMode, DEFAULT_CONFIG.cartOwnershipMode),
+      promotions: isPlainObject(raw.promotions) && Array.isArray(raw.promotions.rules) ? { rules: raw.promotions.rules } : { rules: [] }
     };
     configDiagnostics("runtime config normalized", { drawerMode: normalized.cart.drawerMode }, true);
     if (Object.keys(legacy).length) configDiagnostics("legacy config merged", { keys: Object.keys(legacy) }, true);
@@ -707,6 +708,124 @@
     return "";
   }
 
+
+  function productGidFromId(id) {
+    return id ? "gid://shopify/Product/" + String(id) : "";
+  }
+
+
+  function centsFromDecimal(value) {
+    var number = Number(value || 0);
+    return Number.isFinite(number) ? Math.round(number * 100) : 0;
+  }
+
+  function isScheduleActive(rule) {
+    var now = Date.now();
+    var schedule = rule && rule.schedule || {};
+    var starts = schedule.startsAt ? Date.parse(schedule.startsAt) : null;
+    var ends = schedule.endsAt ? Date.parse(schedule.endsAt) : null;
+    return (!starts || starts <= now) && (!ends || ends >= now);
+  }
+
+  function ruleTriggerProductGids(rule) {
+    var groups = rule && rule.trigger && Array.isArray(rule.trigger.sourceGroups) ? rule.trigger.sourceGroups : [];
+    return groups.reduce(function (ids, group) {
+      (Array.isArray(group.productGids) ? group.productGids : []).forEach(function (gid) { if (ids.indexOf(gid) === -1) ids.push(gid); });
+      return ids;
+    }, []);
+  }
+
+  function quantityForProductGids(cart, gids) {
+    return (cart.items || []).reduce(function (total, item) {
+      return gids.indexOf(productGidFromId(item.product_id)) === -1 ? total : total + Number(item.quantity || 0);
+    }, 0);
+  }
+
+  function triggerQuantity(cart, rule) {
+    return quantityForProductGids(cart, ruleTriggerProductGids(rule));
+  }
+
+  function triggerMatches(cart, rule) {
+    var minimum = Number(rule.trigger && rule.trigger.minimumQuantity || 1);
+    var groups = rule && rule.trigger && Array.isArray(rule.trigger.sourceGroups) ? rule.trigger.sourceGroups : [];
+    if ((rule.trigger && rule.trigger.matchMode) !== "ALL") return triggerQuantity(cart, rule) >= minimum;
+    return groups.length > 0 && groups.every(function (group) {
+      return quantityForProductGids(cart, Array.isArray(group.productGids) ? group.productGids : []) >= minimum;
+    });
+  }
+
+  function rewardQuantityInCart(cart, rule) {
+    return (cart.items || []).reduce(function (total, item) {
+      var props = item.properties || {};
+      return props._loopdesk_promotion_rule_id === rule.ruleId ? total + Number(item.quantity || 0) : total;
+    }, 0);
+  }
+
+  function selectedVariantForRule(rule) {
+    var product = state.offerProducts[rule.ruleId];
+    var variants = product && Array.isArray(product.variants) ? product.variants : [];
+    var selected = state.selectedOfferVariants[rule.ruleId];
+    return variants.filter(function (variant) { return String(variant.id) === String(selected) && variant.available !== false; })[0] || variants.filter(function (variant) { return variant.available !== false; })[0] || null;
+  }
+
+  function eligiblePromotionRules(cart) {
+    if (!cart || !cart.items) return [];
+    var rules = config.promotions && Array.isArray(config.promotions.rules) ? config.promotions.rules : [];
+    return rules.filter(function (rule) {
+      if (!rule || rule.status !== "ACTIVE" || !rule.compilation || rule.compilation.status !== "READY") return false;
+      if (!isScheduleActive(rule)) return false;
+      if (!rule.offer || !rule.offer.handle) return false;
+      if (!triggerMatches(cart, rule)) return false;
+      if (centsFromDecimal(rule.trigger && rule.trigger.minimumCartSubtotal) > Number(cart.items_subtotal_price || cart.total_price || 0)) return false;
+      if (rewardQuantityInCart(cart, rule) >= Number(rule.reward && rule.reward.maximumQuantity || 1)) return false;
+      var product = state.offerProducts[rule.ruleId];
+      return !product || (Array.isArray(product.variants) && product.variants.some(function (variant) { return variant.available !== false; }));
+    }).sort(function (a, b) { return Number(a.priority || 0) - Number(b.priority || 0); });
+  }
+
+  function ensureOfferProducts(rules) {
+    rules.forEach(function (rule) {
+      if (!rule.offer || !rule.offer.handle || state.offerProducts[rule.ruleId] || state.offerLoading[rule.ruleId]) return;
+      state.offerLoading[rule.ruleId] = true;
+      fetch('/products/' + encodeURIComponent(rule.offer.handle) + '.js', { credentials: 'same-origin', headers: { Accept: 'application/json' } })
+        .then(function (response) { if (!response.ok) throw new Error('Offer product unavailable'); return response.json(); })
+        .then(function (product) { state.offerProducts[rule.ruleId] = product; var variant = selectedVariantForRule(rule); if (variant) state.selectedOfferVariants[rule.ruleId] = String(variant.id); })
+        .catch(function () { state.offerProducts[rule.ruleId] = { variants: [] }; })
+        .finally(function () { state.offerLoading[rule.ruleId] = false; render(); });
+    });
+  }
+
+  function offerConfirmationHtml(cart, rule) {
+    var lines = (cart.items || []).filter(function (item) { return (item.properties || {})._loopdesk_promotion_rule_id === rule.ruleId; });
+    if (!lines.length) return '';
+    var original = lines.reduce(function (sum, item) { return sum + Number(item.original_line_price || item.line_price || 0); }, 0);
+    var finalPrice = lines.reduce(function (sum, item) { return sum + Number(item.final_line_price || item.line_price || 0); }, 0);
+    if (original <= finalPrice) return '';
+    return '<div class="loopdesk-cart-drawer__offer-savings"><span>' + money(original, cart.currency) + '</span><strong>' + money(finalPrice, cart.currency) + '</strong><em>' + money(original - finalPrice, cart.currency) + '</em></div>';
+  }
+
+  function renderOfferCard(rule, cart) {
+    var presentation = rule.presentation || {};
+    var product = state.offerProducts[rule.ruleId];
+    var variants = product && Array.isArray(product.variants) ? product.variants : [];
+    var selected = selectedVariantForRule(rule);
+    var image = (product && product.featured_image) || rule.offer.imageUrl || '';
+    return ['<article class="loopdesk-cart-drawer__offer" data-loopdesk-offer-rule="' + escapeHtml(rule.ruleId) + '">',
+      image ? '<img class="loopdesk-cart-drawer__offer-image" src="' + escapeHtml(image) + '" alt="" loading="lazy">' : '',
+      presentation.badgeText ? '<div class="loopdesk-cart-drawer__offer-badge">' + escapeHtml(presentation.badgeText) + '</div>' : '',
+      presentation.heading ? '<h3>' + escapeHtml(presentation.heading) + '</h3>' : '',
+      presentation.customerMessage ? '<p>' + escapeHtml(presentation.customerMessage) + '</p>' : '',
+      variants.length ? '<select data-loopdesk-offer-variant data-loopdesk-offer-rule="' + escapeHtml(rule.ruleId) + '">' + variants.map(function (variant) { return '<option value="' + escapeHtml(variant.id) + '" ' + (selected && String(selected.id) === String(variant.id) ? 'selected' : '') + ' ' + (variant.available === false ? 'disabled' : '') + '>' + escapeHtml(variant.title) + '</option>'; }).join('') + '</select>' : '',
+      presentation.ctaText ? '<button type="button" data-loopdesk-add-offer data-loopdesk-offer-rule="' + escapeHtml(rule.ruleId) + '" ' + (!selected ? 'disabled' : '') + '>' + escapeHtml(presentation.ctaText) + '</button>' : '',
+      offerConfirmationHtml(cart, rule), '</article>'].join('');
+  }
+
+  function renderOffers(cart) {
+    var rules = eligiblePromotionRules(cart);
+    ensureOfferProducts(rules);
+    return rules.map(function (rule) { return renderOfferCard(rule, cart); }).join('');
+  }
+
   function renderLines(cart) {
     if (state.loading) return '<div class="loopdesk-cart-drawer__loading"><span></span>' + escapeHtml(config.labels.loadingText) + '</div>';
     if (!cart || !cart.items || cart.items.length === 0) {
@@ -725,7 +844,7 @@
         "</div>",
         "</article>",
       ].join("");
-    }).join("");
+    }).join("") + renderOffers(cart);
   }
 
   function render() {
@@ -822,9 +941,34 @@
       .finally(function () { state.loading = false; render(); });
   }
 
+
+  function addOfferToCart(ruleId) {
+    var rules = eligiblePromotionRules(state.cart || {});
+    var rule = rules.filter(function (candidate) { return candidate.ruleId === ruleId; })[0];
+    var variant = rule && selectedVariantForRule(rule);
+    if (!rule || !variant) return;
+    state.loading = true;
+    render();
+    return fetch('/cart/add.js', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ id: Number(variant.id), quantity: 1, properties: { _loopdesk_promotion_rule_id: rule.ruleId, _loopdesk_promotion_compilation_version: String(rule.compilation.version) } })
+    }).then(function (response) {
+      if (!response.ok) throw new Error('Offer add failed');
+      return fetchCart();
+    }).catch(function (error) {
+      state.error = error && error.message ? error.message : 'Offer add failed';
+    }).finally(function () { state.loading = false; render(); });
+  }
+
   function handleDrawerAction(event) {
     var qtyButton = event.target && event.target.closest && event.target.closest("[data-loopdesk-qty]");
     var removeButton = event.target && event.target.closest && event.target.closest("[data-loopdesk-remove]");
+    var select = event.target && event.target.closest && event.target.closest("[data-loopdesk-offer-variant]");
+    var addOffer = event.target && event.target.closest && event.target.closest("[data-loopdesk-add-offer]");
+    if (select) { state.selectedOfferVariants[select.getAttribute("data-loopdesk-offer-rule")] = select.value; return; }
+    if (addOffer) { event.preventDefault(); return addOfferToCart(addOffer.getAttribute("data-loopdesk-offer-rule")); }
     var button = qtyButton || removeButton;
     if (!button || !state.cart || !state.cart.items) return;
     event.preventDefault();

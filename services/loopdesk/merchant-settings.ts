@@ -75,6 +75,7 @@ export type LoopDeskPublicRuntimeConfig = Pick<
   enabled: boolean;
   cartOwnershipMode: DrawerMode;
   cartIntelligence?: CartIntelligencePublicRuntimeConfig;
+  promotions?: { rules: unknown[] };
   delhivery?: DelhiveryPublicRuntimeConfig;
   razorpay?: RazorpayPublicRuntimeConfig;
 };
@@ -481,6 +482,24 @@ export function toLoopDeskPublicRuntimeConfig(
   };
 }
 
+async function getCompiledPromotionRuntime(shopId: string) {
+  const rows = await (prisma as any).promotionRule.findMany({
+    where: { shopId, status: "ACTIVE", currentCompilation: { is: { status: "READY" } } },
+    orderBy: [{ priority: "asc" }, { updatedAt: "desc" }],
+    select: { id: true, priority: true, status: true, currentCompilation: { select: { id: true, version: true, status: true, storefrontPayload: true } } },
+  });
+
+  return {
+    rules: rows
+      .map((row: any) => {
+        const payload = row.currentCompilation?.storefrontPayload;
+        if (!isRecord(payload)) return null;
+        return { ...payload, ruleId: payload.ruleId || row.id, priority: payload.priority ?? row.priority, status: payload.status || row.status, compilation: { id: row.currentCompilation.id, version: row.currentCompilation.version, status: row.currentCompilation.status } };
+      })
+      .filter(Boolean),
+  };
+}
+
 async function shopDefaults(shopId: string) {
   const shop = await db().shop.findUnique({
     where: { id: shopId },
@@ -564,12 +583,13 @@ export async function updateCartIntelligenceSettings(shopId: string, patch: unkn
 }
 
 export async function getLoopDeskRuntimeConfig(shopId: string) {
-  const [settings, cartIntelligence, delhivery, razorpay] = await Promise.all([
+  const [settings, cartIntelligence, promotions, delhivery, razorpay] = await Promise.all([
     getLoopDeskMerchantSettings(shopId),
     getCartIntelligenceSettings(shopId),
+    getCompiledPromotionRuntime(shopId),
     getDelhiveryRuntimeConfig(shopId),
     getRazorpayRuntimeConfig(shopId),
   ]);
-  return { ...toLoopDeskPublicRuntimeConfig(settings), cartIntelligence: toCartIntelligencePublicRuntimeConfig(cartIntelligence), delhivery, razorpay };
+  return { ...toLoopDeskPublicRuntimeConfig(settings), cartIntelligence: toCartIntelligencePublicRuntimeConfig(cartIntelligence), promotions, delhivery, razorpay };
 }
 export const normalizeLoopDeskRuntimeConfig = normalizeLoopDeskMerchantSettings;

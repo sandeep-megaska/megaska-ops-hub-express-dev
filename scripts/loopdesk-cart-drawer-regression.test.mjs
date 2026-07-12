@@ -34,4 +34,14 @@ assert.match(source, /elements\.root\) elements\.root\.classList\.toggle\("loopd
 assert.match(css, /#loopdesk-cart-drawer-root \.loopdesk-cart-drawer[\s\S]*display: flex !important;[\s\S]*visibility: visible !important;[\s\S]*pointer-events: auto !important;/, "LoopDesk drawer panel must override broad native cart hiding selectors");
 assert.match(css, /#loopdesk-cart-drawer-root \.loopdesk-cart-drawer__overlay[\s\S]*display: block !important;[\s\S]*visibility: visible !important;/, "LoopDesk overlay must override broad native cart hiding selectors");
 
+assert.match(source, /promotions: isPlainObject\(raw\.promotions\)[\s\S]*rules: raw\.promotions\.rules/, "runtime promotions should be read from app-proxy config");
+assert.match(source, /function eligiblePromotionRules\(cart\) \{[\s\S]*rule\.status !== "ACTIVE"[\s\S]*rule\.compilation\.status !== "READY"[\s\S]*isScheduleActive\(rule\)[\s\S]*triggerMatches\(cart, rule\)[\s\S]*minimumCartSubtotal[\s\S]*maximumQuantity[\s\S]*sort\(function \(a, b\) \{ return Number\(a\.priority \|\| 0\) - Number\(b\.priority \|\| 0\); \}\)/, "compiled promotion eligibility should require active READY scheduled trigger/subtotal/max quantity and ascending priority");
+assert.match(source, /fetch\('\/products\/' \+ encodeURIComponent\(rule\.offer\.handle\) \+ '\.js'/, "offer availability and variants should load from the app-proxy-provided offer handle");
+assert.match(source, /<select data-loopdesk-offer-variant/, "offer card should render a per-rule variant selector");
+assert.match(source, /variant\.available === false \? 'disabled'/, "unavailable offer variants should be disabled");
+assert.match(source, /fetch\('\/cart\/add\.js'[\s\S]*_loopdesk_promotion_rule_id: rule\.ruleId[\s\S]*_loopdesk_promotion_compilation_version: String\(rule\.compilation\.version\)/, "Add Offer should POST the selected variant with exact Function marker properties");
+assert.doesNotMatch(source, /Bag Exclusive|Special Offer|Complete your offer|Add Offer/, "offer copy must come from Promotion Admin fields only");
+assert.match(source, /offerConfirmationHtml\(cart, rule\)[\s\S]*original_line_price[\s\S]*final_line_price/, "discount confirmation should use Shopify cart response prices");
+assert.match(css, /\.loopdesk-cart-drawer__offer[\s\S]*\.loopdesk-cart-drawer__offer-savings/, "offer card and Shopify savings confirmation should be styled inside the existing drawer");
+
 console.log("LoopDesk cart drawer CONFIG-2B regression checks passed");
