@@ -91,6 +91,7 @@ model Shop {
   recoveryTokens        CheckoutRecoveryToken[]
   promotionRules        PromotionRule[]
   promotionAuditLogs    PromotionAuditLog[]
+  promotionRuntimeSyncState PromotionRuntimeSyncState?
 }
 enum PromotionRuleStatus {
   DRAFT
@@ -122,6 +123,13 @@ enum PromotionCompilationStatus {
   READY
   FAILED
   SUPERSEDED
+}
+
+enum PromotionRuntimeSyncStateValue {
+  NEVER_SYNCED
+  SYNCING
+  SYNCED
+  FAILED
 }
 
 enum PromotionCompilationReason {
@@ -255,6 +263,33 @@ model PromotionCompiledMembership {
   @@index([promotionCompilationId])
   @@index([productGid])
   @@index([sourceType, productGid])
+}
+
+model PromotionRuntimeSyncState {
+  id                                   String                         @id @default(uuid())
+  shopId                               String                         @unique
+  shopifyAutomaticDiscountId            String?
+  lastDeployedConfigurationVersion      Int?
+  lastDeployedConfigurationHash         String?
+  lastRulesFingerprint                  String?
+  lastDeployedRuleCount                 Int                            @default(0)
+  lastSuccessfulSyncAt                  DateTime?
+  synchronizationState                  PromotionRuntimeSyncStateValue  @default(NEVER_SYNCED)
+  lastAttemptedAt                       DateTime?
+  lastErrorCode                         String?
+  lastErrorMessage                      String?
+  synchronizationAttemptId              String?
+  synchronizationLeaseExpiresAt         DateTime?
+  lastVerifiedConfiguration             Json?
+  createdAt                            DateTime                       @default(now())
+  updatedAt                            DateTime                       @updatedAt
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@index([synchronizationState, lastAttemptedAt])
+  @@index([synchronizationAttemptId])
+  @@index([synchronizationLeaseExpiresAt])
+  @@index([shopifyAutomaticDiscountId])
 }
 
 model PromotionAuditLog {
