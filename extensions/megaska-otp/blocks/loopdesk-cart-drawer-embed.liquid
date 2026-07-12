@@ -61,10 +61,84 @@
         });
       }
 
+      function formatMoney(amount) {
+        try {
+          return new Intl.NumberFormat(undefined, {
+            style: "currency",
+            currency: "INR",
+            maximumFractionDigits: Number(amount) % 1 === 0 ? 0 : 2
+          }).format(amount);
+        } catch (_error) {
+          return "₹" + Number(amount || 0).toFixed(2);
+        }
+      }
+
+      function numericPrice(text) {
+        var normalized = String(text || "").replace(/[^0-9.,-]/g, "").replace(/,/g, "");
+        var value = Number(normalized);
+        return Number.isFinite(value) ? value : 0;
+      }
+
+      function promotionRule(ruleId) {
+        var rules = window.LoopDeskConfig && window.LoopDeskConfig.promotions && window.LoopDeskConfig.promotions.rules;
+        if (!Array.isArray(rules)) return null;
+        return rules.filter(function (rule) { return String(rule && rule.ruleId || "") === String(ruleId || ""); })[0] || null;
+      }
+
+      function offerPrice(originalPrice, rule) {
+        var reward = rule && rule.reward || {};
+        var value = Number(reward.value || 0);
+        if (!Number.isFinite(value)) value = 0;
+        if (reward.type === "PERCENTAGE_OFF") return Math.max(0, originalPrice * (1 - value / 100));
+        if (reward.type === "FIXED_AMOUNT_OFF") return Math.max(0, originalPrice - value);
+        if (reward.type === "FIXED_PRICE") return Math.max(0, value);
+        return originalPrice;
+      }
+
+      function improveOfferCard(card) {
+        var ruleId = card.getAttribute("data-loopdesk-offer-rule");
+        var rule = promotionRule(ruleId);
+        var priceNode = card.querySelector(".loopdesk-cart-drawer__offer-price");
+        if (!rule || !priceNode) return;
+
+        var originalPrice = numericPrice(priceNode.textContent);
+        if (!(originalPrice > 0)) return;
+        var discountedPrice = offerPrice(originalPrice, rule);
+        var signature = String(originalPrice) + ":" + String(discountedPrice);
+        if (priceNode.getAttribute("data-loopdesk-benefit-signature") !== signature) {
+          priceNode.setAttribute("data-loopdesk-benefit-signature", signature);
+          priceNode.innerHTML = '<strong>Get it for ' + formatMoney(discountedPrice) + '</strong><span>Normally <s>' + formatMoney(originalPrice) + '</s></span>';
+        }
+
+        var select = card.querySelector("[data-loopdesk-offer-variant]");
+        if (!select) return;
+        var meaningfulOptions = Array.prototype.filter.call(select.options || [], function (option) {
+          var label = String(option.textContent || "").split("—")[0].trim();
+          return label && label !== formatMoney(originalPrice) && !/^default title$/i.test(label);
+        });
+        if ((select.options || []).length <= 1 || meaningfulOptions.length === 0) {
+          select.hidden = true;
+          select.style.display = "none";
+          select.setAttribute("aria-hidden", "true");
+        }
+      }
+
+      function improveOfferCards() {
+        document.querySelectorAll("#loopdesk-cart-drawer-root .loopdesk-cart-drawer__offer").forEach(improveOfferCard);
+      }
+
+      function observeOfferCards() {
+        improveOfferCards();
+        if (!window.MutationObserver) return;
+        var observer = new MutationObserver(improveOfferCards);
+        observer.observe(document.documentElement, { childList: true, subtree: true });
+      }
+
       function loadDrawerAsset() {
         var script = document.createElement("script");
         script.src = drawerAssetUrl;
         script.defer = true;
+        script.addEventListener("load", observeOfferCards, { once: true });
         document.head.appendChild(script);
       }
 
