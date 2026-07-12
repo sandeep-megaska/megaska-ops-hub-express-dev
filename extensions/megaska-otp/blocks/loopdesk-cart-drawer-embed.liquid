@@ -9,6 +9,23 @@
 {% if loopdesk_cart_drawer_enabled %}
   {{ 'loopdesk-cart-drawer.css' | asset_url | stylesheet_tag }}
 
+  <style>
+    [data-megaska-express-modal] form[data-express-form="discount"],
+    [data-megaska-express-modal] .megaska-express-progress span:nth-child(2) {
+      display: none !important;
+    }
+    .loopdesk-cart-drawer__coupon { margin:16px 0 0; padding:14px; border:1px solid #dbe2ea; border-radius:14px; background:#fff; }
+    .loopdesk-cart-drawer__coupon-title { margin:0 0 10px; font-size:14px; font-weight:700; color:#111827; }
+    .loopdesk-cart-drawer__coupon-row { display:flex; gap:8px; }
+    .loopdesk-cart-drawer__coupon-input { min-width:0; flex:1; height:42px; padding:0 12px; border:1px solid #cbd5e1; border-radius:10px; font:inherit; text-transform:uppercase; }
+    .loopdesk-cart-drawer__coupon-button { height:42px; padding:0 16px; border:0; border-radius:10px; background:#111827; color:#fff; font:inherit; font-weight:700; cursor:pointer; }
+    .loopdesk-cart-drawer__coupon-button[disabled] { opacity:.6; cursor:wait; }
+    .loopdesk-cart-drawer__coupon-status { margin:10px 0 0; font-size:12px; line-height:1.4; color:#475569; }
+    .loopdesk-cart-drawer__coupon-status[data-state="success"] { color:#15803d; }
+    .loopdesk-cart-drawer__coupon-status[data-state="error"] { color:#b91c1c; }
+    .loopdesk-cart-drawer__coupon-remove { margin-left:8px; padding:0; border:0; background:transparent; color:inherit; font:inherit; text-decoration:underline; cursor:pointer; }
+  </style>
+
   <script>
     window.LoopDeskConfig = Object.assign({}, window.LoopDeskConfig || {}, {
       branding: Object.assign({}, (window.LoopDeskConfig && window.LoopDeskConfig.branding) || {}, {
@@ -35,15 +52,14 @@
       var drawerAssetUrl = {{ 'loopdesk-cart-drawer.js' | asset_url | json }};
       var shopDomain = {{ shop.permanent_domain | json }};
       var runtimeUrl = "/apps/megaska/api/runtime/config?shop=" + encodeURIComponent(shopDomain) + "&_loopdesk_runtime=" + Date.now();
+      var couponBusy = false;
 
       function mergeRuntimeConfig(payload) {
         if (!payload || payload.ok !== true || !payload.config) return;
         window.LoopDeskConfig = Object.assign({}, window.LoopDeskConfig || {}, payload.config, {
           branding: Object.assign({}, (window.LoopDeskConfig && window.LoopDeskConfig.branding) || {}, payload.config.branding || {}),
           labels: Object.assign({}, (window.LoopDeskConfig && window.LoopDeskConfig.labels) || {}, payload.config.labels || {}),
-          cart: Object.assign({}, (window.LoopDeskConfig && window.LoopDeskConfig.cart) || {}, payload.config.cart || {}, {
-            viewCartButtonEnabled: false
-          }),
+          cart: Object.assign({}, (window.LoopDeskConfig && window.LoopDeskConfig.cart) || {}, payload.config.cart || {}, { viewCartButtonEnabled: false }),
           checkout: Object.assign({}, (window.LoopDeskConfig && window.LoopDeskConfig.checkout) || {}, payload.config.checkout || {}),
           promotions: payload.config.promotions || ((window.LoopDeskConfig && window.LoopDeskConfig.promotions) || { rules: [] }),
           shopDomain: shopDomain
@@ -64,15 +80,12 @@
 
       function formatMoney(amount) {
         var value = Number(amount || 0);
-        try {
-          return new Intl.NumberFormat(undefined, {
-            style: "currency",
-            currency: "INR",
-            maximumFractionDigits: value % 1 === 0 ? 0 : 2
-          }).format(value);
-        } catch (_error) {
-          return "₹" + value.toFixed(2);
-        }
+        try { return new Intl.NumberFormat(undefined, { style:"currency", currency:"INR", maximumFractionDigits:value % 1 === 0 ? 0 : 2 }).format(value); }
+        catch (_error) { return "₹" + value.toFixed(2); }
+      }
+
+      function escapeHtmlLocal(value) {
+        return String(value || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\"/g,"&quot;").replace(/'/g,"&#039;");
       }
 
       function numericPrice(text) {
@@ -102,21 +115,18 @@
         var rule = promotionRule(ruleId);
         var priceNode = card.querySelector(".loopdesk-cart-drawer__offer-price");
         if (!rule || !priceNode) return;
-
         var originalPrice = Number(priceNode.getAttribute("data-loopdesk-original-price") || 0);
         if (!(originalPrice > 0)) {
           originalPrice = numericPrice(priceNode.textContent);
           if (!(originalPrice > 0)) return;
           priceNode.setAttribute("data-loopdesk-original-price", String(originalPrice));
         }
-
         var discountedPrice = offerPrice(originalPrice, rule);
         var signature = String(originalPrice) + ":" + String(discountedPrice);
         if (priceNode.getAttribute("data-loopdesk-benefit-signature") !== signature) {
           priceNode.setAttribute("data-loopdesk-benefit-signature", signature);
           priceNode.innerHTML = '<strong>Get it for ' + formatMoney(discountedPrice) + '</strong><span>Normally <s>' + formatMoney(originalPrice) + '</s></span>';
         }
-
         var select = card.querySelector("[data-loopdesk-offer-variant]");
         if (!select) return;
         var meaningfulOptions = Array.prototype.filter.call(select.options || [], function (option) {
@@ -130,13 +140,98 @@
         }
       }
 
-      function improveDrawer() {
-        document.querySelectorAll("#loopdesk-cart-drawer-root .loopdesk-cart-drawer__offer").forEach(improveOfferCard);
-        document.querySelectorAll("#loopdesk-cart-drawer-root .loopdesk-cart-drawer__view-cart").forEach(function (element) {
-          element.hidden = true;
-          element.style.display = "none";
-          element.setAttribute("aria-hidden", "true");
+      function cartDiscountCode(cart) {
+        var codes = cart && Array.isArray(cart.discount_codes) ? cart.discount_codes : [];
+        for (var i = 0; i < codes.length; i += 1) {
+          var code = typeof codes[i] === "string" ? codes[i] : codes[i] && codes[i].code;
+          if (code) return String(code).trim().toUpperCase();
+        }
+        var applications = cart && Array.isArray(cart.cart_level_discount_applications) ? cart.cart_level_discount_applications : [];
+        for (var j = 0; j < applications.length; j += 1) {
+          var application = applications[j] || {};
+          if (String(application.type || "").toLowerCase() === "discount_code" && (application.code || application.title)) return String(application.code || application.title).trim().toUpperCase();
+        }
+        return "";
+      }
+
+      function couponMarkup(cart) {
+        var code = cartDiscountCode(cart);
+        var savings = Math.max(0, Number(cart && cart.total_discount || 0));
+        var status = code
+          ? '<p class="loopdesk-cart-drawer__coupon-status" data-state="success"><strong>' + escapeHtmlLocal(code) + ' applied</strong>' + (savings > 0 ? ' · Total savings ' + escapeHtmlLocal(formatMoney(savings / 100)) : '') + '<button type="button" class="loopdesk-cart-drawer__coupon-remove" data-loopdesk-coupon-remove>Remove</button></p>'
+          : '<p class="loopdesk-cart-drawer__coupon-status" aria-live="polite"></p>';
+        return '<section class="loopdesk-cart-drawer__coupon" data-loopdesk-coupon><h3 class="loopdesk-cart-drawer__coupon-title">Have a coupon?</h3><form data-loopdesk-coupon-form><div class="loopdesk-cart-drawer__coupon-row"><input class="loopdesk-cart-drawer__coupon-input" name="code" type="text" autocomplete="off" placeholder="Enter coupon code" value="' + escapeHtmlLocal(code) + '"><button class="loopdesk-cart-drawer__coupon-button" type="submit">Apply</button></div></form>' + status + '</section>';
+      }
+
+      function readCart() {
+        return fetch('/cart.js?_loopdesk_coupon=' + Date.now(), { credentials:'same-origin', cache:'no-store', headers:{ Accept:'application/json' } })
+          .then(function (response) { if (!response.ok) throw new Error('Unable to refresh cart'); return response.json(); });
+      }
+
+      function findCouponHost() {
+        var root = document.getElementById('loopdesk-cart-drawer-root');
+        if (!root) return null;
+        return root.querySelector('.loopdesk-cart-drawer__body') || root.querySelector('.loopdesk-cart-drawer__content') || root.querySelector('.loopdesk-cart-drawer');
+      }
+
+      function renderCoupon(cart) {
+        var host = findCouponHost();
+        if (!host) return;
+        var existing = host.querySelector('[data-loopdesk-coupon]');
+        if (existing) existing.outerHTML = couponMarkup(cart);
+        else host.insertAdjacentHTML('beforeend', couponMarkup(cart));
+      }
+
+      function refreshCoupon() {
+        return readCart().then(function (cart) {
+          renderCoupon(cart);
+          document.dispatchEvent(new CustomEvent('cart:refresh', { detail:{ source:'loopdesk-coupon' } }));
+          window.dispatchEvent(new CustomEvent('cart:refresh', { detail:{ source:'loopdesk-coupon' } }));
+          return cart;
         });
+      }
+
+      function setCouponStatus(message, state) {
+        var status = document.querySelector('#loopdesk-cart-drawer-root .loopdesk-cart-drawer__coupon-status');
+        if (!status) return;
+        status.textContent = message;
+        status.setAttribute('data-state', state || '');
+      }
+
+      function applyCoupon(code) {
+        if (couponBusy) return;
+        couponBusy = true;
+        var button = document.querySelector('#loopdesk-cart-drawer-root .loopdesk-cart-drawer__coupon-button');
+        if (button) button.disabled = true;
+        setCouponStatus('Applying coupon…', '');
+        fetch('/discount/' + encodeURIComponent(code) + '?redirect=/cart.js', { credentials:'same-origin', cache:'no-store', redirect:'follow' })
+          .then(function (response) { if (!response.ok) throw new Error('Coupon could not be applied'); return refreshCoupon(); })
+          .then(function (cart) {
+            var applied = cartDiscountCode(cart);
+            if (!applied || applied !== String(code).trim().toUpperCase()) throw new Error('This coupon is not valid for the current cart');
+          })
+          .catch(function (error) { setCouponStatus(error && error.message || 'Coupon could not be applied', 'error'); })
+          .finally(function () { couponBusy = false; if (button) button.disabled = false; });
+      }
+
+      function removeCoupon() {
+        if (couponBusy) return;
+        couponBusy = true;
+        setCouponStatus('Removing coupon…', '');
+        fetch('/discount/CLEAR?redirect=/cart.js', { credentials:'same-origin', cache:'no-store', redirect:'follow' })
+          .then(function (response) { if (!response.ok) throw new Error('Coupon could not be removed'); return refreshCoupon(); })
+          .catch(function (error) { setCouponStatus(error && error.message || 'Coupon could not be removed', 'error'); })
+          .finally(function () { couponBusy = false; });
+      }
+
+      function improveDrawer() {
+        document.querySelectorAll('#loopdesk-cart-drawer-root .loopdesk-cart-drawer__offer').forEach(improveOfferCard);
+        document.querySelectorAll('#loopdesk-cart-drawer-root .loopdesk-cart-drawer__view-cart').forEach(function (element) {
+          element.hidden = true;
+          element.style.display = 'none';
+          element.setAttribute('aria-hidden','true');
+        });
+        if (!document.querySelector('#loopdesk-cart-drawer-root [data-loopdesk-coupon]')) refreshCoupon().catch(function () {});
       }
 
       function observeDrawer() {
@@ -146,28 +241,39 @@
         var observer = new MutationObserver(function () {
           if (scheduled) return;
           scheduled = true;
-          window.requestAnimationFrame(function () {
-            scheduled = false;
-            improveDrawer();
-          });
+          window.requestAnimationFrame(function () { scheduled = false; improveDrawer(); });
         });
-        observer.observe(document.documentElement, { childList: true, subtree: true });
+        observer.observe(document.documentElement, { childList:true, subtree:true });
       }
 
+      document.addEventListener('submit', function (event) {
+        var form = event.target && event.target.closest && event.target.closest('[data-loopdesk-coupon-form]');
+        if (!form) return;
+        event.preventDefault();
+        event.stopPropagation();
+        var code = String(new FormData(form).get('code') || '').trim();
+        if (!code) { setCouponStatus('Enter a coupon code.', 'error'); return; }
+        applyCoupon(code);
+      }, true);
+
+      document.addEventListener('click', function (event) {
+        var remove = event.target && event.target.closest && event.target.closest('[data-loopdesk-coupon-remove]');
+        if (!remove) return;
+        event.preventDefault();
+        event.stopPropagation();
+        removeCoupon();
+      }, true);
+
       function loadDrawerAsset() {
-        var script = document.createElement("script");
+        var script = document.createElement('script');
         script.src = drawerAssetUrl;
         script.defer = true;
-        script.addEventListener("load", observeDrawer, { once: true });
+        script.addEventListener('load', observeDrawer, { once:true });
         document.head.appendChild(script);
       }
 
-      if (typeof fetch !== "function") {
-        loadDrawerAsset();
-        return;
-      }
-
-      fetch(runtimeUrl, { credentials: "same-origin", cache: "no-store" })
+      if (typeof fetch !== 'function') { loadDrawerAsset(); return; }
+      fetch(runtimeUrl, { credentials:'same-origin', cache:'no-store' })
         .then(function (response) { return response.ok ? response.json() : null; })
         .then(mergeRuntimeConfig)
         .catch(function () {})
@@ -183,24 +289,9 @@
   "stylesheet": "loopdesk-cart-drawer.css",
   "javascript": "loopdesk-checkout-bridge.js",
   "settings": [
-    {
-      "type": "checkbox",
-      "id": "cart_drawer_enabled",
-      "label": "Enable LoopDesk cart drawer",
-      "default": true
-    },
-    {
-      "type": "checkbox",
-      "id": "open_after_add_to_cart",
-      "label": "Open drawer after add to cart",
-      "default": true
-    },
-    {
-      "type": "checkbox",
-      "id": "express_checkout_button_enabled",
-      "label": "Show Express Checkout button",
-      "default": true
-    }
+    { "type":"checkbox", "id":"cart_drawer_enabled", "label":"Enable LoopDesk cart drawer", "default":true },
+    { "type":"checkbox", "id":"open_after_add_to_cart", "label":"Open drawer after add to cart", "default":true },
+    { "type":"checkbox", "id":"express_checkout_button_enabled", "label":"Show Express Checkout button", "default":true }
   ]
 }
 {% endschema %}
