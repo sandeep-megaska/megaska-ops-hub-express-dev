@@ -1,8 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import fixture from "../../../shared/fixtures/loopdesk-function-configuration.json" with { type: "json" };
-import { assembleFunctionConfiguration } from "./function-contract.ts";
+import { assembleFunctionConfiguration, isLoopDeskFunctionMetafieldNamespace } from "./function-contract.ts";
 import { mapCompilationToFunctionRule } from "./mapper.ts";
+
+test("metafield namespace helper accepts only LoopDesk app-owned identities", () => {
+  for (const namespace of ["$app:loopdesk-promotions", "app--123456789--loopdesk-promotions", "app--client_id-ABC_123--loopdesk-promotions"]) {
+    assert.equal(isLoopDeskFunctionMetafieldNamespace(namespace), true, namespace);
+  }
+
+  for (const namespace of [null, undefined, "", "loopdesk-promotions", "$app:another-namespace", "app--some-app--another-namespace", "app----loopdesk-promotions", "app--some-app--", "xapp--some-app--loopdesk-promotions", "app--some-app--loopdesk-promotions-extra"]) {
+    assert.equal(isLoopDeskFunctionMetafieldNamespace(namespace), false, String(namespace));
+  }
+});
 
 test("fixture has exact top-level keys and stable hash", () => {
   const config = assembleFunctionConfiguration({ configurationVersion: fixture.configurationVersion, rules: fixture.rules as any });

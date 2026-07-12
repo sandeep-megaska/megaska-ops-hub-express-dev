@@ -1,4 +1,4 @@
-import { LOOPDESK_AUTOMATIC_DISCOUNT_TITLE, LOOPDESK_FUNCTION_HANDLE, LOOPDESK_FUNCTION_METAFIELD_KEY, LOOPDESK_FUNCTION_METAFIELD_NAMESPACE, LOOPDESK_FUNCTION_METAFIELD_TYPE, assertFunctionConfigurationEqual, type LoopDeskFunctionConfiguration } from "./function-contract.ts";
+import { LOOPDESK_AUTOMATIC_DISCOUNT_TITLE, LOOPDESK_FUNCTION_HANDLE, LOOPDESK_FUNCTION_METAFIELD_KEY, LOOPDESK_FUNCTION_METAFIELD_NAMESPACE, LOOPDESK_FUNCTION_METAFIELD_TYPE, assertFunctionConfigurationEqual, isLoopDeskFunctionMetafieldNamespace, type LoopDeskFunctionConfiguration } from "./function-contract.ts";
 
 export type ShopifyGraphql = <T>(query: string, variables?: Record<string, unknown>, options?: { shopDomain?: string | null }) => Promise<T>;
 export type DiscountSnapshot = { id: string; title?: string | null; status?: string | null; discountClasses?: string[] | null; appDiscountType?: { appKey?: string | null; functionId?: string | null } | null; metafield?: { namespace: string; key: string; type: string; value: string } | null };
@@ -50,6 +50,8 @@ export function verifyDiscountOwnsCanonicalConfiguration(discount: DiscountSnaps
   if (!discount.discountClasses?.includes("PRODUCT")) throw new Error("Shopify automatic discount is not configured for the PRODUCT discount class.");
   const metafield = discount.metafield;
   if (!metafield?.value) throw new Error("Shopify read-back did not include the Function configuration metafield.");
-  if (metafield.namespace !== LOOPDESK_FUNCTION_METAFIELD_NAMESPACE || metafield.key !== LOOPDESK_FUNCTION_METAFIELD_KEY || metafield.type !== LOOPDESK_FUNCTION_METAFIELD_TYPE) throw new Error("Shopify Function configuration metafield identity did not match the LoopDesk contract.");
+  if (!isLoopDeskFunctionMetafieldNamespace(metafield.namespace)) throw new Error(`Shopify Function configuration metafield identity did not match the LoopDesk contract: unexpected metafield namespace ${JSON.stringify(metafield.namespace)}.`);
+  if (metafield.key !== LOOPDESK_FUNCTION_METAFIELD_KEY) throw new Error(`Shopify Function configuration metafield identity did not match the LoopDesk contract: unexpected metafield key ${JSON.stringify(metafield.key)}.`);
+  if (metafield.type !== LOOPDESK_FUNCTION_METAFIELD_TYPE) throw new Error(`Shopify Function configuration metafield identity did not match the LoopDesk contract: unexpected metafield type ${JSON.stringify(metafield.type)}.`);
   assertFunctionConfigurationEqual(configuration, JSON.parse(metafield.value));
 }

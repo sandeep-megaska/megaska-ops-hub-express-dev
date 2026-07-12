@@ -8,6 +8,12 @@ export const LOOPDESK_FUNCTION_METAFIELD_KEY = "function-config" as const;
 export const LOOPDESK_FUNCTION_METAFIELD_TYPE = "json" as const;
 export const LOOPDESK_AUTOMATIC_DISCOUNT_TITLE = "LoopDesk Universal Promotions" as const;
 
+export function isLoopDeskFunctionMetafieldNamespace(namespace: string | null | undefined): boolean {
+  if (!namespace) return false;
+  if (namespace === LOOPDESK_FUNCTION_METAFIELD_NAMESPACE) return true;
+  return /^app--[A-Za-z0-9][A-Za-z0-9_-]*--loopdesk-promotions$/.test(namespace);
+}
+
 export type LoopDeskFunctionSourceGroup = {
   sourceReferenceId: string;
   sourceType: string;

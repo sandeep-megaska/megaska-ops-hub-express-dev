@@ -18,9 +18,9 @@ function db(overrides = {}) {
   } as any;
 }
 
-function graphql(log: any[], options: { ambiguous?: boolean; badReadback?: boolean } = {}) {
+function graphql(log: any[], options: { ambiguous?: boolean; badReadback?: boolean; expandedReadback?: boolean } = {}) {
   let discount: any = null;
-  const node = (id: string, badReadback = false) => ({ id, metafield: discount?.metafield ? (badReadback ? { ...discount.metafield, value: "{}" } : discount.metafield) : null, discount: { discountId: id, title: "LoopDesk Universal Promotions", status: "ACTIVE", discountClasses: ["PRODUCT"], appDiscountType: { functionId: "gid://shopify/AppFunction/1" } } });
+  const node = (id: string, badReadback = false) => ({ id, metafield: discount?.metafield ? (badReadback ? { ...discount.metafield, value: "{}" } : { ...discount.metafield, namespace: options.expandedReadback ? "app--123456789--loopdesk-promotions" : discount.metafield.namespace }) : null, discount: { discountId: id, title: "LoopDesk Universal Promotions", status: "ACTIVE", discountClasses: ["PRODUCT"], appDiscountType: { functionId: "gid://shopify/AppFunction/1" } } });
   return async (query: string, variables: any) => {
     log.push({ query, variables });
     if (query.includes("discountNodes")) return { discountNodes: { nodes: options.ambiguous ? [node("gid://shopify/DiscountNode/1"), node("gid://shopify/DiscountNode/2")] : discount ? [node(discount.id)] : [] } };
@@ -33,7 +33,7 @@ function graphql(log: any[], options: { ambiguous?: boolean; badReadback?: boole
 
 test("sync creates discount, writes metafield by ownerId, verifies read-back, then persists canonical id", async () => {
   const database = db(); const log: any[] = [];
-  const result = await synchronizePromotionFunctionConfiguration({ shopId: "shop-1" }, { database, graphql: graphql(log) as any, clock: { now: () => new Date("2026-07-12T00:00:00Z") } });
+  const result = await synchronizePromotionFunctionConfiguration({ shopId: "shop-1" }, { database, graphql: graphql(log, { expandedReadback: true }) as any, clock: { now: () => new Date("2026-07-12T00:00:00Z") } });
   assert.equal(result.ok, true);
   const createVars = log.find((c) => c.query.includes("discountAutomaticAppCreate")).variables.automaticAppDiscount;
   assert.equal(createVars.functionHandle, "loopdesk-discount-function");
