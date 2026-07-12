@@ -44,6 +44,7 @@ mod tests {
             },
             offer: OfferConfig {
                 product_gid: "gid://shopify/Product/2".into(),
+                handle: None,
             },
             reward: RewardConfig {
                 reward_type,
@@ -98,6 +99,38 @@ mod tests {
         assert_eq!(cfg.configuration_version, 1);
         assert_eq!(cfg.rules.len(), 1);
         assert_eq!(cfg.rules[0].compilation_version, 3);
+    }
+
+    #[test]
+    fn offer_handle_string_and_null_parse() {
+        let with_handle = r#"{
+            "schemaVersion":1,
+            "configurationVersion":1,
+            "configurationHash":"h",
+            "rules":[{
+                "schemaVersion":1,
+                "ruleId":"r1",
+                "compilationVersion":1,
+                "status":"ACTIVE",
+                "priority":1,
+                "trigger":{
+                    "type":"PRODUCT",
+                    "matchMode":"ANY",
+                    "minimumQuantity":2,
+                    "minimumCartSubtotal":null,
+                    "sourceGroups":[]
+                },
+                "offer":{"productGid":"gid://shopify/Product/2","handle":"sample-product"},
+                "reward":{"type":"PERCENTAGE_OFF","value":"10","maximumQuantity":1}
+            }]
+        }"#;
+        let cfg = parse_config(with_handle).expect("offer handle string should parse");
+        assert_eq!(cfg.rules[0].offer.handle.as_deref(), Some("sample-product"));
+
+        let with_null_handle =
+            with_handle.replace(r#""handle":"sample-product""#, r#""handle":null"#);
+        let cfg = parse_config(&with_null_handle).expect("offer handle null should parse");
+        assert_eq!(cfg.rules[0].offer.handle, None);
     }
 
     #[test]
