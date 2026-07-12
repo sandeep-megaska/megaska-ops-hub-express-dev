@@ -99,7 +99,7 @@
   if (!config.enabled || window.__LOOPDESK_CART_DRAWER_LOADED__) return;
   window.__LOOPDESK_CART_DRAWER_LOADED__ = true;
 
-  var state = { open: false, loading: false, cart: null, error: "", hostMode: LOOPDESK_HOST_MODE, themeDrawer: null, fallbackReason: "", expressCheckoutLock: false, capability: null, drawerModeActive: false, neutralizedThemeDrawers: [], bodyLockSnapshot: null, removedThemeBodyClasses: [], cartTriggerTakeovers: [] };
+  var state = { open: false, loading: false, cart: null, error: "", selectedOfferVariants: {}, productCache: {}, hostMode: LOOPDESK_HOST_MODE, themeDrawer: null, fallbackReason: "", expressCheckoutLock: false, capability: null, drawerModeActive: false, neutralizedThemeDrawers: [], bodyLockSnapshot: null, removedThemeBodyClasses: [], cartTriggerTakeovers: [] };
   var cartTriggerObserver = null;
   var cartTriggerTakeoverTimer = null;
   var suppressNextCartClickUntil = 0;
@@ -700,6 +700,123 @@
     return image ? String(image).replace(/(\.(?:jpg|jpeg|png|webp))(?:\?.*)?$/i, "_160x$1") : "";
   }
 
+
+  function promotionRuleIdFromLine(item) {
+    return item && item.properties ? item.properties._loopdesk_promotion_rule_id || null : null;
+  }
+
+  function promotionCompilationVersionFromLine(item) {
+    return item && item.properties ? item.properties._loopdesk_promotion_compilation_version || null : null;
+  }
+
+  function isLoopDeskPromotionalLine(item) {
+    return Boolean(promotionRuleIdFromLine(item) && promotionCompilationVersionFromLine(item));
+  }
+
+  function ruleCompilationVersion(rule) {
+    return String(rule && rule.compilation && rule.compilation.version != null ? rule.compilation.version : rule && rule.compilationVersion != null ? rule.compilationVersion : "");
+  }
+
+  function promotionLineMatchesRule(item, rule) {
+    return promotionRuleIdFromLine(item) === String(rule.ruleId) && promotionCompilationVersionFromLine(item) === ruleCompilationVersion(rule);
+  }
+
+  function triggerQuantityInCart(rule, cart) {
+    if (!cart || !cart.items) return 0;
+    var triggerProductGids = rule && rule.trigger && rule.trigger.productGids || [];
+    return cart.items.reduce(function (sum, item) {
+      if (isLoopDeskPromotionalLine(item)) return sum;
+      var gid = item.product_id ? "gid://shopify/Product/" + item.product_id : item.product_gid;
+      if (triggerProductGids.length && triggerProductGids.indexOf(gid) === -1) return sum;
+      return sum + (Number(item.quantity) || 0);
+    }, 0);
+  }
+
+  function rewardQuantityInCart(rule, cart) {
+    if (!cart || !cart.items) return 0;
+    return cart.items.reduce(function (sum, item) {
+      return promotionLineMatchesRule(item, rule) ? sum + (Number(item.quantity) || 0) : sum;
+    }, 0);
+  }
+
+  function getPromotionRules() {
+    var runtime = window.LoopDeskPromotionRuntime || window.LOOPDESK_PROMOTION_RUNTIME || {};
+    return runtime.rules || config.promotions || [];
+  }
+
+  function selectedOfferVariant(rule, product) {
+    var selectedId = state.selectedOfferVariants[rule.ruleId];
+    var variants = product && product.variants || [];
+    return variants.filter(function (variant) { return String(variant.id) === String(selectedId) && variant.available !== false; })[0] || variants.filter(function (variant) { return variant.available !== false; })[0] || null;
+  }
+
+  function offerProductForRule(rule) {
+    var handle = rule && rule.offer && rule.offer.handle;
+    if (!handle) return Promise.resolve(null);
+    if (state.productCache[handle]) return Promise.resolve(state.productCache[handle]);
+    return fetch("/products/" + encodeURIComponent(handle) + ".js", { credentials: "same-origin", headers: { Accept: "application/json" } })
+      .then(function (response) { if (!response.ok) throw new Error("Product request failed"); return response.json(); })
+      .then(function (product) { state.productCache[handle] = product; return product; })
+      .catch(function () { return null; });
+  }
+
+  function hydrateOfferProducts() {
+    return Promise.all(getPromotionRules().map(offerProductForRule)).then(function () { render(); });
+  }
+
+  function priceHtml(variant, currency) {
+    if (!variant) return "";
+    var current = Number(variant.price || 0);
+    var compareAt = Number(variant.compare_at_price || 0);
+    return '<div class="loopdesk-cart-drawer__offer-price"><span>' + money(current, currency) + '</span>' + (compareAt > current ? '<s>' + money(compareAt, currency) + '</s>' : '') + '</div>';
+  }
+
+  function offerConfirmationHtml(rule, cart) {
+    var quantity = rewardQuantityInCart(rule, cart);
+    if (!quantity) return "";
+    return '<div class="loopdesk-cart-drawer__offer-confirmation">Offer in cart: ' + escapeHtml(quantity) + '</div>';
+  }
+
+  function renderOfferRule(rule, cart) {
+    var product = state.productCache[rule.offer && rule.offer.handle] || null;
+    var variant = selectedOfferVariant(rule, product);
+    if (!product || !variant || triggerQuantityInCart(rule, cart) < Number(rule.trigger && rule.trigger.minimumQuantity || 1)) return "";
+    var variantTitle = variant.title && variant.title !== "Default Title" ? '<div class="loopdesk-cart-drawer__offer-variant-title">' + escapeHtml(variant.title) + '</div>' : '';
+    var variants = (product.variants || []).map(function (option) {
+      return '<option value="' + escapeHtml(option.id) + '"' + (String(option.id) === String(variant.id) ? ' selected' : '') + (option.available === false ? ' disabled' : '') + '>' + escapeHtml(option.title) + '</option>';
+    }).join("");
+    return '<article class="loopdesk-cart-drawer__offer" data-loopdesk-offer-rule="' + escapeHtml(rule.ruleId) + '">' +
+      (rule.presentation && rule.presentation.badgeText ? '<div class="loopdesk-cart-drawer__offer-badge">' + escapeHtml(rule.presentation.badgeText) + '</div>' : '') +
+      (rule.presentation && rule.presentation.heading ? '<h3>' + escapeHtml(rule.presentation.heading) + '</h3>' : '') +
+      '<div class="loopdesk-cart-drawer__offer-product-title">' + escapeHtml(product.title) + '</div>' + variantTitle + priceHtml(variant, cart && cart.currency) +
+      (rule.presentation && rule.presentation.customerMessage ? '<p>' + escapeHtml(rule.presentation.customerMessage) + '</p>' : '') +
+      '<select data-loopdesk-offer-variant data-loopdesk-rule-id="' + escapeHtml(rule.ruleId) + '">' + variants + '</select>' +
+      offerConfirmationHtml(rule, cart) +
+      '<button type="button" data-loopdesk-add-offer data-loopdesk-rule-id="' + escapeHtml(rule.ruleId) + '">' + escapeHtml(rule.presentation && rule.presentation.ctaText) + '</button>' +
+      '</article>';
+  }
+
+  function renderOffers(cart) {
+    return getPromotionRules().map(function (rule) { return renderOfferRule(rule, cart); }).join("");
+  }
+
+  function addOffer(rule) {
+    return offerProductForRule(rule).then(function (product) {
+      var variant = selectedOfferVariant(rule, product);
+      if (!variant) return null;
+      state.loading = true;
+      render();
+      return fetch("/cart/add.js", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ items: [{ id: variant.id, quantity: 1, properties: { _loopdesk_promotion_rule_id: String(rule.ruleId), _loopdesk_promotion_compilation_version: ruleCompilationVersion(rule) } }] })
+      }).then(function (response) { if (!response.ok) throw new Error("Add offer failed"); return response.json(); })
+        .then(function () { return fetchCart(); })
+        .finally(function () { state.loading = false; render(); });
+    });
+  }
+
   function lineSavingsHtml(item, cart) {
     var original = Number(item.original_line_price || 0);
     var finalPrice = Number(item.final_line_price || 0);
@@ -725,7 +842,7 @@
         "</div>",
         "</article>",
       ].join("");
-    }).join("");
+    }).join("") + renderOffers(cart);
   }
 
   function render() {
@@ -799,7 +916,7 @@
   }
 
   function refreshAndMaybeOpen(open) {
-    return fetchCart().then(function () { if (open) setOpen(true); });
+    return fetchCart().then(function () { return hydrateOfferProducts(); }).then(function () { if (open) setOpen(true); });
   }
 
   function isDrawerAvailable() {
@@ -824,6 +941,14 @@
 
   function handleDrawerAction(event) {
     var qtyButton = event.target && event.target.closest && event.target.closest("[data-loopdesk-qty]");
+    var offerButton = event.target && event.target.closest && event.target.closest("[data-loopdesk-add-offer]");
+    if (offerButton) {
+      event.preventDefault();
+      var ruleId = offerButton.getAttribute("data-loopdesk-rule-id");
+      var rule = getPromotionRules().filter(function (candidate) { return String(candidate.ruleId) === String(ruleId); })[0];
+      if (rule) addOffer(rule);
+      return;
+    }
     var removeButton = event.target && event.target.closest && event.target.closest("[data-loopdesk-remove]");
     var button = qtyButton || removeButton;
     if (!button || !state.cart || !state.cart.items) return;
@@ -940,7 +1065,16 @@
     if (elements.poweredBy) elements.poweredBy.textContent = config.branding.poweredByText;
     var microcopy = hostRoot.querySelector(".loopdesk-cart-drawer__microcopy");
     if (microcopy) microcopy.textContent = config.labels.secureCheckoutText + " • UPI, cards, net banking & COD";
-    if (elements.body) elements.body.addEventListener("click", handleDrawerAction);
+    if (elements.body) {
+      elements.body.addEventListener("click", handleDrawerAction);
+      elements.body.addEventListener("change", function (event) {
+        var select = event.target && event.target.closest && event.target.closest("[data-loopdesk-offer-variant]");
+        if (!select) return;
+        var ruleId = select.getAttribute("data-loopdesk-rule-id");
+        state.selectedOfferVariants[ruleId] = select.value;
+        render();
+      });
+    }
     applyCssVariables(elements.root || document.documentElement);
   }
 
