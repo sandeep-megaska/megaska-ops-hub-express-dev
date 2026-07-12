@@ -9,7 +9,7 @@ import PromotionCompilationHistory from "../PromotionCompilationHistory";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-type PageProps = { params: Promise<{ id: string }>; searchParams?: Promise<PromotionEmbeddedContext & { hmac?: string | string[]; saved?: string; error?: string; publication?: string; sync?: string }> };
+type PageProps = { params: Promise<{ id: string }>; searchParams?: Promise<PromotionEmbeddedContext & { hmac?: string | string[]; saved?: string; error?: string; publication?: string; sync?: string; compile?: string }> };
 
 export default async function EditPromotionPage({ params, searchParams }: PageProps) {
   const { id } = await params;
@@ -27,5 +27,5 @@ export default async function EditPromotionPage({ params, searchParams }: PagePr
 
   const execution = await getPromotionCompilationReadModel(resolved.shop.id, id, { historyLimit: 10 });
   const context = promotionEmbeddedContext(sp, resolved.shop.shopDomain);
-  return <main className="space-y-6"><div><h1 className="text-2xl font-semibold">Edit promotion</h1><p className="text-sm text-gray-500">Status: {rule.status}. Compilation: {execution.label}.</p></div><PromotionExecutionStatus model={execution} ruleStatus={rule.status} saved={typeof sp.saved === "string" ? sp.saved : undefined} publication={typeof sp.publication === "string" ? sp.publication : undefined} sync={typeof sp.sync === "string" ? sp.sync : undefined} /><PromotionForm shopId={resolved.shop.id} shopDomain={resolved.shop.shopDomain} embeddedContext={context} rule={rule} execution={execution} /><PromotionCompilationHistory model={execution} /></main>;
+  return <main className="space-y-6"><div><h1 className="text-2xl font-semibold">Edit promotion</h1><p className="text-sm text-gray-500">Status: {rule.status}. Compilation: {execution.label}.</p></div><PromotionExecutionStatus model={execution} ruleStatus={rule.status} saved={typeof sp.saved === "string" ? sp.saved : undefined} publication={typeof sp.publication === "string" ? sp.publication : undefined} sync={typeof sp.sync === "string" ? sp.sync : undefined} compile={typeof sp.compile === "string" ? sp.compile : undefined} error={typeof sp.error === "string" ? sp.error : undefined} /><PromotionForm shopId={resolved.shop.id} shopDomain={resolved.shop.shopDomain} embeddedContext={context} rule={rule} execution={execution} /><PromotionCompilationHistory model={execution} /></main>;
 }

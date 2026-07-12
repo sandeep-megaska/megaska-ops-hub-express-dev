@@ -41,9 +41,9 @@ test("saving a valid ACTIVE promotion automatically compiles it and synchronizes
   const { publishSavedPromotion } = await import("./publication-orchestration.server.ts");
   const calls: string[] = [];
   const result = await publishSavedPromotion("shop-a", "a.myshopify.com", { id: "rule-1", status: "ACTIVE" }, "RULE_UPDATED", {
-    compiler: async (input: any) => { calls.push(`compile:${input.reason}:${input.promotionRuleId}:${input.shopDomain}`); return { status: "READY", compilationId: "c1", version: 1, compiledHash: "h", membershipCount: 1 }; },
-    synchronizer: async (input: any) => { calls.push(`sync:${input.shopId}`); return { ok: true, outcome: "UPDATED", automaticDiscountId: "d1", configurationVersion: 1, configurationHash: "h", ruleCount: 1, verifiedAt: new Date().toISOString() }; },
-  } as any);
+    compiler: async (input: { reason?: string; promotionRuleId?: string; shopDomain?: string | null; shopId?: string }) => { calls.push(`compile:${input.reason}:${input.promotionRuleId}:${input.shopDomain}`); return { status: "READY", compilationId: "c1", version: 1, compiledHash: "h", membershipCount: 1 }; },
+    synchronizer: async (input: { reason?: string; promotionRuleId?: string; shopDomain?: string | null; shopId?: string }) => { calls.push(`sync:${input.shopId}`); return { ok: true, outcome: "UPDATED", automaticDiscountId: "d1", configurationVersion: 1, configurationHash: "h", ruleCount: 1, verifiedAt: new Date().toISOString() }; },
+  });
   assert.deepEqual(result, { compile: "READY", sync: "SYNCED" });
   assert.deepEqual(calls, ["compile:RULE_UPDATED:rule-1:a.myshopify.com", "sync:shop-a"]);
 });
@@ -54,6 +54,61 @@ test("failed compilation does not mark Shopify publication as configured", async
   await assert.rejects(() => publishSavedPromotion("shop-a", "a.myshopify.com", { id: "rule-1", status: "ACTIVE" }, "RULE_UPDATED", {
     compiler: async () => { throw new Error("compile failed"); },
     synchronizer: async () => { synced = true; return { ok: true }; },
-  } as any), /compile failed/);
+  }), /compile failed/);
   assert.equal(synced, false);
+});
+
+test("existing promotion form save button submits updatePromotionDraftAction", () => {
+  const form = readFileSync(new URL("../../app/admin/promotions/PromotionForm.tsx", import.meta.url), "utf8");
+  assert.match(form, /useActionState\(rule \? updatePromotionDraftAction : createPromotionDraftAction, initial\)/);
+  assert.match(form, /<form action=\{saveAction\}/);
+  assert.match(form, /\{rule \? "Save changes" : "Save draft"\}/);
+});
+
+test("existing ACTIVE rule save action publishes the updated active rule", () => {
+  const action = readFileSync(new URL("./admin-actions.server.ts", import.meta.url), "utf8");
+  assert.match(action, /const s = await shop\(formData\); const id = stringValue\(formData, "id"\); const updated = await updatePromotionRule\(s\.id, id, input\(formData\)\)/);
+  assert.match(action, /publishSavedPromotion\(s\.id, s\.shopDomain, updated, "RULE_UPDATED"\)/);
+});
+
+test("READY compilation triggers synchronization", async () => {
+  const { publishSavedPromotion } = await import("./publication-orchestration.server.ts");
+  const calls: string[] = [];
+  const result = await publishSavedPromotion("shop-a", "a.myshopify.com", { id: "rule-1", status: "ACTIVE" }, "RULE_UPDATED", {
+    compiler: async () => { calls.push("compile"); return { status: "READY", compilationId: "c1", version: 1, compiledHash: "h", membershipCount: 1 }; },
+    synchronizer: async (input: { reason?: string; promotionRuleId?: string; shopDomain?: string | null; shopId?: string }) => { calls.push(`sync:${input.shopId}`); return { ok: true, outcome: "UPDATED", automaticDiscountId: "d1", configurationVersion: 1, configurationHash: "h", ruleCount: 1, verifiedAt: new Date().toISOString() }; },
+  });
+  assert.deepEqual(result, { compile: "READY", sync: "SYNCED" });
+  assert.deepEqual(calls, ["compile", "sync:shop-a"]);
+});
+
+test("NOOP compilation also triggers synchronization", async () => {
+  const { publishSavedPromotion } = await import("./publication-orchestration.server.ts");
+  const calls: string[] = [];
+  const result = await publishSavedPromotion("shop-a", "a.myshopify.com", { id: "rule-1", status: "ACTIVE" }, "RULE_UPDATED", {
+    compiler: async () => { calls.push("compile"); return { status: "NOOP", compilationId: "c2", currentCompilationId: "c1", version: 2, compiledHash: "h" }; },
+    synchronizer: async (input: { reason?: string; promotionRuleId?: string; shopDomain?: string | null; shopId?: string }) => { calls.push(`sync:${input.shopId}`); return { ok: true, outcome: "UNCHANGED", automaticDiscountId: "d1", configurationVersion: 1, configurationHash: "h", ruleCount: 1, verifiedAt: new Date().toISOString() }; },
+  });
+  assert.deepEqual(result, { compile: "NOOP", sync: "SYNCED" });
+  assert.deepEqual(calls, ["compile", "sync:shop-a"]);
+});
+
+test("synchronizer failure exposes a safe error marker for save redirect", () => {
+  const action = readFileSync(new URL("./admin-actions.server.ts", import.meta.url), "utf8");
+  assert.match(action, /publication: "failed", error: publicationErrorParam\(e\)/);
+  assert.match(action, /PromotionPublicationSyncError/);
+  assert.match(action, /return `sync_\$\{safeErrorMarker\(error\.code\)\}`/);
+});
+
+test("successful save redirect includes compile and sync query params", () => {
+  const action = readFileSync(new URL("./admin-actions.server.ts", import.meta.url), "utf8");
+  assert.match(action, /extra = \{ \.\.\.extra, compile: publication\.compile, sync: publication\.sync \}/);
+  assert.equal(buildPromotionAdminUrl("/admin/promotions/r1", { shop: "canon.myshopify.com" }, { saved: "1", compile: "NOOP", sync: "SYNCED" }), "/admin/promotions/r1?shop=canon.myshopify.com&saved=1&compile=NOOP&sync=SYNCED");
+});
+
+test("execution status displays save redirect sync failure instead of ready pending text", () => {
+  const status = readFileSync(new URL("../../app/admin/promotions/PromotionExecutionStatus.tsx", import.meta.url), "utf8");
+  assert.match(status, /if \(publication === "failed"\) return "FAILED"/);
+  assert.match(status, /saved && publication !== "failed"/);
+  assert.match(status, /failureMessage\(error\)/);
 });
