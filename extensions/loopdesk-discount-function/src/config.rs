@@ -62,6 +62,9 @@ pub struct SourceGroup {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct OfferConfig {
     pub product_gid: String,
+
+    #[serde(default)]
+    pub handle: Option<String>,
 }
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
