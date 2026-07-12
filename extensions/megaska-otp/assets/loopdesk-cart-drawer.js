@@ -99,7 +99,7 @@
   if (!config.enabled || window.__LOOPDESK_CART_DRAWER_LOADED__) return;
   window.__LOOPDESK_CART_DRAWER_LOADED__ = true;
 
-  var state = { open: false, loading: false, cart: null, error: "", hostMode: LOOPDESK_HOST_MODE, themeDrawer: null, fallbackReason: "", expressCheckoutLock: false, capability: null, drawerModeActive: false, neutralizedThemeDrawers: [], bodyLockSnapshot: null, removedThemeBodyClasses: [], cartTriggerTakeovers: [] };
+  var state = { open: false, loading: false, cart: null, error: "", promotionRules: [], eligibleOffers: [], promotionLoading: false, promotionError: "", addingOfferRuleId: "", selectedVariantByRuleId: {}, hostMode: LOOPDESK_HOST_MODE, themeDrawer: null, fallbackReason: "", expressCheckoutLock: false, capability: null, drawerModeActive: false, neutralizedThemeDrawers: [], bodyLockSnapshot: null, removedThemeBodyClasses: [], cartTriggerTakeovers: [] };
   var cartTriggerObserver = null;
   var cartTriggerTakeoverTimer = null;
   var suppressNextCartClickUntil = 0;
@@ -707,6 +707,130 @@
     return "";
   }
 
+  var PROMOTION_RULE_PROPERTY = "_loopdesk_promotion_rule_id";
+  var PROMOTION_VERSION_PROPERTY = "_loopdesk_promotion_compilation_version";
+
+  function shopifyProductGid(value) {
+    var raw = String(value || "").trim();
+    if (!raw) return "";
+    if (raw.indexOf("gid://shopify/Product/") === 0) return raw;
+    if (/^\d+$/.test(raw)) return "gid://shopify/Product/" + raw;
+    return raw;
+  }
+
+  function numericVariantId(value) {
+    var raw = String(value || "").trim();
+    var match = raw.match(/ProductVariant\/(\d+)$/);
+    return match ? match[1] : raw;
+  }
+
+  function lineProperty(item, key) {
+    var props = item && item.properties;
+    if (!props) return "";
+    if (Array.isArray(props)) {
+      var found = props.filter(function (p) { return p && p.name === key; })[0];
+      return found ? String(found.value || "") : "";
+    }
+    return String(props[key] || "");
+  }
+
+  function isMarkedPromotionLine(item) {
+    return Boolean(lineProperty(item, PROMOTION_RULE_PROPERTY));
+  }
+
+  function markedLineCount(rule, cart) {
+    var version = String(rule.compilationVersion);
+    return ((cart && cart.items) || []).reduce(function (sum, item) {
+      return sum + (lineProperty(item, PROMOTION_RULE_PROPERTY) === rule.ruleId && lineProperty(item, PROMOTION_VERSION_PROPERTY) === version ? Number(item.quantity || 0) : 0);
+    }, 0);
+  }
+
+  function markedLines(rule, cart) {
+    var version = String(rule.compilationVersion);
+    return ((cart && cart.items) || []).filter(function (item) {
+      return lineProperty(item, PROMOTION_RULE_PROPERTY) === rule.ruleId && lineProperty(item, PROMOTION_VERSION_PROPERTY) === version;
+    });
+  }
+
+  function cartSubtotalExcludingPromotions(cart) {
+    return ((cart && cart.items) || []).reduce(function (sum, item) {
+      return sum + (isMarkedPromotionLine(item) ? 0 : Number(item.final_line_price || item.line_price || 0));
+    }, 0);
+  }
+
+  function evaluateEligibleOffers(cart, rules) {
+    var seen = {};
+    return (rules || []).filter(function (rule) {
+      if (!rule || seen[rule.ruleId] || rule.status !== "ACTIVE") return false;
+      seen[rule.ruleId] = true;
+      var available = ((rule.offer && rule.offer.variants) || []).filter(function (v) { return v && v.available; });
+      if (!available.length) return false;
+      var trigger = rule.trigger || {};
+      var products = {};
+      (trigger.productGids || []).forEach(function (gid) { products[shopifyProductGid(gid)] = true; });
+      var qty = ((cart && cart.items) || []).reduce(function (sum, item) {
+        if (isMarkedPromotionLine(item)) return sum;
+        return sum + (products[shopifyProductGid(item.product_id)] ? Number(item.quantity || 0) : 0);
+      }, 0);
+      if (qty < Number(trigger.minimumQuantity || 1)) return false;
+      var minSubtotal = trigger.minimumCartSubtotal == null ? 0 : Math.round(Number(trigger.minimumCartSubtotal) * 100);
+      if (minSubtotal > 0 && cartSubtotalExcludingPromotions(cart) < minSubtotal) return false;
+      return true;
+    }).sort(function (a, b) { return Number(b.priority || 0) - Number(a.priority || 0); });
+  }
+
+  function syncEligibleOffers() {
+    state.eligibleOffers = evaluateEligibleOffers(state.cart, state.promotionRules);
+    state.eligibleOffers.forEach(function (rule) {
+      var variants = ((rule.offer && rule.offer.variants) || []).filter(function (v) { return v.available; });
+      var current = state.selectedVariantByRuleId[rule.ruleId];
+      if (!variants.some(function (v) { return String(v.variantId) === String(current); })) state.selectedVariantByRuleId[rule.ruleId] = variants[0] ? variants[0].variantId : "";
+    });
+  }
+
+  function loadPromotions() {
+    if (state.promotionLoading || state.promotionRules.length) return Promise.resolve();
+    state.promotionLoading = true;
+    return fetch("/api/runtime/config", { credentials: "same-origin", headers: { Accept: "application/json" } })
+      .then(function (response) { if (!response.ok) throw new Error("Promotion request failed"); return response.json(); })
+      .then(function (payload) { state.promotionRules = (payload && payload.promotions && payload.promotions.rules) || []; state.promotionError = ""; syncEligibleOffers(); })
+      .catch(function (error) { state.promotionRules = []; state.eligibleOffers = []; state.promotionError = error && error.message ? error.message : "Promotion request failed"; })
+      .finally(function () { state.promotionLoading = false; render(); });
+  }
+
+  function renderConfirmedDiscount(rule, cart) {
+    var lines = markedLines(rule, cart);
+    if (!lines.length) return "";
+    return lines.map(function (item) {
+      var original = Number(item.original_line_price || item.line_price || 0);
+      var finalPrice = Number(item.final_line_price || 0);
+      var label = ((item.discounts || item.line_level_discount_allocations || [])[0] || {}).title || "Shopify discount applied";
+      return '<div class="loopdesk-offer-card__confirmed"><strong>Offer added</strong><span>Original ' + money(original, cart.currency) + ' · Final ' + money(finalPrice, cart.currency) + (original > finalPrice ? ' · Savings ' + money(original - finalPrice, cart.currency) : '') + '</span><span>' + escapeHtml(label) + '</span></div>';
+    }).join("");
+  }
+
+  function renderPromotionOffers(cart) {
+    if (!state.eligibleOffers.length) return "";
+    return '<div class="loopdesk-offer-list">' + state.eligibleOffers.map(function (rule) {
+      var offer = rule.offer || {};
+      var variants = (offer.variants || []).filter(function (v) { return v.available; });
+      var selected = state.selectedVariantByRuleId[rule.ruleId] || (variants[0] && variants[0].variantId) || "";
+      var variant = variants.filter(function (v) { return String(v.variantId) === String(selected); })[0] || variants[0] || {};
+      var added = markedLineCount(rule, cart);
+      var max = Number(rule.reward && rule.reward.maximumQuantity || 1);
+      var limitReached = added >= max;
+      var selector = variants.length > 1 ? '<select class="loopdesk-offer-card__select" data-loopdesk-offer-variant data-loopdesk-rule-id="' + escapeHtml(rule.ruleId) + '">' + (offer.variants || []).map(function (v) { return '<option value="' + escapeHtml(v.variantId) + '" ' + (String(v.variantId) === String(selected) ? 'selected' : '') + (v.available ? '' : ' disabled') + '>' + escapeHtml(v.title || 'Default') + '</option>'; }).join('') + '</select>' : '';
+      var image = offer.image ? '<img class="loopdesk-offer-card__image" src="' + escapeHtml(offer.image) + '" alt="' + escapeHtml(offer.title || 'Offer product') + '" loading="lazy">' : '<div class="loopdesk-offer-card__image loopdesk-offer-card__image--placeholder"></div>';
+      return ['<article class="loopdesk-offer-card" data-loopdesk-rule-id="' + escapeHtml(rule.ruleId) + '">',
+        '<div class="loopdesk-offer-card__eyebrow"><span>' + escapeHtml((rule.presentation && rule.presentation.badge) || 'Special offer') + '</span></div>',
+        '<h3>' + escapeHtml((rule.presentation && rule.presentation.heading) || 'Complete your offer') + '</h3>',
+        '<div class="loopdesk-offer-card__content"><div class="loopdesk-offer-card__image-wrap">' + image + '</div><div class="loopdesk-offer-card__main"><strong>' + escapeHtml(offer.title || 'Offer product') + '</strong>' + selector + '<div class="loopdesk-offer-card__prices"><span class="loopdesk-offer-card__compare">' + (variant.compareAtPrice ? money(Math.round(Number(variant.compareAtPrice) * 100), cart && cart.currency) : '') + '</span><span>' + (variant.price ? money(Math.round(Number(variant.price) * 100), cart && cart.currency) : '') + '</span></div><p>' + escapeHtml((rule.presentation && rule.presentation.benefitText) || 'Offer discount available') + '</p></div></div>',
+        renderConfirmedDiscount(rule, cart),
+        '<button type="button" class="loopdesk-offer-card__cta" data-loopdesk-add-offer data-loopdesk-rule-id="' + escapeHtml(rule.ruleId) + '" ' + (!selected || limitReached || state.addingOfferRuleId === rule.ruleId ? 'disabled' : '') + '>' + escapeHtml(limitReached ? 'Offer limit reached' : state.addingOfferRuleId === rule.ruleId ? 'Adding…' : ((rule.presentation && rule.presentation.ctaLabel) || 'Add Offer')) + '</button>',
+        '</article>'].join('');
+    }).join('') + '</div>';
+  }
+
   function renderLines(cart) {
     if (state.loading) return '<div class="loopdesk-cart-drawer__loading"><span></span>' + escapeHtml(config.labels.loadingText) + '</div>';
     if (!cart || !cart.items || cart.items.length === 0) {
@@ -742,7 +866,7 @@
 
     elements.body.innerHTML = state.error
       ? '<div class="loopdesk-cart-drawer__error">We could not load your cart. You can still use the cart page.</div>'
-      : renderLines(cart);
+      : renderLines(cart) + renderPromotionOffers(cart);
 
     elements.subtotal.textContent = money(cart ? cart.total_price : 0, cart && cart.currency);
     elements.count.textContent = itemCount ? "(" + itemCount + ")" : "";
@@ -791,7 +915,7 @@
         if (!response.ok) throw new Error("Cart request failed");
         return response.json();
       })
-      .then(function (cart) { state.cart = cart; })
+      .then(function (cart) { state.cart = cart; syncEligibleOffers(); })
       .catch(function (error) {
         state.error = error && error.message ? error.message : "Cart request failed";
       })
@@ -823,6 +947,10 @@
   }
 
   function handleDrawerAction(event) {
+    var variantSelect = event.target && event.target.closest && event.target.closest("[data-loopdesk-offer-variant]");
+    if (variantSelect) { state.selectedVariantByRuleId[variantSelect.getAttribute("data-loopdesk-rule-id")] = variantSelect.value; render(); return; }
+    var offerButton = event.target && event.target.closest && event.target.closest("[data-loopdesk-add-offer]");
+    if (offerButton) { event.preventDefault(); addOffer(offerButton.getAttribute("data-loopdesk-rule-id")); return; }
     var qtyButton = event.target && event.target.closest && event.target.closest("[data-loopdesk-qty]");
     var removeButton = event.target && event.target.closest && event.target.closest("[data-loopdesk-remove]");
     var button = qtyButton || removeButton;
@@ -833,6 +961,32 @@
     if (!item) return;
     var nextQty = removeButton ? 0 : item.quantity + (button.getAttribute("data-loopdesk-qty") === "increase" ? 1 : -1);
     changeLine(index, nextQty);
+  }
+
+  function addOffer(ruleId) {
+    var rule = state.eligibleOffers.filter(function (r) { return r.ruleId === ruleId; })[0];
+    if (!rule || markedLineCount(rule, state.cart) >= Number(rule.reward && rule.reward.maximumQuantity || 1)) return;
+    var selected = state.selectedVariantByRuleId[ruleId];
+    var variant = ((rule.offer && rule.offer.variants) || []).filter(function (v) { return String(v.variantId) === String(selected) && v.available; })[0];
+    if (!variant) return;
+    state.addingOfferRuleId = ruleId;
+    render();
+    return fetch("/cart/add.js", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ items: [{ id: Number(numericVariantId(variant.variantId)), quantity: 1, properties: { "_loopdesk_promotion_rule_id": rule.ruleId, "_loopdesk_promotion_compilation_version": String(rule.compilationVersion) } }] })
+    }).then(function (response) {
+      if (!response.ok) throw new Error("Offer add failed");
+      return response.json();
+    }).then(function () {
+      return fetchCart();
+    }).catch(function (error) {
+      state.promotionError = error && error.message ? error.message : "Offer add failed";
+    }).finally(function () {
+      state.addingOfferRuleId = "";
+      render();
+    });
   }
 
   function ownCartTriggerEvent(event, trigger, action) {
@@ -940,7 +1094,7 @@
     if (elements.poweredBy) elements.poweredBy.textContent = config.branding.poweredByText;
     var microcopy = hostRoot.querySelector(".loopdesk-cart-drawer__microcopy");
     if (microcopy) microcopy.textContent = config.labels.secureCheckoutText + " • UPI, cards, net banking & COD";
-    if (elements.body) elements.body.addEventListener("click", handleDrawerAction);
+    if (elements.body) { elements.body.addEventListener("click", handleDrawerAction); elements.body.addEventListener("change", handleDrawerAction); }
     applyCssVariables(elements.root || document.documentElement);
   }
 
@@ -955,7 +1109,7 @@
     document.addEventListener("loopdesk:cart-drawer:open", function () { refreshAndMaybeOpen(true); });
     debugLog("selected drawer mode", { mode: config.cart.drawerMode, active: isLoopDeskDrawerActive() }, true);
     debugLog("capability result", getCapabilityResult(), true);
-    refreshAndMaybeOpen(false);
+    loadPromotions().finally(function () { refreshAndMaybeOpen(false); });
     scheduleCartTriggerTakeover("mount");
     observeCartTriggerTakeoverTargets();
   }
@@ -1563,6 +1717,8 @@
       window.setTimeout(function () { refreshAfterCartMutation(true); }, 900);
     }, true);
   }
+
+  window.__LoopDeskPromotionTestUtils = { evaluateEligibleOffers: evaluateEligibleOffers, lineProperty: lineProperty, numericVariantId: numericVariantId };
 
   window.LoopDeskCartController = {
     open: function () {
