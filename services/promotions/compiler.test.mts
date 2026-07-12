@@ -19,7 +19,7 @@ class FakeDb {
     update: async ({ where, data }: any) => { const r = this.rules.find((x) => x.id === where.id && (!where.shopId || x.shopId === where.shopId)); Object.assign(r, data); return r; },
   };
   promotionCompilation = {
-    findFirst: async ({ where }: any) => [...this.compilations].filter((c) => c.promotionRuleId === where.promotionRuleId).sort((a, b) => b.version - a.version)[0] ?? null,
+    findFirst: async ({ where }: any) => [...this.compilations].filter((c) => c.promotionRuleId === where.promotionRuleId && (!where.status || (where.status.in ? where.status.in.includes(c.status) : c.status === where.status))).sort((a, b) => b.version - a.version)[0] ?? null,
     create: async ({ data }: any) => { if (this.conflictCreates-- > 0) { const e: any = new Error("unique"); e.code = "P2002"; throw e; } if (this.compilations.some((c) => c.promotionRuleId === data.promotionRuleId && c.version === data.version)) { const e: any = new Error("unique"); e.code = "P2002"; throw e; } const row = { id: `comp-${this.compilations.length + 1}`, ...data }; this.compilations.push(row); return row; },
     update: async ({ where, data }: any) => { const c = this.compilations.find((x) => x.id === where.id && (!where.status || x.status === where.status)); if (!c) throw new Error("not found"); Object.assign(c, data); return c; },
     updateMany: async ({ where, data }: any) => { const rows = this.compilations.filter((x) => (!where.id || x.id === where.id) && (!where.status || x.status === where.status)); rows.forEach((r) => Object.assign(r, data)); return { count: rows.length }; },
@@ -91,4 +91,12 @@ test("promotion transaction failure rolls back memberships and retains old curre
   const db = new FakeDb(); const oldAt = new Date("2026-01-01T00:00:00Z"); db.compilations.push({ id: "old", promotionRuleId: "r", version: 1, status: "READY", compiledHash: "old", sourceHash: "old", triggerType: "PRODUCT", membershipCount: 1 }); db.rules.push(base({ id: "r", currentCompilationId: "old", compiledAt: oldAt })); db.failInTransaction = true;
   await rejectsCode(() => compilePromotionRule({ shopId: "shop-a", promotionRuleId: "r", reason: "MANUAL_RECOMPILE" }, { database: db as any, catalogueResolver: async () => ({ sourceGroups: [{ sourceReferenceId: "pr", sourceType: "PRODUCT", sourceGid: p("2"), productGids: [p("2")], unresolved: false }], pagination: [] }) }), "PERSISTENCE_FAILED");
   assert.equal(db.rules[0].currentCompilationId, "old"); assert.equal(new Date(db.rules[0].compiledAt).toISOString(), oldAt.toISOString()); assert.equal(db.memberships.length, 0); assert.equal(db.compilations.at(-1)!.status, "FAILED");
+});
+
+
+test("ACTIVE and PAUSED rules can compile while DRAFT, ARCHIVED, cross-shop, and duplicate active attempts are rejected", async () => {
+  for (const status of ["ACTIVE", "PAUSED"] as const) { const db = new FakeDb(); const r = base({ id: `ok-${status}`, status }); db.rules.push(r); const result = await compilePromotionRule({ shopId: "shop-a", promotionRuleId: r.id, reason: "MANUAL_RECOMPILE" }, { database: db as any }); assert.equal(result.status, "READY"); }
+  for (const status of ["DRAFT", "ARCHIVED"] as const) { const db = new FakeDb(); const r = base({ id: `bad-${status}`, status }); db.rules.push(r); await rejectsCode(() => compilePromotionRule({ shopId: "shop-a", promotionRuleId: r.id, reason: "MANUAL_RECOMPILE" }, { database: db as any }), "RULE_NOT_COMPILABLE"); }
+  { const db = new FakeDb(); db.rules.push(base({ id: "other", shopId: "shop-b" })); await rejectsCode(() => compilePromotionRule({ shopId: "shop-a", promotionRuleId: "other", reason: "MANUAL_RECOMPILE" }, { database: db as any }), "RULE_NOT_COMPILABLE"); }
+  { const db = new FakeDb(); db.rules.push(base({ id: "dup" })); db.compilations.push({ id: "pending", promotionRuleId: "dup", version: 1, status: "PENDING", sourceHash: "h", triggerType: "PRODUCT", membershipCount: 0 }); await rejectsCode(() => compilePromotionRule({ shopId: "shop-a", promotionRuleId: "dup", reason: "MANUAL_RECOMPILE" }, { database: db as any }), "DUPLICATE_ACTIVE_COMPILATION"); }
 });
