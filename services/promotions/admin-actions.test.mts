@@ -36,3 +36,24 @@ test("promotion action parses numeric, decimal, and UTC schedule FormData fields
   assert.match(action, /startsAt: optionalUtcDate\(formData, "startsAtUtc", "startsAt"\)/);
   assert.match(action, /endsAt: optionalUtcDate\(formData, "endsAtUtc", "endsAt"\)/);
 });
+
+test("saving a valid ACTIVE promotion automatically compiles it and synchronizes runtime", async () => {
+  const { publishSavedPromotion } = await import("./publication-orchestration.server.ts");
+  const calls: string[] = [];
+  const result = await publishSavedPromotion("shop-a", "a.myshopify.com", { id: "rule-1", status: "ACTIVE" }, "RULE_UPDATED", {
+    compiler: async (input: any) => { calls.push(`compile:${input.reason}:${input.promotionRuleId}:${input.shopDomain}`); return { status: "READY", compilationId: "c1", version: 1, compiledHash: "h", membershipCount: 1 }; },
+    synchronizer: async (input: any) => { calls.push(`sync:${input.shopId}`); return { ok: true, outcome: "UPDATED", automaticDiscountId: "d1", configurationVersion: 1, configurationHash: "h", ruleCount: 1, verifiedAt: new Date().toISOString() }; },
+  } as any);
+  assert.deepEqual(result, { compile: "READY", sync: "SYNCED" });
+  assert.deepEqual(calls, ["compile:RULE_UPDATED:rule-1:a.myshopify.com", "sync:shop-a"]);
+});
+
+test("failed compilation does not mark Shopify publication as configured", async () => {
+  const { publishSavedPromotion } = await import("./publication-orchestration.server.ts");
+  let synced = false;
+  await assert.rejects(() => publishSavedPromotion("shop-a", "a.myshopify.com", { id: "rule-1", status: "ACTIVE" }, "RULE_UPDATED", {
+    compiler: async () => { throw new Error("compile failed"); },
+    synchronizer: async () => { synced = true; return { ok: true }; },
+  } as any), /compile failed/);
+  assert.equal(synced, false);
+});

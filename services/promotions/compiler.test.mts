@@ -100,3 +100,34 @@ test("ACTIVE and PAUSED rules can compile while DRAFT, ARCHIVED, cross-shop, and
   { const db = new FakeDb(); db.rules.push(base({ id: "other", shopId: "shop-b" })); await rejectsCode(() => compilePromotionRule({ shopId: "shop-a", promotionRuleId: "other", reason: "MANUAL_RECOMPILE" }, { database: db as any }), "RULE_NOT_COMPILABLE"); }
   { const db = new FakeDb(); db.rules.push(base({ id: "dup" })); db.compilations.push({ id: "pending", promotionRuleId: "dup", version: 1, status: "PENDING", sourceHash: "h", triggerType: "PRODUCT", membershipCount: 0 }); await rejectsCode(() => compilePromotionRule({ shopId: "shop-a", promotionRuleId: "dup", reason: "MANUAL_RECOMPILE" }, { database: db as any }), "DUPLICATE_ACTIVE_COMPILATION"); }
 });
+
+test("recent PENDING compilation blocks a duplicate attempt", async () => {
+  const db = new FakeDb(); db.rules.push(base({ id: "recent-pending" }));
+  db.compilations.push({ id: "pending", promotionRuleId: "recent-pending", version: 1, status: "PENDING", reason: "MANUAL_RECOMPILE", sourceHash: "h", triggerType: "PRODUCT", membershipCount: 0, createdAt: new Date("2026-07-12T00:00:00Z") });
+  await rejectsCode(() => compilePromotionRule({ shopId: "shop-a", promotionRuleId: "recent-pending", reason: "MANUAL_RECOMPILE" }, { database: db as any, clock: { now: () => new Date("2026-07-12T00:04:59Z") } }), "DUPLICATE_ACTIVE_COMPILATION");
+});
+
+test("recent COMPILING compilation blocks a duplicate attempt", async () => {
+  const db = new FakeDb(); db.rules.push(base({ id: "recent-compiling" }));
+  db.compilations.push({ id: "compiling", promotionRuleId: "recent-compiling", version: 1, status: "COMPILING", reason: "MANUAL_RECOMPILE", sourceHash: "h", triggerType: "PRODUCT", membershipCount: 0, createdAt: new Date("2026-07-12T00:00:00Z"), startedAt: new Date("2026-07-12T00:01:00Z") });
+  await rejectsCode(() => compilePromotionRule({ shopId: "shop-a", promotionRuleId: "recent-compiling", reason: "MANUAL_RECOMPILE" }, { database: db as any, clock: { now: () => new Date("2026-07-12T00:05:59Z") } }), "DUPLICATE_ACTIVE_COMPILATION");
+});
+
+test("stale PENDING compilation is marked failed and a new compile succeeds", async () => {
+  const db = new FakeDb(); db.rules.push(base({ id: "stale-pending" }));
+  db.compilations.push({ id: "pending", promotionRuleId: "stale-pending", version: 1, status: "PENDING", reason: "MANUAL_RECOMPILE", sourceHash: "h", triggerType: "PRODUCT", membershipCount: 0, createdAt: new Date("2026-07-12T00:00:00Z") });
+  const result = await compilePromotionRule({ shopId: "shop-a", promotionRuleId: "stale-pending", reason: "MANUAL_RECOMPILE" }, { database: db as any, clock: { now: () => new Date("2026-07-12T00:06:00Z") } });
+  assert.equal(result.status, "READY");
+  assert.equal(db.compilations[0].status, "FAILED");
+  assert.equal(db.compilations[0].errorCode, "STALE_COMPILATION_RECOVERED");
+  assert.ok(db.audits.some((a) => a.action === "PROMOTION_COMPILATION_STALE_RECOVERED"));
+});
+
+test("stale COMPILING compilation is marked failed and a new compile succeeds", async () => {
+  const db = new FakeDb(); db.rules.push(base({ id: "stale-compiling" }));
+  db.compilations.push({ id: "compiling", promotionRuleId: "stale-compiling", version: 1, status: "COMPILING", reason: "MANUAL_RECOMPILE", sourceHash: "h", triggerType: "PRODUCT", membershipCount: 0, createdAt: new Date("2026-07-12T00:00:00Z"), startedAt: new Date("2026-07-12T00:00:30Z") });
+  const result = await compilePromotionRule({ shopId: "shop-a", promotionRuleId: "stale-compiling", reason: "MANUAL_RECOMPILE" }, { database: db as any, clock: { now: () => new Date("2026-07-12T00:06:00Z") } });
+  assert.equal(result.status, "READY");
+  assert.equal(db.compilations[0].status, "FAILED");
+  assert.equal(db.compilations[0].errorCode, "STALE_COMPILATION_RECOVERED");
+});
