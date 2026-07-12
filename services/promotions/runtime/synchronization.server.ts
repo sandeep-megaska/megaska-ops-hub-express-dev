@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { prisma } from "../../db/prisma.ts";
 import { assembleFunctionConfiguration, assertFunctionConfigurationEqual, buildConfigurationHash, type LoopDeskFunctionConfiguration, type PromotionRuntimeSyncResult } from "./function-contract.ts";
-import { createAutomaticDiscount, findCanonicalAutomaticDiscount, readAutomaticDiscount, readShopifyFunctionByHandle, verifyDiscountOwnsCanonicalConfiguration, writeFunctionConfigurationMetafield, type ShopifyGraphql } from "./shopify-discount.server.ts";
+import { createAutomaticDiscount, ensureAutomaticDiscountCombinations, findCanonicalAutomaticDiscount, readAutomaticDiscount, readShopifyFunctionByHandle, verifyDiscountOwnsCanonicalConfiguration, writeFunctionConfigurationMetafield, type ShopifyGraphql } from "./shopify-discount.server.ts";
 import { mapCompilationToFunctionRule } from "./mapper.ts";
 
 type RuntimeSyncState = { id: string; shopId: string; synchronizationState?: string | null; shopifyAutomaticDiscountId?: string | null; lastRulesFingerprint?: string | null; lastDeployedConfigurationVersion?: number | null; lastDeployedConfigurationHash?: string | null; lastDeployedRuleCount?: number | null; lastSuccessfulSyncAt?: Date | null; lastVerifiedConfiguration?: unknown; synchronizationAttemptId?: string | null; synchronizationLeaseExpiresAt?: Date | null };
@@ -39,6 +39,7 @@ export async function synchronizePromotionFunctionConfiguration(input: Input, de
     const rules = ruleRecords.map((record) => mapCompilationToFunctionRule(record as never));
     const fingerprint = rulesFingerprint(rules);
     if (state.lastRulesFingerprint === fingerprint && state.shopifyAutomaticDiscountId && state.lastDeployedConfigurationVersion) {
+      await ensureAutomaticDiscountCombinations(graphql, shop.shopDomain, state.shopifyAutomaticDiscountId);
       const snapshot = await readAutomaticDiscount(graphql, shop.shopDomain, state.shopifyAutomaticDiscountId);
       if (snapshot?.metafield?.value) {
         try { assertFunctionConfigurationEqual(assembleFunctionConfiguration({ configurationVersion: state.lastDeployedConfigurationVersion, rules }), JSON.parse(snapshot.metafield.value)); await database.promotionRuntimeSyncState.updateMany({ where: { id: state.id, synchronizationAttemptId: attemptId }, data: { synchronizationState: "SYNCED", synchronizationLeaseExpiresAt: null, lastSuccessfulSyncAt: clock.now(), lastErrorCode: null, lastErrorMessage: null } }); return { ok: true, outcome: "UNCHANGED", automaticDiscountId: state.shopifyAutomaticDiscountId, configurationVersion: state.lastDeployedConfigurationVersion, configurationHash: state.lastDeployedConfigurationHash || "", ruleCount: state.lastDeployedRuleCount || 0, verifiedAt: (state.lastSuccessfulSyncAt ?? now).toISOString() }; } catch { /* repair below */ }
@@ -54,6 +55,7 @@ export async function synchronizePromotionFunctionConfiguration(input: Input, de
       discount = state.shopifyAutomaticDiscountId ? null : await findCanonicalAutomaticDiscount(graphql, shop.shopDomain);
       if (!discount) { discount = await createAutomaticDiscount(graphql, shop.shopDomain, now.toISOString()); outcome = "CREATED"; }
     }
+    await ensureAutomaticDiscountCombinations(graphql, shop.shopDomain, discount.id);
     await writeFunctionConfigurationMetafield(graphql, shop.shopDomain, discount.id, configuration);
     const readBack = await readAutomaticDiscount(graphql, shop.shopDomain, discount.id);
     verifyDiscountOwnsCanonicalConfiguration(readBack, configuration, loopdeskFunction.id);
