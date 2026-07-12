@@ -4,6 +4,7 @@ import { synchronizePromotionFunctionConfiguration } from "./runtime/synchroniza
 
 type SavedPromotion = { id: string; status: PromotionRuleStatus };
 type PublicationDeps = { compiler?: typeof compilePromotionRule; synchronizer?: typeof synchronizePromotionFunctionConfiguration };
+type CompilationStatus = Awaited<ReturnType<typeof compilePromotionRule>>["status"];
 
 export class PromotionPublicationSyncError extends Error {
   readonly code: string;
@@ -30,7 +31,7 @@ export async function publishSavedPromotion(shopId: string, shopDomain: string |
 }
 
 export async function publishPromotionStatusChange(shopId: string, shopDomain: string | null | undefined, rule: SavedPromotion, deps: PublicationDeps = {}) {
-  let compile = "SKIPPED" as const | Awaited<ReturnType<typeof compilePromotionRule>>["status"];
+  let compile: "SKIPPED" | CompilationStatus = "SKIPPED";
   if (rule.status === "ACTIVE" || rule.status === "PAUSED") {
     const compiler = deps.compiler ?? compilePromotionRule;
     const compiled = await compiler({ shopId, shopDomain, promotionRuleId: rule.id, reason: "RULE_UPDATED" });
