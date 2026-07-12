@@ -47,12 +47,14 @@
       shopDomain: {{ shop.permanent_domain | json }}
     });
   </script>
+
   <script>
     (function () {
       var drawerAssetUrl = {{ 'loopdesk-cart-drawer.js' | asset_url | json }};
       var shopDomain = {{ shop.permanent_domain | json }};
       var runtimeUrl = "/apps/megaska/api/runtime/config?shop=" + encodeURIComponent(shopDomain) + "&_loopdesk_runtime=" + Date.now();
       var couponBusy = false;
+      var couponMountPromise = null;
 
       function mergeRuntimeConfig(payload) {
         if (!payload || payload.ok !== true || !payload.config) return;
@@ -84,14 +86,14 @@
         catch (_error) { return "₹" + value.toFixed(2); }
       }
 
-      function escapeHtmlLocal(value) {
+      function escapeHtml(value) {
         return String(value || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\"/g,"&quot;").replace(/'/g,"&#039;");
       }
 
-      function numericPrice(text) {
-        var normalized = String(text || "").replace(/[^0-9.,-]/g, "").replace(/,/g, "");
-        var value = Number(normalized);
-        return Number.isFinite(value) ? value : 0;
+      function numericPrice(value) {
+        var normalized = String(value || "").replace(/[^0-9.,-]/g, "").replace(/,/g, "");
+        var number = Number(normalized);
+        return Number.isFinite(number) ? number : 0;
       }
 
       function promotionRule(ruleId) {
@@ -111,8 +113,7 @@
       }
 
       function improveOfferCard(card) {
-        var ruleId = card.getAttribute("data-loopdesk-offer-rule");
-        var rule = promotionRule(ruleId);
+        var rule = promotionRule(card.getAttribute("data-loopdesk-offer-rule"));
         var priceNode = card.querySelector(".loopdesk-cart-drawer__offer-price");
         if (!rule || !priceNode) return;
         var originalPrice = Number(priceNode.getAttribute("data-loopdesk-original-price") || 0);
@@ -142,14 +143,16 @@
 
       function cartDiscountCode(cart) {
         var codes = cart && Array.isArray(cart.discount_codes) ? cart.discount_codes : [];
-        for (var i = 0; i < codes.length; i += 1) {
-          var code = typeof codes[i] === "string" ? codes[i] : codes[i] && codes[i].code;
+        for (var index = 0; index < codes.length; index += 1) {
+          var code = typeof codes[index] === "string" ? codes[index] : codes[index] && codes[index].code;
           if (code) return String(code).trim().toUpperCase();
         }
         var applications = cart && Array.isArray(cart.cart_level_discount_applications) ? cart.cart_level_discount_applications : [];
-        for (var j = 0; j < applications.length; j += 1) {
-          var application = applications[j] || {};
-          if (String(application.type || "").toLowerCase() === "discount_code" && (application.code || application.title)) return String(application.code || application.title).trim().toUpperCase();
+        for (var appIndex = 0; appIndex < applications.length; appIndex += 1) {
+          var application = applications[appIndex] || {};
+          if (String(application.type || "").toLowerCase() === "discount_code" && (application.code || application.title)) {
+            return String(application.code || application.title).trim().toUpperCase();
+          }
         }
         return "";
       }
@@ -158,9 +161,9 @@
         var code = cartDiscountCode(cart);
         var savings = Math.max(0, Number(cart && cart.total_discount || 0));
         var status = code
-          ? '<p class="loopdesk-cart-drawer__coupon-status" data-state="success"><strong>' + escapeHtmlLocal(code) + ' applied</strong>' + (savings > 0 ? ' · Total savings ' + escapeHtmlLocal(formatMoney(savings / 100)) : '') + '<button type="button" class="loopdesk-cart-drawer__coupon-remove" data-loopdesk-coupon-remove>Remove</button></p>'
+          ? '<p class="loopdesk-cart-drawer__coupon-status" data-state="success"><strong>' + escapeHtml(code) + ' applied</strong>' + (savings > 0 ? ' · Total savings ' + escapeHtml(formatMoney(savings / 100)) : '') + '<button type="button" class="loopdesk-cart-drawer__coupon-remove" data-loopdesk-coupon-remove>Remove</button></p>'
           : '<p class="loopdesk-cart-drawer__coupon-status" aria-live="polite"></p>';
-        return '<section class="loopdesk-cart-drawer__coupon" data-loopdesk-coupon><h3 class="loopdesk-cart-drawer__coupon-title">Have a coupon?</h3><form data-loopdesk-coupon-form><div class="loopdesk-cart-drawer__coupon-row"><input class="loopdesk-cart-drawer__coupon-input" name="code" type="text" autocomplete="off" placeholder="Enter coupon code" value="' + escapeHtmlLocal(code) + '"><button class="loopdesk-cart-drawer__coupon-button" type="submit">Apply</button></div></form>' + status + '</section>';
+        return '<section class="loopdesk-cart-drawer__coupon" data-loopdesk-coupon><h3 class="loopdesk-cart-drawer__coupon-title">Have a coupon?</h3><form data-loopdesk-coupon-form><div class="loopdesk-cart-drawer__coupon-row"><input class="loopdesk-cart-drawer__coupon-input" name="code" type="text" autocomplete="off" placeholder="Enter coupon code" value="' + escapeHtml(code) + '"><button class="loopdesk-cart-drawer__coupon-button" type="submit">Apply</button></div></form>' + status + '</section>';
       }
 
       function readCart() {
@@ -168,30 +171,28 @@
           .then(function (response) { if (!response.ok) throw new Error('Unable to refresh cart'); return response.json(); });
       }
 
-      function findCouponHost() {
+      function couponHost() {
         var root = document.getElementById('loopdesk-cart-drawer-root');
         if (!root) return null;
         return root.querySelector('.loopdesk-cart-drawer__body') || root.querySelector('.loopdesk-cart-drawer__content') || root.querySelector('.loopdesk-cart-drawer');
       }
 
       function renderCoupon(cart) {
-        var host = findCouponHost();
+        var host = couponHost();
         if (!host) return;
         var existing = host.querySelector('[data-loopdesk-coupon]');
         if (existing) existing.outerHTML = couponMarkup(cart);
         else host.insertAdjacentHTML('beforeend', couponMarkup(cart));
       }
 
-      function refreshDrawerFromShopifyCart() {
-        document.dispatchEvent(new CustomEvent('loopdesk:cart-drawer:open', { detail:{ source:'loopdesk-coupon' } }));
-      }
-
-      function refreshCoupon() {
-        return readCart().then(function (cart) {
-          renderCoupon(cart);
-          refreshDrawerFromShopifyCart();
-          return cart;
-        });
+      function mountCoupon() {
+        if (!couponHost() || document.querySelector('#loopdesk-cart-drawer-root [data-loopdesk-coupon]')) return Promise.resolve(null);
+        if (couponMountPromise) return couponMountPromise;
+        couponMountPromise = readCart()
+          .then(function (cart) { renderCoupon(cart); return cart; })
+          .catch(function () { return null; })
+          .finally(function () { couponMountPromise = null; });
+        return couponMountPromise;
       }
 
       function setCouponStatus(message, state) {
@@ -214,17 +215,25 @@
         });
       }
 
+      function refreshDrawerOnce() {
+        document.dispatchEvent(new CustomEvent('loopdesk:cart-drawer:open', { detail:{ source:'loopdesk-coupon' } }));
+        window.setTimeout(function () { mountCoupon(); }, 120);
+      }
+
       function applyCoupon(code) {
         if (couponBusy) return;
         couponBusy = true;
+        var normalized = String(code || '').trim().toUpperCase();
         var button = document.querySelector('#loopdesk-cart-drawer-root .loopdesk-cart-drawer__coupon-button');
         if (button) button.disabled = true;
         setCouponStatus('Applying coupon…', '');
-        updateShopifyCartDiscount(String(code).trim().toUpperCase())
-          .then(function () { return refreshCoupon(); })
+        updateShopifyCartDiscount(normalized)
+          .then(function () { return readCart(); })
           .then(function (cart) {
             var applied = cartDiscountCode(cart);
-            if (!applied || applied !== String(code).trim().toUpperCase()) throw new Error('This coupon is not valid for the current cart');
+            if (!applied || applied !== normalized) throw new Error('This coupon is not valid for the current cart');
+            renderCoupon(cart);
+            refreshDrawerOnce();
           })
           .catch(function (error) { setCouponStatus(error && error.message || 'Coupon could not be applied', 'error'); })
           .finally(function () { couponBusy = false; if (button) button.disabled = false; });
@@ -235,7 +244,8 @@
         couponBusy = true;
         setCouponStatus('Removing coupon…', '');
         updateShopifyCartDiscount('')
-          .then(function () { return refreshCoupon(); })
+          .then(function () { return readCart(); })
+          .then(function (cart) { renderCoupon(cart); refreshDrawerOnce(); })
           .catch(function (error) { setCouponStatus(error && error.message || 'Coupon could not be removed', 'error'); })
           .finally(function () { couponBusy = false; });
       }
@@ -247,7 +257,7 @@
           element.style.display = 'none';
           element.setAttribute('aria-hidden','true');
         });
-        if (!document.querySelector('#loopdesk-cart-drawer-root [data-loopdesk-coupon]')) refreshCoupon().catch(function () {});
+        mountCoupon();
       }
 
       function observeDrawer() {
