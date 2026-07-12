@@ -79,3 +79,8 @@ test("verifyDiscountOwnsCanonicalConfiguration rejects non-canonical configurati
 test("findCanonicalAutomaticDiscount rejects duplicate canonical node titles", async () => {
   await assert.rejects(() => findCanonicalAutomaticDiscount(async () => ({ discountNodes: { nodes: [node(ownerId), node("gid://shopify/DiscountNode/2")] } }), null), /ambiguous/i);
 });
+
+test("verifyDiscountOwnsCanonicalConfiguration rejects wrong Function ID", () => {
+  const config = assembleFunctionConfiguration({ configurationVersion: 1, rules: [] });
+  assert.throws(() => verifyDiscountOwnsCanonicalConfiguration({ id: ownerId, ...appDiscount, metafield: { ...metafield, namespace: expandedNamespace, value: JSON.stringify(config) } }, config, "gid://shopify/AppFunction/current"), /current LoopDesk Function/);
+});
