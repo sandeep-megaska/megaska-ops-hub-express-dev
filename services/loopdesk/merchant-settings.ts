@@ -1,6 +1,7 @@
 import { prisma } from "../db/prisma";
 import { getDelhiveryRuntimeConfig, type DelhiveryPublicRuntimeConfig } from "../delhivery/config";
 import { getRazorpayRuntimeConfig, type RazorpayPublicRuntimeConfig } from "../razorpay/config";
+import { shopifyAdminGraphql } from "../shopify/admin";
 
 export const LOOPDESK_RUNTIME_CONFIG_MODULE_KEY = "loopdesk_runtime_config";
 export const CART_INTELLIGENCE_CONFIG_MODULE_KEY = "cart_intelligence_config";
@@ -482,19 +483,94 @@ export function toLoopDeskPublicRuntimeConfig(
   };
 }
 
-async function getCompiledPromotionRuntime(shopId: string) {
-  const rows = await (prisma as any).promotionRule.findMany({
-    where: { shopId, status: "ACTIVE", currentCompilation: { is: { status: "READY" } } },
-    orderBy: [{ priority: "asc" }, { updatedAt: "desc" }],
-    select: { id: true, priority: true, status: true, currentCompilation: { select: { id: true, version: true, status: true, storefrontPayload: true } } },
-  });
+type RuntimePromotionDeps = {
+  database?: RuntimePromotionDatabase;
+  graphql?: <T>(query: string, variables?: Record<string, unknown>, options?: { shopDomain?: string | null }) => Promise<T>;
+  now?: Date;
+};
+type RuntimePromotionRow = { id: string; priority: number; status: string; currentCompilation: { id: string; version: number; status: string; storefrontPayload: unknown } | null };
+type RuntimePromotionDatabase = {
+  shop: { findUnique(args: unknown): Promise<{ shopDomain?: string | null; myshopifyDomain?: string | null; primaryDomain?: string | null } | null> };
+  promotionRule: { findMany(args: unknown): Promise<RuntimePromotionRow[]> };
+};
+type RuntimePromotionCandidate = { row: RuntimePromotionRow; payload: Record<string, unknown> };
+type RuntimeOfferProduct = { productGid: string; handle: string; title: string | null; imageUrl: string | null };
+
+const PROMOTION_OFFER_PRODUCTS_QUERY = `
+  query LoopDeskPromotionOfferProducts($ids: [ID!]!) {
+    nodes(ids: $ids) {
+      ... on Product {
+        id
+        handle
+        title
+        featuredImage {
+          url
+        }
+      }
+    }
+  }
+`;
+
+function offerProductGid(payload: unknown) {
+  return isRecord(payload) && isRecord(payload.offer) && typeof payload.offer.productGid === "string" ? payload.offer.productGid.trim() : "";
+}
+function scheduled(payload: Record<string, unknown>, now: Date) {
+  const schedule = isRecord(payload.schedule) ? payload.schedule : {};
+  const startsAt = typeof schedule.startsAt === "string" && schedule.startsAt ? Date.parse(schedule.startsAt) : null;
+  const endsAt = typeof schedule.endsAt === "string" && schedule.endsAt ? Date.parse(schedule.endsAt) : null;
+  return (startsAt === null || startsAt <= now.getTime()) && (endsAt === null || endsAt > now.getTime());
+}
+function imageUrl(node: Record<string, unknown>) {
+  return isRecord(node.featuredImage) && typeof node.featuredImage.url === "string" && node.featuredImage.url.trim() ? node.featuredImage.url.trim() : null;
+}
+async function resolveRuntimeOfferProducts(shopDomain: string | null | undefined, productGids: string[], deps: RuntimePromotionDeps): Promise<Map<string, RuntimeOfferProduct>> {
+  const ids = [...new Set(productGids.map((id) => id.trim()).filter(Boolean))];
+  if (!ids.length) return new Map();
+  const graphql = deps.graphql ?? shopifyAdminGraphql;
+  try {
+    const data = await graphql<{ nodes?: Array<Record<string, unknown> | null> }>(PROMOTION_OFFER_PRODUCTS_QUERY, { ids }, { shopDomain });
+    const products = new Map<string, RuntimeOfferProduct>();
+    for (const node of data.nodes ?? []) {
+      if (!isRecord(node) || typeof node.id !== "string") continue;
+      const handle = typeof node.handle === "string" ? node.handle.trim() : "";
+      if (!handle) continue;
+      products.set(node.id, { productGid: node.id, handle, title: typeof node.title === "string" && node.title.trim() ? node.title.trim() : null, imageUrl: imageUrl(node) });
+    }
+    return products;
+  } catch (error) {
+    console.warn("[LoopDesk Promotions] offer product enrichment failed; excluding runtime promotion offers", {
+      shopDomain,
+      productCount: ids.length,
+      error: error instanceof Error ? error.message : "unknown_error",
+    });
+    return new Map();
+  }
+}
+
+export async function getCompiledPromotionRuntime(shopId: string, deps: RuntimePromotionDeps = {}) {
+  const database = deps.database ?? (prisma as unknown as RuntimePromotionDatabase);
+  const now = deps.now ?? new Date();
+  const [shop, rows] = await Promise.all([
+    database.shop.findUnique({ where: { id: shopId }, select: { shopDomain: true, myshopifyDomain: true, primaryDomain: true } }),
+    database.promotionRule.findMany({
+      where: { shopId, status: "ACTIVE", currentCompilation: { is: { status: "READY" } } },
+      orderBy: [{ priority: "asc" }, { updatedAt: "desc" }],
+      select: { id: true, priority: true, status: true, currentCompilation: { select: { id: true, version: true, status: true, storefrontPayload: true } } },
+    }),
+  ]);
+  const candidates = rows.reduce<RuntimePromotionCandidate[]>((next, row) => {
+    const payload = row.currentCompilation?.storefrontPayload;
+    if (isRecord(payload) && (payload.status || row.status) === "ACTIVE" && scheduled(payload, now)) next.push({ row, payload });
+    return next;
+  }, []);
+  const offers = await resolveRuntimeOfferProducts(shop?.shopDomain || shop?.myshopifyDomain || shop?.primaryDomain || null, candidates.map(({ payload }) => offerProductGid(payload)), deps);
 
   return {
-    rules: rows
-      .map((row: any) => {
-        const payload = row.currentCompilation?.storefrontPayload;
-        if (!isRecord(payload)) return null;
-        return { ...payload, ruleId: payload.ruleId || row.id, priority: payload.priority ?? row.priority, status: payload.status || row.status, compilation: { id: row.currentCompilation.id, version: row.currentCompilation.version, status: row.currentCompilation.status } };
+    rules: candidates
+      .map(({ row, payload }) => {
+        const product = offers.get(offerProductGid(payload));
+        if (!product) return null;
+        return { ...payload, ruleId: payload.ruleId || row.id, priority: payload.priority ?? row.priority, status: payload.status || row.status, offer: { ...(isRecord(payload.offer) ? payload.offer : {}), productGid: product.productGid, handle: product.handle, title: product.title, imageUrl: product.imageUrl }, compilation: { id: row.currentCompilation!.id, version: row.currentCompilation!.version, status: row.currentCompilation!.status } };
       })
       .filter(Boolean),
   };

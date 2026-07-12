@@ -1,7 +1,12 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import vm from "node:vm";
 
 import {
+  getCompiledPromotionRuntime,
   mergeLoopDeskMerchantSettings,
   normalizeCartIntelligenceSettings,
   normalizeLoopDeskMerchantSettings,
@@ -10,6 +15,37 @@ import {
   validateCartIntelligenceSettingsPatch,
   validateLoopDeskMerchantSettingsPatch,
 } from "./merchant-settings.ts";
+
+const productGid = (id: string) => `gid://shopify/Product/${id}`;
+function compiledRule(id: string, offerId: string) {
+  return {
+    id,
+    priority: 1,
+    status: "ACTIVE",
+    currentCompilation: {
+      id: `c-${id}`,
+      version: 1,
+      status: "READY",
+      storefrontPayload: {
+        schemaVersion: 1,
+        ruleId: id,
+        status: "ACTIVE",
+        priority: 1,
+        schedule: { startsAt: null, endsAt: null },
+        offer: { productGid: productGid(offerId), title: "Stale title", handle: null, imageUrl: null },
+      },
+    },
+  };
+}
+function promotionRuntimeDb(rules: any[]) {
+  return {
+    shop: { findUnique: async () => ({ shopDomain: "tenant.myshopify.com", myshopifyDomain: "tenant.myshopify.com", primaryDomain: null }) },
+    promotionRule: { findMany: async (args: any) => {
+      assert.equal(args.where.shopId, "shop-1");
+      return rules;
+    } },
+  };
+}
 
 test("normalizes merchant settings defaults", () => {
   const settings = normalizeLoopDeskMerchantSettings(
@@ -128,4 +164,84 @@ test("validates cart intelligence patch fields", () => {
   assert.match(errors.join(" "), /Cart Intelligence Enabled/);
   assert.match(errors.join(" "), /Free Shipping Threshold/);
   assert.match(errors.join(" "), /Progress Bar Text/);
+});
+
+test("compiled promotion runtime enriches a valid offer product from Shopify Admin", async () => {
+  const calls: any[] = [];
+  const runtime = await getCompiledPromotionRuntime("shop-1", {
+    database: promotionRuntimeDb([compiledRule("rule-1", "995")]),
+    graphql: async (_query, variables, options) => {
+      calls.push({ variables, options });
+      return { nodes: [{ id: productGid("995"), handle: "hydrogen", title: "The Collection Snowboard: Hydrogen", featuredImage: { url: "https://cdn.shopify.com/hydrogen.jpg" } }] } as any;
+    },
+  });
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0].variables.ids, [productGid("995")]);
+  assert.equal(calls[0].options.shopDomain, "tenant.myshopify.com");
+  assert.equal((runtime.rules[0] as any).offer.productGid, productGid("995"));
+  assert.equal((runtime.rules[0] as any).offer.handle, "hydrogen");
+  assert.equal((runtime.rules[0] as any).offer.title, "The Collection Snowboard: Hydrogen");
+  assert.equal((runtime.rules[0] as any).offer.imageUrl, "https://cdn.shopify.com/hydrogen.jpg");
+});
+
+test("compiled promotion runtime excludes unresolved offer products", async () => {
+  const runtime = await getCompiledPromotionRuntime("shop-1", {
+    database: promotionRuntimeDb([compiledRule("rule-1", "404"), compiledRule("rule-2", "405")]),
+    graphql: async () => ({ nodes: [{ id: productGid("404"), handle: "", title: "No handle" }, null] }) as any,
+  });
+  assert.deepEqual(runtime.rules, []);
+});
+
+test("compiled promotion runtime batch-resolves multiple offer products", async () => {
+  const calls: any[] = [];
+  const runtime = await getCompiledPromotionRuntime("shop-1", {
+    database: promotionRuntimeDb([compiledRule("rule-1", "1"), compiledRule("rule-2", "2"), compiledRule("rule-3", "1")]),
+    graphql: async (_query, variables) => {
+      calls.push(variables);
+      return { nodes: [{ id: productGid("1"), handle: "one", title: "One" }, { id: productGid("2"), handle: "two", title: "Two" }] } as any;
+    },
+  });
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0].ids, [productGid("1"), productGid("2")]);
+  assert.deepEqual(runtime.rules.map((rule: any) => rule.offer.handle), ["one", "two", "one"]);
+});
+
+test("compiled promotion runtime does not expose admin tokens or raw Shopify response", async () => {
+  const runtime = await getCompiledPromotionRuntime("shop-1", {
+    database: promotionRuntimeDb([compiledRule("rule-1", "1")]),
+    graphql: async () => ({ accessToken: "shpat_secret", nodes: [{ id: productGid("1"), handle: "one", title: "One", raw: { token: "shpat_secret" } }] }) as any,
+  });
+  const serialized = JSON.stringify(runtime);
+  assert.doesNotMatch(serialized, /shpat_secret|accessToken|raw/);
+});
+
+test("bootstrap keeps runtime promotions before cart drawer normalization", () => {
+  const block = readFileSync(resolve("extensions/megaska-otp/blocks/loopdesk-cart-drawer-embed.liquid"), "utf8");
+  assert.match(block, /promotions:\s*payload\.config\.promotions/);
+  const source = readFileSync(resolve("extensions/megaska-otp/assets/loopdesk-cart-drawer.js"), "utf8");
+  const document = {
+    readyState: "loading",
+    addEventListener() {},
+    querySelectorAll: () => [],
+    querySelector: () => null,
+    getElementById: () => null,
+    createElement: () => ({ style: {}, setAttribute() {}, appendChild() {}, addEventListener() {}, classList: { add() {}, remove() {}, toggle() {} } }),
+    body: null,
+    documentElement: { style: {} },
+  };
+  const window: any = {
+    LoopDeskConfig: { promotions: { rules: [{ ruleId: "rule-1" }] } },
+    LOOPDESK_CART_DRAWER_CONFIG: {},
+    Shopify: { shop: "tenant.myshopify.com" },
+    console: { debug() {}, warn() {}, error() {}, log() {} },
+    document,
+    location: { pathname: "/" },
+    addEventListener() {},
+    setTimeout() { return 0; },
+    clearTimeout() {},
+    fetch: async () => ({ ok: true, json: async () => ({}) }),
+    XMLHttpRequest: function XMLHttpRequest() {},
+  };
+  vm.runInNewContext(source, { window, document, console: window.console, setTimeout: window.setTimeout, clearTimeout: window.clearTimeout, URLSearchParams, FormData: class FormData {} });
+  assert.equal(window.LoopDeskConfig.promotions.rules.length, 1);
 });
