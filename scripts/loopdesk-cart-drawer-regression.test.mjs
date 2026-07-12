@@ -35,3 +35,19 @@ assert.match(css, /#loopdesk-cart-drawer-root \.loopdesk-cart-drawer[\s\S]*displ
 assert.match(css, /#loopdesk-cart-drawer-root \.loopdesk-cart-drawer__overlay[\s\S]*display: block !important;[\s\S]*visibility: visible !important;/, "LoopDesk overlay must override broad native cart hiding selectors");
 
 console.log("LoopDesk cart drawer CONFIG-2B regression checks passed");
+
+assert.match(source, /selectedOfferVariants: \{\}/, "selected offer variants should be tracked in drawer state");
+assert.match(source, /elements\.body\.addEventListener\("change", function \(event\) \{[\s\S]*?closest\("\[data-loopdesk-offer-variant\]"\)[\s\S]*?state\.selectedOfferVariants\[ruleId\] = select\.value;[\s\S]*?render\(\);[\s\S]*?\}\);/, "offer variant selection must use a change-event listener and store state by rule ID");
+assert.match(source, /function selectedOfferVariant\(rule, product\) \{[\s\S]*?state\.selectedOfferVariants\[rule\.ruleId\][\s\S]*?variant\.available !== false[\s\S]*?\}/, "Add Offer should resolve the currently selected available Shopify variant");
+assert.match(source, /fetch\("\/cart\/add\.js"[\s\S]*?_loopdesk_promotion_rule_id: String\(rule\.ruleId\)[\s\S]*?_loopdesk_promotion_compilation_version: ruleCompilationVersion\(rule\)/, "Add Offer must preserve the cart\/add.js flow and exact marker keys");
+assert.match(source, /function promotionRuleIdFromLine\(item\) \{[\s\S]*?_loopdesk_promotion_rule_id/, "promotion rule marker helper should read the exact rule ID property");
+assert.match(source, /function promotionCompilationVersionFromLine\(item\) \{[\s\S]*?_loopdesk_promotion_compilation_version/, "promotion compilation marker helper should read the exact compilation version property");
+assert.match(source, /function triggerQuantityInCart\(rule, cart\) \{[\s\S]*?if \(isLoopDeskPromotionalLine\(item\)\) return sum;/, "trigger eligibility calculations must exclude marked promotional lines");
+assert.match(source, /function rewardQuantityInCart\(rule, cart\) \{[\s\S]*?promotionLineMatchesRule\(item, rule\)/, "reward quantity should only count marked lines that match the active rule identity");
+assert.match(source, /function promotionLineMatchesRule\(item, rule\) \{[\s\S]*?promotionRuleIdFromLine\(item\) === String\(rule\.ruleId\) && promotionCompilationVersionFromLine\(item\) === ruleCompilationVersion\(rule\);/, "promotion lines must match both rule ID and compilation version");
+assert.match(source, /function offerConfirmationHtml\(rule, cart\) \{[\s\S]*?rewardQuantityInCart\(rule, cart\)/, "offer confirmation must use the version-aware reward quantity helper");
+assert.match(source, /fetch\("\/products\/" \+ encodeURIComponent\(handle\) \+ "\.js"/, "offer product presentation should hydrate from Shopify product JSON");
+assert.match(source, /loopdesk-cart-drawer__offer-product-title">' \+ escapeHtml\(product\.title\)/, "offer cards should display the Shopify product title");
+assert.match(source, /variant\.title && variant\.title !== "Default Title"/, "offer cards should display selected variant title except Default Title");
+assert.match(source, /var current = Number\(variant\.price \|\| 0\);[\s\S]*?var compareAt = Number\(variant\.compare_at_price \|\| 0\);[\s\S]*?compareAt > current/, "offer pricing should use selected Shopify variant price and only show compare-at when higher");
+assert.doesNotMatch(source, /offerProductTitle|offerProductImageUrl|Add eligible items|Recommended add-on/, "drawer offer presentation must not fall back to admin snapshots or canned promo copy");
