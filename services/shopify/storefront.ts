@@ -72,7 +72,10 @@ function buildCartIdFromToken(tokenRaw: string) {
 }
 
 function isConfigured() {
-  return Boolean(String(process.env.SHOPIFY_STORE_DOMAIN || "").trim() && String(process.env.SHOPIFY_STOREFRONT_ACCESS_TOKEN || "").trim());
+  return Boolean(
+    String(process.env.SHOPIFY_STORE_DOMAIN || "").trim() &&
+      String(process.env.SHOPIFY_STOREFRONT_ACCESS_TOKEN || "").trim()
+  );
 }
 
 type StorefrontRequestOptions = {
@@ -230,7 +233,6 @@ export async function updateCartBuyerIdentity(input: {
     apiErrors: response.errors || [],
   };
 }
-
 
 export async function updateCartAttributes(input: {
   cartId?: string | null;
@@ -401,6 +403,7 @@ export async function getCartPricingSnapshot(cartId: string): Promise<CartPricin
     totalAmount: Math.max(0, Math.round(total * 100)),
   };
 }
+
 export async function attachCartDiscountCodes(input: {
   cartId?: string | null;
   cartToken?: string | null;
@@ -419,7 +422,9 @@ export async function attachCartDiscountCodes(input: {
     };
   }
 
-  const discountCodes = (input.discountCodes || []).map((code) => String(code || "").trim()).filter(Boolean);
+  const discountCodes = (input.discountCodes || [])
+    .map((code) => String(code || "").trim())
+    .filter(Boolean);
 
   const response = await storefrontGraphql<{
     cartDiscountCodesUpdate?: {
@@ -453,8 +458,8 @@ export async function attachCartDiscountCodes(input: {
   return {
     ok: Boolean(
       response.data?.cartDiscountCodesUpdate?.cart?.id &&
-      !(response.data?.cartDiscountCodesUpdate?.userErrors?.length || 0) &&
-      !(response.errors?.length || 0)
+        !(response.data?.cartDiscountCodesUpdate?.userErrors?.length || 0) &&
+        !(response.errors?.length || 0)
     ),
     cartId: response.data?.cartDiscountCodesUpdate?.cart?.id || resolvedCartId,
     checkoutUrl: response.data?.cartDiscountCodesUpdate?.cart?.checkoutUrl || undefined,
