@@ -462,6 +462,33 @@ body.loopdesk-cart-drawer-is-open #loopdesk-cart-drawer-root .loopdesk-cart-draw
   font-size: 13px;
 }
 
+.loopdesk-cart-drawer__offer-product-title,
+.loopdesk-cart-drawer__offer-variant-title {
+  margin-bottom: 4px;
+  font-size: 13px;
+  color: #111827;
+}
+
+.loopdesk-cart-drawer__offer-variant-title {
+  color: #6b7280;
+}
+
+.loopdesk-cart-drawer__offer-price {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  margin-bottom: 10px;
+  font-size: 13px;
+}
+
+.loopdesk-cart-drawer__offer-price s {
+  color: #9ca3af;
+}
+
+.loopdesk-cart-drawer__offer-price strong {
+  color: #111827;
+}
+
 .loopdesk-cart-drawer__offer select {
   width: 100%;
   margin-bottom: 10px;

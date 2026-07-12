@@ -737,6 +737,7 @@
 
   function quantityForProductGids(cart, gids) {
     return (cart.items || []).reduce(function (total, item) {
+      if (isPromotionLineForAnyRule(item)) return total;
       return gids.indexOf(productGidFromId(item.product_id)) === -1 ? total : total + Number(item.quantity || 0);
     }, 0);
   }
@@ -756,9 +757,23 @@
 
   function rewardQuantityInCart(cart, rule) {
     return (cart.items || []).reduce(function (total, item) {
-      var props = item.properties || {};
-      return props._loopdesk_promotion_rule_id === rule.ruleId ? total + Number(item.quantity || 0) : total;
+      return isPromotionLineForRule(item, rule) ? total + Number(item.quantity || 0) : total;
     }, 0);
+  }
+
+  function promotionLineProperties(item) {
+    return item && item.properties && typeof item.properties === "object" ? item.properties : {};
+  }
+
+  function isPromotionLineForAnyRule(item) {
+    var props = promotionLineProperties(item);
+    return Boolean(props._loopdesk_promotion_rule_id || props._loopdesk_promotion_compilation_version);
+  }
+
+  function isPromotionLineForRule(item, rule) {
+    var props = promotionLineProperties(item);
+    return String(props._loopdesk_promotion_rule_id || "") === String(rule && rule.ruleId || "") &&
+      String(props._loopdesk_promotion_compilation_version || "") === String(rule && rule.compilation && rule.compilation.version || "");
   }
 
   function selectedVariantForRule(rule) {
@@ -796,12 +811,20 @@
   }
 
   function offerConfirmationHtml(cart, rule) {
-    var lines = (cart.items || []).filter(function (item) { return (item.properties || {})._loopdesk_promotion_rule_id === rule.ruleId; });
+    var lines = (cart.items || []).filter(function (item) { return isPromotionLineForRule(item, rule); });
     if (!lines.length) return '';
     var original = lines.reduce(function (sum, item) { return sum + Number(item.original_line_price || item.line_price || 0); }, 0);
     var finalPrice = lines.reduce(function (sum, item) { return sum + Number(item.final_line_price || item.line_price || 0); }, 0);
     if (original <= finalPrice) return '';
     return '<div class="loopdesk-cart-drawer__offer-savings"><span>' + money(original, cart.currency) + '</span><strong>' + money(finalPrice, cart.currency) + '</strong><em>' + money(original - finalPrice, cart.currency) + '</em></div>';
+  }
+
+  function variantPriceHtml(variant, cart) {
+    var price = Number(variant && variant.price || 0);
+    var compareAt = Number(variant && variant.compare_at_price || 0);
+    return '<span class="loopdesk-cart-drawer__offer-price">' +
+      (compareAt > price ? '<s>' + money(compareAt, cart && cart.currency) + '</s>' : '') +
+      '<strong>' + money(price, cart && cart.currency) + '</strong></span>';
   }
 
   function renderOfferCard(rule, cart) {
@@ -810,12 +833,17 @@
     var variants = product && Array.isArray(product.variants) ? product.variants : [];
     var selected = selectedVariantForRule(rule);
     var image = (product && product.featured_image) || rule.offer.imageUrl || '';
+    var productTitle = product && product.title || rule.offer.title || presentation.heading || '';
+    var selectedVariantTitle = selected && selected.title && selected.title !== "Default Title" ? selected.title : "";
     return ['<article class="loopdesk-cart-drawer__offer" data-loopdesk-offer-rule="' + escapeHtml(rule.ruleId) + '">',
       image ? '<img class="loopdesk-cart-drawer__offer-image" src="' + escapeHtml(image) + '" alt="" loading="lazy">' : '',
       presentation.badgeText ? '<div class="loopdesk-cart-drawer__offer-badge">' + escapeHtml(presentation.badgeText) + '</div>' : '',
       presentation.heading ? '<h3>' + escapeHtml(presentation.heading) + '</h3>' : '',
+      productTitle ? '<div class="loopdesk-cart-drawer__offer-product-title">' + escapeHtml(productTitle) + '</div>' : '',
+      selectedVariantTitle ? '<div class="loopdesk-cart-drawer__offer-variant-title">' + escapeHtml(selectedVariantTitle) + '</div>' : '',
+      selected ? variantPriceHtml(selected, cart) : '',
       presentation.customerMessage ? '<p>' + escapeHtml(presentation.customerMessage) + '</p>' : '',
-      variants.length ? '<select data-loopdesk-offer-variant data-loopdesk-offer-rule="' + escapeHtml(rule.ruleId) + '">' + variants.map(function (variant) { return '<option value="' + escapeHtml(variant.id) + '" ' + (selected && String(selected.id) === String(variant.id) ? 'selected' : '') + ' ' + (variant.available === false ? 'disabled' : '') + '>' + escapeHtml(variant.title) + '</option>'; }).join('') + '</select>' : '',
+      variants.length ? '<select data-loopdesk-offer-variant data-loopdesk-offer-rule="' + escapeHtml(rule.ruleId) + '">' + variants.map(function (variant) { return '<option value="' + escapeHtml(variant.id) + '" ' + (selected && String(selected.id) === String(variant.id) ? 'selected' : '') + ' ' + (variant.available === false ? 'disabled' : '') + '>' + escapeHtml((variant.title && variant.title !== "Default Title" ? variant.title + " — " : "") + money(variant.price, cart.currency)) + '</option>'; }).join('') + '</select>' : '',
       presentation.ctaText ? '<button type="button" data-loopdesk-add-offer data-loopdesk-offer-rule="' + escapeHtml(rule.ruleId) + '" ' + (!selected ? 'disabled' : '') + '>' + escapeHtml(presentation.ctaText) + '</button>' : '',
       offerConfirmationHtml(cart, rule), '</article>'].join('');
   }
@@ -967,7 +995,7 @@
     var removeButton = event.target && event.target.closest && event.target.closest("[data-loopdesk-remove]");
     var select = event.target && event.target.closest && event.target.closest("[data-loopdesk-offer-variant]");
     var addOffer = event.target && event.target.closest && event.target.closest("[data-loopdesk-add-offer]");
-    if (select) { state.selectedOfferVariants[select.getAttribute("data-loopdesk-offer-rule")] = select.value; return; }
+    if (select) { state.selectedOfferVariants[select.getAttribute("data-loopdesk-offer-rule")] = select.value; if (event.type === "change") render(); return; }
     if (addOffer) { event.preventDefault(); return addOfferToCart(addOffer.getAttribute("data-loopdesk-offer-rule")); }
     var button = qtyButton || removeButton;
     if (!button || !state.cart || !state.cart.items) return;
@@ -1084,7 +1112,10 @@
     if (elements.poweredBy) elements.poweredBy.textContent = config.branding.poweredByText;
     var microcopy = hostRoot.querySelector(".loopdesk-cart-drawer__microcopy");
     if (microcopy) microcopy.textContent = config.labels.secureCheckoutText + " • UPI, cards, net banking & COD";
-    if (elements.body) elements.body.addEventListener("click", handleDrawerAction);
+    if (elements.body) {
+      elements.body.addEventListener("click", handleDrawerAction);
+      elements.body.addEventListener("change", handleDrawerAction);
+    }
     applyCssVariables(elements.root || document.documentElement);
   }
 
