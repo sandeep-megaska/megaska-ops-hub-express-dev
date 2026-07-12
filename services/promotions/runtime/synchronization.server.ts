@@ -1,54 +1,60 @@
+import { randomUUID } from "node:crypto";
 import { prisma } from "../../db/prisma.ts";
 import { shopifyAdminGraphql } from "../../shopify/admin.ts";
 import { assembleFunctionConfiguration, assertFunctionConfigurationEqual, buildConfigurationHash, type LoopDeskFunctionConfiguration, type PromotionRuntimeSyncResult } from "./function-contract.ts";
-import { createAutomaticDiscount, findCanonicalAutomaticDiscount, readAutomaticDiscount, writeFunctionConfigurationMetafield, type ShopifyGraphql } from "./shopify-discount.server.ts";
+import { createAutomaticDiscount, findCanonicalAutomaticDiscount, readAutomaticDiscount, verifyDiscountOwnsCanonicalConfiguration, writeFunctionConfigurationMetafield, type ShopifyGraphql } from "./shopify-discount.server.ts";
 import { mapCompilationToFunctionRule } from "./mapper.ts";
 
-type Db = any;
+type RuntimeSyncState = { id: string; shopId: string; synchronizationState?: string | null; shopifyAutomaticDiscountId?: string | null; lastRulesFingerprint?: string | null; lastDeployedConfigurationVersion?: number | null; lastDeployedConfigurationHash?: string | null; lastDeployedRuleCount?: number | null; lastSuccessfulSyncAt?: Date | null; lastVerifiedConfiguration?: unknown; synchronizationAttemptId?: string | null; synchronizationLeaseExpiresAt?: Date | null };
+type Db = { shop: { findUnique(args: object): Promise<{ id: string; shopDomain: string | null } | null> }; promotionRuntimeSyncState: { upsert(args: object): Promise<RuntimeSyncState>; update(args: object): Promise<RuntimeSyncState>; updateMany(args: object): Promise<{ count: number }> }; promotionRule: { findMany(args: object): Promise<unknown[]> } };
 type Deps = { database?: Db; graphql?: ShopifyGraphql; clock?: { now(): Date } };
-type Input = { shopId: string; actorId?: string | null };
+type Input = { shopId: string };
 
-function safeMessage(error: unknown) { return String(error instanceof Error ? error.message : error).replace(/shpat_[A-Za-z0-9_\-]+|Bearer\s+\S+|authorization|token/gi, "[redacted]").slice(0, 500); }
+function safeMessage(error: unknown) { return String(error instanceof Error ? error.message : error).replace(/shpat_[A-Za-z0-9_\-]+|Bearer\s+\S+|authorization|token|secret|password/gi, "[redacted]").slice(0, 500); }
 function failure(code: string, error: unknown, retryable = true): PromotionRuntimeSyncResult { return { ok: false, code, message: safeMessage(error), retryable }; }
 function rulesFingerprint(rules: LoopDeskFunctionConfiguration["rules"]) { return buildConfigurationHash({ configurationVersion: 1, rules }); }
+function leaseUntil(now: Date) { return new Date(now.getTime() + 2 * 60 * 1000); }
 
 export async function synchronizePromotionFunctionConfiguration(input: Input, deps: Deps = {}): Promise<PromotionRuntimeSyncResult> {
-  const database = deps.database ?? prisma;
+  const database = deps.database ?? prisma as unknown as Db;
   const graphql = deps.graphql ?? shopifyAdminGraphql;
   const clock = deps.clock ?? { now: () => new Date() };
   const now = clock.now();
-  let stateId: string | null = null;
+  const attemptId = randomUUID();
+  let state: RuntimeSyncState | null = null;
   try {
     const shop = await database.shop.findUnique({ where: { id: input.shopId } });
     if (!shop) return failure("SHOP_NOT_FOUND", "Shop was not found.", false);
-    const state = await database.promotionRuntimeSyncState.upsert({ where: { shopId: input.shopId }, create: { shopId: input.shopId, synchronizationState: "SYNCING", lastAttemptedAt: now }, update: { synchronizationState: "SYNCING", lastAttemptedAt: now, lastErrorCode: null, lastErrorMessage: null } });
-    stateId = state.id;
+    state = await database.promotionRuntimeSyncState.upsert({ where: { shopId: input.shopId }, create: { shopId: input.shopId, synchronizationState: "NEVER_SYNCED" }, update: {} });
+    const leased = await database.promotionRuntimeSyncState.updateMany({ where: { id: state.id, OR: [{ synchronizationLeaseExpiresAt: null }, { synchronizationLeaseExpiresAt: { lt: now } }, { synchronizationState: { not: "SYNCING" } }] }, data: { synchronizationState: "SYNCING", synchronizationAttemptId: attemptId, synchronizationLeaseExpiresAt: leaseUntil(now), lastAttemptedAt: now, lastErrorCode: null, lastErrorMessage: null } });
+    if (leased.count !== 1) return failure("SYNC_IN_PROGRESS", "Another promotion Function synchronization is already in progress.", true);
+    state = { ...state, synchronizationState: "SYNCING", synchronizationAttemptId: attemptId };
+
     const ruleRecords = await database.promotionRule.findMany({ where: { shopId: input.shopId, status: { in: ["ACTIVE", "PAUSED"] }, archivedAt: null, currentCompilation: { is: { status: "READY" } } }, include: { currentCompilation: true } });
-    const rules = ruleRecords.map(mapCompilationToFunctionRule);
+    const rules = ruleRecords.map((record) => mapCompilationToFunctionRule(record as never));
     const fingerprint = rulesFingerprint(rules);
-    if (state.synchronizationState === "SYNCED" && state.lastRulesFingerprint === fingerprint && state.shopifyAutomaticDiscountId) {
+    if (state.lastRulesFingerprint === fingerprint && state.shopifyAutomaticDiscountId && state.lastDeployedConfigurationVersion) {
       const snapshot = await readAutomaticDiscount(graphql, shop.shopDomain, state.shopifyAutomaticDiscountId);
       if (snapshot?.metafield?.value) {
-        try { assertFunctionConfigurationEqual(assembleFunctionConfiguration({ configurationVersion: state.lastDeployedConfigurationVersion || 1, rules }), JSON.parse(snapshot.metafield.value)); return { ok: true, outcome: "UNCHANGED", automaticDiscountId: state.shopifyAutomaticDiscountId, configurationVersion: state.lastDeployedConfigurationVersion || 1, configurationHash: state.lastDeployedConfigurationHash || "", ruleCount: state.lastDeployedRuleCount || 0, verifiedAt: (state.lastSuccessfulSyncAt ?? now).toISOString() }; } catch { /* recovery write */ }
+        try { assertFunctionConfigurationEqual(assembleFunctionConfiguration({ configurationVersion: state.lastDeployedConfigurationVersion, rules }), JSON.parse(snapshot.metafield.value)); await database.promotionRuntimeSyncState.updateMany({ where: { id: state.id, synchronizationAttemptId: attemptId }, data: { synchronizationState: "SYNCED", synchronizationLeaseExpiresAt: null, lastSuccessfulSyncAt: clock.now(), lastErrorCode: null, lastErrorMessage: null } }); return { ok: true, outcome: "UNCHANGED", automaticDiscountId: state.shopifyAutomaticDiscountId, configurationVersion: state.lastDeployedConfigurationVersion, configurationHash: state.lastDeployedConfigurationHash || "", ruleCount: state.lastDeployedRuleCount || 0, verifiedAt: (state.lastSuccessfulSyncAt ?? now).toISOString() }; } catch { /* repair below */ }
       }
     }
     const version = (state.lastDeployedConfigurationVersion ?? 0) + 1;
     const configuration = assembleFunctionConfiguration({ configurationVersion: version, rules });
     let discount = state.shopifyAutomaticDiscountId ? await readAutomaticDiscount(graphql, shop.shopDomain, state.shopifyAutomaticDiscountId) : null;
     let outcome: "CREATED" | "UPDATED" = "UPDATED";
+    if (discount && discount.title !== "LoopDesk Universal Promotions") discount = null;
     if (!discount) discount = await findCanonicalAutomaticDiscount(graphql, shop.shopDomain);
     if (!discount) { discount = await createAutomaticDiscount(graphql, shop.shopDomain, now.toISOString()); outcome = "CREATED"; }
-    await database.promotionRuntimeSyncState.update({ where: { id: state.id }, data: { shopifyAutomaticDiscountId: discount.id } });
     await writeFunctionConfigurationMetafield(graphql, shop.shopDomain, discount.id, configuration);
     const readBack = await readAutomaticDiscount(graphql, shop.shopDomain, discount.id);
-    if (!readBack?.metafield?.value) throw new Error("Shopify read-back did not include the Function configuration metafield.");
-    const parsed = JSON.parse(readBack.metafield.value) as unknown;
-    assertFunctionConfigurationEqual(configuration, parsed);
+    verifyDiscountOwnsCanonicalConfiguration(readBack, configuration);
     const verifiedAt = clock.now();
-    await database.promotionRuntimeSyncState.update({ where: { id: state.id }, data: { synchronizationState: "SYNCED", shopifyAutomaticDiscountId: discount.id, lastDeployedConfigurationVersion: version, lastDeployedConfigurationHash: configuration.configurationHash, lastRulesFingerprint: fingerprint, lastDeployedRuleCount: configuration.rules.length, lastSuccessfulSyncAt: verifiedAt, lastVerifiedConfiguration: configuration, lastErrorCode: null, lastErrorMessage: null } });
+    const finalized = await database.promotionRuntimeSyncState.updateMany({ where: { id: state.id, synchronizationAttemptId: attemptId }, data: { synchronizationState: "SYNCED", synchronizationAttemptId: null, synchronizationLeaseExpiresAt: null, shopifyAutomaticDiscountId: discount.id, lastDeployedConfigurationVersion: version, lastDeployedConfigurationHash: configuration.configurationHash, lastRulesFingerprint: fingerprint, lastDeployedRuleCount: configuration.rules.length, lastSuccessfulSyncAt: verifiedAt, lastVerifiedConfiguration: configuration, lastErrorCode: null, lastErrorMessage: null } });
+    if (finalized.count !== 1) return failure("STALE_SYNC_ATTEMPT", "Promotion Function synchronization attempt was superseded before finalization.", true);
     return { ok: true, outcome, automaticDiscountId: discount.id, configurationVersion: version, configurationHash: configuration.configurationHash, ruleCount: configuration.rules.length, verifiedAt: verifiedAt.toISOString() };
   } catch (error) {
-    if (stateId) await database.promotionRuntimeSyncState.update({ where: { id: stateId }, data: { synchronizationState: "FAILED", lastErrorCode: "SYNC_FAILED", lastErrorMessage: safeMessage(error), lastAttemptedAt: now } }).catch(() => undefined);
+    if (state) await database.promotionRuntimeSyncState.updateMany({ where: { id: state.id, synchronizationAttemptId: attemptId }, data: { synchronizationState: "FAILED", synchronizationAttemptId: null, synchronizationLeaseExpiresAt: null, lastErrorCode: "SYNC_FAILED", lastErrorMessage: safeMessage(error), lastAttemptedAt: now } }).catch(() => undefined);
     return failure("SYNC_FAILED", error);
   }
 }
