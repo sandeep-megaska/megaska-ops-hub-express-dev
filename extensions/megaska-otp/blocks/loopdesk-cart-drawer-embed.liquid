@@ -182,11 +182,14 @@
         else host.insertAdjacentHTML('beforeend', couponMarkup(cart));
       }
 
+      function refreshDrawerFromShopifyCart() {
+        document.dispatchEvent(new CustomEvent('loopdesk:cart-drawer:open', { detail:{ source:'loopdesk-coupon' } }));
+      }
+
       function refreshCoupon() {
         return readCart().then(function (cart) {
           renderCoupon(cart);
-          document.dispatchEvent(new CustomEvent('cart:refresh', { detail:{ source:'loopdesk-coupon' } }));
-          window.dispatchEvent(new CustomEvent('cart:refresh', { detail:{ source:'loopdesk-coupon' } }));
+          refreshDrawerFromShopifyCart();
           return cart;
         });
       }
@@ -198,14 +201,27 @@
         status.setAttribute('data-state', state || '');
       }
 
+      function updateShopifyCartDiscount(code) {
+        return fetch('/cart/update.js', {
+          method:'POST',
+          credentials:'same-origin',
+          cache:'no-store',
+          headers:{ 'Content-Type':'application/json', Accept:'application/json' },
+          body:JSON.stringify({ discount: code })
+        }).then(function (response) {
+          if (!response.ok) throw new Error('Coupon could not be updated');
+          return response.json();
+        });
+      }
+
       function applyCoupon(code) {
         if (couponBusy) return;
         couponBusy = true;
         var button = document.querySelector('#loopdesk-cart-drawer-root .loopdesk-cart-drawer__coupon-button');
         if (button) button.disabled = true;
         setCouponStatus('Applying coupon…', '');
-        fetch('/discount/' + encodeURIComponent(code) + '?redirect=/cart.js', { credentials:'same-origin', cache:'no-store', redirect:'follow' })
-          .then(function (response) { if (!response.ok) throw new Error('Coupon could not be applied'); return refreshCoupon(); })
+        updateShopifyCartDiscount(String(code).trim().toUpperCase())
+          .then(function () { return refreshCoupon(); })
           .then(function (cart) {
             var applied = cartDiscountCode(cart);
             if (!applied || applied !== String(code).trim().toUpperCase()) throw new Error('This coupon is not valid for the current cart');
@@ -218,8 +234,8 @@
         if (couponBusy) return;
         couponBusy = true;
         setCouponStatus('Removing coupon…', '');
-        fetch('/discount/CLEAR?redirect=/cart.js', { credentials:'same-origin', cache:'no-store', redirect:'follow' })
-          .then(function (response) { if (!response.ok) throw new Error('Coupon could not be removed'); return refreshCoupon(); })
+        updateShopifyCartDiscount('')
+          .then(function () { return refreshCoupon(); })
           .catch(function (error) { setCouponStatus(error && error.message || 'Coupon could not be removed', 'error'); })
           .finally(function () { couponBusy = false; });
       }
@@ -289,9 +305,24 @@
   "stylesheet": "loopdesk-cart-drawer.css",
   "javascript": "loopdesk-checkout-bridge.js",
   "settings": [
-    { "type":"checkbox", "id":"cart_drawer_enabled", "label":"Enable LoopDesk cart drawer", "default":true },
-    { "type":"checkbox", "id":"open_after_add_to_cart", "label":"Open drawer after add to cart", "default":true },
-    { "type":"checkbox", "id":"express_checkout_button_enabled", "label":"Show Express Checkout button", "default":true }
+    {
+      "type": "checkbox",
+      "id": "cart_drawer_enabled",
+      "label": "Enable LoopDesk cart drawer",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "open_after_add_to_cart",
+      "label": "Open drawer after add to cart",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "express_checkout_button_enabled",
+      "label": "Show Express Checkout button",
+      "default": true
+    }
   ]
 }
 {% endschema %}
