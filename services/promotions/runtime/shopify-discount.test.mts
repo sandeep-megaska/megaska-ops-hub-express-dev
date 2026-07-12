@@ -7,6 +7,7 @@ import { createAutomaticDiscount, findCanonicalAutomaticDiscount, readAutomaticD
 const ownerId = "gid://shopify/DiscountNode/1";
 const appDiscount = { discountId: ownerId, title: "LoopDesk Universal Promotions", status: "ACTIVE", discountClasses: ["PRODUCT"], appDiscountType: { appKey: "loopdesk", functionId: "gid://shopify/AppFunction/1" } };
 const metafield = { namespace: "$app:loopdesk-promotions", key: "function-config", type: "json", value: JSON.stringify(assembleFunctionConfiguration({ configurationVersion: 1, rules: [] })) };
+const expandedNamespace = "app--123456789--loopdesk-promotions";
 function node(id = ownerId, overrides: any = {}) { return { id, metafield, discount: appDiscount, ...overrides }; }
 
 test("readAutomaticDiscount uses DiscountNode and flattens owner fields and app discount fields", async () => {
@@ -55,6 +56,24 @@ test("writeFunctionConfigurationMetafield uses DiscountNode ownerId and verifica
   assert.equal(written.namespace, "$app:loopdesk-promotions");
   assert.equal(written.key, "function-config");
   verifyDiscountOwnsCanonicalConfiguration({ id: ownerId, ...appDiscount, metafield: { namespace: written.namespace, key: written.key, type: written.type, value: written.value } }, config);
+});
+
+test("verifyDiscountOwnsCanonicalConfiguration accepts Shopify-expanded app-owned namespace", () => {
+  const config = assembleFunctionConfiguration({ configurationVersion: 1, rules: [] });
+  verifyDiscountOwnsCanonicalConfiguration({ id: ownerId, ...appDiscount, metafield: { ...metafield, namespace: expandedNamespace, value: JSON.stringify(config) } }, config);
+});
+
+test("verifyDiscountOwnsCanonicalConfiguration reports specific identity mismatches", () => {
+  const config = assembleFunctionConfiguration({ configurationVersion: 1, rules: [] });
+  assert.throws(() => verifyDiscountOwnsCanonicalConfiguration({ id: ownerId, ...appDiscount, metafield: { ...metafield, namespace: "loopdesk-promotions", value: JSON.stringify(config) } }, config), /unexpected metafield namespace.*loopdesk-promotions/);
+  assert.throws(() => verifyDiscountOwnsCanonicalConfiguration({ id: ownerId, ...appDiscount, metafield: { ...metafield, key: "wrong-key", value: JSON.stringify(config) } }, config), /unexpected metafield key.*wrong-key/);
+  assert.throws(() => verifyDiscountOwnsCanonicalConfiguration({ id: ownerId, ...appDiscount, metafield: { ...metafield, type: "single_line_text_field", value: JSON.stringify(config) } }, config), /unexpected metafield type.*single_line_text_field/);
+});
+
+test("verifyDiscountOwnsCanonicalConfiguration rejects non-canonical configuration value", () => {
+  const config = assembleFunctionConfiguration({ configurationVersion: 1, rules: [] });
+  const wrongConfig = assembleFunctionConfiguration({ configurationVersion: 2, rules: [] });
+  assert.throws(() => verifyDiscountOwnsCanonicalConfiguration({ id: ownerId, ...appDiscount, metafield: { ...metafield, namespace: expandedNamespace, value: JSON.stringify(wrongConfig) } }, config), /did not match the intended LoopDesk configuration/);
 });
 
 test("findCanonicalAutomaticDiscount rejects duplicate canonical node titles", async () => {
