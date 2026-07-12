@@ -23,7 +23,8 @@ test("fixture has exact top-level keys and stable hash", () => {
 test("rule mapper excludes compiler-only and presentation keys", () => {
   const rule = mapCompilationToFunctionRule({ id: "r1", status: "ACTIVE", priority: 2, currentCompilation: { version: 1, status: "READY", functionPayload: { ...fixture.rules[0], schedule: {}, combinesWith: {}, presentation: {}, offer: { ...fixture.rules[0].offer, title: "Title", handle: "handle", imageUrl: "https://example.test/image.jpg" } } } });
   assert.deepEqual(Object.keys(rule), ["schemaVersion", "ruleId", "compilationVersion", "status", "priority", "trigger", "offer", "reward"]);
-  assert.deepEqual(Object.keys(rule.offer), ["productGid"]);
+  assert.deepEqual(Object.keys(rule.offer), ["productGid", "handle"]);
+  assert.equal(rule.offer.handle, "handle");
   assert.equal("schedule" in rule, false);
   assert.equal("combinesWith" in rule, false);
 });

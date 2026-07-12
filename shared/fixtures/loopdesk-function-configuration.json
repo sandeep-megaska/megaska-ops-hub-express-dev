@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "configurationVersion": 1,
-  "configurationHash": "1b60c77ccbc7e5f4196025db2fe7c14d8f9eacc18104bfcc8b4ad390917730f4",
+  "configurationHash": "138a1d6b96c139614a050d6d8cbedc18905fe5b1717e03f97b6d80507721bbdb",
   "rules": [
     {
       "schemaVersion": 1,
@@ -28,7 +28,8 @@
         ]
       },
       "offer": {
-        "productGid": "gid://shopify/Product/999"
+        "productGid": "gid://shopify/Product/999",
+        "handle": "offer-product"
       },
       "reward": {
         "type": "PERCENTAGE_OFF",

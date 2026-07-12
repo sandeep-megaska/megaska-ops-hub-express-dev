@@ -57,7 +57,7 @@ export type PromotionCompilerSourceSnapshot = {
   status: PromotionRuleStatus;
   priority: number;
   trigger: { type: PromotionTriggerType; matchMode: PromotionTriggerMatchMode; minimumQuantity: number; minimumCartSubtotal: string | null; sourceGroups: PromotionSourceMembershipGroup[] };
-  offer: { productGid: string };
+  offer: { productGid: string; handle: string | null };
   reward: { type: PromotionRewardType; value: string; maximumQuantity: number };
   schedule: { startsAt: string | null; endsAt: string | null };
   combinesWith: { productDiscounts: boolean; orderDiscounts: boolean; shippingDiscounts: boolean };

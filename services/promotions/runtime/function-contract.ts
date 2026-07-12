@@ -35,7 +35,7 @@ export type LoopDeskFunctionRule = {
     minimumCartSubtotal: string | null;
     sourceGroups: LoopDeskFunctionSourceGroup[];
   };
-  offer: { productGid: string };
+  offer: { productGid: string; handle: string | null };
   reward: { type: PromotionRewardType; value: string; maximumQuantity: number };
 };
 
@@ -73,7 +73,7 @@ export function validateAndCanonicalizeFunctionRule(rule: LoopDeskFunctionRule):
     if (typeof group.sourceGid !== "string" || !group.sourceGid.trim()) throw new Error(`Function sourceGid is required for rule ${rule.ruleId}.`);
     return { sourceReferenceId: group.sourceReferenceId, sourceType: group.sourceType, sourceGid: group.sourceGid, productGids: [...new Set(group.productGids)].sort(), unresolved: Boolean(group.unresolved) };
   }).sort((a, b) => `${a.sourceType}:${a.sourceReferenceId}:${a.sourceGid}`.localeCompare(`${b.sourceType}:${b.sourceReferenceId}:${b.sourceGid}`));
-  return { schemaVersion: 1, ruleId: rule.ruleId, compilationVersion: rule.compilationVersion, status: rule.status, priority: rule.priority, trigger: { type: rule.trigger.type, matchMode: rule.trigger.matchMode, minimumQuantity: rule.trigger.minimumQuantity, minimumCartSubtotal: rule.trigger.minimumCartSubtotal, sourceGroups: groups }, offer: { productGid: rule.offer.productGid }, reward: { type: rule.reward.type, value: rule.reward.value, maximumQuantity: rule.reward.maximumQuantity } };
+  return { schemaVersion: 1, ruleId: rule.ruleId, compilationVersion: rule.compilationVersion, status: rule.status, priority: rule.priority, trigger: { type: rule.trigger.type, matchMode: rule.trigger.matchMode, minimumQuantity: rule.trigger.minimumQuantity, minimumCartSubtotal: rule.trigger.minimumCartSubtotal, sourceGroups: groups }, offer: { productGid: rule.offer.productGid, handle: typeof rule.offer.handle === "string" && rule.offer.handle.trim() ? rule.offer.handle.trim() : null }, reward: { type: rule.reward.type, value: rule.reward.value, maximumQuantity: rule.reward.maximumQuantity } };
 }
 
 export function assertFunctionConfigurationEqual(expected: LoopDeskFunctionConfiguration, actual: unknown) {

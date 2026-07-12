@@ -48,6 +48,30 @@ test("sync creates discount, writes metafield by ownerId, verifies read-back, th
   assert.equal(database.state.shopifyAutomaticDiscountId, "gid://shopify/DiscountNode/1");
 });
 
+
+test("sync runtime payload includes offer product gid and handle for compiled READY promotions", async () => {
+  const functionPayload = {
+    schemaVersion: 1,
+    ruleId: "rule-1",
+    status: "ACTIVE",
+    priority: 10,
+    trigger: { type: "PRODUCT", matchMode: "ANY", minimumQuantity: 1, minimumCartSubtotal: null, sourceGroups: [{ sourceReferenceId: "ref-1", sourceType: "PRODUCT", sourceGid: "gid://shopify/Product/111", productGids: ["gid://shopify/Product/111"], unresolved: false }] },
+    offer: { productGid: "gid://shopify/Product/999", handle: "offer-product" },
+    reward: { type: "PERCENTAGE_OFF", value: "100", maximumQuantity: 1 },
+  };
+  const database = db();
+  database.promotionRule = { findMany: async () => [{ id: "rule-1", status: "ACTIVE", priority: 10, currentCompilation: { version: 7, status: "READY", functionPayload } }] };
+  const log: any[] = [];
+
+  const result = await synchronizePromotionFunctionConfiguration({ shopId: "shop-1" }, { database, graphql: graphql(log) as any, clock: { now: () => new Date("2026-07-12T00:00:00Z") } });
+
+  assert.equal(result.ok, true);
+  const metafield = log.find((c) => c.query.includes("metafieldsSet")).variables.metafields[0];
+  const payload = JSON.parse(metafield.value);
+  assert.equal(payload.rules[0].offer.productGid, "gid://shopify/Product/999");
+  assert.equal(payload.rules[0].offer.handle, "offer-product");
+});
+
 test("sync rejects ambiguous canonical discount ownership matches", async () => {
   const result = await synchronizePromotionFunctionConfiguration({ shopId: "shop-1" }, { database: db(), graphql: graphql([], { ambiguous: true }) as any, clock: { now: () => new Date("2026-07-12T00:00:00Z") } });
   assert.equal(result.ok, false);

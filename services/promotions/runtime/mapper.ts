@@ -28,7 +28,7 @@ export function mapCompilationToFunctionRule(rule: CompiledRuleRecord): LoopDesk
       minimumCartSubtotal: payload.trigger.minimumCartSubtotal,
       sourceGroups: payload.trigger.sourceGroups.map((group) => ({ sourceReferenceId: String(group.sourceReferenceId), sourceType: String(group.sourceType), sourceGid: String(group.sourceGid || ""), productGids: group.productGids, unresolved: group.unresolved })),
     },
-    offer: { productGid: String(payload.offer.productGid) },
+    offer: { productGid: String(payload.offer.productGid), handle: typeof payload.offer.handle === "string" ? payload.offer.handle : null },
     reward: { type: payload.reward.type, value: String(payload.reward.value), maximumQuantity: Number(payload.reward.maximumQuantity) },
   });
 }
