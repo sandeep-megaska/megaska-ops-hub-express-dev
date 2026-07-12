@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import { prisma } from "../../db/prisma.ts";
-import { shopifyAdminGraphql } from "../../shopify/admin.ts";
 import { assembleFunctionConfiguration, assertFunctionConfigurationEqual, buildConfigurationHash, type LoopDeskFunctionConfiguration, type PromotionRuntimeSyncResult } from "./function-contract.ts";
 import { createAutomaticDiscount, findCanonicalAutomaticDiscount, readAutomaticDiscount, verifyDiscountOwnsCanonicalConfiguration, writeFunctionConfigurationMetafield, type ShopifyGraphql } from "./shopify-discount.server.ts";
 import { mapCompilationToFunctionRule } from "./mapper.ts";
@@ -15,9 +14,15 @@ function failure(code: string, error: unknown, retryable = true): PromotionRunti
 function rulesFingerprint(rules: LoopDeskFunctionConfiguration["rules"]) { return buildConfigurationHash({ configurationVersion: 1, rules }); }
 function leaseUntil(now: Date) { return new Date(now.getTime() + 2 * 60 * 1000); }
 
+async function resolveGraphqlClient(injected?: ShopifyGraphql): Promise<ShopifyGraphql> {
+  if (injected) return injected;
+  const { shopifyAdminGraphql } = await import("../../shopify/admin.ts");
+  return shopifyAdminGraphql;
+}
+
 export async function synchronizePromotionFunctionConfiguration(input: Input, deps: Deps = {}): Promise<PromotionRuntimeSyncResult> {
   const database = deps.database ?? prisma as unknown as Db;
-  const graphql = deps.graphql ?? shopifyAdminGraphql;
+  const graphql = await resolveGraphqlClient(deps.graphql);
   const clock = deps.clock ?? { now: () => new Date() };
   const now = clock.now();
   const attemptId = randomUUID();
