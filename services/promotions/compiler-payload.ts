@@ -7,6 +7,7 @@ function sortedGroups(groups: PromotionSourceMembershipGroup[]) { return [...gro
 
 export function compilePromotionRule(input: PromotionCompilerRuleInput): PromotionCompilerResult {
   const offerProductGid = canonicalProductGid(input.offerProductGid);
+  const offerProductHandle = canonicalOptionalText(input.offerProductHandle);
   const groups = sortedGroups(input.triggerReferences.map((ref, index): PromotionSourceMembershipGroup => {
     const sourceReferenceId = refId(ref, index);
     if (ref.sourceType === "PRODUCT") { const gid = canonicalProductGid(ref.referenceGid); return { sourceReferenceId, sourceType: "PRODUCT", sourceGid: gid, productGids: [gid], unresolved: false }; }
@@ -20,12 +21,12 @@ export function compilePromotionRule(input: PromotionCompilerRuleInput): Promoti
     status: input.status,
     priority: input.priority,
     trigger: { type: input.triggerType, matchMode: input.triggerMatchMode, minimumQuantity: input.minimumTriggerQuantity, minimumCartSubtotal: input.minimumCartSubtotal == null ? null : canonicalDecimalString(input.minimumCartSubtotal), sourceGroups: groups },
-    offer: { productGid: offerProductGid },
+    offer: { productGid: offerProductGid, handle: offerProductHandle },
     reward: { type: input.rewardType, value: canonicalDecimalString(input.rewardValue), maximumQuantity: input.maximumRewardQuantity },
     schedule: { startsAt: canonicalUtcIso(input.startsAt), endsAt: canonicalUtcIso(input.endsAt) },
     combinesWith: { productDiscounts: Boolean(input.combinesWithProductDiscounts), orderDiscounts: Boolean(input.combinesWithOrderDiscounts), shippingDiscounts: Boolean(input.combinesWithShippingDiscounts) },
   };
-  const storefrontPayload = { ...base, offer: { ...base.offer, title: canonicalOptionalText(input.offerProductTitle), handle: canonicalOptionalText(input.offerProductHandle), imageUrl: canonicalOptionalText(input.offerProductImageUrl) }, presentation: { heading: canonicalOptionalText(input.heading), badgeText: canonicalOptionalText(input.badgeText), customerMessage: canonicalOptionalText(input.customerMessage), ctaText: canonicalOptionalText(input.ctaText) } };
+  const storefrontPayload = { ...base, offer: { ...base.offer, title: canonicalOptionalText(input.offerProductTitle), imageUrl: canonicalOptionalText(input.offerProductImageUrl) }, presentation: { heading: canonicalOptionalText(input.heading), badgeText: canonicalOptionalText(input.badgeText), customerMessage: canonicalOptionalText(input.customerMessage), ctaText: canonicalOptionalText(input.ctaText) } };
   const functionPayload = base;
   const hashes = { sourceHash: sha256Hex(base), storefrontHash: sha256Hex(storefrontPayload), functionHash: sha256Hex(functionPayload) };
   const flattenedProductGids = [...new Set(groups.flatMap((g) => g.productGids))].sort();
