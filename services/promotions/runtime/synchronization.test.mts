@@ -18,15 +18,16 @@ function db(overrides = {}) {
   } as any;
 }
 
-function graphql(log: any[], options: { ambiguous?: boolean; badReadback?: boolean; expandedReadback?: boolean } = {}) {
-  let discount: any = null;
+function graphql(log: any[], options: { ambiguous?: boolean; badReadback?: boolean; expandedReadback?: boolean; storedNodeId?: string; createdNodeId?: string } = {}) {
+  let discount: any = options.storedNodeId ? { id: options.storedNodeId, metafield: null, title: "LoopDesk Universal Promotions", discountClasses: ["PRODUCT"], appDiscountType: { functionId: "gid://shopify/AppFunction/1" } } : null;
   const node = (id: string, badReadback = false) => ({ id, metafield: discount?.metafield ? (badReadback ? { ...discount.metafield, value: "{}" } : { ...discount.metafield, namespace: options.expandedReadback ? "app--123456789--loopdesk-promotions" : discount.metafield.namespace }) : null, discount: { discountId: id, title: "LoopDesk Universal Promotions", status: "ACTIVE", discountClasses: ["PRODUCT"], appDiscountType: { functionId: "gid://shopify/AppFunction/1" } } });
-  return async (query: string, variables: any) => {
+  return async (query: string, variables: any = {}) => {
     log.push({ query, variables });
+    if (query.includes("shopifyFunctions")) return { shopifyFunctions: { nodes: [{ id: "gid://shopify/AppFunction/1", handle: "loopdesk-discount-function", title: "LoopDesk", apiType: "discounts" }] } };
     if (query.includes("discountNodes")) return { discountNodes: { nodes: options.ambiguous ? [node("gid://shopify/DiscountNode/1"), node("gid://shopify/DiscountNode/2")] : discount ? [node(discount.id)] : [] } };
-    if (query.includes("discountAutomaticAppCreate")) { discount = { id: "gid://shopify/DiscountNode/1", title: "LoopDesk Universal Promotions", discountClasses: ["PRODUCT"], appDiscountType: { functionId: "gid://shopify/AppFunction/1" } }; return { discountAutomaticAppCreate: { automaticAppDiscount: { discountId: discount.id, title: discount.title, discountClasses: discount.discountClasses, appDiscountType: discount.appDiscountType }, userErrors: [] } }; }
+    if (query.includes("discountAutomaticAppCreate")) { discount = { id: options.createdNodeId ?? "gid://shopify/DiscountNode/1", title: "LoopDesk Universal Promotions", discountClasses: ["PRODUCT"], appDiscountType: { functionId: "gid://shopify/AppFunction/1" } }; return { discountAutomaticAppCreate: { automaticAppDiscount: { discountId: discount.id, title: discount.title, discountClasses: discount.discountClasses, appDiscountType: discount.appDiscountType }, userErrors: [] } }; }
     if (query.includes("metafieldsSet")) { discount.metafield = variables.metafields[0]; return { metafieldsSet: { metafields: [{ id: "mf1" }], userErrors: [] } }; }
-    if (query.includes("discountNode")) return { discountNode: discount ? node(variables.id, options.badReadback) : null };
+    if (query.includes("discountNode")) return { discountNode: discount?.id === variables.id ? node(variables.id, options.badReadback) : null };
     throw new Error("unexpected query");
   };
 }
@@ -84,4 +85,43 @@ test("sync does not persist success when canonical read-back verification fails"
   const result = await synchronizePromotionFunctionConfiguration({ shopId: "shop-1" }, { database, graphql: graphql([], { badReadback: true }) as any, clock: { now: () => new Date("2026-07-12T00:00:00Z") } });
   assert.equal(result.ok, false);
   assert.notEqual(database.state.synchronizationState, "SYNCED");
+});
+
+test("sync updates stored automatic discount when Shopify node still exists", async () => {
+  const database = db();
+  database.state.shopifyAutomaticDiscountId = "gid://shopify/DiscountNode/existing";
+  const log: any[] = [];
+
+  const result = await synchronizePromotionFunctionConfiguration({ shopId: "shop-1" }, { database, graphql: graphql(log, { storedNodeId: "gid://shopify/DiscountNode/existing" }) as any, clock: { now: () => new Date("2026-07-12T00:00:00Z") } });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.ok && result.outcome, "UPDATED");
+  assert.equal(log.some((call) => call.query.includes("discountAutomaticAppCreate")), false);
+  assert.equal(log.find((call) => call.query.includes("metafieldsSet")).variables.metafields[0].ownerId, "gid://shopify/DiscountNode/existing");
+  assert.equal(database.state.shopifyAutomaticDiscountId, "gid://shopify/DiscountNode/existing");
+});
+
+test("sync creates replacement automatic discount when stored Shopify node is missing", async () => {
+  const database = db();
+  database.state.shopifyAutomaticDiscountId = "gid://shopify/DiscountNode/stale";
+  const log: any[] = [];
+
+  const result = await synchronizePromotionFunctionConfiguration({ shopId: "shop-1" }, { database, graphql: graphql(log, { createdNodeId: "gid://shopify/DiscountNode/replacement" }) as any, clock: { now: () => new Date("2026-07-12T00:00:00Z") } });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.ok && result.outcome, "CREATED");
+  assert.equal(log.some((call) => call.query.includes("discountNodes")), false);
+  assert.equal(log.find((call) => call.query.includes("discountAutomaticAppCreate")).variables.automaticAppDiscount.functionHandle, "loopdesk-discount-function");
+  assert.deepEqual(log.find((call) => call.query.includes("discountAutomaticAppCreate")).variables.automaticAppDiscount.discountClasses, ["PRODUCT"]);
+  assert.equal(log.find((call) => call.query.includes("metafieldsSet")).variables.metafields[0].ownerId, "gid://shopify/DiscountNode/replacement");
+});
+
+test("sync persists replacement ID instead of stale ID", async () => {
+  const database = db();
+  database.state.shopifyAutomaticDiscountId = "gid://shopify/DiscountNode/stale";
+
+  const result = await synchronizePromotionFunctionConfiguration({ shopId: "shop-1" }, { database, graphql: graphql([], { createdNodeId: "gid://shopify/DiscountNode/replacement" }) as any, clock: { now: () => new Date("2026-07-12T00:00:00Z") } });
+
+  assert.equal(result.ok, true);
+  assert.equal(database.state.shopifyAutomaticDiscountId, "gid://shopify/DiscountNode/replacement");
 });

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { prisma } from "../../db/prisma.ts";
 import { assembleFunctionConfiguration, assertFunctionConfigurationEqual, buildConfigurationHash, type LoopDeskFunctionConfiguration, type PromotionRuntimeSyncResult } from "./function-contract.ts";
-import { createAutomaticDiscount, findCanonicalAutomaticDiscount, readAutomaticDiscount, verifyDiscountOwnsCanonicalConfiguration, writeFunctionConfigurationMetafield, type ShopifyGraphql } from "./shopify-discount.server.ts";
+import { createAutomaticDiscount, findCanonicalAutomaticDiscount, readAutomaticDiscount, readShopifyFunctionByHandle, verifyDiscountOwnsCanonicalConfiguration, writeFunctionConfigurationMetafield, type ShopifyGraphql } from "./shopify-discount.server.ts";
 import { mapCompilationToFunctionRule } from "./mapper.ts";
 
 type RuntimeSyncState = { id: string; shopId: string; synchronizationState?: string | null; shopifyAutomaticDiscountId?: string | null; lastRulesFingerprint?: string | null; lastDeployedConfigurationVersion?: number | null; lastDeployedConfigurationHash?: string | null; lastDeployedRuleCount?: number | null; lastSuccessfulSyncAt?: Date | null; lastVerifiedConfiguration?: unknown; synchronizationAttemptId?: string | null; synchronizationLeaseExpiresAt?: Date | null };
@@ -46,14 +46,17 @@ export async function synchronizePromotionFunctionConfiguration(input: Input, de
     }
     const version = (state.lastDeployedConfigurationVersion ?? 0) + 1;
     const configuration = assembleFunctionConfiguration({ configurationVersion: version, rules });
+    const loopdeskFunction = await readShopifyFunctionByHandle(graphql, shop.shopDomain);
     let discount = state.shopifyAutomaticDiscountId ? await readAutomaticDiscount(graphql, shop.shopDomain, state.shopifyAutomaticDiscountId) : null;
     let outcome: "CREATED" | "UPDATED" = "UPDATED";
     if (discount && discount.title !== "LoopDesk Universal Promotions") discount = null;
-    if (!discount) discount = await findCanonicalAutomaticDiscount(graphql, shop.shopDomain);
-    if (!discount) { discount = await createAutomaticDiscount(graphql, shop.shopDomain, now.toISOString()); outcome = "CREATED"; }
+    if (!discount) {
+      discount = state.shopifyAutomaticDiscountId ? null : await findCanonicalAutomaticDiscount(graphql, shop.shopDomain);
+      if (!discount) { discount = await createAutomaticDiscount(graphql, shop.shopDomain, now.toISOString()); outcome = "CREATED"; }
+    }
     await writeFunctionConfigurationMetafield(graphql, shop.shopDomain, discount.id, configuration);
     const readBack = await readAutomaticDiscount(graphql, shop.shopDomain, discount.id);
-    verifyDiscountOwnsCanonicalConfiguration(readBack, configuration);
+    verifyDiscountOwnsCanonicalConfiguration(readBack, configuration, loopdeskFunction.id);
     const verifiedAt = clock.now();
     const finalized = await database.promotionRuntimeSyncState.updateMany({ where: { id: state.id, synchronizationAttemptId: attemptId }, data: { synchronizationState: "SYNCED", synchronizationAttemptId: null, synchronizationLeaseExpiresAt: null, shopifyAutomaticDiscountId: discount.id, lastDeployedConfigurationVersion: version, lastDeployedConfigurationHash: configuration.configurationHash, lastRulesFingerprint: fingerprint, lastDeployedRuleCount: configuration.rules.length, lastSuccessfulSyncAt: verifiedAt, lastVerifiedConfiguration: configuration, lastErrorCode: null, lastErrorMessage: null } });
     if (finalized.count !== 1) return failure("STALE_SYNC_ATTEMPT", "Promotion Function synchronization attempt was superseded before finalization.", true);

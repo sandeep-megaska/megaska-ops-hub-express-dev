@@ -3,6 +3,7 @@ import { LOOPDESK_AUTOMATIC_DISCOUNT_TITLE, LOOPDESK_FUNCTION_HANDLE, LOOPDESK_F
 export type ShopifyGraphql = <T>(query: string, variables?: Record<string, unknown>, options?: { shopDomain?: string | null }) => Promise<T>;
 export type DiscountSnapshot = { id: string; title?: string | null; status?: string | null; discountClasses?: string[] | null; appDiscountType?: { appKey?: string | null; functionId?: string | null } | null; metafield?: { namespace: string; key: string; type: string; value: string } | null };
 export type DiscountNodeResponse = { id: string; metafield?: DiscountSnapshot["metafield"]; discount?: { discountId?: string | null; title?: string | null; status?: string | null; discountClasses?: string[] | null; appDiscountType?: { appKey?: string | null; functionId?: string | null } | null } | null };
+export type ShopifyFunctionSnapshot = { id: string; handle?: string | null; title?: string | null; apiType?: string | null; appKey?: string | null };
 
 function userErrors(errors: Array<{ message?: string; field?: string[] }> | undefined) { if (errors?.length) throw new Error(errors.map((e) => e.message || e.field?.join(".") || "Shopify user error").join("; ")); }
 
@@ -26,6 +27,15 @@ export async function findCanonicalAutomaticDiscount(graphql: ShopifyGraphql, sh
   return matches[0] ?? null;
 }
 
+export async function readShopifyFunctionByHandle(graphql: ShopifyGraphql, shopDomain: string | null) {
+  const data = await graphql<{ shopifyFunctions?: { nodes?: ShopifyFunctionSnapshot[] | null } | null }>(`query LoopDeskShopifyFunctions { shopifyFunctions(first: 100) { nodes { id handle title apiType appKey } } }`, {}, { shopDomain });
+  const matches = (data.shopifyFunctions?.nodes ?? []).filter((node): node is ShopifyFunctionSnapshot => Boolean(node?.id) && node.handle === LOOPDESK_FUNCTION_HANDLE);
+  if (matches.length > 1) throw new Error(`Multiple Shopify Functions match the LoopDesk handle ${LOOPDESK_FUNCTION_HANDLE}; ownership is ambiguous.`);
+  const match = matches[0] ?? null;
+  if (!match) throw new Error(`Shopify Function handle ${LOOPDESK_FUNCTION_HANDLE} was not found.`);
+  return match;
+}
+
 export async function createAutomaticDiscount(graphql: ShopifyGraphql, shopDomain: string | null, startsAt: string) {
   const data = await graphql<{ discountAutomaticAppCreate: { automaticAppDiscount?: DiscountNodeResponse["discount"] | null; userErrors: Array<{ message?: string; field?: string[] }> } }>(`mutation LoopDeskCreateDiscount($automaticAppDiscount: DiscountAutomaticAppInput!) { discountAutomaticAppCreate(automaticAppDiscount: $automaticAppDiscount) { automaticAppDiscount { ${appDiscountSelection} } userErrors { field message } } }`, { automaticAppDiscount: { title: LOOPDESK_AUTOMATIC_DISCOUNT_TITLE, functionHandle: LOOPDESK_FUNCTION_HANDLE, startsAt, discountClasses: ["PRODUCT"] } }, { shopDomain });
   userErrors(data.discountAutomaticAppCreate.userErrors);
@@ -43,10 +53,12 @@ export async function writeFunctionConfigurationMetafield(graphql: ShopifyGraphq
   userErrors(data.metafieldsSet.userErrors);
 }
 
-export function verifyDiscountOwnsCanonicalConfiguration(discount: DiscountSnapshot | null, configuration: LoopDeskFunctionConfiguration) {
+export function verifyDiscountOwnsCanonicalConfiguration(discount: DiscountSnapshot | null, configuration: LoopDeskFunctionConfiguration, expectedFunctionId?: string | null) {
   if (!discount?.id) throw new Error("Shopify read-back did not return the automatic discount owner.");
   if (discount.title !== LOOPDESK_AUTOMATIC_DISCOUNT_TITLE) throw new Error("Shopify automatic discount title is not the LoopDesk canonical title.");
+  if (discount.status !== "ACTIVE") throw new Error("Shopify automatic discount is not ACTIVE.");
   if (!discount.appDiscountType?.functionId) throw new Error("Shopify automatic discount is not linked to an app Function.");
+  if (expectedFunctionId && discount.appDiscountType.functionId !== expectedFunctionId) throw new Error("Shopify automatic discount is not linked to the current LoopDesk Function.");
   if (!discount.discountClasses?.includes("PRODUCT")) throw new Error("Shopify automatic discount is not configured for the PRODUCT discount class.");
   const metafield = discount.metafield;
   if (!metafield?.value) throw new Error("Shopify read-back did not include the Function configuration metafield.");
