@@ -5,14 +5,13 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "vercel-build": "rm -rf node_modules/.prisma && npx prisma generate && next build",
+    "vercel-build": "rm -rf generated/prisma node_modules/.prisma && npx prisma generate && next build",
     "start": "next start",
     "lint": "eslint",
     "prisma:generate": "prisma generate",
     "postinstall": "prisma generate",
     "dev:seed:mock-tracking": "ALLOW_MOCK_TRACKING_SEED=true node scripts/dev-seed-mock-tracking.mjs",
-    "typecheck": "tsc --noEmit",
-    "build:discount-function": "cargo build --manifest-path extensions/loopdesk-discount-function/Cargo.toml --target=wasm32-unknown-unknown --release"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.6.0",

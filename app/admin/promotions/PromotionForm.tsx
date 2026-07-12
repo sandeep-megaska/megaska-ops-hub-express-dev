@@ -1,0 +1,109 @@
+"use client";
+
+import { useActionState, useEffect, useMemo, useRef, useState } from "react";
+import { archivePromotionRuleAction, changePromotionStatusAction, createPromotionDraftAction, updatePromotionDraftAction, type PromotionActionState } from "../../../services/promotions/admin-actions.server";
+import type { PromotionEmbeddedContext } from "../../../services/promotions/admin-context";
+import type { PromotionRewardType, PromotionRuleStatus, PromotionTriggerType } from "../../../services/promotions/domain";
+import { friendlyPromotionFieldLabel, promotionActivationReadiness, promotionClientFormValuesToValidationInput, promotionTextLimits, rewardValueHelp, rewardValueLabel, validatePromotionFormClient } from "../../../services/promotions/form-validation";
+import type { PromotionRuleRecord } from "../../../services/promotions/repository.server";
+import { normalizeProductTypeEntry, productTypesToTriggerReferences, selectedToTriggerReferences, type ProductTypeSelection, type SelectedResource } from "../../../services/promotions/resource-picker";
+import ProductTypeEditor from "./ProductTypeEditor";
+import PromotionConfirmationDialog from "./PromotionConfirmationDialog";
+import PromotionFormSection from "./PromotionFormSection";
+import PromotionReadinessChecklist from "./PromotionReadinessChecklist";
+import PromotionCompilationControls from "./PromotionCompilationControls";
+import type { PromotionExecutionReadModel } from "../../../services/promotions/compiler-admin-read-model.server";
+import PromotionResourcePickerField from "./PromotionResourcePickerField";
+
+const initial: PromotionActionState = { ok: true };
+const inputClass = "mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500";
+
+type FieldError = { field: string; message: string; label?: string };
+function padDatePart(value: number) { return String(value).padStart(2, "0"); }
+function dateValue(value?: Date | string | null) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return `${date.getFullYear()}-${padDatePart(date.getMonth() + 1)}-${padDatePart(date.getDate())}T${padDatePart(date.getHours())}:${padDatePart(date.getMinutes())}`;
+}
+export function localDateTimeToUtc(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  const date = new Date(trimmed);
+  return Number.isNaN(date.getTime()) ? trimmed : date.toISOString();
+}
+function resourceSelections(rule: PromotionRuleRecord | null | undefined, type: "PRODUCT" | "COLLECTION"): SelectedResource[] { return rule?.triggerReferences?.filter((r) => r.sourceType === type && r.referenceGid).map((r) => ({ gid: r.referenceGid!, title: r.displayTitle || null, handle: r.displayHandle || null, imageUrl: r.displayImageUrl || null, resourceType: type })) ?? []; }
+function productTypes(rule: PromotionRuleRecord | null | undefined): ProductTypeSelection[] { return rule?.triggerReferences?.filter((r) => r.sourceType === "PRODUCT_TYPE").map((r) => normalizeProductTypeEntry(r.referenceValue || r.displayTitle || r.normalizedValue || "")).filter((item): item is ProductTypeSelection => Boolean(item)) ?? []; }
+function offer(rule: PromotionRuleRecord | null | undefined): SelectedResource[] { return rule?.offerProductGid ? [{ gid: rule.offerProductGid, title: rule.offerProductTitle || null, handle: rule.offerProductHandle || null, imageUrl: rule.offerProductImageUrl || null, resourceType: "PRODUCT" }] : []; }
+function statusAction(status: PromotionRuleStatus) { if (status === "ACTIVE") return { next: "PAUSED" as const, label: "Pause rule", title: "Pause rule?", message: "Customers will stop seeing this rule after the status change is accepted." }; if (status === "PAUSED") return { next: "ACTIVE" as const, label: "Resume rule", title: "Resume rule?", message: "This requests activation again. The rule still requires later execution phases before customers can use it." }; return { next: "ACTIVE" as const, label: "Activate rule", title: "Activate rule?", message: "Activation checks this draft on the server. This does not create a Shopify discount or enable storefront runtime." }; }
+
+function EmbeddedInputs({ shopId, context }: { shopId: string; context: PromotionEmbeddedContext }) { return <><input type="hidden" name="shopId" value={shopId} /><input type="hidden" name="shop" value={String(context.shop || "")} /><input type="hidden" name="shopify_shop" value={String(context.shopify_shop || "")} /><input type="hidden" name="host" value={String(context.host || "")} /><input type="hidden" name="embedded" value={String(context.embedded || "")} /></>; }
+function Result({ state }: { state: PromotionActionState }) { if (!state.message && !state.errors?.length) return null; return <div role="alert" className={`rounded-lg border p-3 text-sm ${state.ok ? "border-green-200 bg-green-50 text-green-800" : "border-red-200 bg-red-50 text-red-800"}`}><p className="font-semibold">{state.message || (state.ok ? "Saved." : "Fix the highlighted fields.")}</p>{state.errors?.length ? <ul className="mt-2 list-disc pl-5">{state.errors.map((e) => <li key={`${e.field}:${e.message}`}>{friendlyPromotionFieldLabel(e.field)}: {e.message}</li>)}</ul> : null}</div>; }
+function Field({ label, name, value, onChange, type = "text", help, error, disabled, maxLength }: { label: string; name: string; value: string | number; onChange: (v: string) => void; type?: string; help?: string; error?: string; disabled?: boolean; maxLength?: number }) { const helpId = `${name}-help`; const errorId = `${name}-error`; return <label className="block text-sm font-medium text-gray-700">{label}<input className={inputClass} name={name} type={type} value={value} onChange={(e) => onChange(e.target.value)} disabled={disabled} maxLength={maxLength} aria-describedby={`${help ? helpId : ""} ${error ? errorId : ""}`.trim() || undefined} />{help ? <span id={helpId} className="mt-1 block text-xs text-gray-500">{help}</span> : null}{maxLength ? <span className="mt-1 block text-xs text-gray-500">{String(value).length}/{maxLength}</span> : null}{error ? <span id={errorId} className="mt-1 block text-xs text-red-700">{error}</span> : null}</label>; }
+
+export default function PromotionForm({ shopId, embeddedContext, rule, execution }: { shopId: string; shopDomain: string; embeddedContext: PromotionEmbeddedContext; rule?: PromotionRuleRecord | null; execution?: PromotionExecutionReadModel }) {
+  const [saveState, saveAction] = useActionState(rule ? updatePromotionDraftAction : createPromotionDraftAction, initial);
+  const [statusState, statusFormAction] = useActionState(changePromotionStatusAction, initial);
+  const [archiveState, archiveFormAction] = useActionState(archivePromotionRuleAction, initial);
+  const [values, setValues] = useState({ name: rule?.name || "", description: rule?.description || "", priority: String(rule?.priority ?? 0), triggerMatchMode: rule?.triggerMatchMode || "ANY", minimumTriggerQuantity: String(rule?.minimumTriggerQuantity ?? 1), minimumCartSubtotal: String(rule?.minimumCartSubtotal ?? ""), rewardType: (rule?.rewardType || "PERCENTAGE_OFF") as PromotionRewardType, rewardValue: String(rule?.rewardValue ?? ""), maximumRewardQuantity: String(rule?.maximumRewardQuantity ?? 1), startsAt: dateValue(rule?.startsAt), endsAt: dateValue(rule?.endsAt), heading: rule?.heading || "", badgeText: rule?.badgeText || "", customerMessage: rule?.customerMessage || "", ctaText: rule?.ctaText || "" });
+  const [triggerType, setTriggerType] = useState<PromotionTriggerType>(rule?.triggerType || "PRODUCT");
+  const [productTriggers, setProductTriggers] = useState(() => resourceSelections(rule, "PRODUCT"));
+  const [collectionTriggers, setCollectionTriggers] = useState(() => resourceSelections(rule, "COLLECTION"));
+  const [typeTriggers, setTypeTriggers] = useState(() => productTypes(rule));
+  const [offerProduct, setOfferProduct] = useState(() => offer(rule));
+  const [dirty, setDirty] = useState(false);
+  const [confirm, setConfirm] = useState<null | "status" | "archive">(null);
+  const statusSubmit = useRef<HTMLButtonElement>(null); const archiveSubmit = useRef<HTMLButtonElement>(null); const confirmedSubmit = useRef(false);
+  const disabled = rule?.status === "ARCHIVED";
+  const triggerReferences = useMemo(() => triggerType === "PRODUCT" ? selectedToTriggerReferences(productTriggers, triggerType) : triggerType === "COLLECTION" ? selectedToTriggerReferences(collectionTriggers, triggerType) : productTypesToTriggerReferences(typeTriggers), [collectionTriggers, productTriggers, triggerType, typeTriggers]);
+  const triggerReferencesValue = useMemo(() => JSON.stringify(triggerReferences), [triggerReferences]);
+  const validationInput = promotionClientFormValuesToValidationInput({
+    name: values.name,
+    priority: values.priority,
+    triggerType,
+    triggerReferences,
+    offerProductGid: offerProduct[0]?.gid || "",
+    minimumTriggerQuantity: values.minimumTriggerQuantity,
+    maximumRewardQuantity: values.maximumRewardQuantity,
+    rewardType: values.rewardType,
+    rewardValue: values.rewardValue,
+    startsAt: values.startsAt,
+    endsAt: values.endsAt,
+    heading: values.heading,
+    badgeText: values.badgeText,
+    customerMessage: values.customerMessage,
+    ctaText: values.ctaText,
+    status: rule?.status,
+  });
+  const client = validatePromotionFormClient(validationInput);
+  const readiness = promotionActivationReadiness(validationInput);
+  const errorsByField = new Map<string, FieldError>(client.errors.map((e) => [e.field, e]));
+  const action = rule ? statusAction(rule.status) : null;
+  useEffect(() => { const onBeforeUnload = (event: BeforeUnloadEvent) => { if (!dirty) return; event.preventDefault(); event.returnValue = ""; }; window.addEventListener("beforeunload", onBeforeUnload); return () => window.removeEventListener("beforeunload", onBeforeUnload); }, [dirty]);
+  useEffect(() => { const onClick = (event: MouseEvent) => { const link = (event.target as Element | null)?.closest?.("a[href]"); if (dirty && link && !window.confirm("You have unsaved promotion changes. Leave this page?")) event.preventDefault(); }; document.addEventListener("click", onClick); return () => document.removeEventListener("click", onClick); }, [dirty]);
+  const set = (name: keyof typeof values) => (v: string) => { setDirty(true); setValues((current) => ({ ...current, [name]: v })); };
+  const mark = <T,>(fn: (v: T) => void) => (v: T) => { setDirty(true); fn(v); };
+  function switchTriggerType(next: PromotionTriggerType) { if (next === triggerType) return; const hasSelections = productTriggers.length > 0 || collectionTriggers.length > 0 || typeTriggers.length > 0; if (hasSelections && !window.confirm("Changing trigger type clears incompatible trigger selections. Continue?")) return; setDirty(true); setTriggerType(next); setProductTriggers([]); setCollectionTriggers([]); setTypeTriggers([]); }
+  function err(field: string) { return errorsByField.get(field)?.message; }
+  return <div className="space-y-4">
+    <Result state={dirty ? initial : saveState} /><Result state={dirty ? initial : statusState} /><Result state={dirty ? initial : archiveState} />
+    {client.errors.length ? <div role="alert" aria-live="polite" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800"><p className="font-semibold">Review these fields before saving.</p><ul className="mt-2 list-disc pl-5">{client.errors.map((e) => <li key={`${e.field}:${e.message}`}>{e.label}: {e.message}</li>)}</ul></div> : null}
+    {disabled ? <p role="alert" className="rounded-lg bg-gray-100 p-3 text-sm font-medium text-gray-700">This rule is archived and cannot be edited or reactivated.</p> : null}
+    <PromotionReadinessChecklist items={readiness} />
+    <form action={saveAction} onSubmit={() => setDirty(false)} className="space-y-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+      <EmbeddedInputs shopId={shopId} context={embeddedContext} /><input type="hidden" name="id" value={rule?.id || ""} /><input type="hidden" name="startsAtUtc" value={localDateTimeToUtc(values.startsAt)} /><input type="hidden" name="endsAtUtc" value={localDateTimeToUtc(values.endsAt)} /><input type="hidden" name="triggerReferences" value={triggerReferencesValue} /><input type="hidden" name="offerProductGid" value={offerProduct[0]?.gid || ""} /><input type="hidden" name="offerProductTitle" value={offerProduct[0]?.title || ""} /><input type="hidden" name="offerProductHandle" value={offerProduct[0]?.handle || ""} /><input type="hidden" name="offerProductImageUrl" value={offerProduct[0]?.imageUrl || ""} />
+      <PromotionFormSection title="Rule details"><Field label="Internal name" name="name" value={values.name} onChange={set("name")} disabled={disabled} error={err("name")} /><Field label="Priority" name="priority" type="number" value={values.priority} onChange={set("priority")} disabled={disabled} /><label className="block text-sm font-medium text-gray-700 md:col-span-2">Internal description<textarea className={inputClass} name="description" value={values.description} onChange={(e) => set("description")(e.target.value)} disabled={disabled} /></label></PromotionFormSection>
+      <PromotionFormSection title="Trigger conditions"><label className="block text-sm font-medium text-gray-700">Trigger type<select className={inputClass} name="triggerType" value={triggerType} disabled={disabled} onChange={(e) => switchTriggerType(e.target.value as PromotionTriggerType)}><option value="PRODUCT">Product</option><option value="COLLECTION">Collection</option><option value="PRODUCT_TYPE">Product type</option></select></label><label className="block text-sm font-medium text-gray-700">Match mode<select className={inputClass} name="triggerMatchMode" value={values.triggerMatchMode} disabled={disabled} onChange={(e) => set("triggerMatchMode")(e.target.value)}><option value="ANY">Any selected trigger</option><option value="ALL">All selected triggers</option></select></label><Field label="Minimum trigger quantity" name="minimumTriggerQuantity" type="number" value={values.minimumTriggerQuantity} onChange={set("minimumTriggerQuantity")} disabled={disabled} error={err("minimumTriggerQuantity")} /><Field label="Optional minimum cart subtotal" name="minimumCartSubtotal" type="number" value={values.minimumCartSubtotal} onChange={set("minimumCartSubtotal")} disabled={disabled} help="Leave blank when no subtotal threshold is needed." />{triggerType === "PRODUCT" ? <div className="md:col-span-2"><PromotionResourcePickerField kind="product-trigger" selections={productTriggers} onChange={mark(setProductTriggers)} disabled={disabled} /></div> : null}{triggerType === "COLLECTION" ? <div className="md:col-span-2"><PromotionResourcePickerField kind="collection-trigger" selections={collectionTriggers} onChange={mark(setCollectionTriggers)} disabled={disabled} /></div> : null}{triggerType === "PRODUCT_TYPE" ? <div className="md:col-span-2"><ProductTypeEditor values={typeTriggers} onChange={mark(setTypeTriggers)} disabled={disabled} /></div> : null}</PromotionFormSection>
+      <PromotionFormSection title="Offer product"><div className="md:col-span-2"><PromotionResourcePickerField kind="offer-product" selections={offerProduct} onChange={mark(setOfferProduct)} disabled={disabled} /></div><Field label="Maximum reward quantity" name="maximumRewardQuantity" type="number" value={values.maximumRewardQuantity} onChange={set("maximumRewardQuantity")} disabled={disabled} error={err("maximumRewardQuantity")} /></PromotionFormSection>
+      <PromotionFormSection title="Reward"><label className="block text-sm font-medium text-gray-700">Reward type<select className={inputClass} name="rewardType" value={values.rewardType} disabled={disabled} onChange={(e) => set("rewardType")(e.target.value)}><option value="PERCENTAGE_OFF">Percentage off</option><option value="FIXED_AMOUNT_OFF">Fixed amount off</option><option value="FIXED_PRICE">Fixed price</option></select></label><Field label={rewardValueLabel(values.rewardType)} name="rewardValue" type="number" value={values.rewardValue} onChange={set("rewardValue")} disabled={disabled} help={rewardValueHelp(values.rewardType)} error={err("rewardValue")} /></PromotionFormSection>
+      <PromotionFormSection title="Schedule"><Field label="Start date" name="startsAt" type="datetime-local" value={values.startsAt} onChange={set("startsAt")} disabled={disabled} error={err("startsAt")} help="Leave blank to start immediately once the promotion is available." /><div><Field label="End date" name="endsAt" type="datetime-local" value={values.endsAt} onChange={set("endsAt")} disabled={disabled} error={err("endsAt")} help="Leave blank for no expiry date." />{values.endsAt && !disabled ? <button type="button" className="mt-1 text-xs font-medium text-blue-700 hover:text-blue-900" onClick={() => set("endsAt")("")}>No end date</button> : null}</div></PromotionFormSection>
+      <PromotionFormSection title="Discount combinations"><label><input type="checkbox" name="combinesWithProductDiscounts" disabled={disabled} defaultChecked={rule?.combinesWithProductDiscounts} /> Product discounts</label><label><input type="checkbox" name="combinesWithOrderDiscounts" disabled={disabled} defaultChecked={rule?.combinesWithOrderDiscounts ?? true} /> Order discounts</label><label><input type="checkbox" name="combinesWithShippingDiscounts" disabled={disabled} defaultChecked={rule?.combinesWithShippingDiscounts ?? true} /> Shipping discounts</label></PromotionFormSection>
+      <PromotionFormSection title="Customer presentation"><Field label="Heading" name="heading" value={values.heading} onChange={set("heading")} disabled={disabled} maxLength={promotionTextLimits.heading} error={err("heading")} /><Field label="Badge text" name="badgeText" value={values.badgeText} onChange={set("badgeText")} disabled={disabled} maxLength={promotionTextLimits.badgeText} error={err("badgeText")} /><Field label="Customer message" name="customerMessage" value={values.customerMessage} onChange={set("customerMessage")} disabled={disabled} maxLength={promotionTextLimits.customerMessage} error={err("customerMessage")} /><Field label="CTA text" name="ctaText" value={values.ctaText} onChange={set("ctaText")} disabled={disabled} maxLength={promotionTextLimits.ctaText} error={err("ctaText")} /></PromotionFormSection>
+      <PromotionFormSection title="Compilation controls"><div className="md:col-span-2">{rule && execution ? <PromotionCompilationControls shopId={shopId} embeddedContext={embeddedContext} promotionRuleId={rule.id} status={rule.status} execution={execution} dirty={dirty} /> : <p className="rounded-lg bg-gray-50 p-3 text-sm text-gray-700">Save this draft before compiling.</p>}</div></PromotionFormSection>
+      {!disabled ? <button className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white focus:outline-none focus:ring-2 focus:ring-blue-500">{rule ? "Save changes" : "Save draft"}</button> : null}
+    </form>
+    {rule && !disabled && action ? <div className="flex gap-3"><form action={statusFormAction} onSubmit={(e) => { if (confirmedSubmit.current) { confirmedSubmit.current = false; return; } e.preventDefault(); setConfirm("status"); }}><EmbeddedInputs shopId={shopId} context={embeddedContext} /><input type="hidden" name="id" value={rule.id} /><input type="hidden" name="status" value={action.next} /><button className="rounded-lg border px-4 py-2 text-sm" type="submit">{action.label}</button><button hidden ref={statusSubmit} type="submit" formAction={statusFormAction} onClick={() => setDirty(false)}>confirm</button></form><form action={archiveFormAction} onSubmit={(e) => { if (confirmedSubmit.current) { confirmedSubmit.current = false; return; } e.preventDefault(); setConfirm("archive"); }}><EmbeddedInputs shopId={shopId} context={embeddedContext} /><input type="hidden" name="id" value={rule.id} /><button className="rounded-lg border border-red-300 px-4 py-2 text-sm text-red-700" type="submit">Archive</button><button hidden ref={archiveSubmit} type="submit" formAction={archiveFormAction} onClick={() => setDirty(false)}>confirm</button></form></div> : null}
+    <PromotionConfirmationDialog open={confirm === "status"} title={action?.title || "Confirm status change"} message={action?.message || "Confirm this status change."} confirmLabel={action?.label || "Confirm"} onCancel={() => setConfirm(null)} onConfirm={() => { confirmedSubmit.current = true; setConfirm(null); statusSubmit.current?.click(); }} />
+    <PromotionConfirmationDialog open={confirm === "archive"} title="Archive rule?" message="Archived rules cannot be reactivated. You will not be able to edit, activate, resume, pause, or archive this rule again." confirmLabel="Archive rule" destructive onCancel={() => setConfirm(null)} onConfirm={() => { confirmedSubmit.current = true; setConfirm(null); archiveSubmit.current?.click(); }} />
+  </div>;
+}

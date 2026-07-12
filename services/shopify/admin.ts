@@ -433,6 +433,16 @@ async function adminGraphql<T>(
 
   return payload.data;
 }
+export async function shopifyAdminGraphql<T>(
+  query: string,
+  variables?: Record<string, unknown>,
+  options?: {
+    shopDomain?: string | null;
+  },
+): Promise<T> {
+  return adminGraphql<T>(query, variables, options);
+}
+
 export function isShopifyAdminConfigured() {
   return Boolean(getEnvTrimmed("SHOPIFY_STORE_DOMAIN") && (hasRuntimeCredentialConfig() || getEnvTrimmed("SHOPIFY_ADMIN_ACCESS_TOKEN")));
 }

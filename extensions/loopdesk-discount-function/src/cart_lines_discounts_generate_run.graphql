@@ -1,18 +1,23 @@
 query Input {
-  discount {
-    discountClasses
-    metafield(namespace: "loopdesk", key: "discount_function_config") {
-      value
-    }
-  }
   cart {
+    cost {
+      subtotalAmount {
+        amount
+      }
+    }
     lines {
       id
       quantity
       cost {
-        subtotalAmount {
+        amountPerQuantity {
           amount
         }
+      }
+      promotionRuleId: attribute(key: "_loopdesk_promotion_rule_id") {
+        value
+      }
+      promotionCompilationVersion: attribute(key: "_loopdesk_promotion_compilation_version") {
+        value
       }
       merchandise {
         __typename
@@ -23,6 +28,12 @@ query Input {
           }
         }
       }
+    }
+  }
+  discount {
+    discountClasses
+    configuration: metafield(namespace: "$app:loopdesk-promotions", key: "function-config") {
+      value
     }
   }
 }

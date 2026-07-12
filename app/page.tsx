@@ -39,12 +39,6 @@ const quickCards = [
     meta: "Branding, cart drawer, labels, and checkout runtime settings",
     href: "/admin/merchant-settings",
   },
-  {
-    title: "Promotion Rules",
-    value: "Admin Config",
-    meta: "Configure display-only promotion rules without storefront or checkout changes",
-    href: "/admin/promotion-rules",
-  },
 ];
 
 export default function DashboardPage() {
@@ -55,7 +49,7 @@ export default function DashboardPage() {
         <p className="mk-hero-subtitle">
           Central control for store operations. Monitor workflows, manage
           exceptions, and navigate quickly across GST, exchanges,
-          cancellations, issues, LoopDesk installation, merchant settings, and Promotion Rules configuration.
+          cancellations, issues, LoopDesk installation, and merchant settings.
         </p>
 
         <Suspense fallback={null}>
@@ -73,8 +67,8 @@ export default function DashboardPage() {
       <section className="mk-grid-4">
         <div className="mk-card mk-stat-card">
           <p className="mk-stat-label">Active Modules</p>
-          <p className="mk-stat-value">7</p>
-          <p className="mk-stat-meta">GST, Exchanges, Cancellations, Issues, Wizard, Settings, Promotion Rules</p>
+          <p className="mk-stat-value">6</p>
+          <p className="mk-stat-meta">GST, Exchanges, Cancellations, Issues, Wizard, Settings</p>
         </div>
         <div className="mk-card mk-stat-card">
           <p className="mk-stat-label">Store Mode</p>

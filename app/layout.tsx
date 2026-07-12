@@ -49,6 +49,9 @@ export default function RootLayout({
                     <AdminNavLink href="/admin/gst" className="mk-nav-link">
                       GST
                     </AdminNavLink>
+                    <AdminNavLink href="/admin/promotions" className="mk-nav-link">
+                      Promotions
+                    </AdminNavLink>
                     <AdminNavLink
                       href="/admin/exchanges"
                       className="mk-nav-link"
@@ -78,12 +81,6 @@ export default function RootLayout({
                       className="mk-nav-link"
                     >
                       Merchant Settings
-                    </AdminNavLink>
-                    <AdminNavLink
-                      href="/admin/promotion-rules"
-                      className="mk-nav-link"
-                    >
-                      Promotion Rules
                     </AdminNavLink>
                   </nav>
                 </Suspense>
