@@ -88,6 +88,7 @@ model Shop {
   moduleConfigs         ShopModuleConfig[]
   proxyRoutes           ShopProxyRoute[]
   installationEvents    ShopInstallationEvent[]
+  promotionRuntimeSyncState PromotionRuntimeSyncState?
   recoveryTokens        CheckoutRecoveryToken[]
   promotionRules        PromotionRule[]
   promotionAuditLogs    PromotionAuditLog[]
@@ -255,6 +256,27 @@ model PromotionCompiledMembership {
   @@index([promotionCompilationId])
   @@index([productGid])
   @@index([sourceType, productGid])
+}
+
+
+model PromotionRuntimeSyncState {
+  id                                    String   @id @default(uuid())
+  shopId                                String   @unique
+  shopifyAutomaticDiscountId            String?
+  lastSuccessfulConfigurationVersion    Int?
+  lastSuccessfulConfigurationHash       String?
+  lastSuccessfulCompilationVersions     Json?
+  lastSuccessfulRuleIds                 Json?
+  activeAttemptId                       String?
+  attemptStartedAt                      DateTime?
+  leaseExpiresAt                        DateTime?
+  stateVersion                          Int      @default(0)
+  createdAt                             DateTime @default(now())
+  updatedAt                             DateTime @updatedAt
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@index([activeAttemptId])
 }
 
 model PromotionAuditLog {
