@@ -7,8 +7,6 @@ export type ResolvedShopConfig = {
   shopDomain: string;
   accessToken: string | null;
   storefrontAccessToken: string | null;
-  myshopifyDomain?: string | null;
-  primaryDomain?: string | null;
 };
 
 export type ShopRow = {
@@ -143,7 +141,7 @@ export async function getDefaultShopFromConfig() {
        "storefrontAccessToken" = COALESCE(EXCLUDED."storefrontAccessToken", "Shop"."storefrontAccessToken"),
        "isActive" = true,
        "updatedAt" = NOW()
-     RETURNING "id", "shopDomain", "accessToken", "accessTokenEncrypted", "storefrontAccessToken", "storefrontTokenEncrypted", "scopes", "isActive", "installedAt", "uninstalledAt", "myshopifyDomain", "primaryDomain", "installationStatus"`,
+     RETURNING "id", "shopDomain", "accessToken", "accessTokenEncrypted", "storefrontAccessToken", "storefrontTokenEncrypted", "scopes", "isActive", "installedAt", "uninstalledAt", "myshopifyDomain", "installationStatus"`,
     envDomain,
     envAdminToken,
     envStorefrontToken
@@ -164,8 +162,6 @@ export async function resolveShopConfig(
         shopDomain: shop.shopDomain,
         accessToken: shop.accessToken || decryptShopifyToken(shop.accessTokenEncrypted),
         storefrontAccessToken: shop.storefrontAccessToken || decryptShopifyToken(shop.storefrontTokenEncrypted),
-        myshopifyDomain: shop.myshopifyDomain,
-        primaryDomain: shop.primaryDomain,
       };
     }
   }
@@ -177,8 +173,6 @@ export async function resolveShopConfig(
       shopDomain: defaultShop.shopDomain,
       accessToken: defaultShop.accessToken || decryptShopifyToken(defaultShop.accessTokenEncrypted),
       storefrontAccessToken: defaultShop.storefrontAccessToken || decryptShopifyToken(defaultShop.storefrontTokenEncrypted),
-      myshopifyDomain: defaultShop.myshopifyDomain,
-      primaryDomain: defaultShop.primaryDomain,
     };
   }
 
@@ -187,8 +181,6 @@ export async function resolveShopConfig(
     shopDomain: normalizeShopDomain(trimEnv("SHOPIFY_STORE_DOMAIN")),
     accessToken: trimEnv("SHOPIFY_ADMIN_ACCESS_TOKEN") || null,
     storefrontAccessToken: trimEnv("SHOPIFY_STOREFRONT_ACCESS_TOKEN") || null,
-    myshopifyDomain: null,
-    primaryDomain: null,
   };
 }
 

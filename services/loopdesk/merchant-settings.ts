@@ -565,7 +565,7 @@ export async function updateCartIntelligenceSettings(shopId: string, patch: unkn
   return next;
 }
 
-export async function getLoopDeskRuntimeConfig(shopId: string, shopDomain?: string | null, _shopDomains?: { primaryDomain?: string | null; myshopifyDomain?: string | null }) {
+export async function getLoopDeskRuntimeConfig(shopId: string, shopDomain?: string | null) {
   const [settings, cartIntelligence, promotionRulesConfig, delhivery, razorpay, promotionPublication] = await Promise.all([
     getLoopDeskMerchantSettings(shopId),
     getCartIntelligenceSettings(shopId),
