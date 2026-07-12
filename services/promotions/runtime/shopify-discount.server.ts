@@ -1,18 +1,20 @@
 import { LOOPDESK_AUTOMATIC_DISCOUNT_TITLE, LOOPDESK_FUNCTION_HANDLE, LOOPDESK_FUNCTION_METAFIELD_KEY, LOOPDESK_FUNCTION_METAFIELD_NAMESPACE, LOOPDESK_FUNCTION_METAFIELD_TYPE, assertFunctionConfigurationEqual, isLoopDeskFunctionMetafieldNamespace, type LoopDeskFunctionConfiguration } from "./function-contract.ts";
 
 export type ShopifyGraphql = <T>(query: string, variables?: Record<string, unknown>, options?: { shopDomain?: string | null }) => Promise<T>;
-export type DiscountSnapshot = { id: string; title?: string | null; status?: string | null; discountClasses?: string[] | null; appDiscountType?: { appKey?: string | null; functionId?: string | null } | null; metafield?: { namespace: string; key: string; type: string; value: string } | null };
-export type DiscountNodeResponse = { id: string; metafield?: DiscountSnapshot["metafield"]; discount?: { discountId?: string | null; title?: string | null; status?: string | null; discountClasses?: string[] | null; appDiscountType?: { appKey?: string | null; functionId?: string | null } | null } | null };
+export type DiscountCombinesWithSnapshot = { orderDiscounts?: boolean | null; productDiscounts?: boolean | null; shippingDiscounts?: boolean | null };
+export type DiscountSnapshot = { id: string; title?: string | null; status?: string | null; discountClasses?: string[] | null; combinesWith?: DiscountCombinesWithSnapshot | null; appDiscountType?: { appKey?: string | null; functionId?: string | null } | null; metafield?: { namespace: string; key: string; type: string; value: string } | null };
+export type DiscountNodeResponse = { id: string; metafield?: DiscountSnapshot["metafield"]; discount?: { discountId?: string | null; title?: string | null; status?: string | null; discountClasses?: string[] | null; combinesWith?: DiscountCombinesWithSnapshot | null; appDiscountType?: { appKey?: string | null; functionId?: string | null } | null } | null };
 export type ShopifyFunctionSnapshot = { id: string; handle?: string | null; title?: string | null; apiType?: string | null; appKey?: string | null };
 
 function userErrors(errors: Array<{ message?: string; field?: string[] }> | undefined) { if (errors?.length) throw new Error(errors.map((e) => e.message || e.field?.join(".") || "Shopify user error").join("; ")); }
 
-const nodeDiscountSelection = `id metafield(namespace: "${LOOPDESK_FUNCTION_METAFIELD_NAMESPACE}", key: "${LOOPDESK_FUNCTION_METAFIELD_KEY}") { namespace key type value } discount { ... on DiscountAutomaticApp { discountId title status discountClasses appDiscountType { appKey functionId } } }`;
-const appDiscountSelection = `discountId title status discountClasses appDiscountType { appKey functionId }`;
+const combinationInput = { orderDiscounts: true, productDiscounts: true, shippingDiscounts: true };
+const nodeDiscountSelection = `id metafield(namespace: "${LOOPDESK_FUNCTION_METAFIELD_NAMESPACE}", key: "${LOOPDESK_FUNCTION_METAFIELD_KEY}") { namespace key type value } discount { ... on DiscountAutomaticApp { discountId title status discountClasses combinesWith { orderDiscounts productDiscounts shippingDiscounts } appDiscountType { appKey functionId } } }`;
+const appDiscountSelection = `discountId title status discountClasses combinesWith { orderDiscounts productDiscounts shippingDiscounts } appDiscountType { appKey functionId }`;
 
 function flattenDiscountNode(node: DiscountNodeResponse | null | undefined): DiscountSnapshot | null {
   if (!node?.id || !node.discount) return null;
-  return { id: node.id, metafield: node.metafield ?? null, title: node.discount.title, status: node.discount.status, discountClasses: node.discount.discountClasses, appDiscountType: node.discount.appDiscountType };
+  return { id: node.id, metafield: node.metafield ?? null, title: node.discount.title, status: node.discount.status, discountClasses: node.discount.discountClasses, combinesWith: node.discount.combinesWith, appDiscountType: node.discount.appDiscountType };
 }
 
 export async function readAutomaticDiscount(graphql: ShopifyGraphql, shopDomain: string | null, id: string) {
@@ -37,7 +39,7 @@ export async function readShopifyFunctionByHandle(graphql: ShopifyGraphql, shopD
 }
 
 export async function createAutomaticDiscount(graphql: ShopifyGraphql, shopDomain: string | null, startsAt: string) {
-  const data = await graphql<{ discountAutomaticAppCreate: { automaticAppDiscount?: DiscountNodeResponse["discount"] | null; userErrors: Array<{ message?: string; field?: string[] }> } }>(`mutation LoopDeskCreateDiscount($automaticAppDiscount: DiscountAutomaticAppInput!) { discountAutomaticAppCreate(automaticAppDiscount: $automaticAppDiscount) { automaticAppDiscount { ${appDiscountSelection} } userErrors { field message } } }`, { automaticAppDiscount: { title: LOOPDESK_AUTOMATIC_DISCOUNT_TITLE, functionHandle: LOOPDESK_FUNCTION_HANDLE, startsAt, discountClasses: ["PRODUCT"] } }, { shopDomain });
+  const data = await graphql<{ discountAutomaticAppCreate: { automaticAppDiscount?: DiscountNodeResponse["discount"] | null; userErrors: Array<{ message?: string; field?: string[] }> } }>(`mutation LoopDeskCreateDiscount($automaticAppDiscount: DiscountAutomaticAppInput!) { discountAutomaticAppCreate(automaticAppDiscount: $automaticAppDiscount) { automaticAppDiscount { ${appDiscountSelection} } userErrors { field message } } }`, { automaticAppDiscount: { title: LOOPDESK_AUTOMATIC_DISCOUNT_TITLE, functionHandle: LOOPDESK_FUNCTION_HANDLE, startsAt, discountClasses: ["PRODUCT"], combinesWith: combinationInput } }, { shopDomain });
   userErrors(data.discountAutomaticAppCreate.userErrors);
   const discount = data.discountAutomaticAppCreate.automaticAppDiscount;
   if (!discount) throw new Error("Shopify did not return a created automatic discount.");
@@ -46,6 +48,12 @@ export async function createAutomaticDiscount(graphql: ShopifyGraphql, shopDomai
   const snapshot = await readAutomaticDiscount(graphql, shopDomain, discount.discountId);
   if (!snapshot?.id) throw new Error("Shopify did not return the created automatic discount node owner ID.");
   return snapshot;
+}
+
+export async function ensureAutomaticDiscountCombinations(graphql: ShopifyGraphql, shopDomain: string | null, id: string) {
+  const data = await graphql<{ discountAutomaticAppUpdate: { automaticAppDiscount?: DiscountNodeResponse["discount"] | null; userErrors: Array<{ message?: string; field?: string[] }> } }>(`mutation LoopDeskUpdateDiscountCombinations($id: ID!, $automaticAppDiscount: DiscountAutomaticAppInput!) { discountAutomaticAppUpdate(id: $id, automaticAppDiscount: $automaticAppDiscount) { automaticAppDiscount { ${appDiscountSelection} } userErrors { field message } } }`, { id, automaticAppDiscount: { combinesWith: combinationInput } }, { shopDomain });
+  userErrors(data.discountAutomaticAppUpdate.userErrors);
+  if (!data.discountAutomaticAppUpdate.automaticAppDiscount) throw new Error("Shopify did not return the updated automatic discount.");
 }
 
 export async function writeFunctionConfigurationMetafield(graphql: ShopifyGraphql, shopDomain: string | null, ownerId: string, configuration: LoopDeskFunctionConfiguration) {
@@ -60,6 +68,7 @@ export function verifyDiscountOwnsCanonicalConfiguration(discount: DiscountSnaps
   if (!discount.appDiscountType?.functionId) throw new Error("Shopify automatic discount is not linked to an app Function.");
   if (expectedFunctionId && discount.appDiscountType.functionId !== expectedFunctionId) throw new Error("Shopify automatic discount is not linked to the current LoopDesk Function.");
   if (!discount.discountClasses?.includes("PRODUCT")) throw new Error("Shopify automatic discount is not configured for the PRODUCT discount class.");
+  if (!discount.combinesWith?.orderDiscounts || !discount.combinesWith?.productDiscounts || !discount.combinesWith?.shippingDiscounts) throw new Error("Shopify automatic discount is not configured to combine with all supported discount classes.");
   const metafield = discount.metafield;
   if (!metafield?.value) throw new Error("Shopify read-back did not include the Function configuration metafield.");
   if (!isLoopDeskFunctionMetafieldNamespace(metafield.namespace)) throw new Error(`Shopify Function configuration metafield identity did not match the LoopDesk contract: unexpected metafield namespace ${JSON.stringify(metafield.namespace)}.`);
