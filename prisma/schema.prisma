@@ -398,6 +398,11 @@ enum PaymentStatus {
   CANCELLED
 }
 
+enum CodAdvanceType {
+  FIXED
+  PERCENTAGE
+}
+
 enum CodAdvanceStatus {
   CREATED
   PAYMENT_PENDING
@@ -564,16 +569,23 @@ model RequestPayment {
 }
 
 model CodAdvanceSettings {
-  id                        String   @id @default(uuid())
+  id                        String         @id @default(uuid())
   shopId                    String
-  enabled                   Boolean  @default(false)
-  fixedAdvanceAmountPaise   Int      @default(12000)
-  currency                  String   @default("INR")
+  enabled                   Boolean        @default(false)
+  advanceType               CodAdvanceType @default(FIXED)
+  fixedAdvanceAmountPaise   Int            @default(12000)
+  percentageBasisPoints     Int?
+  minimumAdvanceAmountPaise Int?
+  maximumAdvanceAmountPaise Int?
+  customerTitle             String?
+  customerMessage           String?
+  version                   Int            @default(1)
+  currency                  String         @default("INR")
   minOrderAmountPaise       Int?
   maxOrderAmountPaise       Int?
   policyText                String?
-  createdAt                 DateTime @default(now())
-  updatedAt                 DateTime @updatedAt
+  createdAt                 DateTime       @default(now())
+  updatedAt                 DateTime       @updatedAt
 
   shop                      Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
@@ -586,6 +598,19 @@ model CodAdvanceIntent {
   customerProfileId          String?
   cartReference              String?
   checkoutReference          String?
+  expressCheckoutIntentId    String?
+  settingsId                 String?
+  settingsVersion            Int?
+  advanceType                CodAdvanceType?
+  advanceValueSnapshot       Int?
+  pricingFingerprint         String?
+  cartFingerprint            String?
+  merchandiseAmountPaise     Int?
+  shopifyDiscountAmountPaise Int?
+  shippingAmountPaise        Int?
+  codFeeAmountPaise          Int?
+  storeCreditAppliedPaise    Int?
+  customerCashLiabilityPaise Int?
   shopifyOrderId             String?
   shopifyOrderName           String?
   orderAmountPaise           Int
@@ -598,7 +623,12 @@ model CodAdvanceIntent {
   razorpayPaymentId          String?
   providerReferenceId        String?
   paidAt                     DateTime?
+  verifiedAt                 DateTime?
+  consumedAt                 DateTime?
   expiresAt                  DateTime?
+  shopifyDraftOrderId        String?
+  failureCode                String?
+  failureMessage             String?
   metadata                   Json?
   createdAt                  DateTime         @default(now())
   updatedAt                  DateTime         @updatedAt
@@ -608,6 +638,8 @@ model CodAdvanceIntent {
 
   @@index([shopId])
   @@index([status])
+  @@index([shopId, expressCheckoutIntentId])
+  @@index([shopId, status, expiresAt])
   @@index([razorpayPaymentLinkId])
   @@index([shopifyOrderId])
   @@index([customerProfileId, createdAt])
@@ -1528,6 +1560,11 @@ enum ExpressCheckoutPaymentStatus {
   REFUNDED
 }
 
+enum ExpressCheckoutPaymentPurpose {
+  ORDER_PREPAID
+  COD_ADVANCE
+}
+
 enum ExpressCheckoutDiscountType {
   MANUAL_CODE
   AUTOMATIC
@@ -1652,9 +1689,13 @@ model ExpressCheckoutPayment {
   shopId                String
   intentId              String
   method                ExpressCheckoutPaymentMethod
-  status                ExpressCheckoutPaymentStatus @default(PENDING)
-  amountPaise           Int                          @default(0)
-  currency              String                       @default("INR")
+  purpose               ExpressCheckoutPaymentPurpose @default(ORDER_PREPAID)
+  status                ExpressCheckoutPaymentStatus  @default(PENDING)
+  amountPaise           Int                           @default(0)
+  currency              String                        @default("INR")
+  verifiedAt            DateTime?
+  providerAmountPaise   Int?
+  providerCurrency      String?
   razorpayOrderId       String?
   razorpayPaymentId     String?
   razorpaySignatureHash String?
