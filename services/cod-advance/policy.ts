@@ -34,8 +34,8 @@ type NullableMoneyKey =
 const nullableMoneyReasonByKey: Record<NullableMoneyKey, string> = {
   minimumAdvanceAmountPaise: "invalid_minimum_advance",
   maximumAdvanceAmountPaise: "invalid_maximum_advance",
-  minOrderAmountPaise: "below_min_order_amount",
-  maxOrderAmountPaise: "above_max_order_amount",
+  minOrderAmountPaise: "invalid_min_order_amount",
+  maxOrderAmountPaise: "invalid_max_order_amount",
 };
 
 function isValidNonNegativeInteger(value: number | null): value is number {
@@ -75,11 +75,11 @@ function validateNullableMoney(input: CodAdvancePolicyInput, key: NullableMoneyK
 }
 
 function safePercentageRound(amountPaise: number, basisPoints: number): number | null {
-  const product = amountPaise * basisPoints;
-  if (!Number.isSafeInteger(product)) return null;
+  const numerator = BigInt(amountPaise) * BigInt(basisPoints);
+  const rounded = (numerator + 5000n) / 10000n;
+  if (rounded > BigInt(Number.MAX_SAFE_INTEGER)) return null;
 
-  const rounded = Math.round(product / 10000);
-  return Number.isSafeInteger(rounded) ? rounded : null;
+  return Number(rounded);
 }
 
 export function calculateCodAdvancePolicy(input: CodAdvancePolicyInput): CodAdvancePolicyResult {
@@ -129,6 +129,8 @@ export function calculateCodAdvancePolicy(input: CodAdvancePolicyInput): CodAdva
       "invalid_percentage_basis_points",
       "invalid_minimum_advance",
       "invalid_maximum_advance",
+      "invalid_min_order_amount",
+      "invalid_max_order_amount",
       "minimum_advance_exceeds_maximum_advance",
     ].includes(reason),
   ) && minimumAdvanceValid && maximumAdvanceValid && minOrderValid && maxOrderValid;
