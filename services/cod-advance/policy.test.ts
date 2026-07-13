@@ -129,6 +129,34 @@ test("order exactly at maximum", () => {
   assert.deepEqual(result.reasons, []);
 });
 
+test("invalid negative minimum order threshold", () => {
+  const result = policy({ minOrderAmountPaise: -1 });
+  assert.equal(result.available, false);
+  assert.equal(result.eligible, false);
+  assert.deepEqual(result.reasons, ["invalid_min_order_amount"]);
+});
+
+test("invalid non-integer minimum order threshold", () => {
+  const result = policy({ minOrderAmountPaise: 100.5 });
+  assert.equal(result.available, false);
+  assert.equal(result.eligible, false);
+  assert.deepEqual(result.reasons, ["invalid_min_order_amount"]);
+});
+
+test("invalid negative maximum order threshold", () => {
+  const result = policy({ maxOrderAmountPaise: -1 });
+  assert.equal(result.available, false);
+  assert.equal(result.eligible, false);
+  assert.deepEqual(result.reasons, ["invalid_max_order_amount"]);
+});
+
+test("invalid non-integer maximum order threshold", () => {
+  const result = policy({ maxOrderAmountPaise: 100.5 });
+  assert.equal(result.available, false);
+  assert.equal(result.eligible, false);
+  assert.deepEqual(result.reasons, ["invalid_max_order_amount"]);
+});
+
 test("fixed amount zero gives normal COD", () => {
   const result = policy({ fixedAdvanceAmountPaise: 0 });
   assert.equal(result.eligible, true);
@@ -185,6 +213,26 @@ test("no negative COD balance", () => {
   assert.equal(result.advanceAmountPaise, 200000);
   assert.equal(result.codBalanceAmountPaise, 0);
   assert.ok(result.codBalanceAmountPaise >= 0);
+});
+
+test("large safe-integer liability uses BigInt percentage math", () => {
+  const orderTotalPaise = Number.MAX_SAFE_INTEGER;
+  const percentageBasisPoints = 5000;
+  const expected = Number((BigInt(orderTotalPaise) * BigInt(percentageBasisPoints) + 5000n) / 10000n);
+
+  assert.equal(Number.isSafeInteger(orderTotalPaise * percentageBasisPoints), false);
+
+  const result = policy({
+    advanceType: "PERCENTAGE",
+    percentageBasisPoints,
+    orderTotalPaise,
+    fixedAdvanceAmountPaise: 0,
+  });
+
+  assert.equal(result.available, true);
+  assert.equal(result.eligible, true);
+  assert.equal(result.advanceAmountPaise, expected);
+  assert.equal(result.codBalanceAmountPaise, orderTotalPaise - expected);
 });
 
 test("all returned monetary values are safe integers", () => {
