@@ -445,6 +445,7 @@
   }
 
   async function setPaymentMethod(displayMethod) {
+    if (state.paymentUpdating) return;
     const method = backendPaymentMethodForDisplay(displayMethod);
     const previous = paymentMethod();
     const previousDisplay = selectedDisplayPaymentMethod();
@@ -455,22 +456,22 @@
     render();
     try {
       await ensurePaymentMethod(method);
-      state.paymentUpdating = false;
-      render();
     } catch (error) {
       state.selectedDisplayPaymentMethod = previousDisplay;
       state.optimisticPaymentMethod = previous;
-      state.paymentUpdating = false;
       state.error = "Could not update payment method. Please try again.";
+    } finally {
+      state.paymentUpdating = false;
       render();
     }
   }
 
   async function ensurePaymentMethod(method) {
     if (state.intent?.selectedPaymentMethod !== method) {
-      await apiFetch(`/express/checkout/intents/${encodeURIComponent(state.intentId)}/payment-method`, { method: "POST", body: { method } });
+      const data = await apiFetch(`/express/checkout/intents/${encodeURIComponent(state.intentId)}/payment-method`, { method: "POST", body: { method } });
+      if (data?.intent) state.intent = data.intent;
     }
-    await refreshIntent();
+    if (state.intent?.selectedPaymentMethod !== method) await refreshIntent();
     state.optimisticPaymentMethod = null;
     if (state.intent?.selectedPaymentMethod !== method) throw new Error("Could not update payment method. Please try again.");
   }

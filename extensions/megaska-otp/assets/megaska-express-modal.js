@@ -200,7 +200,7 @@
   }
 
   async function loadCodPolicy(reason) {
-    if (!state.intent?.id || selectedDisplayPaymentMethod() !== "COD") return;
+    if (!state.intent?.id || selectedDisplayPaymentMethod() !== "COD" || state.intent?.selectedPaymentMethod !== "COD" || state.paymentUpdating) return;
     const cod = codAdvanceState();
     if (cod.loadingPolicy) return;
     cod.loadingPolicy = true; cod.error = null; cod.refreshKey = `${state.intent.id}:${reason || "select"}:${Date.now()}`;
@@ -219,7 +219,12 @@
   function invalidateCodPolicy(reason) {
     if (!state.codAdvance) return;
     state.codAdvance = freshCodAdvanceState();
-    if (selectedDisplayPaymentMethod() === "COD" && state.intent?.id) window.setTimeout(() => loadCodPolicy(reason), 0);
+    const intentId = state.intent?.id || "";
+    if (selectedDisplayPaymentMethod() === "COD" && state.intent?.selectedPaymentMethod === "COD" && intentId && !state.paymentUpdating) {
+      window.setTimeout(() => {
+        if (state.intent?.id === intentId && state.intent?.selectedPaymentMethod === "COD" && selectedDisplayPaymentMethod() === "COD" && !state.paymentUpdating) loadCodPolicy(reason);
+      }, 0);
+    }
   }
 
   function prepaidPlaceOrderMessage(error) {
@@ -962,15 +967,40 @@ function buildBufferedEta(rawEta) {
 
   async function ensurePaymentMethod(method) { return ensureBackendPaymentMethod(method); }
 
-  function setSelectedDisplayPaymentMethod(method) {
+  async function setSelectedDisplayPaymentMethod(method) {
+    if (state.paymentUpdating) return;
     if (method === "COD" && isCodUnavailable()) return;
     if (!DISPLAY_PAYMENT_METHODS.some((item) => item.key === method)) return;
+    const previousDisplayMethod = selectedDisplayPaymentMethod();
+    const previousOptimisticPaymentMethod = state.optimisticPaymentMethod;
+    const backendMethod = backendPaymentMethodForDisplay(method);
+    state.paymentUpdating = true;
     state.selectedDisplayPaymentMethod = method;
     state.inlinePaymentMode = true;
     state.inlinePaymentError = "";
+    if (backendMethod === "COD") {
+      state.codAdvance = freshCodAdvanceState();
+      codAdvanceState().loadingPolicy = true;
+    } else {
+      resetCodAdvanceState();
+    }
     renderPaymentSectionOnly();
-    if (backendPaymentMethodForDisplay(method) === "COD") loadCodPolicy("payment_method_select");
-    else warmupPrepaidPayment(method);
+    try {
+      await ensureBackendPaymentMethod(backendMethod);
+      if (state.intent?.selectedPaymentMethod !== backendMethod) throw new Error("Could not update payment method. Please try again.");
+      resetCodAdvanceState();
+      state.paymentUpdating = false;
+      if (backendMethod === "COD") await loadCodPolicy("payment_method_select");
+      else warmupPrepaidPayment(method);
+    } catch (error) {
+      state.selectedDisplayPaymentMethod = previousDisplayMethod;
+      state.optimisticPaymentMethod = previousOptimisticPaymentMethod;
+      resetCodAdvanceState();
+      state.inlinePaymentError = error instanceof Error ? error.message : "Could not update payment method. Please try again.";
+    } finally {
+      state.paymentUpdating = false;
+      renderPaymentSectionOnly();
+    }
   }
 
   function getInlinePaymentContainer() { return ensureModal().querySelector("[data-express-payment-section]"); }
@@ -1065,13 +1095,12 @@ function renderStoreCreditOrderPanel() {
       state.optimisticPaymentMethod = null;
       return;
     }
-    const previousIntent = state.intent;
-    await apiFetch(`/express/checkout/intents/${encodeURIComponent(state.intent.id)}/payment-method`, { method: "POST", body: { method } });
+    const data = await apiFetch(`/express/checkout/intents/${encodeURIComponent(state.intent.id)}/payment-method`, { method: "POST", body: { method } });
+    if (data?.intent) state.intent = data.intent;
     if (method === "COD") {
       state.activeRazorpayOrder = null;
       state.activeRazorpayOrderPromise = null;
     }
-    state.intent = Object.assign({}, previousIntent, state.intent || {}, { selectedPaymentMethod: method });
     state.optimisticPaymentMethod = null;
     if (state.intent?.selectedPaymentMethod !== method) await refreshIntent();
     if (state.intent?.selectedPaymentMethod !== method) throw new Error("Could not update payment method. Please try again.");
@@ -1114,13 +1143,13 @@ function renderStoreCreditOrderPanel() {
 
   async function proceedWithSelectedPayment(displayMethod) {
     if (state.orderSubmitting || state.paymentInProgress) return;
-    setSelectedDisplayPaymentMethod(displayMethod);
+    await setSelectedDisplayPaymentMethod(displayMethod);
   }
 
   function onChange(event) {
     if (!event.target.matches('input[name="paymentMethod"]')) return;
     if (event.target.disabled) return;
-    setSelectedDisplayPaymentMethod(event.target.value);
+    void setSelectedDisplayPaymentMethod(event.target.value);
   }
 
   function findRazorpayScript(src) {
