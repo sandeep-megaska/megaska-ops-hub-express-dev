@@ -24,7 +24,8 @@ const clean = (v: unknown) => { const s = String(v ?? "").trim(); return s || nu
 const code = (v: unknown, fallback = "UNKNOWN") => (clean(v) || fallback).toUpperCase();
 const label = (v: unknown) => code(v).replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
 const isMock = (metadata: unknown) => Boolean((metadata as { mock?: unknown } | null)?.mock);
-const iso = (v: Date | string | null | undefined) => v ? new Date(v).toISOString() : null;
+const iso = (v: Date | string | null | undefined) => { if (!v) return null; const d = new Date(v); return Number.isNaN(d.getTime()) ? null : d.toISOString(); };
+const safeUrl = (v: unknown) => { const s = clean(v); if (!s) return null; try { const url = new URL(s); return ["http:", "https:"].includes(url.protocol) ? s : null; } catch { return null; } };
 const validDate = (v: Date | string | null | undefined) => { if (!v) return null; const d = new Date(v); return Number.isNaN(d.getTime()) ? null : d; };
 const meaningful = (s: DashboardTrackingSnapshot | null) => Boolean(s?.shipments.length || s?.available);
 const hasAwbOrUrl = (s: DashboardTrackingSnapshot | null) => Boolean(s?.shipments.some((x) => clean(x.awb) || clean(x.trackingUrl)));
@@ -36,7 +37,7 @@ function mapOrder(row: TrackingOrderRow): DashboardTrackingSnapshot {
     direction: "FORWARD",
     carrier: clean(shipment.provider),
     awb: clean(shipment.awb),
-    trackingUrl: clean(shipment.trackingUrl),
+    trackingUrl: safeUrl(shipment.trackingUrl),
     statusCode: code(shipment.normalizedStatus),
     statusLabel: label(shipment.normalizedStatus),
     lastUpdatedAt: shipment.statusUpdatedAt ?? null,
@@ -64,12 +65,12 @@ export function buildShopifyFallbackTracking(order: DashboardCommerceOrder): Das
     const id = `${fulfillment.id || "shopify-fulfillment"}-${index}`;
     if (fulfillment.createdAt) timeline.push({ id: `${id}-created`, statusCode: status, statusLabel, occurredAt: fulfillment.createdAt, description: "Fulfillment created in Shopify", location: null, isMock: false });
     if (fulfillment.deliveredAt) timeline.push({ id: `${id}-delivered`, statusCode: "DELIVERED", statusLabel: "Delivered", occurredAt: fulfillment.deliveredAt, description: "Shipment delivered", location: null, isMock: false });
-    return { id, direction: "FORWARD", carrier: clean(entry.company), awb: clean(entry.number), trackingUrl: clean(entry.url), statusCode: status, statusLabel, lastUpdatedAt: fulfillment.deliveredAt || fulfillment.createdAt || null, isMock: false, timeline };
+    return { id, direction: "FORWARD", carrier: clean(entry.company), awb: clean(entry.number), trackingUrl: safeUrl(entry.url), statusCode: status, statusLabel, lastUpdatedAt: fulfillment.deliveredAt || fulfillment.createdAt || null, isMock: false, timeline };
   }));
   if (!shipments.length) return null;
   return { available: true, source: "SHOPIFY_FULFILLMENT", summary: { statusCode: shipments[0].statusCode, statusLabel: shipments[0].statusLabel, lastUpdatedAt: shipments[0].lastUpdatedAt, message: "Tracking details are provided by Shopify fulfillment data." }, shipments };
 }
 
 export function selectDashboardTracking(input: { internalTracking: DashboardTrackingSnapshot | null; shopifyFallback: DashboardTrackingSnapshot | null }): DashboardTrackingSnapshot { if (hasAwbOrUrl(input.internalTracking)) return input.internalTracking!; if (input.shopifyFallback) return input.shopifyFallback; if (meaningful(input.internalTracking)) return input.internalTracking!; return noTracking(); }
-export function buildDashboardTrackingDto(snapshot: DashboardTrackingSnapshot): DashboardTrackingDto { return { available: snapshot.available, source: snapshot.source, summary: { statusCode: code(snapshot.summary.statusCode), statusLabel: snapshot.summary.statusLabel || label(snapshot.summary.statusCode), lastUpdatedAt: iso(snapshot.summary.lastUpdatedAt), message: snapshot.summary.message }, shipments: snapshot.shipments.map((s) => ({ id: s.id, direction: s.direction as DashboardShipmentDirection, carrier: s.carrier, awb: s.awb, trackingUrl: s.trackingUrl, statusCode: code(s.statusCode), statusLabel: s.statusLabel || label(s.statusCode), lastUpdatedAt: iso(s.lastUpdatedAt), timeline: s.timeline.map((e) => ({ id: e.id, statusCode: code(e.statusCode), statusLabel: e.statusLabel || label(e.statusCode), occurredAt: new Date(e.occurredAt).toISOString(), description: e.description, location: e.location })) })) }; }
+export function buildDashboardTrackingDto(snapshot: DashboardTrackingSnapshot): DashboardTrackingDto { return { available: snapshot.available, source: snapshot.source, summary: { statusCode: code(snapshot.summary.statusCode), statusLabel: snapshot.summary.statusLabel || label(snapshot.summary.statusCode), lastUpdatedAt: iso(snapshot.summary.lastUpdatedAt), message: snapshot.summary.message }, shipments: snapshot.shipments.map((s) => ({ id: s.id, direction: s.direction as DashboardShipmentDirection, carrier: s.carrier, awb: s.awb, trackingUrl: safeUrl(s.trackingUrl), statusCode: code(s.statusCode), statusLabel: s.statusLabel || label(s.statusCode), lastUpdatedAt: iso(s.lastUpdatedAt), timeline: s.timeline.map((e) => ({ id: e.id, statusCode: code(e.statusCode), statusLabel: e.statusLabel || label(e.statusCode), occurredAt: iso(e.occurredAt) || new Date(0).toISOString(), description: e.description, location: e.location })) })) }; }
 export function findTrustedDeliveredAt(input: { shopifyDeliveredAt: Date | string | null; tracking: DashboardTrackingSnapshot | null }): Date | string | null { const shopify = validDate(input.shopifyDeliveredAt); if (shopify) return input.shopifyDeliveredAt; let latest: Date | null = null; for (const shipment of input.tracking?.shipments || []) { const candidates = [shipment.statusCode === "DELIVERED" ? shipment.lastUpdatedAt : null, ...shipment.timeline.filter((e) => e.statusCode === "DELIVERED").map((e) => e.occurredAt)]; for (const c of candidates) { const d = validDate(c); if (d && (!latest || d > latest)) latest = d; } } return latest; }

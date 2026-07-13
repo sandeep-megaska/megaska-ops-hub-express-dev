@@ -84,3 +84,17 @@ Shopify degradation: if the Shopify dashboard aggregation is unavailable, the V1
 Action availability is calculated server-side from request snapshots, selected tracking/delivery timestamps, module capabilities, and existing deadline helpers. The frontend should not duplicate lifecycle status arrays.
 
 The compatibility mapper should be removed after the app-owned customer dashboard replaces the legacy theme dashboard. Until then, `/api/dashboard/summary` should not be renamed or have legacy keys removed.
+
+## DASH-2F stabilization notes
+
+- Canonical route: `/api/customer-dashboard/v1`, response version `dashboard.v1`.
+- Legacy compatibility route: `/api/dashboard/summary`, mapped by `buildLegacyDashboardSummary(v1)` for the existing Megaska theme dashboard.
+- V1 money fields are integer paise. Legacy wallet fields also remain paise, but legacy `orders[].totalAmount` remains a major-currency number for live theme compatibility.
+- V1 dates must be ISO strings; invalid dates, `Date`, `BigInt`, functions, circular values, Prisma objects, and raw Shopify objects are rejected at the response boundary.
+- Shopify degradation policy: local customer/profile, wallet, and fallback address remain visible; orders become empty when Shopify Admin is unavailable or no Shopify customer can be matched.
+- Wallet failure policy: if wallet is enabled and trusted wallet data cannot load, the dashboard returns typed `DASHBOARD_UNAVAILABLE`; if wallet is disabled, `wallet` is `null` and store credit summary is `0`.
+- Tracking precedence: internal tracking with AWB or safe URL, Shopify fulfillment fallback, meaningful internal tracking without AWB, then `NONE`. Unsafe non-http(s) URLs normalize to `null`.
+- Route responses use `Cache-Control: private, no-store`, `Vary: Origin, Authorization, Access-Control-Request-Headers`, and `X-Content-Type-Options: nosniff`.
+- Compatibility mapper removal criteria: remove only after the app-owned customer dashboard fully replaces the uploaded legacy theme script and all referenced legacy fields are no longer consumed.
+
+DASH-2F does not claim production readiness for request submission forms or app-owned dashboard UI flows.

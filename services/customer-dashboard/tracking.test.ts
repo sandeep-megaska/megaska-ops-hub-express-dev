@@ -56,3 +56,10 @@ test("trusted delivered timestamp prefers Shopify then latest shipment delivery"
   assert.equal(findTrustedDeliveredAt({ shopifyDeliveredAt: "2026-02-01T00:00:00Z", tracking }), "2026-02-01T00:00:00Z");
   assert.equal(findTrustedDeliveredAt({ shopifyDeliveredAt: null, tracking }).toISOString(), "2026-01-03T00:00:00.000Z");
 });
+
+test("unsafe tracking URLs are normalized to null", () => {
+  const dto = buildDashboardTrackingDto({ available: true, source: "LOOPDESK_SHIPMENT", summary: { statusCode: "in_transit", statusLabel: "In transit", lastUpdatedAt: null, message: null }, shipments: [{ id: "s", direction: "FORWARD", carrier: "Carrier", awb: null, trackingUrl: "javascript:alert(1)", statusCode: "in_transit", statusLabel: "In transit", lastUpdatedAt: null, isMock: false, timeline: [] }] });
+  assert.equal(dto.shipments[0].trackingUrl, null);
+  const fallback = buildShopifyFallbackTracking(order("#u", [{ id: "f", status: "success", createdAt: null, deliveredAt: null, trackingInfo: [{ company: "C", number: "A", url: "ftp://bad" }] }]));
+  assert.equal(fallback.shipments[0].trackingUrl, null);
+});
