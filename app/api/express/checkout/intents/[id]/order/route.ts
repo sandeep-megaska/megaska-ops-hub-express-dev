@@ -547,9 +547,6 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
 
       createResult = created.draftOrderCreate || null;
     }
-    if (createResult?.draftOrder?.id) {
-      console.info("[EXPRESS CHECKOUT ORDER] draft_order_create_success", { shopId: shop.shopId, intentId, customerProfileId, draftOrderId: createResult.draftOrder.id, draftOrderName: createResult.draftOrder.name || null });
-    }
     if (createResult?.userErrors?.length || !createResult?.draftOrder?.id) {
       const message = userErrorMessage(createResult?.userErrors);
       const userErrors = normalizeShopifyUserErrors(createResult?.userErrors);
@@ -563,6 +560,8 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
       );
     }
 
+    const createdDraftOrder = createResult.draftOrder;
+    console.info("[EXPRESS CHECKOUT ORDER] draft_order_create_success", { shopId: shop.shopId, intentId, customerProfileId, draftOrderId: createdDraftOrder.id, draftOrderName: createdDraftOrder.name || null });
     const paymentPending = intent.selectedPaymentMethod === "COD";
     const markAsPaid = !paymentPending;
     console.info("[EXPRESS CHECKOUT ORDER] draft_order_complete_start", {
@@ -574,7 +573,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
       paymentPending,
       markAsPaid,
       paid: markAsPaid,
-      draftOrderId: createResult.draftOrder.id,
+      draftOrderId: createdDraftOrder.id,
     });
 
     const completed = await shopifyAdminGraphql<DraftOrderCompletePayload>(
@@ -589,7 +588,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
           userErrors { field message }
         }
       }`,
-      { id: createResult.draftOrder.id, paymentPending }
+      { id: createdDraftOrder.id, paymentPending }
     );
 
     checkoutPerfLog("shopify_admin_api_ms", { ...perfContext, durationMs: elapsedMs(shopifyStartedAt) });
@@ -598,19 +597,19 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     const completedDraftOrder = completeResult?.draftOrder || null;
     const completedOrder = completedDraftOrder?.order || null;
     if ((completeResult?.userErrors?.length || !completedOrder?.id) && hasAlreadyPaidUserError(completeResult?.userErrors)) {
-      console.error("[EXPRESS CHECKOUT ORDER] draft_order_complete_recovery_not_customer_facing", { shopId: shop.shopId, intentId, customerProfileId, draftOrderId: createResult.draftOrder.id, paymentMethod: intent.selectedPaymentMethod, paymentPending, markAsPaid });
+      console.error("[EXPRESS CHECKOUT ORDER] draft_order_complete_recovery_not_customer_facing", { shopId: shop.shopId, intentId, customerProfileId, draftOrderId: createdDraftOrder.id, paymentMethod: intent.selectedPaymentMethod, paymentPending, markAsPaid });
     }
     if ((completeResult?.userErrors?.length && !completedOrder?.id) || !completedDraftOrder || !completedOrder?.id) {
       const message = userErrorMessage(completeResult?.userErrors);
       const shopifyUserErrors = normalizeShopifyUserErrors(completeResult?.userErrors);
-      console.error("[EXPRESS CHECKOUT ORDER] Shopify draftOrderComplete userErrors", { ...diagnostic, shopifyUserErrors, errorName: "ShopifyUserError", errorMessage: message, paymentMethod: intent.selectedPaymentMethod, paymentPending, markAsPaid, draftOrderId: createResult.draftOrder.id });
+      console.error("[EXPRESS CHECKOUT ORDER] Shopify draftOrderComplete userErrors", { ...diagnostic, shopifyUserErrors, errorName: "ShopifyUserError", errorMessage: message, paymentMethod: intent.selectedPaymentMethod, paymentPending, markAsPaid, draftOrderId: createdDraftOrder.id });
       if (storeCreditAmountPaise > 0) await releaseStoreCreditReservation({ shopId: shop.shopId, customerProfileId, checkoutIntentId: intentId, reason: "shopify-draft-order-complete-failed" });
       return jsonWithCors(req, { ok: false, error: "We could not place your order right now. Please try again." }, { status: 422 });
     }
 
     const order = completedOrder;
     const completedAt = new Date().toISOString();
-    console.info("[EXPRESS CHECKOUT ORDER] draft_order_complete_success", { shopId: shop.shopId, intentId, customerProfileId, draftOrderId: completedDraftOrder.id || createResult.draftOrder.id, shopifyOrderId: order.id || null, shopifyOrderName: order.name || null, paymentPending, completionSource: "draft_order_complete" });
+    console.info("[EXPRESS CHECKOUT ORDER] draft_order_complete_success", { shopId: shop.shopId, intentId, customerProfileId, draftOrderId: completedDraftOrder.id || createdDraftOrder.id, shopifyOrderId: order.id || null, shopifyOrderName: order.name || null, paymentPending, completionSource: "draft_order_complete" });
     let orderLink = null;
     let updatedIntent = latestIntent;
 
@@ -622,8 +621,8 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
           shopId: shop.shopId,
           intentId,
           data: {
-            draftOrderId: completedDraftOrder?.id || createResult.draftOrder?.id || null,
-            draftOrderName: completedDraftOrder?.name || createResult.draftOrder?.name || null,
+            draftOrderId: completedDraftOrder?.id || createdDraftOrder.id || null,
+            draftOrderName: completedDraftOrder?.name || createdDraftOrder.name || null,
             shopifyOrderId: order.id || null,
             shopifyOrderName: order.name || null,
             financialStatus: order.displayFinancialStatus || (intent.selectedPaymentMethod === "COD" ? "PENDING" : "PAID"),
