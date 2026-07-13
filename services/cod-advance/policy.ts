@@ -76,7 +76,7 @@ function validateNullableMoney(input: CodAdvancePolicyInput, key: NullableMoneyK
 
 function safePercentageRound(amountPaise: number, basisPoints: number): number | null {
   const numerator = BigInt(amountPaise) * BigInt(basisPoints);
-  const rounded = (numerator + 5000n) / 10000n;
+  const rounded = (numerator + BigInt(5000)) / BigInt(10000);
   if (rounded > BigInt(Number.MAX_SAFE_INTEGER)) return null;
 
   return Number(rounded);
