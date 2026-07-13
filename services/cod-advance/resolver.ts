@@ -47,8 +47,8 @@ function minDate(a: Date | null | undefined, b: Date) {
   return a && a < b ? a : b;
 }
 
-function isPaidOrLinked(intent: { status: string; paidAt?: Date | null; consumedAt?: Date | null; shopifyOrderId?: string | null }) {
-  return Boolean(intent.paidAt || intent.consumedAt || intent.shopifyOrderId || ["ADVANCE_PAID", "ORDER_LINKED"].includes(intent.status));
+function isPaidOrLinked(intent: { status: string; paidAt?: Date | null; consumedAt?: Date | null; shopifyOrderId?: string | null; shopifyOrderName?: string | null }) {
+  return Boolean(intent.paidAt || intent.consumedAt || intent.shopifyOrderId || intent.shopifyOrderName || ["ADVANCE_PAID", "ORDER_LINKED"].includes(intent.status));
 }
 
 async function readActiveWalletReservation(db: ResolverDb, input: { shopId: string; customerProfileId: string; checkoutReference: string; cartReference: string }, audit: (eventType: string, entityType: string, entityId: string | null, payload?: unknown) => Promise<unknown>) {

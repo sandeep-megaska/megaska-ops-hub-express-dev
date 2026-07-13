@@ -120,6 +120,7 @@ test("identical quote reuses intent", async () => {
 test("changed total creates replacement intent and cancels stale CREATED", async () => {
   const h = dbHarness({ existing: [existingIntent({ codBalanceAmountPaise: 97000 })] });
   await resolve({ db: h.db, state: h.state });
+  assert.deepEqual(h.state.updated[0].where, { id: "old", shopId: "shop-1", status: "CREATED", paidAt: null, consumedAt: null, shopifyOrderId: null, shopifyOrderName: null });
   assert.equal(h.state.updated[0].data.status, "CANCELLED");
   assert.equal(h.state.created.length, 1);
 });
