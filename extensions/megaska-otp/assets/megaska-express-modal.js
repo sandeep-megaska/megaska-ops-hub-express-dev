@@ -16,6 +16,7 @@
     paymentStarted: false,
     orderSubmitting: false,
     paymentUpdating: false,
+    codPolicyRequestId: 0,
     selectedDisplayPaymentMethod: "UPI",
     inlinePaymentMode: false,
     razorpayInlineScriptPromise: null,
@@ -163,7 +164,7 @@
     return state.codAdvance;
   }
 
-  function resetCodAdvanceState() { state.codAdvance = freshCodAdvanceState(); }
+  function resetCodAdvanceState() { state.codPolicyRequestId += 1; state.codAdvance = freshCodAdvanceState(); }
 
   function codAdvanceLog(eventName, details) {
     if (window.console && typeof window.console.info === "function") console.info(`[Megaska Express] ${eventName}`, Object.assign({ intentId: state.intent?.id || null }, details || {}));
@@ -199,21 +200,34 @@
     cod.error = body.message && (!cod.available || !cod.eligible) ? String(body.message) : cod.error;
   }
 
+  function isCurrentCodPolicyRequest(requestId, requestIntentId) {
+    return state.codPolicyRequestId === requestId
+      && state.intent?.id === requestIntentId
+      && state.intent?.selectedPaymentMethod === "COD"
+      && selectedDisplayPaymentMethod() === "COD";
+  }
+
   async function loadCodPolicy(reason) {
-    if (!state.intent?.id || selectedDisplayPaymentMethod() !== "COD" || state.intent?.selectedPaymentMethod !== "COD" || state.paymentUpdating) return;
+    const allowDuringPaymentUpdate = reason === "payment_method_select";
+    if (!state.intent?.id || selectedDisplayPaymentMethod() !== "COD" || state.intent?.selectedPaymentMethod !== "COD" || (state.paymentUpdating && !allowDuringPaymentUpdate)) return;
     const cod = codAdvanceState();
     if (cod.loadingPolicy) return;
-    cod.loadingPolicy = true; cod.error = null; cod.refreshKey = `${state.intent.id}:${reason || "select"}:${Date.now()}`;
+    const requestIntentId = state.intent.id;
+    const requestId = state.codPolicyRequestId + 1;
+    state.codPolicyRequestId = requestId;
+    cod.loadingPolicy = true; cod.error = null; cod.refreshKey = `${requestIntentId}:${reason || "select"}:${Date.now()}`;
     renderPaymentSectionOnly();
     try {
-      const data = await apiFetch(`/express/checkout/intents/${encodeURIComponent(state.intent.id)}/cod-policy`);
+      const data = await apiFetch(`/express/checkout/intents/${encodeURIComponent(requestIntentId)}/cod-policy`);
+      if (!isCurrentCodPolicyRequest(requestId, requestIntentId)) return;
       applyCodPolicyPayload(data);
       codAdvanceLog("cod_advance.ui.policy_loaded", { requiresAdvance: cod.requiresAdvance, available: cod.available, eligible: cod.eligible });
     } catch (error) {
+      if (!isCurrentCodPolicyRequest(requestId, requestIntentId)) return;
       cod.loadingPolicy = false; cod.policyLoaded = false; cod.error = codAdvanceErrorMessage(error);
       if (error?.code === "CHECKOUT_EXPIRED") state.error = cod.error;
     }
-    renderPaymentSectionOnly();
+    if (isCurrentCodPolicyRequest(requestId, requestIntentId)) renderPaymentSectionOnly();
   }
 
   function invalidateCodPolicy(reason) {
@@ -989,7 +1003,6 @@ function buildBufferedEta(rawEta) {
       await ensureBackendPaymentMethod(backendMethod);
       if (state.intent?.selectedPaymentMethod !== backendMethod) throw new Error("Could not update payment method. Please try again.");
       resetCodAdvanceState();
-      state.paymentUpdating = false;
       if (backendMethod === "COD") await loadCodPolicy("payment_method_select");
       else warmupPrepaidPayment(method);
     } catch (error) {
