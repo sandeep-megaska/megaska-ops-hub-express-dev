@@ -6,11 +6,11 @@ const DEFAULT_TEXT = 'You need to pay to the delivery agent at the time of deliv
 
 function paiseToRupees(value: unknown) {
   const paise = Number(value || 0)
-  return Number.isFinite(paise) ? String(paise / 100) : '100'
+  return Number.isFinite(paise) ? String(paise / 100) : '0'
 }
 
 export function ExpressCheckoutSettingsForm() {
-  const [form, setForm] = useState({ codFeeAmountRupees: '100', codInformationText: DEFAULT_TEXT })
+  const [form, setForm] = useState({ codFeeAmountRupees: '0', codInformationText: DEFAULT_TEXT })
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
@@ -33,7 +33,7 @@ export function ExpressCheckoutSettingsForm() {
     <div><h2 className="text-base font-semibold text-gray-900">Express checkout COD settings</h2><p className="text-sm text-gray-600">Configure COD charge and COD/refund copy shown in the checkout modal.</p></div>
     {error ? <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
     {message ? <p className="rounded-xl bg-green-50 px-3 py-2 text-sm text-green-700">{message}</p> : null}
-    <label className="block text-sm text-gray-700">COD charge (₹)<input className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2.5" value={form.codFeeAmountRupees} onChange={(e) => setForm((p) => ({ ...p, codFeeAmountRupees: e.target.value }))} inputMode="decimal" /></label>
+    <label className="block text-sm text-gray-700">COD charge (₹)<input className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2.5" value={form.codFeeAmountRupees} onChange={(e) => setForm((p) => ({ ...p, codFeeAmountRupees: e.target.value }))} inputMode="decimal" min="0" step="0.01" /><span className="mt-1 block text-xs text-gray-500">Set 0 to disable the COD fee. This charge is separate from Partial COD advance.</span></label>
     <label className="block text-sm text-gray-700">COD/refund information text<textarea className="mt-1 min-h-32 w-full rounded-xl border border-gray-300 px-3 py-2.5" value={form.codInformationText} onChange={(e) => setForm((p) => ({ ...p, codInformationText: e.target.value }))} /></label>
     <button type="submit" className="rounded-xl bg-gray-900 px-5 py-2.5 text-sm text-white" disabled={loading}>{loading ? 'Saving...' : 'Save settings'}</button>
   </form>
