@@ -24,3 +24,13 @@ DASH-2A introduces only the contract, error model, authenticated context helper,
 2. Extract customer/shop summary and module capability loading.
 3. Extract commerce order normalization from Shopify and Loopdesk records.
 4. Extract request/action eligibility, shipment tracking, and wallet loading behind the orchestrator dependencies.
+
+## DASH-2B identity and commerce extraction
+
+The dashboard context resolves an authenticated customer profile from the trusted server-side session; browser-supplied customer IDs are not accepted for dashboard identity. The extracted customer identity service scopes profile loading to the current shop where the schema supports it and returns `CUSTOMER_NOT_FOUND` when the authenticated profile is absent or belongs to another shop.
+
+Shopify customer identity reconciliation preserves an existing stored Shopify customer ID unless Shopify Admin lookup finds a different valid customer. Reconciliation prefers an email match, falls back to phone when email does not match, and persists only the reconciled Shopify customer ID.
+
+Commerce loading now normalizes Shopify Admin dashboard adapter data into an internal snapshot (`DashboardCommerceSnapshot`) rather than exposing raw GraphQL responses. The snapshot carries availability, source, commerce email, default address, total order count, recent orders, line items, fulfillment status, and tracking information with money represented as integer paise where exact conversion is available.
+
+Shopify Admin unavailability, lookup errors, or unresolved commerce customers return an unavailable commerce snapshot. These failures must not destroy authenticated local dashboard access.
