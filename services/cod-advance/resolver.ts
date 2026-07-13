@@ -177,7 +177,7 @@ export async function resolveExpressCheckoutCodPolicy(input: ResolveInput, db?: 
     for (const stale of existing) {
       if (["CREATED", "PAYMENT_PENDING"].includes(stale.status) && !isPaidOrLinked(stale)) {
         const status = stale.expiresAt && stale.expiresAt <= now ? "EXPIRED" : "CANCELLED";
-        await (tx as any).codAdvanceIntent.updateMany({ where: { id: stale.id, shopId: input.shopId, status: stale.status }, data: { status } });
+        await (tx as any).codAdvanceIntent.updateMany({ where: { id: stale.id, shopId: input.shopId, status: stale.status, paidAt: null, consumedAt: null, shopifyOrderId: null, shopifyOrderName: null }, data: { status } });
         staleEvents.push({ id: stale.id, status });
       }
     }
