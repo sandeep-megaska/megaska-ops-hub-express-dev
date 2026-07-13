@@ -258,8 +258,9 @@ export async function finalizePrepaidExpressCheckoutOrder(params: FinalizeParams
     const createResult = created.draftOrderCreate;
     if (createResult?.userErrors?.length || !createResult?.draftOrder?.id) throw new ExpressCheckoutOrderFinalizationError(422, "Payment received, but we could not create your order automatically. Please contact support.", userErrorMessage(createResult?.userErrors));
 
-    console.info("[EXPRESS PREPAID FINALIZATION] draft_order_complete_start", { shopId: params.shopId, intentId: params.intentId, paymentId: params.paymentId || null, paymentMethod: "PREPAID", selectedPaymentMethod: "PREPAID", paymentPending: false, markAsPaid: true, paid: true, draftOrderId: createResult.draftOrder.id });
-    const completed = await shopifyAdminGraphql<DraftOrderCompletePayload>(params.shopDomain, `mutation DraftOrderComplete($id: ID!, $paymentPending: Boolean) { draftOrderComplete(id: $id, paymentPending: $paymentPending) { draftOrder { id name order { id name displayFinancialStatus displayFulfillmentStatus } } userErrors { field message } } }`, { id: createResult.draftOrder.id, paymentPending: false }, { shopId: params.shopId });
+    const createdDraftOrder = createResult.draftOrder;
+    console.info("[EXPRESS PREPAID FINALIZATION] draft_order_complete_start", { shopId: params.shopId, intentId: params.intentId, paymentId: params.paymentId || null, paymentMethod: "PREPAID", selectedPaymentMethod: "PREPAID", paymentPending: false, markAsPaid: true, paid: true, draftOrderId: createdDraftOrder.id });
+    const completed = await shopifyAdminGraphql<DraftOrderCompletePayload>(params.shopDomain, `mutation DraftOrderComplete($id: ID!, $paymentPending: Boolean) { draftOrderComplete(id: $id, paymentPending: $paymentPending) { draftOrder { id name order { id name displayFinancialStatus displayFulfillmentStatus } } userErrors { field message } } }`, { id: createdDraftOrder.id, paymentPending: false }, { shopId: params.shopId });
     const completeResult = completed.draftOrderComplete;
     if (completeResult?.userErrors?.length || !completeResult?.draftOrder?.order?.id) throw new ExpressCheckoutOrderFinalizationError(422, "Payment received, but we could not create your order automatically. Please contact support.", userErrorMessage(completeResult?.userErrors));
 
@@ -268,7 +269,7 @@ export async function finalizePrepaidExpressCheckoutOrder(params: FinalizeParams
       const link = await writeExpressCheckoutOrderLink(tx, {
         shopId: params.shopId,
         intentId: params.intentId,
-        data: { draftOrderId: completeResult.draftOrder?.id || createResult.draftOrder?.id || null, draftOrderName: completeResult.draftOrder?.name || createResult.draftOrder?.name || null, shopifyOrderId: order.id || null, shopifyOrderName: order.name || null, financialStatus: order.displayFinancialStatus || "PAID", fulfillmentStatus: order.displayFulfillmentStatus || null },
+        data: { draftOrderId: completeResult.draftOrder?.id || createdDraftOrder.id || null, draftOrderName: completeResult.draftOrder?.name || createdDraftOrder.name || null, shopifyOrderId: order.id || null, shopifyOrderName: order.name || null, financialStatus: order.displayFinancialStatus || "PAID", fulfillmentStatus: order.displayFulfillmentStatus || null },
       });
       const updatedIntent = await tx.expressCheckoutIntent.update({ where: { id: params.intentId }, data: { status: "ORDER_COMPLETED" } });
       return { link, updatedIntent };
