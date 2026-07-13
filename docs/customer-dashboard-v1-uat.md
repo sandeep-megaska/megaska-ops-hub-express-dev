@@ -19,3 +19,15 @@ DASH-2F validates the V1 DTO before the canonical API response, preserves legacy
 
 ## Known limitations
 Action submission flows and app-owned dashboard UI are not production-certified by this phase. Historical Partial COD records without reliable metadata stay conservative rather than inferred.
+
+## DASH-3A app-owned shell UAT scenarios
+
+- Open `/apps/megaska/account` through Shopify App Proxy and verify the shell renders without Shopify customer-account login.
+- With no LoopDesk OTP session, verify the sign-in-required state appears and the login action preserves the return path.
+- With a valid OTP session, verify exactly one canonical `/apps/megaska/api/customer-dashboard/v1` request is made and no `/api/dashboard/summary` request is made.
+- Verify profile, summary cards, recent orders, saved address, Store Credit wallet, and tracking render from `dashboard.v1` fields.
+- Open and close an order detail panel with the button, backdrop, close button, and Escape key; verify focus returns to the triggering order card.
+- Verify read-only action rows show statuses or “Coming in next phase” and no request submission form is available.
+- Verify wallet is hidden when disabled and visible with transaction preview when enabled.
+- Verify unsafe tracking URLs are not rendered as links.
+- Verify the legacy theme dashboard remains unchanged and available as fallback.
