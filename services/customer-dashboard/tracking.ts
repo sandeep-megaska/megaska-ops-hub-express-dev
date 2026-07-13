@@ -13,8 +13,9 @@ type TrackingEventRow = { id: string; normalizedStatus: string; occurredAt: Date
 type TrackingShipmentRow = { id: string; provider?: string | null; awb?: string | null; trackingUrl?: string | null; normalizedStatus: string; statusUpdatedAt?: Date | null; metadata?: unknown; events: TrackingEventRow[] };
 type TrackingOrderRow = { shopifyOrderName: string; status: string; statusUpdatedAt?: Date | null; shipments: TrackingShipmentRow[] };
 type TrackingDeps = { megaskaOrder: { findMany: (args: unknown) => Promise<TrackingOrderRow[]> } };
-const prismaWithTracking = prisma as typeof prisma & { megaskaOrder: { findMany: (args: never) => Promise<TrackingOrderRow[]> } };
-const defaultDeps: TrackingDeps = { megaskaOrder: { findMany: (args) => prismaWithTracking.megaskaOrder.findMany(args as never) } };
+type TrackingPrismaClient = { megaskaOrder: { findMany: (args: unknown) => Promise<unknown> } };
+const prismaWithTracking = prisma as unknown as TrackingPrismaClient;
+const defaultDeps: TrackingDeps = { megaskaOrder: { findMany: async (args) => (await prismaWithTracking.megaskaOrder.findMany(args)) as TrackingOrderRow[] } };
 let deps = defaultDeps;
 export function setDashboardTrackingDependenciesForTest(overrides: Partial<TrackingDeps>) { deps = { ...defaultDeps, ...overrides } as TrackingDeps; }
 export function resetDashboardTrackingDependenciesForTest() { deps = defaultDeps; }
