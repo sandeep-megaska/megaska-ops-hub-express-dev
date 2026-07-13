@@ -42,3 +42,29 @@ Customer-dashboard request data is now aggregated by a reusable service that nor
 The service produces an internal snapshot for the latest request of each type per order, derives active request interlocks with the existing domain helpers, and keeps deadlines server-owned. The corrected combined `openRequestCount` is the number of active/blocking cancellation, exchange and issue request records, not merely the number of affected orders and not only cancellation requests.
 
 Customer-facing order actions are produced by a pure policy mapper. It is the normalized authority for cancellation, exchange, issue-reporting and read-only refund-status availability; it preserves the current delivery timestamp precedence, request windows, cancellation shipment lock, exchange progress semantics and cancellation refund outcome wording without exposing raw database records.
+
+## DASH-2D Tracking and Wallet Service Semantics
+
+### Tracking source precedence
+
+Customer dashboard tracking is selected in this order: LoopDesk shipment tracking with a usable AWB or tracking URL, Shopify fulfillment fallback tracking, meaningful LoopDesk shipment state without an AWB, and finally a safe `NONE` tracking response. The `NONE` response is customer-safe and indicates that tracking will appear after shipment.
+
+### Internal tracking and Shopify fallback
+
+Internal tracking is loaded by shop, customer profile, and normalized Shopify order number in a single batched lookup. Shipment events preserve the existing recent-event ordering used by the legacy dashboard. Shopify fallback tracking is derived only from already-loaded commerce fulfillment data; it does not call Shopify. Empty fulfillment tracking entries are ignored, while carrier/company, AWB/tracking number, tracking URL, fulfillment status, fulfillment creation time, and delivered time are preserved when present.
+
+### Trusted delivered timestamps
+
+Delivered timestamps prefer the Shopify delivered timestamp when it is valid. If Shopify has no valid delivered timestamp, dashboard logic may inspect the selected tracking snapshot for delivered shipment state and delivered timeline events, using the latest valid delivered timestamp. If neither source is trustworthy, the delivered timestamp is `null`.
+
+### Wallet module behavior
+
+When the wallet module is disabled, wallet loading returns `null` and does not create or load a wallet account. When enabled, wallet loading uses the scoped wallet account and transaction services with explicit shop and customer profile context. Wallet-service or database failures surface as a typed `DASHBOARD_UNAVAILABLE` error rather than fabricating a zero balance.
+
+### Reservation-aware available balance
+
+Wallet available balance is reservation-aware: `availablePaise = max(balancePaise - reservedPaise, 0)`. Active reservations are aggregated with explicit shop and customer scoping, active status only, and unexpired reservations only. Negative or malformed reservation totals normalize to zero.
+
+### Money and serialization
+
+Wallet money values remain integer paise in service snapshots and DTOs. Wallet transaction order is preserved, and transaction timestamps are serialized as ISO strings in the public DTO.
