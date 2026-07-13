@@ -1,4 +1,5 @@
 import type { CustomerDashboardDtoV1, DashboardModulesDto } from "./contract.ts";
+import type { DashboardOrderRequestAggregation } from "./requests.ts";
 import type { DashboardCommerceSnapshot } from "./commerce.ts";
 import type { DashboardCustomerIdentity } from "./customer.ts";
 import type { CustomerDashboardContext } from "./context.ts";
@@ -7,7 +8,7 @@ import { CustomerDashboardError } from "./errors.ts";
 export type CustomerDashboardDependencies = {
   loadCustomer: (context: CustomerDashboardContext) => Promise<DashboardCustomerIdentity>;
   loadCommerce: (input: { context: CustomerDashboardContext; customer: DashboardCustomerIdentity }) => Promise<DashboardCommerceSnapshot>;
-  loadRequests: (context: CustomerDashboardContext) => Promise<unknown>;
+  loadRequests: (input: { context: CustomerDashboardContext; orderNumbers: string[] }) => Promise<DashboardOrderRequestAggregation>;
   loadTracking: (context: CustomerDashboardContext) => Promise<unknown>;
   loadWallet: (context: CustomerDashboardContext) => Promise<unknown>;
   loadModules: (context: CustomerDashboardContext) => Promise<DashboardModulesDto>;

@@ -34,3 +34,11 @@ Shopify customer identity reconciliation preserves an existing stored Shopify cu
 Commerce loading now normalizes Shopify Admin dashboard adapter data into an internal snapshot (`DashboardCommerceSnapshot`) rather than exposing raw GraphQL responses. The snapshot carries availability, source, commerce email, default address, total order count, recent orders, line items, fulfillment status, and tracking information with money represented as integer paise where exact conversion is available.
 
 Shopify Admin unavailability, lookup errors, or unresolved commerce customers return an unavailable commerce snapshot. These failures must not destroy authenticated local dashboard access.
+
+## DASH-2C request aggregation and action authority
+
+Customer-dashboard request data is now aggregated by a reusable service that normalizes Shopify order numbers before querying cancellation, exchange and issue records. Request-domain lookups are batched by request type and explicitly scoped to `shopId`, `customerProfileId` and normalized `orderNumber` wherever the current schema supports those fields. Refund rows are loaded in a single batch scoped by shop, customer and parent order-action request.
+
+The service produces an internal snapshot for the latest request of each type per order, derives active request interlocks with the existing domain helpers, and keeps deadlines server-owned. The corrected combined `openRequestCount` is the number of active/blocking cancellation, exchange and issue request records, not merely the number of affected orders and not only cancellation requests.
+
+Customer-facing order actions are produced by a pure policy mapper. It is the normalized authority for cancellation, exchange, issue-reporting and read-only refund-status availability; it preserves the current delivery timestamp precedence, request windows, cancellation shipment lock, exchange progress semantics and cancellation refund outcome wording without exposing raw database records.

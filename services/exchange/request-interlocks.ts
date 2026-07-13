@@ -1,6 +1,6 @@
-import { ACTIVE_EXCHANGE_STATUSES } from "./lifecycle";
-import { CANCELLATION_ACTIVE_STATUSES } from "./cancellation";
-import { isIssueStatusBlocking } from "./issue";
+import { ACTIVE_EXCHANGE_STATUSES } from "./lifecycle.ts";
+import { CANCELLATION_ACTIVE_STATUSES } from "./cancellation.ts";
+import { isIssueStatusBlocking } from "./issue.ts";
 
 export const ACTIVE_REQUEST_TYPES = [
   "CANCELLATION",
