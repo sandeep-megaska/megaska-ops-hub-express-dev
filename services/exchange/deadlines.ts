@@ -2,7 +2,7 @@ import {
   EXCHANGE_ALLOWED_DAYS_WINDOW,
   REVERSE_PICKUP_ALLOWED_DAYS_WINDOW,
   REVERSE_PICKUP_PAYMENT_EXPIRY_DAYS,
-} from "./constants";
+} from "./constants.ts";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
