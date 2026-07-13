@@ -52,7 +52,10 @@ export default function RootLayout({
                     <AdminNavLink href="/admin/promotions" className="mk-nav-link">
                       Promotions
                     </AdminNavLink>
-                    <AdminNavLink href="/admin/cod-advance" className="mk-nav-link">
+                    <AdminNavLink href="/admin/express-checkout" className="mk-nav-link">
+                      Express Checkout Settings
+                    </AdminNavLink>
+                    <AdminNavLink href="/admin/partial-cod" className="mk-nav-link">
                       Partial COD
                     </AdminNavLink>
                     <AdminNavLink
