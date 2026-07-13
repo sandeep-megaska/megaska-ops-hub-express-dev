@@ -68,3 +68,19 @@ Wallet available balance is reservation-aware: `availablePaise = max(balancePais
 ### Money and serialization
 
 Wallet money values remain integer paise in service snapshots and DTOs. Wallet transaction order is preserved, and transaction timestamps are serialized as ISO strings in the public DTO.
+
+## DASH-2E route wiring and legacy compatibility
+
+The canonical customer dashboard API is now `GET /api/customer-dashboard/v1`. It resolves the OTP-backed customer dashboard context first, then returns `CustomerDashboardDtoV1` with `Cache-Control: private, no-store`.
+
+The legacy theme endpoint `GET /api/dashboard/summary` remains available and is intentionally implemented as a compatibility route over the same V1 orchestrator. Its response keeps the historical `customer`, `wallet`, `stats`, `address`, and `orders` keys consumed by the uploaded Megaska dashboard asset.
+
+Money units deliberately differ by contract: V1 amounts are integer paise everywhere, while legacy `order.totalAmount` remains major currency units because the current theme JavaScript renders that field as rupees. Legacy wallet balances and transactions remain paise.
+
+OTP sessions remain the authentication authority. Browser-supplied customer identity is not trusted; tenant isolation is enforced by the resolved shop and customer profile context.
+
+Shopify degradation: if the Shopify dashboard aggregation is unavailable, the V1 orchestrator can still return a meaningful dashboard with local customer data, local fallback address, wallet data, and an empty order list. Wallet loading is stricter: when the wallet module is enabled, an untrusted wallet load raises a typed dashboard-unavailable error instead of fabricating a zero balance.
+
+Action availability is calculated server-side from request snapshots, selected tracking/delivery timestamps, module capabilities, and existing deadline helpers. The frontend should not duplicate lifecycle status arrays.
+
+The compatibility mapper should be removed after the app-owned customer dashboard replaces the legacy theme dashboard. Until then, `/api/dashboard/summary` should not be renamed or have legacy keys removed.
