@@ -1,0 +1,38 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import assert from "node:assert/strict";
+import test from "node:test";
+import { readFileSync } from "node:fs";
+
+import { buildCodAdvancePreview, parsePercentageToBasisPoints, parseRupeesToPaise, updateCodAdvanceSettingsForShop, getCodAdvanceSettingsForShop, validateCodAdvanceSettingsInput } from "./settings.ts";
+
+function valid(overrides: any = {}) { return { shopId: "shop-1", enabled: true, advanceType: "FIXED", fixedAdvanceAmountPaise: 30000, percentageBasisPoints: null, minimumAdvanceAmountPaise: null, maximumAdvanceAmountPaise: null, minOrderAmountPaise: null, maxOrderAmountPaise: null, customerTitle: null, customerMessage: null, ...overrides }; }
+function db(seed: any[] = []) {
+  const rows = [...seed];
+  const model = { findFirst: async ({ where }: any) => rows.filter((r) => r.shopId === where.shopId).sort((a, b) => b.updatedAt - a.updatedAt)[0] || null, create: async ({ data }: any) => { const row = { id: `settings-${rows.length + 1}`, updatedAt: rows.length + 1, ...data }; rows.push(row); return row; }, update: async ({ where, data }: any) => { const row = rows.find((r) => r.id === where.id); Object.assign(row, data, { updatedAt: (row.updatedAt || 0) + 1 }); return row; } };
+  return { rows, codAdvanceSettings: model, $transaction: async (fn: any) => fn({ codAdvanceSettings: model }) };
+}
+
+test("new shop receives safe default settings", async () => { const h = db(); const s = await getCodAdvanceSettingsForShop("new-shop", { db: h }); assert.equal(s.enabled, false); assert.equal(s.version, 0); assert.equal(s.fixedAdvanceAmountPaise, 30000); });
+test("existing settings load correctly and are shop scoped", async () => { const h = db([{ id: "a", shopId: "shop-a", enabled: true, advanceType: "PERCENTAGE", fixedAdvanceAmountPaise: 0, percentageBasisPoints: 1250, version: 4, updatedAt: 1 }, { id: "b", shopId: "shop-b", enabled: false, fixedAdvanceAmountPaise: 999, version: 2, updatedAt: 2 }]); const s = await getCodAdvanceSettingsForShop("shop-a", { db: h }); assert.equal(s.id, "a"); assert.equal(s.percentageBasisPoints, 1250); });
+test("enable FIXED with valid amount", async () => { const h = db(); const s = await updateCodAdvanceSettingsForShop(valid(), { db: h }); assert.equal(s.fixedAdvanceAmountPaise, 30000); assert.equal(s.version, 1); });
+test("enable PERCENTAGE with valid basis points", async () => { const h = db(); const s = await updateCodAdvanceSettingsForShop(valid({ advanceType: "PERCENTAGE", fixedAdvanceAmountPaise: 0, percentageBasisPoints: 1250 }), { db: h }); assert.equal(s.percentageBasisPoints, 1250); });
+test("FIXED enabled with zero amount rejected", () => assert.throws(() => validateCodAdvanceSettingsInput(valid({ fixedAdvanceAmountPaise: 0 })), /greater than 0/));
+test("PERCENTAGE enabled with null percentage rejected", () => assert.throws(() => validateCodAdvanceSettingsInput(valid({ advanceType: "PERCENTAGE", fixedAdvanceAmountPaise: 0, percentageBasisPoints: null })), /required/));
+test("percentage zero and above 100 rejected", () => { assert.throws(() => parsePercentageToBasisPoints("0"), /greater than 0/); assert.throws(() => parsePercentageToBasisPoints("100.01"), /at most 100/); });
+test("percentage with more than two decimals rejected by parser", () => assert.throws(() => parsePercentageToBasisPoints("12.345"), /up to two/));
+test("negative monetary value rejected", () => assert.throws(() => parseRupeesToPaise("-1"), /Amount/));
+test("unsafe or non-integer paise rejected", () => assert.throws(() => validateCodAdvanceSettingsInput(valid({ fixedAdvanceAmountPaise: 1.5 })), /safe integer/));
+test("minimum advance greater than maximum rejected", () => assert.throws(() => validateCodAdvanceSettingsInput(valid({ minimumAdvanceAmountPaise: 50000, maximumAdvanceAmountPaise: 10000 })), /minimumAdvanceAmountPaise/));
+test("minimum order greater than maximum order rejected", () => assert.throws(() => validateCodAdvanceSettingsInput(valid({ minOrderAmountPaise: 50000, maxOrderAmountPaise: 10000 })), /minOrderAmountPaise/));
+test("disabling preserves existing values", async () => { const h = db([{ id: "s", shopId: "shop-1", enabled: true, advanceType: "PERCENTAGE", fixedAdvanceAmountPaise: 0, percentageBasisPoints: 1250, minimumAdvanceAmountPaise: 10000, version: 3, updatedAt: 1 }]); const s = await updateCodAdvanceSettingsForShop(valid({ enabled: false, advanceType: "PERCENTAGE", fixedAdvanceAmountPaise: 0, percentageBasisPoints: 1250, minimumAdvanceAmountPaise: 10000 }), { db: h }); assert.equal(s.enabled, false); assert.equal(s.percentageBasisPoints, 1250); assert.equal(s.minimumAdvanceAmountPaise, 10000); });
+test("saving increments version", async () => { const h = db([{ id: "s", shopId: "shop-1", version: 8, fixedAdvanceAmountPaise: 100, updatedAt: 1 }]); const s = await updateCodAdvanceSettingsForShop(valid(), { db: h }); assert.equal(s.version, 9); });
+test("browser-supplied shopId and version are not trusted by API route", () => { const route = readFileSync(new URL("../../app/api/admin/cod-advance/settings/route.ts", import.meta.url), "utf8"); assert.match(route, /shopId: resolved\.id/); assert.doesNotMatch(route, /body\.shopId/); assert.doesNotMatch(route, /body\.version/); });
+test("customer title and message length validated", () => { assert.throws(() => validateCodAdvanceSettingsInput(valid({ customerTitle: "x".repeat(121) })), /120/); assert.throws(() => validateCodAdvanceSettingsInput(valid({ customerMessage: "x".repeat(501) })), /500/); });
+test("percentage conversion 12.5% -> 1250 basis points", () => assert.equal(parsePercentageToBasisPoints("12.5"), 1250));
+test("₹300.50 -> 30050 paise", () => assert.equal(parseRupeesToPaise("300.50"), 30050));
+test("empty optional amount -> null", () => assert.equal(parseRupeesToPaise("", { optional: true }), null));
+test("preview uses post-Store-Credit cash liability", () => { const p = buildCodAdvancePreview({ advanceType: "PERCENTAGE", fixedAdvanceAmountPaise: 0, percentageBasisPoints: 1000, minimumAdvanceAmountPaise: null, maximumAdvanceAmountPaise: null }); assert.equal(p.customerCashLiabilityPaise, 160000); assert.equal(p.advanceAmountPaise, 16000); });
+test("preview applies minimum and maximum advance caps", () => { const min = buildCodAdvancePreview({ advanceType: "PERCENTAGE", fixedAdvanceAmountPaise: 0, percentageBasisPoints: 1000, minimumAdvanceAmountPaise: 30000, maximumAdvanceAmountPaise: null }); const max = buildCodAdvancePreview({ advanceType: "PERCENTAGE", fixedAdvanceAmountPaise: 0, percentageBasisPoints: 5000, minimumAdvanceAmountPaise: null, maximumAdvanceAmountPaise: 40000 }); assert.equal(min.advanceAmountPaise, 30000); assert.equal(max.advanceAmountPaise, 40000); });
+test("existing Partial COD resolver reads newly saved settings helper", () => { const core = readFileSync(new URL("./core.ts", import.meta.url), "utf8"); const resolver = readFileSync(new URL("./resolver.ts", import.meta.url), "utf8"); assert.match(core, /codAdvanceSettings\.findFirst/); assert.match(resolver, /getLatestCodAdvanceSettings/); });
+test("settings save does not mutate payment, order, Razorpay, Store Credit, or Payment Link models", () => { const source = readFileSync(new URL("./settings.ts", import.meta.url), "utf8"); assert.doesNotMatch(source, /razorpay|PaymentLink|storeCredit|expressCheckoutPayment|shopifyOrder|DraftOrder/i); });
+test("no schema or migration files are changed by this test contract", () => { const source = readFileSync(new URL("../../prisma/schema.prisma", import.meta.url), "utf8"); assert.match(source, /model CodAdvanceSettings/); });

@@ -1,34 +1,52 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "../../../../../services/db/prisma";
 import { getShopDomainFromRequest, resolveShopConfig } from "../../../../../services/shopify/shop";
-import { auditCodAdvance, DEFAULT_COD_ADVANCE_AMOUNT_PAISE, rupeesToPaise } from "../../../../../services/cod-advance/core";
+import { auditCodAdvance } from "../../../../../services/cod-advance/core";
+import { CodAdvanceSettingsValidationError, getCodAdvanceSettingsForShop, updateCodAdvanceSettingsForShop, type CodAdvanceSettingsInput } from "../../../../../services/cod-advance/settings";
 
 export const runtime = "nodejs";
 
-async function shop(req: NextRequest) {
-  return resolveShopConfig(getShopDomainFromRequest(req));
+async function authenticatedShop(req: NextRequest): Promise<{ id: string; shopDomain: string }> {
+  const resolved = await resolveShopConfig(getShopDomainFromRequest(req));
+  if (!resolved.id) throw new CodAdvanceSettingsValidationError(["Unable to resolve shop"]);
+  return { id: resolved.id, shopDomain: resolved.shopDomain };
+}
+
+function editableFields(body: Record<string, unknown>): CodAdvanceSettingsInput {
+  return {
+    enabled: body.enabled as boolean,
+    advanceType: body.advanceType as "FIXED" | "PERCENTAGE",
+    fixedAdvanceAmountPaise: body.fixedAdvanceAmountPaise as number,
+    percentageBasisPoints: body.percentageBasisPoints == null ? null : body.percentageBasisPoints as number,
+    minimumAdvanceAmountPaise: body.minimumAdvanceAmountPaise == null ? null : body.minimumAdvanceAmountPaise as number,
+    maximumAdvanceAmountPaise: body.maximumAdvanceAmountPaise == null ? null : body.maximumAdvanceAmountPaise as number,
+    minOrderAmountPaise: body.minOrderAmountPaise == null ? null : body.minOrderAmountPaise as number,
+    maxOrderAmountPaise: body.maxOrderAmountPaise == null ? null : body.maxOrderAmountPaise as number,
+    customerTitle: typeof body.customerTitle === "string" && body.customerTitle.trim() ? body.customerTitle.trim() : null,
+    customerMessage: typeof body.customerMessage === "string" && body.customerMessage.trim() ? body.customerMessage.trim() : null,
+  };
+}
+
+function errorResponse(error: unknown) {
+  if (error instanceof CodAdvanceSettingsValidationError) return NextResponse.json({ ok: false, error: error.message, issues: error.issues }, { status: error.message === "Unable to resolve shop" ? 401 : 400 });
+  return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : "Partial COD settings failed" }, { status: 500 });
 }
 
 export async function GET(req: NextRequest) {
-  const resolved = await shop(req);
-  if (!resolved.id) return NextResponse.json({ ok: false, error: "Unable to resolve shop" }, { status: 400 });
-  const settings = await (prisma as any).codAdvanceSettings.findFirst({ where: { shopId: resolved.id }, orderBy: { updatedAt: "desc" } });
-  return NextResponse.json({ ok: true, settings: settings ?? { enabled: false, fixedAdvanceAmountPaise: DEFAULT_COD_ADVANCE_AMOUNT_PAISE, currency: "INR", minOrderAmountPaise: null, maxOrderAmountPaise: null, policyText: null }, shopDomain: resolved.shopDomain });
+  try {
+    const resolved = await authenticatedShop(req);
+    const settings = await getCodAdvanceSettingsForShop(resolved.id, { audit: auditCodAdvance });
+    return NextResponse.json({ ok: true, settings });
+  } catch (error) { return errorResponse(error); }
 }
 
-export async function POST(req: NextRequest) {
-  const resolved = await shop(req);
-  if (!resolved.id) return NextResponse.json({ ok: false, error: "Unable to resolve shop" }, { status: 400 });
-  const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
-  if (!body) return NextResponse.json({ ok: false, error: "Invalid JSON payload" }, { status: 400 });
-  const fixed = rupeesToPaise(body.fixedAdvanceAmountRupees ?? (Number(body.fixedAdvanceAmountPaise) / 100));
-  const min = body.minOrderAmountRupees === "" || body.minOrderAmountRupees == null ? null : rupeesToPaise(body.minOrderAmountRupees);
-  const max = body.maxOrderAmountRupees === "" || body.maxOrderAmountRupees == null ? null : rupeesToPaise(body.maxOrderAmountRupees);
-  if (!fixed || fixed <= 0) return NextResponse.json({ ok: false, error: "Fixed advance amount must be greater than zero" }, { status: 400 });
-  if (min !== null && max !== null && min > max) return NextResponse.json({ ok: false, error: "Minimum order value cannot exceed maximum order value" }, { status: 400 });
-  const existing = await (prisma as any).codAdvanceSettings.findFirst({ where: { shopId: resolved.id }, orderBy: { updatedAt: "desc" } });
-  const data = { shopId: resolved.id, enabled: Boolean(body.enabled), fixedAdvanceAmountPaise: fixed, currency: String(body.currency || "INR").trim() || "INR", minOrderAmountPaise: min, maxOrderAmountPaise: max, policyText: String(body.policyText || "").trim() || null };
-  const settings = existing ? await (prisma as any).codAdvanceSettings.update({ where: { id: existing.id }, data }) : await (prisma as any).codAdvanceSettings.create({ data });
-  await auditCodAdvance("cod_advance.settings.updated", "CodAdvanceSettings", settings.id, { shopId: resolved.id });
-  return NextResponse.json({ ok: true, settings });
+export async function PUT(req: NextRequest) {
+  try {
+    const resolved = await authenticatedShop(req);
+    const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
+    if (!body) throw new CodAdvanceSettingsValidationError(["Invalid JSON payload"]);
+    const settings = await updateCodAdvanceSettingsForShop({ shopId: resolved.id, ...editableFields(body) }, { audit: auditCodAdvance });
+    return NextResponse.json({ ok: true, settings });
+  } catch (error) { return errorResponse(error); }
 }
+
+export const POST = PUT;
