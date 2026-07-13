@@ -1,5 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { resolveExpressCheckoutCodPolicy, type CodPolicyDto } from "./resolver.ts";
+import {
+  resolveExpressCheckoutCodPolicy,
+  type CodPolicyDto,
+} from "./resolver";
 
 export type CodAdvanceRazorpayOrderInput = { shopId: string; shopDomain: string; checkoutIntentId: string; customerProfileId: string };
 export type CodAdvanceRazorpayOrderOutput = {
@@ -60,7 +63,7 @@ async function createProviderOrder(input: CodAdvanceRazorpayOrderInput, cod: any
 }
 
 export async function createCodAdvanceRazorpayOrder(input: CodAdvanceRazorpayOrderInput, deps: Deps = {}): Promise<CodAdvanceRazorpayOrderOutput> {
-  const db: any = deps.db || (await import("../db/prisma.ts")).prisma; const now = deps.now?.() || new Date(); const resolvePolicy = deps.resolvePolicy || resolveExpressCheckoutCodPolicy;
+  const db: any = deps.db || (await import("../db/prisma")).prisma; const now = deps.now?.() || new Date(); const resolvePolicy = deps.resolvePolicy || resolveExpressCheckoutCodPolicy;
   const policy = await resolvePolicy(input, db, { audit: deps.audit });
   const first = await loadAndValidate(db, input, policy, now);
   const fresh = await db.codAdvanceIntent.findFirst({ where: { id: first.cod.id, shopId: input.shopId }, select: { pricingFingerprint: true, settingsVersion: true, advanceAmountPaise: true, codBalanceAmountPaise: true } });
