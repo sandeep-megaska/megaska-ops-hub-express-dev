@@ -1,6 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { prisma } from "../db/prisma";
-import { auditCodAdvance, getLatestCodAdvanceSettings } from "./core";
+import type { prisma } from "../db/prisma";
 import { calculateCodAdvancePolicy } from "./policy";
 import { createCodAdvancePricingFingerprint } from "./fingerprint";
 
@@ -48,16 +47,15 @@ function minDate(a: Date | null | undefined, b: Date) {
   return a && a < b ? a : b;
 }
 
-function isPaidOrLinked(intent: { status: string; paidAt?: Date | null; consumedAt?: Date | null; shopifyOrderId?: string | null }) {
-  return Boolean(intent.paidAt || intent.consumedAt || intent.shopifyOrderId || ["ADVANCE_PAID", "ORDER_LINKED"].includes(intent.status));
+function isPaidOrLinked(intent: { status: string; paidAt?: Date | null; consumedAt?: Date | null; shopifyOrderId?: string | null; shopifyOrderName?: string | null }) {
+  return Boolean(intent.paidAt || intent.consumedAt || intent.shopifyOrderId || intent.shopifyOrderName || ["ADVANCE_PAID", "ORDER_LINKED"].includes(intent.status));
 }
 
 async function readActiveWalletReservation(db: ResolverDb, input: { shopId: string; customerProfileId: string; checkoutReference: string; cartReference: string }, audit: (eventType: string, entityType: string, entityId: string | null, payload?: unknown) => Promise<unknown>) {
   const now = new Date();
-  const or = [
-    input.checkoutReference ? { checkoutReference: input.checkoutReference } : null,
-    input.cartReference ? { cartReference: input.cartReference } : null,
-  ].filter(Boolean) as Array<Record<string, string>>;
+  const or: Array<{ checkoutReference: string } | { cartReference: string }> = [];
+  if (input.checkoutReference) or.push({ checkoutReference: input.checkoutReference });
+  if (input.cartReference) or.push({ cartReference: input.cartReference });
 
   if (!or.length) return null;
 
@@ -81,7 +79,9 @@ export type CodPolicyResolverDeps = {
   audit?: (eventType: string, entityType: string, entityId: string | null, payload?: unknown) => Promise<unknown>;
 };
 
-export async function resolveExpressCheckoutCodPolicy(input: ResolveInput, db: ResolverDb = prisma, deps: CodPolicyResolverDeps = {}): Promise<CodPolicyDto> {
+export async function resolveExpressCheckoutCodPolicy(input: ResolveInput, db?: ResolverDb, deps: CodPolicyResolverDeps = {}): Promise<CodPolicyDto> {
+  const [{ auditCodAdvance, getLatestCodAdvanceSettings }, defaultDb] = await Promise.all([import("./core"), db ? Promise.resolve(db) : import("../db/prisma").then((mod) => mod.prisma)]);
+  db = defaultDb;
   const getSettings = deps.getLatestSettings || getLatestCodAdvanceSettings;
   const audit = deps.audit || auditCodAdvance;
   const now = new Date();
@@ -155,7 +155,7 @@ export async function resolveExpressCheckoutCodPolicy(input: ResolveInput, db: R
     for (const stale of existing) {
       if (["CREATED", "PAYMENT_PENDING"].includes(stale.status) && !isPaidOrLinked(stale)) {
         const status = stale.expiresAt && stale.expiresAt <= now ? "EXPIRED" : "CANCELLED";
-        await (db as any).codAdvanceIntent.updateMany({ where: { id: stale.id, shopId: input.shopId, status: stale.status }, data: { status } });
+        await (db as any).codAdvanceIntent.updateMany({ where: { id: stale.id, shopId: input.shopId, status: stale.status, paidAt: null, consumedAt: null, shopifyOrderId: null, shopifyOrderName: null }, data: { status } });
         await audit("cod_advance.intent.stale_cancelled", "CodAdvanceIntent", stale.id, { shopId: input.shopId, expressCheckoutIntentId: intent.id, status });
       }
     }
