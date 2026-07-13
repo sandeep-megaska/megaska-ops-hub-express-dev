@@ -1005,10 +1005,29 @@ function renderStoreCreditOrderPanel() {
     if (method !== "COD" && isInlinePaymentUnavailableMessage(state.inlinePaymentError)) {
       return `<div class="megaska-express-inline-panel"><div class="megaska-express-inline-panel-head"><div><span>Selected method</span><h4>${escapeHtml(title)}</h4></div><button type="button" data-express-action="change-payment-method">Change payment method</button></div><div class="megaska-express-inline-fields"><p class="megaska-express-inline-error" data-express-inline-error>Inline payment is not available right now.</p><p class="megaska-express-secure-note">Continue with Razorpay’s secure hosted checkout to complete this payment.</p></div><button class="megaska-otp-primary-btn" type="button" data-express-action="standard-razorpay" ${busy ? "disabled" : ""}>${busy ? "Opening..." : "Continue with secure Razorpay Checkout"}</button></div>`;
     }
-    const codDisabled = method === "COD" && (cod.loadingPolicy || (cod.policyLoaded && (!cod.available || !cod.eligible)) || (cod.requiresAdvance && !cod.verified && (cod.advanceAmountPaise <= 0 || cod.preventDuplicatePayment)));
+    const codDisabled = method === "COD" && (
+      cod.loadingPolicy ||
+      !cod.policyLoaded ||
+      !cod.available ||
+      !cod.eligible ||
+      (
+        cod.requiresAdvance &&
+        !cod.verified &&
+        (
+          cod.advanceAmountPaise <= 0 ||
+          cod.preventDuplicatePayment
+        )
+      )
+    );
+    const paymentMethodLocked = method === "COD" && (
+      cod.verified ||
+      cod.resumeAction === "CREATE_PARTIAL_COD_ORDER" ||
+      cod.preventDuplicatePayment
+    );
+    const changePaymentMethodButton = paymentMethodLocked ? "" : `<button type="button" data-express-action="change-payment-method">Change payment method</button>`;
     const buttonAction = method === "COD" && cod.verified ? " data-express-action=\"resume-partial-cod-order\"" : "";
     const buttonLabel = method === "COD" && cod.verified ? "Continue to confirm order" : (busy ? "Processing..." : escapeHtml(submit));
-    return `<form data-express-form="inline-payment" data-inline-method="${escapeHtml(method)}" class="megaska-express-inline-panel"><div class="megaska-express-inline-panel-head"><div><span>Selected method</span><h4>${escapeHtml(title)}</h4></div><button type="button" data-express-action="change-payment-method">Change payment method</button></div>${error}<div class="megaska-express-inline-fields">${fields}</div><button class="megaska-otp-primary-btn" type="${method === "COD" && cod.verified ? "button" : "submit"}"${buttonAction} ${busy || codDisabled ? "disabled aria-disabled=\"true\"" : ""}>${buttonLabel}</button>${method !== "COD" ? `<button class="megaska-express-fallback-btn" type="button" data-express-action="standard-razorpay" hidden>Continue with secure Razorpay Checkout</button>` : ""}</form>`;
+    return `<form data-express-form="inline-payment" data-inline-method="${escapeHtml(method)}" class="megaska-express-inline-panel"><div class="megaska-express-inline-panel-head"><div><span>Selected method</span><h4>${escapeHtml(title)}</h4></div>${changePaymentMethodButton}</div>${error}<div class="megaska-express-inline-fields">${fields}</div><button class="megaska-otp-primary-btn" type="${method === "COD" && cod.verified ? "button" : "submit"}"${buttonAction} ${busy || codDisabled ? "disabled aria-disabled=\"true\"" : ""}>${buttonLabel}</button>${method !== "COD" ? `<button class="megaska-express-fallback-btn" type="button" data-express-action="standard-razorpay" hidden>Continue with secure Razorpay Checkout</button>` : ""}</form>`;
   }
 
   function codAdvanceBreakdownRow(label, value, emphasize) {
@@ -1458,11 +1477,37 @@ function renderStoreCreditOrderPanel() {
       throw new Error("COD unavailable for this pincode");
     }
     if (state.paymentInProgress) return;
+    const cod = codAdvanceState();
+    if (method === "COD") {
+      if (cod.loadingPolicy) {
+        cod.error = "Cash on Delivery options are still loading. Please wait.";
+        renderPaymentSectionOnly();
+        return;
+      }
+
+      if (!cod.policyLoaded) {
+        cod.error = "Cash on Delivery options could not be confirmed. Please retry.";
+        loadCodPolicy("submit_retry");
+        renderPaymentSectionOnly();
+        return;
+      }
+
+      if (!cod.available || !cod.eligible) {
+        cod.error =
+          cod.customerMessage ||
+          "Cash on Delivery is not available for this checkout.";
+        renderPaymentSectionOnly();
+        return;
+      }
+
+      if (cod.requiresAdvance) {
+        return startCodAdvancePayment();
+      }
+    }
     const submitStartedAt = perfNow();
     const remainingPayable = remainingBasePayablePaise();
     const branch = remainingPayable <= 0 ? "STORE_CREDIT_ONLY" : (method === "COD" ? "COD" : "RAZORPAY");
     logCheckoutSubmitBranch(method, branch);
-    if (method === "COD" && codAdvanceState().requiresAdvance) return startCodAdvancePayment();
     if (branch === "RAZORPAY") validateInlinePayment(method, formData);
     state.paymentInProgress = true; state.orderSubmitting = true; state.busy = true; state.paymentStarted = branch === "RAZORPAY"; state.inlinePaymentError = ""; renderPaymentSectionOnly();
     try {
@@ -1624,7 +1669,10 @@ function renderStoreCreditOrderPanel() {
     try {
       if (action === "retry") await open({});
       if (action === "change-address") { state.editingAddress = true; state.addressSavedForIntentId = null; render(); }
-      if (action === "change-payment-method") { state.inlinePaymentMode = false; state.inlinePaymentError = ""; renderPaymentSectionOnly(); }
+      if (action === "change-payment-method") {
+        if (codAdvanceState().verified || codAdvanceState().resumeAction === "CREATE_PARTIAL_COD_ORDER" || codAdvanceState().preventDuplicatePayment) return;
+        state.inlinePaymentMode = false; state.inlinePaymentError = ""; renderPaymentSectionOnly();
+      }
       if (action === "standard-razorpay") await openStandardRazorpayFallback();
       if (action === "apply-store-credit") await applyStoreCredit();
       if (action === "release-store-credit") await releaseStoreCredit();
