@@ -1088,9 +1088,9 @@ function renderStoreCreditOrderPanel() {
     const rows = [
       codAdvanceBreakdownRow("Order total", money(cod.orderTotalPaise, cod.currency)),
       cod.storeCreditAppliedPaise > 0 ? codAdvanceBreakdownRow("Store Credit", `- ${money(cod.storeCreditAppliedPaise, cod.currency)}`) : "",
-      codAdvanceBreakdownRow("Amount payable by customer", money(cod.customerCashLiabilityPaise, cod.currency), true),
-      codAdvanceBreakdownRow("Pay now to confirm", money(cod.advanceAmountPaise, cod.currency), true),
-      codAdvanceBreakdownRow("Pay on delivery", money(cod.codBalanceAmountPaise, cod.currency), true),
+      codAdvanceBreakdownRow("Amount payable by customer  : ", money(cod.customerCashLiabilityPaise, cod.currency), true),
+      codAdvanceBreakdownRow("Pay now to confirm  : ", money(cod.advanceAmountPaise, cod.currency), true),
+      codAdvanceBreakdownRow("Pay on delivery  : ", money(cod.codBalanceAmountPaise, cod.currency), true),
     ].join("");
     const message = cod.customerMessage || cod.policyText || "A small online advance is required to confirm this Cash on Delivery order.";
     return `<div class="megaska-express-cod-confirm megaska-express-cod-advance" aria-live="polite"><strong>${escapeHtml(cod.customerTitle || "Confirm Cash on Delivery")}</strong><div class="megaska-express-cod-advance-breakdown">${rows}</div><p>${escapeHtml(message)}</p>${cod.error ? `<p class="megaska-express-inline-error" data-express-inline-error tabindex="-1">${escapeHtml(cod.error)}</p>` : ""}</div>`;
