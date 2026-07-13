@@ -11,3 +11,5 @@ export * from "./shop.ts";
 export * from "./orders.ts";
 export * from "./status.ts";
 export * from "./legacy.ts";
+export * from "./validate.ts";
+export * from "./date.ts";
