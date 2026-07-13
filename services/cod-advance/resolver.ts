@@ -1,8 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { prisma } from "../db/prisma";
-import { auditCodAdvance, getLatestCodAdvanceSettings } from "./core";
-import { calculateCodAdvancePolicy } from "./policy";
-import { createCodAdvancePricingFingerprint } from "./fingerprint";
+import type { prisma } from "../db/prisma";
+import { calculateCodAdvancePolicy } from "./policy.ts";
+import { createCodAdvancePricingFingerprint } from "./fingerprint.ts";
 
 type ResolverDb = typeof prisma;
 
@@ -57,7 +56,7 @@ async function readActiveWalletReservation(db: ResolverDb, input: { shopId: stri
   const or = [
     input.checkoutReference ? { checkoutReference: input.checkoutReference } : null,
     input.cartReference ? { cartReference: input.cartReference } : null,
-  ].filter(Boolean) as Array<Record<string, string>>;
+  ].filter(Boolean) as unknown as Array<Record<string, string>>;
 
   if (!or.length) return null;
 
@@ -81,9 +80,12 @@ export type CodPolicyResolverDeps = {
   audit?: (eventType: string, entityType: string, entityId: string | null, payload?: unknown) => Promise<unknown>;
 };
 
-export async function resolveExpressCheckoutCodPolicy(input: ResolveInput, db: ResolverDb = prisma, deps: CodPolicyResolverDeps = {}): Promise<CodPolicyDto> {
-  const getSettings = deps.getLatestSettings || getLatestCodAdvanceSettings;
-  const audit = deps.audit || auditCodAdvance;
+export async function resolveExpressCheckoutCodPolicy(input: ResolveInput, db?: ResolverDb, deps: CodPolicyResolverDeps = {}): Promise<CodPolicyDto> {
+  const defaultCore = async () => import("./core.ts");
+  const resolvedDb = db || (await import("../db/prisma.ts")).prisma;
+  const getSettings = deps.getLatestSettings || (await defaultCore()).getLatestCodAdvanceSettings;
+  const audit = deps.audit || (await defaultCore()).auditCodAdvance;
+  db = resolvedDb;
   const now = new Date();
   const intent = await (db as any).expressCheckoutIntent.findFirst({
     where: { id: input.checkoutIntentId },
@@ -93,7 +95,21 @@ export async function resolveExpressCheckoutCodPolicy(input: ResolveInput, db: R
   if (!intent || intent.shopId !== input.shopId) throw new CodPolicyResolverError(404, "Intent not found");
   if (intent.customerProfileId !== input.customerProfileId) throw new CodPolicyResolverError(404, "Intent not found");
   if (intent.expiresAt && intent.expiresAt <= now) throw new CodPolicyResolverError(409, "Intent expired");
-  if (["ORDER_CREATED", "ORDER_COMPLETED", "CANCELLED", "EXPIRED", "ABANDONED"].includes(intent.status)) throw new CodPolicyResolverError(409, "Intent cannot be used for COD policy");
+  const allowedCheckoutStatuses = new Set([
+    "CREATED",
+    "CUSTOMER_AUTHENTICATED",
+    "CART_SNAPSHOT_LOCKED",
+    "ADDRESS_CAPTURED",
+    "DISCOUNT_APPLIED",
+    "PAYMENT_METHOD_SELECTED",
+    "INITIATED",
+    "SESSION_VERIFIED",
+    "ADDRESS_COMPLETED",
+    "DELIVERY_VALIDATED",
+    "COUPON_APPLIED",
+    "PAYMENT_SELECTED",
+  ]);
+  if (!allowedCheckoutStatuses.has(intent.status)) throw new CodPolicyResolverError(409, "Intent cannot be used for COD policy");
   if (intent.selectedPaymentMethod === "PREPAID") throw new CodPolicyResolverError(409, "Intent selected payment method is PREPAID");
 
   const settings = await getSettings(input.shopId);
@@ -113,6 +129,12 @@ export async function resolveExpressCheckoutCodPolicy(input: ResolveInput, db: R
     orderTotalPaise: intent.totalAmountPaise,
     storeCreditAppliedPaise,
   });
+
+  if (!policy.available || !policy.eligible || !policy.requiresAdvance) {
+    await audit("cod_advance.policy.resolved", "ExpressCheckoutIntent", intent.id, { shopId: input.shopId, codAdvanceIntentId: null, available: policy.available, eligible: policy.eligible, requiresAdvance: policy.requiresAdvance });
+
+    return { available: policy.available, eligible: policy.eligible, requiresAdvance: policy.requiresAdvance, reasons: policy.reasons, paymentMode: "COD", orderTotalPaise: policy.orderTotalPaise, storeCreditAppliedPaise: policy.storeCreditAppliedPaise, customerCashLiabilityPaise: policy.customerCashLiabilityPaise, advanceAmountPaise: policy.advanceAmountPaise, codBalanceAmountPaise: policy.codBalanceAmountPaise, currency: intent.currency || settings.currency || "INR", customerTitle: settings.customerTitle, customerMessage: settings.customerMessage, policyText: settings.policyText, codAdvanceIntentId: null, expiresAt: intent.expiresAt ? intent.expiresAt.toISOString() : null };
+  }
 
   const pricingFingerprint = createCodAdvancePricingFingerprint({
     shopId: input.shopId,
@@ -140,27 +162,39 @@ export async function resolveExpressCheckoutCodPolicy(input: ResolveInput, db: R
   });
 
   const expiresAt = minDate(intent.expiresAt, addMinutes(now, 15));
-  const existing = await (db as any).codAdvanceIntent.findMany({
-    where: { shopId: input.shopId, expressCheckoutIntentId: intent.id, customerProfileId: input.customerProfileId },
-    orderBy: { createdAt: "desc" },
-    take: 10,
-  });
+  const runLifecycle = async (tx: ResolverDb) => {
+    const existing = await (tx as any).codAdvanceIntent.findMany({
+      where: { shopId: input.shopId, expressCheckoutIntentId: intent.id, customerProfileId: input.customerProfileId },
+      orderBy: { createdAt: "desc" },
+      take: 10,
+    });
 
-  const reusable = existing.find((candidate: any) => ["CREATED", "PAYMENT_PENDING"].includes(candidate.status) && !candidate.consumedAt && !candidate.paidAt && (!candidate.expiresAt || candidate.expiresAt > now) && candidate.pricingFingerprint === pricingFingerprint && candidate.settingsVersion === settings.version && candidate.advanceAmountPaise === policy.advanceAmountPaise && candidate.codBalanceAmountPaise === policy.codBalanceAmountPaise);
+    const reusable = existing.find((candidate: any) => ["CREATED", "PAYMENT_PENDING"].includes(candidate.status) && !candidate.consumedAt && !candidate.paidAt && !candidate.shopifyOrderId && (!candidate.expiresAt || candidate.expiresAt > now) && candidate.pricingFingerprint === pricingFingerprint && candidate.settingsVersion === settings.version && candidate.advanceAmountPaise === policy.advanceAmountPaise && candidate.codBalanceAmountPaise === policy.codBalanceAmountPaise && candidate.customerProfileId === input.customerProfileId && candidate.shopId === input.shopId && candidate.expressCheckoutIntentId === intent.id);
 
-  let codAdvanceIntent = reusable || null;
-  if (codAdvanceIntent) {
-    await audit("cod_advance.intent.reused", "CodAdvanceIntent", codAdvanceIntent.id, { shopId: input.shopId, expressCheckoutIntentId: intent.id });
-  } else {
+    if (reusable) return { codAdvanceIntent: reusable, staleEvents: [] as Array<{ id: string; status: string }>, reused: true };
+
+    const staleEvents: Array<{ id: string; status: string }> = [];
     for (const stale of existing) {
       if (["CREATED", "PAYMENT_PENDING"].includes(stale.status) && !isPaidOrLinked(stale)) {
         const status = stale.expiresAt && stale.expiresAt <= now ? "EXPIRED" : "CANCELLED";
-        await (db as any).codAdvanceIntent.updateMany({ where: { id: stale.id, shopId: input.shopId, status: stale.status }, data: { status } });
-        await audit("cod_advance.intent.stale_cancelled", "CodAdvanceIntent", stale.id, { shopId: input.shopId, expressCheckoutIntentId: intent.id, status });
+        await (tx as any).codAdvanceIntent.updateMany({ where: { id: stale.id, shopId: input.shopId, status: stale.status }, data: { status } });
+        staleEvents.push({ id: stale.id, status });
       }
     }
 
-    codAdvanceIntent = await (db as any).codAdvanceIntent.create({ data: { shopId: input.shopId, customerProfileId: input.customerProfileId, cartReference: intent.cartToken || intent.shopifyCartId || null, checkoutReference: intent.id, expressCheckoutIntentId: intent.id, settingsId: settings.id, settingsVersion: settings.version, advanceType: settings.advanceType, advanceValueSnapshot: settings.advanceType === "FIXED" ? settings.fixedAdvanceAmountPaise : settings.percentageBasisPoints, pricingFingerprint, cartFingerprint: intent.shopifyCartId || intent.cartToken || null, merchandiseAmountPaise: intent.subtotalAmountPaise, shopifyDiscountAmountPaise: intent.discountAmountPaise, shippingAmountPaise: intent.shippingAmountPaise, codFeeAmountPaise: intent.codFeeAmountPaise, storeCreditAppliedPaise, customerCashLiabilityPaise: policy.customerCashLiabilityPaise, orderAmountPaise: policy.orderTotalPaise, advanceAmountPaise: policy.advanceAmountPaise, codBalanceAmountPaise: policy.codBalanceAmountPaise, currency: intent.currency, expiresAt } });
+    const codAdvanceIntent = await (tx as any).codAdvanceIntent.create({ data: { shopId: input.shopId, customerProfileId: input.customerProfileId, cartReference: intent.cartToken || intent.shopifyCartId || null, checkoutReference: intent.id, expressCheckoutIntentId: intent.id, settingsId: settings.id, settingsVersion: settings.version, advanceType: settings.advanceType, advanceValueSnapshot: settings.advanceType === "FIXED" ? settings.fixedAdvanceAmountPaise : settings.percentageBasisPoints, pricingFingerprint, cartFingerprint: intent.shopifyCartId || intent.cartToken || null, merchandiseAmountPaise: intent.subtotalAmountPaise, shopifyDiscountAmountPaise: intent.discountAmountPaise, shippingAmountPaise: intent.shippingAmountPaise, codFeeAmountPaise: intent.codFeeAmountPaise, storeCreditAppliedPaise, customerCashLiabilityPaise: policy.customerCashLiabilityPaise, orderAmountPaise: policy.orderTotalPaise, advanceAmountPaise: policy.advanceAmountPaise, codBalanceAmountPaise: policy.codBalanceAmountPaise, currency: intent.currency, expiresAt } });
+    return { codAdvanceIntent, staleEvents, reused: false };
+  };
+
+  const lifecycle = typeof (db as any).$transaction === "function" ? await (db as any).$transaction((tx: ResolverDb) => runLifecycle(tx)) : await runLifecycle(db);
+  const codAdvanceIntent = lifecycle.codAdvanceIntent;
+
+  if (lifecycle.reused) {
+    await audit("cod_advance.intent.reused", "CodAdvanceIntent", codAdvanceIntent.id, { shopId: input.shopId, expressCheckoutIntentId: intent.id });
+  } else {
+    for (const stale of lifecycle.staleEvents) {
+      await audit("cod_advance.intent.stale_cancelled", "CodAdvanceIntent", stale.id, { shopId: input.shopId, expressCheckoutIntentId: intent.id, status: stale.status });
+    }
     await audit("cod_advance.intent.created", "CodAdvanceIntent", codAdvanceIntent.id, { shopId: input.shopId, expressCheckoutIntentId: intent.id });
   }
 
