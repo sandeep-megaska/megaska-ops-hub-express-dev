@@ -6,3 +6,8 @@ export * from "./customer.ts";
 export * from "./commerce.ts";
 export * from "./tracking.ts";
 export * from "./wallet.ts";
+export * from "./modules.ts";
+export * from "./shop.ts";
+export * from "./orders.ts";
+export * from "./status.ts";
+export * from "./legacy.ts";
