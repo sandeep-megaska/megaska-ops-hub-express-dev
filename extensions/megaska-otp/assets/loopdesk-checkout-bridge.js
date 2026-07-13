@@ -3,6 +3,7 @@
   var FALLBACK_URL = "/apps/megaska/checkout";
   var MARKER = "__LOOPDESK_CHECKOUT_BRIDGE_LOADED__";
   var API_NAME = "LoopDeskCheckoutBridge";
+  var DRAWER_RESUME_KEY = "loopdesk_drawer_resume_express_checkout";
 
   if (window[MARKER] && window[API_NAME]) return;
   window[MARKER] = true;
@@ -92,6 +93,50 @@
     return sameOriginPath(action, '/checkout') || sameOriginPath(action, '/cart');
   }
 
+  function hasMegaskaSessionToken() {
+    try {
+      return Boolean(String(window.localStorage.getItem('megaska_session_token') || '').trim());
+    } catch (_error) {
+      return false;
+    }
+  }
+
+  function setDrawerResumeFlag() {
+    try { window.sessionStorage.setItem(DRAWER_RESUME_KEY, '1'); } catch (_error) {}
+  }
+
+  function clearDrawerResumeFlag() {
+    try { window.sessionStorage.removeItem(DRAWER_RESUME_KEY); } catch (_error) {}
+  }
+
+  function hasDrawerResumeFlag() {
+    try { return window.sessionStorage.getItem(DRAWER_RESUME_KEY) === '1'; } catch (_error) { return false; }
+  }
+
+  function closeLoopDeskDrawer() {
+    var closeButton = document.querySelector('#loopdesk-cart-drawer-root .loopdesk-cart-drawer__close');
+    if (closeButton && typeof closeButton.click === 'function') closeButton.click();
+  }
+
+  function openDrawerOtp() {
+    var returnTo = window.location.pathname + window.location.search + window.location.hash;
+    try {
+      if (window.MegaskaAuth && typeof window.MegaskaAuth.openOtpModal === 'function') {
+        window.MegaskaAuth.openOtpModal({ returnTo: returnTo });
+        return true;
+      }
+      if (window.MegaskaAuth && typeof window.MegaskaAuth.openAuthModal === 'function') {
+        window.MegaskaAuth.openAuthModal({ returnTo: returnTo });
+        return true;
+      }
+      if (window.MegaskaOtp && typeof window.MegaskaOtp.openModal === 'function') {
+        window.MegaskaOtp.openModal('checkout');
+        return true;
+      }
+    } catch (_error) {}
+    return false;
+  }
+
   function open(reason) {
     if (lock) return;
     lock = true;
@@ -99,7 +144,7 @@
     state.lastReason = reason || SOURCE;
     window.setTimeout(function () { lock = false; }, 900);
     if (window.MegaskaExpressCheckout && typeof window.MegaskaExpressCheckout.open === 'function') {
-      window.MegaskaExpressCheckout.open({ source: SOURCE });
+      window.MegaskaExpressCheckout.open({ source: reason || SOURCE });
       return;
     }
     state.fallbacks += 1;
@@ -112,6 +157,33 @@
     if (event.stopImmediatePropagation) event.stopImmediatePropagation();
     open(reason);
   }
+
+  document.addEventListener('click', function (event) {
+    var drawerCheckout = closest(event.target, '#loopdesk-cart-drawer-root [data-loopdesk-express-checkout]');
+    if (!drawerCheckout || hasMegaskaSessionToken()) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+
+    state.clicks += 1;
+    state.lastReason = 'drawer-otp-required';
+    setDrawerResumeFlag();
+    closeLoopDeskDrawer();
+
+    if (!openDrawerOtp()) {
+      clearDrawerResumeFlag();
+      state.lastReason = 'drawer-otp-bridge-missing';
+      if (window.console) window.console.warn('[LoopDesk Checkout] OTP bridge unavailable for cart drawer checkout');
+    }
+  }, true);
+
+  document.addEventListener('megaska:auth-state-changed', function () {
+    if (!hasDrawerResumeFlag() || !hasMegaskaSessionToken()) return;
+    clearDrawerResumeFlag();
+    closeLoopDeskDrawer();
+    window.setTimeout(function () { open('loopdesk-cart-drawer-auth-resume'); }, 250);
+  });
 
   document.addEventListener('click', function (event) {
     var control = findCheckoutControl(event.target);
@@ -139,6 +211,7 @@
       return {
         loaded: window[MARKER] === true,
         modalApiPresent: Boolean(window.MegaskaExpressCheckout && typeof window.MegaskaExpressCheckout.open === 'function'),
+        drawerResumePending: hasDrawerResumeFlag(),
         clicks: state.clicks,
         submits: state.submits,
         opened: state.opened,
