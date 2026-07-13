@@ -467,10 +467,12 @@
   }
 
   async function ensurePaymentMethod(method) {
+    let response = null;
     if (state.intent?.selectedPaymentMethod !== method) {
-      await apiFetch(`/express/checkout/intents/${encodeURIComponent(state.intentId)}/payment-method`, { method: "POST", body: { method } });
+      response = await apiFetch(`/express/checkout/intents/${encodeURIComponent(state.intentId)}/payment-method`, { method: "POST", body: { method } });
     }
-    await refreshIntent();
+    if (response?.intent) state.intent = response.intent;
+    else await refreshIntent();
     state.optimisticPaymentMethod = null;
     if (state.intent?.selectedPaymentMethod !== method) throw new Error("Could not update payment method. Please try again.");
   }
