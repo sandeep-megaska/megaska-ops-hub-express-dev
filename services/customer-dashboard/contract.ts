@@ -56,7 +56,11 @@ export type DashboardRequestPaymentDto = { status: string; amountPaise: number; 
 export type DashboardProgressStepDto = { key: string; label: string; state: "COMPLETED" | "PENDING" };
 export type DashboardExchangeRequestDto = { id: string; statusCode: string; statusLabel: string; requestedAt: string; payment: DashboardRequestPaymentDto | null; reverseShipment: DashboardShipmentDto | null; replacementShipment: DashboardShipmentDto | null; progress: DashboardProgressStepDto[] };
 export type DashboardOrderRequestsDto = { cancellation: DashboardRequestSummaryDto | null; exchange: DashboardExchangeRequestDto | null; issue: DashboardRequestSummaryDto | null };
+export type DashboardOrderRequestTimelineRequestType = "CANCELLATION" | "EXCHANGE" | "ISSUE";
+export type DashboardOrderRequestTimelineEventDto = { id: string; label: string; occurredAt: string };
+export type DashboardOrderRequestTimelineItemDto = { id: string; requestType: DashboardOrderRequestTimelineRequestType; requestId: string; createdAt: string; updatedAt: string; currentStatus: string; statusLabel: string; title: string; subtitle: string; events: DashboardOrderRequestTimelineEventDto[] };
+export type DashboardOrderRequestTimelineDto = DashboardOrderRequestTimelineItemDto[];
 
-export type DashboardOrderDto = { id: string; shopifyOrderId: string | null; orderNumber: string; createdAt: string; processedAt: string | null; currency: string; amounts: DashboardOrderAmountsDto; financialStatus: DashboardStatusDto; fulfillmentStatus: DashboardStatusDto; itemCount: number; items: DashboardOrderItemDto[]; tracking: DashboardTrackingDto; actions: DashboardOrderActionsDto; requests: DashboardOrderRequestsDto; payment: DashboardPaymentSummaryDto };
+export type DashboardOrderDto = { id: string; shopifyOrderId: string | null; orderNumber: string; createdAt: string; processedAt: string | null; currency: string; amounts: DashboardOrderAmountsDto; financialStatus: DashboardStatusDto; fulfillmentStatus: DashboardStatusDto; itemCount: number; items: DashboardOrderItemDto[]; tracking: DashboardTrackingDto; actions: DashboardOrderActionsDto; requests: DashboardOrderRequestsDto; timeline: DashboardOrderRequestTimelineDto; payment: DashboardPaymentSummaryDto };
 
 export type DashboardModulesDto = { wallet: boolean; cancellation: boolean; exchange: boolean; issueReporting: boolean; shipmentTracking: boolean; partialCod: boolean; loyalty: boolean; memberships: boolean; referrals: boolean };
