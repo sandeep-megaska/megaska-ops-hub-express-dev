@@ -34,3 +34,15 @@ Issue attachments are represented as upload tokens only. Raw uploads, base64 dat
 ## Transaction rules and limitations
 
 The preferred transaction boundary is conflict recheck → idempotency check → request creation → audit association. The existing schema lacks durable idempotency storage, so no Prisma migration was added in DASH-4A. Next phase should add durable idempotency association or reuse an approved domain metadata field if one is introduced.
+
+## DASH-4B cancellation adapter
+
+Cancellation is wired through the generic action framework. The form-config route returns server-owned cancellation reason options only when the current policy is `AVAILABLE`; locked responses include a customer-safe lock reason and no submit fields. The generic action POST route validates JSON, body size, OTP context, opaque order ownership, action policy, idempotency, and safe error mapping before invoking the cancellation handler.
+
+Cancellation payload shape:
+
+```ts
+{ reasonCode: CancellationReasonCode; reasonText?: string | null }
+```
+
+The handler persists through the existing cancellation `OrderActionRequest` lifecycle and returns a normalized success result with `nextAction.type = "REFRESH_DASHBOARD"`.
