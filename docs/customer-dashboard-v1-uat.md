@@ -43,3 +43,7 @@ Action submission flows and app-owned dashboard UI are not production-certified 
 - Duplicate dashboard blocks do not create competing dashboard roots.
 - Legacy Megaska dashboard remains functional until merchant-approved removal.
 - Theme App Extension changes require `shopify app deploy`; Vercel deployment alone is insufficient unless server/runtime code also changes.
+
+## DASH-3C settings and branding UAT
+
+Verify admin settings persist per shop, neutral defaults appear for shops without saved config, branding CSS variables render in the app-owned shell, hidden sections remain hidden, disabled dashboards do not expose customer data, launcher/mount presentation overrides do not enable server-hidden modules, support/continue-shopping/logout links are safe, “Show more” respects the configured initial order limit, and mobile layout remains usable. Deploy server changes to Vercel and Theme App Extension asset/block changes with `shopify app deploy`.

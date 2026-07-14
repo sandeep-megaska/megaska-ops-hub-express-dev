@@ -14,10 +14,12 @@
     try{var url=new URL(String(value),window.location.origin); return url.origin===window.location.origin && /^\//.test(url.pathname) && !/^\/\//.test(String(value));}catch{return false;}
   }
   function configFor(el){
-    var cfg=parseJson(el.querySelector("[data-loopdesk-account-launcher-config]"));
-    cfg.loggedOutLabel=String(cfg.loggedOutLabel||"Login");
-    cfg.loggedInLabel=String(cfg.loggedInLabel||"My Account");
-    cfg.dashboardUrl=normalizePath(cfg.dashboardUrl,"/apps/megaska/account");
+    var saved=window.LoopDeskCustomerDashboardConfig||{};
+    var cfg=Object.assign({}, saved, parseJson(el.querySelector("[data-loopdesk-account-launcher-config]")));
+    var branding=saved.branding||{}, copy=saved.copy||{};
+    cfg.loggedOutLabel=String(cfg.loggedOutLabel||copy.loginRequiredTitle||"Login");
+    cfg.loggedInLabel=String(cfg.loggedInLabel||branding.accountLabel||saved.accountLabel||"My Account");
+    cfg.dashboardUrl=normalizePath(cfg.dashboardUrl||(saved.links&&saved.links.dashboardUrl),"/apps/megaska/account");
     cfg.returnUrl=isSafeReturnPath(cfg.returnUrl)?normalizePath(cfg.returnUrl,cfg.dashboardUrl):cfg.dashboardUrl;
     cfg.openInSameTab=cfg.openInSameTab!==false;
     cfg.loginBehavior=String(cfg.loginBehavior||"modal");
@@ -55,6 +57,7 @@
   function navigate(cfg){ if(cfg.openInSameTab)window.location.assign(cfg.dashboardUrl); else window.open(cfg.dashboardUrl,"_blank","noopener,noreferrer"); }
   function bind(el){
     if(el.dataset.loopdeskLauncherBound==="1")return; el.dataset.loopdeskLauncherBound="1";
+    if((window.LoopDeskCustomerDashboardConfig||{}).enabled===false && el.dataset.loopdeskHideWhenDisabled==="true"){el.hidden=true;return;}
     var cfg=configFor(el); setState(el,"loading",cfg);
     el.addEventListener("click",async function(e){var action=e.target.closest&&e.target.closest("[data-loopdesk-account-launcher-action]"); if(!action)return; e.preventDefault(); var session=await resolveSession(); if(session&&session.authenticated)navigate(configFor(el)); else openLogin(configFor(el));});
     refresh(el);

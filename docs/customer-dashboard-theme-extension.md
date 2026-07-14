@@ -95,3 +95,7 @@ If server routes or runtime configuration also change in a later phase, deploy V
 ## Next phase
 
 DASH-3C — Merchant Dashboard Configuration & Branding.
+
+## DASH-3C settings and branding UAT
+
+Verify admin settings persist per shop, neutral defaults appear for shops without saved config, branding CSS variables render in the app-owned shell, hidden sections remain hidden, disabled dashboards do not expose customer data, launcher/mount presentation overrides do not enable server-hidden modules, support/continue-shopping/logout links are safe, “Show more” respects the configured initial order limit, and mobile layout remains usable. Deploy server changes to Vercel and Theme App Extension asset/block changes with `shopify app deploy`.
