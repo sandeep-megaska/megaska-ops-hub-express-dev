@@ -46,3 +46,7 @@ Cancellation payload shape:
 ```
 
 The handler persists through the existing cancellation `OrderActionRequest` lifecycle and returns a normalized success result with `nextAction.type = "REFRESH_DASHBOARD"`.
+
+## DASH-4C exchange action
+
+`EXCHANGE` is now wired to `services/customer-dashboard/actions/handlers/exchange.ts`. The framework keeps the payload strict, derives shop/customer/order/fee/status server-side, resolves idempotency before domain creation, and returns normalized `REFRESH_DASHBOARD` or `PAYMENT_REQUIRED` next actions. Exchange-specific audit events use the `customer_dashboard.exchange.*` namespace and omit free-text notes and payment credentials.

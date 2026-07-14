@@ -1,4 +1,4 @@
-import { CLEARANCE_KEYWORDS, EXCHANGE_ALLOWED_DAYS_WINDOW, EXCLUDED_CATEGORY_KEYWORDS } from "./constants";
+import { CLEARANCE_KEYWORDS, EXCHANGE_ALLOWED_DAYS_WINDOW, EXCLUDED_CATEGORY_KEYWORDS } from "./constants.ts";
 
 type EligibilityInput = {
   requestedSize: string;

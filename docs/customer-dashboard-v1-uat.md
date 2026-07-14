@@ -60,3 +60,12 @@ Security: verify Customer A cannot act on Customer B orders, Shop A sessions can
 - Conflict: create an active exchange or issue, verify cancellation is locked with a safe lock reason.
 - Session: expire OTP session before submit, verify 401/login-required handling and no request.
 - Refund/status: approve/reject in admin, refresh dashboard, verify API-provided cancellation/refund explanation renders without client-derived refund logic.
+
+## DASH-4C exchange UAT checklist
+
+- No-fee happy path: open a delivered eligible order, select item/replacement/reason, submit, verify one request, dashboard refresh, exchange progress, and admin visibility.
+- Fee-required happy path: submit, verify `AWAITING_PAYMENT`/payment-required handoff when applicable, complete Razorpay, verify server-side, refresh dashboard, and Fee Paid step.
+- Variant race: open form, make replacement unavailable, submit, expect safe validation and no request.
+- Window race: open near deadline, submit after expiry, expect `ACTION_NOT_AVAILABLE` and no request.
+- Duplicate/conflict: double-click or retry same key creates one request/payment; active cancellation or issue blocks exchange with a clear lock reason.
+- Deployment: backend/dashboard changes require Vercel deployment; extension asset changes require `shopify app deploy`; live Razorpay UAT may require live-store credentials.
