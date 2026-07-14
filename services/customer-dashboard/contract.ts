@@ -57,7 +57,8 @@ export type DashboardProgressStepDto = { key: string; label: string; state: "COM
 export type DashboardExchangeRequestDto = { id: string; statusCode: string; statusLabel: string; requestedAt: string; payment: DashboardRequestPaymentDto | null; reverseShipment: DashboardShipmentDto | null; replacementShipment: DashboardShipmentDto | null; progress: DashboardProgressStepDto[] };
 export type DashboardOrderRequestsDto = { cancellation: DashboardRequestSummaryDto | null; exchange: DashboardExchangeRequestDto | null; issue: DashboardRequestSummaryDto | null };
 export type DashboardOrderRequestTimelineRequestType = "CANCELLATION" | "EXCHANGE" | "ISSUE";
-export type DashboardOrderRequestTimelineEventDto = { id: string; label: string; occurredAt: string };
+export type DashboardOrderRequestTimelineEventType = "REQUEST_SUBMITTED" | "REQUEST_STATUS_CHANGED" | "PAYMENT_RECEIVED" | "PICKUP_SCHEDULED" | "RETURN_RECEIVED" | "STORE_CREDIT_ISSUED" | "REFUND_PROCESSING" | "REFUND_COMPLETED";
+export type DashboardOrderRequestTimelineEventDto = { id: string; type: DashboardOrderRequestTimelineEventType; label: string; occurredAt: string; amount?: { amountPaise: number; currency: string } | null };
 export type DashboardOrderRequestTimelineItemDto = { id: string; requestType: DashboardOrderRequestTimelineRequestType; requestId: string; createdAt: string; updatedAt: string; currentStatus: string; statusLabel: string; title: string; subtitle: string; events: DashboardOrderRequestTimelineEventDto[] };
 export type DashboardOrderRequestTimelineDto = DashboardOrderRequestTimelineItemDto[];
 
