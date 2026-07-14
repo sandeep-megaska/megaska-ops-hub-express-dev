@@ -1,0 +1,44 @@
+{% liquid
+  assign logged_out_label = block.settings.logged_out_label | default: 'Login'
+  assign logged_in_label = block.settings.logged_in_label | default: 'My Account'
+  assign dashboard_url = block.settings.dashboard_url | default: '/apps/megaska/account'
+  assign extra_class = block.settings.additional_css_class | default: ''
+%}
+
+<script>window.MEGASKA_SHOP_DOMAIN = {{ shop.permanent_domain | json }};</script>
+{{ 'megaska-otp.css' | asset_url | stylesheet_tag }}
+{{ 'loopdesk-account-launcher.css' | asset_url | stylesheet_tag }}
+<script src="{{ 'megaska-auth.js' | asset_url }}" defer></script>
+<script src="{{ 'megaska-otp.js' | asset_url }}" defer></script>
+<script src="{{ 'loopdesk-account-launcher.js' | asset_url }}" defer></script>
+
+<button
+  type="button"
+  class="loopdesk-account-launcher {{ extra_class | escape }}"
+  data-loopdesk-account-launcher
+  data-logged-out-label="{{ logged_out_label | escape }}"
+  data-logged-in-label="{{ logged_in_label | escape }}"
+  data-dashboard-url="{{ dashboard_url | escape }}"
+  data-same-tab="{{ block.settings.open_same_tab }}"
+  {{ block.shopify_attributes }}
+>
+  {% if block.settings.show_icon %}
+    <span class="loopdesk-account-launcher__icon" aria-hidden="true">👤</span>
+  {% endif %}
+  <span data-ld-launcher-label>{{ logged_out_label }}</span>
+</button>
+
+{% schema %}
+{
+  "name": "LoopDesk account launcher",
+  "target": "section",
+  "settings": [
+    { "type": "text", "id": "logged_out_label", "label": "Logged-out label", "default": "Login" },
+    { "type": "text", "id": "logged_in_label", "label": "Logged-in label", "default": "My Account" },
+    { "type": "url", "id": "dashboard_url", "label": "Dashboard URL", "default": "/apps/megaska/account" },
+    { "type": "checkbox", "id": "show_icon", "label": "Show icon", "default": true },
+    { "type": "checkbox", "id": "open_same_tab", "label": "Open in same tab", "default": true },
+    { "type": "text", "id": "additional_css_class", "label": "Additional CSS class" }
+  ]
+}
+{% endschema %}

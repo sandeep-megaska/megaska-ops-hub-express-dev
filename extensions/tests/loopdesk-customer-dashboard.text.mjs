@@ -1,0 +1,17 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+const js = readFileSync("extensions/megaska-otp/assets/loopdesk-customer-dashboard.js", "utf8");
+const css = readFileSync("extensions/megaska-otp/assets/loopdesk-customer-dashboard.css", "utf8");
+assert.match(js, /const state = \{ status: "BOOTING"/);
+for (const state of ["BOOTING", "LOADING", "AUTH_REQUIRED", "READY", "EMPTY", "ERROR"]) assert.match(js, new RegExp(state));
+assert.match(js, /state\.request/);
+assert.match(js, /requestSequence/);
+assert.match(js, /role=\"dialog\"/);
+assert.match(js, /aria-modal=\"true\"/);
+assert.match(js, /Escape/);
+assert.match(js, /noopener noreferrer/);
+assert.match(css, /#loopdesk-customer-dashboard-root/);
+assert.match(css, /--ld-account-bg/);
+assert.match(css, /@media \(max-width: 768px\)/);
+assert.doesNotMatch(css, /#megaska-account-app/);
+console.log("loopdesk-customer-dashboard text tests passed");

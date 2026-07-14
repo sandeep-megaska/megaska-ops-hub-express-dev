@@ -1,0 +1,47 @@
+{% liquid
+  assign support_url = block.settings.support_url | default: '/pages/contact'
+  assign continue_shopping_url = block.settings.continue_shopping_url | default: '/collections/all'
+  assign dashboard_url = block.settings.dashboard_url | default: '/apps/megaska/account'
+%}
+
+{{ 'megaska-otp.css' | asset_url | stylesheet_tag }}
+{{ 'loopdesk-customer-dashboard.css' | asset_url | stylesheet_tag }}
+<script>window.MEGASKA_SHOP_DOMAIN = {{ shop.permanent_domain | json }};</script>
+
+{% if request.design_mode %}
+  <div id="loopdesk-customer-dashboard-root" data-loopdesk-customer-dashboard data-design-mode="true" {{ block.shopify_attributes }}>
+    <section class="ld-account"><div class="ld-account-preview"><h1>LoopDesk Customer Dashboard</h1><p>Verified customers will see their profile, orders, Store Credit, tracking, and request statuses here.</p></div></section>
+  </div>
+{% else %}
+  <div id="loopdesk-customer-dashboard-root" data-loopdesk-customer-dashboard {{ block.shopify_attributes }}></div>
+{% endif %}
+
+<script type="application/json" id="loopdesk-customer-dashboard-config">
+{
+  "apiUrl": "/apps/megaska/api/dashboard/summary",
+  "dashboardUrl": {{ dashboard_url | json }},
+  "homeUrl": "/",
+  "supportUrl": {{ support_url | json }},
+  "continueShoppingUrl": {{ continue_shopping_url | json }},
+  "shopDomain": {{ shop.permanent_domain | json }},
+  "accountLabel": {{ block.settings.account_label | default: 'My Account' | json }},
+  "brandLabel": {{ block.settings.brand_label | default: 'Megaska Account' | json }}
+}
+</script>
+<script src="{{ 'megaska-auth.js' | asset_url }}" defer></script>
+<script src="{{ 'megaska-otp.js' | asset_url }}" defer></script>
+<script src="{{ 'loopdesk-customer-dashboard.js' | asset_url }}" defer></script>
+
+{% schema %}
+{
+  "name": "LoopDesk customer dashboard",
+  "target": "section",
+  "settings": [
+    { "type": "url", "id": "dashboard_url", "label": "Dashboard URL", "default": "/apps/megaska/account" },
+    { "type": "url", "id": "support_url", "label": "Support URL", "default": "/pages/contact" },
+    { "type": "url", "id": "continue_shopping_url", "label": "Continue shopping URL", "default": "/collections/all" },
+    { "type": "text", "id": "account_label", "label": "Account label", "default": "My Account" },
+    { "type": "text", "id": "brand_label", "label": "Brand label", "default": "Megaska Account" }
+  ]
+}
+{% endschema %}
