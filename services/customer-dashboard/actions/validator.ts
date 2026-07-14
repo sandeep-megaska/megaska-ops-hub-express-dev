@@ -76,6 +76,15 @@ export function validateIssuePayload(payload: unknown): IssueActionPayload {
     return { token };
   }) : invalid({ attachments: "Invalid attachments." });
   if (attachments.length) invalid({ attachments: "Evidence upload is not supported yet." });
-  return { issueType, lineItems: validateLines(p.lineItems, "lineItems", false) as IssueActionPayload["lineItems"], description, attachments };
+  const declarations = obj(p.declarations, "declarations");
+  const required = ["declaredUnused", "declaredUnwashed", "declaredTagsIntact"] as const;
+  const validated = {} as IssueActionPayload["declarations"];
+  for (const key of required) {
+    if (!(key in declarations)) invalid({ [`declarations.${key}`]: "Required." });
+    if (typeof declarations[key] !== "boolean") invalid({ [`declarations.${key}`]: "Must be true or false." });
+    if (declarations[key] !== true) invalid({ [`declarations.${key}`]: "Required for issue reporting." });
+    validated[key] = declarations[key];
+  }
+  return { issueType, lineItems: validateLines(p.lineItems, "lineItems", false) as IssueActionPayload["lineItems"], description, declarations: validated, attachments };
 }
 export function validatePayloadForAction(type: CustomerDashboardActionType, payload: unknown): CustomerDashboardValidatedPayload { return type === "CANCELLATION" ? validateCancellationPayload(payload) : type === "EXCHANGE" ? validateExchangePayload(payload) : validateIssuePayload(payload); }
