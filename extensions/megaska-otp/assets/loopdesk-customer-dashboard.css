@@ -180,3 +180,32 @@ body.ld-account-scroll-lock { overflow: hidden; }
   #loopdesk-customer-dashboard-root .ld-account-exchange-items label { grid-template-columns: auto 54px minmax(0, 1fr); }
   #loopdesk-customer-dashboard-root .ld-account-exchange-items img, #loopdesk-customer-dashboard-root .ld-account-exchange-items b { width: 54px; height: 54px; }
 }
+#loopdesk-customer-dashboard-root .ld-account-issue-action, #loopdesk-customer-dashboard-root .ld-account-issue-update { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; border: 1px solid var(--ld-account-line); border-radius: 18px; background: #fffafd; padding: 14px; margin: 12px 0; overflow-wrap: anywhere; }
+#loopdesk-customer-dashboard-root .ld-account-issue-update { grid-template-columns: 1fr; }
+#loopdesk-customer-dashboard-root .ld-account-issue-action p { margin: 4px 0 0; color: var(--ld-account-muted); }
+#loopdesk-customer-dashboard-root .ld-account-issue-action.is-disabled { background: #f9fafb; }
+#loopdesk-customer-dashboard-root .ld-account-issue-action button:disabled { background: #e5e7eb; color: #6b7280; cursor: not-allowed; }
+#loopdesk-customer-dashboard-root .ld-account-issue-modal-wrap { position: fixed; inset: 0; z-index: 2147483003; display: grid; place-items: center; padding: 18px; }
+#loopdesk-customer-dashboard-root .ld-account-issue-overlay { position: absolute; inset: 0; background: rgba(20, 10, 16, .58); }
+#loopdesk-customer-dashboard-root .ld-account-issue-modal { position: relative; width: min(720px, 100%); max-height: min(860px, calc(100vh - 36px)); overflow-y: auto; background: #fff; color: var(--ld-account-text); border-radius: 28px; box-shadow: var(--ld-account-shadow); padding: 26px; }
+#loopdesk-customer-dashboard-root .ld-account-issue-items { border: 0; padding: 0; margin: 16px 0; display: grid; gap: 10px; }
+#loopdesk-customer-dashboard-root .ld-account-issue-items legend { font-weight: 800; margin-bottom: 8px; }
+#loopdesk-customer-dashboard-root .ld-account-issue-items label { display: grid; grid-template-columns: auto 64px minmax(0, 1fr); gap: 8px 12px; align-items: center; border: 1px solid var(--ld-account-line); border-radius: 16px; padding: 12px; cursor: pointer; }
+#loopdesk-customer-dashboard-root .ld-account-issue-items label.is-disabled { opacity: .68; cursor: not-allowed; background: #f9fafb; }
+#loopdesk-customer-dashboard-root .ld-account-issue-items input { width: 20px; height: 20px; accent-color: var(--ld-account-brand); }
+#loopdesk-customer-dashboard-root .ld-account-issue-items img, #loopdesk-customer-dashboard-root .ld-account-issue-items b { width: 64px; height: 64px; border-radius: 14px; object-fit: cover; background: var(--ld-account-soft); display: grid; place-items: center; color: var(--ld-account-muted); font-size: 12px; text-align: center; }
+#loopdesk-customer-dashboard-root .ld-account-issue-items strong, #loopdesk-customer-dashboard-root .ld-account-issue-items small, #loopdesk-customer-dashboard-root .ld-account-issue-items em { grid-column: 3; overflow-wrap: anywhere; }
+#loopdesk-customer-dashboard-root .ld-account-issue-items small, #loopdesk-customer-dashboard-root .ld-account-issue-items em { color: var(--ld-account-muted); }
+#loopdesk-customer-dashboard-root .ld-account-issue-modal > label, #loopdesk-customer-dashboard-root .ld-account-issue-evidence label { display: grid; gap: 8px; font-weight: 800; margin: 12px 0; }
+#loopdesk-customer-dashboard-root .ld-account-issue-evidence { display: grid; gap: 8px; border: 1px dashed var(--ld-account-line); border-radius: 18px; padding: 14px; margin: 14px 0; }
+#loopdesk-customer-dashboard-root .ld-account-issue-evidence span { color: var(--ld-account-muted); font-weight: 600; }
+#loopdesk-customer-dashboard-root .ld-account-issue-modal input[type="text"], #loopdesk-customer-dashboard-root .ld-account-issue-modal select { min-height: 44px; border: 1px solid var(--ld-account-line); border-radius: 14px; padding: 10px 12px; font: inherit; }
+#loopdesk-customer-dashboard-root .ld-account-issue-modal input:focus, #loopdesk-customer-dashboard-root .ld-account-issue-modal select:focus { outline: 3px solid var(--ld-account-brand); outline-offset: 2px; }
+@media (max-width: 768px) {
+  #loopdesk-customer-dashboard-root .ld-account-issue-action { grid-template-columns: 1fr; align-items: stretch; }
+  #loopdesk-customer-dashboard-root .ld-account-issue-action button, #loopdesk-customer-dashboard-root .ld-account-issue-modal .ld-account-modal-actions button { width: 100%; }
+  #loopdesk-customer-dashboard-root .ld-account-issue-modal-wrap { align-items: end; padding: 0; }
+  #loopdesk-customer-dashboard-root .ld-account-issue-modal { width: 100%; max-height: 94vh; border-radius: 24px 24px 0 0; padding: 20px; }
+  #loopdesk-customer-dashboard-root .ld-account-issue-items label { grid-template-columns: auto 54px minmax(0, 1fr); }
+  #loopdesk-customer-dashboard-root .ld-account-issue-items img, #loopdesk-customer-dashboard-root .ld-account-issue-items b { width: 54px; height: 54px; }
+}
