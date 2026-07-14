@@ -1,2 +1,0 @@
-import CustomerDashboardSettingsForm from "../../../components/customer-dashboard/customer-dashboard-settings-form";
-export default function CustomerDashboardSettingsPage() { return <main className="mk-page"><div className="mk-page-header"><p className="mk-eyebrow">Customers</p><h1>Customer Dashboard</h1><p>Configure tenant-scoped customer dashboard branding, links, visible sections, and customer-facing copy.</p></div><CustomerDashboardSettingsForm /></main>; }

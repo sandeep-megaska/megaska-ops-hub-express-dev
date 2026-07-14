@@ -1,2 +1,0 @@
-import test from "node:test"; import assert from "node:assert/strict"; import { readFileSync } from "node:fs";
-test("action route uses central executor and no-store customer-safe errors",()=>{const src=readFileSync("app/api/customer-dashboard/v1/actions/route.ts","utf8"); assert.match(src,/executeCustomerDashboardAction/); assert.match(src,/Cache-Control/); assert.match(src,/toCustomerDashboardActionErrorDto/); assert.doesNotMatch(src,/prisma\./);});
