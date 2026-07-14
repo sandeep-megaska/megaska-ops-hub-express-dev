@@ -43,7 +43,20 @@
 #loopdesk-customer-dashboard-root .ld-account-pill-ok { color: var(--ld-account-ok); background: #e9fbf4; }
 #loopdesk-customer-dashboard-root .ld-account-link-button, #loopdesk-customer-dashboard-root .ld-account-link { color: var(--ld-account-brand-dark); background: transparent; border: 0; padding: 0; text-decoration: underline; font-weight: 700; }
 #loopdesk-customer-dashboard-root .ld-account-wallet-grid, #loopdesk-customer-dashboard-root .ld-account-actions, #loopdesk-customer-dashboard-root .ld-account-tracking, #loopdesk-customer-dashboard-root .ld-account-progress { display: grid; gap: 9px; }
-#loopdesk-customer-dashboard-root .ld-account-transaction { display: grid; grid-template-columns: 1fr auto auto; gap: 6px; padding: 10px 0; border-top: 1px dashed var(--ld-account-line); }
+#loopdesk-customer-dashboard-root .ld-account-wallet-hero { border-radius: 18px; background: var(--ld-account-soft); padding: 14px; margin-bottom: 12px; overflow-wrap: anywhere; }
+#loopdesk-customer-dashboard-root .ld-account-wallet-hero span { color: var(--ld-account-muted); display: block; }
+#loopdesk-customer-dashboard-root .ld-account-wallet-hero strong { display: block; font-size: clamp(26px, 7vw, 40px); line-height: 1.1; }
+#loopdesk-customer-dashboard-root .ld-account-tracking, #loopdesk-customer-dashboard-root .ld-account-link, #loopdesk-customer-dashboard-root .ld-account-line-item { min-width: 0; overflow-wrap: anywhere; word-break: break-word; }
+#loopdesk-customer-dashboard-root .ld-account-timeline { display: grid; gap: 10px; margin: 12px 0 0; padding-left: 20px; }
+#loopdesk-customer-dashboard-root .ld-account-timeline li { padding-left: 4px; overflow-wrap: anywhere; }
+#loopdesk-customer-dashboard-root .ld-account-timeline time, #loopdesk-customer-dashboard-root .ld-account-timeline span, #loopdesk-customer-dashboard-root .ld-account-timeline small { display: block; color: var(--ld-account-muted); }
+#loopdesk-customer-dashboard-root .ld-account-line-items { display: grid; gap: 10px; margin-bottom: 16px; }
+#loopdesk-customer-dashboard-root .ld-account-line-item { display: grid; grid-template-columns: 56px minmax(0, 1fr) auto; gap: 10px; align-items: center; border: 1px solid var(--ld-account-line); border-radius: 16px; padding: 10px; }
+#loopdesk-customer-dashboard-root .ld-account-line-item img { width: 56px; height: 56px; object-fit: cover; border-radius: 12px; }
+#loopdesk-customer-dashboard-root .ld-account-line-item span, #loopdesk-customer-dashboard-root .ld-account-line-item small { display: block; color: var(--ld-account-muted); }
+#loopdesk-customer-dashboard-root .ld-account-transaction { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 6px; padding: 10px 0; border-top: 1px dashed var(--ld-account-line); align-items: baseline; }
+#loopdesk-customer-dashboard-root .ld-account-transaction span { min-width: 0; overflow-wrap: anywhere; }
+#loopdesk-customer-dashboard-root .ld-account-transaction b { text-align: right; white-space: nowrap; }
 #loopdesk-customer-dashboard-root .ld-account-transaction small { grid-column: 1 / -1; color: var(--ld-account-muted); }
 #loopdesk-customer-dashboard-root .ld-account-state, #loopdesk-customer-dashboard-root .ld-account-error, #loopdesk-customer-dashboard-root .ld-account-loading, #loopdesk-customer-dashboard-root .ld-account-preview, #loopdesk-customer-dashboard-root .ld-account-skeleton { text-align: center; background: var(--ld-account-card); border: 1px solid var(--ld-account-line); border-radius: 28px; box-shadow: var(--ld-account-shadow); padding: 40px 20px; }
 #loopdesk-customer-dashboard-root .ld-account-empty-orders { text-align: center; padding: 28px 12px; }
@@ -67,5 +80,9 @@ body.ld-account-scroll-lock { overflow: hidden; }
   #loopdesk-customer-dashboard-root .ld-account-order { grid-template-columns: 86px minmax(0, 1fr); }
   #loopdesk-customer-dashboard-root .ld-account-order-media { width: 86px; height: 86px; }
   #loopdesk-customer-dashboard-root .ld-account-drawer { width: 100vw; padding: 20px; }
+  #loopdesk-customer-dashboard-root .ld-account-transaction { grid-template-columns: minmax(0, 1fr) auto; }
+  #loopdesk-customer-dashboard-root .ld-account-transaction b { grid-column: 2; }
+  #loopdesk-customer-dashboard-root .ld-account-line-item { grid-template-columns: 48px minmax(0, 1fr); }
+  #loopdesk-customer-dashboard-root .ld-account-line-item b { grid-column: 1 / -1; }
 }
 @media (max-width: 375px) { #loopdesk-customer-dashboard-root .ld-account-order { grid-template-columns: 1fr; } }
