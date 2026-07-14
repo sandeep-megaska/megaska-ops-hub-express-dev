@@ -228,12 +228,16 @@
   }
 
   if (!response.ok) {
-    throw new Error(
+    const error = new Error(
       parseApiError(
         data,
         `Request failed (${response.status})`,
       ),
     );
+    error.status = response.status;
+    error.response = response;
+    error.data = data;
+    throw error;
   }
 
   return data;
@@ -327,11 +331,22 @@ if (token) {
         raw: data,
       };
     } catch (error) {
-      console.warn("[Megaska Auth] Session check failed, clearing token", error);
-      clearSessionToken();
+      if (error?.status === 401 || error?.status === 403) {
+        console.warn("[Megaska Auth] Session expired or revoked; clearing token", { status: error.status });
+        clearSessionToken();
+        return {
+          authenticated: false,
+          customer: null,
+        };
+      }
+
+      console.warn("[Megaska Auth] Session check unavailable; preserving token", {
+        status: error?.status || null,
+      });
       return {
-        authenticated: false,
+        authenticated: null,
         customer: null,
+        unavailable: true,
       };
     }
   }
@@ -688,15 +703,15 @@ if (token) {
   async function refreshAuthState() {
     const session = await fetchSession();
 
-    if (session.authenticated) {
+    if (session.authenticated === true) {
       updateAuthUILoggedIn(session.customer);
-    } else {
+    } else if (session.authenticated === false) {
       updateAuthUILoggedOut();
     }
 
     document.dispatchEvent(
       new CustomEvent("megaska:auth-state-changed", {
-        detail: { authenticated: session.authenticated, customer: session.customer || null },
+        detail: { authenticated: session.authenticated, customer: session.customer || null, unavailable: session.unavailable === true },
       })
     );
 
