@@ -76,7 +76,25 @@ function triggerExistingOtpLogin() {
   function onInput(e){var f=e.target&&e.target.getAttribute("data-ld-field");if(!f||!state.dialog)return;if(state.dialog.actionType==="ISSUE"){var iid=e.target.getAttribute("data-line-id"),ix=iid?(state.dialog.issueLines[iid]||(state.dialog.issueLines[iid]={quantity:1})):null;if(f==="issueSelect")ix.selected=e.target.checked;else if(f==="issueQuantity")ix.quantity=Number(e.target.value||1);else if(f==="issueType")state.dialog.issueType=e.target.value;else if(f==="description")state.dialog.description=e.target.value;else if(f==="issueDeclaration"){state.dialog.declarations=state.dialog.declarations||{};state.dialog.declarations[e.target.getAttribute("data-declaration-key")]=Boolean(e.target.checked);}state.idempotencyKey=null;return render();}if(state.dialog.actionType==="EXCHANGE"){var id=e.target.getAttribute("data-line-id"),x=state.dialog.exchangeLines[id]||(state.dialog.exchangeLines[id]={quantity:1});if(f==="exchangeSelect")x.selected=e.target.checked;else if(f==="exchangeQuantity")x.quantity=Number(e.target.value||1);else if(f==="exchangeVariant")x.requestedVariantId=e.target.value;else if(f==="exchangeReason")x.reasonCode=e.target.value;else if(f==="exchangeNote")x.note=e.target.value;state.idempotencyKey=null;return render();}state.dialog[f]=e.target.value;if(state.lastPayloadKey&&state.lastPayloadKey!==payloadKey({reasonCode:state.dialog.reasonCode||"",reasonText:state.dialog.reasonText?String(state.dialog.reasonText).trim():null}))state.idempotencyKey=null;render();}
   function onClick(e){var target=e.target.closest&&e.target.closest("[data-ld-action]");if(!target)return;var action=target.getAttribute("data-ld-action");if(action==="retry")loadDashboard();if(action==="logout")logout();if(action==="details")openDetail(target.getAttribute("data-order-id"),target);if(action==="close-detail")closeDetail();if(action==="open-cancellation")openCancellation(target.getAttribute("data-order-id"),target);if(action==="open-exchange")openExchange(target.getAttribute("data-order-id"),target);if(action==="open-issue")openIssue(target.getAttribute("data-order-id"),target);if(action==="close-action"&&!state.submitting){state.dialog=null;render();if(lastTrigger)lastTrigger.focus();}if(action==="submit-cancellation"){e.preventDefault();state.dialog&&state.dialog.actionType==="EXCHANGE"?submitExchange():state.dialog&&state.dialog.actionType==="ISSUE"?submitIssue():submitCancellation();}if(action==="show-more"){var c=cfg();c.orders=c.orders||{};c.orders.initialOrderLimit=50;window.LoopDeskCustomerDashboardConfig=Object.assign({},window.LoopDeskCustomerDashboardConfig||{},c);render();}}
   function logout(){document.cookie="loopdesk_customer_session=; Max-Age=0; path=/; SameSite=Lax";location.href=cfg().logoutRedirectUrl||"/";}
-  function loadDashboard(silent) {
+function triggerExistingOtpLogin() {
+  var trigger = document.querySelector("[data-megaska-open-login]");
+
+  if (!trigger) {
+    trigger = document.createElement("button");
+    trigger.type = "button";
+    trigger.hidden = true;
+    trigger.setAttribute("data-megaska-open-login", "1");
+    trigger.setAttribute(
+      "data-account-destination",
+      "/apps/megaska/account"
+    );
+    document.body.appendChild(trigger);
+  }
+
+  trigger.click();
+}
+
+function loadDashboard(silent) {
   if (!silent) {
     state.loading = true;
     state.error = null;
@@ -103,5 +121,8 @@ function triggerExistingOtpLogin() {
       state.error = e;
       render();
     });
+}
+
+  
 }root.addEventListener("click",onClick);root.addEventListener("input",onInput);root.addEventListener("submit",function(e){if(e.target.closest&&e.target.closest(".ld-action-panel")){e.preventDefault();state.dialog&&state.dialog.actionType==="EXCHANGE"?submitExchange():state.dialog&&state.dialog.actionType==="ISSUE"?submitIssue():submitCancellation();}});document.addEventListener("keydown",function(e){if(e.key==="Escape"&&state.dialog&&!state.submitting){state.dialog=null;render();if(lastTrigger)lastTrigger.focus();}});loadDashboard();
 })();
