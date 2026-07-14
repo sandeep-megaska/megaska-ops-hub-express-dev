@@ -1,6 +1,6 @@
 (function(){
   "use strict";
-  var state={dashboard:null,loading:false,error:null,selectedOrderId:null,dialog:null,submitting:false,idempotencyKey:null,lastPayloadKey:null,loginPromptOpen:false,authRefreshInFlight:false};var root=document.querySelector("[data-loopdesk-customer-dashboard]")||document.getElementById("loopdesk-customer-dashboard");if(!root)return;var lastTrigger=null;
+  var state={dashboard:null,loading:false,error:null,authRequired:false,selectedOrderId:null,dialog:null,submitting:false,idempotencyKey:null,lastPayloadKey:null,loginPromptOpen:false,dashboardRequest:null,requestSeq:0,lastAuthRefreshAt:0};var root=document.querySelector("[data-loopdesk-customer-dashboard]")||document.getElementById("loopdesk-customer-dashboard");if(!root)return;var lastTrigger=null;
   function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c];});}
   function el(t,c,ch,a){var n=document.createElement(t);if(c)n.className=c;Object.keys(a||{}).forEach(function(k){if(a[k]!=null)n.setAttribute(k,a[k]);});(ch||[]).forEach(function(x){if(x==null)return;n.appendChild(typeof x==="string"?document.createTextNode(x):x);});return n;}
   function readJsonConfig(){var s=document.getElementById("loopdesk-customer-dashboard-config");if(!s)return{};try{return JSON.parse(s.textContent||"{}");}catch(e){return{};}}
@@ -9,17 +9,22 @@
   function money(v,c){return new Intl.NumberFormat(undefined,{style:"currency",currency:c||"INR"}).format((Number(v)||0)/100);}function date(v){return v?new Date(v).toLocaleDateString():"";}function safeUrl(u){try{return u?new URL(u,location.href).toString():"";}catch(e){return"";}}
   function initials(n){return String(n||"?").split(/\s+/).map(function(p){return p[0]||"";}).join("").slice(0,2).toUpperCase();}
   function statusClass(s){var tone=(s&&s.tone)||"info";return "ld-account-status ld-account-status-"+tone;}
-  function renderShell(children){root.replaceChildren(el("div","ld-account-shell",children));}
-  function renderLoading(){renderShell([el("div","ld-account-skeleton",["Loading your account…"])]);}function renderError(){renderShell([el("div","ld-account-error",[el("h1",null,[(cfg().copy&&cfg().copy.temporaryErrorMessage)||"We could not load your account right now."]),el("button","ld-account-button ld-account-button-primary",["Try again"],{"data-ld-action":"retry"})])]);}
+  function setBusy(active){root.setAttribute("aria-busy",active?"true":"false");}
+  function renderShell(children,attrs){setBusy(Boolean(attrs&&attrs["aria-busy"]==="true"));root.replaceChildren(el("div","ld-account-shell",children,attrs));}
+  function renderLoading(){renderShell([el("div","ld-account-live ld-account-sr-only",["Loading your account."],{"aria-live":"polite"}),el("div","ld-account-skeleton",["Loading your account…"])],{"aria-busy":"true"});}
+  function renderAuthRequired(){renderShell([el("section","ld-account-auth-required",[el("div","ld-account-live ld-account-sr-only",["Authentication required. Complete the login prompt to view your account."],{"aria-live":"polite"}),el("h1",null,[(cfg().copy&&cfg().copy.authenticationRequiredTitle)||"Sign in to view your account"]),el("p","ld-account-muted",[(cfg().copy&&cfg().copy.authenticationRequiredMessage)||"Complete the secure login prompt to continue."])])],{"aria-busy":"false"});}
+  function renderError(){renderShell([el("div","ld-account-error",[el("h1",null,[(cfg().copy&&cfg().copy.temporaryErrorMessage)||"We could not load your account right now."]),el("button","ld-account-button ld-account-button-primary",["Try again"],{"data-ld-action":"retry"})])]);}
   function summary(d){return el("div","ld-account-summary",(d.summaryCards||[]).map(function(card){return el("div","ld-account-card ld-account-summary-card",[el("span","ld-account-muted",[card.label]),el("strong",null,[card.value]),card.caption?el("small",null,[card.caption]):null]);}));}
   function header(d){var c=cfg(),label=(c.branding&&c.branding.heading)||c.accountLabel||(d.shop&&d.shop.branding&&d.shop.branding.accountLabel)||"My Account",logo=safeUrl((c.branding&&c.branding.logoUrl)||(d.shop&&d.shop.branding&&d.shop.branding.logoUrl)||c.logoUrl);return el("div","ld-account-header",[el("div","ld-account-profile",[logo?el("img","ld-account-logo",[],{src:logo,alt:"",loading:"lazy"}):el("div","ld-account-avatar",[d.customer.initials||initials(d.customer.displayName)]),el("div",null,[el("h1","ld-account-title",[label]),el("div","ld-account-muted",[d.customer.displayName||"Customer"]),el("div","ld-account-muted",[(d.customer.phoneVerified?"Verified mobile":"Mobile")+(d.customer.email?" · "+d.customer.email:"")])])]),el("div","ld-account-actions",[c.supportUrl?el("a","ld-account-button",[(c.copy&&c.copy.supportLabel)||"Need help?"],{href:c.supportUrl}):null,el("button","ld-account-button",[(c.copy&&c.copy.logoutLabel)||"Logout"],{"data-ld-action":"logout"})])]);}
-  function actionBadges(order){var a=order.actions||{},nodes=[];if(a.cancellation&&a.cancellation.state!=="NOT_APPLICABLE"){nodes.push(el("span","ld-account-status ld-account-status-info",[a.cancellation.available?"Cancellation available":(a.cancellation.lockReason||a.cancellation.state)]));}if(a.exchange&&a.exchange.state!=="NOT_APPLICABLE"){nodes.push(el("span","ld-account-status ld-account-status-info",[a.exchange.available?"Exchange available":(a.exchange.lockReason||a.exchange.state)]));}if(a.issue&&a.issue.state!=="NOT_APPLICABLE"){nodes.push(el("span","ld-account-status ld-account-status-info",[a.issue.available?"Issue reporting available":(a.issue.lockReason||a.issue.state)]));}return nodes;}
+  function normalizeReason(reason){return typeof reason==="string"?reason.trim().replace(/\s+/g," "):"";}
+  function uniqueActionReasons(reasons){var out=[];reasons.forEach(function(reason){var normalized=normalizeReason(reason);if(normalized&&!out.some(function(existing){return normalizeReason(existing)===normalized;}))out.push(reason.trim());});return out;}
+  function actionBadges(order){var a=order.actions||{},nodes=[],reasons=[];if(a.cancellation&&a.cancellation.state!=="NOT_APPLICABLE"){a.cancellation.available?nodes.push(el("span","ld-account-status ld-account-status-info",["Cancellation available"])):reasons.push(a.cancellation.lockReason||a.cancellation.state);}if(a.exchange&&a.exchange.state!=="NOT_APPLICABLE"){a.exchange.available?nodes.push(el("span","ld-account-status ld-account-status-info",["Exchange available"])):reasons.push(a.exchange.lockReason||a.exchange.state);}if(a.issue&&a.issue.state!=="NOT_APPLICABLE"){a.issue.available?nodes.push(el("span","ld-account-status ld-account-status-info",["Issue reporting available"])):reasons.push(a.issue.lockReason||a.issue.state);}return nodes.concat(uniqueActionReasons(reasons).map(function(reason){return el("span","ld-account-status ld-account-status-info ld-account-lock-reason",[reason]);}));}
   function media(o){var img=o.items&&o.items[0]&&safeUrl(o.items[0].imageUrl);return img?el("img","ld-account-order-image",[],{src:img,alt:"",loading:"lazy"}):el("div","ld-account-order-image ld-account-order-placeholder",["#"]);}
   function orderCard(o){var meta=el("div","ld-account-order-meta",[el("div",null,[el("strong",null,[o.orderNumber||"Order"]),el("span","ld-account-muted",[date(o.createdAt)])]),el("div",null,[el("span",null,[money(o.amounts&&o.amounts.totalPaise,o.currency)]),el("span","ld-account-muted",[(o.items||[]).length+" items"])]),el("div",null,[(cfg().orders&&cfg().orders.showFinancialStatus===false)?null:el("span",statusClass(o.financialStatus),[(o.financialStatus&&o.financialStatus.label)||"Payment"]),(cfg().orders&&cfg().orders.showFulfillmentStatus===false)?null:el("span",statusClass(o.fulfillmentStatus),[(o.fulfillmentStatus&&o.fulfillmentStatus.label)||"Fulfillment"])].concat(actionBadges(o)))]);return el("article","ld-account-order",[media(o),meta,el("button","ld-account-button",["View details"],{"data-ld-action":"details","data-order-id":o.id,"aria-label":"View details for "+(o.orderNumber||"order")})]);}
   function addressCard(d){var a=d.customer.defaultAddress;if(!a)return el("div","ld-account-card",[el("h2",null,["Saved address"]),el("p","ld-account-muted",["No default address saved."])]);return el("div","ld-account-card",[el("h2",null,["Saved address"]),el("p",null,[[a.name,a.address1,a.address2,a.city,a.province,a.zip].filter(Boolean).join(", ")])]);}
   function walletCard(d){var c=cfg();if(c.sections&&c.sections.showWallet===false)return null;if(!d.modules||!d.modules.wallet||!d.wallet)return null;var w=d.wallet;return el("div","ld-account-card",[el("h2",null,["Store Credit"]),el("div","ld-account-stat",[money(w.availablePaise,w.currency)]),el("p","ld-account-muted",["Current balance "+money(w.balancePaise,w.currency)])]);}
   function renderReady(d){var c=cfg(),orders=d.orders||[],limit=Math.max(1,Math.min(50,Number(c.orders&&c.orders.initialOrderLimit)||10)),shown=orders.slice(0,limit);renderShell([header(d),summary(d),el("div","ld-account-grid",[c.sections&&c.sections.showOrders===false?null:el("main","ld-account-card",[el("h2",null,["Recent orders"]),orders.length?el("div","ld-account-list",shown.map(orderCard).concat(orders.length>shown.length?[el("button","ld-account-button",["Show more"],{"data-ld-action":"show-more"})]:[])):el("div","ld-account-empty",[el("h3",null,["No orders"]),el("p",null,[(c.copy&&c.copy.emptyOrdersMessage)||"You have not placed any orders yet."]),el("a","ld-account-button",[(c.copy&&c.copy.continueShoppingLabel)||"Continue shopping"],{href:c.continueShoppingUrl||"/"})])]),el("aside",null,[(c.sections&&c.sections.showSavedAddress===false)?null:addressCard(d),walletCard(d)].filter(Boolean))]),drawer(),actionDialog()].filter(Boolean));}
-  function render(){if(state.loading)return renderLoading();if(state.error)return renderError();if(state.dashboard)return renderReady(state.dashboard);renderLoading();}
+  function render(){if(state.loading)return renderLoading();if(state.authRequired)return renderAuthRequired();if(state.error)return renderError();if(state.dashboard)return renderReady(state.dashboard);renderLoading();}
   function detailRows(o){var a=o.amounts||{};return ["subtotalPaise","discountPaise","shippingPaise","taxPaise","totalPaise"].map(function(k){return el("div","ld-account-row",[el("span",null,[k.replace("Paise","")]),el("strong",null,[money(a[k],o.currency)])]);});}
   function tracking(t){if(!t||!t.length)return el("p","ld-account-muted",["Tracking will appear when available."]);return el("div","ld-account-list",t.map(function(x){return el("div","ld-account-row",[el("span",null,[x.carrier||"Shipment"]),x.trackingUrl?el("a",null,[x.awb||"Track"],{href:safeUrl(x.trackingUrl),target:"_blank",rel:"noopener"}):el("span",null,[x.statusLabel||x.status||""])])}));}
 
@@ -97,40 +102,49 @@ function triggerExistingOtpLogin() {
 }
 
 function loadDashboard(silent) {
-  if (state.authRefreshInFlight && silent) return Promise.resolve();
-  if (silent) state.authRefreshInFlight = true;
-  if (!silent) {
-    state.loading = true;
-    state.error = null;
-    render();
-  }
+  if (state.dashboardRequest) return state.dashboardRequest;
 
-  return api("")
+  var seq = ++state.requestSeq;
+  state.loading = true;
+  state.authRequired = false;
+  state.error = null;
+  render();
+
+  state.dashboardRequest = api("")
     .then(function (d) {
+      if (seq !== state.requestSeq) return;
       state.dashboard = d;
       state.loginPromptOpen = false;
-      state.authRefreshInFlight = false;
       state.loading = false;
+      state.authRequired = false;
       state.error = null;
       render();
     })
     .catch(function (e) {
+      if (seq !== state.requestSeq) return;
       state.loading = false;
-      state.authRefreshInFlight = false;
 
       if (e.status === 401) {
+        state.dashboard = null;
         state.error = null;
-        renderLoading();
+        state.authRequired = true;
+        render();
         triggerExistingOtpLogin();
         return;
       }
 
       state.loginPromptOpen = false;
+      state.authRequired = false;
       state.error = e;
       render();
+    })
+    .finally(function () {
+      if (seq === state.requestSeq) state.dashboardRequest = null;
     });
+
+  return state.dashboardRequest;
 }
 
   
-root.addEventListener("click",onClick);root.addEventListener("input",onInput);root.addEventListener("submit",function(e){if(e.target.closest&&e.target.closest(".ld-action-panel")){e.preventDefault();state.dialog&&state.dialog.actionType==="EXCHANGE"?submitExchange():state.dialog&&state.dialog.actionType==="ISSUE"?submitIssue():submitCancellation();}});document.addEventListener("keydown",function(e){if(e.key==="Escape"&&state.dialog&&!state.submitting){state.dialog=null;render();if(lastTrigger)lastTrigger.focus();}});document.addEventListener("megaska:auth-state-changed",function(e){if(e&&e.detail&&e.detail.authenticated){state.loginPromptOpen=false;loadDashboard(true);}});setTimeout(function(){loadDashboard();},250);
+root.addEventListener("click",onClick);root.addEventListener("input",onInput);root.addEventListener("submit",function(e){if(e.target.closest&&e.target.closest(".ld-action-panel")){e.preventDefault();state.dialog&&state.dialog.actionType==="EXCHANGE"?submitExchange():state.dialog&&state.dialog.actionType==="ISSUE"?submitIssue():submitCancellation();}});document.addEventListener("keydown",function(e){if(e.key==="Escape"&&state.dialog&&!state.submitting){state.dialog=null;render();if(lastTrigger)lastTrigger.focus();}});document.addEventListener("megaska:auth-state-changed",function(e){if(e&&e.detail&&e.detail.authenticated){var now=Date.now();state.loginPromptOpen=false;if(now-state.lastAuthRefreshAt<100||state.dashboardRequest)return;state.lastAuthRefreshAt=now;loadDashboard(true);}});setTimeout(function(){loadDashboard();},250);
 })();
