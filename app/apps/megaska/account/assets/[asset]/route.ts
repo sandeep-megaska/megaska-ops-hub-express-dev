@@ -6,6 +6,7 @@ import { NextResponse } from "next/server";
 const ALLOWED: Record<string, { contentType: string; binary?: boolean }> = {
   "loopdesk-customer-dashboard.js": { contentType: "application/javascript; charset=utf-8" },
   "loopdesk-customer-dashboard.css": { contentType: "text/css; charset=utf-8" },
+  "loopdesk-dashboard-auth-bridge.js": { contentType: "application/javascript; charset=utf-8" },
   "megaska-auth.js": { contentType: "application/javascript; charset=utf-8" },
   "megaska-otp.js": { contentType: "application/javascript; charset=utf-8" },
   "megaska-otp.css": { contentType: "text/css; charset=utf-8" },
