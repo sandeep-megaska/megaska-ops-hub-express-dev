@@ -5,6 +5,10 @@ const js = readFileSync("extensions/megaska-otp/assets/loopdesk-customer-dashboa
 const css = readFileSync("extensions/megaska-otp/assets/loopdesk-customer-dashboard.css", "utf8");
 
 assert.match(js, /Sign in to view your account/);
+assert.match(js, /data-megaska-open-login>Sign in/);
+assert.doesNotMatch(js, /data-ld-login>Sign in/);
+assert.doesNotMatch(js, /MegaskaAuth\.openLogin|function openLogin\(|loginPromptOpen|querySelector\("\[data-megaska-open-login\]"\)\?\.click/);
+assert.match(js, /Secure sign-in is temporarily unavailable\. Please refresh and try again\./);
 assert.match(js, /Verify your mobile number to see your orders and account details\./);
 assert.match(js, /We could not load your account right now\./);
 assert.match(js, /You have not placed any orders yet\./);

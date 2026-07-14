@@ -22,14 +22,15 @@ assert.match(assetRoute, /immutable/);
 assert.match(assetRoute, /decodeURIComponent/);
 
 assert.match(dashboardJs, /__LOOPDESK_CUSTOMER_DASHBOARD_INITIALIZED__/);
-assert.match(dashboardJs, /LoopDeskCustomerDashboard\s*=\s*\{\s*boot,\s*refresh,\s*logout\s*\}/);
+assert.match(dashboardJs, /LoopDeskCustomerDashboard\s*=\s*\{[^}]*boot,[^}]*refresh,[^}]*logout[^}]*\}/s);
 assert.match(dashboardJs, /Authorization: `Bearer \$\{token\}`/);
 assert.match(dashboardJs, /cache: "no-store"/);
 assert.match(dashboardJs, /window\.MegaskaAuth\.getSessionToken|getSessionToken/);
 assert.match(dashboardJs, /getToken/);
 assert.match(dashboardJs, /getSession/);
 assert.match(dashboardJs, /Please verify your mobile number to view your account/);
-assert.match(dashboardJs, /openLogin/);
+assert.match(dashboardJs, /data-megaska-open-login>Sign in/);
+assert.doesNotMatch(dashboardJs, /openLogin|loginPromptOpen|MegaskaAuth\.openLogin|data-ld-login>Sign in/);
 assert.match(dashboardJs, /megaska:auth-state-changed/);
 assert.match(dashboardJs, /moneyPaise/);
 assert.match(dashboardJs, /primaryShipment\(o\)/);

@@ -9,10 +9,20 @@ function createHarness({ token = "", fetchImpl, configOverride = {} } = {}) {
   const root = { id: "loopdesk-customer-dashboard-root", dataset: {}, attributes: {}, innerHTML: "", setAttribute(n, v) { this.attributes[n] = String(v); }, appendChild(node) { document._drawer = node; } };
   const config = { id: "loopdesk-customer-dashboard-config", textContent: JSON.stringify(Object.assign({ apiUrl: "/summary", shopDomain: "shop.test" }, configOverride)) };
   class CustomEvent { constructor(type, init = {}) { this.type = type; this.detail = init.detail; } }
+  const makeLoginButton = () => ({
+    dataset: { megaskaOpenLogin: "" },
+    matches: (selector) => selector === "[data-megaska-open-login]",
+    addEventListener: (_type, fn) => { document._loginListeners.push(fn); },
+    click: () => {
+      const event = { type: "click", target: document._loginButton, defaultPrevented: false };
+      for (const fn of document._loginListeners) fn(event);
+      document.dispatchEvent(event);
+    },
+  });
   const document = {
-    readyState: "complete", documentElement: { getAttribute: () => "shop.test" }, body: { classList: { add() {}, remove() {} } }, activeElement: null,
+    readyState: "complete", documentElement: { getAttribute: () => "shop.test" }, body: { classList: { add() {}, remove() {} } }, activeElement: null, _loginListeners: [],
     getElementById(id) { return id === root.id ? root : id === config.id ? config : null; },
-    querySelector(selector) { if (selector === "[data-loopdesk-customer-dashboard]") return root; if (selector === ".ld-account-drawer-wrap") return this._drawer || null; if (selector === "[data-ld-login]") return root.innerHTML.includes("data-ld-login") ? { addEventListener: (_t, fn) => { this._login = fn; }, click: () => this._login?.() } : null; if (selector === "[data-megaska-open-login]") return { click: () => calls.push({ kind: "fallbackLogin" }) }; return null; },
+    querySelector(selector) { if (selector === "[data-loopdesk-customer-dashboard]") return root; if (selector === ".ld-account-drawer-wrap") return this._drawer || null; if (selector === "[data-megaska-open-login]" && root.innerHTML.includes("data-megaska-open-login")) { this._loginButton ||= makeLoginButton(); return this._loginButton; } if (selector === "[data-ld-login-unavailable]") return root.innerHTML.includes("data-ld-login-unavailable") ? { removeAttribute: () => calls.push({ kind: "unavailableNotice" }) } : null; return null; },
     querySelectorAll(selector) { if (selector === "[data-ld-logout]" && root.innerHTML.includes("data-ld-logout")) return [{ addEventListener: (_t, fn) => { this._logout = fn; }, click: () => this._logout?.() }]; return []; },
     addEventListener(type, fn) { listeners.set(type, [...(listeners.get(type) || []), fn]); },
     dispatchEvent(event) { for (const fn of listeners.get(event.type) || []) fn(event); },
@@ -20,7 +30,7 @@ function createHarness({ token = "", fetchImpl, configOverride = {} } = {}) {
   };
   const calls = [];
   const context = { window: null, document, CustomEvent, localStorage: { getItem: () => token, removeItem: () => { token = ""; } }, console: { log() { throw new Error("unsafe log"); }, debug() { throw new Error("unsafe debug"); }, info(...args) { calls.push({ kind: "info", args }); }, warn() {}, error() {} }, fetch: (...args) => { calls.push({ kind: "fetch", args }); return fetchImpl ? fetchImpl(...args) : Promise.resolve({ ok: true, status: 200, json: async () => ({ customer: { name: "Test" }, orders: [] }) }); }, setTimeout, clearTimeout, AbortController, Date, URL, Intl };
-  context.window = { location: { origin: "https://shop.test", assign: (url) => calls.push({ kind: "redirect", url }) }, Shopify: { shop: "shop.test" }, setTimeout, clearTimeout, MegaskaAuth: { getSessionToken: () => token, getToken: () => token, getSession: () => ({ token }), openLogin: () => calls.push({ kind: "openLogin" }), logout: () => { calls.push({ kind: "logout" }); token = ""; } } };
+  context.window = { location: { origin: "https://shop.test", assign: (url) => calls.push({ kind: "redirect", url }) }, Shopify: { shop: "shop.test" }, setTimeout, clearTimeout, MegaskaAuth: { getSessionToken: () => token, getToken: () => token, getSession: () => ({ token }), logout: () => { calls.push({ kind: "logout" }); token = ""; } } };
   vm.runInNewContext(source, context);
   return { root, document, calls, window: context.window, setToken: (value) => { token = value; }, Event: CustomEvent };
 }
@@ -96,14 +106,19 @@ const fetchCount = (h) => h.calls.filter((c) => c.kind === "fetch").length;
 
 {
   const h = createHarness();
-  h.document.querySelector("[data-ld-login]").click();
-  assert.equal(h.calls.filter((c) => c.kind === "openLogin").length, 1);
+  let delegatedClicks = 0;
+  h.document.addEventListener("click", (event) => { if (event.target.matches("[data-megaska-open-login]")) delegatedClicks += 1; });
+  h.document.querySelector("[data-megaska-open-login]").click();
+  assert.equal(delegatedClicks, 1, "customer click reaches the delegated OTP trigger exactly once");
+  assert.equal(h.calls.filter((c) => c.kind === "openLogin").length, 0);
+  assert.equal(h.calls.filter((c) => c.kind === "fallbackLogin").length, 0);
 }
 
 
 {
   const h = createHarness({ configOverride: { continueShoppingUrl: "/collections/sale", homeUrl: "/home" } });
-  assert.match(h.root.innerHTML, /data-ld-login>Sign in/);
+  assert.match(h.root.innerHTML, /data-megaska-open-login>Sign in/);
+  assert.doesNotMatch(h.root.innerHTML, /data-ld-login>Sign in/);
   assert.match(h.root.innerHTML, /href="https:\/\/shop\.test\/collections\/sale">Continue shopping/);
   assert.match(h.root.innerHTML, /href="https:\/\/shop\.test\/home">Back to home/);
   assert.doesNotMatch(h.root.innerHTML, /\/account\/login/);
@@ -111,9 +126,9 @@ const fetchCount = (h) => h.calls.filter((c) => c.kind === "fetch").length;
 
 {
   const h = createHarness();
-  delete h.window.MegaskaAuth.openLogin;
-  h.document.querySelector("[data-ld-login]").click();
-  assert.equal(h.calls.filter((c) => c.kind === "fallbackLogin").length, 1);
+  h.document.querySelector("[data-megaska-open-login]").click();
+  await sleep(0);
+  assert.equal(h.calls.filter((c) => c.kind === "unavailableNotice").length, 1);
 }
 
 {
@@ -154,8 +169,10 @@ const fetchCount = (h) => h.calls.filter((c) => c.kind === "fetch").length;
   const h = createHarness({ token: "token-now" });
   h.window.LoopDeskCustomerDashboard.logout();
   await sleep(0);
-  h.document.querySelector("[data-ld-login]").click();
-  assert.equal(h.calls.filter((c) => c.kind === "openLogin").length, 1);
+  let delegatedClicks = 0;
+  h.document.addEventListener("click", (event) => { if (event.target.matches("[data-megaska-open-login]")) delegatedClicks += 1; });
+  h.document.querySelector("[data-megaska-open-login]").click();
+  assert.equal(delegatedClicks, 1);
 }
 
 for (const call of createHarness().calls.filter((c) => c.kind === "info")) {
