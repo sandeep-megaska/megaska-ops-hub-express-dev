@@ -57,3 +57,7 @@ Use `/apps/megaska/account?shop=<shop-domain>&signature=<shopify-app-proxy-signa
 ## DASH-3B Theme App Extension integration
 
 DASH-3B adds explicit Theme App Extension blocks for the app-owned shell: a LoopDesk account launcher and a portable customer dashboard mount. The launcher uses the OTP-backed `window.MegaskaAuth` state and navigates to `/apps/megaska/account` by default; the mount block reuses the DASH-3A `loopdesk-customer-dashboard.js` and CSS assets with safe JSON configuration. Deploy Theme App Extension changes with `shopify app deploy`; Vercel deployment alone does not publish theme extension assets.
+
+## DASH-3C settings and branding UAT
+
+Verify admin settings persist per shop, neutral defaults appear for shops without saved config, branding CSS variables render in the app-owned shell, hidden sections remain hidden, disabled dashboards do not expose customer data, launcher/mount presentation overrides do not enable server-hidden modules, support/continue-shopping/logout links are safe, “Show more” respects the configured initial order limit, and mobile layout remains usable. Deploy server changes to Vercel and Theme App Extension asset/block changes with `shopify app deploy`.
