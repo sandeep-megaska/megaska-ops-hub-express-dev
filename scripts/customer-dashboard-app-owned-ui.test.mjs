@@ -32,7 +32,8 @@ assert.match(dashboardJs, /Please verify your mobile number to view your account
 assert.match(dashboardJs, /openLogin/);
 assert.match(dashboardJs, /megaska:auth-state-changed/);
 assert.match(dashboardJs, /moneyPaise/);
-assert.match(dashboardJs, /tracking\(o\)/);
+assert.match(dashboardJs, /primaryShipment\(o\)/);
+assert.match(dashboardJs, /shipmentsOf\(o\)/);
 assert.match(dashboardJs, /safeUrl/);
 assert.match(dashboardJs, /latestCancellationStatus/);
 assert.match(dashboardJs, /exchangeProgress/);
