@@ -209,3 +209,23 @@ body.ld-account-scroll-lock { overflow: hidden; }
   #loopdesk-customer-dashboard-root .ld-account-issue-items label { grid-template-columns: auto 54px minmax(0, 1fr); }
   #loopdesk-customer-dashboard-root .ld-account-issue-items img, #loopdesk-customer-dashboard-root .ld-account-issue-items b { width: 54px; height: 54px; }
 }
+#loopdesk-customer-dashboard-root .ld-request-timeline-card { border: 1px solid var(--ld-account-line); border-radius: 18px; background: #fffafd; padding: 14px; margin: 12px 0; overflow-wrap: anywhere; }
+#loopdesk-customer-dashboard-root .ld-request-timeline-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+#loopdesk-customer-dashboard-root .ld-request-timeline-head h4 { margin: 0; }
+#loopdesk-customer-dashboard-root .ld-request-timeline { list-style: none; display: grid; gap: 0; margin: 0; padding: 0; }
+#loopdesk-customer-dashboard-root .ld-request-timeline-step { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 10px; position: relative; padding: 0 0 16px; }
+#loopdesk-customer-dashboard-root .ld-request-timeline-step:not(:last-child)::before { content: ""; position: absolute; left: 11px; top: 22px; bottom: -2px; width: 2px; background: var(--ld-account-line); }
+#loopdesk-customer-dashboard-root .ld-request-marker { z-index: 1; width: 22px; height: 22px; border-radius: 999px; border: 3px solid #d1d5db; background: #fff; margin-top: 2px; }
+#loopdesk-customer-dashboard-root .ld-request-timeline-step.is-completed .ld-request-marker { border-color: var(--ld-account-ok); background: #e9fbf4; }
+#loopdesk-customer-dashboard-root .ld-request-timeline-step.is-current .ld-request-marker { border-color: var(--ld-account-brand); box-shadow: 0 0 0 4px var(--ld-account-soft); }
+#loopdesk-customer-dashboard-root .ld-request-timeline-step.is-failed .ld-request-marker, #loopdesk-customer-dashboard-root .ld-request-timeline-step.is-blocked .ld-request-marker { border-color: #9b1c1c; background: #fee2e2; }
+#loopdesk-customer-dashboard-root .ld-request-step-body { min-width: 0; display: grid; gap: 4px; }
+#loopdesk-customer-dashboard-root .ld-request-step-body time, #loopdesk-customer-dashboard-root .ld-request-step-body p, #loopdesk-customer-dashboard-root .ld-request-step-state, #loopdesk-customer-dashboard-root .ld-request-logistics { color: var(--ld-account-muted); margin: 0; }
+#loopdesk-customer-dashboard-root .ld-request-action { display: grid; gap: 6px; border-radius: 14px; background: #fff4d6; padding: 10px; margin-top: 6px; }
+#loopdesk-customer-dashboard-root .ld-request-action .ld-account-button { justify-self: start; text-decoration: none; min-height: 44px; display: inline-flex; align-items: center; }
+#loopdesk-customer-dashboard-root .ld-request-logistics { display: flex; gap: 8px; flex-wrap: wrap; }
+@media (max-width: 768px) {
+  #loopdesk-customer-dashboard-root .ld-request-timeline-card { padding: 12px; }
+  #loopdesk-customer-dashboard-root .ld-request-action .ld-account-button { width: 100%; justify-content: center; }
+  #loopdesk-customer-dashboard-root .ld-request-logistics { display: grid; }
+}
