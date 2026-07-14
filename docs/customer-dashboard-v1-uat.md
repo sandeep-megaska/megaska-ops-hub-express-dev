@@ -51,3 +51,12 @@ Verify admin settings persist per shop, neutral defaults appear for shops withou
 ## DASH-4A customer request action framework UAT
 
 Security: verify Customer A cannot act on Customer B orders, Shop A sessions cannot act on Shop B orders, and expired OTP sessions cannot submit. Idempotency: double-clicking cancellation creates one request, retrying the same key/payload replays the same result, and changing payload with the same key is rejected. Eligibility: stale available controls are rejected after shipment, conflicting exchange/issue/cancellation requests block submission, and module-disabled actions remain unavailable. UX: success refreshes dashboard state, customer-safe errors render clearly, duplicate requests do not appear, and the future generic dialog must pass mobile keyboard/focus checks.
+
+## DASH-4B cancellation UAT checklist
+
+- Happy path: open an eligible order, open cancellation, select a reason, submit, verify one cancellation request appears in merchant admin, and verify dashboard refresh shows “Cancellation requested”.
+- Race: open dialog while eligible, fulfill/ship the order in admin, submit, verify `ACTION_NOT_AVAILABLE` and no new cancellation record.
+- Duplicate: double-click or retry the same payload/key, verify one request and the same result.
+- Conflict: create an active exchange or issue, verify cancellation is locked with a safe lock reason.
+- Session: expire OTP session before submit, verify 401/login-required handling and no request.
+- Refund/status: approve/reject in admin, refresh dashboard, verify API-provided cancellation/refund explanation renders without client-derived refund logic.

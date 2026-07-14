@@ -3,9 +3,44 @@ import { withCors, handleOptions } from "../../../../../../_lib/cors";
 import { buildDashboardOrderActions } from "../../../../../../../../services/customer-dashboard/actions.ts";
 import { loadDashboardModules } from "../../../../../../../../services/customer-dashboard/modules.ts";
 import { loadDashboardOrderRequests } from "../../../../../../../../services/customer-dashboard/requests.ts";
-import { getCustomerDashboardActionDefinition, loadOwnedOrderForAction, normalizeActionError, resolveCustomerDashboardActionContext, toCustomerDashboardActionErrorDto, type CustomerDashboardActionFormConfig, type CustomerDashboardActionType } from "../../../../../../../../services/customer-dashboard/actions/index.ts";
-export const runtime="nodejs";
-function secure(res:NextResponse){res.headers.set("Cache-Control","private, no-store");res.headers.set("Vary","Origin, Authorization, Access-Control-Request-Headers");res.headers.set("X-Content-Type-Options","nosniff");return res;}
-export async function OPTIONS(req:NextRequest){return secure(withCors(req,handleOptions(req)));}
-const fields={CANCELLATION:[{name:"reasonCode",type:"select",label:"Reason",required:true,maxLength:60,options:[{value:"CHANGED_MIND",label:"Changed my mind"},{value:"ORDERED_BY_MISTAKE",label:"Ordered by mistake"},{value:"OTHER",label:"Other"}]},{name:"reasonText",type:"textarea",label:"Additional details",required:false,maxLength:500}],EXCHANGE:[],ISSUE:[]} as const;
-export async function GET(req:NextRequest,ctx:{params:Promise<{orderId:string;actionType:string}>}){ try{ const params=await ctx.params; const actionType=String(params.actionType||"").toUpperCase() as CustomerDashboardActionType; const def=getCustomerDashboardActionDefinition(actionType); const context=await resolveCustomerDashboardActionContext(req); const [modules,order]=await Promise.all([loadDashboardModules(context),loadOwnedOrderForAction({context,orderId:params.orderId})]); const reqs=await loadDashboardOrderRequests({context,orderNumbers:[order.orderNumber]}); const snap=reqs.byOrderNumber.get(order.orderNumber.replace(/^#/,"").toUpperCase())||reqs.byOrderNumber.get(order.orderNumber)||{cancellation:null,exchange:null,issue:null,activeConflict:null}; const policy=buildDashboardOrderActions({now:context.now,fulfillmentStatus:order.fulfillmentStatus,fulfilledAt:order.fulfilledAt,deliveredAt:order.deliveredAt,trackingDeliveredAt:null,requests:snap,modules}); const action=actionType==="CANCELLATION"?policy.cancellation:actionType==="EXCHANGE"?policy.exchange:policy.issue; const config:CustomerDashboardActionFormConfig={actionType,available:Boolean(modules[def.moduleCapability]&&action.available&&action.state==="AVAILABLE"),title:action.label,description:action.description??null,fields:JSON.parse(JSON.stringify(fields[actionType])),submitLabel:actionType==="CANCELLATION"?"Submit cancellation request":"Submit request",deadlineAt:action.deadlineAt??null,lockReason:modules[def.moduleCapability]?action.lockReason??null:"This action is disabled for this store."}; return secure(withCors(req,NextResponse.json(config,{status:200}))); }catch(error){const normalized=normalizeActionError(error); return secure(withCors(req,NextResponse.json(toCustomerDashboardActionErrorDto(normalized),{status:normalized.status})));}}
+import { CANCELLATION_REASON_OPTIONS, CANCELLATION_REASON_TEXT_MAX_LENGTH } from "../../../../../../../../services/customer-dashboard/actions/reasons.ts";
+import { auditCustomerDashboardAction, getCustomerDashboardActionDefinition, loadOwnedOrderForAction, normalizeActionError, resolveCustomerDashboardActionContext, toCustomerDashboardActionErrorDto, type CustomerDashboardActionFormConfig, type CustomerDashboardActionType } from "../../../../../../../../services/customer-dashboard/actions/index.ts";
+
+export const runtime = "nodejs";
+function secure(res: NextResponse) { res.headers.set("Cache-Control", "private, no-store"); res.headers.set("Vary", "Origin, Authorization, Access-Control-Request-Headers"); res.headers.set("X-Content-Type-Options", "nosniff"); return res; }
+export async function OPTIONS(req: NextRequest) { return secure(withCors(req, handleOptions(req))); }
+
+const cancellationFields = [
+  { key: "reasonCode", name: "reasonCode", type: "select", label: "Reason for cancellation", required: true, options: CANCELLATION_REASON_OPTIONS },
+  { key: "reasonText", name: "reasonText", type: "textarea", label: "Additional details", required: false, maxLength: CANCELLATION_REASON_TEXT_MAX_LENGTH },
+] as const;
+
+export async function GET(req: NextRequest, ctx: { params: Promise<{ orderId: string; actionType: string }> }) {
+  try {
+    const params = await ctx.params;
+    const actionType = String(params.actionType || "").toUpperCase() as CustomerDashboardActionType;
+    const def = getCustomerDashboardActionDefinition(actionType);
+    const context = await resolveCustomerDashboardActionContext(req);
+    const [modules, order] = await Promise.all([loadDashboardModules(context), loadOwnedOrderForAction({ context, orderId: params.orderId })]);
+    const reqs = await loadDashboardOrderRequests({ context, orderNumbers: [order.orderNumber] });
+    const snap = reqs.byOrderNumber.get(order.orderNumber.replace(/^#/, "").toUpperCase()) || reqs.byOrderNumber.get(order.orderNumber) || { cancellation: null, exchange: null, issue: null, activeConflict: null };
+    const policies = buildDashboardOrderActions({ now: context.now, fulfillmentStatus: order.fulfillmentStatus, fulfilledAt: order.fulfilledAt, deliveredAt: order.deliveredAt, trackingDeliveredAt: null, requests: snap, modules });
+    const action = actionType === "CANCELLATION" ? policies.cancellation : actionType === "EXCHANGE" ? policies.exchange : policies.issue;
+    const available = Boolean(modules[def.moduleCapability] && action.available && action.state === "AVAILABLE");
+    const config: CustomerDashboardActionFormConfig = {
+      actionType,
+      available,
+      title: actionType === "CANCELLATION" ? "Cancel order" : action.label,
+      description: actionType === "CANCELLATION" ? "Submit a cancellation request before the order is shipped." : action.description ?? null,
+      fields: available && actionType === "CANCELLATION" ? JSON.parse(JSON.stringify(cancellationFields)) : [],
+      submitLabel: actionType === "CANCELLATION" ? "Submit cancellation request" : "Submit request",
+      deadlineAt: action.deadlineAt ?? null,
+      lockReason: modules[def.moduleCapability] ? action.lockReason ?? null : "This action is disabled for this store.",
+    };
+    await auditCustomerDashboardAction({ event: "customer_dashboard.cancellation.form_viewed", context, actionType, orderId: order.id, orderNumber: order.orderNumber, resultCode: available ? "AVAILABLE" : "LOCKED" });
+    return secure(withCors(req, NextResponse.json(config, { status: 200 })));
+  } catch (error) {
+    const normalized = normalizeActionError(error);
+    return secure(withCors(req, NextResponse.json(toCustomerDashboardActionErrorDto(normalized), { status: normalized.status })));
+  }
+}
