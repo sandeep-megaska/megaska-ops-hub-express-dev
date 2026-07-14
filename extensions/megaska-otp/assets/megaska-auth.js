@@ -1116,7 +1116,7 @@ const sku = order?.firstLineItemSku || order?.sku || "";
 
   async function initDashboardPage() {
     const pathname = String(window?.location?.pathname || "");
-    if (!(pathname.includes("/pages/megaska-dashboard") || pathname.includes("/apps/megaska/dashboard"))) return;
+    if (!(pathname.includes("/pages/megaska-dashboard") || pathname.includes("/apps/megaska/account"))) return;
 
     const mountTarget =
       [

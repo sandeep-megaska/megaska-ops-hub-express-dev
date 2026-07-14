@@ -1,7 +1,7 @@
 {% liquid
   assign support_url = block.settings.support_url | default: '/pages/contact'
   assign continue_shopping_url = block.settings.continue_shopping_url | default: '/collections/all'
-  assign dashboard_url = block.settings.dashboard_url | default: '/apps/megaska/account'
+  assign dashboard_path = block.settings.dashboard_path | default: block.settings.dashboard_url | default: '/apps/megaska/account'
 %}
 
 {{ 'megaska-otp.css' | asset_url | stylesheet_tag }}
@@ -9,17 +9,18 @@
 <script>window.MEGASKA_SHOP_DOMAIN = {{ shop.permanent_domain | json }};</script>
 
 {% if request.design_mode %}
-  <div id="loopdesk-customer-dashboard-root" data-loopdesk-customer-dashboard data-design-mode="true" {{ block.shopify_attributes }}>
+  <div id="loopdesk-customer-dashboard-root" data-loopdesk-customer-dashboard data-design-mode="true" data-dashboard-path="{{ dashboard_path | escape }}" data-shop-domain="{{ shop.permanent_domain | escape }}" role="region" aria-label="Customer account dashboard" {{ block.shopify_attributes }}>
     <section class="ld-account"><div class="ld-account-preview"><h1>LoopDesk Customer Dashboard</h1><p>Verified customers will see their profile, orders, Store Credit, tracking, and request statuses here.</p></div></section>
   </div>
 {% else %}
-  <div id="loopdesk-customer-dashboard-root" data-loopdesk-customer-dashboard {{ block.shopify_attributes }}></div>
+  <div id="loopdesk-customer-dashboard-root" data-loopdesk-customer-dashboard data-dashboard-path="{{ dashboard_path | escape }}" data-shop-domain="{{ shop.permanent_domain | escape }}" role="region" aria-label="Customer account dashboard" {{ block.shopify_attributes }}></div>
 {% endif %}
 
 <script type="application/json" id="loopdesk-customer-dashboard-config">
 {
   "apiUrl": "/apps/megaska/api/dashboard/summary",
-  "dashboardUrl": {{ dashboard_url | json }},
+  "dashboardPath": {{ dashboard_path | json }},
+  "dashboardUrl": {{ dashboard_path | json }},
   "homeUrl": "/",
   "supportUrl": {{ support_url | json }},
   "continueShoppingUrl": {{ continue_shopping_url | json }},
@@ -38,7 +39,7 @@
  "name": "LoopDesk Dashboard",
   "target": "section",
   "settings": [
-    { "type": "url", "id": "dashboard_url", "label": "Dashboard URL" },
+    { "type": "url", "id": "dashboard_path", "label": "Dashboard page path" },
 { "type": "url", "id": "support_url", "label": "Support URL" },
 { "type": "url", "id": "continue_shopping_url", "label": "Continue shopping URL" },
     { "type": "text", "id": "account_label", "label": "Account label", "default": "My Account" },

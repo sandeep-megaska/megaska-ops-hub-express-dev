@@ -85,7 +85,7 @@
   const resumingCartAddForms = new WeakSet();
   const ACCOUNT_FALLBACK_DESKTOP_ID = "megaska-account-fallback-desktop";
   const ACCOUNT_FALLBACK_MOBILE_ID = "megaska-account-fallback-mobile";
-  const DEFAULT_MEGASKA_DASHBOARD_URL = "/apps/megaska/dashboard";
+  const DEFAULT_MEGASKA_DASHBOARD_URL = "/apps/megaska/account";
 
   const ACCOUNT_TRIGGER_SELECTORS = [
     "[data-megaska-open-login]",
@@ -2310,14 +2310,17 @@ function consumePendingAccountRedirect() {
   function normalizeAccountDestination(rawDestination) {
     const fallbackDestination = DEFAULT_MEGASKA_DASHBOARD_URL;
     const destination = String(rawDestination || "").trim();
-    if (!destination) return fallbackDestination;
+    if (!destination) return "";
+    if (!destination.startsWith("/") || destination.startsWith("//")) return "";
 
     let parsedUrl = null;
     try {
       parsedUrl = new URL(destination, window.location.origin);
     } catch {
-      return fallbackDestination;
+      return "";
     }
+
+    if (parsedUrl.origin !== window.location.origin) return "";
 
     const pathname = String(parsedUrl.pathname || "").trim();
     const normalizedPath = pathname.replace(/\/+$/, "") || "/";
@@ -2361,6 +2364,13 @@ function consumePendingAccountRedirect() {
           source?.getAttribute?.("data-account-destination") ||
           "";
 
+    const configDestination = String(
+      window?.LoopDeskCustomerDashboardConfig?.themePagePath ||
+        window?.LOOPDESK_CUSTOMER_DASHBOARD_CONFIG?.themePagePath ||
+        window?.LoopDeskCustomerDashboardConfig?.dashboardPath ||
+        window?.LOOPDESK_CUSTOMER_DASHBOARD_CONFIG?.dashboardPath ||
+        ""
+    ).trim();
     const windowDestination = String(window?.MEGASKA_ACCOUNT_DASHBOARD_URL || "").trim();
     const htmlDestination = String(
       document?.documentElement?.getAttribute?.("data-megaska-account-destination") || ""
@@ -2371,6 +2381,7 @@ function consumePendingAccountRedirect() {
 
     return (
       normalizeAccountDestination(preferredDestination) ||
+      normalizeAccountDestination(configDestination) ||
       normalizeAccountDestination(windowDestination) ||
       normalizeAccountDestination(htmlDestination) ||
       normalizeAccountDestination(bodyDestination) ||
@@ -2824,9 +2835,9 @@ function consumePendingAccountRedirect() {
   link.className = "megaska-account-fallback megaska-account-fallback--desktop";
   link.setAttribute("data-megaska-open-login", "1");
   link.setAttribute("data-megaska-fallback-account", "desktop");
-  link.setAttribute("aria-label", "Account");
+  link.setAttribute("aria-label", "My account");
   link.innerHTML =
-    '<span class="megaska-account-fallback__icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false" aria-hidden="true"><path d="M12 12.5a5 5 0 1 0 0-10 5 5 0 0 0 0 10Zm0 2.5c-4.3 0-8.5 2.2-8.5 5v1.5c0 .6.4 1 1 1h15c.6 0 1-.4 1-1V20c0-2.8-4.2-5-8.5-5Z"/></svg></span><span class="megaska-visually-hidden">Account</span>';
+    '<span class="megaska-account-fallback__icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false" aria-hidden="true"><path d="M12 12.5a5 5 0 1 0 0-10 5 5 0 0 0 0 10Zm0 2.5c-4.3 0-8.5 2.2-8.5 5v1.5c0 .6.4 1 1 1h15c.6 0 1-.4 1-1V20c0-2.8-4.2-5-8.5-5Z"/></svg></span><span class="megaska-visually-hidden">My account</span>';
   return link;
 }
 
@@ -2837,7 +2848,7 @@ function consumePendingAccountRedirect() {
     item.className = "megaska-account-fallback-item";
     item.setAttribute("data-megaska-fallback-account", "mobile");
     item.innerHTML =
-      `<a href="${dashboardUrl}" class="megaska-account-fallback megaska-account-fallback--mobile megaska-mobile-account-link" data-megaska-open-login="1"><span class="megaska-account-fallback__label">Login</span></a>`;
+      `<a href="${dashboardUrl}" class="megaska-account-fallback megaska-account-fallback--mobile megaska-mobile-account-link" data-megaska-open-login="1" aria-label="My account"><span class="megaska-account-fallback__label">My Account</span></a>`;
     return item;
   }
 
