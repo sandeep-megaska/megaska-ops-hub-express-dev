@@ -47,3 +47,7 @@ Action submission flows and app-owned dashboard UI are not production-certified 
 ## DASH-3C settings and branding UAT
 
 Verify admin settings persist per shop, neutral defaults appear for shops without saved config, branding CSS variables render in the app-owned shell, hidden sections remain hidden, disabled dashboards do not expose customer data, launcher/mount presentation overrides do not enable server-hidden modules, support/continue-shopping/logout links are safe, “Show more” respects the configured initial order limit, and mobile layout remains usable. Deploy server changes to Vercel and Theme App Extension asset/block changes with `shopify app deploy`.
+
+## DASH-4A customer request action framework UAT
+
+Security: verify Customer A cannot act on Customer B orders, Shop A sessions cannot act on Shop B orders, and expired OTP sessions cannot submit. Idempotency: double-clicking cancellation creates one request, retrying the same key/payload replays the same result, and changing payload with the same key is rejected. Eligibility: stale available controls are rejected after shipment, conflicting exchange/issue/cancellation requests block submission, and module-disabled actions remain unavailable. UX: success refreshes dashboard state, customer-safe errors render clearly, duplicate requests do not appear, and the future generic dialog must pass mobile keyboard/focus checks.

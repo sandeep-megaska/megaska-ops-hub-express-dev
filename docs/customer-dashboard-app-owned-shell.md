@@ -61,3 +61,7 @@ DASH-3B adds explicit Theme App Extension blocks for the app-owned shell: a Loop
 ## DASH-3C settings and branding UAT
 
 Verify admin settings persist per shop, neutral defaults appear for shops without saved config, branding CSS variables render in the app-owned shell, hidden sections remain hidden, disabled dashboards do not expose customer data, launcher/mount presentation overrides do not enable server-hidden modules, support/continue-shopping/logout links are safe, “Show more” respects the configured initial order limit, and mobile layout remains usable. Deploy server changes to Vercel and Theme App Extension asset/block changes with `shopify app deploy`.
+
+## DASH-4A action framework boundary
+
+The app-owned shell should use the server-owned action framework for request submissions. It must fetch form configuration from `/api/customer-dashboard/v1/orders/[orderId]/actions/[actionType]`, submit to `/api/customer-dashboard/v1/actions` with a per-attempt idempotency key, and refresh `dashboard.v1` after success. The shell must not duplicate action eligibility, lifecycle status lists, ownership checks, or request-window logic in JavaScript.

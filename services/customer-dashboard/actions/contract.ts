@@ -1,0 +1,10 @@
+export type CustomerDashboardActionType = "CANCELLATION" | "EXCHANGE" | "ISSUE";
+export type CustomerDashboardActionRequest = { actionType: CustomerDashboardActionType; orderId: string; idempotencyKey: string; payload: unknown };
+export type CustomerDashboardActionResult = { ok: true; actionType: CustomerDashboardActionType; requestId: string; statusCode: string; statusLabel: string; customerMessage: string; orderId: string; orderNumber: string; createdAt: string; nextAction: { type: "NONE" | "PAYMENT_REQUIRED" | "REFRESH_DASHBOARD" | "TRACK_REQUEST"; url: string | null } };
+export type CustomerDashboardActionErrorDto = { version: "customer-dashboard-action.error.v1"; code: "SESSION_REQUIRED" | "SESSION_EXPIRED" | "ORDER_NOT_FOUND" | "ORDER_NOT_OWNED" | "ACTION_DISABLED" | "ACTION_NOT_AVAILABLE" | "REQUEST_CONFLICT" | "REQUEST_ALREADY_EXISTS" | "INVALID_INPUT" | "IDEMPOTENCY_CONFLICT" | "ACTION_FAILED"; message: string; retryable: boolean; fieldErrors?: Record<string, string> };
+export type CancellationActionPayload = { reasonCode: string; reasonText?: string | null };
+export type ExchangeActionPayload = { lineItems: Array<{ lineItemId: string; quantity: number; requestedVariantId: string | null; reasonCode: string; note?: string | null }> };
+export type IssueActionPayload = { issueType: "DAMAGED" | "WRONG_ITEM" | "MISSING_ITEM" | "QUALITY" | "OTHER"; lineItems: Array<{ lineItemId: string; quantity: number }>; description: string; attachments?: Array<{ token: string }> };
+export type CustomerDashboardValidatedPayload = CancellationActionPayload | ExchangeActionPayload | IssueActionPayload;
+export type CustomerDashboardActionField = { name: string; type: "text" | "textarea" | "select" | "lineItems" | "attachments"; label: string; required: boolean; maxLength?: number; options?: Array<{ value: string; label: string }> };
+export type CustomerDashboardActionFormConfig = { actionType: CustomerDashboardActionType; available: boolean; title: string; description: string | null; fields: CustomerDashboardActionField[]; submitLabel: string; deadlineAt: string | null; lockReason: string | null };
