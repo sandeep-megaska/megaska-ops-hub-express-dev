@@ -53,3 +53,7 @@ The asset is portable: it does not assume ownership of `document.body`, uses the
 ## UAT URL
 
 Use `/apps/megaska/account?shop=<shop-domain>&signature=<shopify-app-proxy-signature>` in App Proxy environments. In local allowed-shop development, use the repository’s existing App Proxy bypass settings.
+
+## DASH-3B Theme App Extension integration
+
+DASH-3B adds explicit Theme App Extension blocks for the app-owned shell: a LoopDesk account launcher and a portable customer dashboard mount. The launcher uses the OTP-backed `window.MegaskaAuth` state and navigates to `/apps/megaska/account` by default; the mount block reuses the DASH-3A `loopdesk-customer-dashboard.js` and CSS assets with safe JSON configuration. Deploy Theme App Extension changes with `shopify app deploy`; Vercel deployment alone does not publish theme extension assets.

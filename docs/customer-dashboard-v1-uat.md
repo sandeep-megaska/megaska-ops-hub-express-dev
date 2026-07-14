@@ -31,3 +31,15 @@ Action submission flows and app-owned dashboard UI are not production-certified 
 - Verify wallet is hidden when disabled and visible with transaction preview when enabled.
 - Verify unsafe tracking URLs are not rendered as links.
 - Verify the legacy theme dashboard remains unchanged and available as fallback.
+
+## DASH-3B Theme App Extension UAT additions
+
+- Launcher logged out → **Login**.
+- Login opens LoopDesk OTP, not Shopify email/password login.
+- OTP success → launcher updates to **My Account**.
+- **My Account** opens `/apps/megaska/account` or configured same-store App Proxy path.
+- Logout returns launcher to **Login**.
+- Dashboard app block loads for verified OTP customers and shows login-required state for unverified shoppers.
+- Duplicate dashboard blocks do not create competing dashboard roots.
+- Legacy Megaska dashboard remains functional until merchant-approved removal.
+- Theme App Extension changes require `shopify app deploy`; Vercel deployment alone is insufficient unless server/runtime code also changes.

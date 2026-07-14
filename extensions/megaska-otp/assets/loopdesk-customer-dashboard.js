@@ -5,7 +5,8 @@
   var VERSION="dashboard.v1";
   var state={status:"BOOTING",dashboard:null,selectedOrderId:null,error:null};
   var root=null,lastTrigger=null,booted=false;
-  function cfg(){return Object.assign({apiUrl:"/apps/megaska/api/customer-dashboard/v1",loginUrl:"/account/login",logoutRedirectUrl:"/",accountLabel:"My Account",supportUrl:"",continueShoppingUrl:"/collections/all",shopDomain:"",logoUrl:null},window.LoopDeskCustomerDashboardConfig||{});}
+  function readJsonConfig(){var n=document.querySelector("[data-loopdesk-customer-dashboard-config]");if(!n)return{};try{return JSON.parse(n.textContent||"{}");}catch{console.warn("[LoopDesk Dashboard] config parse failed",{errorCode:"CONFIG_PARSE_FAILED"});return{};}}
+  function cfg(){var inline=readJsonConfig();return Object.assign({apiUrl:"/apps/megaska/api/customer-dashboard/v1",loginUrl:"/apps/megaska/account",logoutRedirectUrl:"/",accountLabel:"My Account",supportUrl:"",continueShoppingUrl:"/collections/all",shopDomain:"",logoUrl:null,mountMode:"navigate",presentation:{}},window.LoopDeskCustomerDashboardConfig||{},inline);}
   function text(v){return document.createTextNode(String(v==null?"":v));}
   function el(tag,cls,children,attrs){var n=document.createElement(tag); if(cls)n.className=cls; Object.keys(attrs||{}).forEach(function(k){var v=attrs[k]; if(v==null||v===false)return; if(k==="text") n.appendChild(text(v)); else if(k==="html"){} else n.setAttribute(k,String(v));}); (children||[]).forEach(function(c){if(c==null)return; n.appendChild(typeof c==="string"?text(c):c);}); return n;}
   function safeUrl(url){try{if(!url)return"";var u=new URL(String(url),window.location.origin);return (u.protocol==="http:"||u.protocol==="https:")?u.href:"";}catch{return"";}}
@@ -13,7 +14,7 @@
   function date(v){if(!v)return"—";try{return new Intl.DateTimeFormat(undefined,{dateStyle:"medium"}).format(new Date(v));}catch{return String(v);}}
   function statusClass(s){var tone=String(s&&s.tone||"NEUTRAL").toLowerCase();return "ld-account-status ld-account-status-"+tone;}
   function announce(msg){var live=root&&root.querySelector("[data-ld-live]"); if(live) live.textContent=msg;}
-  function findRoot(){return document.getElementById("loopdesk-customer-dashboard-root")||document.querySelector("[data-loopdesk-customer-dashboard]");}
+  function findRoot(){var roots=document.querySelectorAll("[data-loopdesk-customer-dashboard]");if(roots.length>1){Array.prototype.slice.call(roots,1).forEach(function(n){n.setAttribute("data-loopdesk-dashboard-duplicate","true");n.textContent="LoopDesk dashboard is already mounted on this page.";});}return document.getElementById("loopdesk-customer-dashboard-root")||roots[0]||null;}
   function getSessionToken(){var a=window.MegaskaAuth||{}; if(typeof a.getSessionToken==="function")return a.getSessionToken()||""; if(typeof a.getToken==="function")return a.getToken()||""; try{return sessionStorage.getItem("megaska_session_token")||localStorage.getItem("megaska_session_token")||"";}catch{return"";}}
   async function getSession(){var a=window.MegaskaAuth||{}; if(typeof a.getSession==="function")return a.getSession(); if(typeof a.fetchSession==="function")return a.fetchSession(); return {authenticated:!!getSessionToken()};}
   function setState(next){state=Object.assign({},state,next); render();}
@@ -52,7 +53,7 @@
   function onKey(e){if(e.key==="Escape")closeDetail();}
   async function logout(){try{if(window.MegaskaAuth&&typeof window.MegaskaAuth.logout==="function")await window.MegaskaAuth.logout();}catch(e){console.warn("[LoopDesk Dashboard] logout failed",{errorCode:e&&e.message});}try{sessionStorage.removeItem("megaska_session_token");localStorage.removeItem("megaska_session_token");}catch{} if(root)root.textContent=""; state={status:"UNAUTHORIZED",dashboard:null,selectedOrderId:null,error:null}; window.location.href=cfg().logoutRedirectUrl||"/";}
   function render(){if(!root)return;if(state.status==="BOOTING"||state.status==="LOADING")return renderLoading(); if(state.status==="UNAUTHORIZED")return renderUnauthorized(); if(state.status==="ERROR")return renderError(); if(state.status==="EMPTY")return renderEmpty(); if(state.status==="READY")return renderReady(state.dashboard);}
-  function boot(){if(booted)return;root=findRoot(); if(!root)return; booted=true; root.addEventListener("click",onClick); document.addEventListener("keydown",onKey); loadDashboard();}
+  function boot(){if(booted)return;root=findRoot(); if(!root)return; booted=true; if(window.Shopify&&window.Shopify.designMode){var p=document.querySelector("[data-loopdesk-theme-editor-preview]");if(p){p.hidden=false;root.hidden=true;}return;} root.addEventListener("click",onClick); document.addEventListener("keydown",onKey); loadDashboard();}
   function refresh(){return loadDashboard();}
   window[PUBLIC_NAME]={boot:boot,refresh:refresh,logout:logout};
   if(!window[GUARD]){window[GUARD]=true;if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",boot);else boot();}
