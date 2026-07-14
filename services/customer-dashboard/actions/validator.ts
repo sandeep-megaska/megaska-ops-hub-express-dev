@@ -1,11 +1,12 @@
 import type { CancellationActionPayload, CustomerDashboardActionRequest, CustomerDashboardActionType, CustomerDashboardValidatedPayload, ExchangeActionPayload, IssueActionPayload } from "./contract.ts";
 import { CustomerDashboardActionError } from "./errors.ts";
 import { CANCELLATION_REASON_TEXT_MAX_LENGTH, isCancellationReasonCode } from "./reasons.ts";
+import { EXCHANGE_NOTE_MAX_LENGTH, isExchangeReasonCode } from "./exchange-reasons.ts";
 
 const types = new Set(["CANCELLATION", "EXCHANGE", "ISSUE"]);
 const html = /<[^>]+>/;
 const control = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/;
-const max = { reasonCode: 60, reasonText: CANCELLATION_REASON_TEXT_MAX_LENGTH, description: 1000, note: 500, idempotencyKey: 128 };
+const max = { reasonCode: 60, reasonText: CANCELLATION_REASON_TEXT_MAX_LENGTH, description: 1000, note: EXCHANGE_NOTE_MAX_LENGTH, idempotencyKey: 128 };
 
 function obj(v: unknown, path: string) {
   if (!v || typeof v !== "object" || Array.isArray(v)) throw invalid({ [path]: "Must be an object." });
@@ -53,7 +54,12 @@ function validateLines(lines: unknown, path: string, exchange: boolean) {
     const quantity = Number(l.quantity);
     if (!Number.isInteger(quantity) || quantity < 1 || quantity > 999) invalid({ [`${path}.${i}.quantity`]: "Invalid quantity." });
     if (!exchange) return { lineItemId, quantity };
-    return { lineItemId, quantity, requestedVariantId: l.requestedVariantId == null ? null : clean(l.requestedVariantId, `${path}.${i}.requestedVariantId`, 120, false), reasonCode: clean(l.reasonCode, `${path}.${i}.reasonCode`, max.reasonCode), note: l.note == null ? null : clean(l.note, `${path}.${i}.note`, max.note, false) };
+    const requestedVariantId = clean(l.requestedVariantId, `${path}.${i}.requestedVariantId`, 160);
+    const reasonCode = clean(l.reasonCode, `${path}.${i}.reasonCode`, max.reasonCode).toUpperCase();
+    if (!isExchangeReasonCode(reasonCode)) invalid({ [`${path}.${i}.reasonCode`]: "Select a valid exchange reason." });
+    const note = l.note == null ? null : clean(l.note, `${path}.${i}.note`, max.note, false);
+    if (reasonCode === "OTHER" && !note) invalid({ [`${path}.${i}.note`]: "Additional details are required for Other." });
+    return { lineItemId, quantity, requestedVariantId, reasonCode, note };
   });
 }
 export function validateExchangePayload(payload: unknown): ExchangeActionPayload { const p = obj(payload, "payload"); return { lineItems: validateLines(p.lineItems, "lineItems", true) as ExchangeActionPayload["lineItems"] }; }
