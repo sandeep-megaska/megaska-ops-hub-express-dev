@@ -229,3 +229,28 @@ body.ld-account-scroll-lock { overflow: hidden; }
   #loopdesk-customer-dashboard-root .ld-request-action .ld-account-button { width: 100%; justify-content: center; }
   #loopdesk-customer-dashboard-root .ld-request-logistics { display: grid; }
 }
+#loopdesk-customer-dashboard-root .ld-store-credit-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+#loopdesk-customer-dashboard-root .ld-store-credit-heading h2 { margin-bottom: 0; }
+#loopdesk-customer-dashboard-root .ld-store-credit-list { list-style: none; display: grid; gap: 12px; margin: 0; padding: 0; }
+#loopdesk-customer-dashboard-root .ld-store-credit-transaction { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: start; border: 1px solid var(--ld-account-line); border-radius: 18px; background: #fffafd; padding: 14px; overflow-wrap: anywhere; }
+#loopdesk-customer-dashboard-root .ld-store-credit-transaction-main { min-width: 0; display: grid; gap: 8px; }
+#loopdesk-customer-dashboard-root .ld-store-credit-meta { display: flex; gap: 8px; flex-wrap: wrap; color: var(--ld-account-muted); font-size: 13px; }
+#loopdesk-customer-dashboard-root .ld-store-credit-order { font-weight: 700; color: var(--ld-account-text); word-break: break-word; }
+#loopdesk-customer-dashboard-root .ld-store-credit-amount { display: grid; gap: 4px; justify-items: end; text-align: right; white-space: nowrap; }
+#loopdesk-customer-dashboard-root .ld-store-credit-amount span { color: var(--ld-account-muted); font-size: 13px; font-weight: 800; }
+#loopdesk-customer-dashboard-root .ld-store-credit-amount b { font-size: 18px; }
+#loopdesk-customer-dashboard-root .ld-store-credit-amount small { color: var(--ld-account-muted); white-space: normal; }
+#loopdesk-customer-dashboard-root .ld-store-credit-transaction-credit .ld-store-credit-amount b { color: var(--ld-account-ok); }
+#loopdesk-customer-dashboard-root .ld-store-credit-transaction-debit .ld-store-credit-amount b { color: #9b1c1c; }
+#loopdesk-customer-dashboard-root .ld-store-credit-transaction-unknown .ld-store-credit-amount b { color: var(--ld-account-text); }
+#loopdesk-customer-dashboard-root .ld-store-credit-details { grid-column: 1 / -1; border-top: 1px dashed var(--ld-account-line); padding-top: 8px; }
+#loopdesk-customer-dashboard-root .ld-store-credit-details summary { min-height: 44px; display: inline-flex; align-items: center; color: var(--ld-account-brand-dark); font-weight: 800; cursor: pointer; }
+#loopdesk-customer-dashboard-root .ld-store-credit-details dl { display: grid; gap: 8px; margin: 6px 0 0; }
+#loopdesk-customer-dashboard-root .ld-store-credit-details dl > div { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: 8px; }
+#loopdesk-customer-dashboard-root .ld-store-credit-details dt { color: var(--ld-account-muted); font-weight: 800; }
+#loopdesk-customer-dashboard-root .ld-store-credit-details dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 768px) {
+  #loopdesk-customer-dashboard-root .ld-store-credit-transaction { grid-template-columns: 1fr; }
+  #loopdesk-customer-dashboard-root .ld-store-credit-amount { justify-items: start; text-align: left; white-space: normal; }
+  #loopdesk-customer-dashboard-root .ld-store-credit-details dl > div { grid-template-columns: 1fr; gap: 2px; }
+}
