@@ -62,7 +62,6 @@ const STOREFRONT_API_PREFIXES = [
   "express/checkout/",
   "profile/",
   "runtime/config",
-  "customer-dashboard/v1",
 ];
 
 function isStorefrontApiPath(path: string) {
@@ -72,7 +71,6 @@ function isStorefrontApiPath(path: string) {
 
 const API_MODULES: Array<{ prefix: string; moduleKey: string }> = [
   { prefix: "dashboard/", moduleKey: "dashboard" },
-  { prefix: "customer-dashboard/v1", moduleKey: "dashboard" },
   { prefix: "express/checkout/", moduleKey: "express_checkout" },
   { prefix: "delhivery/pincode", moduleKey: "pincode" },
   { prefix: "requests/exchange", moduleKey: "exchanges" },

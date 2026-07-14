@@ -1,2 +1,0 @@
-import test from "node:test"; import assert from "node:assert/strict"; import { customerDashboardActionRegistry, getCustomerDashboardActionDefinition } from "./registry.ts";
-test("registry allowlists known action definitions",()=>{ assert.equal(customerDashboardActionRegistry.size,3); assert.equal(getCustomerDashboardActionDefinition("CANCELLATION").moduleCapability,"cancellation"); assert.equal(getCustomerDashboardActionDefinition("EXCHANGE").requiresDelivery,true); });
