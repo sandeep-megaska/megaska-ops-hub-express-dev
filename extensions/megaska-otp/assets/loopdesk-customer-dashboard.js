@@ -46,7 +46,36 @@ function issueFields(d){if(!d.config||!d.config.available)return el("p",null,[(d
   function payloadKey(p){return JSON.stringify(p);}function submitCancellation(){var d=state.dialog;if(!d||state.submitting)return;var p={reasonCode:String(d.reasonCode||""),reasonText:d.reasonText?String(d.reasonText).trim():null};if(!p.reasonCode){d.error="Select a reason.";return render();}if(p.reasonCode==="OTHER"&&!p.reasonText){d.error="Add details for Other.";return render();}var key=payloadKey(p);if(!state.idempotencyKey||state.lastPayloadKey!==key){state.idempotencyKey=cryptoKey();state.lastPayloadKey=key;}state.submitting=true;d.error=null;render();api("/actions",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({actionType:"CANCELLATION",orderId:d.orderId,idempotencyKey:state.idempotencyKey,payload:p})}).then(function(res){d.message=res.customerMessage||"Your cancellation request has been submitted.";state.idempotencyKey=null;return loadDashboard(true);}).then(function(){state.submitting=false;state.dialog=null;render();}).catch(function(e){state.submitting=false;d.error=(e.data&&e.data.message)||e.message;render();});}
   function onInput(e){var f=e.target&&e.target.getAttribute("data-ld-field");if(!f||!state.dialog)return;if(state.dialog.actionType==="ISSUE"){var iid=e.target.getAttribute("data-line-id"),ix=iid?(state.dialog.issueLines[iid]||(state.dialog.issueLines[iid]={quantity:1})):null;if(f==="issueSelect")ix.selected=e.target.checked;else if(f==="issueQuantity")ix.quantity=Number(e.target.value||1);else if(f==="issueType")state.dialog.issueType=e.target.value;else if(f==="description")state.dialog.description=e.target.value;else if(f==="issueDeclaration"){state.dialog.declarations=state.dialog.declarations||{};state.dialog.declarations[e.target.getAttribute("data-declaration-key")]=Boolean(e.target.checked);}state.idempotencyKey=null;return render();}if(state.dialog.actionType==="EXCHANGE"){var id=e.target.getAttribute("data-line-id"),x=state.dialog.exchangeLines[id]||(state.dialog.exchangeLines[id]={quantity:1});if(f==="exchangeSelect")x.selected=e.target.checked;else if(f==="exchangeQuantity")x.quantity=Number(e.target.value||1);else if(f==="exchangeVariant")x.requestedVariantId=e.target.value;else if(f==="exchangeReason")x.reasonCode=e.target.value;else if(f==="exchangeNote")x.note=e.target.value;state.idempotencyKey=null;return render();}state.dialog[f]=e.target.value;if(state.lastPayloadKey&&state.lastPayloadKey!==payloadKey({reasonCode:state.dialog.reasonCode||"",reasonText:state.dialog.reasonText?String(state.dialog.reasonText).trim():null}))state.idempotencyKey=null;render();}
   function onClick(e){var target=e.target.closest&&e.target.closest("[data-ld-action]");if(!target)return;var action=target.getAttribute("data-ld-action");if(action==="retry")loadDashboard();if(action==="logout")logout();if(action==="details")openDetail(target.getAttribute("data-order-id"),target);if(action==="close-detail")closeDetail();if(action==="open-cancellation")openCancellation(target.getAttribute("data-order-id"),target);if(action==="open-exchange")openExchange(target.getAttribute("data-order-id"),target);if(action==="open-issue")openIssue(target.getAttribute("data-order-id"),target);if(action==="close-action"&&!state.submitting){state.dialog=null;render();if(lastTrigger)lastTrigger.focus();}if(action==="submit-cancellation"){e.preventDefault();state.dialog&&state.dialog.actionType==="EXCHANGE"?submitExchange():state.dialog&&state.dialog.actionType==="ISSUE"?submitIssue():submitCancellation();}if(action==="show-more"){var c=cfg();c.orders=c.orders||{};c.orders.initialOrderLimit=50;window.LoopDeskCustomerDashboardConfig=Object.assign({},window.LoopDeskCustomerDashboardConfig||{},c);render();}}
-  function logout(){document.cookie="loopdesk_customer_session=; Max-Age=0; path=/; SameSite=Lax";location.href=cfg().logoutRedirectUrl||"/";}
+  function logout() {
+  var auth = window.MegaskaAuth || {};
+  var redirectUrl = cfg().logoutRedirectUrl || "/";
+
+  state.dashboard = null;
+  state.error = null;
+  state.loading = true;
+  render();
+
+  if (typeof auth.logout === "function") {
+    Promise.resolve(auth.logout())
+      .catch(function () {
+        // The established auth logout already clears the local token
+        // even when server revocation fails.
+      })
+      .finally(function () {
+        location.href = redirectUrl;
+      });
+
+    return;
+  }
+
+  if (typeof auth.clearSessionToken === "function") {
+    auth.clearSessionToken();
+  } else {
+    localStorage.removeItem("megaska_session_token");
+  }
+
+  location.href = redirectUrl;
+}
 function triggerExistingOtpLogin() {
   if (state.loginPromptOpen) return;
   state.loginPromptOpen = true;
