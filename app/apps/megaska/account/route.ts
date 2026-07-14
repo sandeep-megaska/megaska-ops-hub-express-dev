@@ -19,6 +19,7 @@ export async function GET(request: NextRequest) {
       homeUrl: "/",
       supportUrl: "/pages/contact",
       continueShoppingUrl: "/collections/all",
+      logoutRedirectUrl: "/",
       shopDomain: shop.shopDomain,
       accountLabel: "My Account",
       brandLabel: "Megaska Account",
@@ -33,6 +34,7 @@ export async function GET(request: NextRequest) {
   <link rel="stylesheet" href="${ASSET_BASE}/loopdesk-customer-dashboard.css">
 </head>
 <body>
+  <!-- Standalone App Proxy page: intentionally theme-independent. Use the normal Shopify theme page plus the LoopDesk customer dashboard app block when merchant theme header/footer is required. -->
   <main>
     <div id="loopdesk-customer-dashboard-root" data-loopdesk-customer-dashboard></div>
   </main>
