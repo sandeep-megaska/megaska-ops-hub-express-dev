@@ -1,4 +1,4 @@
-import { sendAdminAlert } from "./resend";
+import { sendAdminAlert } from "./resend.ts";
 
 type IssueNotifyPayload = {
   requestId: string;
