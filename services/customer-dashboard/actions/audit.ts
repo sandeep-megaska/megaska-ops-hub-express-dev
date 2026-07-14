@@ -21,7 +21,13 @@ type EventName =
   | "customer_dashboard.exchange.payment_verified"
   | "customer_dashboard.exchange.rejected"
   | "customer_dashboard.exchange.idempotent_replay"
-  | "customer_dashboard.exchange.failed";
+  | "customer_dashboard.exchange.failed"
+  | "customer_dashboard.issue.form_viewed"
+  | "customer_dashboard.issue.attempted"
+  | "customer_dashboard.issue.created"
+  | "customer_dashboard.issue.rejected"
+  | "customer_dashboard.issue.idempotent_replay"
+  | "customer_dashboard.issue.failed";
 type Logger = Pick<Console, "info" | "warn" | "error">;
 let logger: Logger = console;
 export function setActionAuditLoggerForTest(l: Logger) { logger = l; }
