@@ -1,6 +1,6 @@
 (function(){
   "use strict";
-  var state={dashboard:null,loading:false,error:null,selectedOrderId:null,dialog:null,submitting:false,idempotencyKey:null,lastPayloadKey:null};var root=document.querySelector("[data-loopdesk-customer-dashboard]")||document.getElementById("loopdesk-customer-dashboard");if(!root)return;var lastTrigger=null;
+  var state={dashboard:null,loading:false,error:null,selectedOrderId:null,dialog:null,submitting:false,idempotencyKey:null,lastPayloadKey:null,loginPromptOpen:false,authRefreshInFlight:false};var root=document.querySelector("[data-loopdesk-customer-dashboard]")||document.getElementById("loopdesk-customer-dashboard");if(!root)return;var lastTrigger=null;
   function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c];});}
   function el(t,c,ch,a){var n=document.createElement(t);if(c)n.className=c;Object.keys(a||{}).forEach(function(k){if(a[k]!=null)n.setAttribute(k,a[k]);});(ch||[]).forEach(function(x){if(x==null)return;n.appendChild(typeof x==="string"?document.createTextNode(x):x);});return n;}
   function readJsonConfig(){var s=document.getElementById("loopdesk-customer-dashboard-config");if(!s)return{};try{return JSON.parse(s.textContent||"{}");}catch(e){return{};}}
@@ -34,36 +34,7 @@
   function exchangeFields(d){if(!d.config||!d.config.available)return el("p",null,[(d.config&&d.config.lockReason)||"This action is not available."]);var reasons=((d.config.fields||[]).find(function(f){return f.key==="reasonCode";})||{}).options||[], fee=d.config.fee||{amountPaise:0,currency:"INR",required:false,label:"Reverse pickup fee"};return el("div",null,(d.config.items||[]).map(function(i,idx){var sel=(d.exchangeLines&&d.exchangeLines[i.lineItemId])||{};return el("div","ld-account-line-item",[el("label",null,[el("input",null,[],{type:"checkbox","data-ld-field":"exchangeSelect","data-line-id":i.lineItemId,checked:sel.selected?"checked":null,disabled:i.eligible?null:"disabled"})," "+i.title+" ("+(i.variantTitle||"Variant")+")"]),i.lockReason?el("small","ld-account-muted",[i.lockReason]):null,sel.selected?el("div",null,[el("label",null,["Quantity",el("select",null,Array.from({length:i.maxExchangeQuantity},function(_,n){return el("option",null,[String(n+1)],{value:String(n+1),selected:Number(sel.quantity||1)===n+1?"selected":null});}),{"data-ld-field":"exchangeQuantity","data-line-id":i.lineItemId})]),el("label",null,["Replacement",el("select",null,[el("option",null,["Select replacement"],{value:""})].concat((i.replacementOptions||[]).map(function(o){return el("option",null,[o.title],{value:o.variantId,selected:sel.requestedVariantId===o.variantId?"selected":null,disabled:o.available?null:"disabled"});})),{"data-ld-field":"exchangeVariant","data-line-id":i.lineItemId,required:"required"})]),el("label",null,["Reason",el("select",null,[el("option",null,["Select reason"],{value:""})].concat(reasons.map(function(r){return el("option",null,[r.label],{value:r.value,selected:sel.reasonCode===r.value?"selected":null});})),{"data-ld-field":"exchangeReason","data-line-id":i.lineItemId,required:"required"})]),el("label",null,["Note",el("textarea",null,[sel.note||""],{"data-ld-field":"exchangeNote","data-line-id":i.lineItemId,maxlength:"500"})])]):null]);}).concat([el("p","ld-account-muted",[fee.required?(fee.label+": "+money(fee.amountPaise,fee.currency)):"No reverse pickup fee"]),el("p","ld-account-muted",["This fee covers reverse pickup and is separate from your order total."])]));}
   function formFields(d){if(d.actionType==="EXCHANGE")return exchangeFields(d);if(d.actionType==="ISSUE")return issueFields(d);if(d.config&&!d.config.available)return el("p",null,[d.config.lockReason||"This action is not available."]);var opts=((d.config&&d.config.fields||[]).find(function(f){return f.key==="reasonCode";})||{}).options||[];return el("div",null,[el("label",null,["Reason for cancellation",el("select",null,[el("option",null,["Select a reason"],{value:""})].concat(opts.map(function(o){return el("option",null,[o.label],{value:o.value,selected:d.reasonCode===o.value?"selected":null});})),{"name":"reasonCode","data-ld-field":"reasonCode",required:"required"})]),el("label",null,["Additional details",el("textarea",null,[d.reasonText||""],{"name":"reasonText","data-ld-field":"reasonText",maxlength:"500"})]),el("small","ld-account-muted",[(d.reasonText||"").length+"/500"])]);}
 
-function triggerExistingOtpLogin() {
-  var existingTrigger = document.querySelector(
-    "[data-megaska-open-login]"
-  );
-
-  if (existingTrigger) {
-    existingTrigger.click();
-    return true;
-  }
-
-  var trigger = document.createElement("button");
-  trigger.type = "button";
-  trigger.hidden = true;
-  trigger.setAttribute("data-megaska-open-login", "1");
-  trigger.setAttribute(
-    "data-account-destination",
-    "/apps/megaska/account"
-  );
-
-  document.body.appendChild(trigger);
-  trigger.click();
-
-  setTimeout(function () {
-    trigger.remove();
-  }, 0);
-
-  return true;
-}
-  
-  function issueFields(d){if(!d.config||!d.config.available)return el("p",null,[(d.config&&d.config.lockReason)||"This action is not available."]);var types=d.config.issueTypes||[],rules=d.config.descriptionRules||{maximumLength:1000},atts=d.config.attachments||{},decls=d.config.declarations||[];return el("div",null,[el("label",null,["Issue type",el("select",null,[el("option",null,["Select issue"],{value:""})].concat(types.map(function(t){return el("option",null,[t.label],{value:t.code,selected:d.issueType===t.code?"selected":null});})),{"data-ld-field":"issueType",required:"required"})]),el("div",null,(d.config.items||[]).map(function(i){var sel=(d.issueLines&&d.issueLines[i.lineItemId])||{};return el("div","ld-account-line-item",[el("label",null,[el("input",null,[],{type:"checkbox","data-ld-field":"issueSelect","data-line-id":i.lineItemId,checked:sel.selected?"checked":null,disabled:i.available?null:"disabled"})," "+i.title+" ("+(i.variantTitle||"Variant")+")"]),sel.selected?el("label",null,["Quantity",el("select",null,Array.from({length:i.maximumIssueQuantity},function(_,n){return el("option",null,[String(n+1)],{value:String(n+1),selected:Number(sel.quantity||1)===n+1?"selected":null});}),{"data-ld-field":"issueQuantity","data-line-id":i.lineItemId})]):null]);})),el("label",null,["Description",el("textarea",null,[d.description||""],{"data-ld-field":"description",maxlength:String(rules.maximumLength||1000),required:"required"})]),el("small","ld-account-muted",[(d.description||"").length+"/"+(rules.maximumLength||1000)]),el("fieldset","ld-account-declarations",[el("legend",null,["Item condition declarations"])].concat(decls.map(function(x){return el("label",null,[el("input",null,[],{type:"checkbox","data-ld-field":"issueDeclaration","data-declaration-key":x.key,checked:d.declarations&&d.declarations[x.key]?"checked":null,required:x.required?"required":null})," "+x.label]);}))),atts.uploadSupported?el("p","ld-account-muted",["Evidence upload is available."]):el("p","ld-account-muted",["Evidence upload is not supported yet; no files or URLs are accepted."])]);}
+function issueFields(d){if(!d.config||!d.config.available)return el("p",null,[(d.config&&d.config.lockReason)||"This action is not available."]);var types=d.config.issueTypes||[],rules=d.config.descriptionRules||{maximumLength:1000},atts=d.config.attachments||{},decls=d.config.declarations||[];return el("div",null,[el("label",null,["Issue type",el("select",null,[el("option",null,["Select issue"],{value:""})].concat(types.map(function(t){return el("option",null,[t.label],{value:t.code,selected:d.issueType===t.code?"selected":null});})),{"data-ld-field":"issueType",required:"required"})]),el("div",null,(d.config.items||[]).map(function(i){var sel=(d.issueLines&&d.issueLines[i.lineItemId])||{};return el("div","ld-account-line-item",[el("label",null,[el("input",null,[],{type:"checkbox","data-ld-field":"issueSelect","data-line-id":i.lineItemId,checked:sel.selected?"checked":null,disabled:i.available?null:"disabled"})," "+i.title+" ("+(i.variantTitle||"Variant")+")"]),sel.selected?el("label",null,["Quantity",el("select",null,Array.from({length:i.maximumIssueQuantity},function(_,n){return el("option",null,[String(n+1)],{value:String(n+1),selected:Number(sel.quantity||1)===n+1?"selected":null});}),{"data-ld-field":"issueQuantity","data-line-id":i.lineItemId})]):null]);})),el("label",null,["Description",el("textarea",null,[d.description||""],{"data-ld-field":"description",maxlength:String(rules.maximumLength||1000),required:"required"})]),el("small","ld-account-muted",[(d.description||"").length+"/"+(rules.maximumLength||1000)]),el("fieldset","ld-account-declarations",[el("legend",null,["Item condition declarations"])].concat(decls.map(function(x){return el("label",null,[el("input",null,[],{type:"checkbox","data-ld-field":"issueDeclaration","data-declaration-key":x.key,checked:d.declarations&&d.declarations[x.key]?"checked":null,required:x.required?"required":null})," "+x.label]);}))),atts.uploadSupported?el("p","ld-account-muted",["Evidence upload is available."]):el("p","ld-account-muted",["Evidence upload is not supported yet; no files or URLs are accepted."])]);}
   function cryptoKey(){var a=new Uint8Array(16);(window.crypto||window.msCrypto).getRandomValues(a);return Array.from(a).map(function(x){return x.toString(16).padStart(2,"0");}).join("");}
   function openCancellation(id,trigger){var o=(state.dashboard.orders||[]).find(function(x){return x.id===id;});state.dialog={actionType:"CANCELLATION",orderId:id,orderNumber:o&&o.orderNumber,loading:true,reasonCode:"",reasonText:"",error:null,message:""};lastTrigger=trigger;render();api("/orders/"+encodeURIComponent(id)+"/actions/CANCELLATION").then(function(c){state.dialog.config=c;state.dialog.loading=false;render();}).catch(function(e){state.dialog.error=e.message;state.dialog.loading=false;render();});}
   function openExchange(id,trigger){var o=(state.dashboard.orders||[]).find(function(x){return x.id===id;});state.dialog={actionType:"EXCHANGE",orderId:id,orderNumber:o&&o.orderNumber,loading:true,exchangeLines:{},error:null,message:""};lastTrigger=trigger;render();api("/orders/"+encodeURIComponent(id)+"/actions/EXCHANGE").then(function(c){state.dialog.config=c;state.dialog.loading=false;render();}).catch(function(e){state.dialog.error=e.message;state.dialog.loading=false;render();});}
@@ -77,6 +48,8 @@ function triggerExistingOtpLogin() {
   function onClick(e){var target=e.target.closest&&e.target.closest("[data-ld-action]");if(!target)return;var action=target.getAttribute("data-ld-action");if(action==="retry")loadDashboard();if(action==="logout")logout();if(action==="details")openDetail(target.getAttribute("data-order-id"),target);if(action==="close-detail")closeDetail();if(action==="open-cancellation")openCancellation(target.getAttribute("data-order-id"),target);if(action==="open-exchange")openExchange(target.getAttribute("data-order-id"),target);if(action==="open-issue")openIssue(target.getAttribute("data-order-id"),target);if(action==="close-action"&&!state.submitting){state.dialog=null;render();if(lastTrigger)lastTrigger.focus();}if(action==="submit-cancellation"){e.preventDefault();state.dialog&&state.dialog.actionType==="EXCHANGE"?submitExchange():state.dialog&&state.dialog.actionType==="ISSUE"?submitIssue():submitCancellation();}if(action==="show-more"){var c=cfg();c.orders=c.orders||{};c.orders.initialOrderLimit=50;window.LoopDeskCustomerDashboardConfig=Object.assign({},window.LoopDeskCustomerDashboardConfig||{},c);render();}}
   function logout(){document.cookie="loopdesk_customer_session=; Max-Age=0; path=/; SameSite=Lax";location.href=cfg().logoutRedirectUrl||"/";}
 function triggerExistingOtpLogin() {
+  if (state.loginPromptOpen) return;
+  state.loginPromptOpen = true;
   var trigger = document.querySelector("[data-megaska-open-login]");
 
   if (!trigger) {
@@ -95,6 +68,8 @@ function triggerExistingOtpLogin() {
 }
 
 function loadDashboard(silent) {
+  if (state.authRefreshInFlight && silent) return Promise.resolve();
+  if (silent) state.authRefreshInFlight = true;
   if (!silent) {
     state.loading = true;
     state.error = null;
@@ -104,12 +79,15 @@ function loadDashboard(silent) {
   return api("")
     .then(function (d) {
       state.dashboard = d;
+      state.loginPromptOpen = false;
+      state.authRefreshInFlight = false;
       state.loading = false;
       state.error = null;
       render();
     })
     .catch(function (e) {
       state.loading = false;
+      state.authRefreshInFlight = false;
 
       if (e.status === 401) {
         state.error = null;
@@ -118,11 +96,12 @@ function loadDashboard(silent) {
         return;
       }
 
+      state.loginPromptOpen = false;
       state.error = e;
       render();
     });
 }
 
   
-}root.addEventListener("click",onClick);root.addEventListener("input",onInput);root.addEventListener("submit",function(e){if(e.target.closest&&e.target.closest(".ld-action-panel")){e.preventDefault();state.dialog&&state.dialog.actionType==="EXCHANGE"?submitExchange():state.dialog&&state.dialog.actionType==="ISSUE"?submitIssue():submitCancellation();}});document.addEventListener("keydown",function(e){if(e.key==="Escape"&&state.dialog&&!state.submitting){state.dialog=null;render();if(lastTrigger)lastTrigger.focus();}});loadDashboard();
+root.addEventListener("click",onClick);root.addEventListener("input",onInput);root.addEventListener("submit",function(e){if(e.target.closest&&e.target.closest(".ld-action-panel")){e.preventDefault();state.dialog&&state.dialog.actionType==="EXCHANGE"?submitExchange():state.dialog&&state.dialog.actionType==="ISSUE"?submitIssue():submitCancellation();}});document.addEventListener("keydown",function(e){if(e.key==="Escape"&&state.dialog&&!state.submitting){state.dialog=null;render();if(lastTrigger)lastTrigger.focus();}});document.addEventListener("megaska:auth-state-changed",function(e){if(e&&e.detail&&e.detail.authenticated){state.loginPromptOpen=false;loadDashboard(true);}});setTimeout(function(){loadDashboard();},250);
 })();

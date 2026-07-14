@@ -7,6 +7,8 @@ const ALLOWED: Record<string, string> = {
   "loopdesk-customer-dashboard.js": "application/javascript; charset=utf-8",
   "loopdesk-customer-dashboard.css": "text/css; charset=utf-8",
   "megaska-auth.js": "application/javascript; charset=utf-8",
+  "megaska-otp.js": "application/javascript; charset=utf-8",
+  "megaska-otp.css": "text/css; charset=utf-8",
 };
 
 export async function GET(_request: NextRequest, context: { params: Promise<{ asset: string }> }) {
