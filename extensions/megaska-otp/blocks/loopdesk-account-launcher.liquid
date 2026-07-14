@@ -1,7 +1,24 @@
 {% liquid
   assign logged_out_label = block.settings.logged_out_label | default: 'Login'
   assign logged_in_label = block.settings.logged_in_label | default: 'My Account'
-  assign dashboard_url = block.settings.dashboard_url | default: '/apps/megaska/account'
+  assign configured_dashboard_url = block.settings.dashboard_url
+  assign configured_dashboard_path = configured_dashboard_url | split: '?' | first | split: '#' | first
+  assign obsolete_dashboard_path = '/apps/megaska/dashboard'
+  assign obsolete_dashboard_path_slash = '/apps/megaska/dashboard/'
+  assign permanent_shop_https_origin = 'https://' | append: shop.permanent_domain
+  assign permanent_shop_http_origin = 'http://' | append: shop.permanent_domain
+  assign display_shop_https_origin = 'https://' | append: shop.domain
+  assign display_shop_http_origin = 'http://' | append: shop.domain
+  assign configured_dashboard_path = configured_dashboard_path | remove: permanent_shop_https_origin | remove: permanent_shop_http_origin | remove: display_shop_https_origin | remove: display_shop_http_origin
+
+  if configured_dashboard_url == blank
+    assign dashboard_url = '/apps/megaska/account'
+  elsif configured_dashboard_path == obsolete_dashboard_path or configured_dashboard_path == obsolete_dashboard_path_slash
+    assign dashboard_url = '/apps/megaska/account'
+  else
+    assign dashboard_url = configured_dashboard_url
+  endif
+
   assign extra_class = block.settings.additional_css_class | default: ''
 %}
 
