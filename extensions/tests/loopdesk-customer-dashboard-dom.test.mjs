@@ -20,9 +20,14 @@ assert.match(js, /moneyMajor\(o\.total \|\| o\.totalPrice \|\| o\.currentTotalPr
 assert.match(js, /new URL\(u, fallback \|\| window\.location\.origin\)/);
 assert.match(js, /\["http:", "https:"\]\.includes\(x\.protocol\)/);
 assert.match(js, /state\.requestSequence\+\+/);
-assert.match(js, /if \(state\.request\) return state\.request/);
+assert.match(js, /if \(state\.dashboardRequest\) return state\.dashboardRequest/);
 assert.match(js, /err\.auth = true/);
 assert.match(js, /renderAuthRequired\(false\)/);
+assert.match(js, /waitForDashboardSessionToken/);
+assert.match(js, /Completing secure sign-in…/);
+assert.match(js, /handleAuthStateChanged/);
+assert.match(js, /AUTH_SETTLING/);
+assert.match(js, /LOADING_DASHBOARD/);
 assert.match(js, /window\.MegaskaAuth/);
 assert.match(js, /typeof a\.logout === "function"/);
 assert.match(js, /document\.dispatchEvent\(new CustomEvent\("megaska:auth-state-changed"/);
