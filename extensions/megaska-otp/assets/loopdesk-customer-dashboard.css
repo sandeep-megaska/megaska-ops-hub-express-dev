@@ -95,3 +95,22 @@ body.ld-account-scroll-lock { overflow: hidden; }
   #loopdesk-customer-dashboard-root .ld-account-auth-actions { align-items: stretch; flex-direction: column; }
   #loopdesk-customer-dashboard-root .ld-account-auth-actions .ld-account-button, #loopdesk-customer-dashboard-root .ld-account-auth-actions .ld-account-home-link { width: 100%; }
 }
+#loopdesk-customer-dashboard-root .ld-account-status-list { display: grid; gap: 8px; margin: 10px 0; }
+#loopdesk-customer-dashboard-root .ld-account-status-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; color: var(--ld-account-muted); }
+#loopdesk-customer-dashboard-root .ld-account-status-row > span:first-child { font-weight: 700; color: var(--ld-account-text); }
+#loopdesk-customer-dashboard-root .ld-account-pill-progress { color: #8a5a00; background: #fff4d6; }
+#loopdesk-customer-dashboard-root .ld-account-pill-bad { color: #9b1c1c; background: #fee2e2; }
+#loopdesk-customer-dashboard-root .ld-account-pill-neutral { color: #4b5563; background: #f3f4f6; }
+#loopdesk-customer-dashboard-root .ld-account-pill-cancel, #loopdesk-customer-dashboard-root .ld-account-pill-exchange, #loopdesk-customer-dashboard-root .ld-account-pill-issue { color: var(--ld-account-brand-dark); background: var(--ld-account-soft); }
+#loopdesk-customer-dashboard-root .ld-account-tracking-preview, #loopdesk-customer-dashboard-root .ld-account-tracking-card { display: grid; gap: 8px; min-width: 0; overflow-wrap: anywhere; word-break: break-word; border: 1px solid var(--ld-account-line); border-radius: 16px; background: #fffafd; padding: 12px; margin: 12px 0; }
+#loopdesk-customer-dashboard-root .ld-account-tracking-preview { background: var(--ld-account-soft); }
+#loopdesk-customer-dashboard-root .ld-account-tracking-card .ld-account-link, #loopdesk-customer-dashboard-root .ld-account-tracking-preview .ld-account-link { justify-self: start; min-height: 0; }
+#loopdesk-customer-dashboard-root .ld-account-empty-state { color: var(--ld-account-muted); }
+#loopdesk-customer-dashboard-root .ld-account-transactions { margin-top: 16px; }
+#loopdesk-customer-dashboard-root .ld-account-transactions h3 { margin-bottom: 8px; }
+#loopdesk-customer-dashboard-root .ld-account-transaction-credit b { color: var(--ld-account-ok); }
+#loopdesk-customer-dashboard-root .ld-account-transaction-debit b { color: #9b1c1c; }
+@media (max-width: 768px) {
+  #loopdesk-customer-dashboard-root .ld-account-status-row { align-items: flex-start; flex-direction: column; }
+  #loopdesk-customer-dashboard-root .ld-account-tracking-preview, #loopdesk-customer-dashboard-root .ld-account-tracking-card { padding: 10px; }
+}
