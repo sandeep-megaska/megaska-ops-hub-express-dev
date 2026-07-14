@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { buildDashboardOrderActions } from "./actions.ts";
 import { buildDashboardOrderRequestsDto, type DashboardOrderRequestSnapshot } from "./requests.ts";
-const empty:DashboardOrderRequestSnapshot={cancellation:null,exchange:null,issue:null,activeConflict:null};
+const empty:DashboardOrderRequestSnapshot={cancellation:null,exchange:null,issue:null,cancellations:[],exchanges:[],issues:[],timeline:[],activeConflict:null};
 const mods={cancellation:true,exchange:true,issueReporting:true};
 const base={now:new Date("2026-01-02T00:00:00Z"),fulfillmentStatus:null,fulfilledAt:null,deliveredAt:null,trackingDeliveredAt:null,requests:empty,modules:mods};
 test("Cancellation available before shipment and locked after shipment",()=>{assert.equal(buildDashboardOrderActions(base).cancellation.available,true);assert.equal(buildDashboardOrderActions({...base,fulfillmentStatus:"shipped"}).cancellation.state,"LOCKED");});

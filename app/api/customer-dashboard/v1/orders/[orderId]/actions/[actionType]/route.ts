@@ -27,7 +27,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ orderId: st
     const context = await resolveCustomerDashboardActionContext(req);
     const [modules, order] = await Promise.all([loadDashboardModules(context), loadOwnedOrderForAction({ context, orderId: params.orderId })]);
     const reqs = await loadDashboardOrderRequests({ context, orderNumbers: [order.orderNumber] });
-    const snap = reqs.byOrderNumber.get(order.orderNumber.replace(/^#/, "").toUpperCase()) || reqs.byOrderNumber.get(order.orderNumber) || { cancellation: null, exchange: null, issue: null, activeConflict: null };
+    const snap = reqs.byOrderNumber.get(order.orderNumber.replace(/^#/, "").toUpperCase()) || reqs.byOrderNumber.get(order.orderNumber) || { cancellation: null, exchange: null, issue: null, cancellations: [], exchanges: [], issues: [], timeline: [], activeConflict: null };
     const policies = buildDashboardOrderActions({ now: context.now, fulfillmentStatus: order.fulfillmentStatus, fulfilledAt: order.fulfilledAt, deliveredAt: order.deliveredAt, trackingDeliveredAt: null, requests: snap, modules });
     const action = actionType === "CANCELLATION" ? policies.cancellation : actionType === "EXCHANGE" ? policies.exchange : policies.issue;
     const available = Boolean(modules[def.moduleCapability] && action.available && action.state === "AVAILABLE");
