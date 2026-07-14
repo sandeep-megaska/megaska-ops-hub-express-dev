@@ -114,3 +114,35 @@ body.ld-account-scroll-lock { overflow: hidden; }
   #loopdesk-customer-dashboard-root .ld-account-status-row { align-items: flex-start; flex-direction: column; }
   #loopdesk-customer-dashboard-root .ld-account-tracking-preview, #loopdesk-customer-dashboard-root .ld-account-tracking-card { padding: 10px; }
 }
+#loopdesk-customer-dashboard-root .ld-account-cancel-action, #loopdesk-customer-dashboard-root .ld-account-cancellation-update { display: grid; gap: 12px; border: 1px solid var(--ld-account-line); border-radius: 18px; background: #fffafd; padding: 14px; margin: 12px 0; overflow-wrap: anywhere; }
+#loopdesk-customer-dashboard-root .ld-account-cancel-action { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
+#loopdesk-customer-dashboard-root .ld-account-cancel-action p { margin: 4px 0 0; color: var(--ld-account-muted); }
+#loopdesk-customer-dashboard-root .ld-account-cancel-action.is-disabled { background: #f9fafb; }
+#loopdesk-customer-dashboard-root .ld-account-cancel-action button:disabled { background: #e5e7eb; color: #6b7280; cursor: not-allowed; }
+#loopdesk-customer-dashboard-root .ld-account-update-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+#loopdesk-customer-dashboard-root .ld-account-update-row > span:first-child, #loopdesk-customer-dashboard-root .ld-account-update-explanation strong { color: var(--ld-account-text); font-weight: 800; }
+#loopdesk-customer-dashboard-root .ld-account-update-explanation p { margin: 6px 0 0; color: var(--ld-account-muted); }
+#loopdesk-customer-dashboard-root .ld-account-cancel-modal-wrap { position: fixed; inset: 0; z-index: 2147483001; display: grid; place-items: center; padding: 18px; }
+#loopdesk-customer-dashboard-root .ld-account-cancel-overlay { position: absolute; inset: 0; background: rgba(20, 10, 16, .56); }
+#loopdesk-customer-dashboard-root .ld-account-cancel-modal { position: relative; width: min(560px, 100%); max-height: min(760px, calc(100vh - 36px)); overflow-y: auto; background: #fff; color: var(--ld-account-text); border-radius: 28px; box-shadow: var(--ld-account-shadow); padding: 26px; }
+#loopdesk-customer-dashboard-root .ld-account-cancel-summary { display: grid; gap: 6px; background: var(--ld-account-soft); border-radius: 18px; padding: 14px; margin: 14px 0; overflow-wrap: anywhere; }
+#loopdesk-customer-dashboard-root .ld-account-cancel-summary span { color: var(--ld-account-muted); }
+#loopdesk-customer-dashboard-root .ld-account-reasons { border: 0; padding: 0; margin: 16px 0; display: grid; gap: 10px; }
+#loopdesk-customer-dashboard-root .ld-account-reasons legend, #loopdesk-customer-dashboard-root .ld-account-note-label { font-weight: 800; margin-bottom: 8px; }
+#loopdesk-customer-dashboard-root .ld-account-reasons label { display: flex; align-items: center; gap: 10px; border: 1px solid var(--ld-account-line); border-radius: 16px; padding: 12px; cursor: pointer; }
+#loopdesk-customer-dashboard-root .ld-account-reasons input { width: 20px; height: 20px; accent-color: var(--ld-account-brand); }
+#loopdesk-customer-dashboard-root .ld-account-note-label { display: block; }
+#loopdesk-customer-dashboard-root .ld-account-note-label span { color: var(--ld-account-muted); font-weight: 600; }
+#loopdesk-customer-dashboard-root .ld-account-note { width: 100%; min-height: 110px; border: 1px solid var(--ld-account-line); border-radius: 16px; padding: 12px; font: inherit; resize: vertical; }
+#loopdesk-customer-dashboard-root .ld-account-note:focus { outline: 3px solid var(--ld-account-brand); outline-offset: 2px; }
+#loopdesk-customer-dashboard-root .ld-account-form-message { border-radius: 14px; padding: 12px; margin: 12px 0; overflow-wrap: anywhere; }
+#loopdesk-customer-dashboard-root .ld-account-form-message-error { background: #fee2e2; color: #9b1c1c; }
+#loopdesk-customer-dashboard-root .ld-account-form-message-success { background: #e9fbf4; color: var(--ld-account-ok); }
+#loopdesk-customer-dashboard-root .ld-account-modal-actions { display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+@media (max-width: 768px) {
+  #loopdesk-customer-dashboard-root .ld-account-cancel-action { grid-template-columns: 1fr; align-items: stretch; }
+  #loopdesk-customer-dashboard-root .ld-account-cancel-action button, #loopdesk-customer-dashboard-root .ld-account-modal-actions button { width: 100%; }
+  #loopdesk-customer-dashboard-root .ld-account-cancel-modal-wrap { align-items: end; padding: 0; }
+  #loopdesk-customer-dashboard-root .ld-account-cancel-modal { width: 100%; max-height: 92vh; border-radius: 24px 24px 0 0; padding: 20px; }
+  #loopdesk-customer-dashboard-root .ld-account-modal-actions { position: sticky; bottom: -20px; background: #fff; padding: 12px 0 20px; }
+}

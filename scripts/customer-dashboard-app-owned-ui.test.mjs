@@ -32,7 +32,7 @@ assert.match(dashboardJs, /Please verify your mobile number to view your account
 assert.match(dashboardJs, /data-megaska-open-login>Sign in/);
 assert.doesNotMatch(dashboardJs, /openLogin|loginPromptOpen|MegaskaAuth\.openLogin|data-ld-login>Sign in/);
 assert.match(dashboardJs, /megaska:auth-state-changed/);
-assert.match(dashboardJs, /moneyPaise/);
+assert.match(dashboardJs, /moneyMinor/);
 assert.match(dashboardJs, /primaryShipment\(o\)/);
 assert.match(dashboardJs, /shipmentsOf\(o\)/);
 assert.match(dashboardJs, /safeUrl/);
@@ -40,6 +40,8 @@ assert.match(dashboardJs, /latestCancellationStatus/);
 assert.match(dashboardJs, /exchangeProgress/);
 assert.match(dashboardJs, /latestIssueStatus/);
 assert.match(dashboardJs, /transactions/);
-assert.doesNotMatch(dashboardJs, /dashboard\.v1|customer-dashboard\/v1|console\.log\(\"\[MEGASKA ACCOUNT\] dashboard data|megaska-ops-hub-exs1|requests\/(cancellation|exchange|issue)/);
+assert.doesNotMatch(dashboardJs, /dashboard\.v1|customer-dashboard\/v1|console\.log\(\"\[MEGASKA ACCOUNT\] dashboard data|megaska-ops-hub-exs1|requests\/(exchange|issue)/);
+assert.match(dashboardJs, /requests\/cancellation/);
+assert.match(dashboardJs, /Request cancellation/);
 
 console.log("customer-dashboard-app-owned-ui tests passed");
