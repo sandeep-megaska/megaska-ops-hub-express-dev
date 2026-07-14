@@ -2,11 +2,12 @@ import type { CancellationActionPayload, CustomerDashboardActionRequest, Custome
 import { CustomerDashboardActionError } from "./errors.ts";
 import { CANCELLATION_REASON_TEXT_MAX_LENGTH, isCancellationReasonCode } from "./reasons.ts";
 import { EXCHANGE_NOTE_MAX_LENGTH, isExchangeReasonCode } from "./exchange-reasons.ts";
+import { ISSUE_DESCRIPTION_MAX_LENGTH, ISSUE_DESCRIPTION_MIN_LENGTH, isIssueReasonCode } from "./issue-reasons.ts";
 
 const types = new Set(["CANCELLATION", "EXCHANGE", "ISSUE"]);
 const html = /<[^>]+>/;
 const control = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/;
-const max = { reasonCode: 60, reasonText: CANCELLATION_REASON_TEXT_MAX_LENGTH, description: 1000, note: EXCHANGE_NOTE_MAX_LENGTH, idempotencyKey: 128 };
+const max = { reasonCode: 60, reasonText: CANCELLATION_REASON_TEXT_MAX_LENGTH, description: ISSUE_DESCRIPTION_MAX_LENGTH, note: EXCHANGE_NOTE_MAX_LENGTH, idempotencyKey: 128 };
 
 function obj(v: unknown, path: string) {
   if (!v || typeof v !== "object" || Array.isArray(v)) throw invalid({ [path]: "Must be an object." });
@@ -63,5 +64,18 @@ function validateLines(lines: unknown, path: string, exchange: boolean) {
   });
 }
 export function validateExchangePayload(payload: unknown): ExchangeActionPayload { const p = obj(payload, "payload"); return { lineItems: validateLines(p.lineItems, "lineItems", true) as ExchangeActionPayload["lineItems"] }; }
-export function validateIssuePayload(payload: unknown): IssueActionPayload { const p = obj(payload, "payload"); const issueType = clean(p.issueType, "issueType", 40) as IssueActionPayload["issueType"]; if (!["DAMAGED", "WRONG_ITEM", "MISSING_ITEM", "QUALITY", "OTHER"].includes(issueType)) invalid({ issueType: "Invalid issue type." }); const attachments = p.attachments == null ? [] : Array.isArray(p.attachments) ? p.attachments.map((a, i) => { const token = clean(obj(a, `attachments.${i}`).token, `attachments.${i}.token`, 180); if (/^https?:|data:/i.test(token)) invalid({ [`attachments.${i}.token`]: "Use an upload token, not a URL." }); return { token }; }) : invalid({ attachments: "Invalid attachments." }); if (attachments.length > 5) invalid({ attachments: "At most 5 attachments are allowed." }); return { issueType, lineItems: validateLines(p.lineItems, "lineItems", false) as IssueActionPayload["lineItems"], description: clean(p.description, "description", max.description), attachments }; }
+export function validateIssuePayload(payload: unknown): IssueActionPayload {
+  const p = obj(payload, "payload");
+  const issueType = clean(p.issueType, "issueType", 40) as IssueActionPayload["issueType"];
+  if (!isIssueReasonCode(issueType)) invalid({ issueType: "Invalid issue type." });
+  const description = clean(p.description, "description", max.description);
+  if (description.length < ISSUE_DESCRIPTION_MIN_LENGTH) invalid({ description: `Must be at least ${ISSUE_DESCRIPTION_MIN_LENGTH} characters.` });
+  const attachments = p.attachments == null ? [] : Array.isArray(p.attachments) ? p.attachments.map((a, i) => {
+    const token = clean(obj(a, `attachments.${i}`).token, `attachments.${i}.token`, 180);
+    if (/^https?:|data:/i.test(token)) invalid({ [`attachments.${i}.token`]: "Use an upload token, not a URL." });
+    return { token };
+  }) : invalid({ attachments: "Invalid attachments." });
+  if (attachments.length) invalid({ attachments: "Evidence upload is not supported yet." });
+  return { issueType, lineItems: validateLines(p.lineItems, "lineItems", false) as IssueActionPayload["lineItems"], description, attachments };
+}
 export function validatePayloadForAction(type: CustomerDashboardActionType, payload: unknown): CustomerDashboardValidatedPayload { return type === "CANCELLATION" ? validateCancellationPayload(payload) : type === "EXCHANGE" ? validateExchangePayload(payload) : validateIssuePayload(payload); }

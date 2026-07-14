@@ -69,3 +69,10 @@ Security: verify Customer A cannot act on Customer B orders, Shop A sessions can
 - Window race: open near deadline, submit after expiry, expect `ACTION_NOT_AVAILABLE` and no request.
 - Duplicate/conflict: double-click or retry same key creates one request/payment; active cancellation or issue blocks exchange with a clear lock reason.
 - Deployment: backend/dashboard changes require Vercel deployment; extension asset changes require `shopify app deploy`; live Razorpay UAT may require live-store credentials.
+
+## DASH-4D issue reporting UAT checklist
+
+- Happy path: open a delivered eligible order, select issue type, one or more delivered items and quantities, enter a description, submit, and verify dashboard refresh plus merchant Issues visibility.
+- Security: stale issue forms must be rejected after deadline, module disablement, session expiry, or a newly active cancellation/exchange/issue.
+- Validation: duplicate line items, foreign line items, excess quantities, unsupported issue types, unsafe descriptions, and non-empty attachments must be rejected without creating a request.
+- Attachments: the issue form must not show an upload control while upload tokens are unsupported, and the API must reject URL/base64/file payloads.
