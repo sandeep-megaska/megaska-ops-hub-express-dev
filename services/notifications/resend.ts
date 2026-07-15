@@ -1,13 +1,23 @@
+import { randomUUID } from "node:crypto";
 import { getMerchantNotificationRoutingSettings, type NotificationSettingsDb } from "../settings/merchant-notifications.ts";
+import { recordAcceptedEmailUsage } from "../usage/email-usage.ts";
 
 export type AdminAlertEventType = "CANCELLATION" | "EXCHANGE" | "ISSUE" | "STORE_CREDIT" | "CHECKOUT" | "GENERAL";
 export type CustomerEmailEventType = AdminAlertEventType | "ORDER";
+
+export type NotificationUsageContext = {
+  sourceType?: string;
+  sourceId?: string;
+  idempotencyKey?: string;
+  metadata?: Record<string, unknown>;
+};
 
 export type SendAdminAlertInput = {
   shopId: string;
   eventType: AdminAlertEventType;
   subject: string;
   text: string;
+  usageContext?: NotificationUsageContext;
 };
 
 export type SendCustomerEmailInput = {
@@ -16,6 +26,7 @@ export type SendCustomerEmailInput = {
   eventType: CustomerEmailEventType;
   subject: string;
   text: string;
+  usageContext?: NotificationUsageContext;
 };
 
 export type AdminAlertSkipReason = "EMAIL_DISABLED" | "EVENT_DISABLED" | "NO_RECIPIENTS" | "PLATFORM_TRANSPORT_NOT_CONFIGURED";
@@ -37,6 +48,61 @@ type SendAdminAlertDeps = {
 };
 
 type SendCustomerEmailDeps = SendAdminAlertDeps;
+
+
+function usageLog(operation: string, details: Record<string, unknown>) {
+  console.info("[USAGE METER]", { operation, ...details });
+}
+
+async function safelyRecordEmailUsage(input: {
+  shopId: string;
+  audience: "ADMIN" | "CUSTOMER";
+  eventType: string;
+  providerMessageId: string | null;
+  notificationAttemptId: string;
+  recipientCount: number;
+  usageContext?: NotificationUsageContext;
+}, db?: NotificationSettingsDb) {
+  try {
+    const result = await recordAcceptedEmailUsage({
+      shopId: input.shopId,
+      notificationAudience: input.audience,
+      eventType: input.eventType,
+      providerMessageId: input.providerMessageId,
+      notificationAttemptId: input.notificationAttemptId,
+      recipientCount: input.recipientCount,
+      sourceType: input.usageContext?.sourceType,
+      sourceId: input.usageContext?.sourceId,
+      idempotencyKey: input.usageContext?.idempotencyKey,
+    }, db as Parameters<typeof recordAcceptedEmailUsage>[1]);
+    usageLog(result.created ? "email_usage_recorded" : "email_usage_duplicate", {
+      shopId: input.shopId,
+      audience: input.audience,
+      eventType: input.eventType,
+      providerMessageId: input.providerMessageId,
+      notificationAttemptId: input.notificationAttemptId,
+      recipientCount: input.recipientCount,
+      sourceType: input.usageContext?.sourceType || (input.providerMessageId ? "RESEND_MESSAGE" : "RESEND_ATTEMPT"),
+      sourceId: input.usageContext?.sourceId || input.providerMessageId || input.notificationAttemptId,
+      eventId: result.eventId,
+      created: result.created,
+    });
+  } catch (error) {
+    console.error("[USAGE METER]", {
+      operation: "email_usage_record_failed",
+      shopId: input.shopId,
+      audience: input.audience,
+      eventType: input.eventType,
+      providerMessageId: input.providerMessageId,
+      notificationAttemptId: input.notificationAttemptId,
+      recipientCount: input.recipientCount,
+      sourceType: input.usageContext?.sourceType || null,
+      sourceId: input.usageContext?.sourceId || null,
+      errorName: error instanceof Error ? error.name : null,
+      errorMessage: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
 
 function parseRecipients(value: string | undefined) {
   return String(value || "")
@@ -206,6 +272,8 @@ export async function sendAdminAlert(input: SendAdminAlertInput, deps: SendAdmin
     return { skipped: true, reason: "PLATFORM_TRANSPORT_NOT_CONFIGURED" };
   }
 
+  const notificationAttemptId = randomUUID();
+
   try {
     const body: Record<string, unknown> = {
       from,
@@ -222,8 +290,10 @@ export async function sendAdminAlert(input: SendAdminAlertInput, deps: SendAdmin
     });
     const data = (await response.json().catch(() => null)) as { id?: string; message?: string } | null;
     if (!response.ok) throw new Error(data?.message || `Resend HTTP ${response.status}`);
-    log("provider_accepted", { shopId, eventType, recipientCount: recipients.length, providerMessageId: data?.id || null });
-    return { skipped: false, success: true, messageId: data?.id || null };
+    const providerMessageId = data?.id || null;
+    log("provider_accepted", { shopId, eventType, recipientCount: recipients.length, providerMessageId });
+    await safelyRecordEmailUsage({ shopId, audience: "ADMIN", eventType, providerMessageId, notificationAttemptId, recipientCount: recipients.length, usageContext: input.usageContext }, deps.db);
+    return { skipped: false, success: true, messageId: providerMessageId };
   } catch (error) {
     console.error("[ADMIN NOTIFY]", { operation: "provider_failed", shopId, eventType, subject: boundedSubject(subject), errorName: error instanceof Error ? error.name : null, errorMessage: error instanceof Error ? error.message : String(error) });
     return { skipped: false, success: false, errorCode: "PROVIDER_FAILED" };
@@ -279,6 +349,8 @@ export async function sendCustomerEmail(input: SendCustomerEmailInput, deps: Sen
     return { skipped: true, reason: "PLATFORM_TRANSPORT_NOT_CONFIGURED" };
   }
 
+  const notificationAttemptId = randomUUID();
+
   try {
     const body: Record<string, unknown> = {
       from,
@@ -296,8 +368,10 @@ export async function sendCustomerEmail(input: SendCustomerEmailInput, deps: Sen
     });
     const data = (await response.json().catch(() => null)) as { id?: string; message?: string } | null;
     if (!response.ok) throw new Error(data?.message || `Resend HTTP ${response.status}`);
-    customerLog("provider_accepted", { shopId, eventType, providerMessageId: data?.id || null, subject: boundedSubject(subject), recipientPresent: true });
-    return { skipped: false, success: true, messageId: data?.id || null };
+    const providerMessageId = data?.id || null;
+    customerLog("provider_accepted", { shopId, eventType, providerMessageId, subject: boundedSubject(subject), recipientPresent: true });
+    await safelyRecordEmailUsage({ shopId, audience: "CUSTOMER", eventType, providerMessageId, notificationAttemptId, recipientCount: 1, usageContext: input.usageContext }, deps.db);
+    return { skipped: false, success: true, messageId: providerMessageId };
   } catch (error) {
     console.error("[CUSTOMER NOTIFY]", { operation: "provider_failed", shopId, eventType, subject: boundedSubject(subject), recipientPresent: true, errorName: error instanceof Error ? error.name : null, errorMessage: error instanceof Error ? error.message : String(error) });
     return { skipped: false, success: false, errorCode: "PROVIDER_FAILED" };

@@ -53,7 +53,17 @@ export async function sendExchangeTeamAlert(
   subject: string,
   payload: ExchangeNotifyPayload
 ) {
-  const result = await sendOpsAlert({ shopId: payload.shopId, eventType: "EXCHANGE", subject, text: buildBody(payload) });
+  const result = await sendOpsAlert({
+    shopId: payload.shopId,
+    eventType: "EXCHANGE",
+    subject,
+    text: buildBody(payload),
+    usageContext: {
+      sourceType: "EXCHANGE_REQUEST",
+      sourceId: payload.requestId,
+      idempotencyKey: `usage:email-send:${payload.shopId}:exchange:${payload.requestId}:${eventName.toLowerCase().replace(/_/g, "-")}-admin`,
+    },
+  });
 
   if (result.skipped) return;
 
@@ -74,7 +84,17 @@ export async function sendExchangeTeamAlert(
 
 export async function sendExchangeRequestCreatedEmail(payload: ExchangeNotifyPayload) {
   const template = buildExchangeRequestedOpsTemplate(payload);
-  await sendOpsAlert({ shopId: payload.shopId, eventType: "EXCHANGE", subject: template.subject, text: template.text });
+  await sendOpsAlert({
+    shopId: payload.shopId,
+    eventType: "EXCHANGE",
+    subject: template.subject,
+    text: template.text,
+    usageContext: {
+      sourceType: "EXCHANGE_REQUEST",
+      sourceId: payload.requestId,
+      idempotencyKey: `usage:email-send:${payload.shopId}:exchange:${payload.requestId}:request-created-admin`,
+    },
+  });
 }
 
 export async function sendExchangeStatusChangedEmail(payload: ExchangeNotifyPayload) {
@@ -113,6 +133,11 @@ export async function sendExchangeApprovedPaymentRequiredEmail(
     eventType: "EXCHANGE",
     subject: template.subject,
     text: template.text,
+    usageContext: {
+      sourceType: "EXCHANGE_REQUEST",
+      sourceId: payload.requestId,
+      idempotencyKey: `usage:email-send:${payload.shopId}:exchange:${payload.requestId}:payment-required-customer`,
+    },
   });
 
   if (!result.success && !result.skipped) {
@@ -126,7 +151,17 @@ export async function sendExchangePaymentReceivedOpsEmail(
   payload: ExchangeNotifyPayload
 ) {
   const template = buildExchangePaymentReceivedOpsTemplate(payload);
-  await sendOpsAlert({ shopId: payload.shopId, eventType: "EXCHANGE", subject: template.subject, text: template.text });
+  await sendOpsAlert({
+    shopId: payload.shopId,
+    eventType: "EXCHANGE",
+    subject: template.subject,
+    text: template.text,
+    usageContext: {
+      sourceType: "EXCHANGE_REQUEST",
+      sourceId: payload.requestId,
+      idempotencyKey: `usage:email-send:${payload.shopId}:exchange:${payload.requestId}:payment-received-admin`,
+    },
+  });
 }
 
 
@@ -163,5 +198,9 @@ export async function sendExchangeInvoiceEmail(invoice: {
     eventType: "EXCHANGE",
     subject,
     text,
+    usageContext: {
+      sourceType: "EXCHANGE_INVOICE",
+      sourceId: invoice.invoiceNumber,
+    },
   });
 }

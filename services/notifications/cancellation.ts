@@ -40,7 +40,17 @@ export async function sendCancellationTeamAlert(
   subject: string,
   payload: CancellationNotifyPayload
 ) {
-  const result = await sendAdminAlert({ shopId: payload.shopId, eventType: "CANCELLATION", subject, text: buildBody(payload) });
+  const result = await sendAdminAlert({
+    shopId: payload.shopId,
+    eventType: "CANCELLATION",
+    subject,
+    text: buildBody(payload),
+    usageContext: {
+      sourceType: "CANCELLATION_REQUEST",
+      sourceId: payload.requestId,
+      idempotencyKey: `usage:email-send:${payload.shopId}:cancellation:${payload.requestId}:${eventName.toLowerCase().replace(/_/g, "-")}-admin`,
+    },
+  });
 
   if (result.skipped) return;
 
