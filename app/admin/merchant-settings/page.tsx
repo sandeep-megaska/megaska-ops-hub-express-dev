@@ -453,11 +453,11 @@ export default async function MerchantSettingsPage({
         <section id="otp-provider" className={`${cardClass} grid gap-5`}>
           <SectionHeader title="OTP provider" description="LoopDesk currently sends OTPs using the platform-managed Twilio Verify service. Merchant-owned Twilio and MSG91 connections can be configured after provider verification support is enabled." />
           <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm font-medium text-blue-900">
-            These settings are shop-scoped preferences only. They do not change live OTP request, verification, authentication, session, checkout continuation, or dashboard login behavior in this phase.
+            These settings now control whether LoopDesk uses the platform-managed Twilio service for this shop. Merchant-owned providers remain unavailable until secure credential verification is implemented.
           </div>
           <div className="grid gap-3 md:grid-cols-2">
-            <NotificationCheck label="Enable OTP authentication" name="otpEnabled" defaultChecked={otpSettings.otpEnabled} help="Stores whether this shop wants OTP authentication enabled for future provider resolution." />
-            <NotificationCheck label="Allow platform Twilio fallback" name="otpAllowPlatformFallback" defaultChecked={otpSettings.allowPlatformFallback} help="Allows a future resolver to fall back to LoopDesk managed Twilio when merchant-owned providers are unavailable." />
+            <NotificationCheck label="Enable OTP authentication" name="otpEnabled" defaultChecked={otpSettings.otpEnabled} help="When disabled, OTP requests are unavailable. This does not bypass authentication requirements." />
+            <NotificationCheck label="Allow platform Twilio fallback" name="otpAllowPlatformFallback" defaultChecked={otpSettings.allowPlatformFallback} help="Allows LoopDesk managed Twilio to handle OTPs when a merchant-owned provider is unavailable." />
           </div>
           <label className="grid gap-2 text-sm font-medium text-gray-800">
             <span>Preferred OTP provider</span>
