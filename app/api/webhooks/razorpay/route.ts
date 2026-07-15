@@ -161,6 +161,7 @@ export async function POST(req: NextRequest) {
     });
 
     void sendExchangePaymentReceivedOpsEmail({
+      shopId: payment.request.shopId || "",
       requestId: payment.request.id,
       orderNumber: payment.request.orderNumber,
       status: "PAYMENT_RECEIVED",

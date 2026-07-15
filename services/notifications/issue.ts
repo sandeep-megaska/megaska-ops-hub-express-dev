@@ -1,6 +1,7 @@
 import { sendAdminAlert } from "./resend.ts";
 
-type IssueNotifyPayload = {
+export type IssueNotifyPayload = {
+  shopId: string;
   requestId: string;
   orderNumber: string;
   status: string;
@@ -39,7 +40,7 @@ export async function sendIssueTeamAlert(
   subject: string,
   payload: IssueNotifyPayload
 ) {
-  const result = await sendAdminAlert(subject, buildBody(payload));
+  const result = await sendAdminAlert({ shopId: payload.shopId, eventType: "ISSUE", subject, text: buildBody(payload) });
 
   if (result.skipped) return;
 

@@ -1,6 +1,7 @@
 import { sendAdminAlert } from "./resend";
 
-type CancellationNotifyPayload = {
+export type CancellationNotifyPayload = {
+  shopId: string;
   requestId: string;
   orderNumber: string;
   status: string;
@@ -39,7 +40,7 @@ export async function sendCancellationTeamAlert(
   subject: string,
   payload: CancellationNotifyPayload
 ) {
-  const result = await sendAdminAlert(subject, buildBody(payload));
+  const result = await sendAdminAlert({ shopId: payload.shopId, eventType: "CANCELLATION", subject, text: buildBody(payload) });
 
   if (result.skipped) return;
 

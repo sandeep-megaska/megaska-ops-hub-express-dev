@@ -440,7 +440,7 @@ export default async function MerchantSettingsPage({
         <section id="email-notifications" className={`${cardClass} grid gap-5`}>
           <SectionHeader title="Email notifications" description="LoopDesk can send operational and customer notification emails using the platform-managed email service. Configure who should receive store alerts and which notification categories are enabled." />
           <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm font-medium text-blue-900">
-            These preferences will be applied to notification delivery in a subsequent activation phase. Existing email delivery behavior is unchanged by this settings foundation.
+            These settings control the store-admin recipients and operational alert categories used by LoopDesk. Emails are sent through the platform-managed email service.
           </div>
           <div className="grid gap-3 md:grid-cols-2">
             <NotificationCheck label="Enable email notifications" name="notificationEmailEnabled" defaultChecked={notificationSettings.emailEnabled} />
@@ -450,7 +450,7 @@ export default async function MerchantSettingsPage({
             <Field label="Sender display name" name="notificationSenderDisplayName" defaultValue={notificationSettings.senderDisplayName} help="Display name only; not a sender email address." />
             <Field label="Reply-to email" name="notificationReplyToEmail" type="email" defaultValue={notificationSettings.replyToEmail} help="Optional merchant reply-to address for future notification routing." />
           </div>
-          <TextArea label="Admin recipients" name="notificationAdminRecipients" defaultValue={notificationSettings.adminRecipients.join("\n")} help="Enter up to 10 email addresses. Separate addresses using commas or new lines." />
+          <TextArea label="Admin recipients" name="notificationAdminRecipients" defaultValue={notificationSettings.adminRecipients.join("\n")} help={notificationSettings.adminRecipients.length ? "Enter up to 10 email addresses. Separate addresses using commas or new lines." : "Add at least one admin recipient to receive store operational alerts."} />
           <div className="grid gap-3 md:grid-cols-2">
             <NotificationCheck label="Cancellation alerts" name="notificationCancellationAlerts" defaultChecked={notificationSettings.cancellationAlerts} />
             <NotificationCheck label="Exchange alerts" name="notificationExchangeAlerts" defaultChecked={notificationSettings.exchangeAlerts} />

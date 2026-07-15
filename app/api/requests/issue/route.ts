@@ -231,6 +231,7 @@ export async function POST(req: NextRequest) {
 
     try {
       await sendIssueRequestCreatedEmail({
+        shopId: created.shopId || "",
         requestId: created.id,
         orderNumber: created.orderNumber,
         status: created.status,

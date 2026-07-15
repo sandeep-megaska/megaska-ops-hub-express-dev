@@ -281,6 +281,7 @@ export async function PATCH(
     }
 
     void sendExchangeStatusChangedEmail({
+      shopId: updated.shopId || "",
       requestId: updated.id,
       orderNumber: updated.orderNumber,
       status: updated.status,
