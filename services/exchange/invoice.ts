@@ -80,7 +80,8 @@ export async function ensureReversePickupInvoice(requestPaymentId: string) {
 
 export async function sendReversePickupInvoiceEmail(requestPaymentId: string) {
   const invoice = await ensureReversePickupInvoice(requestPaymentId);
-  await sendExchangeInvoiceEmail(invoice);
+  const request = await prisma.orderActionRequest.findUnique({ where: { id: invoice.requestId }, select: { shopId: true } });
+  await sendExchangeInvoiceEmail({ ...invoice, shopId: request?.shopId || null });
   return prisma.exchangePaymentInvoice.update({
     where: { id: invoice.id },
     data: { invoiceStatus: "SENT" as InvoiceStatus, sentAt: new Date() },

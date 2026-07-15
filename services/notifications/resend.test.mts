@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { sendAdminAlert, formatPlatformFrom } from "./resend.ts";
+import { sendAdminAlert, sendCustomerEmail, formatPlatformFrom } from "./resend.ts";
 import { saveMerchantNotificationSettings, type NotificationSettingsDb } from "../settings/merchant-notifications.ts";
 
 type Shop = { id: string; shopDomain: string; shopName: string | null };
@@ -162,4 +162,76 @@ test("provider failure returns failure and success returns message id", async ()
 test("unresolved shop cannot send", async () => {
   const result = await sendAdminAlert({ shopId: "missing", eventType: "GENERAL", subject: "S", text: "T" }, { db: db(), fetchImpl: fetchOk([]) });
   assert.deepEqual(result, { skipped: false, success: false, errorCode: "SHOP_UNRESOLVED" });
+});
+
+test("customer emails route by shop display name and remain tenant isolated", async () => {
+  const restore = withEnv({ RESEND_API_KEY: "key", CUSTOMER_NOTIFICATION_FROM_EMAIL: "customers@example.com", OPS_NOTIFICATION_FROM_EMAIL: "ops@example.com" });
+  const client = db();
+  await saveMerchantNotificationSettings("shop-a", { ...base, senderDisplayName: "Alpha Store", replyToEmail: "alpha@example.com" }, client);
+  await saveMerchantNotificationSettings("shop-b", { ...base, senderDisplayName: "Beta Store", replyToEmail: "" }, client);
+  const calls: Array<Record<string, unknown>> = [];
+  await sendCustomerEmail({ shopId: "shop-a", to: " customer-a@example.com ", eventType: "EXCHANGE", subject: "A", text: "body" }, { db: client, fetchImpl: fetchOk(calls) });
+  await sendCustomerEmail({ shopId: "shop-b", to: "customer-b@example.com", eventType: "STORE_CREDIT", subject: "B", text: "body" }, { db: client, fetchImpl: fetchOk(calls) });
+  restore();
+  assert.equal(calls[0].from, "Alpha Store <customers@example.com>");
+  assert.deepEqual(calls[0].to, ["customer-a@example.com"]);
+  assert.equal(calls[0].reply_to, "alpha@example.com");
+  assert.equal(calls[1].from, "Beta Store <customers@example.com>");
+  assert.deepEqual(calls[1].to, ["customer-b@example.com"]);
+  assert.equal(calls[1].reply_to, undefined);
+});
+
+test("customer emails honor global and customer-specific disable switches", async () => {
+  const client = db();
+  await saveMerchantNotificationSettings("shop-a", { ...base, emailEnabled: false }, client);
+  await saveMerchantNotificationSettings("shop-b", { ...base, customerEmailsEnabled: false }, client);
+  assert.deepEqual(await sendCustomerEmail({ shopId: "shop-a", to: "a@example.com", eventType: "GENERAL", subject: "S", text: "T" }, { db: client, fetchImpl: fetchOk([]) }), { skipped: true, reason: "EMAIL_DISABLED" });
+  assert.deepEqual(await sendCustomerEmail({ shopId: "shop-b", to: "b@example.com", eventType: "GENERAL", subject: "S", text: "T" }, { db: client, fetchImpl: fetchOk([]) }), { skipped: true, reason: "CUSTOMER_EMAIL_DISABLED" });
+});
+
+test("customer emails use safe defaults when settings row is missing", async () => {
+  const restore = withEnv({ RESEND_API_KEY: "key", CUSTOMER_NOTIFICATION_FROM_EMAIL: undefined, OPS_NOTIFICATION_FROM_EMAIL: "fallback@example.com" });
+  const calls: Array<Record<string, unknown>> = [];
+  const result = await sendCustomerEmail({ shopId: "shop-a", to: "a@example.com", eventType: "GENERAL", subject: "S", text: "T" }, { db: db(), fetchImpl: fetchOk(calls) });
+  restore();
+  assert.deepEqual(result, { skipped: false, success: true, messageId: "msg_123" });
+  assert.equal(calls[0].from, "Shop A <fallback@example.com>");
+});
+
+test("customer recipient validation rejects missing invalid and multiple recipients", async () => {
+  const restore = withEnv({ RESEND_API_KEY: "key", CUSTOMER_NOTIFICATION_FROM_EMAIL: "customers@example.com" });
+  const client = db();
+  await saveMerchantNotificationSettings("shop-a", base, client);
+  const calls: Array<Record<string, unknown>> = [];
+  for (const to of ["", "not-an-email", "a@example.com,b@example.com", "a@example.com\r\nBcc: b@example.com", `${"a".repeat(245)}@example.com`]) {
+    const result = await sendCustomerEmail({ shopId: "shop-a", to, eventType: "GENERAL", subject: "S", text: "T" }, { db: client, fetchImpl: fetchOk(calls) });
+    assert.deepEqual(result, { skipped: true, reason: "NO_RECIPIENT" });
+  }
+  restore();
+  assert.equal(calls.length, 0);
+});
+
+test("customer email skips missing platform transport and unresolved shop", async () => {
+  const restore = withEnv({ RESEND_API_KEY: undefined, CUSTOMER_NOTIFICATION_FROM_EMAIL: undefined, OPS_NOTIFICATION_FROM_EMAIL: undefined });
+  const client = db();
+  await saveMerchantNotificationSettings("shop-a", base, client);
+  assert.deepEqual(await sendCustomerEmail({ shopId: "shop-a", to: "a@example.com", eventType: "GENERAL", subject: "S", text: "T" }, { db: client }), { skipped: true, reason: "PLATFORM_TRANSPORT_NOT_CONFIGURED" });
+  assert.deepEqual(await sendCustomerEmail({ shopId: "missing", to: "a@example.com", eventType: "GENERAL", subject: "S", text: "T" }, { db: client }), { skipped: false, success: false, errorCode: "SHOP_UNRESOLVED" });
+  restore();
+});
+
+test("customer email sender cannot alter platform sender and provider outcomes are structured", async () => {
+  const restore = withEnv({ RESEND_API_KEY: "key", CUSTOMER_NOTIFICATION_FROM_EMAIL: "customers@example.com" });
+  const client = db();
+  await saveMerchantNotificationSettings("shop-a", base, client);
+  client.settings.set("shop-a", { ...client.settings.get("shop-a")!, senderDisplayName: "Bad <spoof@example.com>Name" });
+  const calls: Array<Record<string, unknown>> = [];
+  const ok = await sendCustomerEmail({ shopId: "shop-a", to: "a@example.com", eventType: "ORDER", subject: "S", text: "T" }, { db: client, fetchImpl: fetchOk(calls) });
+  const failFetch = (async () => ({ ok: false, status: 500, json: async () => ({ message: "nope" }) } as Response)) as typeof fetch;
+  const fail = await sendCustomerEmail({ shopId: "shop-a", to: "a@example.com", eventType: "ORDER", subject: "S", text: "T" }, { db: client, fetchImpl: failFetch });
+  restore();
+  assert.deepEqual(ok, { skipped: false, success: true, messageId: "msg_123" });
+  assert.match(String(calls[0].from), /<customers@example\.com>$/);
+  assert.equal(String(calls[0].from).includes("spoof@example.com>"), false);
+  assert.deepEqual(fail, { skipped: false, success: false, errorCode: "PROVIDER_FAILED" });
 });
