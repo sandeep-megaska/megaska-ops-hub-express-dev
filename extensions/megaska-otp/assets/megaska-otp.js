@@ -69,7 +69,6 @@
   profileCountryRegion: COUNTRY_REGION,
 };
 
-  let globalClickBound = false;
   let checkoutSubmitBound = false;
   let cartAddSubmitBound = false;
   let submitDebugBound = false;
@@ -86,30 +85,32 @@
   const ACCOUNT_FALLBACK_DESKTOP_ID = "megaska-account-fallback-desktop";
   const ACCOUNT_FALLBACK_MOBILE_ID = "megaska-account-fallback-mobile";
   const DEFAULT_MEGASKA_DASHBOARD_URL = "/apps/megaska/account";
+  const OBSOLETE_MEGASKA_DASHBOARD_PATH = "/apps/megaska/dashboard";
 
   const ACCOUNT_TRIGGER_SELECTORS = [
     "[data-megaska-open-login]",
+    "[data-loopdesk-account-launcher]",
+    "[data-megaska-account-trigger]",
+    "[data-megaska-account-destination]",
+    "[data-account-destination]",
     "a[href='/account']",
     "a[href^='/account?']",
-    "a[href$='/account']",
     "a[href='/account/login']",
     "a[href^='/account/login?']",
-    "a[href*='/account/login']",
-    "a[href*='/account/register']",
+    "a[href='/account/register']",
+    "a[href^='/account/register?']",
     "[data-account-link]",
     "[data-customer-login]",
-    ".header__icon--account",
-    ".header__account",
-    ".site-nav__link--account",
-    ".js__tc",
-    ".js_link_acc",
-    ".kalles-account-icon",
-    ".iccl-user",
-    ".icon-user",
-    ".site-header__account",
-    ".customer-account-link",
-    "[aria-label*='account' i]",
-    "[title*='account' i]",
+    "header .header__icon--account",
+    "header .header__account",
+    "header .site-nav__link--account",
+    "header .js__tc",
+    "header .js_link_acc",
+    "header .kalles-account-icon",
+    "header .iccl-user",
+    "header .site-header__account",
+    "header .customer-account-link",
+    "nav .customer-account-link",
   ];
   const MOBILE_CONTEXT_SELECTORS = [
     ".mobile-nav",
@@ -1549,7 +1550,19 @@ setTimeout(() => closeModal("success", { force: true }), SUCCESS_CLOSE_DELAY_MS)
     const element = target?.target || target;
     if (!element || typeof element.closest !== "function") return false;
     return Boolean(
-      element.closest("[data-megaska-express-checkout], [data-loopdesk-express-checkout], [data-bag-action='checkout'], .loopdesk-cart-drawer__express")
+      element.closest(
+        [
+          "[data-megaska-express-checkout]",
+          "[data-loopdesk-express-checkout]",
+          "[data-express-checkout]",
+          "[data-ld-express-checkout]",
+          "[data-bag-action='checkout']",
+          ".loopdesk-express-checkout",
+          ".megaska-express-checkout",
+          ".loopdesk-cart-drawer__express",
+          "#megaska-place-order-btn",
+        ].join(",")
+      )
     );
   }
 
@@ -2325,6 +2338,10 @@ function consumePendingAccountRedirect() {
     const pathname = String(parsedUrl.pathname || "").trim();
     const normalizedPath = pathname.replace(/\/+$/, "") || "/";
 
+    if (normalizedPath === OBSOLETE_MEGASKA_DASHBOARD_PATH) {
+      return fallbackDestination;
+    }
+
     const isNativeShopifyAccountPath = isShopifyNativeAccountPath(normalizedPath);
 
     if (isNativeShopifyAccountPath) {
@@ -2390,6 +2407,10 @@ function consumePendingAccountRedirect() {
   }
 
  async function handleAccountTriggerClick(event, triggerEl) {
+  if (isExpressCheckoutIntent(event?.target) || isCheckoutIntent(event?.target)) {
+    return;
+  }
+
   hardBlockEvent(event);
 
   const gateState = await getMegaskaCheckoutGateState();
@@ -2398,6 +2419,11 @@ function consumePendingAccountRedirect() {
   const authenticated =
     Boolean(gateState?.authenticated) &&
     Boolean(gateState?.verifiedPhonePresent);
+
+  console.log("[Megaska OTP] account intent resolved", {
+    trigger: triggerEl,
+    destination: accountDestination,
+  });
 
   if (!authenticated) {
     setPendingAction({
@@ -2555,8 +2581,8 @@ function consumePendingAccountRedirect() {
 	}
 
   function bindGlobalClickInterceptor() {
-    if (globalClickBound) return;
-    globalClickBound = true;
+    if (window.__MEGASKA_OTP_GLOBAL_CLICK_BOUND__) return;
+    window.__MEGASKA_OTP_GLOBAL_CLICK_BOUND__ = true;
 
     document.addEventListener(
       "click",
@@ -2567,9 +2593,9 @@ function consumePendingAccountRedirect() {
           return;
         }
 
-        const accountTrigger = findClosestMatchingElement(event, ACCOUNT_TRIGGER_SELECTORS);
-        if (accountTrigger) {
-          await handleAccountTriggerClick(event, accountTrigger);
+        const checkoutTrigger = inferCheckoutTriggerFromEvent(event);
+        if (checkoutTrigger && isCheckoutIntent(checkoutTrigger)) {
+          await handleCheckoutTriggerClick(event, checkoutTrigger);
           return;
         }
 
@@ -2577,9 +2603,13 @@ function consumePendingAccountRedirect() {
           return;
         }
 
-        const checkoutTrigger = inferCheckoutTriggerFromEvent(event);
-        if (checkoutTrigger && isCheckoutIntent(checkoutTrigger)) {
-          await handleCheckoutTriggerClick(event, checkoutTrigger);
+        if (isExpressCheckoutIntent(event.target)) {
+          return;
+        }
+
+        const accountTrigger = findClosestMatchingElement(event, ACCOUNT_TRIGGER_SELECTORS);
+        if (accountTrigger) {
+          await handleAccountTriggerClick(event, accountTrigger);
           return;
         }
 
@@ -3174,6 +3204,18 @@ function hasVisibleNativeDesktopAccountEntry() {
   }
 
   function init() {
+    window.MegaskaOtpInternals = Object.assign({}, window.MegaskaOtpInternals, {
+      ACCOUNT_TRIGGER_SELECTORS,
+      CHECKOUT_TRIGGER_SELECTORS,
+      isExpressCheckoutIntent,
+      isAddToCartIntent,
+      isCheckoutIntent,
+      inferCheckoutTriggerFromEvent,
+      resolveAccountDestinationUrl,
+      normalizeAccountDestination,
+      getPendingAction: () => pendingAction,
+    });
+
     bindGlobalClickInterceptor();
     bindSubmitDebugListener();
     interceptCheckoutClicks({ enabled: true });
