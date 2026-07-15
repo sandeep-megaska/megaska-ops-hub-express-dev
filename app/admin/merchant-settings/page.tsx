@@ -23,6 +23,12 @@ import {
   saveMerchantNotificationSettings,
   MerchantNotificationSettingsValidationError,
 } from "../../../services/settings/merchant-notifications";
+import {
+  getMerchantOtpSettings,
+  saveMerchantOtpSettings,
+  MerchantOtpSettingsValidationError,
+  getPlatformTwilioConfigurationStatus,
+} from "../../../services/settings/merchant-otp";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -181,6 +187,11 @@ async function saveMerchantSettings(
       defaultBreadth: formData.get("delhiveryDefaultBreadth"),
       defaultHeight: formData.get("delhiveryDefaultHeight"),
     });
+    await saveMerchantOtpSettings(shopId, {
+      otpEnabled: formData.getAll("otpEnabled").at(-1),
+      providerMode: formData.get("otpProviderMode"),
+      allowPlatformFallback: formData.getAll("otpAllowPlatformFallback").at(-1),
+    });
     await saveMerchantNotificationSettings(shopId, {
       emailEnabled: formData.getAll("notificationEmailEnabled").at(-1),
       customerEmailsEnabled: formData.getAll("notificationCustomerEmailsEnabled").at(-1),
@@ -197,7 +208,7 @@ async function saveMerchantSettings(
     revalidatePath("/admin/merchant-settings");
   } catch (error) {
     const message =
-      error instanceof MerchantNotificationSettingsValidationError || error instanceof Error ? error.message : "Invalid merchant settings.";
+      error instanceof MerchantNotificationSettingsValidationError || error instanceof MerchantOtpSettingsValidationError || error instanceof Error ? error.message : "Invalid merchant settings.";
     embeddedContext.delete("saved");
     embeddedContext.set("error", message);
     redirectUrl = `/admin/merchant-settings?${embeddedContext.toString()}`;
@@ -312,13 +323,15 @@ export default async function MerchantSettingsPage({
         </div>
       </main>
     );
-  const [settings, cartIntelligence, delhivery, razorpay, notificationSettings] = await Promise.all([
+  const [settings, cartIntelligence, delhivery, razorpay, notificationSettings, otpSettings] = await Promise.all([
     getLoopDeskMerchantSettings(resolved.shop.id),
     getCartIntelligenceSettings(resolved.shop.id),
     getDelhiveryAdminConfig(resolved.shop.id),
     getRazorpayAdminConfig(resolved.shop.id),
     getMerchantNotificationSettings(resolved.shop.id),
+    getMerchantOtpSettings(resolved.shop.id),
   ]);
+  const platformTwilio = getPlatformTwilioConfigurationStatus();
   const shopParam = encodeURIComponent(resolved.shop.shopDomain);
   const saveAction = saveMerchantSettings.bind(
     null,
@@ -434,6 +447,43 @@ export default async function MerchantSettingsPage({
             <Field label="Trust item 1" name="otpTrustItem1" defaultValue={settings.otpModalBranding.trustItems[0]} />
             <Field label="Trust item 2" name="otpTrustItem2" defaultValue={settings.otpModalBranding.trustItems[1]} />
             <Field label="Trust item 3" name="otpTrustItem3" defaultValue={settings.otpModalBranding.trustItems[2]} />
+          </div>
+        </section>
+
+        <section id="otp-provider" className={`${cardClass} grid gap-5`}>
+          <SectionHeader title="OTP provider" description="LoopDesk currently sends OTPs using the platform-managed Twilio Verify service. Merchant-owned Twilio and MSG91 connections can be configured after provider verification support is enabled." />
+          <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm font-medium text-blue-900">
+            These settings are shop-scoped preferences only. They do not change live OTP request, verification, authentication, session, checkout continuation, or dashboard login behavior in this phase.
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <NotificationCheck label="Enable OTP authentication" name="otpEnabled" defaultChecked={otpSettings.otpEnabled} help="Stores whether this shop wants OTP authentication enabled for future provider resolution." />
+            <NotificationCheck label="Allow platform Twilio fallback" name="otpAllowPlatformFallback" defaultChecked={otpSettings.allowPlatformFallback} help="Allows a future resolver to fall back to LoopDesk managed Twilio when merchant-owned providers are unavailable." />
+          </div>
+          <label className="grid gap-2 text-sm font-medium text-gray-800">
+            <span>Preferred OTP provider</span>
+            <select className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-950 shadow-sm outline-none transition focus:border-gray-900 focus:ring-2 focus:ring-gray-900/10" name="otpProviderMode" defaultValue={otpSettings.providerMode}>
+              <option value="PLATFORM_TWILIO">LoopDesk managed Twilio</option>
+              <option value="MERCHANT_TWILIO" disabled>Use my Twilio account — coming after verification support</option>
+              <option value="MERCHANT_MSG91" disabled>Use my MSG91 account — coming after approval support</option>
+            </select>
+            <span className={helpClass}>Mock is development-only and is not exposed in merchant admin.</span>
+          </label>
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
+              <h3 className="font-semibold text-gray-950">Platform Twilio</h3>
+              <p className="mt-2">Status: {platformTwilio.configured ? "Configured" : "Not configured"}</p>
+              <p className={helpClass}>Checks only whether account SID, auth token, and Verify Service SID are present. Secret values are not displayed.</p>
+            </div>
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
+              <h3 className="font-semibold text-gray-950">Merchant Twilio</h3>
+              <p className="mt-2">Status: {otpSettings.merchantTwilioStatus.replaceAll("_", " ").toLowerCase()}</p>
+              <p className={helpClass}>Future setup requires Account SID, Auth Token, and Verify Service SID. Credential entry is deferred until write-only secret handling is implemented for this provider.</p>
+            </div>
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
+              <h3 className="font-semibold text-gray-950">Merchant MSG91</h3>
+              <p className="mt-2">Status: {otpSettings.merchantMsg91Status.replaceAll("_", " ").toLowerCase()}</p>
+              <p className={helpClass}>Activation will require KYC approval, DLT approval, template approval, and provider verification.</p>
+            </div>
           </div>
         </section>
 
