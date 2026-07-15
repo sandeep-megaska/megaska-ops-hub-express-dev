@@ -312,22 +312,50 @@
     state.profileCountryRegion = COUNTRY_REGION;
   }
 
-  function resolveExtensionAssetUrl(filename) {
-    const currentScript =
-      document.currentScript ||
-      Array.from(document.scripts || []).find((script) =>
-        String(script?.src || "").includes("megaska-otp.js")
-      );
+  function escapeHtml(value) {
+    return String(value == null ? "" : value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
 
+  function isSafeImageUrl(value) {
+    const next = String(value || "").trim();
+    if (!next) return "";
     try {
-      if (currentScript?.src) {
-        return new URL(filename, currentScript.src).toString();
-      }
-    } catch (error) {
-      console.warn("[Megaska OTP] asset URL fallback used", error);
+      const parsed = new URL(next, window.location.origin);
+      return parsed.protocol === "https:" || parsed.protocol === "http:" || parsed.protocol === "data:" ? next : "";
+    } catch {
+      return "";
     }
+  }
 
-    return `/assets/${filename}`;
+  function shopNameFallback() {
+    const fromConfig = window.LoopDeskConfig && window.LoopDeskConfig.general && (window.LoopDeskConfig.general.storeName || window.LoopDeskConfig.general.merchantName);
+    const shop = window.Shopify && window.Shopify.shop ? String(window.Shopify.shop).replace(/\.myshopify\.com$/i, "") : "";
+    return String(fromConfig || shop || "Secure Login").trim() || "Secure Login";
+  }
+
+  function getOtpModalBranding() {
+    const config = (window.LoopDeskConfig && window.LoopDeskConfig.otpModalBranding) || {};
+    const fallbackBrandText = String(config.fallbackBrandText || shopNameFallback()).trim() || "Secure Login";
+    const trustItems = Array.isArray(config.trustItems) ? config.trustItems : [];
+    return {
+      logoUrl: isSafeImageUrl(config.logoUrl),
+      logoAlt: String(config.logoAlt || fallbackBrandText).trim() || fallbackBrandText,
+      fallbackBrandText,
+      heading: String(config.heading || "Login or Signup").trim() || "Login or Signup",
+      description: String(config.description || "Sign in securely to continue").trim() || "Sign in securely to continue",
+      promotionEnabled: config.promotionEnabled === true,
+      promotionBadgeText: String(config.promotionBadgeText || "").trim(),
+      promotionMessage: String(config.promotionMessage || "").trim(),
+      showTrustItems: config.showTrustItems !== false,
+      trustItems: [trustItems[0] || "Secure login", trustItems[1] || "Faster checkout", trustItems[2] || ""].map((item) => String(item || "").trim()),
+      inputHelperText: String(config.inputHelperText || "Enter 10 digits to receive an OTP automatically.").trim() || "Enter 10 digits to receive an OTP automatically.",
+      privacyText: String(config.privacyText || "We never share your number.").trim() || "We never share your number.",
+    };
   }
 
   function ensureModal() {
@@ -340,7 +368,16 @@
     modal.className = "megaska-otp-modal";
     modal.hidden = true;
 
-    const logoUrl = resolveExtensionAssetUrl("megaska_logo.png");
+    const branding = getOtpModalBranding();
+    const logoHtml = branding.logoUrl
+      ? `<img src="${escapeHtml(branding.logoUrl)}" alt="${escapeHtml(branding.logoAlt)}" class="megaska-otp-logo" data-megaska-otp-logo />`
+      : "";
+    const offerHtml = branding.promotionEnabled && (branding.promotionBadgeText || branding.promotionMessage)
+      ? `<div class="megaska-otp-offer">${branding.promotionBadgeText ? `<span class="megaska-otp-offer-badge">${escapeHtml(branding.promotionBadgeText)}</span>` : ""}${branding.promotionMessage ? `<span>${escapeHtml(branding.promotionMessage)}</span>` : ""}</div>`
+      : "";
+    const trustHtml = branding.showTrustItems
+      ? branding.trustItems.filter(Boolean).map((item) => `<span class="megaska-otp-chip">${escapeHtml(item)}</span>`).join("")
+      : "";
 
     modal.innerHTML = `
       <div class="megaska-otp-backdrop" data-megaska-otp-backdrop></div>
@@ -358,27 +395,16 @@
             <div class="megaska-otp-handle" aria-hidden="true"></div>
 
             <div class="megaska-otp-logo-wrap">
-              <img
-                src="${logoUrl}"
-                alt="Megaska"
-                class="megaska-otp-logo"
-                onerror="this.style.display='none';"
-              />
+              ${logoHtml}
+              <span class="megaska-otp-brand-text" data-megaska-otp-brand-text${branding.logoUrl ? ' hidden' : ''}>${escapeHtml(branding.fallbackBrandText)}</span>
             </div>
 
-            <div class="megaska-otp-offer">
-              <span class="megaska-otp-offer-badge">15% OFF</span>
-              <span>Use Code: <strong>MEGA15</strong></span>
-            </div>
+            ${offerHtml}
 
-            <h2 id="megaska-otp-title" class="megaska-otp-title">Login or Signup</h2>
-            <p class="megaska-otp-subtitle">Unlock 15% OFF and continue to secure checkout</p>
+            <h2 id="megaska-otp-title" class="megaska-otp-title">${escapeHtml(branding.heading)}</h2>
+            <p class="megaska-otp-subtitle">${escapeHtml(branding.description)}</p>
 
-            <div class="megaska-otp-trust-strip">
-              <span class="megaska-otp-chip">Secure login</span>
-              <span class="megaska-otp-chip">Faster checkout</span>
-              <span class="megaska-otp-chip">Free shipping</span>
-            </div>
+            ${trustHtml ? `<div class="megaska-otp-trust-strip">${trustHtml}</div>` : ""}
           </div>
 
           <div data-megaska-step-phone class="megaska-otp-step-phone">
@@ -400,8 +426,8 @@
                 aria-label="Enter 10 digit mobile number"
               />
             </div>
-            <p class="megaska-otp-hint" data-megaska-phone-hint>Enter your 10-digit mobile number to receive an OTP automatically.</p>
-            <p class="megaska-otp-trouble">We never share your number</p>
+            <p class="megaska-otp-hint" data-megaska-phone-hint>${escapeHtml(branding.inputHelperText)}</p>
+            <p class="megaska-otp-trouble">${escapeHtml(branding.privacyText)}</p>
           </div>
 
           <div data-megaska-step-otp hidden class="megaska-otp-step-otp">
@@ -797,7 +823,7 @@
     if (state.requesting) {
       phoneHint.textContent = "Sending OTP...";
     } else if (state.phoneDigits.length < 10) {
-      phoneHint.textContent = "Enter 10 digits to receive an OTP automatically.";
+      phoneHint.textContent = getOtpModalBranding().inputHelperText;
     } else {
       phoneHint.textContent = state.normalizedPhone === state.lastRequestedPhone ? "OTP sent. Check your messages." : "Sending OTP automatically...";
     }

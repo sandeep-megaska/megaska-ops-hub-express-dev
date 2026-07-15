@@ -12,6 +12,19 @@
     viewCartButtonEnabled: {{ block.settings.view_cart_button_enabled | json }},
     shopDomain: {{ shop.permanent_domain | json }}
   });
+  (function () {
+    var shopDomain = {{ shop.permanent_domain | json }};
+    if (!shopDomain || window.LoopDeskConfig && window.LoopDeskConfig.otpModalBranding) return;
+    fetch("/apps/megaska/api/runtime/config?shop=" + encodeURIComponent(shopDomain) + "&_loopdesk_otp_runtime=" + Date.now(), { credentials: "same-origin" })
+      .then(function (response) { return response.ok ? response.json() : null; })
+      .then(function (payload) {
+        if (!payload || !payload.config) return;
+        window.LoopDeskConfig = Object.assign({}, window.LoopDeskConfig || {}, payload.config, {
+          otpModalBranding: Object.assign({}, (window.LoopDeskConfig && window.LoopDeskConfig.otpModalBranding) || {}, payload.config.otpModalBranding || {})
+        });
+      })
+      .catch(function () {});
+  })();
 </script>
 
 <script src="{{ 'megaska-auth.js' | asset_url }}" defer></script>

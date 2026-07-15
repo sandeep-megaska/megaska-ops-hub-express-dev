@@ -47,6 +47,20 @@ export type LoopDeskMerchantSettings = {
     nativeDrawerDisabledRequiredMessage: string;
   };
   checkout: { showSecureBadge: boolean; showTrustCopy: boolean };
+  otpModalBranding: {
+    logoUrl: string | null;
+    logoAlt: string;
+    fallbackBrandText: string;
+    heading: string;
+    description: string;
+    promotionEnabled: boolean;
+    promotionBadgeText: string;
+    promotionMessage: string;
+    showTrustItems: boolean;
+    trustItems: [string, string, string];
+    privacyText: string;
+    inputHelperText: string;
+  };
   integrations: {
     razorpay: { status: IntegrationStatus; displayName: string };
     delhivery: { status: IntegrationStatus; displayName: string };
@@ -71,7 +85,7 @@ export type CartIntelligencePublicRuntimeConfig = CartIntelligenceSettings;
 
 export type LoopDeskPublicRuntimeConfig = Pick<
   LoopDeskMerchantSettings,
-  "general" | "branding" | "labels" | "cart" | "checkout"
+  "general" | "branding" | "labels" | "cart" | "checkout" | "otpModalBranding"
 > & {
   enabled: boolean;
   cartOwnershipMode: DrawerMode;
@@ -173,6 +187,16 @@ function url(value: unknown) {
     return null;
   }
 }
+function httpsUrl(value: unknown) {
+  const next = nullableText(value, 800);
+  if (!next) return null;
+  try {
+    const parsed = new URL(next);
+    return parsed.protocol === "https:" ? next : null;
+  } catch {
+    return null;
+  }
+}
 function email(value: unknown) {
   const next = text(value, "", 254);
   return !next || /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(next) ? next : "";
@@ -265,7 +289,7 @@ export function validateLoopDeskMerchantSettingsPatch(
     if (typeof value !== "string" || !COLOR_RE.test(value.trim()))
       errors.push(`${label} must be a valid hex, rgb/rgba, or hsl/hsla color.`);
   };
-  const validateUrl = (value: unknown, label: string) => {
+  const validateUrl = (value: unknown, label: string, options: { httpsOnly?: boolean } = {}) => {
     if (value === undefined || value === null || value === "") return;
     if (typeof value !== "string") {
       errors.push(`${label} must be a URL.`);
@@ -284,7 +308,9 @@ export function validateLoopDeskMerchantSettingsPatch(
       return;
     try {
       const parsed = new URL(next);
-      if (parsed.protocol !== "http:" && parsed.protocol !== "https:")
+      if (options.httpsOnly && parsed.protocol !== "https:")
+        errors.push(`${label} must use https.`);
+      else if (parsed.protocol !== "http:" && parsed.protocol !== "https:")
         errors.push(`${label} must use http or https.`);
     } catch {
       errors.push(`${label} must be a valid URL.`);
@@ -295,6 +321,7 @@ export function validateLoopDeskMerchantSettingsPatch(
   const labels = isRecord(raw.labels) ? raw.labels : {};
   const cart = isRecord(raw.cart) ? raw.cart : {};
   const checkout = isRecord(raw.checkout) ? raw.checkout : {};
+  const otpModalBranding = isRecord(raw.otpModalBranding) ? raw.otpModalBranding : {};
   validateText(general.merchantName, "Merchant name", 120);
   validateText(general.supportEmail, "Support email", 254);
   if (
@@ -336,6 +363,20 @@ export function validateLoopDeskMerchantSettingsPatch(
   validateBool(cart.viewCartButtonEnabled, "View cart button enabled");
   validateBool(checkout.showSecureBadge, "Show secure badge");
   validateBool(checkout.showTrustCopy, "Show trust copy");
+  validateUrl(otpModalBranding.logoUrl, "OTP modal logo URL", { httpsOnly: true });
+  validateText(otpModalBranding.logoAlt, "OTP modal logo alt text", 120);
+  validateText(otpModalBranding.fallbackBrandText, "OTP modal fallback brand text", 120);
+  validateText(otpModalBranding.heading, "OTP modal heading", 120);
+  validateText(otpModalBranding.description, "OTP modal description", 240);
+  validateBool(otpModalBranding.promotionEnabled, "Show promotional banner");
+  validateText(otpModalBranding.promotionBadgeText, "Promotional badge text", 60);
+  validateText(otpModalBranding.promotionMessage, "Promotional message", 160);
+  validateBool(otpModalBranding.showTrustItems, "Show trust items");
+  validateText(otpModalBranding.trustItem1, "Trust item 1", 80);
+  validateText(otpModalBranding.trustItem2, "Trust item 2", 80);
+  validateText(otpModalBranding.trustItem3, "Trust item 3", 80);
+  validateText(otpModalBranding.privacyText, "Privacy/helper text", 160);
+  validateText(otpModalBranding.inputHelperText, "OTP input helper text", 180);
   return errors;
 }
 
@@ -349,6 +390,7 @@ export function normalizeLoopDeskMerchantSettings(
   const labels = section(raw, "labels");
   const cart = section(raw, "cart");
   const checkout = section(raw, "checkout");
+  const otpModalBranding = section(raw, "otpModalBranding");
   const integrations = isRecord(raw.integrations) ? raw.integrations : {};
   const razorpay = isRecord(integrations.razorpay) ? integrations.razorpay : {};
   const delhivery = isRecord(integrations.delhivery)
@@ -425,6 +467,24 @@ export function normalizeLoopDeskMerchantSettings(
       showSecureBadge: bool(checkout.showSecureBadge, true),
       showTrustCopy: bool(checkout.showTrustCopy, true),
     },
+    otpModalBranding: {
+      logoUrl: httpsUrl(otpModalBranding.logoUrl),
+      logoAlt: text(otpModalBranding.logoAlt, merchantName || storeName, 120),
+      fallbackBrandText: text(otpModalBranding.fallbackBrandText, storeName || "Secure Login", 120),
+      heading: text(otpModalBranding.heading, "Login or Signup", 120),
+      description: text(otpModalBranding.description, "Sign in securely to continue", 240),
+      promotionEnabled: bool(otpModalBranding.promotionEnabled, false),
+      promotionBadgeText: text(otpModalBranding.promotionBadgeText, "", 60),
+      promotionMessage: text(otpModalBranding.promotionMessage, "", 160),
+      showTrustItems: bool(otpModalBranding.showTrustItems, true),
+      trustItems: [
+        text(otpModalBranding.trustItem1, "Secure login", 80),
+        text(otpModalBranding.trustItem2, "Faster checkout", 80),
+        text(otpModalBranding.trustItem3, "", 80),
+      ],
+      inputHelperText: text(otpModalBranding.inputHelperText, "Enter 10 digits to receive an OTP automatically.", 180),
+      privacyText: text(otpModalBranding.privacyText, "We never share your number.", 160),
+    },
     integrations: {
       razorpay: {
         status: status(razorpay.status, "not_configured"),
@@ -464,6 +524,10 @@ export function mergeLoopDeskMerchantSettings(
       ...current.checkout,
       ...(isRecord(raw.checkout) ? raw.checkout : {}),
     },
+    otpModalBranding: {
+      ...current.otpModalBranding,
+      ...(isRecord(raw.otpModalBranding) ? raw.otpModalBranding : {}),
+    },
     integrations: current.integrations,
     analytics: current.analytics,
   });
@@ -478,6 +542,7 @@ export function toLoopDeskPublicRuntimeConfig(
     labels: settings.labels,
     cart: settings.cart,
     checkout: settings.checkout,
+    otpModalBranding: settings.otpModalBranding,
     enabled: settings.cart.drawerMode !== "theme",
     cartOwnershipMode: settings.cart.drawerMode,
   };

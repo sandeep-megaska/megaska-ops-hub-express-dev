@@ -118,6 +118,22 @@ async function saveMerchantSettings(
         showSecureBadge: formData.get("showSecureBadge") === "on",
         showTrustCopy: formData.get("showTrustCopy") === "on",
       },
+      otpModalBranding: {
+        logoUrl: formData.get("otpLogoUrl"),
+        logoAlt: formData.get("otpLogoAlt"),
+        fallbackBrandText: formData.get("otpFallbackBrandText"),
+        heading: formData.get("otpHeading"),
+        description: formData.get("otpDescription"),
+        promotionEnabled: formData.get("otpPromotionEnabled") === "on",
+        promotionBadgeText: formData.get("otpPromotionBadgeText"),
+        promotionMessage: formData.get("otpPromotionMessage"),
+        showTrustItems: formData.get("otpShowTrustItems") === "on",
+        trustItem1: formData.get("otpTrustItem1"),
+        trustItem2: formData.get("otpTrustItem2"),
+        trustItem3: formData.get("otpTrustItem3"),
+        privacyText: formData.get("otpPrivacyText"),
+        inputHelperText: formData.get("otpInputHelperText"),
+      },
     });
     await updateCartIntelligenceSettings(shopId, {
       enabled: formData.get("cartIntelligenceEnabled") === "on",
@@ -345,6 +361,33 @@ export default async function MerchantSettingsPage({
             <Check label="Open after add to cart" name="openAfterAddToCart" defaultChecked={settings.cart.openAfterAddToCart} help="Opens LoopDesk drawer after cart add when LoopDesk drawer is active." />
             <Check label="Express checkout button" name="expressCheckoutButtonEnabled" defaultChecked={settings.cart.expressCheckoutButtonEnabled} help="Keeps Express Checkout visible in drawer." />
             <Check label="View cart button" name="viewCartButtonEnabled" defaultChecked={settings.cart.viewCartButtonEnabled} help="Keeps the standard cart link visible." />
+          </div>
+        </section>
+
+        <section id="otp-modal-branding" className={`${cardClass} grid gap-5`}>
+          <SectionHeader title="OTP Modal Branding & Content" description="Presentation-only OTP modal settings. These values do not change OTP logic, authentication, sessions, checkout continuation, or discount rules." />
+          <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm font-medium text-blue-900">
+            Use your store logo URL or upload/select a logo supported by the existing admin asset workflow. Promotional copy is display-only and is not coupled to active promotion rules or discount codes.
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field label="Logo URL" name="otpLogoUrl" defaultValue={settings.otpModalBranding.logoUrl} placeholder="https://cdn.shopify.com/..." help="Optional app-hosted, Shopify CDN, or secure HTTPS image URL." />
+            <Field label="Logo alt text" name="otpLogoAlt" defaultValue={settings.otpModalBranding.logoAlt} help="Optional; defaults to the merchant/shop name." />
+            <Field label="Fallback brand text" name="otpFallbackBrandText" defaultValue={settings.otpModalBranding.fallbackBrandText} help="Shown if the image is missing or fails. Defaults to the Shopify shop name, then Secure Login." />
+            <Field label="Modal heading" name="otpHeading" defaultValue={settings.otpModalBranding.heading} />
+            <Field label="Modal description" name="otpDescription" defaultValue={settings.otpModalBranding.description} />
+            <Field label="OTP input helper text" name="otpInputHelperText" defaultValue={settings.otpModalBranding.inputHelperText} />
+            <Field label="Privacy/helper text" name="otpPrivacyText" defaultValue={settings.otpModalBranding.privacyText} />
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <Check label="Show promotional banner" name="otpPromotionEnabled" defaultChecked={settings.otpModalBranding.promotionEnabled} help="Disabled by default for new merchants; preserve merchant-specific offers with saved values only." />
+            <Check label="Show trust items" name="otpShowTrustItems" defaultChecked={settings.otpModalBranding.showTrustItems} />
+          </div>
+          <div className="grid gap-4 md:grid-cols-3">
+            <Field label="Promotional badge text" name="otpPromotionBadgeText" defaultValue={settings.otpModalBranding.promotionBadgeText} placeholder="15% OFF" />
+            <Field label="Promotional message" name="otpPromotionMessage" defaultValue={settings.otpModalBranding.promotionMessage} placeholder="Use Code: MEGA15" />
+            <Field label="Trust item 1" name="otpTrustItem1" defaultValue={settings.otpModalBranding.trustItems[0]} />
+            <Field label="Trust item 2" name="otpTrustItem2" defaultValue={settings.otpModalBranding.trustItems[1]} />
+            <Field label="Trust item 3" name="otpTrustItem3" defaultValue={settings.otpModalBranding.trustItems[2]} />
           </div>
         </section>
         <section className={`${cardClass} grid gap-5`}>
