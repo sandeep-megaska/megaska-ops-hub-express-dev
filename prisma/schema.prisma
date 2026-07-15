@@ -144,6 +144,50 @@ enum MerchantUsageBillingStatus {
   EXCLUDED
 }
 
+
+model BillableFeature {
+  id          String   @id @default(uuid())
+  code        String   @unique
+  name        String
+  description String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  pricingPlanFeatures PricingPlanFeature[]
+}
+
+model PricingPlan {
+  id               String   @id @default(uuid())
+  code             String   @unique
+  name             String
+  description      String?
+  monthlyBasePrice Decimal  @db.Decimal(18, 6)
+  currency         String   @default("INR")
+  active           Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  features PricingPlanFeature[]
+}
+
+model PricingPlanFeature {
+  id                String   @id @default(uuid())
+  pricingPlanId     String
+  billableFeatureId String
+  includedQuantity  Decimal  @default(0) @db.Decimal(18, 6)
+  overageUnitPrice  Decimal  @default(0) @db.Decimal(18, 6)
+  active            Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  pricingPlan     PricingPlan     @relation(fields: [pricingPlanId], references: [id], onDelete: Cascade)
+  billableFeature BillableFeature @relation(fields: [billableFeatureId], references: [id], onDelete: Restrict)
+
+  @@unique([pricingPlanId, billableFeatureId])
+  @@index([billableFeatureId])
+}
+
 model MerchantUsageEvent {
   id                   String                     @id @default(uuid())
   shopId               String
