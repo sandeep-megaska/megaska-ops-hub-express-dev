@@ -92,6 +92,32 @@ model Shop {
   promotionRules        PromotionRule[]
   promotionAuditLogs    PromotionAuditLog[]
   promotionRuntimeSyncState PromotionRuntimeSyncState?
+  merchantNotificationSettings MerchantNotificationSettings?
+}
+
+model MerchantNotificationSettings {
+  id                    String   @id @default(uuid())
+  shopId                String   @unique
+
+  emailEnabled          Boolean  @default(true)
+  customerEmailsEnabled Boolean  @default(true)
+
+  senderDisplayName     String?
+  replyToEmail          String?
+  adminRecipients       String[]
+
+  cancellationAlerts    Boolean  @default(true)
+  exchangeAlerts        Boolean  @default(true)
+  issueAlerts           Boolean  @default(true)
+  storeCreditAlerts     Boolean  @default(true)
+  checkoutAlerts        Boolean  @default(true)
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@index([shopId])
 }
 enum PromotionRuleStatus {
   DRAFT
