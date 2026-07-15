@@ -358,9 +358,93 @@
     };
   }
 
+  function applyOtpModalBranding(modal) {
+    if (!modal) return;
+    const branding = getOtpModalBranding();
+
+    const logoWrap = modal.querySelector("[data-megaska-otp-logo-wrap]");
+    const brandText = modal.querySelector("[data-megaska-otp-brand-text]");
+    if (logoWrap) {
+      let logo = logoWrap.querySelector("[data-megaska-otp-logo]");
+      if (branding.logoUrl) {
+        if (!logo) {
+          logo = document.createElement("img");
+          logo.className = "megaska-otp-logo";
+          logo.setAttribute("data-megaska-otp-logo", "");
+          logoWrap.insertBefore(logo, brandText || null);
+        }
+        logo.src = branding.logoUrl;
+        logo.alt = branding.logoAlt;
+        logo.hidden = false;
+        if (brandText) brandText.hidden = true;
+      } else {
+        if (logo) logo.remove();
+        if (brandText) {
+          brandText.textContent = branding.fallbackBrandText;
+          brandText.hidden = false;
+        }
+      }
+    }
+
+    if (brandText && !branding.logoUrl) {
+      brandText.textContent = branding.fallbackBrandText;
+      brandText.hidden = false;
+    }
+
+    const title = modal.querySelector("[data-megaska-otp-title]");
+    if (title) title.textContent = branding.heading;
+
+    const description = modal.querySelector("[data-megaska-otp-description]");
+    if (description) description.textContent = branding.description;
+
+    const offerContainer = modal.querySelector("[data-megaska-otp-offer-container]");
+    if (offerContainer) {
+      offerContainer.textContent = "";
+      const hasOffer = branding.promotionEnabled && (branding.promotionBadgeText || branding.promotionMessage);
+      offerContainer.hidden = !hasOffer;
+      if (hasOffer) {
+        if (branding.promotionBadgeText) {
+          const badge = document.createElement("span");
+          badge.className = "megaska-otp-offer-badge";
+          badge.textContent = branding.promotionBadgeText;
+          offerContainer.appendChild(badge);
+        }
+        if (branding.promotionMessage) {
+          const message = document.createElement("span");
+          message.textContent = branding.promotionMessage;
+          offerContainer.appendChild(message);
+        }
+      }
+    }
+
+    const trustStrip = modal.querySelector("[data-megaska-otp-trust-strip]");
+    if (trustStrip) {
+      const trustItems = branding.showTrustItems ? branding.trustItems.filter(Boolean) : [];
+      trustStrip.textContent = "";
+      trustStrip.hidden = trustItems.length === 0;
+      trustItems.forEach((item) => {
+        const chip = document.createElement("span");
+        chip.className = "megaska-otp-chip";
+        chip.textContent = item;
+        trustStrip.appendChild(chip);
+      });
+    }
+
+    const phoneHint = modal.querySelector("[data-megaska-phone-hint]");
+    if (phoneHint && state.step === "phone" && !state.requesting && state.phoneDigits.length < 10) {
+      phoneHint.textContent = branding.inputHelperText;
+    }
+
+    const privacy = modal.querySelector("[data-megaska-otp-privacy]");
+    if (privacy) privacy.textContent = branding.privacyText;
+  }
+
   function ensureModal() {
     let modal = document.querySelector("[data-megaska-otp-modal]");
-    if (modal) return modal;
+    if (modal) {
+      applyOtpModalBranding(modal);
+      return modal;
+    }
 
     modal = document.createElement("div");
     modal.setAttribute("data-megaska-otp-modal", "1");
@@ -368,16 +452,6 @@
     modal.className = "megaska-otp-modal";
     modal.hidden = true;
 
-    const branding = getOtpModalBranding();
-    const logoHtml = branding.logoUrl
-      ? `<img src="${escapeHtml(branding.logoUrl)}" alt="${escapeHtml(branding.logoAlt)}" class="megaska-otp-logo" data-megaska-otp-logo />`
-      : "";
-    const offerHtml = branding.promotionEnabled && (branding.promotionBadgeText || branding.promotionMessage)
-      ? `<div class="megaska-otp-offer">${branding.promotionBadgeText ? `<span class="megaska-otp-offer-badge">${escapeHtml(branding.promotionBadgeText)}</span>` : ""}${branding.promotionMessage ? `<span>${escapeHtml(branding.promotionMessage)}</span>` : ""}</div>`
-      : "";
-    const trustHtml = branding.showTrustItems
-      ? branding.trustItems.filter(Boolean).map((item) => `<span class="megaska-otp-chip">${escapeHtml(item)}</span>`).join("")
-      : "";
 
     modal.innerHTML = `
       <div class="megaska-otp-backdrop" data-megaska-otp-backdrop></div>
@@ -394,17 +468,16 @@
           <div class="megaska-otp-header">
             <div class="megaska-otp-handle" aria-hidden="true"></div>
 
-            <div class="megaska-otp-logo-wrap">
-              ${logoHtml}
-              <span class="megaska-otp-brand-text" data-megaska-otp-brand-text${branding.logoUrl ? ' hidden' : ''}>${escapeHtml(branding.fallbackBrandText)}</span>
+            <div class="megaska-otp-logo-wrap" data-megaska-otp-logo-wrap>
+              <span class="megaska-otp-brand-text" data-megaska-otp-brand-text></span>
             </div>
 
-            ${offerHtml}
+            <div class="megaska-otp-offer" data-megaska-otp-offer-container hidden></div>
 
-            <h2 id="megaska-otp-title" class="megaska-otp-title">${escapeHtml(branding.heading)}</h2>
-            <p class="megaska-otp-subtitle">${escapeHtml(branding.description)}</p>
+            <h2 id="megaska-otp-title" class="megaska-otp-title" data-megaska-otp-title></h2>
+            <p class="megaska-otp-subtitle" data-megaska-otp-description></p>
 
-            ${trustHtml ? `<div class="megaska-otp-trust-strip">${trustHtml}</div>` : ""}
+            <div class="megaska-otp-trust-strip" data-megaska-otp-trust-strip hidden></div>
           </div>
 
           <div data-megaska-step-phone class="megaska-otp-step-phone">
@@ -426,8 +499,8 @@
                 aria-label="Enter 10 digit mobile number"
               />
             </div>
-            <p class="megaska-otp-hint" data-megaska-phone-hint>${escapeHtml(branding.inputHelperText)}</p>
-            <p class="megaska-otp-trouble">${escapeHtml(branding.privacyText)}</p>
+            <p class="megaska-otp-hint" data-megaska-phone-hint></p>
+            <p class="megaska-otp-trouble" data-megaska-otp-privacy></p>
           </div>
 
           <div data-megaska-step-otp hidden class="megaska-otp-step-otp">
@@ -606,6 +679,7 @@
     `;
 
     document.body.appendChild(modal);
+    applyOtpModalBranding(modal);
 
     modal.querySelector("[data-megaska-otp-close]").addEventListener("click", () => {
       closeModal("close-button");
@@ -3231,6 +3305,11 @@ function hasVisibleNativeDesktopAccountEntry() {
     hideAccountMenu,
     handleLogoutClick,
   };
+
+  window.addEventListener("loopdesk:runtime-config-ready", () => {
+    const modal = document.querySelector("[data-megaska-otp-modal]");
+    if (modal) applyOtpModalBranding(modal);
+  });
 
   document.addEventListener("DOMContentLoaded", init);
 })();

@@ -14,7 +14,24 @@
   });
   (function () {
     var shopDomain = {{ shop.permanent_domain | json }};
-    if (!shopDomain || window.LoopDeskConfig && window.LoopDeskConfig.otpModalBranding) return;
+    var runtimeConfigReadyDispatched = false;
+    function dispatchRuntimeConfigReady() {
+      if (runtimeConfigReadyDispatched) return;
+      runtimeConfigReadyDispatched = true;
+      window.dispatchEvent(
+        new CustomEvent("loopdesk:runtime-config-ready", {
+          detail: {
+            otpModalBranding:
+              (window.LoopDeskConfig && window.LoopDeskConfig.otpModalBranding) || null
+          }
+        })
+      );
+    }
+    if (window.LoopDeskConfig && window.LoopDeskConfig.otpModalBranding) {
+      dispatchRuntimeConfigReady();
+      return;
+    }
+    if (!shopDomain) return;
     fetch("/apps/megaska/api/runtime/config?shop=" + encodeURIComponent(shopDomain) + "&_loopdesk_otp_runtime=" + Date.now(), { credentials: "same-origin" })
       .then(function (response) { return response.ok ? response.json() : null; })
       .then(function (payload) {
@@ -22,6 +39,7 @@
         window.LoopDeskConfig = Object.assign({}, window.LoopDeskConfig || {}, payload.config, {
           otpModalBranding: Object.assign({}, (window.LoopDeskConfig && window.LoopDeskConfig.otpModalBranding) || {}, payload.config.otpModalBranding || {})
         });
+        dispatchRuntimeConfigReady();
       })
       .catch(function () {});
   })();
