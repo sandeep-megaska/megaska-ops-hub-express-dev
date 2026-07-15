@@ -530,29 +530,10 @@ function buildBufferedEta(rawEta) {
     return numeric ? `gid://shopify/ProductVariant/${numeric}` : "";
   }
 
-  function allocatedCartDiscounts(cart, items) {
-    const totalDiscount = Number(cart?.total_discount || 0);
-    const finalTotal = Number(cart?.total_price || 0);
-    const rawLineTotal = items.reduce((sum, item) => sum + Number(item?.final_line_price || item?.line_price || 0), 0);
-    const originalTotal = items.reduce((sum, item) => sum + Number(item?.original_line_price || item?.line_price || 0), 0);
-    const cartLevelDiscount = Math.max(0, rawLineTotal - finalTotal);
-    if (!items.length || totalDiscount <= 0 || cartLevelDiscount <= 0 || rawLineTotal < finalTotal || originalTotal <= 0) return [];
-    let remaining = cartLevelDiscount;
-    return items.map((item, index) => {
-      const basis = Number(item?.original_line_price || item?.line_price || item?.final_line_price || 0);
-      const amount = index === items.length - 1 ? remaining : Math.floor(cartLevelDiscount * basis / originalTotal);
-      const allocation = Math.max(0, Math.min(amount, Number(item?.final_line_price || item?.line_price || 0), remaining));
-      remaining -= allocation;
-      return allocation;
-    });
-  }
-
-  function cartLineItem(item, cartDiscountAllocation) {
+  function cartLineItem(item) {
     const variantId = variantGid(item?.variant_id || item?.variantId || item?.id);
     const quantity = Math.max(0, Math.floor(Number(item?.quantity || 0)));
     if (!variantId || quantity <= 0) return null;
-    const rawFinalLinePrice = Number(item?.final_line_price || item?.line_price || 0);
-    const finalLinePrice = Math.max(0, rawFinalLinePrice - Number(cartDiscountAllocation || 0));
     return {
       variantId,
       quantity,
@@ -560,17 +541,16 @@ function buildBufferedEta(rawEta) {
       variantTitle: item?.variant_title || item?.variantTitle || "",
       sku: item?.sku || "",
       price: Number(item?.price || item?.final_price || 0),
-      line_price: finalLinePrice,
+      line_price: Number(item?.line_price || item?.final_line_price || 0),
       original_line_price: Number(item?.original_line_price || item?.line_price || item?.final_line_price || 0),
-      final_line_price: finalLinePrice,
+      final_line_price: Number(item?.final_line_price || item?.line_price || 0),
       image: item?.image || item?.featured_image?.url || "",
     };
   }
 
   function cartSnapshot(cart) {
     const items = Array.isArray(cart?.items) ? cart.items : [];
-    const allocations = allocatedCartDiscounts(cart, items);
-    const lineItems = items.map((item, index) => cartLineItem(item, allocations[index])).filter(Boolean);
+    const lineItems = items.map(cartLineItem).filter(Boolean);
     return { token: cart?.token || "", items, lineItems, item_count: Number(cart?.item_count || 0), total_price: Number(cart?.total_price || 0), original_total_price: Number(cart?.original_total_price || 0), items_subtotal_price: Number(cart?.items_subtotal_price || 0), total_discount: Number(cart?.total_discount || 0), cart_level_discount_applications: cart?.cart_level_discount_applications || [], discount_codes: cart?.discount_codes || [], currency: cart?.currency || "INR" };
   }
 

@@ -781,35 +781,9 @@
     return image ? String(image).replace(/(\.(?:jpg|jpeg|png|webp))(?:\?.*)?$/i, "_160x$1") : "";
   }
 
-  function allocatedCartDiscountByKey(cart) {
-    var items = cart && Array.isArray(cart.items) ? cart.items : [];
-    var totalDiscount = Number(cart && cart.total_discount || 0);
-    var finalTotal = Number(cart && cart.total_price || 0);
-    var rawLineTotal = items.reduce(function (sum, item) { return sum + Number(item.final_line_price || item.line_price || 0); }, 0);
-    var originalTotal = items.reduce(function (sum, item) { return sum + Number(item.original_line_price || item.line_price || 0); }, 0);
-    var cartLevelDiscount = Math.max(0, rawLineTotal - finalTotal);
-    if (!items.length || totalDiscount <= 0 || cartLevelDiscount <= 0 || rawLineTotal < finalTotal || originalTotal <= 0) return {};
-    var remaining = cartLevelDiscount;
-    var allocations = {};
-    items.forEach(function (item, index) {
-      var basis = Number(item.original_line_price || item.line_price || item.final_line_price || 0);
-      var amount = index === items.length - 1 ? remaining : Math.floor(cartLevelDiscount * basis / originalTotal);
-      amount = Math.max(0, Math.min(amount, Number(item.final_line_price || item.line_price || 0), remaining));
-      allocations[item.key || String(index)] = amount;
-      remaining -= amount;
-    });
-    return allocations;
-  }
-
-  function effectiveLinePrice(item, cart, index) {
-    var rawFinal = Number(item.final_line_price || item.line_price || 0);
-    var allocations = cart.__loopdeskAllocatedCartDiscounts || (cart.__loopdeskAllocatedCartDiscounts = allocatedCartDiscountByKey(cart));
-    return Math.max(0, rawFinal - Number(allocations[item.key || String(index)] || 0));
-  }
-
-  function lineSavingsHtml(item, cart, index) {
-    var original = Number(item.original_line_price || item.line_price || 0);
-    var finalPrice = effectiveLinePrice(item, cart, index);
+  function lineSavingsHtml(item, cart) {
+    var original = Number(item.original_line_price || 0);
+    var finalPrice = Number(item.final_line_price || 0);
     if (original > finalPrice) return '<div class="loopdesk-cart-drawer__savings">You save ' + money(original - finalPrice, cart.currency) + '</div>';
     return "";
   }
@@ -973,7 +947,7 @@
         '<article class="loopdesk-cart-drawer__line" data-loopdesk-line-key="' + escapeHtml(item.key) + '">',
         '<div class="loopdesk-cart-drawer__image-wrap">' + (image ? '<img class="loopdesk-cart-drawer__image" src="' + escapeHtml(image) + '" alt="' + escapeHtml(item.product_title || item.title) + '" loading="lazy">' : '<div class="loopdesk-cart-drawer__image loopdesk-cart-drawer__image--placeholder"></div>') + '</div>',
         '<div class="loopdesk-cart-drawer__line-main">',
-        '<div class="loopdesk-cart-drawer__line-top"><div><div class="loopdesk-cart-drawer__title">' + escapeHtml(item.product_title || item.title) + "</div>" + variant + '</div><div class="loopdesk-cart-drawer__price">' + money(effectiveLinePrice(item, cart, index), cart.currency) + lineSavingsHtml(item, cart, index) + '</div></div>',
+        '<div class="loopdesk-cart-drawer__line-top"><div><div class="loopdesk-cart-drawer__title">' + escapeHtml(item.product_title || item.title) + "</div>" + variant + '</div><div class="loopdesk-cart-drawer__price">' + money(item.final_line_price, cart.currency) + lineSavingsHtml(item, cart) + '</div></div>',
         '<div class="loopdesk-cart-drawer__line-actions"><div class="loopdesk-cart-drawer__qty" aria-label="Quantity controls"><button type="button" data-loopdesk-qty="decrease" data-loopdesk-line="' + index + '">−</button><span>' + escapeHtml(item.quantity) + '</span><button type="button" data-loopdesk-qty="increase" data-loopdesk-line="' + index + '">+</button></div><button type="button" class="loopdesk-cart-drawer__remove" data-loopdesk-remove data-loopdesk-line="' + index + '">Remove</button></div>',
         "</div>",
         "</article>",
