@@ -213,6 +213,7 @@ export async function POST(req: NextRequest) {
 
     try {
       await sendCancellationRequestCreatedEmail({
+        shopId: created.shopId || "",
         requestId: created.id,
         orderNumber: created.orderNumber,
         status: created.status,

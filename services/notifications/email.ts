@@ -1,10 +1,6 @@
-import { sendAdminAlert } from "./resend";
+import { sendAdminAlert, type SendAdminAlertInput, type SendResult } from "./resend";
 
-type SendResult = {
-  skipped: boolean;
-  success?: boolean;
-  messageId?: string | null;
-};
+type CustomerSendResult = { skipped: boolean; success?: boolean; messageId?: string | null };
 
 function parseRecipients(value: string | null | undefined) {
   return String(value || "")
@@ -23,15 +19,15 @@ function getCustomerMailConfig() {
   };
 }
 
-export async function sendOpsAlert(subject: string, text: string): Promise<SendResult> {
-  return sendAdminAlert(subject, text);
+export async function sendOpsAlert(input: SendAdminAlertInput): Promise<SendResult> {
+  return sendAdminAlert(input);
 }
 
 export async function sendCustomerEmail(
   to: string | null | undefined,
   subject: string,
   text: string
-): Promise<SendResult> {
+): Promise<CustomerSendResult> {
   const recipient = parseRecipients(to).slice(0, 1);
   const config = getCustomerMailConfig();
 

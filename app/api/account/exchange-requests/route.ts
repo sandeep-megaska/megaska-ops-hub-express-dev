@@ -318,6 +318,7 @@ export async function POST(req: NextRequest) {
 
     try {
       await sendExchangeRequestCreatedEmail({
+        shopId: created.shopId || "",
         requestId: created.id,
         customerName: created.customerNameSnapshot,
         customerPhone: created.customerPhoneSnapshot,

@@ -6,7 +6,8 @@ import {
   buildExchangeRequestedOpsTemplate,
 } from "./templates";
 
-type ExchangeNotifyPayload = {
+export type ExchangeNotifyPayload = {
+  shopId: string;
   requestId: string;
   orderNumber: string;
   status: string;
@@ -52,7 +53,7 @@ export async function sendExchangeTeamAlert(
   subject: string,
   payload: ExchangeNotifyPayload
 ) {
-  const result = await sendOpsAlert(subject, buildBody(payload));
+  const result = await sendOpsAlert({ shopId: payload.shopId, eventType: "EXCHANGE", subject, text: buildBody(payload) });
 
   if (result.skipped) return;
 
@@ -73,7 +74,7 @@ export async function sendExchangeTeamAlert(
 
 export async function sendExchangeRequestCreatedEmail(payload: ExchangeNotifyPayload) {
   const template = buildExchangeRequestedOpsTemplate(payload);
-  await sendOpsAlert(template.subject, template.text);
+  await sendOpsAlert({ shopId: payload.shopId, eventType: "EXCHANGE", subject: template.subject, text: template.text });
 }
 
 export async function sendExchangeStatusChangedEmail(payload: ExchangeNotifyPayload) {
@@ -118,7 +119,7 @@ export async function sendExchangePaymentReceivedOpsEmail(
   payload: ExchangeNotifyPayload
 ) {
   const template = buildExchangePaymentReceivedOpsTemplate(payload);
-  await sendOpsAlert(template.subject, template.text);
+  await sendOpsAlert({ shopId: payload.shopId, eventType: "EXCHANGE", subject: template.subject, text: template.text });
 }
 
 
