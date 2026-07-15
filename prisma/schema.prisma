@@ -94,6 +94,88 @@ model Shop {
   promotionRuntimeSyncState PromotionRuntimeSyncState?
   merchantNotificationSettings MerchantNotificationSettings?
   merchantOtpSettings MerchantOtpSettings?
+  merchantUsageEvents MerchantUsageEvent[]
+}
+
+enum MerchantUsageType {
+  OTP
+  EMAIL
+  SMS
+  WHATSAPP
+  AI
+  DELIVERY_LOOKUP
+  CHECKOUT_TRANSACTION
+}
+
+enum MerchantUsageAction {
+  OTP_REQUEST
+  EMAIL_SEND
+  SMS_SEND
+  WHATSAPP_SEND
+  AI_REQUEST
+  DELIVERY_LOOKUP
+  CHECKOUT_TRANSACTION
+}
+
+enum MerchantUsageProvider {
+  PLATFORM_TWILIO
+  PLATFORM_RESEND
+  PLATFORM_MSG91
+  MERCHANT_TWILIO
+  MERCHANT_RESEND
+  MERCHANT_MSG91
+  INTERNAL
+}
+
+enum MerchantUsageStatus {
+  RECORDED
+  REVERSED
+  EXCLUDED
+}
+
+enum MerchantUsageBillingStatus {
+  UNRATED
+  PENDING
+  INCLUDED
+  BILLABLE
+  SUBMITTED
+  BILLED
+  FAILED
+  EXCLUDED
+}
+
+model MerchantUsageEvent {
+  id                   String                     @id @default(uuid())
+  shopId               String
+
+  usageType            MerchantUsageType
+  action               MerchantUsageAction
+  provider             MerchantUsageProvider
+
+  quantity             Decimal                    @db.Decimal(18, 6)
+  status               MerchantUsageStatus        @default(RECORDED)
+  billingStatus        MerchantUsageBillingStatus @default(UNRATED)
+
+  sourceType           String
+  sourceId             String
+  providerReference    String?
+
+  idempotencyKey       String                     @unique
+
+  countryCode          String?
+  metadata             Json?
+
+  occurredAt           DateTime
+  createdAt            DateTime                   @default(now())
+  updatedAt            DateTime                   @updatedAt
+
+  shop                 Shop                       @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@index([shopId, occurredAt])
+  @@index([shopId, usageType, occurredAt])
+  @@index([shopId, billingStatus, occurredAt])
+  @@index([sourceType, sourceId])
+  @@index([provider, occurredAt])
 }
 
 model MerchantNotificationSettings {
