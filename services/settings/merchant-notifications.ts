@@ -80,6 +80,14 @@ function normalizeOptionalEmail(input: unknown, label: string) {
   return email;
 }
 
+function normalizeStoredOptionalEmail(input: unknown) {
+  try {
+    return normalizeOptionalEmail(input, "Reply-to email");
+  } catch {
+    return null;
+  }
+}
+
 function normalizeSenderDisplayName(input: unknown) {
   const value = String(input || "").trim();
   if (!value) return null;
@@ -121,7 +129,7 @@ export async function getMerchantNotificationSettings(shopId: string, db?: Notif
   const shop = await client.shop.findUnique({ where: { id: shopId }, select: { id: true, shopDomain: true, shopName: true } });
   if (!shop) { log("unresolved_shop", { shopId }); throw new Error("Unable to resolve shop notification settings."); }
   const row = await client.merchantNotificationSettings.findUnique({ where: { shopId: shop.id } });
-  const resolved = row ? { ...row, adminRecipients: normalizeAdminRecipients(row.adminRecipients), replyToEmail: row.replyToEmail ? normalizeOptionalEmail(row.replyToEmail, "Reply-to email") : null, senderDisplayName: normalizeSenderDisplayName(row.senderDisplayName) } : defaults(shop);
+  const resolved = row ? { ...row, adminRecipients: normalizeAdminRecipients(row.adminRecipients), replyToEmail: row.replyToEmail ? normalizeStoredOptionalEmail(row.replyToEmail) : null, senderDisplayName: normalizeSenderDisplayName(row.senderDisplayName) } : defaults(shop);
   log("loaded", { shopId: shop.id, shopDomain: shop.shopDomain, recipientCount: resolved.adminRecipients.length, hasSettingsRow: Boolean(row) });
   return resolved;
 }
@@ -131,7 +139,7 @@ export async function getMerchantNotificationRoutingSettings(shopId: string, db?
   const shop = await client.shop.findUnique({ where: { id: shopId }, select: { id: true, shopDomain: true, shopName: true } });
   if (!shop) { log("unresolved_shop", { shopId }); throw new Error("Unable to resolve shop notification routing settings."); }
   const row = await client.merchantNotificationSettings.findUnique({ where: { shopId: shop.id } });
-  const resolved = row ? { ...row, adminRecipients: normalizeAdminRecipients(row.adminRecipients), replyToEmail: row.replyToEmail ? normalizeOptionalEmail(row.replyToEmail, "Reply-to email") : null, senderDisplayName: normalizeSenderDisplayName(row.senderDisplayName) } : defaults(shop);
+  const resolved = row ? { ...row, adminRecipients: normalizeAdminRecipients(row.adminRecipients), replyToEmail: row.replyToEmail ? normalizeStoredOptionalEmail(row.replyToEmail) : null, senderDisplayName: normalizeSenderDisplayName(row.senderDisplayName) } : defaults(shop);
   log("routing_loaded", { shopId: shop.id, shopDomain: shop.shopDomain, recipientCount: resolved.adminRecipients.length, hasSettingsRow: Boolean(row) });
   return { ...resolved, hasSettingsRow: Boolean(row), shopName: shop.shopName || null };
 }

@@ -5,6 +5,7 @@ type StoreCreditEvent = "COD_REFUND_CREDIT" | "MANUAL_CREDIT" | "GOODWILL_CREDIT
 
 type StoreCreditEmailPayload = {
   event: StoreCreditEvent;
+  shopId?: string | null;
   customerEmail?: string | null;
   customerName?: string | null;
   amount: number;
@@ -68,15 +69,21 @@ async function logAndSend(payload: StoreCreditEmailPayload) {
     sourceId: payload.sourceId || null,
   };
 
-  if (!payload.customerEmail) {
-    console.info(storeCreditNotificationLog(payload.event, "skipped"), { ...context, reason: "missing-customer-email" });
+  if (!payload.shopId) {
+    console.info(storeCreditNotificationLog(payload.event, "skipped"), { ...context, reason: "missing-shop-context" });
     return;
   }
 
-  const result = await sendCustomerEmail(payload.customerEmail, subjectForEvent(payload.event), buildStoreCreditText(payload));
+  const result = await sendCustomerEmail({
+    shopId: payload.shopId,
+    to: payload.customerEmail,
+    eventType: payload.event === "CHECKOUT_REDEMPTION" ? "CHECKOUT" : "STORE_CREDIT",
+    subject: subjectForEvent(payload.event),
+    text: buildStoreCreditText(payload),
+  });
 
   if (result.skipped) {
-    console.info(storeCreditNotificationLog(payload.event, "skipped"), { ...context, reason: "email-provider-config-or-recipient", providerMessageId: result.messageId || null });
+    console.info(storeCreditNotificationLog(payload.event, "skipped"), { ...context, reason: result.reason });
     return;
   }
 
@@ -85,12 +92,13 @@ async function logAndSend(payload: StoreCreditEmailPayload) {
     return;
   }
 
-  console.error(storeCreditNotificationLog(payload.event, "failed"), { ...context, providerMessageId: result.messageId || null });
+  console.error(storeCreditNotificationLog(payload.event, "failed"), { ...context, errorCode: result.errorCode || null });
 }
 
 async function notifyFromWalletTransactionId(walletTransactionId: string, expectedType: StoreCreditEvent) {
   const rows = await prisma.$queryRaw<Array<{
     id: string;
+    shopId: string;
     customerProfileId: string;
     transactionType: string;
     amount: number;
@@ -103,7 +111,7 @@ async function notifyFromWalletTransactionId(walletTransactionId: string, expect
     email: string | null;
     currentBalance: number | null;
   }>>`
-    SELECT wt."id", wt."customerProfileId", wt."transactionType", wt."amount", wt."currency", wt."orderNumber",
+    SELECT wt."id", wt."shopId", wt."customerProfileId", wt."transactionType", wt."amount", wt."currency", wt."orderNumber",
       wt."reason", wt."sourceId", cp."fullName", cp."firstName", cp."email", wa."currentBalance"
     FROM "WalletTransaction" wt
     JOIN "CustomerProfile" cp ON cp."id" = wt."customerProfileId"
@@ -125,6 +133,7 @@ async function notifyFromWalletTransactionId(walletTransactionId: string, expect
 
   await logAndSend({
     event: expectedType,
+    shopId: transaction.shopId,
     customerEmail: transaction.email,
     customerName: transaction.fullName || transaction.firstName,
     amount: transaction.amount,

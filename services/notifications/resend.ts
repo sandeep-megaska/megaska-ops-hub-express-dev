@@ -1,6 +1,7 @@
 import { getMerchantNotificationRoutingSettings, type NotificationSettingsDb } from "../settings/merchant-notifications.ts";
 
 export type AdminAlertEventType = "CANCELLATION" | "EXCHANGE" | "ISSUE" | "STORE_CREDIT" | "CHECKOUT" | "GENERAL";
+export type CustomerEmailEventType = AdminAlertEventType | "ORDER";
 
 export type SendAdminAlertInput = {
   shopId: string;
@@ -9,10 +10,24 @@ export type SendAdminAlertInput = {
   text: string;
 };
 
+export type SendCustomerEmailInput = {
+  shopId: string;
+  to: string | null | undefined;
+  eventType: CustomerEmailEventType;
+  subject: string;
+  text: string;
+};
+
 export type AdminAlertSkipReason = "EMAIL_DISABLED" | "EVENT_DISABLED" | "NO_RECIPIENTS" | "PLATFORM_TRANSPORT_NOT_CONFIGURED";
+export type CustomerEmailSkipReason = "EMAIL_DISABLED" | "CUSTOMER_EMAIL_DISABLED" | "NO_RECIPIENT" | "PLATFORM_TRANSPORT_NOT_CONFIGURED";
 
 export type SendResult =
   | { skipped: true; success?: undefined; reason: AdminAlertSkipReason }
+  | { skipped: false; success: true; messageId: string | null }
+  | { skipped: false; success: false; errorCode?: string | null };
+
+export type CustomerEmailSendResult =
+  | { skipped: true; success?: undefined; reason: CustomerEmailSkipReason }
   | { skipped: false; success: true; messageId: string | null }
   | { skipped: false; success: false; errorCode?: string | null };
 
@@ -20,6 +35,8 @@ type SendAdminAlertDeps = {
   db?: NotificationSettingsDb;
   fetchImpl?: typeof fetch;
 };
+
+type SendCustomerEmailDeps = SendAdminAlertDeps;
 
 function parseRecipients(value: string | undefined) {
   return String(value || "")
@@ -31,6 +48,12 @@ function parseRecipients(value: string | undefined) {
 export function getPlatformAdminEmailTransport() {
   const apiKey = String(process.env.RESEND_API_KEY || "").trim();
   const platformFromEmail = String(process.env.OPS_NOTIFICATION_FROM_EMAIL || "").trim();
+  return { apiKey, platformFromEmail, enabled: Boolean(apiKey && platformFromEmail) };
+}
+
+export function getPlatformCustomerEmailTransport() {
+  const apiKey = String(process.env.RESEND_API_KEY || "").trim();
+  const platformFromEmail = String(process.env.CUSTOMER_NOTIFICATION_FROM_EMAIL || process.env.OPS_NOTIFICATION_FROM_EMAIL || "").trim();
   return { apiKey, platformFromEmail, enabled: Boolean(apiKey && platformFromEmail) };
 }
 
@@ -69,6 +92,25 @@ export function formatPlatformFrom(displayName: string | null | undefined, platf
 
 function log(operation: string, details: Record<string, unknown>) {
   console.info("[ADMIN NOTIFY]", { operation, ...details });
+}
+
+function customerLog(operation: string, details: Record<string, unknown>) {
+  console.info("[CUSTOMER NOTIFY]", { operation, ...details });
+}
+
+function normalizeCustomerRecipient(value: string | null | undefined) {
+  const recipient = String(value || "").trim().toLowerCase();
+  if (!recipient || recipient.length > 254) return null;
+  if (/[\r\n]/.test(recipient) || recipient.includes(",")) return null;
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient)) return null;
+  return recipient;
+}
+
+function normalizeReplyTo(value: string | null | undefined) {
+  const email = String(value || "").trim().toLowerCase();
+  if (!email || email.length > 254 || /[\r\n,]/.test(email)) return null;
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return null;
+  return email;
 }
 
 export async function sendAdminAlert(input: SendAdminAlertInput, deps: SendAdminAlertDeps = {}): Promise<SendResult> {
@@ -141,6 +183,74 @@ export async function sendAdminAlert(input: SendAdminAlertInput, deps: SendAdmin
     return { skipped: false, success: true, messageId: data?.id || null };
   } catch (error) {
     console.error("[ADMIN NOTIFY]", { operation: "provider_failed", shopId, eventType, subject: boundedSubject(subject), errorName: error instanceof Error ? error.name : null, errorMessage: error instanceof Error ? error.message : String(error) });
+    return { skipped: false, success: false, errorCode: "PROVIDER_FAILED" };
+  }
+}
+
+export async function sendCustomerEmail(input: SendCustomerEmailInput, deps: SendCustomerEmailDeps = {}): Promise<CustomerEmailSendResult> {
+  const shopId = String(input.shopId || "").trim();
+  const eventType = input.eventType;
+  const subject = String(input.subject || "");
+  const text = String(input.text || "");
+
+  if (!shopId) {
+    customerLog("shop_unresolved", { shopId, eventType, subject: boundedSubject(subject), recipientPresent: Boolean(String(input.to || "").trim()) });
+    return { skipped: false, success: false, errorCode: "SHOP_UNRESOLVED" };
+  }
+
+  let settings: Awaited<ReturnType<typeof getMerchantNotificationRoutingSettings>>;
+  try {
+    settings = await getMerchantNotificationRoutingSettings(shopId, deps.db);
+  } catch (error) {
+    customerLog("shop_unresolved", { shopId, eventType, subject: boundedSubject(subject), recipientPresent: Boolean(String(input.to || "").trim()), errorName: error instanceof Error ? error.name : null });
+    return { skipped: false, success: false, errorCode: "SHOP_UNRESOLVED" };
+  }
+
+  if (!settings.emailEnabled) {
+    customerLog("skipped_email_disabled", { shopId, eventType, hasSettingsRow: settings.hasSettingsRow, subject: boundedSubject(subject), recipientPresent: Boolean(String(input.to || "").trim()) });
+    return { skipped: true, reason: "EMAIL_DISABLED" };
+  }
+
+  if (!settings.customerEmailsEnabled) {
+    customerLog("skipped_customer_email_disabled", { shopId, eventType, hasSettingsRow: settings.hasSettingsRow, subject: boundedSubject(subject), recipientPresent: Boolean(String(input.to || "").trim()) });
+    return { skipped: true, reason: "CUSTOMER_EMAIL_DISABLED" };
+  }
+
+  const recipient = normalizeCustomerRecipient(input.to);
+  if (!recipient) {
+    customerLog("skipped_no_recipient", { shopId, eventType, hasSettingsRow: settings.hasSettingsRow, subject: boundedSubject(subject), recipientPresent: Boolean(String(input.to || "").trim()) });
+    return { skipped: true, reason: "NO_RECIPIENT" };
+  }
+
+  const transport = getPlatformCustomerEmailTransport();
+  if (!transport.enabled) {
+    customerLog("transport_missing", { shopId, eventType, hasSettingsRow: settings.hasSettingsRow, hasApiKey: Boolean(transport.apiKey), hasFrom: Boolean(transport.platformFromEmail), subject: boundedSubject(subject), recipientPresent: true });
+    return { skipped: true, reason: "PLATFORM_TRANSPORT_NOT_CONFIGURED" };
+  }
+
+  customerLog("routing_resolved", { shopId, eventType, hasSettingsRow: settings.hasSettingsRow, subject: boundedSubject(subject), recipientPresent: true });
+
+  try {
+    const body: Record<string, unknown> = {
+      from: formatPlatformFrom(settings.senderDisplayName || settings.shopName, transport.platformFromEmail),
+      to: [recipient],
+      subject,
+      text,
+    };
+    const replyTo = normalizeReplyTo(settings.replyToEmail);
+    if (replyTo) body.reply_to = replyTo;
+
+    const response = await (deps.fetchImpl || fetch)("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${transport.apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = (await response.json().catch(() => null)) as { id?: string; message?: string } | null;
+    if (!response.ok) throw new Error(data?.message || `Resend HTTP ${response.status}`);
+    customerLog("provider_accepted", { shopId, eventType, providerMessageId: data?.id || null, subject: boundedSubject(subject), recipientPresent: true });
+    return { skipped: false, success: true, messageId: data?.id || null };
+  } catch (error) {
+    console.error("[CUSTOMER NOTIFY]", { operation: "provider_failed", shopId, eventType, subject: boundedSubject(subject), recipientPresent: true, errorName: error instanceof Error ? error.name : null, errorMessage: error instanceof Error ? error.message : String(error) });
     return { skipped: false, success: false, errorCode: "PROVIDER_FAILED" };
   }
 }

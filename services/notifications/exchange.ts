@@ -102,11 +102,18 @@ export async function sendExchangeApprovedPaymentRequiredEmail(
   payload: ExchangeNotifyPayload
 ) {
   const template = buildExchangePaymentRequiredCustomerTemplate(payload);
-  const result = await sendCustomerEmail(
-    payload.customerEmail,
-    template.subject,
-    template.text
-  );
+  if (!payload.shopId) {
+    console.warn("[EXCHANGE NOTIFY] Customer payment-required email skipped", { requestId: payload.requestId, reason: "missing-shop-context" });
+    return;
+  }
+
+  const result = await sendCustomerEmail({
+    shopId: payload.shopId,
+    to: payload.customerEmail,
+    eventType: "EXCHANGE",
+    subject: template.subject,
+    text: template.text,
+  });
 
   if (!result.success && !result.skipped) {
     console.error("[EXCHANGE NOTIFY] Customer payment-required email failed", {
@@ -124,6 +131,7 @@ export async function sendExchangePaymentReceivedOpsEmail(
 
 
 export async function sendExchangeInvoiceEmail(invoice: {
+  shopId: string | null;
   invoiceNumber: string;
   customerEmail: string | null;
   orderNumber: string;
@@ -144,5 +152,16 @@ export async function sendExchangeInvoiceEmail(invoice: {
     invoiceLink ? `Invoice Link: ${invoiceLink}` : "",
   ].filter(Boolean).join("\n");
 
-  await sendCustomerEmail(invoice.customerEmail, subject, text);
+  if (!invoice.shopId) {
+    console.warn("[EXCHANGE NOTIFY] Invoice email skipped", { requestId: invoice.requestId, invoiceNumber: invoice.invoiceNumber, reason: "missing-shop-context" });
+    return;
+  }
+
+  await sendCustomerEmail({
+    shopId: invoice.shopId,
+    to: invoice.customerEmail,
+    eventType: "EXCHANGE",
+    subject,
+    text,
+  });
 }

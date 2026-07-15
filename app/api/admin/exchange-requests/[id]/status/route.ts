@@ -265,20 +265,24 @@ export async function PATCH(
     }
 
     if (shouldRequirePayment) {
-      void sendExchangeApprovedPaymentRequiredEmail({
-        shopId: updated.shopId || "",
-        requestId: updated.id,
-        orderNumber: updated.orderNumber,
-        status: updated.status,
-        customerName: updated.customerNameSnapshot,
-        customerPhone: updated.customerPhoneSnapshot,
-        customerEmail: updated.customerEmailSnapshot,
-        currentSize: updated.items[0]?.currentSize,
-        requestedSize: updated.items[0]?.requestedSize,
-        adminNote: updated.adminNote,
-        paymentAmountPaise: pickupChargePaise,
-        paymentCurrency: "INR",
-      });
+      if (!updated.shopId) {
+        console.warn("[EXCHANGE NOTIFY] Customer payment-required email skipped", { requestId: updated.id, reason: "missing-shop-context" });
+      } else {
+        void sendExchangeApprovedPaymentRequiredEmail({
+          shopId: updated.shopId,
+          requestId: updated.id,
+          orderNumber: updated.orderNumber,
+          status: updated.status,
+          customerName: updated.customerNameSnapshot,
+          customerPhone: updated.customerPhoneSnapshot,
+          customerEmail: updated.customerEmailSnapshot,
+          currentSize: updated.items[0]?.currentSize,
+          requestedSize: updated.items[0]?.requestedSize,
+          adminNote: updated.adminNote,
+          paymentAmountPaise: pickupChargePaise,
+          paymentCurrency: "INR",
+        });
+      }
     }
 
     void sendExchangeStatusChangedEmail({
