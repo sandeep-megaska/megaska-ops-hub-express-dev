@@ -85,17 +85,25 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const provider = challenge.provider;
+    const provider = challenge.provider || "twilio";
+
+    if (!challenge.provider) {
+      console.info("[OTP VERIFY LEGACY PROVIDER INFERRED]", {
+        challengeId: challenge.id,
+        shopId: shop.id,
+        shopDomain: shop.shopDomain,
+        inferredProvider: provider,
+      });
+    }
 
     console.info("[OTP VERIFY PROVIDER SELECTED]", {
       challengeId: challenge.id,
       shopId: shop.id,
       shopDomain: shop.shopDomain,
       provider,
-      phoneE164,
     });
 
-    if (provider === "twilio") {
+    if (provider === "twilio" || provider === "PLATFORM_TWILIO") {
       try {
         const check = await verifyOtpWithTwilio(phoneE164, otpRaw);
 
@@ -103,7 +111,6 @@ export async function POST(req: NextRequest) {
           challengeId: challenge.id,
           shopId: shop.id,
           shopDomain: shop.shopDomain,
-          phoneE164,
           provider,
           status: check.status,
           valid: check.valid,
@@ -134,7 +141,6 @@ export async function POST(req: NextRequest) {
           challengeId: challenge.id,
           shopId: shop.id,
           shopDomain: shop.shopDomain,
-          phoneE164,
           provider,
           message:
             twilioError instanceof Error
@@ -158,7 +164,6 @@ export async function POST(req: NextRequest) {
           challengeId: challenge.id,
           shopId: shop.id,
           shopDomain: shop.shopDomain,
-          phoneE164,
           provider,
           status: check.status,
           valid: check.valid,
@@ -191,7 +196,6 @@ export async function POST(req: NextRequest) {
           challengeId: challenge.id,
           shopId: shop.id,
           shopDomain: shop.shopDomain,
-          phoneE164,
           provider,
           message:
             msg91Error instanceof Error
@@ -233,7 +237,6 @@ export async function POST(req: NextRequest) {
         challengeId: challenge.id,
         shopId: shop.id,
         shopDomain: shop.shopDomain,
-        phoneE164,
         provider: "mock",
         status: "approved",
       });

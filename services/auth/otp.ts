@@ -231,9 +231,10 @@ export async function sendOtpWithTwilio(phoneE164: string): Promise<TwilioSendRe
   const twilioResponse = await parseTwilioResponse(response);
 
   console.info("[OTP TWILIO SEND RESPONSE]", {
-    status: response.status,
+    statusCode: response.status,
     ok: response.ok,
-    body: twilioResponse.payload,
+    providerStatus: String((twilioResponse.payload as Record<string, unknown> | null)?.status ?? "unknown"),
+    hasSid: typeof (twilioResponse.payload as Record<string, unknown> | null)?.sid === "string",
   });
 
   if (!response.ok) {
@@ -281,7 +282,7 @@ export async function verifyOtpWithTwilio(phoneE164: string, otpCode: string): P
     ok: response.ok,
     verifyStatus: status,
     valid,
-    body: twilioResponse.payload,
+    hasSid: typeof (twilioResponse.payload as Record<string, unknown> | null)?.sid === "string",
   });
 
   return {
@@ -319,10 +320,9 @@ export async function sendOtpWithMsg91(phoneE164: string): Promise<Msg91SendResu
 
   const msg91Response = await parseMsg91Response(response);
 
-  console.info("[OTP MSG91 SEND RESPONSE BODY]", {
-    status: response.status,
+  console.info("[OTP MSG91 SEND RESPONSE]", {
+    statusCode: response.status,
     ok: response.ok,
-    body: msg91Response.payload,
   });
 
   if (!response.ok) {
@@ -358,10 +358,9 @@ export async function verifyOtpWithMsg91(phoneE164: string, otpCode: string): Pr
 
   const msg91Response = await parseMsg91Response(response);
 
-  console.info("[OTP MSG91 VERIFY RESPONSE BODY]", {
-    status: response.status,
+  console.info("[OTP MSG91 VERIFY RESPONSE]", {
+    statusCode: response.status,
     ok: response.ok,
-    body: msg91Response.payload,
   });
 
   return {
