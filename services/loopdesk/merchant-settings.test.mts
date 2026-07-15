@@ -245,3 +245,42 @@ test("bootstrap keeps runtime promotions before cart drawer normalization", () =
   vm.runInNewContext(source, { window, document, console: window.console, setTimeout: window.setTimeout, clearTimeout: window.clearTimeout, URLSearchParams, FormData: class FormData {} });
   assert.equal(window.LoopDeskConfig.promotions.rules.length, 1);
 });
+
+test("normalizes OTP modal branding defaults and runtime projection", () => {
+  const settings = normalizeLoopDeskMerchantSettings({}, { shopName: "Demo Store", shopDomain: "demo.myshopify.com" });
+  assert.equal(settings.otpModalBranding.logoUrl, null);
+  assert.equal(settings.otpModalBranding.logoAlt, "Demo Store");
+  assert.equal(settings.otpModalBranding.fallbackBrandText, "Demo Store");
+  assert.equal(settings.otpModalBranding.heading, "Login or Signup");
+  assert.equal(settings.otpModalBranding.description, "Sign in securely to continue");
+  assert.equal(settings.otpModalBranding.promotionEnabled, false);
+  assert.deepEqual(settings.otpModalBranding.trustItems, ["Secure login", "Faster checkout", ""]);
+  assert.equal(settings.otpModalBranding.inputHelperText, "Enter 10 digits to receive an OTP automatically.");
+  assert.equal(settings.otpModalBranding.privacyText, "We never share your number.");
+  assert.deepEqual(toLoopDeskPublicRuntimeConfig(settings).otpModalBranding, settings.otpModalBranding);
+});
+
+test("validates and preserves saved OTP modal promotional copy", () => {
+  const current = normalizeLoopDeskMerchantSettings({}, { shopName: "Megaska", shopDomain: "megaska.myshopify.com" });
+  const merged = mergeLoopDeskMerchantSettings(current, {
+    otpModalBranding: {
+      logoUrl: "https://cdn.shopify.com/logo.png",
+      promotionEnabled: true,
+      promotionBadgeText: "15% OFF",
+      promotionMessage: "Use Code: MEGA15",
+      trustItem3: "Easy order tracking",
+    },
+  });
+  assert.equal(merged.otpModalBranding.logoUrl, "https://cdn.shopify.com/logo.png");
+  assert.equal(merged.otpModalBranding.promotionEnabled, true);
+  assert.equal(merged.otpModalBranding.promotionBadgeText, "15% OFF");
+  assert.equal(merged.otpModalBranding.promotionMessage, "Use Code: MEGA15");
+  assert.equal(merged.otpModalBranding.trustItems[2], "Easy order tracking");
+
+  const errors = validateLoopDeskMerchantSettingsPatch({
+    otpModalBranding: { logoUrl: "http://example.com/logo.png", heading: "x".repeat(121), promotionEnabled: "yes" },
+  });
+  assert.match(errors.join(" "), /OTP modal logo URL must use https/);
+  assert.match(errors.join(" "), /OTP modal heading/);
+  assert.match(errors.join(" "), /Show promotional banner/);
+});
