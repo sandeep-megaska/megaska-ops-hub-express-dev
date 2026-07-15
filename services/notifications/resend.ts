@@ -45,16 +45,50 @@ function parseRecipients(value: string | undefined) {
     .filter(Boolean);
 }
 
+export type ParsedPlatformSender = {
+  email: string;
+  configuredDisplayName: string | null;
+};
+
+function isValidSenderEmail(value: string) {
+  const email = String(value || "").trim().toLowerCase();
+  if (!email || email.length > 254) return false;
+  if (/[\r\n,<>]/.test(email)) return false;
+  if ((email.match(/@/g) || []).length !== 1) return false;
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return false;
+  return true;
+}
+
+export function parsePlatformSender(rawValue: string | null | undefined): ParsedPlatformSender | null {
+  const raw = String(rawValue || "").trim();
+  if (!raw || /[\r\n,]/.test(raw)) return null;
+
+  const formatted = raw.match(/^([^<>]+?)\s*<\s*([^<>]+?)\s*>$/);
+  if (formatted) {
+    const configuredDisplayName = formatted[1].replace(/["<>]/g, "").replace(/\s+/g, " ").trim();
+    const email = formatted[2].trim().toLowerCase();
+    if (!configuredDisplayName || !isValidSenderEmail(email)) return null;
+    return { email, configuredDisplayName: configuredDisplayName.slice(0, 100) };
+  }
+
+  if (raw.includes("<") || raw.includes(">")) return null;
+  const email = raw.toLowerCase();
+  if (!isValidSenderEmail(email)) return null;
+  return { email, configuredDisplayName: null };
+}
+
 export function getPlatformAdminEmailTransport() {
   const apiKey = String(process.env.RESEND_API_KEY || "").trim();
-  const platformFromEmail = String(process.env.OPS_NOTIFICATION_FROM_EMAIL || "").trim();
-  return { apiKey, platformFromEmail, enabled: Boolean(apiKey && platformFromEmail) };
+  const rawPlatformSender = String(process.env.OPS_NOTIFICATION_FROM_EMAIL || "").trim();
+  const parsedSender = parsePlatformSender(rawPlatformSender);
+  return { apiKey, rawPlatformSender, parsedSender, enabled: Boolean(apiKey && parsedSender) };
 }
 
 export function getPlatformCustomerEmailTransport() {
   const apiKey = String(process.env.RESEND_API_KEY || "").trim();
-  const platformFromEmail = String(process.env.CUSTOMER_NOTIFICATION_FROM_EMAIL || process.env.OPS_NOTIFICATION_FROM_EMAIL || "").trim();
-  return { apiKey, platformFromEmail, enabled: Boolean(apiKey && platformFromEmail) };
+  const rawPlatformSender = String(process.env.CUSTOMER_NOTIFICATION_FROM_EMAIL || process.env.OPS_NOTIFICATION_FROM_EMAIL || "").trim();
+  const parsedSender = parsePlatformSender(rawPlatformSender);
+  return { apiKey, rawPlatformSender, parsedSender, enabled: Boolean(apiKey && parsedSender) };
 }
 
 function getLegacyAdminRecipients() {
@@ -86,8 +120,11 @@ function sanitizeDisplayName(value: string | null | undefined) {
   return sanitized.slice(0, 100);
 }
 
-export function formatPlatformFrom(displayName: string | null | undefined, platformFromEmail: string) {
-  return `${sanitizeDisplayName(displayName)} <${platformFromEmail}>`;
+export function formatPlatformFrom(displayName: string | null | undefined, rawPlatformSender: string) {
+  const parsedSender = parsePlatformSender(rawPlatformSender);
+  if (!parsedSender) return null;
+  const finalDisplayName = sanitizeDisplayName(displayName || parsedSender.configuredDisplayName || "LoopDesk");
+  return `${finalDisplayName} <${parsedSender.email}>`;
 }
 
 function log(operation: string, details: Record<string, unknown>) {
@@ -157,15 +194,21 @@ export async function sendAdminAlert(input: SendAdminAlertInput, deps: SendAdmin
 
   const transport = getPlatformAdminEmailTransport();
   if (!transport.enabled) {
-    log("transport_missing", { shopId, eventType, recipientCount: recipients.length, hasApiKey: Boolean(transport.apiKey), hasFrom: Boolean(transport.platformFromEmail), subject: boundedSubject(subject) });
+    log("transport_missing", { shopId, eventType, recipientCount: recipients.length, hasApiKey: Boolean(transport.apiKey), hasValidFrom: Boolean(transport.parsedSender), subject: boundedSubject(subject) });
     return { skipped: true, reason: "PLATFORM_TRANSPORT_NOT_CONFIGURED" };
   }
 
   log("routing_resolved", { shopId, eventType, recipientCount: recipients.length, hasSettingsRow: settings.hasSettingsRow, usedLegacyFallback, subject: boundedSubject(subject) });
 
+  const from = formatPlatformFrom(settings.senderDisplayName || settings.shopName, transport.rawPlatformSender);
+  if (!from) {
+    log("transport_missing", { shopId, eventType, recipientCount: recipients.length, hasApiKey: Boolean(transport.apiKey), hasValidFrom: false, subject: boundedSubject(subject) });
+    return { skipped: true, reason: "PLATFORM_TRANSPORT_NOT_CONFIGURED" };
+  }
+
   try {
     const body: Record<string, unknown> = {
-      from: formatPlatformFrom(settings.senderDisplayName || settings.shopName, transport.platformFromEmail),
+      from,
       to: recipients,
       subject,
       text,
@@ -224,15 +267,21 @@ export async function sendCustomerEmail(input: SendCustomerEmailInput, deps: Sen
 
   const transport = getPlatformCustomerEmailTransport();
   if (!transport.enabled) {
-    customerLog("transport_missing", { shopId, eventType, hasSettingsRow: settings.hasSettingsRow, hasApiKey: Boolean(transport.apiKey), hasFrom: Boolean(transport.platformFromEmail), subject: boundedSubject(subject), recipientPresent: true });
+    customerLog("transport_missing", { shopId, eventType, hasSettingsRow: settings.hasSettingsRow, hasApiKey: Boolean(transport.apiKey), hasValidFrom: Boolean(transport.parsedSender), subject: boundedSubject(subject), recipientPresent: true });
     return { skipped: true, reason: "PLATFORM_TRANSPORT_NOT_CONFIGURED" };
   }
 
   customerLog("routing_resolved", { shopId, eventType, hasSettingsRow: settings.hasSettingsRow, subject: boundedSubject(subject), recipientPresent: true });
 
+  const from = formatPlatformFrom(settings.senderDisplayName || settings.shopName, transport.rawPlatformSender);
+  if (!from) {
+    customerLog("transport_missing", { shopId, eventType, hasSettingsRow: settings.hasSettingsRow, hasApiKey: Boolean(transport.apiKey), hasValidFrom: false, subject: boundedSubject(subject), recipientPresent: true });
+    return { skipped: true, reason: "PLATFORM_TRANSPORT_NOT_CONFIGURED" };
+  }
+
   try {
     const body: Record<string, unknown> = {
-      from: formatPlatformFrom(settings.senderDisplayName || settings.shopName, transport.platformFromEmail),
+      from,
       to: [recipient],
       subject,
       text,

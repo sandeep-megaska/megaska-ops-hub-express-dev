@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { sendAdminAlert, sendCustomerEmail, formatPlatformFrom } from "./resend.ts";
+import { sendAdminAlert, sendCustomerEmail, formatPlatformFrom, parsePlatformSender, getPlatformAdminEmailTransport } from "./resend.ts";
 import { saveMerchantNotificationSettings, type NotificationSettingsDb } from "../settings/merchant-notifications.ts";
 
 type Shop = { id: string; shopDomain: string; shopName: string | null };
@@ -53,6 +53,44 @@ function withEnv(values: Record<string, string | undefined>) {
     }
   };
 }
+
+
+test("platform sender parser supports bare and formatted sender values", () => {
+  assert.deepEqual(parsePlatformSender("notifications@example.com"), { email: "notifications@example.com", configuredDisplayName: null });
+  assert.deepEqual(parsePlatformSender("LoopDesk Notifications <notifications@example.com>"), { email: "notifications@example.com", configuredDisplayName: "LoopDesk Notifications" });
+  assert.deepEqual(parsePlatformSender("  LoopDesk Notifications   < notifications@example.com >"), { email: "notifications@example.com", configuredDisplayName: "LoopDesk Notifications" });
+});
+
+test("platform sender parser rejects invalid single sender configurations", () => {
+  for (const raw of [
+    "LoopDesk Notifications",
+    "LoopDesk <not-an-email>",
+    "Name <first@example.com> extra",
+    "Name <first@example.com><second@example.com>",
+    "notifications@example.com,other@example.com",
+    "Name\r\nBcc: attacker@example.com <notifications@example.com>",
+  ]) {
+    assert.equal(parsePlatformSender(raw), null, raw);
+  }
+});
+
+test("formatPlatformFrom normalizes sender display precedence without nested brackets", () => {
+  assert.equal(formatPlatformFrom("Megaska", "notifications@example.com"), "Megaska <notifications@example.com>");
+  assert.equal(formatPlatformFrom("Megaska", "LoopDesk <notifications@example.com>"), "Megaska <notifications@example.com>");
+  assert.equal(formatPlatformFrom(null, "LoopDesk <notifications@example.com>"), "LoopDesk <notifications@example.com>");
+  assert.equal(formatPlatformFrom(null, "notifications@example.com"), "LoopDesk <notifications@example.com>");
+  assert.equal(formatPlatformFrom("Megaska", "invalid"), null);
+});
+
+test("invalid platform sender disables admin transport", () => {
+  for (const from of ["invalid", "LoopDesk <not-an-email>", "Name\r\nBcc: attacker@example.com <notifications@example.com>", "notifications@example.com,other@example.com"]) {
+    const restore = withEnv({ RESEND_API_KEY: "key", OPS_NOTIFICATION_FROM_EMAIL: from });
+    const transport = getPlatformAdminEmailTransport();
+    restore();
+    assert.equal(transport.enabled, false, from);
+    assert.equal(transport.parsedSender, null, from);
+  }
+});
 
 function fetchOk(calls: unknown[]) {
   return (async (_url: string | URL | Request, init?: RequestInit) => {
@@ -165,7 +203,7 @@ test("unresolved shop cannot send", async () => {
 });
 
 test("customer emails route by shop display name and remain tenant isolated", async () => {
-  const restore = withEnv({ RESEND_API_KEY: "key", CUSTOMER_NOTIFICATION_FROM_EMAIL: "customers@example.com", OPS_NOTIFICATION_FROM_EMAIL: "ops@example.com" });
+  const restore = withEnv({ RESEND_API_KEY: "key", CUSTOMER_NOTIFICATION_FROM_EMAIL: "LoopDesk Customers <customers@example.com>", OPS_NOTIFICATION_FROM_EMAIL: "ops@example.com" });
   const client = db();
   await saveMerchantNotificationSettings("shop-a", { ...base, senderDisplayName: "Alpha Store", replyToEmail: "alpha@example.com" }, client);
   await saveMerchantNotificationSettings("shop-b", { ...base, senderDisplayName: "Beta Store", replyToEmail: "" }, client);
@@ -196,6 +234,36 @@ test("customer emails use safe defaults when settings row is missing", async () 
   restore();
   assert.deepEqual(result, { skipped: false, success: true, messageId: "msg_123" });
   assert.equal(calls[0].from, "Shop A <fallback@example.com>");
+});
+
+
+test("sender display falls back through shop name platform name and LoopDesk", async () => {
+  {
+    const restore = withEnv({ RESEND_API_KEY: "key", OPS_NOTIFICATION_FROM_EMAIL: "LoopDesk Platform <ops@example.com>", ADMIN_ALERT_EMAIL: "legacy@example.com" });
+    const calls: Array<Record<string, unknown>> = [];
+    const result = await sendAdminAlert({ shopId: "shop-a", eventType: "GENERAL", subject: "S", text: "T" }, { db: db(), fetchImpl: fetchOk(calls) });
+    restore();
+    assert.deepEqual(result, { skipped: false, success: true, messageId: "msg_123" });
+    assert.equal(calls[0].from, "Shop A <ops@example.com>");
+  }
+  {
+    const client = db();
+    client.shop.findUnique = async ({ where }) => where.id === "shop-a" ? { id: "shop-a", shopDomain: "a.myshopify.com", shopName: null } : null;
+    const restore = withEnv({ RESEND_API_KEY: "key", OPS_NOTIFICATION_FROM_EMAIL: "LoopDesk Platform <ops@example.com>", ADMIN_ALERT_EMAIL: "legacy@example.com" });
+    const calls: Array<Record<string, unknown>> = [];
+    await sendAdminAlert({ shopId: "shop-a", eventType: "GENERAL", subject: "S", text: "T" }, { db: client, fetchImpl: fetchOk(calls) });
+    restore();
+    assert.equal(calls[0].from, "LoopDesk Platform <ops@example.com>");
+  }
+  {
+    const client = db();
+    client.shop.findUnique = async ({ where }) => where.id === "shop-a" ? { id: "shop-a", shopDomain: "a.myshopify.com", shopName: null } : null;
+    const restore = withEnv({ RESEND_API_KEY: "key", OPS_NOTIFICATION_FROM_EMAIL: "ops@example.com", ADMIN_ALERT_EMAIL: "legacy@example.com" });
+    const calls: Array<Record<string, unknown>> = [];
+    await sendAdminAlert({ shopId: "shop-a", eventType: "GENERAL", subject: "S", text: "T" }, { db: client, fetchImpl: fetchOk(calls) });
+    restore();
+    assert.equal(calls[0].from, "LoopDesk <ops@example.com>");
+  }
 });
 
 test("customer recipient validation rejects missing invalid and multiple recipients", async () => {
