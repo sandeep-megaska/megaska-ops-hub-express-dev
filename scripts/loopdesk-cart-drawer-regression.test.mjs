@@ -25,6 +25,34 @@ assert.ok(controllerOpen, "manual controller open helper should exist");
 assert.match(controllerOpen[0], /return refreshAndMaybeOpen\(true\);/, "manual open helper should open the drawer for debugging");
 assert.doesNotMatch(controllerOpen[0], /isLoopDeskDrawerActive\(\)/, "manual open helper should not be gated by cartOwnershipMode");
 
+
+const renderFunction = source.match(/function render\(\) \{[\s\S]*?\n  \}\n\n  function setOpen/);
+assert.ok(renderFunction, "cart drawer render function should exist");
+assert.match(renderFunction[0], /var hasItems = itemCount > 0;/, "render should derive a single cart availability value");
+assert.match(renderFunction[0], /elements\.body\.innerHTML = state\.error[\s\S]*renderLines\(cart\)/, "render should keep empty cart messaging sourced from renderLines");
+assert.match(renderFunction[0], /elements\.express\.hidden = !config\.cart\.expressCheckoutButtonEnabled;/, "merchant setting should control express checkout visibility");
+assert.match(renderFunction[0], /elements\.express\.disabled = !hasItems \|\| state\.loading \|\| state\.expressCheckoutLock;/, "empty, loading, and opening states should disable express checkout");
+assert.match(renderFunction[0], /elements\.express\.setAttribute\("aria-disabled", elements\.express\.disabled \? "true" : "false"\);/, "express checkout should expose aria-disabled from the disabled state");
+assert.match(renderFunction[0], /if \(state\.expressCheckoutLock\) \{[\s\S]*Opening checkout\.\.\.[\s\S]*\} else if \(!hasItems\) \{[\s\S]*Add items to checkout[\s\S]*\} else \{[\s\S]*config\.labels\.expressCheckoutText/, "express checkout label should reflect opening, empty, and enabled cart states");
+assert.match(renderFunction[0], /elements\.viewCart\.hidden = !config\.cart\.viewCartButtonEnabled;/, "view cart merchant setting should still control visibility");
+
+const interceptCheckout = source.match(/function interceptCheckout\(event, source\) \{[\s\S]*?\n  \}\n\n  var CHECKOUT_INTENT_SELECTOR/);
+assert.ok(interceptCheckout, "checkout interception helper should exist");
+assert.match(interceptCheckout[0], /event\.preventDefault\(\);[\s\S]*event\.stopPropagation\(\);/, "defensive checkout guard should prevent default and propagation before returning");
+assert.match(interceptCheckout[0], /if \(!state\.cart \|\| Number\(state\.cart\.item_count \|\| 0\) <= 0 \|\| state\.loading\) \{[\s\S]*return;[\s\S]*\}/, "checkout interception should fail closed for empty or loading carts");
+assert.match(interceptCheckout[0], /openExpressCheckout\(source\);/, "checkout interception should still open checkout for valid carts");
+
+assert.match(source, /Your cart is empty/, "empty cart should render the empty cart message");
+assert.match(source, /Add items to checkout/, "empty cart express checkout should use disabled empty-cart label");
+assert.doesNotMatch(source, /elements\.express\.hidden = !config\.cart\.expressCheckoutButtonEnabled \|\| itemCount === 0/, "empty cart should no longer hide express checkout when merchant setting is enabled");
+assert.doesNotMatch(source, /megaska-otp\.js|megaska-auth\.js|megaska-express-modal\.js|loopdesk-checkout-bridge\.js/, "cart drawer regression source should not reference forbidden asset edits");
+
+assert.match(css, /\.loopdesk-cart-drawer__express\[hidden\],[\s\S]*\.loopdesk-cart-drawer__view-cart\[hidden\] \{[\s\S]*display: none;/, "scoped hidden CSS should hide merchant-disabled express checkout and view cart fallback");
+assert.doesNotMatch(css, /(^|[^_a-zA-Z0-9-])\[hidden\] \{[\s\S]*display: none;/, "hidden CSS should remain scoped, not global");
+assert.match(css, /\.loopdesk-cart-drawer__express:disabled,[\s\S]*\.loopdesk-cart-drawer__express\[aria-disabled="true"\] \{[\s\S]*cursor: not-allowed;[\s\S]*box-shadow: none;[\s\S]*opacity: 0\.48;[\s\S]*filter: none;/, "disabled express checkout styling should avoid active primary affordance");
+assert.match(css, /\.loopdesk-cart-drawer__express:not\(:disabled\):hover/, "express checkout hover brightening should only apply when enabled");
+assert.doesNotMatch(css, /\.loopdesk-cart-drawer__express:hover,/, "disabled express checkout should not match active hover selector");
+
 assert.match(source, /if \(wasAdd && shouldOpenLoopDeskAfterCartAdd\(\)\) return refreshAndMaybeOpen\(true\);/, "add-to-cart should only open the drawer when explicitly configured, avoiding OTP/checkout changes");
 assert.match(source, /elements\.express\.addEventListener\("click", function \(event\) \{ interceptCheckout\(event, "loopdesk-cart-drawer"\); \}\);/, "express checkout OTP/checkout should remain scoped to the drawer checkout CTA");
 

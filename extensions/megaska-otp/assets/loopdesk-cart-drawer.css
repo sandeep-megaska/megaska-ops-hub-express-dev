@@ -286,6 +286,19 @@
   box-shadow: 0 14px 28px rgba(17, 24, 39, 0.18);
 }
 
+.loopdesk-cart-drawer__express[hidden],
+.loopdesk-cart-drawer__view-cart[hidden] {
+  display: none;
+}
+
+.loopdesk-cart-drawer__express:disabled,
+.loopdesk-cart-drawer__express[aria-disabled="true"] {
+  cursor: not-allowed;
+  box-shadow: none;
+  opacity: 0.48;
+  filter: none;
+}
+
 .loopdesk-cart-drawer__view-cart {
   margin-top: 10px;
   border: 1px solid #d1d5db;
@@ -331,7 +344,7 @@
 
 .loopdesk-checkout-cta:hover,
 .loopdesk-checkout-cta:focus-visible,
-.loopdesk-cart-drawer__express:hover,
+.loopdesk-cart-drawer__express:not(:disabled):hover,
 .loopdesk-cart-drawer__view-cart:hover,
 .loopdesk-cart-drawer__close:hover,
 .loopdesk-cart-drawer__qty button:hover {

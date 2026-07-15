@@ -958,7 +958,7 @@
   function render() {
     var cart = state.cart;
     var itemCount = cart && typeof cart.item_count === "number" ? cart.item_count : 0;
-
+    var hasItems = itemCount > 0;
 
     if (!elements.panel) return;
     elements.panel.setAttribute("aria-hidden", state.open ? "false" : "true");
@@ -973,10 +973,17 @@
 
     elements.subtotal.textContent = money(cart ? cart.total_price : 0, cart && cart.currency);
     elements.count.textContent = itemCount ? "(" + itemCount + ")" : "";
-    elements.express.hidden = !config.cart.expressCheckoutButtonEnabled || itemCount === 0;
-    elements.express.disabled = state.expressCheckoutLock;
+    elements.express.hidden = !config.cart.expressCheckoutButtonEnabled;
+    elements.express.disabled = !hasItems || state.loading || state.expressCheckoutLock;
+    elements.express.setAttribute("aria-disabled", elements.express.disabled ? "true" : "false");
     elements.express.classList.toggle("is-loading", state.expressCheckoutLock);
-    elements.express.textContent = state.expressCheckoutLock ? "Opening checkout..." : config.labels.expressCheckoutText;
+    if (state.expressCheckoutLock) {
+      elements.express.textContent = "Opening checkout...";
+    } else if (!hasItems) {
+      elements.express.textContent = "Add items to checkout";
+    } else {
+      elements.express.textContent = config.labels.expressCheckoutText;
+    }
     elements.viewCart.hidden = !config.cart.viewCartButtonEnabled;
     if (elements.poweredBy) elements.poweredBy.hidden = config.branding.showPoweredBy === false;
   }
@@ -1269,6 +1276,9 @@
       event.preventDefault();
       event.stopPropagation();
       if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+    }
+    if (!state.cart || Number(state.cart.item_count || 0) <= 0 || state.loading) {
+      return;
     }
     debugLog("checkout click intercepted with reason", { source: source || "cart-drawer" });
     openExpressCheckout(source);
