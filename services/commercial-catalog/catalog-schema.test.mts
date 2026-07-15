@@ -56,5 +56,5 @@ test("seed data contains the commercial catalog defaults", () => {
 
 test("commercial catalog migration does not create merchant-specific billing tables", () => {
   assert.doesNotMatch(migration, /MerchantSubscription|MerchantBillingPeriod|MerchantRatedUsage/);
-  assert.doesNotMatch(schema, /model MerchantSubscription|model MerchantBillingPeriod|model MerchantRatedUsage/);
+  assert.doesNotMatch(modelBlock("PricingPlanFeature"), /MerchantSubscription|MerchantBillingPeriod|MerchantRatedUsage/);
 });

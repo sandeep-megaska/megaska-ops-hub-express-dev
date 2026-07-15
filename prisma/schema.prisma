@@ -95,6 +95,7 @@ model Shop {
   merchantNotificationSettings MerchantNotificationSettings?
   merchantOtpSettings MerchantOtpSettings?
   merchantUsageEvents MerchantUsageEvent[]
+  merchantSubscription MerchantSubscription?
 }
 
 enum MerchantUsageType {
@@ -169,6 +170,7 @@ model PricingPlan {
   updatedAt        DateTime @updatedAt
 
   features PricingPlanFeature[]
+  merchantSubscriptions MerchantSubscription[]
 }
 
 model PricingPlanFeature {
@@ -186,6 +188,56 @@ model PricingPlanFeature {
 
   @@unique([pricingPlanId, billableFeatureId])
   @@index([billableFeatureId])
+}
+
+enum MerchantSubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  PAUSED
+  CANCELED
+  EXPIRED
+}
+
+enum BillingProvider {
+  SHOPIFY
+  STRIPE
+  RAZORPAY
+  MANUAL
+  INTERNAL
+}
+
+model MerchantSubscription {
+  id                            String                     @id @default(uuid())
+  shopId                        String                     @unique
+  pricingPlanId                 String
+
+  status                        MerchantSubscriptionStatus @default(TRIALING)
+  billingProvider               BillingProvider            @default(INTERNAL)
+
+  externalSubscriptionReference String?
+  externalCustomerReference     String?
+
+  trialStartsAt                 DateTime?
+  trialEndsAt                   DateTime?
+
+  currentPeriodStart            DateTime?
+  currentPeriodEnd              DateTime?
+
+  renewsAutomatically           Boolean                    @default(true)
+  canceledAt                    DateTime?
+  cancellationEffectiveAt       DateTime?
+
+  createdAt                     DateTime                   @default(now())
+  updatedAt                     DateTime                   @updatedAt
+
+  shop                          Shop                       @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  pricingPlan                   PricingPlan                @relation(fields: [pricingPlanId], references: [id], onDelete: Restrict)
+
+  @@index([pricingPlanId])
+  @@index([status])
+  @@index([billingProvider])
+  @@index([currentPeriodEnd])
 }
 
 model MerchantUsageEvent {
