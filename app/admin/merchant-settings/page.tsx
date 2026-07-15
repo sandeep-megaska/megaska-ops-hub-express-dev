@@ -18,6 +18,11 @@ import {
   formatAdminShopResolutionError,
   resolveAdminShopFromSearchParams,
 } from "../../../services/shopify/admin-shop-context";
+import {
+  getMerchantNotificationSettings,
+  saveMerchantNotificationSettings,
+  MerchantNotificationSettingsValidationError,
+} from "../../../services/settings/merchant-notifications";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -176,11 +181,23 @@ async function saveMerchantSettings(
       defaultBreadth: formData.get("delhiveryDefaultBreadth"),
       defaultHeight: formData.get("delhiveryDefaultHeight"),
     });
+    await saveMerchantNotificationSettings(shopId, {
+      emailEnabled: formData.getAll("notificationEmailEnabled").at(-1),
+      customerEmailsEnabled: formData.getAll("notificationCustomerEmailsEnabled").at(-1),
+      senderDisplayName: formData.get("notificationSenderDisplayName"),
+      replyToEmail: formData.get("notificationReplyToEmail"),
+      adminRecipients: formData.get("notificationAdminRecipients"),
+      cancellationAlerts: formData.getAll("notificationCancellationAlerts").at(-1),
+      exchangeAlerts: formData.getAll("notificationExchangeAlerts").at(-1),
+      issueAlerts: formData.getAll("notificationIssueAlerts").at(-1),
+      storeCreditAlerts: formData.getAll("notificationStoreCreditAlerts").at(-1),
+      checkoutAlerts: formData.getAll("notificationCheckoutAlerts").at(-1),
+    });
     revalidatePath(`/admin/merchant-settings?shop=${encodeURIComponent(shopDomain)}`);
     revalidatePath("/admin/merchant-settings");
   } catch (error) {
     const message =
-      error instanceof Error ? error.message : "Invalid merchant settings.";
+      error instanceof MerchantNotificationSettingsValidationError || error instanceof Error ? error.message : "Invalid merchant settings.";
     embeddedContext.delete("saved");
     embeddedContext.set("error", message);
     redirectUrl = `/admin/merchant-settings?${embeddedContext.toString()}`;
@@ -232,6 +249,34 @@ function Check(props: {
   );
 }
 
+function TextArea(props: { label: string; name: string; defaultValue?: string | null; help?: string; placeholder?: string; }) {
+  return (
+    <label className="grid gap-2 text-sm font-medium text-gray-800">
+      <span>{props.label}</span>
+      <textarea
+        className="min-h-28 rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-950 shadow-sm outline-none transition focus:border-gray-900 focus:ring-2 focus:ring-gray-900/10"
+        name={props.name}
+        defaultValue={props.defaultValue || ""}
+        placeholder={props.placeholder}
+      />
+      {props.help ? <span className={helpClass}>{props.help}</span> : null}
+    </label>
+  );
+}
+
+function NotificationCheck(props: { label: string; name: string; defaultChecked: boolean; help?: string; }) {
+  return (
+    <label className="flex items-start gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-3 text-sm text-gray-800">
+      <input type="hidden" name={props.name} value="false" />
+      <input className="mt-1" name={props.name} type="checkbox" value="true" defaultChecked={props.defaultChecked} />
+      <span>
+        <span className="font-medium">{props.label}</span>
+        {props.help ? <span className={`block ${helpClass}`}>{props.help}</span> : null}
+      </span>
+    </label>
+  );
+}
+
 function SectionHeader(props: { title: string; description: string }) {
   return (
     <div className="border-b border-gray-100 pb-4">
@@ -267,11 +312,12 @@ export default async function MerchantSettingsPage({
         </div>
       </main>
     );
-  const [settings, cartIntelligence, delhivery, razorpay] = await Promise.all([
+  const [settings, cartIntelligence, delhivery, razorpay, notificationSettings] = await Promise.all([
     getLoopDeskMerchantSettings(resolved.shop.id),
     getCartIntelligenceSettings(resolved.shop.id),
     getDelhiveryAdminConfig(resolved.shop.id),
     getRazorpayAdminConfig(resolved.shop.id),
+    getMerchantNotificationSettings(resolved.shop.id),
   ]);
   const shopParam = encodeURIComponent(resolved.shop.shopDomain);
   const saveAction = saveMerchantSettings.bind(
@@ -390,6 +436,30 @@ export default async function MerchantSettingsPage({
             <Field label="Trust item 3" name="otpTrustItem3" defaultValue={settings.otpModalBranding.trustItems[2]} />
           </div>
         </section>
+
+        <section id="email-notifications" className={`${cardClass} grid gap-5`}>
+          <SectionHeader title="Email notifications" description="LoopDesk can send operational and customer notification emails using the platform-managed email service. Configure who should receive store alerts and which notification categories are enabled." />
+          <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm font-medium text-blue-900">
+            These preferences will be applied to notification delivery in a subsequent activation phase. Existing email delivery behavior is unchanged by this settings foundation.
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <NotificationCheck label="Enable email notifications" name="notificationEmailEnabled" defaultChecked={notificationSettings.emailEnabled} />
+            <NotificationCheck label="Enable customer notification emails" name="notificationCustomerEmailsEnabled" defaultChecked={notificationSettings.customerEmailsEnabled} />
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field label="Sender display name" name="notificationSenderDisplayName" defaultValue={notificationSettings.senderDisplayName} help="Display name only; not a sender email address." />
+            <Field label="Reply-to email" name="notificationReplyToEmail" type="email" defaultValue={notificationSettings.replyToEmail} help="Optional merchant reply-to address for future notification routing." />
+          </div>
+          <TextArea label="Admin recipients" name="notificationAdminRecipients" defaultValue={notificationSettings.adminRecipients.join("\n")} help="Enter up to 10 email addresses. Separate addresses using commas or new lines." />
+          <div className="grid gap-3 md:grid-cols-2">
+            <NotificationCheck label="Cancellation alerts" name="notificationCancellationAlerts" defaultChecked={notificationSettings.cancellationAlerts} />
+            <NotificationCheck label="Exchange alerts" name="notificationExchangeAlerts" defaultChecked={notificationSettings.exchangeAlerts} />
+            <NotificationCheck label="Issue-reporting alerts" name="notificationIssueAlerts" defaultChecked={notificationSettings.issueAlerts} />
+            <NotificationCheck label="Store-credit alerts" name="notificationStoreCreditAlerts" defaultChecked={notificationSettings.storeCreditAlerts} />
+            <NotificationCheck label="Checkout or order alerts" name="notificationCheckoutAlerts" defaultChecked={notificationSettings.checkoutAlerts} />
+          </div>
+        </section>
+
         <section className={`${cardClass} grid gap-5`}>
           <SectionHeader title="Checkout reassurance" description="Non-payment display controls only. Payment, OTP, and order logic are unchanged." />
           <div className="grid gap-3 md:grid-cols-2">
