@@ -530,10 +530,29 @@ function buildBufferedEta(rawEta) {
     return numeric ? `gid://shopify/ProductVariant/${numeric}` : "";
   }
 
-  function cartLineItem(item) {
+  function allocatedCartDiscounts(cart, items) {
+    const totalDiscount = Number(cart?.total_discount || 0);
+    const finalTotal = Number(cart?.total_price || 0);
+    const rawLineTotal = items.reduce((sum, item) => sum + Number(item?.final_line_price || item?.line_price || 0), 0);
+    const originalTotal = items.reduce((sum, item) => sum + Number(item?.original_line_price || item?.line_price || 0), 0);
+    const cartLevelDiscount = Math.max(0, rawLineTotal - finalTotal);
+    if (!items.length || totalDiscount <= 0 || cartLevelDiscount <= 0 || rawLineTotal < finalTotal || originalTotal <= 0) return [];
+    let remaining = cartLevelDiscount;
+    return items.map((item, index) => {
+      const basis = Number(item?.original_line_price || item?.line_price || item?.final_line_price || 0);
+      const amount = index === items.length - 1 ? remaining : Math.floor(cartLevelDiscount * basis / originalTotal);
+      const allocation = Math.max(0, Math.min(amount, Number(item?.final_line_price || item?.line_price || 0), remaining));
+      remaining -= allocation;
+      return allocation;
+    });
+  }
+
+  function cartLineItem(item, cartDiscountAllocation) {
     const variantId = variantGid(item?.variant_id || item?.variantId || item?.id);
     const quantity = Math.max(0, Math.floor(Number(item?.quantity || 0)));
     if (!variantId || quantity <= 0) return null;
+    const rawFinalLinePrice = Number(item?.final_line_price || item?.line_price || 0);
+    const finalLinePrice = Math.max(0, rawFinalLinePrice - Number(cartDiscountAllocation || 0));
     return {
       variantId,
       quantity,
@@ -541,16 +560,17 @@ function buildBufferedEta(rawEta) {
       variantTitle: item?.variant_title || item?.variantTitle || "",
       sku: item?.sku || "",
       price: Number(item?.price || item?.final_price || 0),
-      line_price: Number(item?.original_line_price || item?.line_price || item?.final_line_price || 0),
+      line_price: finalLinePrice,
       original_line_price: Number(item?.original_line_price || item?.line_price || item?.final_line_price || 0),
-      final_line_price: Number(item?.final_line_price || item?.line_price || 0),
+      final_line_price: finalLinePrice,
       image: item?.image || item?.featured_image?.url || "",
     };
   }
 
   function cartSnapshot(cart) {
     const items = Array.isArray(cart?.items) ? cart.items : [];
-    const lineItems = items.map(cartLineItem).filter(Boolean);
+    const allocations = allocatedCartDiscounts(cart, items);
+    const lineItems = items.map((item, index) => cartLineItem(item, allocations[index])).filter(Boolean);
     return { token: cart?.token || "", items, lineItems, item_count: Number(cart?.item_count || 0), total_price: Number(cart?.total_price || 0), original_total_price: Number(cart?.original_total_price || 0), items_subtotal_price: Number(cart?.items_subtotal_price || 0), total_discount: Number(cart?.total_discount || 0), cart_level_discount_applications: cart?.cart_level_discount_applications || [], discount_codes: cart?.discount_codes || [], currency: cart?.currency || "INR" };
   }
 
@@ -618,7 +638,7 @@ function buildBufferedEta(rawEta) {
   function lineTitle(line) { return line?.product_title || line?.productTitle || line?.title || line?.name || "Item"; }
   function lineVariant(line) { const title = line?.variant_title || line?.variantTitle || ""; return title && title !== "Default Title" ? title : ""; }
   function lineImage(line) { return line?.image || line?.featured_image?.url || line?.featuredImage?.url || ""; }
-  function linePrice(line) { return line?.original_line_price ?? line?.originalLinePrice ?? line?.line_price ?? line?.linePrice ?? line?.final_line_price ?? line?.price ?? 0; }
+  function linePrice(line) { return line?.final_line_price ?? line?.finalLinePrice ?? line?.line_price ?? line?.linePrice ?? line?.original_line_price ?? line?.originalLinePrice ?? line?.price ?? 0; }
   function cartSubtotalPaise(cart) { return Number(cart?.original_total_price || cart?.items_subtotal_price || cart?.total_price || 0); }
   function cartDiscountPaise(cart) { return Number(cart?.total_discount || 0); }
   function cartTotalPaise(cart) { return Math.max(Number(cart?.total_price || 0), 0); }
