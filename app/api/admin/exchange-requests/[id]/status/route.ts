@@ -266,6 +266,7 @@ export async function PATCH(
 
     if (shouldRequirePayment) {
       void sendExchangeApprovedPaymentRequiredEmail({
+        shopId: updated.shopId || "",
         requestId: updated.id,
         orderNumber: updated.orderNumber,
         status: updated.status,
