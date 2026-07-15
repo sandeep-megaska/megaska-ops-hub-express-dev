@@ -80,6 +80,11 @@ async function logAndSend(payload: StoreCreditEmailPayload) {
     eventType: payload.event === "CHECKOUT_REDEMPTION" ? "CHECKOUT" : "STORE_CREDIT",
     subject: subjectForEvent(payload.event),
     text: buildStoreCreditText(payload),
+    usageContext: payload.walletTransactionId ? {
+      sourceType: "WALLET_TRANSACTION",
+      sourceId: payload.walletTransactionId,
+      idempotencyKey: `usage:email-send:${payload.shopId}:wallet:${payload.walletTransactionId}:${payload.event.toLowerCase().replace(/_/g, "-")}-customer`,
+    } : undefined,
   });
 
   if (result.skipped) {

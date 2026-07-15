@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import test from "node:test";
 import assert from "node:assert/strict";
 import { sendAdminAlert, sendCustomerEmail, formatPlatformFrom, parsePlatformSender, getPlatformAdminEmailTransport } from "./resend.ts";
@@ -5,7 +6,8 @@ import { saveMerchantNotificationSettings, type NotificationSettingsDb } from ".
 
 type Shop = { id: string; shopDomain: string; shopName: string | null };
 type Saved = Awaited<ReturnType<typeof saveMerchantNotificationSettings>> & { id: string };
-type MockDb = NotificationSettingsDb & { settings: Map<string, Saved> };
+type UsageMock = { merchantUsageEvent: { findUnique: (input: any) => Promise<any>; create: (input: any) => Promise<any> } };
+type MockDb = NotificationSettingsDb & UsageMock & { settings: Map<string, Saved>; events: Map<string, Record<string, any>> };
 
 function db(): MockDb {
   const shops = new Map<string, Shop>([
@@ -13,9 +15,23 @@ function db(): MockDb {
     ["shop-b", { id: "shop-b", shopDomain: "b.myshopify.com", shopName: "Shop B" }],
   ]);
   const settings = new Map<string, Saved>();
+  const events = new Map<string, Record<string, any>>();
   return {
     settings,
+    events,
     shop: { findUnique: async ({ where }) => shops.get(where.id) || null },
+    merchantUsageEvent: {
+      findUnique: async ({ where, select }: any) => {
+        const found = events.get(where.idempotencyKey);
+        if (!found) return null;
+        return select ? Object.fromEntries(Object.keys(select).map((k) => [k, found[k]])) : found;
+      },
+      create: async ({ data, select }: any) => {
+        const row = { id: `usage-${events.size + 1}`, billingStatus: "UNRATED", createdAt: new Date(), updatedAt: new Date(), ...data, quantity: data.quantity.toString() };
+        events.set(row.idempotencyKey, row);
+        return select ? Object.fromEntries(Object.keys(select).map((k) => [k, row[k]])) : row;
+      },
+    },
     merchantNotificationSettings: {
       findUnique: async ({ where }) => settings.get(where.shopId) || null,
       upsert: async ({ where, create, update }) => {
@@ -183,7 +199,7 @@ test("reply-to is included only when configured and display name does not change
   assert.equal(calls[0].from, "Demo Store <notifications@example.com>");
   assert.equal(calls[0].reply_to, "merchant@example.com");
   assert.equal(calls[1].reply_to, undefined);
-  assert.match(formatPlatformFrom("bad\r\nName <x@y.com>", "notifications@example.com"), /<notifications@example\.com>$/);
+  assert.match(String(formatPlatformFrom("bad\r\nName <x@y.com>", "notifications@example.com")), /<notifications@example\.com>$/);
 });
 
 test("provider failure returns failure and success returns message id", async () => {
@@ -302,4 +318,59 @@ test("customer email sender cannot alter platform sender and provider outcomes a
   assert.match(String(calls[0].from), /<customers@example\.com>$/);
   assert.equal(String(calls[0].from).includes("spoof@example.com>"), false);
   assert.deepEqual(fail, { skipped: false, success: false, errorCode: "PROVIDER_FAILED" });
+});
+
+
+test("successful admin alert records one email usage event for multiple recipients", async () => {
+  const restore = withEnv({ RESEND_API_KEY: "key", OPS_NOTIFICATION_FROM_EMAIL: "notifications@example.com" });
+  const client = db();
+  await saveMerchantNotificationSettings("shop-a", { ...base, adminRecipients: "a@example.com,b@example.com" }, client);
+  const result = await sendAdminAlert({ shopId: "shop-a", eventType: "CANCELLATION", subject: "S", text: "T", usageContext: { sourceType: "CANCELLATION_REQUEST", sourceId: "req-1", idempotencyKey: "usage:email-send:shop-a:cancellation:req-1:request-created-admin" } }, { db: client, fetchImpl: fetchOk([]) });
+  restore();
+  assert.deepEqual(result, { skipped: false, success: true, messageId: "msg_123" });
+  const row = client.events.get("usage:email-send:shop-a:cancellation:req-1:request-created-admin")!;
+  assert.equal(row.usageType, "EMAIL");
+  assert.equal(row.action, "EMAIL_SEND");
+  assert.equal(row.provider, "PLATFORM_RESEND");
+  assert.equal(row.quantity, "1");
+  assert.equal(row.metadata.recipientCount, 2);
+  assert.equal(row.metadata.audience, "ADMIN");
+});
+
+test("skipped and failed admin alerts do not record usage", async () => {
+  const client = db();
+  await saveMerchantNotificationSettings("shop-a", { ...base, emailEnabled: false }, client);
+  await sendAdminAlert({ shopId: "shop-a", eventType: "GENERAL", subject: "S", text: "T" }, { db: client, fetchImpl: fetchOk([]) });
+  assert.equal(client.events.size, 0);
+
+  const restore = withEnv({ RESEND_API_KEY: "key", OPS_NOTIFICATION_FROM_EMAIL: "notifications@example.com" });
+  const failClient = db();
+  await saveMerchantNotificationSettings("shop-a", base, failClient);
+  const failFetch = (async () => ({ ok: false, status: 500, json: async () => ({ message: "nope" }) } as Response)) as typeof fetch;
+  await sendAdminAlert({ shopId: "shop-a", eventType: "GENERAL", subject: "S", text: "T" }, { db: failClient, fetchImpl: failFetch });
+  restore();
+  assert.equal(failClient.events.size, 0);
+});
+
+test("usage failure does not change admin or customer success results", async () => {
+  const restore = withEnv({ RESEND_API_KEY: "key", OPS_NOTIFICATION_FROM_EMAIL: "notifications@example.com", CUSTOMER_NOTIFICATION_FROM_EMAIL: "customers@example.com" });
+  const client = db();
+  await saveMerchantNotificationSettings("shop-a", base, client);
+  client.merchantUsageEvent.create = async () => { throw new Error("boom"); };
+  const admin = await sendAdminAlert({ shopId: "shop-a", eventType: "GENERAL", subject: "S", text: "T" }, { db: client, fetchImpl: fetchOk([]) });
+  const customer = await sendCustomerEmail({ shopId: "shop-a", to: "a@example.com", eventType: "GENERAL", subject: "S", text: "T" }, { db: client, fetchImpl: fetchOk([]) });
+  restore();
+  assert.deepEqual(admin, { skipped: false, success: true, messageId: "msg_123" });
+  assert.deepEqual(customer, { skipped: false, success: true, messageId: "msg_123" });
+});
+
+test("customer email records usage and generic sends remain attempt/provider based", async () => {
+  const restore = withEnv({ RESEND_API_KEY: "key", CUSTOMER_NOTIFICATION_FROM_EMAIL: "customers@example.com" });
+  const client = db();
+  await saveMerchantNotificationSettings("shop-a", base, client);
+  await sendCustomerEmail({ shopId: "shop-a", to: "a@example.com", eventType: "STORE_CREDIT", subject: "S", text: "T", usageContext: { sourceType: "WALLET_TRANSACTION", sourceId: "tx-1", idempotencyKey: "usage:email-send:shop-a:wallet:tx-1:credit-issued-customer" } }, { db: client, fetchImpl: fetchOk([]) });
+  await sendCustomerEmail({ shopId: "shop-a", to: "a@example.com", eventType: "GENERAL", subject: "S", text: "T" }, { db: client, fetchImpl: fetchOk([]) });
+  restore();
+  assert.equal(client.events.get("usage:email-send:shop-a:wallet:tx-1:credit-issued-customer")!.metadata.audience, "CUSTOMER");
+  assert.ok(client.events.get("usage:email-send:shop-a:resend:msg_123"));
 });

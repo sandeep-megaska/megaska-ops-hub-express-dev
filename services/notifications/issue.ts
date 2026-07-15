@@ -40,7 +40,17 @@ export async function sendIssueTeamAlert(
   subject: string,
   payload: IssueNotifyPayload
 ) {
-  const result = await sendAdminAlert({ shopId: payload.shopId, eventType: "ISSUE", subject, text: buildBody(payload) });
+  const result = await sendAdminAlert({
+    shopId: payload.shopId,
+    eventType: "ISSUE",
+    subject,
+    text: buildBody(payload),
+    usageContext: {
+      sourceType: "ISSUE_REQUEST",
+      sourceId: payload.requestId,
+      idempotencyKey: `usage:email-send:${payload.shopId}:issue:${payload.requestId}:${eventName.toLowerCase().replace(/_/g, "-")}-admin`,
+    },
+  });
 
   if (result.skipped) return;
 
