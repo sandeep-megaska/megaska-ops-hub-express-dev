@@ -93,6 +93,7 @@ model Shop {
   promotionAuditLogs    PromotionAuditLog[]
   promotionRuntimeSyncState PromotionRuntimeSyncState?
   merchantNotificationSettings MerchantNotificationSettings?
+  merchantOtpSettings MerchantOtpSettings?
 }
 
 model MerchantNotificationSettings {
@@ -119,6 +120,81 @@ model MerchantNotificationSettings {
 
   @@index([shopId])
 }
+enum OtpProviderMode {
+  PLATFORM_TWILIO
+  MERCHANT_TWILIO
+  MERCHANT_MSG91
+  MOCK
+}
+
+enum OtpProviderStatus {
+  NOT_CONFIGURED
+  PENDING_VERIFICATION
+  VERIFIED
+  ACTIVE
+  SUSPENDED
+  ERROR
+}
+
+model MerchantOtpSettings {
+  id                    String            @id @default(uuid())
+  shopId                String            @unique
+
+  otpEnabled            Boolean           @default(true)
+  providerMode          OtpProviderMode   @default(PLATFORM_TWILIO)
+  allowPlatformFallback Boolean           @default(true)
+
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+
+  shop                  Shop              @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  twilioSettings        MerchantTwilioSettings?
+  msg91Settings         MerchantMsg91Settings?
+
+  @@index([shopId])
+}
+
+model MerchantTwilioSettings {
+  id                         String            @id @default(uuid())
+  merchantOtpSettingsId      String            @unique
+
+  accountSidMasked           String?
+  accountSidEncrypted        String?
+  authTokenEncrypted         String?
+  verifyServiceSidMasked     String?
+  verifyServiceSidEncrypted  String?
+
+  status                     OtpProviderStatus @default(NOT_CONFIGURED)
+  verifiedAt                 DateTime?
+  lastVerifiedAt             DateTime?
+  lastVerificationErrorCode  String?
+  createdAt                  DateTime          @default(now())
+  updatedAt                  DateTime          @updatedAt
+
+  merchantOtpSettings        MerchantOtpSettings @relation(fields: [merchantOtpSettingsId], references: [id], onDelete: Cascade)
+}
+
+model MerchantMsg91Settings {
+  id                         String            @id @default(uuid())
+  merchantOtpSettingsId      String            @unique
+
+  authKeyEncrypted           String?
+  templateIdMasked           String?
+  templateIdEncrypted        String?
+  senderId                   String?
+
+  status                     OtpProviderStatus @default(NOT_CONFIGURED)
+  kycApproved                Boolean           @default(false)
+  dltApproved                Boolean           @default(false)
+  templateApproved           Boolean           @default(false)
+  verifiedAt                 DateTime?
+  lastVerificationErrorCode  String?
+  createdAt                  DateTime          @default(now())
+  updatedAt                  DateTime          @updatedAt
+
+  merchantOtpSettings        MerchantOtpSettings @relation(fields: [merchantOtpSettingsId], references: [id], onDelete: Cascade)
+}
+
 enum PromotionRuleStatus {
   DRAFT
   ACTIVE
