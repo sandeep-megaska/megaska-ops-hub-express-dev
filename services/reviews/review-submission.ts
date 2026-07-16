@@ -31,7 +31,7 @@ export async function submitVerifiedReview(input: { token: unknown; shopId: stri
   const { db = prisma, now = new Date() } = input;
   const context = await getReviewSubmissionContext({ token: input.token, shopId: input.shopId, now, db });
   if (!context.ok) return context;
-  if (!Number.isInteger(input.rating) || typeof input.rating !== "number" || input.rating < context.settings.minimumRating || input.rating > context.settings.maximumRating) return { ok: false, errorCode: "REVIEW_VALIDATION_FAILED", fieldErrors: { rating: `Choose a rating from ${context.settings.minimumRating} to ${context.settings.maximumRating}.` } };
+  if (typeof input.rating !== "number" || !Number.isInteger(input.rating) || input.rating < context.settings.minimumRating || input.rating > context.settings.maximumRating) return { ok: false, errorCode: "REVIEW_VALIDATION_FAILED", fieldErrors: { rating: `Choose a rating from ${context.settings.minimumRating} to ${context.settings.maximumRating}.` } };
   const title = normalizeReviewTitle(input.title); const body = normalizeReviewBody(input.body);
   if (title.error || body.error) return { ok: false, errorCode: "REVIEW_VALIDATION_FAILED", fieldErrors: { ...(title.error ? { title: title.error } : {}), ...(body.error ? { body: body.error } : {}) } };
   const token = normalizeReviewToken(input.token); if (!token) return { ok: false, errorCode: "REVIEW_TOKEN_INVALID" };
