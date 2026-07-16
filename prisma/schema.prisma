@@ -96,6 +96,7 @@ model Shop {
   merchantOtpSettings MerchantOtpSettings?
   merchantUsageEvents MerchantUsageEvent[]
   merchantSubscription MerchantSubscription?
+  merchantBillingPeriods MerchantBillingPeriod[]
 }
 
 enum MerchantUsageType {
@@ -190,6 +191,14 @@ model PricingPlanFeature {
   @@index([billableFeatureId])
 }
 
+enum MerchantBillingPeriodStatus {
+  OPEN
+  RATING
+  RATED
+  CLOSED
+  VOID
+}
+
 enum MerchantSubscriptionStatus {
   TRIALING
   ACTIVE
@@ -233,11 +242,40 @@ model MerchantSubscription {
 
   shop                          Shop                       @relation(fields: [shopId], references: [id], onDelete: Cascade)
   pricingPlan                   PricingPlan                @relation(fields: [pricingPlanId], references: [id], onDelete: Restrict)
+  billingPeriods                MerchantBillingPeriod[]
 
   @@index([pricingPlanId])
   @@index([status])
   @@index([billingProvider])
   @@index([currentPeriodEnd])
+}
+
+model MerchantBillingPeriod {
+  id             String                      @id @default(uuid())
+  shopId         String
+  subscriptionId String
+
+  periodStart    DateTime
+  periodEnd      DateTime
+
+  status         MerchantBillingPeriodStatus @default(OPEN)
+
+  openedAt       DateTime                    @default(now())
+  ratedAt        DateTime?
+  closedAt       DateTime?
+  voidedAt       DateTime?
+
+  createdAt      DateTime                    @default(now())
+  updatedAt      DateTime                    @updatedAt
+
+  shop           Shop                        @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  subscription   MerchantSubscription        @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@unique([subscriptionId, periodStart, periodEnd])
+  @@index([shopId, status])
+  @@index([subscriptionId, status])
+  @@index([shopId, periodStart, periodEnd])
+  @@index([periodEnd])
 }
 
 model MerchantUsageEvent {
