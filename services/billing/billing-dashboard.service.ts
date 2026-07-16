@@ -2,6 +2,7 @@ import { prisma as defaultPrisma } from "../db/prisma.ts";
 import { getCurrentBillingPeriodSummary, getCurrentMerchantSubscriptionSummary, listBillingPeriodSummaries } from "./billing-summary.ts";
 import type { BillingPeriodSummaryPage } from "./billing-summary.types.ts";
 import type { BillingProviderStatusSummary, MerchantBillingDashboardDto } from "./billing-dashboard.types.ts";
+import { getBillingLifecycleStatus } from "./lifecycle.ts";
 
 type Submission = { status: string; errorCode: string | null; errorMessage: string | null; updatedAt: Date };
 type SubscriptionProviderRow = { billingProvider: string; providerStatus: string | null; confirmationUrl: string | null; providerActivatedAt: Date | null; updatedAt: Date; billingProviderSubmissions: Submission[] };
@@ -45,12 +46,13 @@ export async function getBillingProviderStatus(input: { shopId: string }): Promi
 }
 
 export async function getMerchantBillingDashboard(input: { shopId: string }): Promise<MerchantBillingDashboardDto> {
-  const [subscription, currentPeriod, provider] = await Promise.all([
+  const [subscription, currentPeriod, provider, lifecycle] = await Promise.all([
     getCurrentMerchantSubscriptionSummary({ shopId: input.shopId }),
     getCurrentBillingPeriodSummary({ shopId: input.shopId }),
     getBillingProviderStatus({ shopId: input.shopId }),
+    getBillingLifecycleStatus({ shopId: input.shopId }),
   ]);
-  return { subscription, currentPeriod, provider };
+  return { subscription, currentPeriod, provider, lifecycle };
 }
 
 export async function getMerchantBillingHistory(input: { shopId: string; cursor?: string; limit?: number }): Promise<BillingPeriodSummaryPage> {
