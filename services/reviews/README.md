@@ -37,3 +37,25 @@ Order delivered → ReviewRequest PENDING_ELIGIBILITY
   ↓ later submission → ProductReview PENDING_MODERATION
   ↓ later moderation → PUBLISHED / REJECTED / HIDDEN
 ```
+
+## Delivered-order candidate synchronization
+
+Candidate synchronization is an internal service only. It fetches one authoritative Shopify order by the persisted Shopify order ID, outside database transactions, and requires canonical `MegaskaOrder.deliveredAt`. It never accepts a caller token, sends email, creates review tokens, exposes a route, or activates customer-facing behavior.
+
+```
+Canonical delivered order
+        ↓
+Fetch Shopify order by ID
+        ↓
+Normalize line items and apply policy
+        ↓
+Create/enrich one ReviewRequest per purchased line
+        ↓
+Run existing order eligibility engine
+        ↓
+PENDING_ELIGIBILITY / ELIGIBLE / BLOCKED
+```
+
+Quantity does not multiply requests: the uniqueness boundary is Shopify order + Shopify line item. Fully removed/refunded lines, gift cards, shipping/tip-like custom lines, and lines without a Shopify product are skipped; a real zero-price promotional product remains reviewable. Re-sync is idempotent and races re-read the unique request. Existing source omissions are retained rather than deleted.
+
+Snapshots preserve historical non-empty title, handle, image, and variant values. Only explicit missing/placeholder values are enriched; immutable Shopify order, line-item, and product IDs are never updated. Unsent delivery snapshots may follow canonical delivery, while advanced workflow states retain their historical delivery snapshot. Candidate synchronization only creates/enriches; the separate eligibility engine remains responsible for status decisions.
