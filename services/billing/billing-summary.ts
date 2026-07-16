@@ -11,13 +11,14 @@ import type {
 const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 100;
 const ACTIVE_SUBSCRIPTION_STATUSES = new Set(["TRIALING", "ACTIVE", "PAST_DUE"]);
+const ACTIVE_SUBSCRIPTION_STATUS_VALUES = ["TRIALING", "ACTIVE", "PAST_DUE"];
 
 type Plan = { id: string; code: string; name: string; currency: string; monthlyBasePrice: unknown };
 type Subscription = { id: string; shopId: string; status: string; billingProvider: string | null; createdAt: Date; currentPeriodStart: Date | null; currentPeriodEnd: Date | null; canceledAt: Date | null; cancellationEffectiveAt: Date | null; pricingPlan: Plan };
 type RatedUsage = { id: string; shopId: string; billingPeriodId: string; billableFeatureId: string; featureCodeSnapshot: string; featureNameSnapshot: string | null; currency: string; usedQuantity: unknown; includedQuantity: unknown; billableQuantity: unknown; unitRate: unknown; amount: unknown; usageEventCount: number };
 type Period = { id: string; shopId: string; subscriptionId: string; periodStart: Date; periodEnd: Date; status: string; subscription: Subscription; ratedUsages: RatedUsage[] };
 type SummaryDb = {
-  merchantSubscription: { findFirst(args: unknown): Promise<Subscription | null> };
+  merchantSubscription: { findMany(args: unknown): Promise<Subscription[]> };
   merchantBillingPeriod: { findFirst(args: unknown): Promise<Period | null>; findMany(args: unknown): Promise<Period[]> };
 };
 
@@ -94,8 +95,13 @@ const periodInclude = { subscription: { include: { pricingPlan: true } }, ratedU
 
 export async function getCurrentMerchantSubscriptionSummary(input: { shopId: string; asOf?: Date }): Promise<MerchantSubscriptionSummary | null> {
   const asOf = input.asOf ?? new Date();
-  const subscription = await prismaClient.merchantSubscription.findFirst({ where: { shopId: input.shopId }, include: { pricingPlan: true } });
-  return subscription && subscriptionIsActiveAt(subscription, asOf) ? toSubscriptionSummary(subscription) : null;
+  const candidates = await prismaClient.merchantSubscription.findMany({
+    where: { shopId: input.shopId, status: { in: ACTIVE_SUBSCRIPTION_STATUS_VALUES } },
+    orderBy: [{ currentPeriodStart: "desc" }, { createdAt: "desc" }, { id: "desc" }],
+    include: { pricingPlan: true },
+  });
+  const subscription = candidates.find((candidate) => subscriptionIsActiveAt(candidate, asOf)) ?? null;
+  return subscription ? toSubscriptionSummary(subscription) : null;
 }
 
 export async function getCurrentBillingPeriodSummary(input: { shopId: string; asOf?: Date }): Promise<MerchantBillingPeriodSummary | null> {
