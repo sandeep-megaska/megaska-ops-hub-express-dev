@@ -62,6 +62,7 @@ const STOREFRONT_API_PREFIXES = [
   "express/checkout/",
   "profile/",
   "runtime/config",
+  "reviews/submission/",
 ];
 
 function isStorefrontApiPath(path: string) {
@@ -98,7 +99,7 @@ async function proxyInternalApi(request: NextRequest, context: { params: Promise
       : await requireShopFromAppProxy(request);
     const moduleKey = resolveModuleKey(proxyPath);
 
-    if (!moduleKey && proxyPath !== "runtime/config") {
+    if (!moduleKey && proxyPath !== "runtime/config" && !proxyPath.startsWith("reviews/submission/")) {
       return NextResponse.json({ ok: false, error: "API route is not available through the Megaska app proxy" }, { status: 404 });
     }
 
@@ -113,6 +114,8 @@ async function proxyInternalApi(request: NextRequest, context: { params: Promise
     const headers = new Headers(request.headers);
     headers.set("x-shopify-shop-domain", shop.shopDomain);
     headers.set("x-megaska-app-proxy", "1");
+    // The browser Origin belongs to the Shopify storefront; this internal hop is trusted only after app-proxy verification.
+    headers.set("origin", targetUrl.origin);
     headers.delete("host");
 
     const init: RequestInit = {

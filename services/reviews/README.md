@@ -61,6 +61,24 @@ Quantity does not multiply requests: the uniqueness boundary is Shopify order + 
 Snapshots preserve historical non-empty title, handle, image, and variant values. Only explicit missing/placeholder values are enriched; immutable Shopify order, line-item, and product IDs are never updated. Unsent delivery snapshots may follow canonical delivery, while advanced workflow states retain their historical delivery snapshot. Candidate synchronization only creates/enriches; the separate eligibility engine remains responsible for status decisions.
 
 ## Internal review-request delivery (REVIEW-1A.5)
-Delivery is deliberately disabled unless `REVIEW_REQUEST_DELIVERY_ENABLED=true`; it also requires a safe `REVIEW_SUBMISSION_BASE_URL`. No public submission UI or API exists yet. Eligible requests are re-evaluated, then atomically claimed as `SCHEDULED` before a final revalidation and send through the tenant-aware shared Resend service. Customer email is read only from `CustomerProfile`; accepted sends reuse existing email usage metering with a stable request idempotency key.
+Delivery is deliberately disabled unless `REVIEW_REQUEST_DELIVERY_ENABLED=true`; it also requires a safe `REVIEW_SUBMISSION_BASE_URL`. The later REVIEW-1A.6 submission endpoint consumes only valid sent tokens; delivery itself remains disabled by default. Eligible requests are re-evaluated, then atomically claimed as `SCHEDULED` before a final revalidation and send through the tenant-aware shared Resend service. Customer email is read only from `CustomerProfile`; accepted sends reuse existing email usage metering with a stable request idempotency key.
 
-Tokens use 256-bit cryptographic randomness; only SHA-256 hashes and expiry are stored. Provider failures and disabled transport return requests to `ELIGIBLE` for bounded retry (`REVIEW_REQUEST_MAX_SEND_ATTEMPTS`, default 3); missing recipients block as `CUSTOMER_UNREACHABLE`. Stale 15-minute claims recover without resending when a provider message ID exists, and sent expired tokens transition to `EXPIRED`. Reminders and customer submission are deferred.
+Tokens use 256-bit cryptographic randomness; only SHA-256 hashes and expiry are stored. Provider failures and disabled transport return requests to `ELIGIBLE` for bounded retry (`REVIEW_REQUEST_MAX_SEND_ATTEMPTS`, default 3); missing recipients block as `CUSTOMER_UNREACHABLE`. Stale 15-minute claims recover without resending when a provider message ID exists, and sent expired tokens transition to `EXPIRED`. Reminders remain deferred.
+
+## Verified email-token submission (REVIEW-1A.6)
+
+A sent review email authorizes one review opportunity with its existing opaque 256-bit token; OTP is **not** required. The storefront page at `/apps/megaska/review?token=…` is protected by the Shopify app-proxy boundary, resolves the active shop, then validates that token hash belongs to that shop. The frontend immediately removes the token from the visible URL and keeps it in memory only—never browser storage, cookies, DOM attributes, or analytics.
+
+```
+Email token opened → app proxy resolves shop → token hash lookup
+  → sent + active + unexpired validation → safe product context
+  → customer submits rating/plain text → revalidate in transaction
+  → verified ProductReview → PENDING_MODERATION or PUBLISHED
+  → complete ReviewRequest and clear token hash/expiry
+```
+
+Only `token`, rating, title, body, and display name are accepted from the browser. Shopify, customer, order, request, verified-purchase, and publication fields are always copied from the persisted request. A valid active customer session is an optional cross-check: matching sessions proceed; a mismatched session gets a generic authorization error without identifying the token owner.
+
+Customer text is plain text only: it is normalized, bounded, control-character cleaned, and rejects HTML/contact-information display names. Display names default to a privacy-preserving first name plus last initial, or `Verified buyer`. Settings choose moderation versus immediate publication; published reviews recalculate the tenant/product aggregate. Successful submission creates one review, completes the request, and invalidates its token in one transaction; duplicate or concurrent retries return already-submitted rather than creating another review.
+
+Lookup and submission use app-proxy-only POST JSON, bounded request bodies, origin checks, no-store/referrer/nosniff headers, and small in-memory development rate limits. Production deployments should replace that process-local limiter with shared durable infrastructure. Media, review display, merchant moderation, and dashboard management remain deferred.
