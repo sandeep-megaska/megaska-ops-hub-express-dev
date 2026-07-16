@@ -35,6 +35,19 @@ The easiest way to deploy your Next.js app is to use the [Vercel Platform](https
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
 
+## Billing catalog deployment
+
+Commercial billing catalog records are platform-owned and are not created by Billing page requests. Deploy them explicitly after migrations and before the application:
+
+```bash
+npx prisma migrate deploy
+npm run billing:seed-catalog
+npm run billing:verify-catalog
+# deploy application
+```
+
+The catalog seed is idempotent and is configured in `prisma.config.ts` for explicit Prisma seed operations. Do not add catalog seeding to Vercel builds.
+
 ## OTP provider environment variables
 
 Set these server-side variables in Vercel/Next.js runtime:

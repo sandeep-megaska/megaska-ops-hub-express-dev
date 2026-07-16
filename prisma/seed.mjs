@@ -1,6 +1,9 @@
 import { PrismaClient, Prisma } from "../generated/prisma/index.js";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { Pool } from "pg";
 
-const prisma = new PrismaClient();
+const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 1, allowExitOnIdle: true });
+const prisma = new PrismaClient({ adapter: new PrismaPg(pool) });
 
 export const billableFeatures = [
   { code: "OTP", name: "OTP" },
@@ -89,5 +92,5 @@ export async function seedCommercialCatalog(db = prisma) {
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   seedCommercialCatalog()
-    .finally(async () => prisma.$disconnect());
+    .finally(async () => { await prisma.$disconnect(); await pool.end(); });
 }

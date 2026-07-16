@@ -9,6 +9,8 @@
     "start": "next start",
     "lint": "eslint",
     "prisma:generate": "prisma generate",
+    "billing:seed-catalog": "node prisma/seed.mjs",
+    "billing:verify-catalog": "node scripts/verify-commercial-catalog.mjs",
     "postinstall": "prisma generate",
     "dev:seed:mock-tracking": "ALLOW_MOCK_TRACKING_SEED=true node scripts/dev-seed-mock-tracking.mjs",
     "typecheck": "tsc --noEmit"
@@ -33,8 +35,5 @@
     "eslint-config-next": "16.2.2",
     "tailwindcss": "^4",
     "typescript": "^5"
-  },
-  "prisma": {
-    "seed": "node prisma/seed.mjs"
   }
 }
