@@ -78,8 +78,8 @@ test("schema adds provider-independent MerchantSubscription foundation", () => {
   assert.match(migration, /CREATE TYPE "BillingProvider" AS ENUM/);
 });
 
-test("schema has no rated-usage or invoice models yet", () => {
-  assert.doesNotMatch(schema, /model MerchantRatedUsage|model BillingInvoice|model BillingBatch|model SubscriptionAudit|model Entitlement/);
+test("schema has no invoice models yet", () => {
+  assert.doesNotMatch(schema, /model BillingInvoice|model BillingBatch|model SubscriptionAudit|model Entitlement/);
 });
 
 test("missing subscription resolves PROFESSIONAL without creating a row", async () => {

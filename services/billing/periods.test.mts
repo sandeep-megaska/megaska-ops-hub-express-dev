@@ -99,7 +99,7 @@ test("schema and migration add MerchantBillingPeriod foundation only", () => {
   assert.match(modelBlock("MerchantSubscription"), /billingPeriods\s+MerchantBillingPeriod\[\]/);
   assert.match(migration, /CREATE TYPE "MerchantBillingPeriodStatus" AS ENUM/);
   assert.match(migration, /CHECK \("periodEnd" > "periodStart"\)/);
-  assert.doesNotMatch(schema, /model MerchantRatedUsage|model BillingInvoice|model BillingBatch/);
+  assert.doesNotMatch(schema, /model BillingInvoice|model BillingBatch/);
 });
 
 test("opens a valid persisted-subscription period and references correct shop/subscription", async () => {

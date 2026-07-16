@@ -97,6 +97,7 @@ model Shop {
   merchantUsageEvents MerchantUsageEvent[]
   merchantSubscription MerchantSubscription?
   merchantBillingPeriods MerchantBillingPeriod[]
+  merchantRatedUsages MerchantRatedUsage[]
 }
 
 enum MerchantUsageType {
@@ -157,6 +158,7 @@ model BillableFeature {
   updatedAt   DateTime @updatedAt
 
   pricingPlanFeatures PricingPlanFeature[]
+  merchantRatedUsages MerchantRatedUsage[]
 }
 
 model PricingPlan {
@@ -172,6 +174,7 @@ model PricingPlan {
 
   features PricingPlanFeature[]
   merchantSubscriptions MerchantSubscription[]
+  merchantRatedUsages MerchantRatedUsage[]
 }
 
 model PricingPlanFeature {
@@ -270,12 +273,47 @@ model MerchantBillingPeriod {
 
   shop           Shop                        @relation(fields: [shopId], references: [id], onDelete: Cascade)
   subscription   MerchantSubscription        @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  ratedUsages    MerchantRatedUsage[]
 
   @@unique([subscriptionId, periodStart, periodEnd])
   @@index([shopId, status])
   @@index([subscriptionId, status])
   @@index([shopId, periodStart, periodEnd])
   @@index([periodEnd])
+}
+
+model MerchantRatedUsage {
+  id                  String   @id @default(uuid())
+  shopId              String
+  billingPeriodId     String
+  pricingPlanId       String
+  billableFeatureId   String
+
+  featureCodeSnapshot String
+  featureNameSnapshot String?
+  planCodeSnapshot    String
+  planNameSnapshot    String?
+  currency            String
+
+  usedQuantity        Decimal  @db.Decimal(18, 6)
+  includedQuantity    Decimal  @db.Decimal(18, 6)
+  billableQuantity    Decimal  @db.Decimal(18, 6)
+  unitRate            Decimal  @db.Decimal(18, 6)
+  amount              Decimal  @db.Decimal(18, 6)
+  usageEventCount     Int
+
+  ratedAt             DateTime @default(now())
+  createdAt           DateTime @default(now())
+
+  shop                Shop                  @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  billingPeriod       MerchantBillingPeriod @relation(fields: [billingPeriodId], references: [id], onDelete: Cascade)
+  pricingPlan         PricingPlan           @relation(fields: [pricingPlanId], references: [id], onDelete: Restrict)
+  billableFeature     BillableFeature       @relation(fields: [billableFeatureId], references: [id], onDelete: Restrict)
+
+  @@unique([billingPeriodId, billableFeatureId])
+  @@index([shopId, billingPeriodId])
+  @@index([pricingPlanId])
+  @@index([featureCodeSnapshot])
 }
 
 model MerchantUsageEvent {
