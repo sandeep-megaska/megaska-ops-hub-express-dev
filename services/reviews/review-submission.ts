@@ -8,9 +8,12 @@ import { recalculateProductReviewAggregate } from "./review-foundation.ts";
 type Db = typeof prisma;
 type ErrorCode = "REVIEW_TOKEN_INVALID" | "REVIEW_TOKEN_EXPIRED" | "REVIEW_TOKEN_REQUEST_INACTIVE" | "REVIEW_ALREADY_SUBMITTED" | "REVIEW_SHOP_MISMATCH" | "REVIEWS_DISABLED" | "REVIEW_PRODUCT_UNAVAILABLE" | "REVIEW_CUSTOMER_SESSION_MISMATCH";
 export type SubmissionResult = { ok: true; review: { status: "PENDING_MODERATION" | "PUBLISHED"; verifiedPurchase: true } } | { ok: false; errorCode: ErrorCode | "REVIEW_VALIDATION_FAILED"; fieldErrors?: Record<string, string> };
+type ReviewSubmissionContext =
+  | { ok: true; request: { tokenExpiresAt: Date; productTitle: string; variantTitle: string | null; productImageUrl: string | null; orderName: string | null; verifiedPurchase: true }; settings: { minimumRating: number; maximumRating: number; minimumBodyLength: number; maximumBodyLength: number; moderationRequired: boolean; allowMedia: boolean }; shop: { displayName: string } }
+  | { ok: false; errorCode: ErrorCode };
 
 function safeImage(url: string | null) { try { return url && new URL(url).protocol === "https:" ? url : null; } catch { return null; } }
-export async function getReviewSubmissionContext({ token, shopId, now = new Date(), db = prisma }: { token: unknown; shopId: string; now?: Date; db?: Db }) {
+export async function getReviewSubmissionContext({ token, shopId, now = new Date(), db = prisma }: { token: unknown; shopId: string; now?: Date; db?: Db }): Promise<ReviewSubmissionContext> {
   const found = await findReviewRequestByToken(token, { now, db });
   if (!found.ok) return found;
   if (found.reviewRequest.shopId !== shopId) return { ok: false as const, errorCode: "REVIEW_SHOP_MISMATCH" as const };
