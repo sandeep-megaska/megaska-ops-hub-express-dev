@@ -5,6 +5,7 @@ import type { BillingProviderStatusSummary, MerchantBillingDashboardDto } from "
 import { getBillingLifecycleStatus } from "./lifecycle.ts";
 import { listAvailablePricingPlans } from "./plans/plan-catalog.ts";
 import { getCurrentPlanLifecycleStatus } from "./plans/plan-lifecycle.ts";
+import { getCurrentLiveUsageEstimate } from "./live-usage-estimate.ts";
 
 type Submission = { status: string; errorCode: string | null; errorMessage: string | null; updatedAt: Date };
 type SubscriptionProviderRow = { billingProvider: string; providerStatus: string | null; confirmationUrl: string | null; providerActivatedAt: Date | null; updatedAt: Date; billingProviderSubmissions: Submission[] };
@@ -48,15 +49,16 @@ export async function getBillingProviderStatus(input: { shopId: string }): Promi
 }
 
 export async function getMerchantBillingDashboard(input: { shopId: string }): Promise<MerchantBillingDashboardDto> {
-  const [subscription, currentPeriod, provider, lifecycle, plans, planChange] = await Promise.all([
+  const [subscription, currentPeriod, provider, lifecycle, plans, planChange, liveEstimate] = await Promise.all([
     getCurrentMerchantSubscriptionSummary({ shopId: input.shopId }),
     getCurrentBillingPeriodSummary({ shopId: input.shopId }),
     getBillingProviderStatus({ shopId: input.shopId }),
     getBillingLifecycleStatus({ shopId: input.shopId }),
     listAvailablePricingPlans({ shopId: input.shopId }),
     getCurrentPlanLifecycleStatus({ shopId: input.shopId }),
+    getCurrentLiveUsageEstimate({ shopId: input.shopId }),
   ]);
-  return { subscription, currentPeriod, provider, lifecycle, plans, planChange: planChange ? { id: planChange.id, status: planChange.status, type: planChange.changeType, timing: planChange.timing, effectiveAt: planChange.effectiveAt?.toISOString() ?? null, fromPlan: planChange.fromPricingPlan?.name ?? null, toPlan: planChange.toPricingPlan?.name ?? null } : null };
+  return { subscription, currentPeriod, liveEstimate, provider, lifecycle, plans, planChange: planChange ? { id: planChange.id, status: planChange.status, type: planChange.changeType, timing: planChange.timing, effectiveAt: planChange.effectiveAt?.toISOString() ?? null, fromPlan: planChange.fromPricingPlan?.name ?? null, toPlan: planChange.toPricingPlan?.name ?? null } : null };
 }
 
 export async function getMerchantBillingHistory(input: { shopId: string; cursor?: string; limit?: number }): Promise<BillingPeriodSummaryPage> {

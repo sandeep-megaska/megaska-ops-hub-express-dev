@@ -32,3 +32,15 @@ The safe order is **Meter → Rate → Submit → Reconcile → Close**. Reconci
 A non-zero row matches only when its successful submission has a provider reference and the queried Shopify amount and exact currency match. Multiple successful records are surfaced as duplicates; zero-rated rows are skipped, while any provider charge for one is a mismatch. Shopify's node lookup is limited to the persisted usage-record reference; if Shopify cannot resolve that node, the result is `PROVIDER_NOT_FOUND`.
 
 All reconciliation APIs require `BILLING_UAT_CONTROLS_ENABLED=true` and resolve the shop from authenticated server context. `submit-and-run` additionally requires `BILLING_UAT_SHOPIFY_TEST_MODE=true` and rejects production calls with `LIVE_BILLING_NOT_ALLOWED_FROM_UAT`. Shopify periods should not close until every non-zero row is matched; other providers retain the existing lifecycle policy.
+
+## Live usage estimates (COMMERCE-BILLING-1F)
+
+`getCurrentLiveUsageEstimate` is a read-only projection for an **OPEN** period:
+
+```
+MerchantUsageEvent -> live usage estimate -> merchant dashboard -> final rating -> immutable MerchantRatedUsage
+```
+
+It uses the same Decimal allowance/overage calculation in `rating-core.ts` as final rating, and only counts recorded platform-managed usage (`PLATFORM_TWILIO`, `PLATFORM_RESEND`, and the existing platform SMS provider). The resulting amount is an estimated **LoopDesk merchant charge**, not a Twilio or Resend wholesale invoice cost. It creates no periods, usage events, rated rows, provider submissions, or Shopify charges.
+
+After rating, the dashboard uses immutable rated usage instead of a live projection. Late events do not change that final display; a future correction workflow must handle them.

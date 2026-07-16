@@ -1,5 +1,6 @@
 import { Prisma } from "../../generated/prisma/index.js";
 import { prisma as defaultPrisma } from "../db/prisma.ts";
+import { calculateFeatureRating } from "./rating-core.ts";
 
 const LOG_PREFIX = "[COMMERCIAL RATING]";
 
@@ -59,7 +60,7 @@ export async function rateBillingPeriod(shopId: string, billingPeriodId: string)
       const claimed = await db.merchantBillingPeriod.updateMany({ where: { id: billingPeriodId, shopId, status: "OPEN" }, data: { status: "RATING" } });
       if (claimed.count !== 1) throw new CommercialRatingError("RATING_IN_PROGRESS");
       log("rating_started", { shopId, billingPeriodId, subscriptionId: period.subscriptionId, pricingPlanCode: plan.code });
-      const events = await db.merchantUsageEvent.findMany({ where: { shopId, status: "RECORDED", occurredAt: { gte: period.periodStart, lt: period.periodEnd } }, select: { usageType: true, quantity: true } });
+      const events = await db.merchantUsageEvent.findMany({ where: { shopId, status: "RECORDED", provider: { in: ["PLATFORM_TWILIO", "PLATFORM_RESEND", "PLATFORM_MSG91"] }, occurredAt: { gte: period.periodStart, lt: period.periodEnd } }, select: { usageType: true, quantity: true } });
       const usage = new Map<string, { quantity: Prisma.Decimal; count: number }>();
       for (const event of events) { const code = usageTypeToFeatureCode[event.usageType]; if (code) { const current = usage.get(code) ?? { quantity: new Prisma.Decimal(0), count: 0 }; current.quantity = current.quantity.plus(decimal(event.quantity)); current.count++; usage.set(code, current); } }
       const activeFeatures = plan.features.filter((feature) => feature.active);
@@ -68,9 +69,8 @@ export async function rateBillingPeriod(shopId: string, billingPeriodId: string)
       const ratedAt = new Date();
       const rows = activeFeatures.map((feature) => {
         const aggregate = usage.get(feature.billableFeature.code) ?? { quantity: new Prisma.Decimal(0), count: 0 };
-        const included = decimal(feature.includedQuantity); const rate = decimal(feature.overageUnitPrice);
-        const billable = Prisma.Decimal.max(aggregate.quantity.minus(included), new Prisma.Decimal(0)); const amount = billable.times(rate);
-        return { shopId, billingPeriodId, pricingPlanId: plan.id, billableFeatureId: feature.billableFeature.id, featureCodeSnapshot: feature.billableFeature.code, featureNameSnapshot: feature.billableFeature.name, planCodeSnapshot: plan.code, planNameSnapshot: plan.name, currency: plan.currency, usedQuantity: aggregate.quantity, includedQuantity: included, billableQuantity: billable, unitRate: rate, amount, usageEventCount: aggregate.count, ratedAt };
+        const calculation = calculateFeatureRating({ usedQuantity: aggregate.quantity, includedQuantity: decimal(feature.includedQuantity), unitRate: decimal(feature.overageUnitPrice) });
+        return { shopId, billingPeriodId, pricingPlanId: plan.id, billableFeatureId: feature.billableFeature.id, featureCodeSnapshot: feature.billableFeature.code, featureNameSnapshot: feature.billableFeature.name, planCodeSnapshot: plan.code, planNameSnapshot: plan.name, currency: plan.currency, usedQuantity: calculation.usedQuantity, includedQuantity: calculation.includedQuantity, billableQuantity: calculation.billableQuantity, unitRate: decimal(feature.overageUnitPrice), amount: calculation.amount, usageEventCount: aggregate.count, ratedAt };
       });
       await db.merchantRatedUsage.createMany({ data: rows });
       await db.merchantBillingPeriod.update({ where: { id: billingPeriodId }, data: { status: "RATED", ratedAt } });
