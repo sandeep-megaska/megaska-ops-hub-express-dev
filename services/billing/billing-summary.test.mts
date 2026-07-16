@@ -32,13 +32,23 @@ function matches(row: typeof current, where: Record<string, unknown>) {
   return true;
 }
 
-function makeDb(periods = [current]) {
+type TestSubscription = typeof subscription;
+
+function makeDb(periods = [current], subscriptions: TestSubscription[] = [subscription]) {
   const writes = 0;
   const db = {
     get writes() { return writes; },
-    merchantSubscription: { async findFirst(args: unknown) {
-      const query = args as { where: { shopId: string } };
-      return query.where.shopId === "shop-a" ? subscription : null;
+    merchantSubscription: { async findMany(args: unknown) {
+      const query = args as { where: { shopId: string; status?: { in?: string[] } } };
+      const allowedStatuses = query.where.status?.in;
+      return subscriptions
+        .filter((candidate) => candidate.shopId === query.where.shopId)
+        .filter((candidate) => !allowedStatuses || allowedStatuses.includes(candidate.status))
+        .sort((left, right) => {
+          const leftStart = left.currentPeriodStart?.getTime() ?? Number.NEGATIVE_INFINITY;
+          const rightStart = right.currentPeriodStart?.getTime() ?? Number.NEGATIVE_INFINITY;
+          return rightStart - leftStart || right.createdAt.getTime() - left.createdAt.getTime() || right.id.localeCompare(left.id);
+        });
     } },
     merchantBillingPeriod: {
       async findFirst(args: unknown) {
@@ -61,6 +71,22 @@ test("resolves only an active subscription for its shop and as-of lifecycle", as
   assert.equal((await getCurrentMerchantSubscriptionSummary({ shopId: "shop-a", asOf: at("2026-06-15") }))?.subscriptionId, "sub-a");
   assert.equal(await getCurrentMerchantSubscriptionSummary({ shopId: "shop-b", asOf: at("2026-06-15") }), null);
   assert.equal(await getCurrentMerchantSubscriptionSummary({ shopId: "shop-a", asOf: at("2027-01-01") }), null);
+});
+
+test("skips an older inactive subscription and resolves the valid active subscription", async () => {
+  const inactive = {
+    ...subscription,
+    id: "sub-old",
+    status: "CANCELED",
+    createdAt: at("2025-01-01T00:00:00.000Z"),
+    currentPeriodStart: at("2025-01-01T00:00:00.000Z"),
+    currentPeriodEnd: at("2026-01-01T00:00:00.000Z"),
+    canceledAt: at("2026-01-01T00:00:00.000Z"),
+    cancellationEffectiveAt: at("2026-01-01T00:00:00.000Z"),
+  };
+  makeDb([current], [inactive, subscription]);
+  const summary = await getCurrentMerchantSubscriptionSummary({ shopId: "shop-a", asOf: at("2026-06-15") });
+  assert.equal(summary?.subscriptionId, "sub-a");
 });
 
 test("current period preserves half-open boundaries and performs no writes", async () => {
