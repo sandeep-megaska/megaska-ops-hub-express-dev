@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { MerchantBillingOverviewDto } from "../../services/billing/merchant-billing-overview";
 import { formatBillingMoney, formatBillingQuantity } from "./billing-format";
 
-type Api = { ok: true; overview: MerchantBillingOverviewDto } | { ok: false; error?: string };
+type Api = { ok: true; overview: MerchantBillingOverviewDto } | { ok: false; error?: string; message?: string };
 const statusLabels: Record<string, string> = { ACTIVE: "Active", PENDING_CONFIRMATION: "Pending Shopify approval", TRIALING: "Pending confirmation", PAST_DUE: "Payment issue", CANCELED: "Cancelled" };
 const date = (value: string) => new Intl.DateTimeFormat("en-US", { dateStyle: "medium" }).format(new Date(value));
 const label = (value: string) => statusLabels[value] ?? value.replaceAll("_", " ");
@@ -12,7 +12,7 @@ const label = (value: string) => statusLabels[value] ?? value.replaceAll("_", " 
 export default function BillingDashboard({ shopDomain }: { shopDomain: string }) {
   const [overview, setOverview] = useState<MerchantBillingOverviewDto | null>(null);
   const [error, setError] = useState(""); const [loading, setLoading] = useState(true);
-  const load = useCallback(async () => { setLoading(true); setError(""); try { const response = await fetch(`/api/admin/billing/overview?shop=${encodeURIComponent(shopDomain)}`, { cache: "no-store" }); const data = await response.json() as Api; if (!response.ok || !data.ok) throw new Error("overview"); setOverview(data.overview); } catch { setError("We couldn't refresh your billing data. Please try again."); } finally { setLoading(false); } }, [shopDomain]);
+  const load = useCallback(async () => { setLoading(true); setError(""); try { const response = await fetch(`/api/admin/billing/overview?shop=${encodeURIComponent(shopDomain)}`, { cache: "no-store" }); const data = await response.json() as Api; if (!data.ok) { setError(data.error === "COMMERCIAL_CATALOG_NOT_CONFIGURED" && data.message ? data.message : "We couldn't refresh your billing data. Please try again."); return; } if (!response.ok) { setError("We couldn't refresh your billing data. Please try again."); return; } setOverview(data.overview); } catch { setError("We couldn't refresh your billing data. Please try again."); } finally { setLoading(false); } }, [shopDomain]);
   useEffect(() => { void load(); }, [load]);
   if (loading && !overview) return <main className="mk-page"><header className="mk-page-header"><div><h1 className="mk-page-title">Billing</h1><p className="mk-page-subtitle">Loading your subscription and current usage…</p></div></header></main>;
   if (!overview) return <main className="mk-page"><h1 className="mk-page-title">Billing</h1><section className="mk-card" role="alert"><p>{error}</p><button className="mk-btn mt-3" onClick={() => void load()}>Try again</button></section></main>;

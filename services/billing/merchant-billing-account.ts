@@ -1,6 +1,6 @@
 import { prisma as defaultPrisma } from "../db/prisma.ts";
+import { requirePrimaryCommercialCatalog } from "./commercial-catalog-health.ts";
 
-const DEFAULT_PRIMARY_PLAN_CODE = "PROFESSIONAL";
 const INTERNAL_BILLING_ENABLED = process.env.LOOPDESK_INTERNAL_BILLING_ENABLED === "true";
 
 type PlanFeature = { id: string; active: boolean; includedQuantity: unknown; overageUnitPrice: unknown; billableFeature: { id: string; code: string; name: string; active: boolean } };
@@ -16,7 +16,6 @@ type BillingAccountDb = {
 let prismaClient: BillingAccountDb = defaultPrisma as unknown as BillingAccountDb;
 export function __setMerchantBillingAccountPrismaForTests(client: BillingAccountDb) { prismaClient = client; }
 
-export class MerchantBillingAccountConfigurationError extends Error {}
 export class MerchantBillingAccountNotFoundError extends Error {}
 
 function nextCalendarMonth(date: Date) {
@@ -36,9 +35,10 @@ export async function ensureMerchantBillingAccount(input: { shopId: string; now?
   const now = input.now ?? new Date();
   const shop = await prismaClient.shop.findUnique({ where: { id: input.shopId }, select: { id: true, installationStatus: true } });
   if (!shop) throw new MerchantBillingAccountNotFoundError("Shop was not found.");
-  const planCode = process.env.LOOPDESK_PRIMARY_PLAN_CODE || DEFAULT_PRIMARY_PLAN_CODE;
+  const catalog = await requirePrimaryCommercialCatalog();
+  const planCode = catalog.planCode;
   const plan = await prismaClient.pricingPlan.findUnique({ where: { code: planCode }, include: { features: { include: { billableFeature: true } } } });
-  if (!plan?.active) throw new MerchantBillingAccountConfigurationError("The primary LoopDesk plan is not configured.");
+  if (!plan?.active) throw new Error("Commercial catalog changed while billing account was being initialized.");
 
   const internal = INTERNAL_BILLING_ENABLED && isDevelopmentStore(shop.installationStatus);
   const start = now;
