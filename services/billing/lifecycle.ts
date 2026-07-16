@@ -81,6 +81,13 @@ export async function closeRatedBillingPeriodLifecycle(input: { shopId: string; 
   const period = await ownedPeriod(input.shopId, input.billingPeriodId); if (period.status === "CLOSED") return period; if (period.status !== "RATED") throw new BillingLifecycleError("BILLING_PERIOD_NOT_RATED");
   const blocking = await db.merchantBillingProviderSubmission.findFirst({ where: { shopId: input.shopId, merchantBillingPeriodId: period.id, status: { in: input.allowDeferredProviderSubmission && process.env.BILLING_UAT_CONTROLS_ENABLED === "true" ? ["PROCESSING"] : ["PENDING", "PROCESSING", "FAILED_RETRYABLE", "FAILED_FINAL"] } } });
   if (blocking) { const code = blocking.status === "FAILED_FINAL" ? "PROVIDER_SUBMISSION_FAILED_FINAL" : "PROVIDER_SUBMISSION_UNRESOLVED"; log("billing_period_close_blocked", { shopId: input.shopId, billingPeriodId: period.id, normalizedErrorCode: code }); throw new BillingLifecycleError(code); }
+  // Shopify is blocked by default until the latest immutable reconciliation audit matches every non-zero row.
+  if (period.subscription.billingProvider === "SHOPIFY" && process.env.BILLING_REQUIRE_SHOPIFY_RECONCILIATION !== "false" && db.merchantBillingReconciliation?.findMany) {
+    const audits = await db.merchantBillingReconciliation.findMany({ where: { shopId: input.shopId, billingPeriodId: period.id }, orderBy: { checkedAt: "desc" } });
+    const latest = new Map<string, any>(); for (const audit of audits) if (audit.merchantRatedUsageId && !latest.has(audit.merchantRatedUsageId)) latest.set(audit.merchantRatedUsageId, audit);
+    const rated = await db.merchantRatedUsage.findMany({ where: { shopId: input.shopId, billingPeriodId: period.id } });
+    if (rated.some((row: any) => !new Prisma.Decimal(row.amount).isZero() && latest.get(row.id)?.status !== "MATCHED")) throw new BillingLifecycleError("PROVIDER_RECONCILIATION_UNRESOLVED");
+  }
   const changed = await db.merchantBillingPeriod.updateMany({ where: { id: period.id, shopId: input.shopId, status: "RATED" }, data: { status: "CLOSED", closedAt: new Date() } }); if (changed.count !== 1) return ownedPeriod(input.shopId, period.id); const closed = await ownedPeriod(input.shopId, period.id); log("billing_period_closed", { shopId: input.shopId, subscriptionId: period.subscriptionId, billingPeriodId: period.id, previousStatus: "RATED", nextStatus: "CLOSED" }); return closed;
 }
 

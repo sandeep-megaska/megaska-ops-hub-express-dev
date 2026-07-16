@@ -99,6 +99,7 @@ model Shop {
   merchantBillingPeriods MerchantBillingPeriod[]
   merchantRatedUsages MerchantRatedUsage[]
   billingProviderSubmissions MerchantBillingProviderSubmission[]
+  billingReconciliations MerchantBillingReconciliation[]
 }
 
 enum MerchantUsageType {
@@ -307,6 +308,44 @@ model MerchantBillingProviderSubmission {
   @@index([shopId, status])
   @@index([merchantSubscriptionId, operation])
   @@index([merchantBillingPeriodId])
+}
+
+enum BillingReconciliationStatus {
+  NOT_SUBMITTED
+  PENDING
+  MATCHED
+  AMOUNT_MISMATCH
+  CURRENCY_MISMATCH
+  MISSING_PROVIDER_REFERENCE
+  DUPLICATE_PROVIDER_SUBMISSION
+  PROVIDER_NOT_FOUND
+  FAILED_RETRYABLE
+  FAILED_FINAL
+  SKIPPED_ZERO_AMOUNT
+}
+
+model MerchantBillingReconciliation {
+  id                     String                      @id @default(uuid())
+  shopId                 String
+  billingPeriodId        String
+  merchantRatedUsageId   String?
+  provider               BillingProvider
+  status                 BillingReconciliationStatus
+  internalAmount         Decimal?                    @db.Decimal(18, 6)
+  internalCurrency       String?
+  providerAmount         Decimal?                    @db.Decimal(18, 6)
+  providerCurrency       String?
+  providerSubmissionId   String?
+  externalReference      String?
+  errorCode              String?
+  errorMessage           String?
+  checkedAt              DateTime                    @default(now())
+  createdAt              DateTime                    @default(now())
+
+  shop                   Shop                        @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@index([shopId, billingPeriodId, checkedAt])
+  @@index([merchantRatedUsageId, checkedAt])
 }
 
 model MerchantBillingPeriod {

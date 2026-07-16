@@ -94,3 +94,19 @@ export class ShopifyBillingAdapter implements BillingProviderAdapter {
     } catch (error) { return normalize(error); }
   }
 }
+
+export type ShopifyUsageRecord = { id: string; amount: string; currency: string };
+type UsageRecordQueryResponse = { node: { id: string; price: { amount: string; currencyCode: string } } | null };
+const GET_USAGE_RECORD = `query GetAppUsageRecord($id: ID!) { node(id: $id) { ... on AppUsageRecord { id price { amount currencyCode } } } }`;
+
+/** Read-only, server-authenticated Shopify usage record lookup for billing reconciliation. */
+export async function getShopifyUsageRecord(input: { shopId: string; externalUsageRecordId: string }, adapter = new ShopifyBillingAdapter()): Promise<ShopifyUsageRecord | null> {
+  if (!input.shopId || !input.externalUsageRecordId) throw new BillingProviderValidationError("INVALID_USAGE_RECORD_LOOKUP", "A shop and provider reference are required.");
+  const shopDomain = await (adapter as any).resolveShopDomain(input.shopId);
+  if (!shopDomain) throw new BillingProviderValidationError("SHOP_NOT_FOUND", "Shop was not found.");
+  try {
+    const data = await (adapter as any).execute<UsageRecordQueryResponse>(GET_USAGE_RECORD, { id: input.externalUsageRecordId }, { shopDomain });
+    const record = data.node;
+    return record ? { id: record.id, amount: record.price.amount, currency: record.price.currencyCode } : null;
+  } catch (error) { return normalize(error); }
+}
