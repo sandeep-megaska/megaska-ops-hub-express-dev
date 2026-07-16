@@ -1,0 +1,2 @@
+import test from "node:test"; import assert from "node:assert/strict"; import { getReviewSettings, saveReviewSettings } from "./review-settings.ts";
+test("safe defaults do not write",async()=>{let writes=0;const db:any={reviewSettings:{findUnique:async()=>null,upsert:async()=>{writes++}},shop:{findUnique:async()=>({})}};const value:any=await getReviewSettings("s",db);assert.equal(value.reviewsEnabled,false);assert.equal(writes,0);await assert.rejects(()=>saveReviewSettings("s",{automaticRequestsEnabled:true},db));});

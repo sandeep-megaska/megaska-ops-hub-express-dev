@@ -41,6 +41,8 @@ model CustomerProfile {
   refundRequests      RefundRequest[]
   codAdvanceIntents   CodAdvanceIntent[]
   recoveryTokens      CheckoutRecoveryToken[]
+  reviewRequests      ReviewRequest[]
+  productReviews      ProductReview[]
 
   @@unique([shopId, shopifyCustomerId])
   @@index([shopId])
@@ -101,6 +103,12 @@ model Shop {
   billingProviderSubmissions MerchantBillingProviderSubmission[]
   billingReconciliations MerchantBillingReconciliation[]
   merchantPlanChanges MerchantPlanChange[]
+  reviewSettings ReviewSettings?
+  reviewRequests ReviewRequest[]
+  productReviews ProductReview[]
+  productReviewMedia ProductReviewMedia[]
+  productReviewReplies ProductReviewMerchantReply[]
+  productReviewAggregates ProductReviewAggregate[]
 }
 
 enum MerchantUsageType {
@@ -1199,6 +1207,14 @@ enum MegaskaOrderStatus {
   REFUNDED
 }
 
+enum MegaskaOrderDeliverySource {
+  SHOPIFY_FULFILLMENT
+  COURIER_SHIPMENT
+  INTERNAL_STATUS
+  MANUAL
+  MIGRATED
+}
+
 enum CourierProvider {
   DELHIVERY
   DTDC
@@ -1217,6 +1233,8 @@ model MegaskaOrder {
   status             MegaskaOrderStatus @default(ORDER_CONFIRMED)
   statusSource       String?
   statusUpdatedAt    DateTime?
+  deliveredAt        DateTime?
+  deliverySource     MegaskaOrderDeliverySource?
   metadata           Json?
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
@@ -1225,11 +1243,14 @@ model MegaskaOrder {
   customerProfile    CustomerProfile    @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
   shipments          OrderShipment[]
   actionRequests     OrderActionRequest[]
+  reviewRequests     ReviewRequest[]
+  productReviews     ProductReview[]
 
   @@unique([shopId, shopifyOrderName])
   @@index([customerProfileId, createdAt])
   @@index([shopifyOrderId])
   @@index([status])
+  @@index([shopId, deliveredAt])
 }
 
 model OrderShipment {
@@ -1268,6 +1289,235 @@ model OrderShipmentEvent {
   shipment           OrderShipment      @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
 
   @@index([shipmentId, occurredAt])
+}
+
+enum ReviewRequestStatus {
+  PENDING_ELIGIBILITY
+  ELIGIBLE
+  SCHEDULED
+  SENT
+  REMINDER_SENT
+  COMPLETED
+  BLOCKED
+  EXPIRED
+  CANCELED
+}
+
+enum ReviewRequestBlockReason {
+  ORDER_NOT_DELIVERED
+  CUSTOMER_NOT_RESOLVED
+  PRODUCT_NOT_RESOLVED
+  CANCELED_ORDER
+  REFUNDED_ORDER
+  CANCELLATION_REQUEST
+  EXCHANGE_REQUEST
+  ISSUE_REQUEST
+  REFUND_REQUEST
+  PROTECTION_WINDOW
+  ALREADY_REVIEWED
+  REVIEWS_DISABLED
+  CUSTOMER_UNREACHABLE
+  OTHER
+}
+
+enum ProductReviewStatus {
+  DRAFT
+  PENDING_MODERATION
+  PUBLISHED
+  REJECTED
+  HIDDEN
+  DELETED
+}
+
+enum ProductReviewSource {
+  VERIFIED_PURCHASE
+  MANUAL_IMPORT
+  MERCHANT_CREATED
+}
+
+enum ProductReviewMediaType {
+  IMAGE
+  VIDEO
+}
+
+model ReviewSettings {
+  id                       String   @id @default(uuid())
+  shopId                   String   @unique
+  reviewsEnabled           Boolean  @default(false)
+  automaticRequestsEnabled Boolean  @default(false)
+  requestDelayDays         Int      @default(7)
+  reminderEnabled          Boolean  @default(false)
+  reminderDelayDays        Int      @default(7)
+  maxReminderCount         Int      @default(1)
+  minimumRating            Int      @default(1)
+  maximumRating            Int      @default(5)
+  requireVerifiedPurchase  Boolean  @default(true)
+  moderationRequired       Boolean  @default(true)
+  allowReviewEditing       Boolean  @default(true)
+  allowReviewDeletion      Boolean  @default(true)
+  allowMedia               Boolean  @default(true)
+  maxMediaCount            Int      @default(5)
+  exchangeProtectionDays   Int?
+  issueProtectionDays      Int?
+  cancellationBlocksReview Boolean  @default(true)
+  exchangeBlocksReview     Boolean  @default(true)
+  issueBlocksReview        Boolean  @default(true)
+  refundBlocksReview       Boolean  @default(true)
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+  shop                     Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+}
+
+model ReviewRequest {
+  id                      String                    @id @default(uuid())
+  shopId                  String
+  customerProfileId       String
+  megaskaOrderId          String
+  shopifyOrderId          String
+  shopifyOrderName        String?
+  shopifyLineItemId       String
+  shopifyProductId        String
+  shopifyVariantId        String?
+  productTitleSnapshot    String
+  variantTitleSnapshot    String?
+  productHandleSnapshot   String?
+  productImageUrlSnapshot String?
+  orderCreatedAt          DateTime?
+  deliveredAtSnapshot     DateTime?
+  status                  ReviewRequestStatus       @default(PENDING_ELIGIBILITY)
+  blockReason             ReviewRequestBlockReason?
+  blockDetail             String?
+  eligibleAt              DateTime?
+  scheduledAt             DateTime?
+  sentAt                  DateTime?
+  reminderSentAt          DateTime?
+  completedAt             DateTime?
+  canceledAt              DateTime?
+  expiresAt               DateTime?
+  sendAttemptCount        Int                       @default(0)
+  reminderCount           Int                       @default(0)
+  tokenHash               String?                   @unique
+  tokenExpiresAt          DateTime?
+  createdAt               DateTime                  @default(now())
+  updatedAt               DateTime                  @updatedAt
+  shop                    Shop                      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  customerProfile         CustomerProfile           @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+  megaskaOrder            MegaskaOrder              @relation(fields: [megaskaOrderId], references: [id], onDelete: Cascade)
+  review                  ProductReview?
+
+  @@unique([shopId, shopifyOrderId, shopifyLineItemId])
+  @@index([shopId, status, scheduledAt])
+  @@index([customerProfileId, status])
+  @@index([megaskaOrderId])
+  @@index([shopId, shopifyProductId])
+}
+
+model ProductReview {
+  id                    String                      @id @default(uuid())
+  shopId                String
+  customerProfileId     String?
+  reviewRequestId       String?                     @unique
+  megaskaOrderId        String?
+  shopifyOrderId        String?
+  shopifyLineItemId     String?
+  shopifyProductId      String
+  shopifyVariantId      String?
+  source                ProductReviewSource         @default(VERIFIED_PURCHASE)
+  status                ProductReviewStatus         @default(PENDING_MODERATION)
+  rating                Int
+  title                 String?
+  body                  String?
+  customerDisplayName   String
+  verifiedPurchase      Boolean                     @default(false)
+  productTitleSnapshot  String
+  variantTitleSnapshot  String?
+  productHandleSnapshot String?
+  submittedAt           DateTime                    @default(now())
+  publishedAt           DateTime?
+  rejectedAt            DateTime?
+  hiddenAt              DateTime?
+  deletedAt             DateTime?
+  moderationNote        String?
+  editedAt              DateTime?
+  createdAt             DateTime                    @default(now())
+  updatedAt             DateTime                    @updatedAt
+  shop                  Shop                        @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  customerProfile       CustomerProfile?            @relation(fields: [customerProfileId], references: [id], onDelete: SetNull)
+  reviewRequest         ReviewRequest?              @relation(fields: [reviewRequestId], references: [id], onDelete: SetNull)
+  megaskaOrder          MegaskaOrder?               @relation(fields: [megaskaOrderId], references: [id], onDelete: SetNull)
+  media                 ProductReviewMedia[]
+  merchantReply         ProductReviewMerchantReply?
+
+  @@index([shopId, shopifyProductId, status, publishedAt])
+  @@index([shopId, customerProfileId, submittedAt])
+  @@index([megaskaOrderId])
+  @@index([shopId, status, submittedAt])
+}
+
+model ProductReviewMedia {
+  id              String                 @id @default(uuid())
+  shopId          String
+  productReviewId String
+  mediaType       ProductReviewMediaType
+  storageProvider String
+  storageKey      String
+  publicUrl       String?
+  thumbnailUrl    String?
+  mimeType        String?
+  sizeBytes       Int?
+  width           Int?
+  height          Int?
+  durationSeconds Int?
+  altText         String?
+  sortOrder       Int                    @default(0)
+  approved        Boolean                @default(false)
+  rejectedAt      DateTime?
+  deletedAt       DateTime?
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  shop            Shop                   @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  productReview   ProductReview          @relation(fields: [productReviewId], references: [id], onDelete: Cascade)
+
+  @@unique([storageProvider, storageKey])
+  @@index([productReviewId, sortOrder])
+  @@index([shopId, approved])
+}
+
+model ProductReviewMerchantReply {
+  id              String        @id @default(uuid())
+  shopId          String
+  productReviewId String        @unique
+  body            String
+  repliedBy       String?
+  publishedAt     DateTime?
+  hiddenAt        DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  shop            Shop          @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  productReview   ProductReview @relation(fields: [productReviewId], references: [id], onDelete: Cascade)
+
+  @@index([shopId, publishedAt])
+}
+
+model ProductReviewAggregate {
+  id               String    @id @default(uuid())
+  shopId           String
+  shopifyProductId String
+  publishedCount   Int       @default(0)
+  ratingSum        Int       @default(0)
+  averageRating    Decimal   @default(0) @db.Decimal(4, 3)
+  rating1Count     Int       @default(0)
+  rating2Count     Int       @default(0)
+  rating3Count     Int       @default(0)
+  rating4Count     Int       @default(0)
+  rating5Count     Int       @default(0)
+  lastPublishedAt  DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  shop             Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@unique([shopId, shopifyProductId])
+  @@index([shopId, averageRating])
 }
 
 enum WalletDirection {
