@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { ShopifyBillingAdapter, BillingProviderValidationError } from "./shopify-billing-adapter.ts";
 
-function adapter(response: unknown, calls: Array<{ query: string; variables: Record<string, unknown>}) {
+function adapter(response: unknown, calls: Array<{ query: string; variables: Record<string, unknown> }>) {
   return new ShopifyBillingAdapter(async (query, variables) => { calls.push({ query, variables }); return response as never; }, console, async () => "shop-a.myshopify.com");
 }
 
