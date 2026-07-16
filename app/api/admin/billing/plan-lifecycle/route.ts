@@ -1,2 +1,4 @@
-import { NextRequest, NextResponse } from "next/server"; import { getCurrentPlanLifecycleStatus } from "../../../../../services/billing/plans/plan-lifecycle"; import { adminShop, failure, noStore } from "../plan-route"; export { runtime, dynamic } from "../plan-route";
+import { NextRequest, NextResponse } from "next/server"; import { getCurrentPlanLifecycleStatus } from "../../../../../services/billing/plans/plan-lifecycle"; import { adminShop, failure, noStore } from "../plan-route";
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 export async function GET(req:NextRequest) { const auth=await adminShop(req); if("response" in auth)return auth.response; try { const change=await getCurrentPlanLifecycleStatus({shopId:auth.shopId}); return NextResponse.json({ok:true,planChange:change?{id:change.id,status:change.status,type:change.changeType,timing:change.timing,effectiveAt:change.effectiveAt?.toISOString()??null,fromPlan:change.fromPricingPlan?.name??null,toPlan:change.toPricingPlan?.name??null}:null},{headers:noStore}); }catch(e){return failure(e);} }
