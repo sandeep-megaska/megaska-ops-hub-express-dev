@@ -95,3 +95,21 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   seedCommercialCatalog()
     .finally(async () => { await prisma.$disconnect(); await pool.end(); });
 }
+const isDirectRun =
+  typeof process.argv[1] === "string" &&
+  import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (isDirectRun) {
+  seedCommercialCatalog()
+    .then(() => {
+      console.log("Commercial catalog seeded successfully");
+    })
+    .catch((error) => {
+      console.error("Commercial catalog seed failed", error);
+      process.exitCode = 1;
+    })
+    .finally(async () => {
+      await prisma.$disconnect();
+      await pool.end();
+    });
+}
