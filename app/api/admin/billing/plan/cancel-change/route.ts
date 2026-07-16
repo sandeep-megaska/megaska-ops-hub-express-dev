@@ -1,4 +1,2 @@
 import { NextRequest, NextResponse } from "next/server"; import { cancelScheduledPlanChange } from "../../../../../../services/billing/plans/plan-lifecycle"; import { adminShop, body, failure, noStore } from "../../plan-route";
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
 export async function POST(req:NextRequest){const a=await adminShop(req);if("response"in a)return a.response;try{const b=await body(req);if(typeof b.planChangeId!=="string")throw new Error();return NextResponse.json({ok:true,result:await cancelScheduledPlanChange({shopId:a.shopId,planChangeId:b.planChangeId})},{headers:noStore});}catch(e){return failure(e);}}
