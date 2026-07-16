@@ -74,7 +74,7 @@ export async function submitRatedBillingPeriodUsage(input: { shopId: string; bil
       await db.merchantBillingProviderSubmission.update({ where: { id: claim.submission.id }, data: { status: "SUCCEEDED", succeededAt: new Date(), externalReference: result.externalUsageRecordId } }); output.submitted++; output.results.push({ merchantRatedUsageId: row.id, featureCode: row.featureCodeSnapshot, status: result.status, providerSubmissionId: claim.submission.id, errorCode: null });
     } catch (error) { const providerError = error instanceof BillingProviderError ? error : null; const status = providerError?.retryable ? "FAILED_RETRYABLE" : "FAILED_FINAL"; await db.merchantBillingProviderSubmission.update({ where: { id: claim.submission.id }, data: { status, failedAt: new Date(), errorCode: providerError?.code ?? "PROVIDER_SUBMISSION_FAILED", errorMessage: providerError?.message ?? "Provider usage submission failed." } }); if (status === "FAILED_RETRYABLE") output.retryableFailures++; else output.finalFailures++; output.results.push({ merchantRatedUsageId: row.id, featureCode: row.featureCodeSnapshot, status, providerSubmissionId: claim.submission.id, errorCode: providerError?.code ?? "PROVIDER_SUBMISSION_FAILED" }); }
   }
-  log("billing_period_usage_submission_completed", { shopId: input.shopId, billingPeriodId: period.id, ...output }); return output;
+  log("billing_period_usage_submission_completed", { shopId: input.shopId, ...output }); return output;
 }
 
 export async function closeRatedBillingPeriodLifecycle(input: { shopId: string; billingPeriodId: string; allowDeferredProviderSubmission?: boolean }): Promise<ResolvedMerchantBillingPeriod> {
