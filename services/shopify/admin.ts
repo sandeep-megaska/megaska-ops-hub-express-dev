@@ -340,7 +340,11 @@ export type ShopifyCancelledOrder = {
   note?: string | null;
 };
 
-async function adminGraphql<T>(
+/**
+ * Server-only authenticated Admin GraphQL boundary. Callers provide a shop
+ * domain (never an access token); token resolution remains centralized here.
+ */
+export async function adminGraphql<T>(
   query: string,
   variables?: Record<string, unknown>,
   options?: AdminRequestOptions
