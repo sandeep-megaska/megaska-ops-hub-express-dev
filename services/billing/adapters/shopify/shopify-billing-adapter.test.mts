@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ShopifyBillingAdapter, BillingProviderValidationError } from "./shopify-billing-adapter.ts";
+import { getShopifyUsageRecord, ShopifyBillingAdapter, BillingProviderValidationError } from "./shopify-billing-adapter.ts";
 
 function adapter(response: unknown, calls: Array<{ query: string; variables: Record<string, unknown> }>) {
   return new ShopifyBillingAdapter(async (query, variables) => { calls.push({ query, variables }); return response as never; }, console, async () => "shop-a.myshopify.com");
@@ -27,4 +27,17 @@ test("rejects negative money and normalizes Shopify user errors as final", async
   const calls: Array<{ query: string; variables: Record<string, unknown>}> = [];
   await assert.rejects(() => adapter({}, calls).createUsageCharge({ shopId: "shop-a", merchantSubscriptionId: "sub-a", merchantBillingPeriodId: "period-a", description: "OTP", currency: "INR", amount: "-1", usageLineItemId: "line", idempotencyKey: "x" }), BillingProviderValidationError);
   await assert.rejects(() => adapter({ appUsageRecordCreate: { appUsageRecord: null, userErrors: [{ code: "CAPPED_AMOUNT_EXCEEDED", message: "cap" }] } }, calls).createUsageCharge({ shopId: "shop-a", merchantSubscriptionId: "sub-a", merchantBillingPeriodId: "period-a", description: "OTP", currency: "INR", amount: "1", usageLineItemId: "line", idempotencyKey: "x" }), (error: Error & { retryable?: boolean }) => error.retryable === false);
+});
+
+
+test("retrieves a Shopify usage record through the typed adapter interface", async () => {
+  const calls: Array<{ query: string; variables: Record<string, unknown> }> = [];
+  const result = await getShopifyUsageRecord(
+    { shopId: "shop-a", externalUsageRecordId: "gid://shopify/AppUsageRecord/1" },
+    adapter({ node: { id: "gid://shopify/AppUsageRecord/1", price: { amount: "0.123456", currencyCode: "INR" } } }, calls),
+  );
+
+  assert.deepEqual(result, { id: "gid://shopify/AppUsageRecord/1", amount: "0.123456", currency: "INR" });
+  assert.match(calls[0].query, /GetAppUsageRecord/);
+  assert.deepEqual(calls[0].variables, { id: "gid://shopify/AppUsageRecord/1" });
 });
