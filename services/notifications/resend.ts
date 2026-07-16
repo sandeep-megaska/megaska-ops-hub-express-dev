@@ -3,7 +3,7 @@ import { getMerchantNotificationRoutingSettings, type NotificationSettingsDb } f
 import { recordAcceptedEmailUsage } from "../usage/email-usage.ts";
 
 export type AdminAlertEventType = "CANCELLATION" | "EXCHANGE" | "ISSUE" | "STORE_CREDIT" | "CHECKOUT" | "GENERAL";
-export type CustomerEmailEventType = AdminAlertEventType | "ORDER";
+export type CustomerEmailEventType = AdminAlertEventType | "ORDER" | "REVIEW_REQUEST" | "REVIEW_REMINDER";
 
 export type NotificationUsageContext = {
   sourceType?: string;

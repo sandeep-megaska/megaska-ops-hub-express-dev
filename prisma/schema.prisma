@@ -1398,6 +1398,9 @@ model ReviewRequest {
   reminderCount           Int                       @default(0)
   tokenHash               String?                   @unique
   tokenExpiresAt          DateTime?
+  lastSendAttemptAt       DateTime?
+  lastSendErrorCode       String?
+  providerMessageId       String?
   createdAt               DateTime                  @default(now())
   updatedAt               DateTime                  @updatedAt
   shop                    Shop                      @relation(fields: [shopId], references: [id], onDelete: Cascade)
@@ -1408,6 +1411,8 @@ model ReviewRequest {
   @@unique([shopId, shopifyOrderId, shopifyLineItemId])
   @@index([shopId, status, scheduledAt])
   @@index([shopId, status, eligibleAt])
+  @@index([status, eligibleAt, id])
+  @@index([shopId, status, eligibleAt, id])
   @@index([customerProfileId, status])
   @@index([megaskaOrderId])
   @@index([shopId, shopifyProductId])
