@@ -79,6 +79,15 @@ export class ShopifyBillingAdapter implements BillingProviderAdapter {
     } catch (error) { return normalize(error); }
   }
 
+  async getAppSubscriptionStatus(input: { shopId: string; externalSubscriptionId: string }): Promise<{ id: string; status: string } | null> {
+    const shopDomain = await this.resolveShopDomain(input.shopId);
+    if (!shopDomain) throw new BillingProviderValidationError("SHOP_NOT_FOUND", "Shop was not found.");
+    try {
+      const data = await this.execute<{ node: { id: string; status: string } | null }>(`query GetAppSubscription($id: ID!) { node(id: $id) { ... on AppSubscription { id status } } }`, { id: input.externalSubscriptionId }, { shopDomain });
+      return data.node ? { id: data.node.id, status: data.node.status } : null;
+    } catch (error) { return normalize(error); }
+  }
+
   async getUsageRecord(input: { shopId: string; externalUsageRecordId: string }): Promise<ShopifyUsageRecord | null> {
     const shopDomain = await this.resolveShopDomain(input.shopId);
     if (!shopDomain) throw new BillingProviderValidationError("SHOP_NOT_FOUND", "Shop was not found.");
