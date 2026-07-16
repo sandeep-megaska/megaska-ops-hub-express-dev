@@ -98,6 +98,7 @@ model Shop {
   merchantSubscription MerchantSubscription?
   merchantBillingPeriods MerchantBillingPeriod[]
   merchantRatedUsages MerchantRatedUsage[]
+  billingProviderSubmissions MerchantBillingProviderSubmission[]
 }
 
 enum MerchantUsageType {
@@ -229,6 +230,10 @@ model MerchantSubscription {
 
   externalSubscriptionReference String?
   externalCustomerReference     String?
+  providerStatus                String?
+  confirmationUrl               String?
+  providerActivatedAt           DateTime?
+  providerMetadata              Json?
 
   trialStartsAt                 DateTime?
   trialEndsAt                   DateTime?
@@ -246,11 +251,62 @@ model MerchantSubscription {
   shop                          Shop                       @relation(fields: [shopId], references: [id], onDelete: Cascade)
   pricingPlan                   PricingPlan                @relation(fields: [pricingPlanId], references: [id], onDelete: Restrict)
   billingPeriods                MerchantBillingPeriod[]
+  billingProviderSubmissions    MerchantBillingProviderSubmission[]
 
   @@index([pricingPlanId])
   @@index([status])
   @@index([billingProvider])
   @@index([currentPeriodEnd])
+}
+
+enum BillingProviderOperation {
+  CREATE_SUBSCRIPTION
+  CREATE_USAGE_RECORD
+}
+
+enum BillingProviderSubmissionStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED_RETRYABLE
+  FAILED_FINAL
+}
+
+model MerchantBillingProviderSubmission {
+  id                      String                          @id @default(uuid())
+  shopId                  String
+  merchantSubscriptionId  String
+  merchantBillingPeriodId String?
+  merchantRatedUsageId    String?
+  provider                BillingProvider
+  operation               BillingProviderOperation
+  idempotencyKey          String
+  status                  BillingProviderSubmissionStatus @default(PENDING)
+  externalReference       String?
+  externalParentReference String?
+  recurringLineItemReference String?
+  usageLineItemReference  String?
+  amount                  Decimal?                        @db.Decimal(18, 6)
+  currency                String?
+  attemptCount            Int                             @default(0)
+  lastAttemptAt           DateTime?
+  succeededAt             DateTime?
+  failedAt                DateTime?
+  errorCode               String?
+  errorMessage            String?
+  requestSnapshot         Json?
+  responseSnapshot        Json?
+  createdAt               DateTime                        @default(now())
+  updatedAt               DateTime                        @updatedAt
+
+  shop                    Shop                            @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  merchantSubscription    MerchantSubscription            @relation(fields: [merchantSubscriptionId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, operation, idempotencyKey])
+  @@unique([provider, operation, merchantRatedUsageId])
+  @@index([shopId, status])
+  @@index([merchantSubscriptionId, operation])
+  @@index([merchantBillingPeriodId])
 }
 
 model MerchantBillingPeriod {
