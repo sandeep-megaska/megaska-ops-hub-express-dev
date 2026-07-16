@@ -100,6 +100,7 @@ model Shop {
   merchantRatedUsages MerchantRatedUsage[]
   billingProviderSubmissions MerchantBillingProviderSubmission[]
   billingReconciliations MerchantBillingReconciliation[]
+  merchantPlanChanges MerchantPlanChange[]
 }
 
 enum MerchantUsageType {
@@ -171,12 +172,16 @@ model PricingPlan {
   monthlyBasePrice Decimal  @db.Decimal(18, 6)
   currency         String   @default("INR")
   active           Boolean  @default(true)
+  tierRank         Int      @default(0)
+  displayOrder     Int      @default(0)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
   features PricingPlanFeature[]
   merchantSubscriptions MerchantSubscription[]
   merchantRatedUsages MerchantRatedUsage[]
+  merchantPlanChangesFrom MerchantPlanChange[] @relation("PlanChangeFrom")
+  merchantPlanChangesTo MerchantPlanChange[] @relation("PlanChangeTo")
 }
 
 model PricingPlanFeature {
@@ -253,11 +258,69 @@ model MerchantSubscription {
   pricingPlan                   PricingPlan                @relation(fields: [pricingPlanId], references: [id], onDelete: Restrict)
   billingPeriods                MerchantBillingPeriod[]
   billingProviderSubmissions    MerchantBillingProviderSubmission[]
+  planChanges                   MerchantPlanChange[]
 
   @@index([pricingPlanId])
   @@index([status])
   @@index([billingProvider])
   @@index([currentPeriodEnd])
+}
+
+enum MerchantPlanChangeType {
+  INITIAL_SUBSCRIPTION
+  UPGRADE
+  DOWNGRADE
+  CANCEL
+  REACTIVATE
+}
+
+enum MerchantPlanChangeTiming {
+  IMMEDIATE
+  PERIOD_END
+}
+
+enum MerchantPlanChangeStatus {
+  PENDING
+  PENDING_PROVIDER_CONFIRMATION
+  SCHEDULED
+  PROCESSING
+  APPLIED
+  CANCELED
+  FAILED_RETRYABLE
+  FAILED_FINAL
+}
+
+model MerchantPlanChange {
+  id                     String                   @id @default(uuid())
+  shopId                 String
+  merchantSubscriptionId String
+  fromPricingPlanId      String?
+  toPricingPlanId        String?
+  changeType             MerchantPlanChangeType
+  timing                 MerchantPlanChangeTiming
+  status                 MerchantPlanChangeStatus @default(PENDING)
+  effectiveAt            DateTime?
+  requestedAt            DateTime                 @default(now())
+  confirmedAt            DateTime?
+  appliedAt              DateTime?
+  canceledAt             DateTime?
+  failedAt               DateTime?
+  provider               BillingProvider?
+  providerSubmissionId   String?
+  externalReference      String?
+  idempotencyKey         String                   @unique
+  failureCode            String?
+  failureMessage         String?
+  createdAt              DateTime                 @default(now())
+  updatedAt              DateTime                 @updatedAt
+
+  shop                   Shop                     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  merchantSubscription   MerchantSubscription     @relation(fields: [merchantSubscriptionId], references: [id], onDelete: Cascade)
+  fromPricingPlan        PricingPlan?             @relation("PlanChangeFrom", fields: [fromPricingPlanId], references: [id], onDelete: Restrict)
+  toPricingPlan          PricingPlan?             @relation("PlanChangeTo", fields: [toPricingPlanId], references: [id], onDelete: Restrict)
+
+  @@index([shopId, merchantSubscriptionId, status])
+  @@index([status, effectiveAt, id])
 }
 
 enum BillingProviderOperation {

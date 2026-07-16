@@ -1,5 +1,6 @@
 import type { MerchantBillingPeriodSummary, MerchantSubscriptionSummary } from "./billing-summary.types.ts";
 import type { BillingLifecycleStatus } from "./lifecycle.ts";
+import type { MerchantPricingPlanDto } from "./plans/plan-catalog.ts";
 
 export type BillingProviderStatusSummary = {
   provider: string;
@@ -17,4 +18,6 @@ export type MerchantBillingDashboardDto = {
   currentPeriod: MerchantBillingPeriodSummary | null;
   provider: BillingProviderStatusSummary | null;
   lifecycle: BillingLifecycleStatus | null;
+  plans: MerchantPricingPlanDto[];
+  planChange: { id: string; status: string; type: string; timing: string; effectiveAt: string | null; fromPlan: string | null; toPlan: string | null } | null;
 };

@@ -3,6 +3,8 @@ import { getCurrentBillingPeriodSummary, getCurrentMerchantSubscriptionSummary, 
 import type { BillingPeriodSummaryPage } from "./billing-summary.types.ts";
 import type { BillingProviderStatusSummary, MerchantBillingDashboardDto } from "./billing-dashboard.types.ts";
 import { getBillingLifecycleStatus } from "./lifecycle.ts";
+import { listAvailablePricingPlans } from "./plans/plan-catalog.ts";
+import { getCurrentPlanLifecycleStatus } from "./plans/plan-lifecycle.ts";
 
 type Submission = { status: string; errorCode: string | null; errorMessage: string | null; updatedAt: Date };
 type SubscriptionProviderRow = { billingProvider: string; providerStatus: string | null; confirmationUrl: string | null; providerActivatedAt: Date | null; updatedAt: Date; billingProviderSubmissions: Submission[] };
@@ -51,8 +53,10 @@ export async function getMerchantBillingDashboard(input: { shopId: string }): Pr
     getCurrentBillingPeriodSummary({ shopId: input.shopId }),
     getBillingProviderStatus({ shopId: input.shopId }),
     getBillingLifecycleStatus({ shopId: input.shopId }),
+    listAvailablePricingPlans({ shopId: input.shopId }),
+    getCurrentPlanLifecycleStatus({ shopId: input.shopId }),
   ]);
-  return { subscription, currentPeriod, provider, lifecycle };
+  return { subscription, currentPeriod, provider, lifecycle, plans, planChange: planChange ? { id: planChange.id, status: planChange.status, type: planChange.changeType, timing: planChange.timing, effectiveAt: planChange.effectiveAt?.toISOString() ?? null, fromPlan: planChange.fromPricingPlan?.name ?? null, toPlan: planChange.toPricingPlan?.name ?? null } : null };
 }
 
 export async function getMerchantBillingHistory(input: { shopId: string; cursor?: string; limit?: number }): Promise<BillingPeriodSummaryPage> {
