@@ -1407,6 +1407,7 @@ model ReviewRequest {
 
   @@unique([shopId, shopifyOrderId, shopifyLineItemId])
   @@index([shopId, status, scheduledAt])
+  @@index([shopId, status, eligibleAt])
   @@index([customerProfileId, status])
   @@index([megaskaOrderId])
   @@index([shopId, shopifyProductId])
