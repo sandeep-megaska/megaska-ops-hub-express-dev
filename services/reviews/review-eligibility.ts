@@ -1,0 +1,65 @@
+import { prisma } from "../db/prisma.ts";
+import { addDays } from "../exchange/deadlines.ts";
+import { isCancellationStatusBlocking } from "../exchange/cancellation.ts";
+import { ACTIVE_EXCHANGE_STATUSES } from "../exchange/lifecycle.ts";
+import { isIssueStatusBlocking } from "../exchange/issue.ts";
+import { resolveReviewProtectionWindows, type ResolvedReviewProtectionWindows } from "./review-protection-windows.ts";
+
+export type ReviewRequestStatus = "PENDING_ELIGIBILITY" | "ELIGIBLE" | "SCHEDULED" | "SENT" | "REMINDER_SENT" | "COMPLETED" | "BLOCKED" | "EXPIRED" | "CANCELED";
+export type ReviewRequestBlockReason = "ORDER_NOT_DELIVERED" | "CUSTOMER_NOT_RESOLVED" | "PRODUCT_NOT_RESOLVED" | "CANCELED_ORDER" | "REFUNDED_ORDER" | "CANCELLATION_REQUEST" | "EXCHANGE_REQUEST" | "ISSUE_REQUEST" | "REFUND_REQUEST" | "PROTECTION_WINDOW" | "ALREADY_REVIEWED" | "REVIEWS_DISABLED" | "CUSTOMER_UNREACHABLE" | "OTHER";
+type Settings = { reviewsEnabled: boolean; cancellationBlocksReview: boolean; refundBlocksReview: boolean; exchangeBlocksReview: boolean; issueBlocksReview: boolean };
+type Action = { requestType: "CANCELLATION" | "REFUND" | "EXCHANGE" | "ISSUE"; status: string };
+export type EligibilityRequest = { id: string; shopId: string; customerProfileId: string; megaskaOrderId: string; shopifyOrderId: string; shopifyOrderName?: string | null; shopifyLineItemId: string; shopifyProductId: string; productTitleSnapshot: string; status: ReviewRequestStatus; blockReason: ReviewRequestBlockReason | null; blockDetail: string | null; eligibleAt: Date | null; deliveredAtSnapshot: Date | null; completedAt: Date | null; sentAt: Date | null; tokenHash: string | null };
+export type EligibilityOrder = { id: string; shopId: string; customerProfileId: string; shopifyOrderId?: string | null; shopifyOrderName: string; deliveredAt: Date | null; status: string };
+
+export type ReviewEligibilityDecision = { reviewRequestId: string; previousStatus: ReviewRequestStatus; nextStatus: ReviewRequestStatus; eligible: boolean; eligibleAt: Date | null; blockReason: ReviewRequestBlockReason | null; blockDetail: string | null; deliveredAt: Date | null; evaluatedAt: Date; protection: ResolvedReviewProtectionWindows; changed: boolean };
+const terminal = new Set<ReviewRequestStatus>(["SENT", "REMINDER_SENT", "COMPLETED", "EXPIRED", "CANCELED"]);
+const permanent = new Set<ReviewRequestBlockReason>(["CANCELED_ORDER", "REFUNDED_ORDER", "ALREADY_REVIEWED"]);
+const detail: Record<Exclude<ReviewRequestBlockReason, "ORDER_NOT_DELIVERED" | "PROTECTION_WINDOW">, string> = { CUSTOMER_NOT_RESOLVED: "Customer or order ownership could not be resolved.", PRODUCT_NOT_RESOLVED: "Product identity could not be resolved.", CANCELED_ORDER: "Order is cancelled.", REFUNDED_ORDER: "Order is refunded.", CANCELLATION_REQUEST: "Cancellation request exists for this order.", EXCHANGE_REQUEST: "Exchange request exists for this order.", ISSUE_REQUEST: "Issue request exists for this order.", REFUND_REQUEST: "Refund request exists for this order.", ALREADY_REVIEWED: "A review already exists for this purchased line.", REVIEWS_DISABLED: "Reviews are disabled for this shop.", CUSTOMER_UNREACHABLE: "Customer cannot be reached.", OTHER: "Review request relations are inconsistent." };
+
+function actionBlocker(actions: Action[], settings: Settings): ReviewRequestBlockReason | null {
+  const has = (type: Action["requestType"], predicate: (status: string) => boolean) => actions.some((action) => action.requestType === type && predicate(action.status));
+  if (settings.cancellationBlocksReview && has("CANCELLATION", isCancellationStatusBlocking)) return "CANCELLATION_REQUEST";
+  if (settings.refundBlocksReview && has("REFUND", () => true)) return "REFUND_REQUEST";
+  if (settings.exchangeBlocksReview && has("EXCHANGE", (status) => ACTIVE_EXCHANGE_STATUSES.includes(status as typeof ACTIVE_EXCHANGE_STATUSES[number]))) return "EXCHANGE_REQUEST";
+  if (settings.issueBlocksReview && has("ISSUE", isIssueStatusBlocking)) return "ISSUE_REQUEST";
+  return null;
+}
+function changed(request: EligibilityRequest, next: ReviewRequestStatus, reason: ReviewRequestBlockReason | null, blockDetail: string | null, eligibleAt: Date | null, deliveredAt: Date | null, completedAt: Date | null) {
+  const sameDate = (a: Date | null, b: Date | null) => a?.getTime() === b?.getTime();
+  const snapshot = terminal.has(request.status) ? request.deliveredAtSnapshot : deliveredAt;
+  return request.status !== next || request.blockReason !== reason || request.blockDetail !== blockDetail || !sameDate(request.eligibleAt, eligibleAt) || !sameDate(request.deliveredAtSnapshot, snapshot) || !sameDate(request.completedAt, completedAt);
+}
+
+export function decideReviewEligibility(input: { request: EligibilityRequest; order: EligibilityOrder | null; customerExists: boolean; reviewExists: { submittedAt: Date } | null; settings: Settings; actions: Action[]; protection: ResolvedReviewProtectionWindows; now?: Date }): ReviewEligibilityDecision {
+  const { request, order, settings, protection } = input; const now = input.now ?? new Date();
+  const result = (nextStatus: ReviewRequestStatus, blockReason: ReviewRequestBlockReason | null, eligibleAt: Date | null, deliveredAt: Date | null, completedAt: Date | null = request.completedAt): ReviewEligibilityDecision => { const blockDetail = blockReason === "ORDER_NOT_DELIVERED" ? "Order has not been delivered." : blockReason === "PROTECTION_WINDOW" ? "Post-delivery protection window is still active." : blockReason ? detail[blockReason] : null; return { reviewRequestId: request.id, previousStatus: request.status, nextStatus, eligible: nextStatus === "ELIGIBLE", eligibleAt, blockReason, blockDetail, deliveredAt, evaluatedAt: now, protection, changed: changed(request, nextStatus, blockReason, blockDetail, eligibleAt, deliveredAt, completedAt) }; };
+  if (terminal.has(request.status)) return result(request.status, request.blockReason, request.eligibleAt, request.deliveredAtSnapshot);
+  if (!settings.reviewsEnabled) return result("BLOCKED", "REVIEWS_DISABLED", request.eligibleAt, order?.deliveredAt ?? null);
+  if (!order || order.shopId !== request.shopId || order.customerProfileId !== request.customerProfileId || !input.customerExists) return result("BLOCKED", "CUSTOMER_NOT_RESOLVED", null, null);
+  if (!request.shopifyProductId || !request.shopifyLineItemId || !request.productTitleSnapshot) return result("BLOCKED", "PRODUCT_NOT_RESOLVED", null, order.deliveredAt);
+  if (input.reviewExists) return result("COMPLETED", "ALREADY_REVIEWED", request.eligibleAt, order.deliveredAt, input.reviewExists.submittedAt);
+  if (request.status === "SCHEDULED" && (request.sentAt || request.tokenHash)) return result("SCHEDULED", request.blockReason, request.eligibleAt, request.deliveredAtSnapshot);
+  if (order.status === "CANCELLED" && settings.cancellationBlocksReview) return result("BLOCKED", "CANCELED_ORDER", null, order.deliveredAt);
+  if (order.status === "REFUNDED" && settings.refundBlocksReview) return result("BLOCKED", "REFUNDED_ORDER", null, order.deliveredAt);
+  if (!order.deliveredAt) return result("PENDING_ELIGIBILITY", "ORDER_NOT_DELIVERED", null, null);
+  const blocker = actionBlocker(input.actions, settings); if (blocker) return result("BLOCKED", blocker, addDays(order.deliveredAt, protection.effectiveProtectionDays), order.deliveredAt);
+  const eligibleAt = addDays(order.deliveredAt, protection.effectiveProtectionDays);
+  if (now.getTime() < eligibleAt.getTime()) return result("PENDING_ELIGIBILITY", "PROTECTION_WINDOW", eligibleAt, order.deliveredAt);
+  return result("ELIGIBLE", null, eligibleAt, order.deliveredAt);
+}
+
+export type ReviewEligibilityDb = { reviewRequest: { findFirst(args: unknown): Promise<EligibilityRequest | null>; update(args: unknown): Promise<EligibilityRequest>; findMany(args: unknown): Promise<EligibilityRequest[]> }; megaskaOrder: { findFirst(args: unknown): Promise<EligibilityOrder | null> }; customerProfile: { findFirst(args: unknown): Promise<unknown | null> }; productReview: { findFirst(args: unknown): Promise<{ submittedAt: Date } | null> }; orderActionRequest: { findMany(args: unknown): Promise<Action[]> }; reviewSettings: { findUnique(args: unknown): Promise<(Settings & { requestDelayDays: number; exchangeProtectionDays: number | null; issueProtectionDays: number | null }) | null> } };
+export async function evaluateAndApplyReviewRequestEligibility(input: { shopId: string; reviewRequestId: string; now?: Date }, db: ReviewEligibilityDb = prisma as unknown as ReviewEligibilityDb): Promise<{ decision: ReviewEligibilityDecision; persisted: EligibilityRequest }> {
+  const request = await db.reviewRequest.findFirst({ where: { id: input.reviewRequestId, shopId: input.shopId } }); if (!request) throw new ReviewEligibilityError("REVIEW_REQUEST_NOT_FOUND", "Review request was not found for this shop.");
+  const [order, customer, protection] = await Promise.all([db.megaskaOrder.findFirst({ where: { id: request.megaskaOrderId, shopId: input.shopId } }), db.customerProfile.findFirst({ where: { id: request.customerProfileId, shopId: input.shopId } }), resolveReviewProtectionWindows(input.shopId, db)]);
+  const actions = order ? await db.orderActionRequest.findMany({ where: { shopId: input.shopId, OR: [{ megaskaOrderId: order.id }, { shopifyOrderId: order.shopifyOrderId }, { orderNumber: order.shopifyOrderName }] } }) : [];
+  const review = await db.productReview.findFirst({ where: { shopId: input.shopId, OR: [{ reviewRequestId: request.id }, { shopifyOrderId: request.shopifyOrderId, shopifyLineItemId: request.shopifyLineItemId }] } });
+  const settings = await reviewSettingsForEligibility(input.shopId, db); const decision = decideReviewEligibility({ request, order, customerExists: Boolean(customer), reviewExists: review, settings, actions, protection, now: input.now });
+  if (!decision.changed) return { decision, persisted: request };
+  const persisted = await db.reviewRequest.update({ where: { id: request.id }, data: { status: decision.nextStatus, blockReason: decision.blockReason, blockDetail: decision.blockDetail, eligibleAt: decision.eligibleAt, deliveredAtSnapshot: terminal.has(request.status) ? request.deliveredAtSnapshot : decision.deliveredAt, completedAt: decision.nextStatus === "COMPLETED" ? (review?.submittedAt ?? request.completedAt) : request.completedAt } }); return { decision, persisted };
+}
+async function reviewSettingsForEligibility(shopId: string, db: ReviewEligibilityDb): Promise<Settings> { const row = await db.reviewSettings.findUnique({ where: { shopId } }); return row ?? { reviewsEnabled: false, cancellationBlocksReview: true, refundBlocksReview: true, exchangeBlocksReview: true, issueBlocksReview: true }; }
+export class ReviewEligibilityError extends Error { readonly code: "REVIEW_REQUEST_NOT_FOUND" | "REVIEW_ORDER_NOT_FOUND" | "REVIEW_ORDER_SHOP_MISMATCH"; constructor(code: "REVIEW_REQUEST_NOT_FOUND" | "REVIEW_ORDER_NOT_FOUND" | "REVIEW_ORDER_SHOP_MISMATCH", message: string) { super(message); this.name = "ReviewEligibilityError"; this.code = code; } }
+export async function evaluateReviewRequestsForOrder(input: { shopId: string; megaskaOrderId: string; now?: Date }, db: ReviewEligibilityDb = prisma as unknown as ReviewEligibilityDb) { const order = await db.megaskaOrder.findFirst({ where: { id: input.megaskaOrderId, shopId: input.shopId } }); if (!order) throw new ReviewEligibilityError("REVIEW_ORDER_NOT_FOUND", "Order was not found for this shop."); const requests = await db.reviewRequest.findMany({ where: { shopId: input.shopId, megaskaOrderId: order.id } }); const results = await Promise.all(requests.map((request) => evaluateAndApplyReviewRequestEligibility({ shopId: input.shopId, reviewRequestId: request.id, now: input.now }, db))); const decisions = results.map((result) => result.decision); return { shopId: input.shopId, megaskaOrderId: order.id, evaluated: decisions.length, eligible: decisions.filter((d) => d.nextStatus === "ELIGIBLE").length, waiting: decisions.filter((d) => d.nextStatus === "PENDING_ELIGIBILITY").length, blocked: decisions.filter((d) => d.nextStatus === "BLOCKED").length, unchanged: decisions.filter((d) => !d.changed).length, decisions }; }
+export async function listReviewEligibilityCandidates(input: { shopId?: string; deliveredBefore?: Date; limit?: number; cursor?: string; includeEligible?: boolean }, db: ReviewEligibilityDb = prisma as unknown as ReviewEligibilityDb) { const limit = Math.min(Math.max(input.limit ?? 100, 1), 250); const statuses: ReviewRequestStatus[] = input.includeEligible ? ["PENDING_ELIGIBILITY", "BLOCKED", "ELIGIBLE"] : ["PENDING_ELIGIBILITY", "BLOCKED"]; return db.reviewRequest.findMany({ take: limit, ...(input.cursor ? { cursor: { id: input.cursor }, skip: 1 } : {}), where: { ...(input.shopId ? { shopId: input.shopId } : {}), status: { in: statuses }, ...(input.deliveredBefore ? { deliveredAtSnapshot: { lte: input.deliveredBefore } } : {}) }, orderBy: [{ updatedAt: "asc" }, { id: "asc" }] }); }
