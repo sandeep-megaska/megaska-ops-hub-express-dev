@@ -48,7 +48,7 @@ export async function getBillingProviderStatus(input: { shopId: string }): Promi
 }
 
 export async function getMerchantBillingDashboard(input: { shopId: string }): Promise<MerchantBillingDashboardDto> {
-  const [subscription, currentPeriod, provider, lifecycle] = await Promise.all([
+  const [subscription, currentPeriod, provider, lifecycle, plans, planChange] = await Promise.all([
     getCurrentMerchantSubscriptionSummary({ shopId: input.shopId }),
     getCurrentBillingPeriodSummary({ shopId: input.shopId }),
     getBillingProviderStatus({ shopId: input.shopId }),
