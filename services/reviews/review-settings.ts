@@ -1,4 +1,5 @@
 import { prisma } from "../db/prisma.ts";
+import type { ReviewSettings as PrismaReviewSettings } from "../../generated/prisma/index.js";
 import { isReviewSort, normalizeReviewSort, type ReviewSort } from "./review-sort.ts";
 
 export type ReviewSettings = {
@@ -33,9 +34,11 @@ export type ReviewSettings = {
   showVariantTitle: boolean;
 };
 
-export type RawReviewSettings = Omit<ReviewSettings, "defaultReviewSort"> & {
-  defaultReviewSort: string;
-};
+/**
+ * Scalar settings fields as returned by Prisma. `defaultReviewSort` remains a
+ * string here because the backing column is a Prisma String field.
+ */
+export type RawReviewSettings = Pick<PrismaReviewSettings, keyof ReviewSettings>;
 
 export const DEFAULT_REVIEW_SETTINGS: Omit<ReviewSettings, "shopId"> = {
   reviewsEnabled: false,
@@ -86,8 +89,8 @@ export function normalizeReviewsPerPage(value: unknown): number {
   return Math.min(25, Math.max(1, value));
 }
 
-export function toReviewSettings(row: RawReviewSettings | null): ReviewSettings {
-  if (!row) return { shopId: "", ...DEFAULT_REVIEW_SETTINGS };
+export function toReviewSettings(row: RawReviewSettings | null, fallbackShopId = ""): ReviewSettings {
+  if (!row) return { shopId: fallbackShopId, ...DEFAULT_REVIEW_SETTINGS };
 
   return {
     ...DEFAULT_REVIEW_SETTINGS,
@@ -117,7 +120,7 @@ export function toReviewSettings(row: RawReviewSettings | null): ReviewSettings 
 
 export async function getReviewSettings(shopId: string, db: ReviewSettingsDb = prisma): Promise<ReviewSettings> {
   const row = await db.reviewSettings.findUnique({ where: { shopId } });
-  return row ? toReviewSettings(row) : { shopId, ...DEFAULT_REVIEW_SETTINGS };
+  return toReviewSettings(row, shopId);
 }
 
 function integer(value: unknown, name: string, min: number, max: number, nullable = false): void {
