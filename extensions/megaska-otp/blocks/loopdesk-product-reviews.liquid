@@ -1,0 +1,8 @@
+{% if product %}
+  {{ 'loopdesk-product-reviews.css' | asset_url | stylesheet_tag }}
+  <div id="loopdesk-product-reviews-root-{{ block.id }}" data-loopdesk-product-reviews data-product-id="{{ product.id }}" data-product-gid="gid://shopify/Product/{{ product.id }}" data-app-proxy-base="/apps/megaska" role="region" aria-label="Product reviews" {{ block.shopify_attributes }}></div>
+  <script src="{{ 'loopdesk-product-reviews.js' | asset_url }}" defer></script>
+{% endif %}
+{% schema %}
+{"name":"LoopDesk Product Reviews","target":"section","settings":[]}
+{% endschema %}
