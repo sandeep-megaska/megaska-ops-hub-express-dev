@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { prisma } from "../db/prisma";
 import { getDefaultShopFromConfig, getShopByDomain, normalizeShopDomain } from "./shop";
+import { createInternalAppProxyProof as createProof, verifyInternalAppProxyProof } from "./app-proxy-internal-proof";
 
 type AppProxyShop = {
   id: string;
@@ -38,6 +39,35 @@ const ACTIVE_MODULE_KEYS = new Set([
 
 function getShopifyApiSecret() {
   return String(process.env.SHOPIFY_API_SECRET || process.env.SHOPIFY_API_SECRET_KEY || "").trim();
+}
+
+/**
+ * The app-proxy catch-all makes an internal request to an app API route after
+ * Shopify's signature has been checked.  A plain marker header is not an
+ * authorization boundary: browsers can forge it.  Bind that internal hop to
+ * the server-only Shopify secret instead.
+ */
+export function createInternalAppProxyProof(input: {
+  timestamp: string;
+  method: string;
+  pathname: string;
+  shopDomain: string;
+}) {
+  return createProof({ ...input, secret: getShopifyApiSecret() });
+}
+
+export function isVerifiedInternalAppProxyRequest(request: NextRequest) {
+  const timestamp = request.headers.get("x-megaska-app-proxy-timestamp");
+  const proof = request.headers.get("x-megaska-app-proxy-proof");
+  const shopDomain = normalizeShopDomain(request.headers.get("x-shopify-shop-domain"));
+  return verifyInternalAppProxyProof({
+    secret: getShopifyApiSecret(),
+    timestamp,
+    proof,
+    method: request.method,
+    pathname: new URL(request.url).pathname,
+    shopDomain,
+  });
 }
 
 function timingSafeEqualHex(left: string, right: string) {

@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { appProxyJsonError, requireEnabledModule, requireShopFromAppProxy, requireStorefrontShopFromAppProxy } from "../../../../../services/shopify/app-proxy";
+import { appProxyJsonError, createInternalAppProxyProof, requireEnabledModule, requireShopFromAppProxy, requireStorefrontShopFromAppProxy } from "../../../../../services/shopify/app-proxy";
 
 
 const HOP_BY_HOP_RESPONSE_HEADERS = new Set([
@@ -114,6 +114,18 @@ async function proxyInternalApi(request: NextRequest, context: { params: Promise
     const headers = new Headers(request.headers);
     headers.set("x-shopify-shop-domain", shop.shopDomain);
     headers.set("x-megaska-app-proxy", "1");
+    const proxyTimestamp = String(Date.now());
+    const proxyProof = createInternalAppProxyProof({
+      timestamp: proxyTimestamp,
+      method: request.method,
+      pathname: targetUrl.pathname,
+      shopDomain: shop.shopDomain,
+    });
+    if (!proxyProof) {
+      return NextResponse.json({ ok: false, error: "App proxy is unavailable" }, { status: 503 });
+    }
+    headers.set("x-megaska-app-proxy-timestamp", proxyTimestamp);
+    headers.set("x-megaska-app-proxy-proof", proxyProof);
     // The browser Origin belongs to the Shopify storefront; this internal hop is trusted only after app-proxy verification.
     headers.set("origin", targetUrl.origin);
     headers.delete("host");
