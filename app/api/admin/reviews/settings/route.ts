@@ -19,6 +19,9 @@ export function publicSettings(settings: Awaited<ReturnType<typeof getReviewSett
     showVariantTitle: settings.showVariantTitle,
     reviewsPerPage: settings.reviewsPerPage,
     defaultReviewSort: settings.defaultReviewSort,
+    reviewSectionHeading: settings.reviewSectionHeading, reviewEmptyStateText: settings.reviewEmptyStateText, reviewVerifiedPurchaseText: settings.reviewVerifiedPurchaseText, reviewLoadMoreText: settings.reviewLoadMoreText, reviewWriteReviewText: settings.reviewWriteReviewText, reviewCountTextTemplate: settings.reviewCountTextTemplate,
+    reviewAccentColor: settings.reviewAccentColor, reviewStarColor: settings.reviewStarColor, reviewHeadingColor: settings.reviewHeadingColor, reviewTextColor: settings.reviewTextColor, reviewMutedTextColor: settings.reviewMutedTextColor, reviewBorderColor: settings.reviewBorderColor, reviewBackgroundColor: settings.reviewBackgroundColor, reviewButtonBackgroundColor: settings.reviewButtonBackgroundColor, reviewButtonTextColor: settings.reviewButtonTextColor,
+    reviewAlignment: settings.reviewAlignment, reviewCardStyle: settings.reviewCardStyle, reviewCornerRadius: settings.reviewCornerRadius, reviewSectionSpacing: settings.reviewSectionSpacing, showReviewSectionHeading: settings.showReviewSectionHeading, showWriteReviewButton: settings.showWriteReviewButton,
   };
 }
 
