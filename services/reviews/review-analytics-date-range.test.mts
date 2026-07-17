@@ -1,0 +1,4 @@
+import assert from "node:assert/strict";import test from "node:test";import { comparison,resolveReviewAnalyticsRange } from "./review-analytics-date-range.ts";
+test("defaults to 30 days and calculates an equivalent preceding comparison",()=>{const r=resolveReviewAnalyticsRange(new URLSearchParams(),new Date("2026-06-30T00:00:00Z"));assert.equal(r.end.getTime()-r.start.getTime(),30*86_400_000);assert.equal(r.start.getTime()-r.comparisonStart.getTime(),r.end.getTime()-r.start.getTime()+1)});
+test("rejects reversed and overlong custom ranges",()=>{assert.throws(()=>resolveReviewAnalyticsRange(new URLSearchParams("range=custom&start=2026-06-10&end=2026-06-01")));assert.throws(()=>resolveReviewAnalyticsRange(new URLSearchParams("range=custom&start=2024-01-01&end=2026-07-17")))});
+test("does not report infinite comparison growth",()=>assert.equal(comparison(5,0).percentageChange,null));
