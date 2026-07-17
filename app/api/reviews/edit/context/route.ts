@@ -1,0 +1,5 @@
+import type { NextRequest } from "next/server";
+import { getEditableReviewByToken } from "../../../../../services/reviews/review-editing.ts";
+import { allowedOrigin, parseJson, rateLimit, reply, requireReviewProxy } from "../../../../../services/reviews/review-submission-http.ts";
+const status=(e:string)=>["REVIEW_EDIT_TOKEN_EXPIRED","REVIEW_EDIT_TOKEN_REVOKED","REVIEW_EDIT_WINDOW_EXPIRED","REVIEW_EDITING_DISABLED"].includes(e)?410:404;
+export async function POST(request:NextRequest){if(!allowedOrigin(request))return reply({ok:false,errorCode:"REVIEW_EDIT_TOKEN_INVALID"},403);const shop=await requireReviewProxy(request).catch(()=>null);if(!shop)return reply({ok:false,errorCode:"REVIEW_EDIT_TOKEN_INVALID"},401);if(!rateLimit(request,"review-edit-context",20,600000))return reply({ok:false,errorCode:"RATE_LIMITED"},429);const body=await parseJson(request);if(!body||typeof body.token!=="string")return reply({ok:false,errorCode:"REVIEW_EDIT_TOKEN_INVALID"},400);const result=await getEditableReviewByToken({shopId:shop.id,token:body.token});return reply(result,result.ok?200:status(result.errorCode));} export const dynamic="force-dynamic";

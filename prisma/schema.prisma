@@ -105,6 +105,7 @@ model Shop {
   billingReconciliations       MerchantBillingReconciliation[]
   merchantPlanChanges          MerchantPlanChange[]
   reviewSettings               ReviewSettings?
+  reviewEditTokens             ProductReviewEditToken[]
   reviewRequests               ReviewRequest[]
   productReviews               ProductReview[]
   productReviewMedia           ProductReviewMedia[]
@@ -1455,6 +1456,9 @@ model ProductReview {
   deletedAt             DateTime?
   moderationNote        String?
   editedAt              DateTime?
+  lastEditedAt          DateTime?
+  editCount             Int                         @default(0)
+  lastEditedBy          String?
   createdAt             DateTime                    @default(now())
   updatedAt             DateTime                    @updatedAt
   shop                  Shop                        @relation(fields: [shopId], references: [id], onDelete: Cascade)
@@ -1463,11 +1467,49 @@ model ProductReview {
   megaskaOrder          MegaskaOrder?               @relation(fields: [megaskaOrderId], references: [id], onDelete: SetNull)
   media                 ProductReviewMedia[]
   merchantReply         ProductReviewMerchantReply?
+  editTokens            ProductReviewEditToken[]
+  revisions             ProductReviewRevision[]
 
   @@index([shopId, shopifyProductId, status, publishedAt])
   @@index([shopId, customerProfileId, submittedAt])
   @@index([megaskaOrderId])
   @@index([shopId, status, submittedAt])
+}
+
+model ProductReviewEditToken {
+  id        String        @id @default(uuid())
+  shopId    String
+  reviewId  String
+  tokenHash String        @unique
+  expiresAt DateTime
+  createdAt DateTime      @default(now())
+  usedAt    DateTime?
+  revokedAt DateTime?
+  useCount  Int           @default(0)
+  shop      Shop          @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  review    ProductReview @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+
+  @@index([shopId, reviewId])
+  @@index([shopId, expiresAt])
+}
+
+model ProductReviewRevision {
+  id             String        @id @default(uuid())
+  shopId         String
+  reviewId       String
+  previousRating Int
+  previousTitle  String?
+  previousBody   String?
+  newRating      Int
+  newTitle       String?
+  newBody        String?
+  previousStatus String
+  newStatus      String
+  editSource     String
+  createdAt      DateTime      @default(now())
+  review         ProductReview @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+
+  @@index([shopId, reviewId, createdAt])
 }
 
 model ProductReviewMedia {
