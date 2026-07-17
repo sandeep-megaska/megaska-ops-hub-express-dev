@@ -89,6 +89,16 @@ Lookup and submission use app-proxy-only POST JSON, bounded request bodies, orig
 
 ## Storefront published review display (REVIEW-1A.8)
 
+### Independent merchant controls
+
+Review settings intentionally separate collection, public display, and automation:
+
+- `reviewsEnabled` allows new customer review collection. Turning it off blocks new review opportunities and submissions, but does not delete or unpublish existing reviews.
+- `storefrontReviewsEnabled` controls only the Product Reviews storefront block. Turning it off hides published reviews without changing their moderation status. It may remain on when `reviewsEnabled` is off, so historical published reviews can stay visible.
+- `automaticRequestsEnabled` controls automatic scheduling and sending for eligible delivered orders. Turning it off does not by itself invalidate otherwise valid manual or already-issued review submission flows; automatic requests also require collection to be enabled.
+
+For example, `reviewsEnabled=false` with `storefrontReviewsEnabled=true` stops new collection while continuing to display already-published reviews. Either collection state combined with `storefrontReviewsEnabled=false` hides the storefront block.
+
 Only `PUBLISHED`, non-deleted reviews are public. Storefront queries always scope the review and aggregate lookup by both `shopId` resolved from the verified Shopify app-proxy hop and the canonical numeric Shopify product ID; a browser never supplies a tenant ID. The query uses `ProductReviewAggregate` for average/count/distribution, returns a safe zero summary when absent, and lists only a deliberately public projection. Pagination is bounded to 1–25 reviews and deterministic sorts are newest, highest rating, and lowest rating.
 
 `POST /apps/megaska/api/reviews/storefront/product` forwards to the protected internal route and requires the existing signed internal app-proxy proof, bounded JSON, no-store security headers, and rate limiting. Product IDs accept only numeric IDs or Product GIDs. Pending and rejected reviews, customer/order/token/session data, moderation data, and media are never returned.
