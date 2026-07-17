@@ -39,4 +39,4 @@ return (
     <ReviewDisplaySettingsClient initial={displaySettings} />
     <ReviewModerationClient shop={shop.shopDomain} />
   </>
-);
+);}
