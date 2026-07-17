@@ -74,44 +74,45 @@ model Shop {
   tokenExpiresAt           DateTime?
   tokenRotationRequiredAt  DateTime?
 
-  customers                    CustomerProfile[]
-  otpChallenges                OTPChallenge[]
-  orderActionRequests          OrderActionRequest[]
-  megaskaOrders                MegaskaOrder[]
-  walletReservations           WalletReservation[]
-  walletAccounts               WalletAccount[]
-  walletTransactions           WalletTransaction[]
-  gstSettings                  GstSettings[]
-  gstProductTaxMaps            GstProductTaxMap[]
-  gstSkuTaxMaps                GstSkuTaxMap[]
-  gstOrderImports              GstOrderImport[]
-  refundRequests               RefundRequest[]
-  codAdvanceSettings           CodAdvanceSettings[]
-  codAdvanceIntents            CodAdvanceIntent[]
-  moduleConfigs                ShopModuleConfig[]
-  proxyRoutes                  ShopProxyRoute[]
-  installationEvents           ShopInstallationEvent[]
-  recoveryTokens               CheckoutRecoveryToken[]
-  promotionRules               PromotionRule[]
-  promotionAuditLogs           PromotionAuditLog[]
-  promotionRuntimeSyncState    PromotionRuntimeSyncState?
-  merchantNotificationSettings MerchantNotificationSettings?
-  merchantOtpSettings          MerchantOtpSettings?
-  merchantUsageEvents          MerchantUsageEvent[]
-  merchantSubscription         MerchantSubscription?
-  merchantBillingPeriods       MerchantBillingPeriod[]
-  merchantRatedUsages          MerchantRatedUsage[]
-  billingProviderSubmissions   MerchantBillingProviderSubmission[]
-  billingReconciliations       MerchantBillingReconciliation[]
-  merchantPlanChanges          MerchantPlanChange[]
-  reviewSettings               ReviewSettings?
-  reviewRequests               ReviewRequest[]
-  productReviews               ProductReview[]
-  productReviewMedia           ProductReviewMedia[]
-  productReviewReplies         ProductReviewMerchantReply[]
-  reviewEditTokens             ProductReviewEditToken[]
-  productReviewRevisions       ProductReviewRevision[]
-  productReviewAggregates      ProductReviewAggregate[]
+  customers                     CustomerProfile[]
+  otpChallenges                 OTPChallenge[]
+  orderActionRequests           OrderActionRequest[]
+  megaskaOrders                 MegaskaOrder[]
+  walletReservations            WalletReservation[]
+  walletAccounts                WalletAccount[]
+  walletTransactions            WalletTransaction[]
+  gstSettings                   GstSettings[]
+  gstProductTaxMaps             GstProductTaxMap[]
+  gstSkuTaxMaps                 GstSkuTaxMap[]
+  gstOrderImports               GstOrderImport[]
+  refundRequests                RefundRequest[]
+  codAdvanceSettings            CodAdvanceSettings[]
+  codAdvanceIntents             CodAdvanceIntent[]
+  moduleConfigs                 ShopModuleConfig[]
+  proxyRoutes                   ShopProxyRoute[]
+  installationEvents            ShopInstallationEvent[]
+  recoveryTokens                CheckoutRecoveryToken[]
+  promotionRules                PromotionRule[]
+  promotionAuditLogs            PromotionAuditLog[]
+  promotionRuntimeSyncState     PromotionRuntimeSyncState?
+  merchantNotificationSettings  MerchantNotificationSettings?
+  merchantOtpSettings           MerchantOtpSettings?
+  merchantUsageEvents           MerchantUsageEvent[]
+  merchantSubscription          MerchantSubscription?
+  merchantBillingPeriods        MerchantBillingPeriod[]
+  merchantRatedUsages           MerchantRatedUsage[]
+  billingProviderSubmissions    MerchantBillingProviderSubmission[]
+  billingReconciliations        MerchantBillingReconciliation[]
+  merchantPlanChanges           MerchantPlanChange[]
+  reviewSettings                ReviewSettings?
+  reviewRequests                ReviewRequest[]
+  productReviews                ProductReview[]
+  productReviewMedia            ProductReviewMedia[]
+  productReviewReplies          ProductReviewMerchantReply[]
+  reviewEditTokens              ProductReviewEditToken[]
+  reviewRequestDeliveryAttempts ProductReviewRequestDeliveryAttempt[]
+  productReviewRevisions        ProductReviewRevision[]
+  productReviewAggregates       ProductReviewAggregate[]
 }
 
 enum MerchantUsageType {
@@ -1292,11 +1293,46 @@ model OrderShipmentEvent {
   @@index([shipmentId, occurredAt])
 }
 
+enum ReviewRequestTrigger {
+  FULFILLED
+  DELIVERED
+}
+
+enum ReviewRequestChannel {
+  EMAIL
+  SMS
+  WHATSAPP
+}
+
+enum ReviewRequestAttemptType {
+  INITIAL
+  REMINDER
+}
+
+enum ReviewRequestAttemptStatus {
+  PENDING
+  SENDING
+  ACCEPTED
+  DELIVERED
+  FAILED_RETRYABLE
+  FAILED_PERMANENT
+  CANCELLED
+  SUPPRESSED
+}
+
 enum ReviewRequestStatus {
   PENDING_ELIGIBILITY
   ELIGIBLE
   SCHEDULED
+  READY
+  SENDING
   SENT
+  DELIVERED
+  OPENED
+  CLICKED
+  SUBMITTED
+  SUPPRESSED
+  FAILED
   REMINDER_SENT
   COMPLETED
   BLOCKED
@@ -1351,51 +1387,66 @@ enum ProductReviewMediaStatus {
 }
 
 model ReviewSettings {
-  id                            String   @id @default(uuid())
-  shopId                        String   @unique
-  reviewsEnabled                Boolean  @default(false)
-  automaticRequestsEnabled      Boolean  @default(false)
-  requestDelayDays              Int      @default(7)
-  reminderEnabled               Boolean  @default(false)
-  reminderDelayDays             Int      @default(7)
-  maxReminderCount              Int      @default(1)
-  minimumRating                 Int      @default(1)
-  maximumRating                 Int      @default(5)
-  requireVerifiedPurchase       Boolean  @default(true)
-  moderationRequired            Boolean  @default(true)
-  allowReviewEditing            Boolean  @default(true)
-  reviewEditWindowDays          Int      @default(30)
-  allowReviewDeletion           Boolean  @default(true)
-  allowMedia                    Boolean  @default(true)
-  maxMediaCount                 Int      @default(5)
-  reviewMediaEnabled            Boolean  @default(true)
-  reviewPhotoUploadsEnabled     Boolean  @default(true)
-  reviewVideoUploadsEnabled     Boolean  @default(true)
-  reviewMaxMediaItems           Int      @default(5)
-  reviewMaxPhotoSizeBytes       Int      @default(8388608)
-  reviewMaxVideoSizeBytes       Int      @default(41943040)
-  reviewMaxVideoDurationSeconds Int      @default(30)
-  exchangeProtectionDays        Int?
-  issueProtectionDays           Int?
-  cancellationBlocksReview      Boolean  @default(true)
-  exchangeBlocksReview          Boolean  @default(true)
-  issueBlocksReview             Boolean  @default(true)
-  refundBlocksReview            Boolean  @default(true)
-  storefrontReviewsEnabled      Boolean  @default(true)
-  showReviewSummary             Boolean  @default(true)
-  showRatingDistribution        Boolean  @default(true)
-  showVerifiedPurchaseBadge     Boolean  @default(true)
-  reviewsPerPage                Int      @default(10)
-  defaultReviewSort             String   @default("NEWEST")
-  showReviewDates               Boolean  @default(true)
-  showVariantTitle              Boolean  @default(true)
-  createdAt                     DateTime @default(now())
-  updatedAt                     DateTime @updatedAt
-  shop                          Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  id                                   String               @id @default(uuid())
+  shopId                               String               @unique
+  reviewsEnabled                       Boolean              @default(false)
+  automaticRequestsEnabled             Boolean              @default(false)
+  reviewRequestTrigger                 ReviewRequestTrigger @default(DELIVERED)
+  reviewRequestSendHourLocal           Int                  @default(10)
+  reviewRequestPrimaryChannel          ReviewRequestChannel @default(EMAIL)
+  reviewRequestEmailEnabled            Boolean              @default(true)
+  reviewRequestSmsEnabled              Boolean              @default(false)
+  reviewRequestWhatsappEnabled         Boolean              @default(false)
+  reviewRequestIncludeProductImage     Boolean              @default(true)
+  reviewRequestIncludeIncentiveText    Boolean              @default(false)
+  reviewRequestIncentiveText           String?
+  reviewRequestSenderName              String?
+  reviewRequestReplyToEmail            String?
+  reviewRequestSubjectTemplate         String?
+  reviewRequestBodyTemplate            String?
+  reviewRequestReminderSubjectTemplate String?
+  reviewRequestReminderBodyTemplate    String?
+  requestDelayDays                     Int                  @default(7)
+  reminderEnabled                      Boolean              @default(false)
+  reminderDelayDays                    Int                  @default(7)
+  maxReminderCount                     Int                  @default(1)
+  minimumRating                        Int                  @default(1)
+  maximumRating                        Int                  @default(5)
+  requireVerifiedPurchase              Boolean              @default(true)
+  moderationRequired                   Boolean              @default(true)
+  allowReviewEditing                   Boolean              @default(true)
+  reviewEditWindowDays                 Int                  @default(30)
+  allowReviewDeletion                  Boolean              @default(true)
+  allowMedia                           Boolean              @default(true)
+  maxMediaCount                        Int                  @default(5)
+  reviewMediaEnabled                   Boolean              @default(true)
+  reviewPhotoUploadsEnabled            Boolean              @default(true)
+  reviewVideoUploadsEnabled            Boolean              @default(true)
+  reviewMaxMediaItems                  Int                  @default(5)
+  reviewMaxPhotoSizeBytes              Int                  @default(8388608)
+  reviewMaxVideoSizeBytes              Int                  @default(41943040)
+  reviewMaxVideoDurationSeconds        Int                  @default(30)
+  exchangeProtectionDays               Int?
+  issueProtectionDays                  Int?
+  cancellationBlocksReview             Boolean              @default(true)
+  exchangeBlocksReview                 Boolean              @default(true)
+  issueBlocksReview                    Boolean              @default(true)
+  refundBlocksReview                   Boolean              @default(true)
+  storefrontReviewsEnabled             Boolean              @default(true)
+  showReviewSummary                    Boolean              @default(true)
+  showRatingDistribution               Boolean              @default(true)
+  showVerifiedPurchaseBadge            Boolean              @default(true)
+  reviewsPerPage                       Int                  @default(10)
+  defaultReviewSort                    String               @default("NEWEST")
+  showReviewDates                      Boolean              @default(true)
+  showVariantTitle                     Boolean              @default(true)
+  createdAt                            DateTime             @default(now())
+  updatedAt                            DateTime             @updatedAt
+  shop                                 Shop                 @relation(fields: [shopId], references: [id], onDelete: Cascade)
 }
 
 model ReviewRequest {
-  id                      String                    @id @default(uuid())
+  id                      String                                @id @default(uuid())
   shopId                  String
   customerProfileId       String
   megaskaOrderId          String
@@ -1410,7 +1461,20 @@ model ReviewRequest {
   productImageUrlSnapshot String?
   orderCreatedAt          DateTime?
   deliveredAtSnapshot     DateTime?
-  status                  ReviewRequestStatus       @default(PENDING_ELIGIBILITY)
+  triggerEventType        ReviewRequestTrigger?
+  triggerAt               DateTime?
+  nextAttemptAt           DateTime?
+  deliveredAt             DateTime?
+  openedAt                DateTime?
+  clickedAt               DateTime?
+  submittedAt             DateTime?
+  suppressedAt            DateTime?
+  lastReminderAt          DateTime?
+  claimToken              String?
+  claimedAt               DateTime?
+  claimExpiresAt          DateTime?
+  workerId                String?
+  status                  ReviewRequestStatus                   @default(PENDING_ELIGIBILITY)
   blockReason             ReviewRequestBlockReason?
   blockDetail             String?
   eligibleAt              DateTime?
@@ -1420,28 +1484,60 @@ model ReviewRequest {
   completedAt             DateTime?
   canceledAt              DateTime?
   expiresAt               DateTime?
-  sendAttemptCount        Int                       @default(0)
-  reminderCount           Int                       @default(0)
-  tokenHash               String?                   @unique
+  sendAttemptCount        Int                                   @default(0)
+  reminderCount           Int                                   @default(0)
+  tokenHash               String?                               @unique
   tokenExpiresAt          DateTime?
   lastSendAttemptAt       DateTime?
   lastSendErrorCode       String?
   providerMessageId       String?
-  createdAt               DateTime                  @default(now())
-  updatedAt               DateTime                  @updatedAt
-  shop                    Shop                      @relation(fields: [shopId], references: [id], onDelete: Cascade)
-  customerProfile         CustomerProfile           @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
-  megaskaOrder            MegaskaOrder              @relation(fields: [megaskaOrderId], references: [id], onDelete: Cascade)
+  createdAt               DateTime                              @default(now())
+  updatedAt               DateTime                              @updatedAt
+  shop                    Shop                                  @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  customerProfile         CustomerProfile                       @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+  megaskaOrder            MegaskaOrder                          @relation(fields: [megaskaOrderId], references: [id], onDelete: Cascade)
   review                  ProductReview?
+  deliveryAttempts        ProductReviewRequestDeliveryAttempt[]
 
   @@unique([shopId, shopifyOrderId, shopifyLineItemId])
   @@index([shopId, status, scheduledAt])
+  @@index([shopId, status, nextAttemptAt])
   @@index([shopId, status, eligibleAt])
   @@index([status, eligibleAt, id])
   @@index([shopId, status, eligibleAt, id])
   @@index([customerProfileId, status])
   @@index([megaskaOrderId])
   @@index([shopId, shopifyProductId])
+}
+
+model ProductReviewRequestDeliveryAttempt {
+  id                String                     @id @default(uuid())
+  shopId            String
+  reviewRequestId   String
+  channel           ReviewRequestChannel
+  attemptType       ReviewRequestAttemptType
+  attemptNumber     Int
+  status            ReviewRequestAttemptStatus @default(PENDING)
+  provider          String
+  providerMessageId String?
+  idempotencyKey    String
+  scheduledAt       DateTime
+  startedAt         DateTime?
+  completedAt       DateTime?
+  nextRetryAt       DateTime?
+  errorCode         String?
+  errorMessageSafe  String?
+  claimToken        String?
+  claimedAt         DateTime?
+  claimExpiresAt    DateTime?
+  createdAt         DateTime                   @default(now())
+  updatedAt         DateTime                   @updatedAt
+  shop              Shop                       @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  reviewRequest     ReviewRequest              @relation(fields: [reviewRequestId], references: [id], onDelete: Cascade)
+
+  @@unique([shopId, idempotencyKey])
+  @@index([shopId, reviewRequestId, createdAt])
+  @@index([shopId, status, nextRetryAt])
 }
 
 model ProductReview {

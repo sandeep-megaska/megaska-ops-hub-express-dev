@@ -1,0 +1,7 @@
+const keys=["store_name","customer_name","product_title","variant_title","order_name","review_url","incentive_text"] as const;
+type Key=typeof keys[number]; export type ReviewRequestTemplateValues=Record<Key,string>;
+export const DEFAULT_REVIEW_REQUEST_SUBJECT="How was your purchase from {{store_name}}?";
+export const DEFAULT_REVIEW_REQUEST_BODY="Hi {{customer_name}},\n\nThank you for purchasing {{product_title}} from {{store_name}}. Please share an honest review: {{review_url}}";
+export function validateReviewRequestTemplate(template: unknown){if(typeof template!=="string"||template.length>6000)return {ok:false as const,errorCode:"REVIEW_REQUEST_TEMPLATE_INVALID" as const};const unknown=[...template.matchAll(/{{\s*([^}\s]+)\s*}}/g)].map(m=>m[1]).filter(k=>!keys.includes(k as Key));return unknown.length?{ok:false as const,errorCode:"REVIEW_REQUEST_TEMPLATE_INVALID" as const}:{ok:true as const};}
+const html=(s:string)=>s.replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]!));
+export function renderReviewRequestTemplate(template:string, values:ReviewRequestTemplateValues, channel:"EMAIL"|"SMS"|"WHATSAPP"){const validation=validateReviewRequestTemplate(template);if(!validation.ok)return validation;const output=template.replace(/{{\s*([^}\s]+)\s*}}/g,(_,key:string)=>channel==="EMAIL"?html(values[key as Key]??""):values[key as Key]??"");return {ok:true as const,output};}

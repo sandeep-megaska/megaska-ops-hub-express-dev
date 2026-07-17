@@ -1,0 +1,6 @@
+export type ReviewRequestLifecycleStatus = "SCHEDULED"|"READY"|"SENDING"|"SENT"|"DELIVERED"|"OPENED"|"CLICKED"|"SUBMITTED"|"CANCELLED"|"CANCELED"|"EXPIRED"|"SUPPRESSED"|"FAILED";
+const transitions: Record<ReviewRequestLifecycleStatus, readonly ReviewRequestLifecycleStatus[]> = {
+ SCHEDULED:["READY","CANCELLED","CANCELED","SUPPRESSED","EXPIRED"], READY:["SENDING","CANCELLED","CANCELED","SUPPRESSED","EXPIRED"], SENDING:["SENT","FAILED","READY","CANCELLED","CANCELED","SUPPRESSED"], SENT:["DELIVERED","OPENED","CLICKED","SUBMITTED","CANCELLED","CANCELED","SUPPRESSED","EXPIRED","FAILED"], DELIVERED:["OPENED","CLICKED","SUBMITTED","EXPIRED"], OPENED:["CLICKED","SUBMITTED","EXPIRED"], CLICKED:["SUBMITTED","EXPIRED"], SUBMITTED:[], CANCELLED:[], CANCELED:[], EXPIRED:[], SUPPRESSED:[], FAILED:[]
+};
+export function canTransitionReviewRequest(from: ReviewRequestLifecycleStatus, to: ReviewRequestLifecycleStatus) { return transitions[from].includes(to); }
+export function reviewRequestTransition(from: ReviewRequestLifecycleStatus, to: ReviewRequestLifecycleStatus) { return canTransitionReviewRequest(from,to)?{ok:true as const}:{ok:false as const,errorCode:"REVIEW_REQUEST_INVALID_STATUS" as const}; }
