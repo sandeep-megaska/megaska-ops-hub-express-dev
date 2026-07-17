@@ -1,0 +1,5 @@
+import test from "node:test"; import assert from "node:assert/strict";
+import { canTransitionReviewRequest, reviewRequestTransition } from "./review-request-lifecycle.ts";
+import { DEFAULT_REVIEW_REQUEST_BODY, renderReviewRequestTemplate, validateReviewRequestTemplate } from "./review-request-templates.ts";
+test("review lifecycle only permits canonical transitions",()=>{assert.equal(canTransitionReviewRequest("SCHEDULED","READY"),true);assert.equal(canTransitionReviewRequest("SENT","SCHEDULED"),false);assert.equal(reviewRequestTransition("SUBMITTED","SENT").ok,false);});
+test("request templates allowlisted variables and escape email output",()=>{assert.equal(validateReviewRequestTemplate("Hello {{nope}}").ok,false);const result=renderReviewRequestTemplate(DEFAULT_REVIEW_REQUEST_BODY,{store_name:"<Store>",customer_name:"A",product_title:"<item>",variant_title:"",order_name:"#1",review_url:"https://example.test",incentive_text:""},"EMAIL");assert.equal(result.ok,true);if(result.ok)assert.match(result.output,/&lt;Store&gt;/);});

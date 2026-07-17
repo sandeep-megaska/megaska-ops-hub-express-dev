@@ -5,6 +5,21 @@ export type ReviewSettings = {
   shopId: string;
   reviewsEnabled: boolean;
   automaticRequestsEnabled: boolean;
+  reviewRequestTrigger: "FULFILLED" | "DELIVERED";
+  reviewRequestSendHourLocal: number;
+  reviewRequestPrimaryChannel: "EMAIL" | "SMS" | "WHATSAPP";
+  reviewRequestEmailEnabled: boolean;
+  reviewRequestSmsEnabled: boolean;
+  reviewRequestWhatsappEnabled: boolean;
+  reviewRequestIncludeProductImage: boolean;
+  reviewRequestIncludeIncentiveText: boolean;
+  reviewRequestIncentiveText: string | null;
+  reviewRequestSenderName: string | null;
+  reviewRequestReplyToEmail: string | null;
+  reviewRequestSubjectTemplate: string | null;
+  reviewRequestBodyTemplate: string | null;
+  reviewRequestReminderSubjectTemplate: string | null;
+  reviewRequestReminderBodyTemplate: string | null;
   requestDelayDays: number;
   reminderEnabled: boolean;
   reminderDelayDays: number;
@@ -47,6 +62,21 @@ export type RawReviewSettings = Omit<ReviewSettings, "defaultReviewSort"> & {
 export const DEFAULT_REVIEW_SETTINGS: Omit<ReviewSettings, "shopId"> = {
   reviewsEnabled: false,
   automaticRequestsEnabled: false,
+  reviewRequestTrigger: "DELIVERED",
+  reviewRequestSendHourLocal: 10,
+  reviewRequestPrimaryChannel: "EMAIL",
+  reviewRequestEmailEnabled: true,
+  reviewRequestSmsEnabled: false,
+  reviewRequestWhatsappEnabled: false,
+  reviewRequestIncludeProductImage: true,
+  reviewRequestIncludeIncentiveText: false,
+  reviewRequestIncentiveText: null,
+  reviewRequestSenderName: null,
+  reviewRequestReplyToEmail: null,
+  reviewRequestSubjectTemplate: null,
+  reviewRequestBodyTemplate: null,
+  reviewRequestReminderSubjectTemplate: null,
+  reviewRequestReminderBodyTemplate: null,
   requestDelayDays: 7,
   reminderEnabled: false,
   reminderDelayDays: 7,
@@ -151,8 +181,8 @@ export async function saveReviewSettings(
 ): Promise<ReviewSettings> {
   if (!(await db.shop.findUnique({ where: { id: shopId } }))) throw new Error("Shop not found");
   const value = { ...DEFAULT_REVIEW_SETTINGS, ...input };
-  for (const key of ["requestDelayDays", "reminderDelayDays"] as const) integer(value[key], key, 0, 365);
-  integer(value.maxReminderCount, "maxReminderCount", 0, 5);
+  integer(value.requestDelayDays, "requestDelayDays", 0, 90); integer(value.reminderDelayDays, "reminderDelayDays", 1, 30); integer(value.reviewRequestSendHourLocal, "reviewRequestSendHourLocal", 0, 23);
+  integer(value.maxReminderCount, "maxReminderCount", 0, 3);
   integer(value.minimumRating, "minimumRating", 1, 5);
   integer(value.maximumRating, "maximumRating", 1, 5);
   integer(value.maxMediaCount, "maxMediaCount", 0, 10);
@@ -165,9 +195,14 @@ export async function saveReviewSettings(
   integer(value.issueProtectionDays, "issueProtectionDays", 0, 365, true);
   if (value.minimumRating > value.maximumRating) throw new Error("minimumRating cannot exceed maximumRating");
   if (value.automaticRequestsEnabled && !value.reviewsEnabled) throw new Error("Automatic requests require reviews to be enabled");
+  if (!["FULFILLED", "DELIVERED"].includes(value.reviewRequestTrigger)) throw new Error("reviewRequestTrigger is invalid");
+  if (!["EMAIL", "SMS", "WHATSAPP"].includes(value.reviewRequestPrimaryChannel)) throw new Error("reviewRequestPrimaryChannel is invalid");
+  const enabled = { EMAIL: value.reviewRequestEmailEnabled, SMS: value.reviewRequestSmsEnabled, WHATSAPP: value.reviewRequestWhatsappEnabled };
+  if (value.automaticRequestsEnabled && (!Object.values(enabled).some(Boolean) || !enabled[value.reviewRequestPrimaryChannel])) throw new Error("Automation needs an enabled primary channel");
+  for (const key of ["reviewRequestIncentiveText", "reviewRequestSenderName", "reviewRequestReplyToEmail", "reviewRequestSubjectTemplate", "reviewRequestBodyTemplate", "reviewRequestReminderSubjectTemplate", "reviewRequestReminderBodyTemplate"] as const) if (value[key] !== null && (typeof value[key] !== "string" || value[key].length > 6000)) throw new Error(`${key} is invalid`);
   if (!isReviewSort(value.defaultReviewSort)) throw new Error("defaultReviewSort is invalid");
   for (const [key, setting] of Object.entries(value)) {
-    if (typeof setting !== "boolean" && !["requestDelayDays", "reminderDelayDays", "maxReminderCount", "minimumRating", "maximumRating", "maxMediaCount", "reviewMaxMediaItems", "reviewMaxPhotoSizeBytes", "reviewMaxVideoSizeBytes", "reviewMaxVideoDurationSeconds", "reviewsPerPage", "exchangeProtectionDays", "issueProtectionDays", "defaultReviewSort"].includes(key)) throw new Error(`${key} must be boolean`);
+    if (typeof setting !== "boolean" && !["requestDelayDays", "reminderDelayDays", "maxReminderCount", "minimumRating", "maximumRating", "maxMediaCount", "reviewMaxMediaItems", "reviewMaxPhotoSizeBytes", "reviewMaxVideoSizeBytes", "reviewMaxVideoDurationSeconds", "reviewsPerPage", "exchangeProtectionDays", "issueProtectionDays", "defaultReviewSort", "reviewRequestTrigger", "reviewRequestPrimaryChannel", "reviewRequestSendHourLocal", "reviewRequestIncentiveText", "reviewRequestSenderName", "reviewRequestReplyToEmail", "reviewRequestSubjectTemplate", "reviewRequestBodyTemplate", "reviewRequestReminderSubjectTemplate", "reviewRequestReminderBodyTemplate"].includes(key)) throw new Error(`${key} must be boolean`);
   }
   const row = await db.reviewSettings.upsert({ where: { shopId }, create: { shopId, ...value }, update: value });
   return toReviewSettings(row);

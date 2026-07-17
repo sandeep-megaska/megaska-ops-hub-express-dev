@@ -1,0 +1,5 @@
+import { randomUUID } from "node:crypto";
+import { prisma } from "../db/prisma.ts";
+export function reviewRequestAttemptKey(requestId:string,type:"INITIAL"|"REMINDER",number:number){return `review-request:${requestId}:${type.toLowerCase()}:${number}`;}
+/** Atomically claims a due attempt; external delivery must occur after this query commits. */
+export async function claimReviewRequestAttempt(input:{shopId:string;attemptId:string;workerId:string;now?:Date;leaseMs?:number},db=prisma){const now=input.now??new Date(),claimToken=randomUUID(),claimExpiresAt=new Date(now.getTime()+(input.leaseMs??15*60_000));const changed=await db.productReviewRequestDeliveryAttempt.updateMany({where:{id:input.attemptId,shopId:input.shopId,status:{in:["PENDING","FAILED_RETRYABLE"]},OR:[{claimExpiresAt:null},{claimExpiresAt:{lt:now}}],AND:[{OR:[{scheduledAt:{lte:now}},{nextRetryAt:{lte:now}}]}]},data:{status:"SENDING",claimToken,claimedAt:now,claimExpiresAt}});return changed.count===1?{ok:true as const,claimToken,claimExpiresAt}:{ok:false as const,errorCode:"REVIEW_REQUEST_ALREADY_CLAIMED" as const};}
