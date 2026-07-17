@@ -94,3 +94,13 @@ Only `PUBLISHED`, non-deleted reviews are public. Storefront queries always scop
 `POST /apps/megaska/api/reviews/storefront/product` forwards to the protected internal route and requires the existing signed internal app-proxy proof, bounded JSON, no-store security headers, and rate limiting. Product IDs accept only numeric IDs or Product GIDs. Pending and rejected reviews, customer/order/token/session data, moderation data, and media are never returned.
 
 The **LoopDesk Product Reviews** theme app block is product-context-only and loads dedicated scoped JavaScript/CSS. It renders summary, distribution, sort, cards, pagination, loading/error, and empty states using DOM text nodes. Merchant controls in Review settings configure storefront availability, summary/distribution/badge/date/variant visibility, page size, and default sort. Aggregate/Review JSON-LD is intentionally deferred to avoid duplicate theme schema; review media, editing, voting, and merchant replies are also deferred.
+
+## Review moderation admin UX (REVIEW-1A.9)
+
+`/admin/reviews` is the merchant moderation workspace. It keeps the existing tenant-scoped review APIs and moderation transitions intact while presenting a responsive hierarchy: a Reviews header, collection-status notice, four filterable summary cards, search/status controls, results, detail panel, and storefront display settings.
+
+Summary cards show Pending, Published, Rejected, and Total Reviews counts and apply their corresponding status filter. Search is debounced and searches only the fields already supported by the moderation API. On desktop, review results and the selected detail panel are shown side by side; at tablet and mobile widths, the list becomes stacked cards and the detail panel follows the list without horizontal page scrolling. Product-image snapshots have a fixed-size fallback when no image is available.
+
+The interface distinguishes no-reviews, status-filter, and search empty states; it uses skeletons for the initial list, summaries, and changing detail, retains content during mutation refreshes, and provides concise retryable errors and live success feedback. Review selection and all controls use native keyboard-accessible elements, ratings expose an accessible text label, visible focus styles are retained, and the Reject/Unpublish confirmations support Escape to close. Rejection reasons are clearly identified as internal-only.
+
+The embedded admin diagnostic panel is intentionally retained unchanged during this phase. No Prisma schema, moderation transition, aggregate, storefront, or tenant-resolution behavior was changed. Merchant replies remain deferred to REVIEW-1A.10.
