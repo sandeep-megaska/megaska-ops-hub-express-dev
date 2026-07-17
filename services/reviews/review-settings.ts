@@ -180,7 +180,12 @@ export async function saveReviewSettings(
   db: ReviewSettingsDb = prisma,
 ): Promise<ReviewSettings> {
   if (!(await db.shop.findUnique({ where: { id: shopId } }))) throw new Error("Shop not found");
-  const value = { ...DEFAULT_REVIEW_SETTINGS, ...input };
+  // Admin routes submit a deliberately small, public subset. Merge it with the
+  // persisted tenant row so saving display controls never resets request policy.
+  const existing = await db.reviewSettings.findUnique({ where: { shopId } });
+  const existingSettings = { ...(existing ?? { shopId: "" }) };
+  delete existingSettings.shopId;
+  const value = { ...DEFAULT_REVIEW_SETTINGS, ...existingSettings, ...input };
   integer(value.requestDelayDays, "requestDelayDays", 0, 90); integer(value.reminderDelayDays, "reminderDelayDays", 1, 30); integer(value.reviewRequestSendHourLocal, "reviewRequestSendHourLocal", 0, 23);
   integer(value.maxReminderCount, "maxReminderCount", 0, 3);
   integer(value.minimumRating, "minimumRating", 1, 5);
