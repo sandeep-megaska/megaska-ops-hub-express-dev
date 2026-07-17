@@ -1,0 +1,5 @@
+import { NextRequest, NextResponse } from "next/server";
+import { formatAdminShopResolutionError, resolveAdminShopFromRequest } from "../../../../../services/shopify/admin-shop-context";
+import { getAdminReview } from "../../../../../services/reviews/review-admin-query";
+export const runtime="nodejs"; export const dynamic="force-dynamic"; const headers={"Cache-Control":"no-store, private"};
+export async function GET(request:NextRequest,{params}:{params:Promise<{reviewId:string}>}){const resolved=await resolveAdminShopFromRequest(request);if(!resolved.shop?.id)return NextResponse.json({ok:false,code:"UNAUTHORIZED",message:formatAdminShopResolutionError(resolved)},{status:401,headers});const {reviewId}=await params;const review=await getAdminReview(resolved.shop.id,reviewId);if(!review)return NextResponse.json({ok:false,code:"REVIEW_NOT_FOUND"},{status:404,headers});return NextResponse.json({ok:true,review:{...review,shopifyOrderName:review.reviewRequest?.shopifyOrderName??null,productImageUrlSnapshot:review.reviewRequest?.productImageUrlSnapshot??null,reviewRequest:undefined}},{headers});}

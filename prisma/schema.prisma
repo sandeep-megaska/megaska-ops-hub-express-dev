@@ -1440,6 +1440,9 @@ model ProductReview {
   productHandleSnapshot String?
   submittedAt           DateTime                    @default(now())
   publishedAt           DateTime?
+  moderatedAt           DateTime?
+  moderatedBy           String?
+  rejectionReason       String?
   rejectedAt            DateTime?
   hiddenAt              DateTime?
   deletedAt             DateTime?

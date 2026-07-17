@@ -82,3 +82,11 @@ Only `token`, rating, title, body, and display name are accepted from the browse
 Customer text is plain text only: it is normalized, bounded, control-character cleaned, and rejects HTML/contact-information display names. Display names default to a privacy-preserving first name plus last initial, or `Verified buyer`. Settings choose moderation versus immediate publication; published reviews recalculate the tenant/product aggregate. Successful submission creates one review, completes the request, and invalidates its token in one transaction; duplicate or concurrent retries return already-submitted rather than creating another review.
 
 Lookup and submission use app-proxy-only POST JSON, bounded request bodies, origin checks, no-store/referrer/nosniff headers, and small in-memory development rate limits. The app-proxy catch-all signs its short-lived internal API hop with the server-only Shopify secret, so a browser cannot bypass Shopify verification by forging the old marker header. Production deployments should replace that process-local limiter with shared durable infrastructure. Media, review display, merchant moderation, and dashboard management remain deferred.
+
+## Merchant moderation (REVIEW-1A.7)
+
+The active moderation states are `PENDING_MODERATION`, `PUBLISHED`, and `REJECTED`. Merchant actions use the explicit transitions: pending → published/rejected; published → rejected/pending; rejected → published/pending. Every moderation lookup is scoped by both the authenticated shop and review ID, so a review from another tenant is indistinguishable from a missing review.
+
+Publishing sets the publication and moderation audit timestamps, clears the internal rejection reason, and recalculates that shop/product aggregate in the same transaction. Rejection and unpublishing clear `publishedAt`; either transition out of publication recalculates the aggregate in that transaction. Repeated or invalid actions return typed conflict codes without altering aggregates.
+
+Rejection reasons are optional, bounded plain-text internal merchant notes; they reject control characters and HTML and are never a storefront field. Storefront rendering remains deferred: only `PUBLISHED` reviews are eligible for that later phase.
