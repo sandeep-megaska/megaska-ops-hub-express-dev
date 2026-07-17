@@ -76,6 +76,9 @@ export default function RootLayout({
                     <AdminNavLink href="/admin/wallets" className="mk-nav-link">
                       Store Credit / Wallets
                     </AdminNavLink>
+                    <AdminNavLink href="/admin/reviews" className="mk-nav-link">
+                      Reviews
+                    </AdminNavLink>
                     <AdminNavLink href="/admin/issues" className="mk-nav-link">
                       Issues
                     </AdminNavLink>
