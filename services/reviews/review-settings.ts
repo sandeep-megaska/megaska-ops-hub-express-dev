@@ -57,6 +57,9 @@ export type ReviewSettings = {
 
 export type RawReviewSettings = Omit<ReviewSettings, "defaultReviewSort"> & {
   defaultReviewSort: string;
+  id?: string;
+  createdAt?: Date;
+  updatedAt?: Date;
 };
 
 export const DEFAULT_REVIEW_SETTINGS: Omit<ReviewSettings, "shopId"> = {
@@ -133,9 +136,19 @@ export function normalizeReviewsPerPage(value: unknown): number {
 export function toReviewSettings(row: RawReviewSettings | null): ReviewSettings {
   if (!row) return { shopId: "", ...DEFAULT_REVIEW_SETTINGS };
 
+  // Prisma rows include database metadata. Project only canonical domain fields so
+  // metadata can never be merged, validated, returned, or written as settings.
+  const settings = Object.fromEntries(
+    Object.keys(DEFAULT_REVIEW_SETTINGS).map((key) => [
+      key,
+      row[key as keyof typeof DEFAULT_REVIEW_SETTINGS],
+    ]),
+  ) as Omit<ReviewSettings, "shopId">;
+
   return {
     ...DEFAULT_REVIEW_SETTINGS,
-    ...row,
+    ...settings,
+    shopId: row.shopId,
     reviewsEnabled: normalizeBoolean(row.reviewsEnabled, DEFAULT_REVIEW_SETTINGS.reviewsEnabled),
     automaticRequestsEnabled: normalizeBoolean(row.automaticRequestsEnabled, DEFAULT_REVIEW_SETTINGS.automaticRequestsEnabled),
     reminderEnabled: normalizeBoolean(row.reminderEnabled, DEFAULT_REVIEW_SETTINGS.reminderEnabled),
@@ -161,7 +174,6 @@ export function toReviewSettings(row: RawReviewSettings | null): ReviewSettings 
     defaultReviewSort: normalizeReviewSort(row.defaultReviewSort),
   };
 }
-
 export async function getReviewSettings(shopId: string, db: ReviewSettingsDb = prisma): Promise<ReviewSettings> {
   const row = await db.reviewSettings.findUnique({ where: { shopId } });
   return row ? toReviewSettings(row) : { shopId, ...DEFAULT_REVIEW_SETTINGS };
@@ -182,26 +194,12 @@ export async function saveReviewSettings(
   if (!(await db.shop.findUnique({ where: { id: shopId } }))) throw new Error("Shop not found");
   // Admin routes submit a deliberately small, public subset. Merge it with the
   // persisted tenant row so saving display controls never resets request policy.
-  const existing = await db.reviewSettings.findUnique({
-  where: { shopId },
-});
-
-const normalizedExisting = toReviewSettings(existing);
-
-const existingSettings = Object.fromEntries(
-  Object.keys(DEFAULT_REVIEW_SETTINGS).map((key) => [
-    key,
-    normalizedExisting[
-      key as keyof typeof DEFAULT_REVIEW_SETTINGS
-    ],
-  ]),
-) as Omit<ReviewSettings, "shopId">;
-
-const value = {
-  ...DEFAULT_REVIEW_SETTINGS,
-  ...existingSettings,
-  ...input,
-};
+  const existing = await db.reviewSettings.findUnique({ where: { shopId } });
+  const current = toReviewSettings(existing);
+  const writableCurrent = Object.fromEntries(
+    Object.keys(DEFAULT_REVIEW_SETTINGS).map((key) => [key, current[key as keyof typeof DEFAULT_REVIEW_SETTINGS]]),
+  ) as Omit<ReviewSettings, "shopId">;
+  const value: ReviewSettingsWrite = { ...DEFAULT_REVIEW_SETTINGS, ...writableCurrent, ...input };
   integer(value.requestDelayDays, "requestDelayDays", 0, 90); integer(value.reminderDelayDays, "reminderDelayDays", 1, 30); integer(value.reviewRequestSendHourLocal, "reviewRequestSendHourLocal", 0, 23);
   integer(value.maxReminderCount, "maxReminderCount", 0, 3);
   integer(value.minimumRating, "minimumRating", 1, 5);

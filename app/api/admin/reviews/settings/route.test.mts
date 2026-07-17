@@ -18,3 +18,21 @@ test("settings API parser accepts activation booleans and rejects malformed or u
   assert.throws(() => parseDisplaySettingsInput({ ...valid, shopId: "other-shop" }), /shopId is not supported/);
   assert.throws(() => parseDisplaySettingsInput({ ...valid, reviewsPerPage: 26 }), /reviewsPerPage must be an integer/);
 });
+
+import { DEFAULT_REVIEW_SETTINGS } from "../../../../../services/reviews/review-settings.ts";
+import { publicSettings } from "./route.ts";
+
+test("settings API response projects only merchant-writable display fields", () => {
+  const response = publicSettings({
+    shopId: "shop-1",
+    ...DEFAULT_REVIEW_SETTINGS,
+    id: "settings-id",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  } as never);
+  assert.equal(response.reviewsEnabled, false);
+  assert.equal("shopId" in response, false);
+  assert.equal("id" in response, false);
+  assert.equal("createdAt" in response, false);
+  assert.equal("updatedAt" in response, false);
+});

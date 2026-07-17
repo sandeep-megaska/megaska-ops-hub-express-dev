@@ -16,6 +16,13 @@ type Settings = {
   defaultReviewSort: ReviewSort;
 };
 
+function isSettingsResponse(value: unknown): value is { ok: true; settings: Settings } {
+  return typeof value === "object" && value !== null &&
+    (value as { ok?: unknown }).ok === true &&
+    typeof (value as { settings?: unknown }).settings === "object" &&
+    (value as { settings: Settings }).settings !== null;
+}
+
 const displaySettings = [
   ["showReviewSummary", "Show review summary"],
   ["showRatingDistribution", "Show rating distribution"],
@@ -52,7 +59,14 @@ export default function ReviewDisplaySettingsClient({ initial }: { initial: Sett
     body: JSON.stringify(value),
   },
 );
-      if (!response.ok) throw new Error();
+      const payload: unknown = await response.json().catch(() => null);
+      if (!response.ok || !isSettingsResponse(payload)) {
+        if (process.env.NODE_ENV !== "production") {
+          console.error("[REVIEW SETTINGS SAVE FAILED]", { status: response.status });
+        }
+        throw new Error("Review settings save failed");
+      }
+      setValue(payload.settings);
       setState("saved");
     } catch {
       setState("error");
