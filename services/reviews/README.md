@@ -86,3 +86,11 @@ Lookup and submission use app-proxy-only POST JSON, bounded request bodies, orig
 ## Merchant moderation (REVIEW-1A.7)
 
 `ProductReview` moderation reuses the existing `PENDING_MODERATION`, `PUBLISHED`, and `REJECTED` statuses. Merchants may publish pending/rejected reviews, reject pending/published reviews, and unpublish published/rejected reviews back to pending. Every moderation action is scoped by both review ID and `shopId`; cross-tenant review IDs are indistinguishable from missing reviews. Published-state entries and exits recalculate the tenant/product aggregate inside the same transaction. `moderatedAt`, `moderatedBy`, and the optional plain-text `rejectionReason` provide an internal audit trail. Rejection reasons are bounded to 500 characters, never public, and storefront rendering remains deferred.
+
+## Storefront published review display (REVIEW-1A.8)
+
+Only `PUBLISHED`, non-deleted reviews are public. Storefront queries always scope the review and aggregate lookup by both `shopId` resolved from the verified Shopify app-proxy hop and the canonical numeric Shopify product ID; a browser never supplies a tenant ID. The query uses `ProductReviewAggregate` for average/count/distribution, returns a safe zero summary when absent, and lists only a deliberately public projection. Pagination is bounded to 1–25 reviews and deterministic sorts are newest, highest rating, and lowest rating.
+
+`POST /apps/megaska/api/reviews/storefront/product` forwards to the protected internal route and requires the existing signed internal app-proxy proof, bounded JSON, no-store security headers, and rate limiting. Product IDs accept only numeric IDs or Product GIDs. Pending and rejected reviews, customer/order/token/session data, moderation data, and media are never returned.
+
+The **LoopDesk Product Reviews** theme app block is product-context-only and loads dedicated scoped JavaScript/CSS. It renders summary, distribution, sort, cards, pagination, loading/error, and empty states using DOM text nodes. Merchant controls in Review settings configure storefront availability, summary/distribution/badge/date/variant visibility, page size, and default sort. Aggregate/Review JSON-LD is intentionally deferred to avoid duplicate theme schema; review media, editing, voting, and merchant replies are also deferred.
