@@ -1341,41 +1341,57 @@ enum ProductReviewMediaType {
   VIDEO
 }
 
+enum ProductReviewMediaStatus {
+  UPLOADING
+  READY
+  PROCESSING
+  REJECTED
+  FAILED
+  DELETED
+}
+
 model ReviewSettings {
-  id                        String   @id @default(uuid())
-  shopId                    String   @unique
-  reviewsEnabled            Boolean  @default(false)
-  automaticRequestsEnabled  Boolean  @default(false)
-  requestDelayDays          Int      @default(7)
-  reminderEnabled           Boolean  @default(false)
-  reminderDelayDays         Int      @default(7)
-  maxReminderCount          Int      @default(1)
-  minimumRating             Int      @default(1)
-  maximumRating             Int      @default(5)
-  requireVerifiedPurchase   Boolean  @default(true)
-  moderationRequired        Boolean  @default(true)
-  allowReviewEditing        Boolean  @default(true)
-  reviewEditWindowDays      Int      @default(30)
-  allowReviewDeletion       Boolean  @default(true)
-  allowMedia                Boolean  @default(true)
-  maxMediaCount             Int      @default(5)
-  exchangeProtectionDays    Int?
-  issueProtectionDays       Int?
-  cancellationBlocksReview  Boolean  @default(true)
-  exchangeBlocksReview      Boolean  @default(true)
-  issueBlocksReview         Boolean  @default(true)
-  refundBlocksReview        Boolean  @default(true)
-  storefrontReviewsEnabled  Boolean  @default(true)
-  showReviewSummary         Boolean  @default(true)
-  showRatingDistribution    Boolean  @default(true)
-  showVerifiedPurchaseBadge Boolean  @default(true)
-  reviewsPerPage            Int      @default(10)
-  defaultReviewSort         String   @default("NEWEST")
-  showReviewDates           Boolean  @default(true)
-  showVariantTitle          Boolean  @default(true)
-  createdAt                 DateTime @default(now())
-  updatedAt                 DateTime @updatedAt
-  shop                      Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  id                            String   @id @default(uuid())
+  shopId                        String   @unique
+  reviewsEnabled                Boolean  @default(false)
+  automaticRequestsEnabled      Boolean  @default(false)
+  requestDelayDays              Int      @default(7)
+  reminderEnabled               Boolean  @default(false)
+  reminderDelayDays             Int      @default(7)
+  maxReminderCount              Int      @default(1)
+  minimumRating                 Int      @default(1)
+  maximumRating                 Int      @default(5)
+  requireVerifiedPurchase       Boolean  @default(true)
+  moderationRequired            Boolean  @default(true)
+  allowReviewEditing            Boolean  @default(true)
+  reviewEditWindowDays          Int      @default(30)
+  allowReviewDeletion           Boolean  @default(true)
+  allowMedia                    Boolean  @default(true)
+  maxMediaCount                 Int      @default(5)
+  reviewMediaEnabled            Boolean  @default(true)
+  reviewPhotoUploadsEnabled     Boolean  @default(true)
+  reviewVideoUploadsEnabled     Boolean  @default(true)
+  reviewMaxMediaItems           Int      @default(5)
+  reviewMaxPhotoSizeBytes       Int      @default(8388608)
+  reviewMaxVideoSizeBytes       Int      @default(41943040)
+  reviewMaxVideoDurationSeconds Int      @default(30)
+  exchangeProtectionDays        Int?
+  issueProtectionDays           Int?
+  cancellationBlocksReview      Boolean  @default(true)
+  exchangeBlocksReview          Boolean  @default(true)
+  issueBlocksReview             Boolean  @default(true)
+  refundBlocksReview            Boolean  @default(true)
+  storefrontReviewsEnabled      Boolean  @default(true)
+  showReviewSummary             Boolean  @default(true)
+  showRatingDistribution        Boolean  @default(true)
+  showVerifiedPurchaseBadge     Boolean  @default(true)
+  reviewsPerPage                Int      @default(10)
+  defaultReviewSort             String   @default("NEWEST")
+  showReviewDates               Boolean  @default(true)
+  showVariantTitle              Boolean  @default(true)
+  createdAt                     DateTime @default(now())
+  updatedAt                     DateTime @updatedAt
+  shop                          Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
 }
 
 model ReviewRequest {
@@ -1479,10 +1495,11 @@ model ProductReview {
 }
 
 model ProductReviewMedia {
-  id              String                 @id @default(uuid())
+  id              String                   @id @default(uuid())
   shopId          String
   productReviewId String
   mediaType       ProductReviewMediaType
+  status          ProductReviewMediaStatus @default(UPLOADING)
   storageProvider String
   storageKey      String
   publicUrl       String?
@@ -1493,18 +1510,22 @@ model ProductReviewMedia {
   height          Int?
   durationSeconds Int?
   altText         String?
-  sortOrder       Int                    @default(0)
-  approved        Boolean                @default(false)
+  sortOrder       Int                      @default(0)
+  approved        Boolean                  @default(false)
+  moderationNote  String?
   rejectedAt      DateTime?
   deletedAt       DateTime?
-  createdAt       DateTime               @default(now())
-  updatedAt       DateTime               @updatedAt
-  shop            Shop                   @relation(fields: [shopId], references: [id], onDelete: Cascade)
-  productReview   ProductReview          @relation(fields: [productReviewId], references: [id], onDelete: Cascade)
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+  shop            Shop                     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  productReview   ProductReview            @relation(fields: [productReviewId], references: [id], onDelete: Cascade)
 
   @@unique([storageProvider, storageKey])
+  @@unique([productReviewId, sortOrder])
   @@index([productReviewId, sortOrder])
   @@index([shopId, approved])
+  @@index([shopId, status])
+  @@index([shopId, createdAt])
 }
 
 model ProductReviewMerchantReply {
@@ -1545,6 +1566,7 @@ model ProductReviewRevision {
   nextRating      Int
   nextTitle       String?
   nextBody        String?
+  mediaChanges    Json?
   createdAt       DateTime      @default(now())
   shop            Shop          @relation(fields: [shopId], references: [id], onDelete: Cascade)
   productReview   ProductReview @relation(fields: [productReviewId], references: [id], onDelete: Cascade)

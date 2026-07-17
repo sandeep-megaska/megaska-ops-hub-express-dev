@@ -17,6 +17,13 @@ export type ReviewSettings = {
   allowReviewDeletion: boolean;
   allowMedia: boolean;
   maxMediaCount: number;
+  reviewMediaEnabled: boolean;
+  reviewPhotoUploadsEnabled: boolean;
+  reviewVideoUploadsEnabled: boolean;
+  reviewMaxMediaItems: number;
+  reviewMaxPhotoSizeBytes: number;
+  reviewMaxVideoSizeBytes: number;
+  reviewMaxVideoDurationSeconds: number;
   exchangeProtectionDays: number | null;
   issueProtectionDays: number | null;
   cancellationBlocksReview: boolean;
@@ -52,6 +59,13 @@ export const DEFAULT_REVIEW_SETTINGS: Omit<ReviewSettings, "shopId"> = {
   allowReviewDeletion: true,
   allowMedia: true,
   maxMediaCount: 5,
+  reviewMediaEnabled: true,
+  reviewPhotoUploadsEnabled: true,
+  reviewVideoUploadsEnabled: true,
+  reviewMaxMediaItems: 5,
+  reviewMaxPhotoSizeBytes: 8_388_608,
+  reviewMaxVideoSizeBytes: 41_943_040,
+  reviewMaxVideoDurationSeconds: 30,
   exchangeProtectionDays: null,
   issueProtectionDays: null,
   cancellationBlocksReview: true,
@@ -100,6 +114,9 @@ export function toReviewSettings(row: RawReviewSettings | null): ReviewSettings 
     allowReviewEditing: normalizeBoolean(row.allowReviewEditing, DEFAULT_REVIEW_SETTINGS.allowReviewEditing),
     allowReviewDeletion: normalizeBoolean(row.allowReviewDeletion, DEFAULT_REVIEW_SETTINGS.allowReviewDeletion),
     allowMedia: normalizeBoolean(row.allowMedia, DEFAULT_REVIEW_SETTINGS.allowMedia),
+    reviewMediaEnabled: normalizeBoolean(row.reviewMediaEnabled, DEFAULT_REVIEW_SETTINGS.reviewMediaEnabled),
+    reviewPhotoUploadsEnabled: normalizeBoolean(row.reviewPhotoUploadsEnabled, DEFAULT_REVIEW_SETTINGS.reviewPhotoUploadsEnabled),
+    reviewVideoUploadsEnabled: normalizeBoolean(row.reviewVideoUploadsEnabled, DEFAULT_REVIEW_SETTINGS.reviewVideoUploadsEnabled),
     cancellationBlocksReview: normalizeBoolean(row.cancellationBlocksReview, DEFAULT_REVIEW_SETTINGS.cancellationBlocksReview),
     exchangeBlocksReview: normalizeBoolean(row.exchangeBlocksReview, DEFAULT_REVIEW_SETTINGS.exchangeBlocksReview),
     issueBlocksReview: normalizeBoolean(row.issueBlocksReview, DEFAULT_REVIEW_SETTINGS.issueBlocksReview),
@@ -139,6 +156,10 @@ export async function saveReviewSettings(
   integer(value.minimumRating, "minimumRating", 1, 5);
   integer(value.maximumRating, "maximumRating", 1, 5);
   integer(value.maxMediaCount, "maxMediaCount", 0, 10);
+  integer(value.reviewMaxMediaItems, "reviewMaxMediaItems", 1, 10);
+  integer(value.reviewMaxPhotoSizeBytes, "reviewMaxPhotoSizeBytes", 262_144, 52_428_800);
+  integer(value.reviewMaxVideoSizeBytes, "reviewMaxVideoSizeBytes", 1_048_576, 104_857_600);
+  integer(value.reviewMaxVideoDurationSeconds, "reviewMaxVideoDurationSeconds", 5, 120);
   integer(value.reviewsPerPage, "reviewsPerPage", 1, 25);
   integer(value.exchangeProtectionDays, "exchangeProtectionDays", 0, 365, true);
   integer(value.issueProtectionDays, "issueProtectionDays", 0, 365, true);
@@ -146,7 +167,7 @@ export async function saveReviewSettings(
   if (value.automaticRequestsEnabled && !value.reviewsEnabled) throw new Error("Automatic requests require reviews to be enabled");
   if (!isReviewSort(value.defaultReviewSort)) throw new Error("defaultReviewSort is invalid");
   for (const [key, setting] of Object.entries(value)) {
-    if (typeof setting !== "boolean" && !["requestDelayDays", "reminderDelayDays", "maxReminderCount", "minimumRating", "maximumRating", "maxMediaCount", "reviewsPerPage", "exchangeProtectionDays", "issueProtectionDays", "defaultReviewSort"].includes(key)) throw new Error(`${key} must be boolean`);
+    if (typeof setting !== "boolean" && !["requestDelayDays", "reminderDelayDays", "maxReminderCount", "minimumRating", "maximumRating", "maxMediaCount", "reviewMaxMediaItems", "reviewMaxPhotoSizeBytes", "reviewMaxVideoSizeBytes", "reviewMaxVideoDurationSeconds", "reviewsPerPage", "exchangeProtectionDays", "issueProtectionDays", "defaultReviewSort"].includes(key)) throw new Error(`${key} must be boolean`);
   }
   const row = await db.reviewSettings.upsert({ where: { shopId }, create: { shopId, ...value }, update: value });
   return toReviewSettings(row);
