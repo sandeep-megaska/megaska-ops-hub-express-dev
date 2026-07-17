@@ -183,7 +183,7 @@ export async function saveReviewSettings(
   // Admin routes submit a deliberately small, public subset. Merge it with the
   // persisted tenant row so saving display controls never resets request policy.
   const existing = await db.reviewSettings.findUnique({ where: { shopId } });
-  const { shopId: _shopId, ...existingSettings } = existing ?? { shopId: "" };
+  const { shopId: _shopId, ...existingSettings } = toReviewSettings(existing);
   const value = { ...DEFAULT_REVIEW_SETTINGS, ...existingSettings, ...input };
   integer(value.requestDelayDays, "requestDelayDays", 0, 90); integer(value.reminderDelayDays, "reminderDelayDays", 1, 30); integer(value.reviewRequestSendHourLocal, "reviewRequestSendHourLocal", 0, 23);
   integer(value.maxReminderCount, "maxReminderCount", 0, 3);
