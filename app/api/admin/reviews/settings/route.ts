@@ -8,8 +8,7 @@ const headers = { "Cache-Control": "no-store" };
 export { parseDisplaySettingsInput } from "../../../../../services/reviews/review-display-settings-input";
 
 function publicSettings(settings: Awaited<ReturnType<typeof getReviewSettings>>) {
-  const safeSettings = { ...settings };
-  delete safeSettings.shopId;
+  const { shopId: _shopId, ...safeSettings } = settings;
   return safeSettings;
 }
 
