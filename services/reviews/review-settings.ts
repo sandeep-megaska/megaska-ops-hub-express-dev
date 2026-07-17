@@ -53,10 +53,34 @@ export type ReviewSettings = {
   defaultReviewSort: ReviewSort;
   showReviewDates: boolean;
   showVariantTitle: boolean;
+  reviewSectionHeading: string;
+  reviewEmptyStateText: string;
+  reviewVerifiedPurchaseText: string;
+  reviewLoadMoreText: string;
+  reviewWriteReviewText: string;
+  reviewCountTextTemplate: string;
+  reviewAccentColor: string;
+  reviewStarColor: string;
+  reviewHeadingColor: string;
+  reviewTextColor: string;
+  reviewMutedTextColor: string;
+  reviewBorderColor: string;
+  reviewBackgroundColor: string;
+  reviewButtonBackgroundColor: string;
+  reviewButtonTextColor: string;
+  reviewAlignment: "left" | "center";
+  reviewCardStyle: "minimal" | "bordered";
+  reviewCornerRadius: number;
+  reviewSectionSpacing: "compact" | "normal" | "spacious";
+  showReviewSectionHeading: boolean;
+  showWriteReviewButton: boolean;
 };
 
-export type RawReviewSettings = Omit<ReviewSettings, "defaultReviewSort"> & {
+export type RawReviewSettings = Omit<ReviewSettings, "defaultReviewSort" | "reviewAlignment" | "reviewCardStyle" | "reviewSectionSpacing"> & {
   defaultReviewSort: string;
+  reviewAlignment: string;
+  reviewCardStyle: string;
+  reviewSectionSpacing: string;
   id?: string;
   createdAt?: Date;
   updatedAt?: Date;
@@ -113,6 +137,27 @@ export const DEFAULT_REVIEW_SETTINGS: Omit<ReviewSettings, "shopId"> = {
   defaultReviewSort: "NEWEST",
   showReviewDates: true,
   showVariantTitle: true,
+  reviewSectionHeading: "Customer reviews",
+  reviewEmptyStateText: "No reviews yet.",
+  reviewVerifiedPurchaseText: "Verified purchase",
+  reviewLoadMoreText: "Load more reviews",
+  reviewWriteReviewText: "Write a review",
+  reviewCountTextTemplate: "{count} reviews",
+  reviewAccentColor: "#111111",
+  reviewStarColor: "#F5A623",
+  reviewHeadingColor: "#111111",
+  reviewTextColor: "#333333",
+  reviewMutedTextColor: "#6B6B6B",
+  reviewBorderColor: "#E5E5E5",
+  reviewBackgroundColor: "#FFFFFF",
+  reviewButtonBackgroundColor: "#111111",
+  reviewButtonTextColor: "#FFFFFF",
+  reviewAlignment: "left",
+  reviewCardStyle: "minimal",
+  reviewCornerRadius: 8,
+  reviewSectionSpacing: "normal",
+  showReviewSectionHeading: true,
+  showWriteReviewButton: true,
 };
 
 type ReviewSettingsWrite = Omit<RawReviewSettings, "shopId">;
@@ -145,6 +190,9 @@ export function toReviewSettings(row: RawReviewSettings | null): ReviewSettings 
     ]),
   ) as Omit<ReviewSettings, "shopId">;
 
+  const textKeys = ["reviewSectionHeading", "reviewEmptyStateText", "reviewVerifiedPurchaseText", "reviewLoadMoreText", "reviewWriteReviewText", "reviewCountTextTemplate", "reviewAccentColor", "reviewStarColor", "reviewHeadingColor", "reviewTextColor", "reviewMutedTextColor", "reviewBorderColor", "reviewBackgroundColor", "reviewButtonBackgroundColor", "reviewButtonTextColor"] as const;
+  for (const key of textKeys) if (typeof settings[key] !== "string") settings[key] = DEFAULT_REVIEW_SETTINGS[key];
+
   return {
     ...DEFAULT_REVIEW_SETTINGS,
     ...settings,
@@ -170,6 +218,12 @@ export function toReviewSettings(row: RawReviewSettings | null): ReviewSettings 
     showVerifiedPurchaseBadge: normalizeBoolean(row.showVerifiedPurchaseBadge, DEFAULT_REVIEW_SETTINGS.showVerifiedPurchaseBadge),
     showReviewDates: normalizeBoolean(row.showReviewDates, DEFAULT_REVIEW_SETTINGS.showReviewDates),
     showVariantTitle: normalizeBoolean(row.showVariantTitle, DEFAULT_REVIEW_SETTINGS.showVariantTitle),
+    showReviewSectionHeading: normalizeBoolean(row.showReviewSectionHeading, DEFAULT_REVIEW_SETTINGS.showReviewSectionHeading),
+    showWriteReviewButton: normalizeBoolean(row.showWriteReviewButton, DEFAULT_REVIEW_SETTINGS.showWriteReviewButton),
+    reviewAlignment: row.reviewAlignment === "center" ? "center" : "left",
+    reviewCardStyle: row.reviewCardStyle === "bordered" ? "bordered" : "minimal",
+    reviewSectionSpacing: ["compact", "normal", "spacious"].includes(row.reviewSectionSpacing) ? row.reviewSectionSpacing as ReviewSettings["reviewSectionSpacing"] : DEFAULT_REVIEW_SETTINGS.reviewSectionSpacing,
+    reviewCornerRadius: typeof row.reviewCornerRadius === "number" && Number.isInteger(row.reviewCornerRadius) ? Math.min(24, Math.max(0, row.reviewCornerRadius)) : DEFAULT_REVIEW_SETTINGS.reviewCornerRadius,
     reviewsPerPage: normalizeReviewsPerPage(row.reviewsPerPage),
     defaultReviewSort: normalizeReviewSort(row.defaultReviewSort),
   };
@@ -219,9 +273,13 @@ export async function saveReviewSettings(
   const enabled = { EMAIL: value.reviewRequestEmailEnabled, SMS: value.reviewRequestSmsEnabled, WHATSAPP: value.reviewRequestWhatsappEnabled };
   if (value.automaticRequestsEnabled && (!Object.values(enabled).some(Boolean) || !enabled[value.reviewRequestPrimaryChannel])) throw new Error("Automation needs an enabled primary channel");
   for (const key of ["reviewRequestIncentiveText", "reviewRequestSenderName", "reviewRequestReplyToEmail", "reviewRequestSubjectTemplate", "reviewRequestBodyTemplate", "reviewRequestReminderSubjectTemplate", "reviewRequestReminderBodyTemplate"] as const) if (value[key] !== null && (typeof value[key] !== "string" || value[key].length > 6000)) throw new Error(`${key} is invalid`);
+  integer(value.reviewCornerRadius, "reviewCornerRadius", 0, 24);
+  if (!["left", "center"].includes(value.reviewAlignment)) throw new Error("reviewAlignment is invalid");
+  if (!["minimal", "bordered"].includes(value.reviewCardStyle)) throw new Error("reviewCardStyle is invalid");
+  if (!["compact", "normal", "spacious"].includes(value.reviewSectionSpacing)) throw new Error("reviewSectionSpacing is invalid");
   if (!isReviewSort(value.defaultReviewSort)) throw new Error("defaultReviewSort is invalid");
   for (const [key, setting] of Object.entries(value)) {
-    if (typeof setting !== "boolean" && !["requestDelayDays", "reminderDelayDays", "maxReminderCount", "minimumRating", "maximumRating", "maxMediaCount", "reviewMaxMediaItems", "reviewMaxPhotoSizeBytes", "reviewMaxVideoSizeBytes", "reviewMaxVideoDurationSeconds", "reviewsPerPage", "exchangeProtectionDays", "issueProtectionDays", "defaultReviewSort", "reviewRequestTrigger", "reviewRequestPrimaryChannel", "reviewRequestSendHourLocal", "reviewRequestIncentiveText", "reviewRequestSenderName", "reviewRequestReplyToEmail", "reviewRequestSubjectTemplate", "reviewRequestBodyTemplate", "reviewRequestReminderSubjectTemplate", "reviewRequestReminderBodyTemplate"].includes(key)) throw new Error(`${key} must be boolean`);
+    if (typeof setting !== "boolean" && !["requestDelayDays", "reminderDelayDays", "maxReminderCount", "minimumRating", "maximumRating", "maxMediaCount", "reviewMaxMediaItems", "reviewMaxPhotoSizeBytes", "reviewMaxVideoSizeBytes", "reviewMaxVideoDurationSeconds", "reviewsPerPage", "exchangeProtectionDays", "issueProtectionDays", "defaultReviewSort", "reviewRequestTrigger", "reviewRequestPrimaryChannel", "reviewRequestSendHourLocal", "reviewRequestIncentiveText", "reviewRequestSenderName", "reviewRequestReplyToEmail", "reviewRequestSubjectTemplate", "reviewRequestBodyTemplate", "reviewRequestReminderSubjectTemplate", "reviewRequestReminderBodyTemplate", "reviewSectionHeading", "reviewEmptyStateText", "reviewVerifiedPurchaseText", "reviewLoadMoreText", "reviewWriteReviewText", "reviewCountTextTemplate", "reviewAccentColor", "reviewStarColor", "reviewHeadingColor", "reviewTextColor", "reviewMutedTextColor", "reviewBorderColor", "reviewBackgroundColor", "reviewButtonBackgroundColor", "reviewButtonTextColor", "reviewAlignment", "reviewCardStyle", "reviewCornerRadius", "reviewSectionSpacing"].includes(key)) throw new Error(`${key} must be boolean`);
   }
   const row = await db.reviewSettings.upsert({ where: { shopId }, create: { shopId, ...value }, update: value });
   return toReviewSettings(row);
