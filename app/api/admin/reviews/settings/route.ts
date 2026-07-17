@@ -1,6 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getReviewSettings, REVIEW_STOREFRONT_SORTS, saveReviewSettings } from "../../../../../services/reviews/review-settings";
+import { parseDisplaySettingsInput } from "../../../../../services/reviews/review-display-settings-input";
+import { getReviewSettings, saveReviewSettings } from "../../../../../services/reviews/review-settings";
 import { resolveAdminShopFromRequest } from "../../../../../services/shopify/admin-shop-context";
-const headers={"Cache-Control":"no-store"}; const keys=["storefrontReviewsEnabled","showReviewSummary","showRatingDistribution","showVerifiedPurchaseBadge","showReviewDates","showVariantTitle"] as const;
-export async function GET(request:NextRequest){const resolved=await resolveAdminShopFromRequest(request);if(!resolved.shop?.id)return NextResponse.json({ok:false,error:"Shop context unavailable."},{status:401,headers});return NextResponse.json({ok:true,settings:await getReviewSettings(resolved.shop.id)},{headers});}
-export async function POST(request:NextRequest){const resolved=await resolveAdminShopFromRequest(request);if(!resolved.shop?.id)return NextResponse.json({ok:false,error:"Shop context unavailable."},{status:401,headers});try{const body=await request.json() as Record<string,unknown>;const input:Record<string,unknown>={};for(const key of keys){if(typeof body[key]!=="boolean")throw new Error(`${key} must be boolean`);input[key]=body[key];}if(!Number.isInteger(body.reviewsPerPage)||Number(body.reviewsPerPage)<1||Number(body.reviewsPerPage)>25)throw new Error("reviewsPerPage must be an integer between 1 and 25");if(!(REVIEW_STOREFRONT_SORTS as readonly string[]).includes(String(body.defaultReviewSort)))throw new Error("defaultReviewSort is invalid");input.reviewsPerPage=body.reviewsPerPage;input.defaultReviewSort=body.defaultReviewSort;return NextResponse.json({ok:true,settings:await saveReviewSettings(resolved.shop.id,input)},{headers});}catch{return NextResponse.json({ok:false,error:"Invalid review display settings."},{status:400,headers});}}
+
+const headers = { "Cache-Control": "no-store" };
+
+export { parseDisplaySettingsInput } from "../../../../../services/reviews/review-display-settings-input";
+
+export async function GET(request: NextRequest) {
+  const resolved = await resolveAdminShopFromRequest(request);
+  if (!resolved.shop?.id) return NextResponse.json({ ok: false, error: "Shop context unavailable." }, { status: 401, headers });
+  return NextResponse.json({ ok: true, settings: await getReviewSettings(resolved.shop.id) }, { headers });
+}
+
+export async function POST(request: NextRequest) {
+  const resolved = await resolveAdminShopFromRequest(request);
+  if (!resolved.shop?.id) return NextResponse.json({ ok: false, error: "Shop context unavailable." }, { status: 401, headers });
+  try {
+    const input = parseDisplaySettingsInput(await request.json());
+    return NextResponse.json({ ok: true, settings: await saveReviewSettings(resolved.shop.id, input) }, { headers });
+  } catch {
+    return NextResponse.json({ ok: false, error: "Invalid review display settings." }, { status: 400, headers });
+  }
+}
