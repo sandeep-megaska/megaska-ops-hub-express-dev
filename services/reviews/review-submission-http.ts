@@ -2,12 +2,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSessionTokenFromRequest, hashSessionToken } from "../auth/session.ts";
 import { prisma } from "../db/prisma.ts";
 import { requireStorefrontShopFromRequest } from "../shopify/shop.ts";
+import { isValidInternalAppProxySignature } from "../shopify/app-proxy-internal.ts";
 
 const hits = new Map<string, { count: number; expiresAt: number }>();
 export const secureHeaders = { "Cache-Control": "no-store", "Referrer-Policy": "no-referrer", "X-Content-Type-Options": "nosniff" };
 export function reply(payload: unknown, status = 200) { return NextResponse.json(payload, { status, headers: secureHeaders }); }
 export async function requireReviewProxy(request: NextRequest) {
   if (request.headers.get("x-megaska-app-proxy") !== "1") return null;
+  if (!isValidInternalAppProxySignature({
+    shopDomain: request.headers.get("x-shopify-shop-domain"),
+    timestamp: request.headers.get("x-megaska-app-proxy-timestamp"),
+    signature: request.headers.get("x-megaska-app-proxy-signature"),
+    method: request.method,
+    pathname: request.nextUrl.pathname,
+  })) return null;
   return requireStorefrontShopFromRequest(request);
 }
 export async function parseJson(request: NextRequest) {
