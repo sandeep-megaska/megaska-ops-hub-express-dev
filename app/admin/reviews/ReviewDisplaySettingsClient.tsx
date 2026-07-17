@@ -27,6 +27,12 @@ const displaySettings = [
 function SettingToggle({ checked, disabled, label, description, onChange }: { checked: boolean; disabled?: boolean; label: string; description: string; onChange: (checked: boolean) => void }) {
   return <label style={{ display: "grid", gap: 4 }}><span><input type="checkbox" checked={checked} disabled={disabled} onChange={(event) => onChange(event.target.checked)} /> {label}</span><small>{description}</small></label>;
 }
+function adminApiUrl(path: string): string {
+  const params = new URLSearchParams(window.location.search);
+  const query = params.toString();
+
+  return query ? `${path}?${query}` : path;
+}
 
 export default function ReviewDisplaySettingsClient({ initial }: { initial: Settings }) {
   const [value, setValue] = useState(initial);
@@ -36,7 +42,16 @@ export default function ReviewDisplaySettingsClient({ initial }: { initial: Sett
   const save = async () => {
     setState("saving");
     try {
-      const response = await fetch("/api/admin/reviews/settings", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(value) });
+      const response = await fetch(
+  adminApiUrl("/api/admin/reviews/settings"),
+  {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(value),
+  },
+);
       if (!response.ok) throw new Error();
       setState("saved");
     } catch {
