@@ -1,16 +1,19 @@
 import { prisma } from "../db/prisma.ts";
 import { getReviewSettings } from "./review-settings.ts";
-import { findReviewRequestByToken, hashReviewToken, normalizeReviewToken } from "./review-token.ts";
+import { findReviewRequestByToken, hashReviewToken, normalizeReviewToken, type ReviewTokenErrorCode } from "./review-token.ts";
 import { normalizeReviewBody, normalizeReviewDisplayName, normalizeReviewTitle } from "./review-content.ts";
 import { defaultReviewDisplayName } from "./review-display-name.ts";
 import { recalculateProductReviewAggregate } from "./review-foundation.ts";
 
 type Db = typeof prisma;
-type ErrorCode = "REVIEW_TOKEN_INVALID" | "REVIEW_TOKEN_EXPIRED" | "REVIEW_TOKEN_REQUEST_INACTIVE" | "REVIEW_ALREADY_SUBMITTED" | "REVIEW_SHOP_MISMATCH" | "REVIEWS_DISABLED" | "REVIEW_PRODUCT_UNAVAILABLE" | "REVIEW_CUSTOMER_SESSION_MISMATCH";
-export type SubmissionResult = { ok: true; review: { status: "PENDING_MODERATION" | "PUBLISHED"; verifiedPurchase: true } } | { ok: false; errorCode: ErrorCode | "REVIEW_VALIDATION_FAILED"; fieldErrors?: Record<string, string> };
+export type ReviewSubmissionDomainErrorCode = ReviewTokenErrorCode | "REVIEW_ALREADY_SUBMITTED" | "REVIEW_SHOP_MISMATCH" | "REVIEWS_DISABLED" | "REVIEW_PRODUCT_UNAVAILABLE" | "REVIEW_CUSTOMER_SESSION_MISMATCH";
+export type ReviewSubmissionErrorCode = ReviewSubmissionDomainErrorCode | "REVIEW_VALIDATION_FAILED";
+export type SubmissionResult = { ok: true; review: { status: "PENDING_MODERATION" | "PUBLISHED"; verifiedPurchase: true } } | { ok: false; errorCode: ReviewSubmissionErrorCode; fieldErrors?: Record<string, string> };
+export type ReviewSubmissionContext = { ok: true; request: { tokenExpiresAt: Date; productTitle: string; variantTitle: string | null; productImageUrl: string | null; orderName: string | null; verifiedPurchase: true }; settings: { minimumRating: number; maximumRating: number; minimumBodyLength: number; maximumBodyLength: number; moderationRequired: boolean; allowMedia: boolean }; shop: { displayName: string } } | { ok: false; errorCode: ReviewSubmissionDomainErrorCode };
 
 function safeImage(url: string | null) { try { return url && new URL(url).protocol === "https:" ? url : null; } catch { return null; } }
-export async function getReviewSubmissionContext({ token, shopId, now = new Date(), db = prisma }: { token: unknown; shopId: string; now?: Date; db?: Db }) {
+function parseReviewRating(value: unknown, minimum: number, maximum: number): { ok: true; rating: number } | { ok: false; message: string } { if (typeof value !== "number" || !Number.isInteger(value) || value < minimum || value > maximum) return { ok: false, message: `Choose a rating from ${minimum} to ${maximum}.` }; return { ok: true, rating: value }; }
+export async function getReviewSubmissionContext({ token, shopId, now = new Date(), db = prisma }: { token: unknown; shopId: string; now?: Date; db?: Db }): Promise<ReviewSubmissionContext> {
   const found = await findReviewRequestByToken(token, { now, db });
   if (!found.ok) return found;
   if (found.reviewRequest.shopId !== shopId) return { ok: false as const, errorCode: "REVIEW_SHOP_MISMATCH" as const };
@@ -28,7 +31,9 @@ export async function submitVerifiedReview(input: { token: unknown; shopId: stri
   const { db = prisma, now = new Date() } = input;
   const context = await getReviewSubmissionContext({ token: input.token, shopId: input.shopId, now, db });
   if (!context.ok) return context;
-  if (!Number.isInteger(input.rating) || typeof input.rating !== "number" || input.rating < context.settings.minimumRating || input.rating > context.settings.maximumRating) return { ok: false, errorCode: "REVIEW_VALIDATION_FAILED", fieldErrors: { rating: `Choose a rating from ${context.settings.minimumRating} to ${context.settings.maximumRating}.` } };
+  const ratingResult = parseReviewRating(input.rating, context.settings.minimumRating, context.settings.maximumRating);
+  if (!ratingResult.ok) return { ok: false, errorCode: "REVIEW_VALIDATION_FAILED", fieldErrors: { rating: ratingResult.message } };
+  const rating = ratingResult.rating;
   const title = normalizeReviewTitle(input.title); const body = normalizeReviewBody(input.body);
   if (title.error || body.error) return { ok: false, errorCode: "REVIEW_VALIDATION_FAILED", fieldErrors: { ...(title.error ? { title: title.error } : {}), ...(body.error ? { body: body.error } : {}) } };
   const token = normalizeReviewToken(input.token); if (!token) return { ok: false, errorCode: "REVIEW_TOKEN_INVALID" };
@@ -44,8 +49,8 @@ export async function submitVerifiedReview(input: { token: unknown; shopId: stri
       if (!settings.reviewsEnabled) return { ok: false as const, errorCode: "REVIEWS_DISABLED" as const };
       const display = input.customerDisplayName === undefined ? { value: defaultReviewDisplayName(request.customerProfile) } : normalizeReviewDisplayName(input.customerDisplayName);
       if (display.error || !display.value) return { ok: false as const, errorCode: "REVIEW_VALIDATION_FAILED" as const, fieldErrors: { customerDisplayName: display.error || "Enter a display name." } };
-      const status = settings.moderationRequired ? "PENDING_MODERATION" as const : "PUBLISHED" as const;
-      const review = await tx.productReview.create({ data: { shopId: request.shopId, customerProfileId: request.customerProfileId, reviewRequestId: request.id, megaskaOrderId: request.megaskaOrderId, shopifyOrderId: request.shopifyOrderId, shopifyLineItemId: request.shopifyLineItemId, shopifyProductId: request.shopifyProductId, shopifyVariantId: request.shopifyVariantId, source: "VERIFIED_PURCHASE", status, rating: input.rating, title: title.value, body: body.value, customerDisplayName: display.value, verifiedPurchase: true, productTitleSnapshot: request.productTitleSnapshot, variantTitleSnapshot: request.variantTitleSnapshot, productHandleSnapshot: request.productHandleSnapshot, publishedAt: status === "PUBLISHED" ? now : null } });
+      const status: "PENDING_MODERATION" | "PUBLISHED" = settings.moderationRequired ? "PENDING_MODERATION" : "PUBLISHED";
+      const review = await tx.productReview.create({ data: { shopId: request.shopId, customerProfileId: request.customerProfileId, reviewRequestId: request.id, megaskaOrderId: request.megaskaOrderId, shopifyOrderId: request.shopifyOrderId, shopifyLineItemId: request.shopifyLineItemId, shopifyProductId: request.shopifyProductId, shopifyVariantId: request.shopifyVariantId, source: "VERIFIED_PURCHASE", status, rating, title: title.value, body: body.value, customerDisplayName: display.value, verifiedPurchase: true, productTitleSnapshot: request.productTitleSnapshot, variantTitleSnapshot: request.variantTitleSnapshot, productHandleSnapshot: request.productHandleSnapshot, publishedAt: status === "PUBLISHED" ? now : null } });
       await tx.reviewRequest.update({ where: { id: request.id }, data: { status: "COMPLETED", completedAt: now, tokenHash: null, tokenExpiresAt: null } });
       if (status === "PUBLISHED") await recalculateProductReviewAggregate(request.shopId, request.shopifyProductId, tx);
       return { ok: true as const, review: { status: review.status as "PENDING_MODERATION" | "PUBLISHED", verifiedPurchase: true as const } };
