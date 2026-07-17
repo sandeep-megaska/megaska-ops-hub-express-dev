@@ -56,7 +56,18 @@ export default function ReviewDisplaySettingsClient({ initial }: { initial: Sett
     headers: {
       "content-type": "application/json",
     },
-    body: JSON.stringify(value),
+   body: JSON.stringify({
+  reviewsEnabled: value.reviewsEnabled,
+  automaticRequestsEnabled: value.automaticRequestsEnabled,
+  storefrontReviewsEnabled: value.storefrontReviewsEnabled,
+  showReviewSummary: value.showReviewSummary,
+  showRatingDistribution: value.showRatingDistribution,
+  showVerifiedPurchaseBadge: value.showVerifiedPurchaseBadge,
+  showReviewDates: value.showReviewDates,
+  showVariantTitle: value.showVariantTitle,
+  reviewsPerPage: value.reviewsPerPage,
+  defaultReviewSort: value.defaultReviewSort,
+}),
   },
 );
       const payload: unknown = await response.json().catch(() => null);
