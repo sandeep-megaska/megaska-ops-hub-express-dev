@@ -2,10 +2,10 @@ import { prisma } from "../db/prisma.ts";
 import { isReviewSort, type ReviewSort } from "./review-sort.ts";
 
 export type { ReviewSort } from "./review-sort.ts";
-export type PublicProductReview = { id:string; rating:number; title:string|null; body:string|null; customerDisplayName:string; verifiedPurchase:boolean; productTitleSnapshot:string; variantTitleSnapshot:string|null; createdAt:Date; publishedAt:Date|null };
+export type PublicProductReview = { id:string; rating:number; title:string|null; body:string|null; customerDisplayName:string; verifiedPurchase:boolean; productTitleSnapshot:string; variantTitleSnapshot:string|null; createdAt:Date; publishedAt:Date|null; merchantReply?:{body:string;authorLabel:string;createdAt:Date;updatedAt:Date}|null };
 export type ProductReviewSummary = { averageRating:number; reviewCount:number; rating1Count:number; rating2Count:number; rating3Count:number; rating4Count:number; rating5Count:number };
 type Db={productReview:{findMany(args:unknown):Promise<PublicProductReview[]>;count(args:unknown):Promise<number>};productReviewAggregate:{findUnique(args:unknown):Promise<{averageRating:unknown;publishedCount:number;rating1Count:number;rating2Count:number;rating3Count:number;rating4Count:number;rating5Count:number}|null>}};
-const select={id:true,rating:true,title:true,body:true,customerDisplayName:true,verifiedPurchase:true,productTitleSnapshot:true,variantTitleSnapshot:true,createdAt:true,publishedAt:true};
+const select={id:true,rating:true,title:true,body:true,customerDisplayName:true,verifiedPurchase:true,productTitleSnapshot:true,variantTitleSnapshot:true,createdAt:true,publishedAt:true,merchantReply:{select:{body:true,authorLabel:true,createdAt:true,updatedAt:true}}};
 const zeroSummary=():ProductReviewSummary=>({averageRating:0,reviewCount:0,rating1Count:0,rating2Count:0,rating3Count:0,rating4Count:0,rating5Count:0});
 export function normalizeShopifyProductId(value:unknown):string|null { if(typeof value!=="string"&&typeof value!=="number")return null; const raw=String(value).trim(); if(/^\d+$/.test(raw)&&Number(raw)>0)return raw; const match=/^gid:\/\/shopify\/Product\/(\d+)$/.exec(raw); return match&&Number(match[1])>0?match[1]:null; }
 export function normalizeStorefrontPage(value:unknown, fallback=1){return typeof value==="number"&&Number.isInteger(value)&&value>=1?value:fallback}

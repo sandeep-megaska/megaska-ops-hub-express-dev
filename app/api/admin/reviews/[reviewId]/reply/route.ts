@@ -1,0 +1,6 @@
+import { NextRequest, NextResponse } from "next/server";
+import { deleteMerchantReply, saveMerchantReply } from "../../../../../../services/reviews/review-reply";
+import { formatAdminShopResolutionError, resolveAdminShopFromRequest } from "../../../../../../services/shopify/admin-shop-context";
+export const runtime="nodejs";
+export async function PUT(req:NextRequest,ctx:{params:Promise<{reviewId:string}>}){const resolved=await resolveAdminShopFromRequest(req);if(!resolved.shop?.id)return NextResponse.json({ok:false,error:formatAdminShopResolutionError(resolved)},{status:401});const body=await req.json().catch(()=>null);const {reviewId}=await ctx.params;const result=await saveMerchantReply({shopId:resolved.shop.id,reviewId,body:body?.body,authorLabel:body?.authorLabel});return NextResponse.json(result,{status:result.ok?200:result.errorCode==="REVIEW_NOT_FOUND"?404:422});}
+export async function DELETE(req:NextRequest,ctx:{params:Promise<{reviewId:string}>}){const resolved=await resolveAdminShopFromRequest(req);if(!resolved.shop?.id)return NextResponse.json({ok:false,error:formatAdminShopResolutionError(resolved)},{status:401});const {reviewId}=await ctx.params;const result=await deleteMerchantReply({shopId:resolved.shop.id,reviewId});return NextResponse.json(result,{status:result.ok?200:404});}
