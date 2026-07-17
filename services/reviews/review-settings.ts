@@ -15,6 +15,9 @@ export type ReviewSettings = {
   requireVerifiedPurchase: boolean;
   moderationRequired: boolean;
   allowReviewEditing: boolean;
+  customerReviewEditingEnabled: boolean;
+  reviewEditWindowDays: number;
+  requireRemoderationAfterEdit: boolean;
   allowReviewDeletion: boolean;
   allowMedia: boolean;
   maxMediaCount: number;
@@ -52,6 +55,9 @@ export const DEFAULT_REVIEW_SETTINGS: Omit<ReviewSettings, "shopId"> = {
   requireVerifiedPurchase: true,
   moderationRequired: true,
   allowReviewEditing: true,
+  customerReviewEditingEnabled: true,
+  reviewEditWindowDays: 30,
+  requireRemoderationAfterEdit: true,
   allowReviewDeletion: true,
   allowMedia: true,
   maxMediaCount: 5,
@@ -80,6 +86,8 @@ export type ReviewSettingsDb = {
   };
 };
 
+function integerOrDefault(value: unknown, fallback: number, min: number, max: number) { return typeof value === "number" && Number.isInteger(value) && value >= min && value <= max ? value : fallback; }
+
 function normalizeBoolean(value: unknown, fallback: boolean): boolean {
   return typeof value === "boolean" ? value : fallback;
 }
@@ -101,6 +109,9 @@ export function toReviewSettings(row: RawReviewSettings | null, fallbackShopId =
     requireVerifiedPurchase: normalizeBoolean(row.requireVerifiedPurchase, DEFAULT_REVIEW_SETTINGS.requireVerifiedPurchase),
     moderationRequired: normalizeBoolean(row.moderationRequired, DEFAULT_REVIEW_SETTINGS.moderationRequired),
     allowReviewEditing: normalizeBoolean(row.allowReviewEditing, DEFAULT_REVIEW_SETTINGS.allowReviewEditing),
+    customerReviewEditingEnabled: normalizeBoolean(row.customerReviewEditingEnabled, DEFAULT_REVIEW_SETTINGS.customerReviewEditingEnabled),
+    requireRemoderationAfterEdit: normalizeBoolean(row.requireRemoderationAfterEdit, DEFAULT_REVIEW_SETTINGS.requireRemoderationAfterEdit),
+    reviewEditWindowDays: integerOrDefault(row.reviewEditWindowDays, DEFAULT_REVIEW_SETTINGS.reviewEditWindowDays, 1, 365),
     allowReviewDeletion: normalizeBoolean(row.allowReviewDeletion, DEFAULT_REVIEW_SETTINGS.allowReviewDeletion),
     allowMedia: normalizeBoolean(row.allowMedia, DEFAULT_REVIEW_SETTINGS.allowMedia),
     cancellationBlocksReview: normalizeBoolean(row.cancellationBlocksReview, DEFAULT_REVIEW_SETTINGS.cancellationBlocksReview),
@@ -142,6 +153,7 @@ export async function saveReviewSettings(
   integer(value.minimumRating, "minimumRating", 1, 5);
   integer(value.maximumRating, "maximumRating", 1, 5);
   integer(value.maxMediaCount, "maxMediaCount", 0, 10);
+  integer(value.reviewEditWindowDays, "reviewEditWindowDays", 1, 365);
   integer(value.reviewsPerPage, "reviewsPerPage", 1, 25);
   integer(value.exchangeProtectionDays, "exchangeProtectionDays", 0, 365, true);
   integer(value.issueProtectionDays, "issueProtectionDays", 0, 365, true);
@@ -149,7 +161,7 @@ export async function saveReviewSettings(
   if (value.automaticRequestsEnabled && !value.reviewsEnabled) throw new Error("Automatic requests require reviews to be enabled");
   if (!isReviewSort(value.defaultReviewSort)) throw new Error("defaultReviewSort is invalid");
   for (const [key, setting] of Object.entries(value)) {
-    if (typeof setting !== "boolean" && !["requestDelayDays", "reminderDelayDays", "maxReminderCount", "minimumRating", "maximumRating", "maxMediaCount", "reviewsPerPage", "exchangeProtectionDays", "issueProtectionDays", "defaultReviewSort"].includes(key)) throw new Error(`${key} must be boolean`);
+    if (typeof setting !== "boolean" && !["requestDelayDays", "reminderDelayDays", "maxReminderCount", "minimumRating", "maximumRating", "maxMediaCount", "reviewEditWindowDays", "reviewsPerPage", "exchangeProtectionDays", "issueProtectionDays", "defaultReviewSort"].includes(key)) throw new Error(`${key} must be boolean`);
   }
   const row = await db.reviewSettings.upsert({ where: { shopId }, create: { shopId, ...value }, update: value });
   return toReviewSettings(row);
