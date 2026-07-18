@@ -983,6 +983,9 @@
   }
 
   function closeModal(reason, options) {
+    if (reason && reason !== "success") {
+      document.dispatchEvent(new CustomEvent("megaska:otp-cancelled", { detail: { reason } }));
+    }
     const opts = options || {};
     const force = Boolean(opts.force);
 
