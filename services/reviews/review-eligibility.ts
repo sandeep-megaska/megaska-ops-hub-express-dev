@@ -1,4 +1,5 @@
 import { prisma } from "../db/prisma.ts";
+import { isOrderDeliveredForReview } from "../orders/canonical-delivery.ts";
 import { addDays } from "../exchange/deadlines.ts";
 import { isCancellationStatusBlocking } from "../exchange/cancellation.ts";
 import { ACTIVE_EXCHANGE_STATUSES } from "../exchange/lifecycle.ts";
@@ -42,11 +43,12 @@ export function decideReviewEligibility(input: { request: EligibilityRequest; or
   if (request.status === "SCHEDULED" && (request.sentAt || request.tokenHash)) return result("SCHEDULED", request.blockReason, request.eligibleAt, request.deliveredAtSnapshot);
   if (order.status === "CANCELLED" && settings.cancellationBlocksReview) return result("BLOCKED", "CANCELED_ORDER", null, order.deliveredAt);
   if (order.status === "REFUNDED" && settings.refundBlocksReview) return result("BLOCKED", "REFUNDED_ORDER", null, order.deliveredAt);
-  if (!order.deliveredAt) return result("PENDING_ELIGIBILITY", "ORDER_NOT_DELIVERED", null, null);
-  const blocker = actionBlocker(input.actions, settings); if (blocker) return result("BLOCKED", blocker, addDays(order.deliveredAt, protection.effectiveProtectionDays), order.deliveredAt);
-  const eligibleAt = addDays(order.deliveredAt, protection.effectiveProtectionDays);
+  if (!isOrderDeliveredForReview(order)) return result("PENDING_ELIGIBILITY", "ORDER_NOT_DELIVERED", null, null);
+  const deliveredAt = order.deliveredAt!;
+  const blocker = actionBlocker(input.actions, settings); if (blocker) return result("BLOCKED", blocker, addDays(deliveredAt, protection.effectiveProtectionDays), deliveredAt);
+  const eligibleAt = addDays(deliveredAt, protection.effectiveProtectionDays);
   if (now.getTime() < eligibleAt.getTime()) return result("PENDING_ELIGIBILITY", "PROTECTION_WINDOW", eligibleAt, order.deliveredAt);
-  return result("ELIGIBLE", null, eligibleAt, order.deliveredAt);
+  return result("ELIGIBLE", null, eligibleAt, deliveredAt);
 }
 
 export type ReviewEligibilityDb = { reviewRequest: { findFirst(args: unknown): Promise<EligibilityRequest | null>; update(args: unknown): Promise<EligibilityRequest>; findMany(args: unknown): Promise<EligibilityRequest[]> }; megaskaOrder: { findFirst(args: unknown): Promise<EligibilityOrder | null> }; customerProfile: { findFirst(args: unknown): Promise<unknown | null> }; productReview: { findFirst(args: unknown): Promise<{ submittedAt: Date } | null> }; orderActionRequest: { findMany(args: unknown): Promise<Action[]> }; reviewSettings: { findUnique(args: unknown): Promise<(Settings & { requestDelayDays: number; exchangeProtectionDays: number | null; issueProtectionDays: number | null }) | null> } };

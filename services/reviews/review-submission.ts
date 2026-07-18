@@ -5,6 +5,7 @@ import { normalizeReviewBody, normalizeReviewDisplayName, normalizeReviewTitle }
 import { defaultReviewDisplayName } from "./review-display-name.ts";
 import { recalculateProductReviewAggregate } from "./review-foundation.ts";
 import { validateReviewSubmissionInput, type ReviewSubmissionInput } from "./review-submission-input.ts";
+import { evaluateReviewSubmissionEligibility, type ReviewSubmissionEligibilityDependencies, type ReviewSubmissionEligibilityReason } from "./review-submission-eligibility.ts";
 
 type Db = typeof prisma;
 export type ReviewSubmissionDomainErrorCode = ReviewTokenErrorCode | "REVIEW_ALREADY_SUBMITTED" | "REVIEW_SHOP_MISMATCH" | "REVIEWS_DISABLED" | "REVIEW_PRODUCT_UNAVAILABLE" | "REVIEW_CUSTOMER_SESSION_MISMATCH";
@@ -66,12 +67,13 @@ export async function submitVerifiedReview(input: { token: unknown; shopId: stri
 export type PendingReviewSource = "CUSTOMER_DASHBOARD" | "PRODUCT_PAGE" | "REVIEW_REQUEST_EMAIL" | "REVIEW_REQUEST_WHATSAPP";
 export type SubmitReviewCommand = { shopId: string; customerProfileId: string; source: PendingReviewSource; reviewRequestId?: string | null; input: ReviewSubmissionInput };
 export type PublicSubmittedReview = { id: string; productId: string; variantId: string | null; orderId: string; orderLineId: string; rating: number; title: string | null; body: string | null; verifiedPurchase: boolean; status: "PENDING_MODERATION"; source: PendingReviewSource; submittedAt: Date };
-type PendingReviewDb = { productReview: { create(args: { data: Record<string, unknown> }): Promise<any> } };
+type CreatedPendingReview = { id: string; shopifyProductId: string; shopifyVariantId: string | null; shopifyOrderId: string | null; shopifyLineItemId: string | null; rating: number; title: string | null; body: string | null; verifiedPurchase: boolean; status: string; source: string; submittedAt: Date };
+type PendingReviewDb = { productReview: { create(args: { data: Record<string, unknown> }): Promise<CreatedPendingReview> } };
 export type ReviewSubmissionDependencies = { db?: PendingReviewDb; now?: () => Date };
 
 export class ReviewSubmissionDomainError extends Error {
-  readonly code: "ALREADY_REVIEWED";
-  constructor(code: "ALREADY_REVIEWED") { super(code); this.name = "ReviewSubmissionDomainError"; this.code = code; }
+  readonly code: ReviewSubmissionEligibilityReason;
+  constructor(code: ReviewSubmissionEligibilityReason) { super(code); this.name = "ReviewSubmissionDomainError"; this.code = code; }
 }
 
 function isDuplicateReviewError(error: unknown) {
@@ -79,7 +81,7 @@ function isDuplicateReviewError(error: unknown) {
   return value?.code === "P2002";
 }
 
-function publicSubmittedReview(review: { id: string; shopifyProductId: string; shopifyVariantId: string | null; shopifyOrderId: string | null; shopifyLineItemId: string | null; rating: number; title: string | null; body: string | null; verifiedPurchase: boolean; status: string; source: string; submittedAt: Date }): PublicSubmittedReview {
+function publicSubmittedReview(review: CreatedPendingReview): PublicSubmittedReview {
   return { id: review.id, productId: review.shopifyProductId, variantId: review.shopifyVariantId, orderId: review.shopifyOrderId || "", orderLineId: review.shopifyLineItemId || "", rating: review.rating, title: review.title, body: review.body, verifiedPurchase: review.verifiedPurchase, status: "PENDING_MODERATION", source: review.source as PendingReviewSource, submittedAt: review.submittedAt };
 }
 
@@ -94,4 +96,13 @@ export async function createPendingReview(command: SubmitReviewCommand, dependen
     if (isDuplicateReviewError(error)) throw new ReviewSubmissionDomainError("ALREADY_REVIEWED");
     throw error;
   }
+}
+
+
+export type EligibleReviewSubmissionDependencies = ReviewSubmissionDependencies & { eligibility?: ReviewSubmissionEligibilityDependencies };
+export async function submitEligibleReview(command: SubmitReviewCommand, dependencies: EligibleReviewSubmissionDependencies = {}): Promise<PublicSubmittedReview> {
+  const input = validateReviewSubmissionInput(command.input);
+  const eligibility = await evaluateReviewSubmissionEligibility({ shopId: command.shopId, customerProfileId: command.customerProfileId, orderId: input.orderId, orderLineId: input.orderLineId, productId: input.productId, variantId: input.variantId }, dependencies.eligibility);
+  if (!eligibility.eligible) throw new ReviewSubmissionDomainError(eligibility.reason);
+  return createPendingReview({ ...command, shopId: eligibility.shopId, customerProfileId: eligibility.customerProfileId, input: { ...input, orderId: eligibility.orderId, orderLineId: eligibility.orderLineId, productId: eligibility.productId, variantId: eligibility.variantId } }, dependencies);
 }
