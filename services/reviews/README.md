@@ -56,7 +56,7 @@ Run existing order eligibility engine
 PENDING_ELIGIBILITY / ELIGIBLE / BLOCKED
 ```
 
-Quantity does not multiply requests: the uniqueness boundary is Shopify order + Shopify line item. Fully removed/refunded lines, gift cards, shipping/tip-like custom lines, and lines without a Shopify product are skipped; a real zero-price promotional product remains reviewable. Re-sync is idempotent and races re-read the unique request. Existing source omissions are retained rather than deleted.
+Quantity does not multiply requests: the uniqueness boundary is Shopify order + Shopify line item. Fully removed lines, gift cards, shipping/tip-like custom lines, and lines without a Shopify product are skipped; a real zero-price promotional product remains reviewable. Shopify `refundableQuantity` is not treated as refunded quantity, so it does not disqualify a purchased line. Re-sync is idempotent and races re-read the unique request. Existing source omissions are retained rather than deleted.
 
 Snapshots preserve historical non-empty title, handle, image, and variant values. Only explicit missing/placeholder values are enriched; immutable Shopify order, line-item, and product IDs are never updated. Unsent delivery snapshots may follow canonical delivery, while advanced workflow states retain their historical delivery snapshot. Candidate synchronization only creates/enriches; the separate eligibility engine remains responsible for status decisions.
 
