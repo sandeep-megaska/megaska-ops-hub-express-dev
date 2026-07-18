@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { appProxyJsonError, createInternalAppProxyProof, requireEnabledModule, requireShopFromAppProxy, requireStorefrontShopFromAppProxy } from "../../../../../services/shopify/app-proxy";
+import { buildInternalApiUrl, isPublicApiPath, isStorefrontApiPath } from "./routing";
 
 
 const HOP_BY_HOP_RESPONSE_HEADERS = new Set([
@@ -54,24 +55,6 @@ async function buildOtpRequestProxyResponse(response: Response) {
   );
 }
 
-const STOREFRONT_API_PREFIXES = [
-  "otp/request",
-  "otp/verify",
-  "auth/session",
-  "delhivery/pincode",
-  "express/checkout/",
-  "profile/",
-  "runtime/config",
-  "reviews/submission/",
-  "reviews/storefront/",
-  "reviews/customer",
-];
-
-function isStorefrontApiPath(path: string) {
-  const normalized = path.replace(/^\/+/, "");
-  return STOREFRONT_API_PREFIXES.some((prefix) => normalized === prefix || normalized.startsWith(prefix));
-}
-
 const API_MODULES: Array<{ prefix: string; moduleKey: string }> = [
   { prefix: "dashboard/", moduleKey: "dashboard" },
   { prefix: "express/checkout/", moduleKey: "express_checkout" },
@@ -101,17 +84,13 @@ async function proxyInternalApi(request: NextRequest, context: { params: Promise
       : await requireShopFromAppProxy(request);
     const moduleKey = resolveModuleKey(proxyPath);
 
-    if (!moduleKey && proxyPath !== "runtime/config" && proxyPath !== "reviews/customer" && !proxyPath.startsWith("reviews/submission/") && !proxyPath.startsWith("reviews/storefront/")) {
+    if (!moduleKey && !isPublicApiPath(proxyPath)) {
       return NextResponse.json({ ok: false, error: "API route is not available through the Megaska app proxy" }, { status: 404 });
     }
 
     if (moduleKey) await requireEnabledModule(shop.id, moduleKey);
 
-    const targetUrl = new URL(request.url);
-    targetUrl.pathname = `/api/${proxyPath}`;
-    targetUrl.searchParams.set("shop", shop.shopDomain);
-    targetUrl.searchParams.delete("signature");
-    targetUrl.searchParams.delete("hmac");
+    const targetUrl = buildInternalApiUrl(request.url, proxyPath, shop.shopDomain);
 
     const headers = new Headers(request.headers);
     headers.set("x-shopify-shop-domain", shop.shopDomain);
