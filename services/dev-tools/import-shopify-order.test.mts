@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import test from "node:test";
 import assert from "node:assert/strict";
-import { assertDevelopmentOrderImportEnabled } from "./import-shopify-order.ts";
+import { assertDevelopmentOrderImportEnabled, importShopifyOrderForDevelopment } from "./import-shopify-order.ts";
 import { normalizeShopifyOrderIdentifier, syncCanonicalShopifyOrder } from "../orders/shopify-order-sync.ts";
 
 test("guard requires its exact flag and independently rejects both production signals", () => {
@@ -20,7 +20,7 @@ test("accepts only a numeric ID or canonical Admin GraphQL order GID", () => {
 const source = {
   shopifyOrderId: "gid://shopify/Order/123", shopifyOrderName: "#123", createdAt: "2026-07-17T10:00:00Z", processedAt: "2026-07-17T10:01:00Z", cancelledAt: null,
   displayFinancialStatus: "PAID", displayFulfillmentStatus: "FULFILLED", deliveredAt: "2026-07-18T10:00:00Z", customerId: "gid://shopify/Customer/9",
-  lineItems: [{ shopifyLineItemId: "gid://shopify/LineItem/7", shopifyProductId: "gid://shopify/Product/8", shopifyVariantId: "gid://shopify/ProductVariant/10", title: "Tea", productTitle: "Tea", variantTitle: "Default Title", productHandle: "tea", productImageUrl: "https://example.test/tea.jpg", sku: "TEA", quantity: 1, currentQuantity: 1, fulfillableQuantity: 0, refundableQuantity: 0, isGiftCard: false, requiresShipping: true, originalUnitPrice: "10.00", discountedTotal: "10.00", currencyCode: "INR", productType: "Tea", vendor: "Megaska", tags: [] }],
+  lineItems: [{ shopifyLineItemId: "gid://shopify/LineItem/7", shopifyProductId: "gid://shopify/Product/8", shopifyVariantId: "gid://shopify/ProductVariant/10", title: "Tea", productTitle: "Tea", variantTitle: "Default Title", productHandle: "tea", productImageUrl: "https://example.test/tea.jpg", sku: "TEA", quantity: 1, currentQuantity: 1, fulfillableQuantity: 0, refundableQuantity: 1, isGiftCard: false, requiresShipping: true, originalUnitPrice: "10.00", discountedTotal: "10.00", currencyCode: "INR", productType: "Tea", vendor: "Megaska", tags: [] }],
 };
 
 function harness() {
@@ -56,4 +56,20 @@ test("sync is tenant scoped, idempotent, links the customer, creates lines, and 
   assert.equal(first.deliveredAt, null);
   assert.notEqual(first.status, "DELIVERED");
   assert.equal(first.metadata.shopifyDeliveredAt, source.deliveredAt);
+});
+
+test("development import creates one candidate when refundable quantity equals quantity and preserves delivery on rerun", async () => {
+  const state = harness();
+  const sync = (input: { shopId: string; shopDomain: string; orderIdentifier: string }) => syncCanonicalShopifyOrder(input, state.deps as any);
+  const input = { shopId: "shop-a", shopDomain: "a.myshopify.com", orderIdentifier: "123" };
+  const first = await importShopifyOrderForDevelopment(input, { env: { LOOPDESK_DEV_ORDER_IMPORT_HELPER_ENABLED: "true" }, sync });
+  assert.equal(state.lines.length, 1);
+
+  first.status = "DELIVERED";
+  first.deliveredAt = new Date("2026-07-18T10:00:00Z");
+  const second = await importShopifyOrderForDevelopment(input, { env: { LOOPDESK_DEV_ORDER_IMPORT_HELPER_ENABLED: "true" }, sync });
+
+  assert.equal(state.lines.length, 1);
+  assert.equal(second.status, "DELIVERED");
+  assert.equal(second.deliveredAt?.toISOString(), "2026-07-18T10:00:00.000Z");
 });
