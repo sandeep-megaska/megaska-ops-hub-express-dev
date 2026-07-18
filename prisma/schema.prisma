@@ -1512,7 +1512,11 @@ model ReviewRequest {
   sendAttemptCount        Int                                   @default(0)
   reminderCount           Int                                   @default(0)
   tokenHash               String?                               @unique
+  tokenCreatedAt          DateTime?
   tokenExpiresAt          DateTime?
+  tokenConsumedAt         DateTime?
+  tokenRevokedAt          DateTime?
+  submittedReviewId       String?
   lastSendAttemptAt       DateTime?
   lastSendErrorCode       String?
   providerMessageId       String?
