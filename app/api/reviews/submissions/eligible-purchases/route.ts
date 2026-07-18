@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 import { resolveReviewAccessFromCustomerSession } from "../../../../../services/reviews/review-submission-access.ts";
 import { getReviewSettings } from "../../../../../services/reviews/review-settings.ts";
-import { listEligibleReviewPurchases } from "../../../../../services/reviews/review-eligible-purchases.ts";
+import { listEligibleReviewPurchasesWithDiagnostics } from "../../../../../services/reviews/review-eligible-purchases.ts";
 import { allowedOrigin, rateLimit, reply } from "../../../../../services/reviews/review-submission-http.ts";
 import { normalizeShopifyProductId } from "../../../../../services/reviews/review-storefront-query.ts";
 
@@ -16,6 +16,13 @@ export async function GET(request: NextRequest) {
   if (!access.ok) return reply({ ok: false, errorCode: "UNAUTHENTICATED" }, 401);
   const settings = await getReviewSettings(access.shopId);
   if (!settings.reviewsEnabled) return reply({ ok: false, errorCode: "REVIEWS_DISABLED", purchases: [] }, 410);
-  const purchases = (await listEligibleReviewPurchases({ shopId: access.shopId, customerProfileId: access.customerProfileId, productId, take: 25 })).map(({ productTitle: _productTitle, productImageUrl: _productImageUrl, ...purchase }) => ({ ...purchase, eligible: true }));
+  const result = await listEligibleReviewPurchasesWithDiagnostics({ shopId: access.shopId, customerProfileId: access.customerProfileId, productId, take: 25 });
+  console.info("[REVIEW ELIGIBLE PURCHASES DIAGNOSTIC]", {
+    shopId: access.shopId,
+    customerProfileId: access.customerProfileId,
+    normalizedProductId: productId,
+    ...result.diagnostics,
+  });
+  const purchases = result.purchases.map(({ productTitle: _productTitle, productImageUrl: _productImageUrl, ...purchase }) => ({ ...purchase, eligible: true }));
   return reply({ ok: true, purchases });
 }
