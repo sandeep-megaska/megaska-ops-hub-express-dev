@@ -254,3 +254,18 @@ body.ld-account-scroll-lock { overflow: hidden; }
   #loopdesk-customer-dashboard-root .ld-store-credit-amount { justify-items: start; text-align: left; white-space: normal; }
   #loopdesk-customer-dashboard-root .ld-store-credit-details dl > div { grid-template-columns: 1fr; gap: 2px; }
 }
+#loopdesk-customer-dashboard-root .ld-account-summary-link { border: 0; border-radius: 18px; background: var(--ld-account-soft); color: var(--ld-account-text); padding: 16px; text-align: left; cursor: pointer; display: grid; gap: 4px; font: inherit; }
+#loopdesk-customer-dashboard-root .ld-reviews { margin: 18px 0; }
+#loopdesk-customer-dashboard-root .ld-review-list { display: grid; gap: 14px; }
+#loopdesk-customer-dashboard-root .ld-review-card { display: grid; grid-template-columns: 88px minmax(0,1fr); gap: 14px; border: 1px solid var(--ld-account-line); border-radius: 18px; padding: 14px; overflow-wrap: anywhere; }
+#loopdesk-customer-dashboard-root .ld-review-image { width: 88px; height: 88px; object-fit: cover; border-radius: 14px; background: var(--ld-account-soft); }
+#loopdesk-customer-dashboard-root .ld-review-image-fallback { display: grid; place-items: center; color: var(--ld-account-muted); font-size: 12px; text-align: center; }
+#loopdesk-customer-dashboard-root .ld-review-content { min-width: 0; display: grid; align-content: start; gap: 7px; }
+#loopdesk-customer-dashboard-root .ld-review-heading { display: flex; align-items: start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+#loopdesk-customer-dashboard-root .ld-review-heading > div, #loopdesk-customer-dashboard-root .ld-review-content > small { display: grid; color: var(--ld-account-muted); }
+#loopdesk-customer-dashboard-root .ld-review-stars { color: #f5a623; letter-spacing: 2px; }
+#loopdesk-customer-dashboard-root .ld-review-body { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+#loopdesk-customer-dashboard-root .ld-review-meta, #loopdesk-customer-dashboard-root .ld-review-pages { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; color: var(--ld-account-muted); }
+#loopdesk-customer-dashboard-root .ld-review-pages { justify-content: center; margin: 14px 0; }
+#loopdesk-customer-dashboard-root .ld-review-awaiting .ld-account-button { justify-self: start; margin-top: 4px; }
+@media (max-width: 560px) { #loopdesk-customer-dashboard-root .ld-review-card { grid-template-columns: 64px minmax(0,1fr); padding: 12px; } #loopdesk-customer-dashboard-root .ld-review-image { width: 64px; height: 64px; } #loopdesk-customer-dashboard-root .ld-review-heading .ld-account-pill { width: fit-content; } }

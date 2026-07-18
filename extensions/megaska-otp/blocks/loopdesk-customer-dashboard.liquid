@@ -6,6 +6,7 @@
 
 {{ 'megaska-otp.css' | asset_url | stylesheet_tag }}
 {{ 'loopdesk-customer-dashboard.css' | asset_url | stylesheet_tag }}
+{{ 'loopdesk-product-reviews.css' | asset_url | stylesheet_tag }}
 <script>window.MEGASKA_SHOP_DOMAIN = {{ shop.permanent_domain | json }};</script>
 
 {% if request.design_mode %}
@@ -32,6 +33,7 @@
 </script>
 <script src="{{ 'megaska-auth.js' | asset_url }}" defer></script>
 <script src="{{ 'megaska-otp.js' | asset_url }}" defer></script>
+<script src="{{ 'loopdesk-product-reviews.js' | asset_url }}" defer></script>
 <script src="{{ 'loopdesk-customer-dashboard.js' | asset_url }}" defer></script>
 
 {% schema %}
