@@ -31,3 +31,30 @@ test("duplicate policy is scoped to customer, shop, and order line so another li
   await createPendingReview({ ...command, input: { ...command.input, orderLineId: "line-2" } }, { db });
   assert.deepEqual(lines, ["line-1", "line-2"]);
 });
+
+test("submitEligibleReview rejects ineligible submissions before creating reviews", async () => {
+  const { submitEligibleReview } = await import("./review-submission.ts");
+  let created = false;
+  await assert.rejects(() => submitEligibleReview(command, { db: { productReview: { create: async () => { created = true; return {}; } } } as never, eligibility: { getReviewSettings: async () => ({ reviewsEnabled: false }), findCustomer: async () => null, findOrder: async () => null, findOrderLine: async () => null, findExistingReview: async () => null, isDelivered: () => false } } as never), (error) => error instanceof ReviewSubmissionDomainError && error.code === "REVIEWS_DISABLED");
+  assert.equal(created, false);
+});
+
+test("submitEligibleReview creates with canonical eligibility identifiers", async () => {
+  const { submitEligibleReview } = await import("./review-submission.ts");
+  let data: Record<string, unknown> | undefined;
+  await submitEligibleReview({ ...command, input: { ...command.input, orderId: "browser-order", orderLineId: "browser-line", productId: "canonical-product", variantId: undefined } }, {
+    db: { productReview: { create: async (args: { data: Record<string, unknown> }) => { data = args.data; return { id: "review", ...args.data }; } } } as never,
+    eligibility: {
+      getReviewSettings: async () => ({ reviewsEnabled: true }),
+      findCustomer: async () => ({ id: "trusted-customer", shopId: "trusted-shop" }),
+      findOrder: async () => ({ id: "canonical-order", shopId: "trusted-shop", customerProfileId: "trusted-customer", deliveredAt: new Date(), status: "DELIVERED" }),
+      findOrderLine: async () => ({ id: "request", shopId: "trusted-shop", customerProfileId: "trusted-customer", megaskaOrderId: "canonical-order", shopifyOrderId: "shopify-order", shopifyLineItemId: "canonical-line", shopifyProductId: "canonical-product", shopifyVariantId: "canonical-variant" }),
+      findExistingReview: async () => null,
+      isDelivered: () => true,
+    },
+  } as never);
+  assert.equal(data?.megaskaOrderId, "canonical-order");
+  assert.equal(data?.shopifyLineItemId, "canonical-line");
+  assert.equal(data?.shopifyProductId, "canonical-product");
+  assert.equal(data?.shopifyVariantId, "canonical-variant");
+});

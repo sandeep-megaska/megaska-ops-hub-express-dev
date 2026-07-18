@@ -12,6 +12,11 @@ export function chooseCanonicalDeliveryTimestamp(existing: Pick<Order,"delivered
  if (existing.deliverySource==="MIGRATED" && authority[source]>authority.MIGRATED) return { deliveredAt:candidate, source };
  return { deliveredAt:existing.deliveredAt, source:existing.deliverySource! };
 }
+
+export function isOrderDeliveredForReview(order: { deliveredAt: Date | null; status: string }) {
+ return Boolean(order.deliveredAt) && order.status === "DELIVERED";
+}
+
 export async function recordCanonicalOrderDelivery(input:RecordCanonicalDeliveryInput, db:DeliveryDb=prisma as unknown as DeliveryDb) {
  const candidate=input.deliveredAt instanceof Date ? new Date(input.deliveredAt) : new Date(input.deliveredAt);
  if (Number.isNaN(candidate.getTime())) throw new Error("Invalid deliveredAt timestamp");
