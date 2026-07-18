@@ -18,3 +18,11 @@ test("dashboard opens the shared form once with the dashboard entry point and re
   assert.match(form, /window\.LoopDeskReviewForm=Object\.assign/);
   assert.equal((block.match(/loopdesk-product-reviews\.js/g) || []).length, 1);
 });
+
+
+test("product review eligibility reuses the persisted LoopDesk OTP bearer token", () => {
+  assert.match(form, /SESSION_KEY="megaska_session_token"/);
+  assert.match(form, /localStorage\.getItem\(SESSION_KEY\)/);
+  assert.match(form, /base\.Authorization="Bearer "\+t/);
+  assert.match(form, /credentials:"include"/);
+});
