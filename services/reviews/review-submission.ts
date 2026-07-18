@@ -68,12 +68,13 @@ export type PendingReviewSource = "CUSTOMER_DASHBOARD" | "PRODUCT_PAGE" | "REVIE
 export type SubmitReviewCommand = { shopId: string; customerProfileId: string; source: PendingReviewSource; reviewRequestId?: string | null; input: ReviewSubmissionInput };
 export type PublicSubmittedReview = { id: string; productId: string; variantId: string | null; orderId: string; orderLineId: string; rating: number; title: string | null; body: string | null; verifiedPurchase: boolean; status: "PENDING_MODERATION"; source: PendingReviewSource; submittedAt: Date };
 type CreatedPendingReview = { id: string; shopifyProductId: string; shopifyVariantId: string | null; shopifyOrderId: string | null; shopifyLineItemId: string | null; rating: number; title: string | null; body: string | null; verifiedPurchase: boolean; status: string; source: string; submittedAt: Date };
-type PendingReviewDb = { productReview: { create(args: { data: Record<string, unknown> }): Promise<CreatedPendingReview> } };
+type PendingReviewDb = { productReview: { create(args: { data: Record<string, unknown> }): Promise<CreatedPendingReview> }; reviewRequest?: { updateMany(args: { where: Record<string, unknown>; data: Record<string, unknown> }): Promise<{ count: number }> }; $transaction?: <T>(fn: (tx: PendingReviewDb) => Promise<T>) => Promise<T> };
 export type ReviewSubmissionDependencies = { db?: PendingReviewDb; now?: () => Date };
 
+export type ReviewSubmissionApiDomainErrorCode = ReviewSubmissionEligibilityReason | "REQUEST_NOT_ELIGIBLE" | "TOKEN_CONSUMED";
 export class ReviewSubmissionDomainError extends Error {
-  readonly code: ReviewSubmissionEligibilityReason;
-  constructor(code: ReviewSubmissionEligibilityReason) { super(code); this.name = "ReviewSubmissionDomainError"; this.code = code; }
+  readonly code: ReviewSubmissionApiDomainErrorCode;
+  constructor(code: ReviewSubmissionApiDomainErrorCode) { super(code); this.name = "ReviewSubmissionDomainError"; this.code = code; }
 }
 
 function isDuplicateReviewError(error: unknown) {
@@ -105,4 +106,20 @@ export async function submitEligibleReview(command: SubmitReviewCommand, depende
   const eligibility = await evaluateReviewSubmissionEligibility({ shopId: command.shopId, customerProfileId: command.customerProfileId, orderId: input.orderId, orderLineId: input.orderLineId, productId: input.productId, variantId: input.variantId }, dependencies.eligibility);
   if (!eligibility.eligible) throw new ReviewSubmissionDomainError(eligibility.reason);
   return createPendingReview({ ...command, shopId: eligibility.shopId, customerProfileId: eligibility.customerProfileId, input: { ...input, orderId: eligibility.orderId, orderLineId: eligibility.orderLineId, productId: eligibility.productId, variantId: eligibility.variantId } }, dependencies);
+}
+
+
+export async function submitEligibleReviewWithTokenConsumption(command: SubmitReviewCommand & { reviewRequestId: string }, dependencies: EligibleReviewSubmissionDependencies = {}): Promise<PublicSubmittedReview> {
+  const db = (dependencies.db ?? prisma) as PendingReviewDb;
+  if (!command.reviewRequestId) throw new ReviewSubmissionDomainError("REQUEST_NOT_ELIGIBLE");
+  if (!db.$transaction) throw new Error("Review submission token consumption requires a transaction-capable database client.");
+  return db.$transaction(async (tx) => {
+    const review = await submitEligibleReview(command, { ...dependencies, db: tx, eligibility: { ...dependencies.eligibility, db: tx as never } as never });
+    const consumed = await tx.reviewRequest?.updateMany({
+      where: { id: command.reviewRequestId, shopId: command.shopId, customerProfileId: command.customerProfileId, tokenConsumedAt: null, submittedReviewId: null, tokenRevokedAt: null },
+      data: { tokenConsumedAt: review.submittedAt, submittedAt: review.submittedAt, submittedReviewId: review.id, status: "COMPLETED", completedAt: review.submittedAt },
+    });
+    if (!consumed || consumed.count !== 1) throw new ReviewSubmissionDomainError("TOKEN_CONSUMED");
+    return review;
+  });
 }
