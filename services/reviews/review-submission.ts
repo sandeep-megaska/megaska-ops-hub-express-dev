@@ -4,6 +4,7 @@ import { findReviewRequestByToken, hashReviewToken, normalizeReviewToken, type R
 import { normalizeReviewBody, normalizeReviewDisplayName, normalizeReviewTitle } from "./review-content.ts";
 import { defaultReviewDisplayName } from "./review-display-name.ts";
 import { recalculateProductReviewAggregate } from "./review-foundation.ts";
+import { validateReviewSubmissionInput, type ReviewSubmissionInput } from "./review-submission-input.ts";
 
 type Db = typeof prisma;
 export type ReviewSubmissionDomainErrorCode = ReviewTokenErrorCode | "REVIEW_ALREADY_SUBMITTED" | "REVIEW_SHOP_MISMATCH" | "REVIEWS_DISABLED" | "REVIEW_PRODUCT_UNAVAILABLE" | "REVIEW_CUSTOMER_SESSION_MISMATCH";
@@ -57,6 +58,40 @@ export async function submitVerifiedReview(input: { token: unknown; shopId: stri
     });
   } catch (error) {
     if ((error as { code?: string }).code === "P2002") return { ok: false, errorCode: "REVIEW_ALREADY_SUBMITTED" };
+    throw error;
+  }
+}
+
+
+export type PendingReviewSource = "CUSTOMER_DASHBOARD" | "PRODUCT_PAGE" | "REVIEW_REQUEST_EMAIL" | "REVIEW_REQUEST_WHATSAPP";
+export type SubmitReviewCommand = { shopId: string; customerProfileId: string; source: PendingReviewSource; reviewRequestId?: string | null; input: ReviewSubmissionInput };
+export type PublicSubmittedReview = { id: string; productId: string; variantId: string | null; orderId: string; orderLineId: string; rating: number; title: string | null; body: string | null; verifiedPurchase: boolean; status: "PENDING_MODERATION"; source: PendingReviewSource; submittedAt: Date };
+type PendingReviewDb = { productReview: { create(args: { data: Record<string, unknown> }): Promise<any> } };
+export type ReviewSubmissionDependencies = { db?: PendingReviewDb; now?: () => Date };
+
+export class ReviewSubmissionDomainError extends Error {
+  readonly code: "ALREADY_REVIEWED";
+  constructor(code: "ALREADY_REVIEWED") { super(code); this.name = "ReviewSubmissionDomainError"; this.code = code; }
+}
+
+function isDuplicateReviewError(error: unknown) {
+  const value = error as { code?: string; meta?: { target?: unknown } };
+  return value?.code === "P2002";
+}
+
+function publicSubmittedReview(review: { id: string; shopifyProductId: string; shopifyVariantId: string | null; shopifyOrderId: string | null; shopifyLineItemId: string | null; rating: number; title: string | null; body: string | null; verifiedPurchase: boolean; status: string; source: string; submittedAt: Date }): PublicSubmittedReview {
+  return { id: review.id, productId: review.shopifyProductId, variantId: review.shopifyVariantId, orderId: review.shopifyOrderId || "", orderLineId: review.shopifyLineItemId || "", rating: review.rating, title: review.title, body: review.body, verifiedPurchase: review.verifiedPurchase, status: "PENDING_MODERATION", source: review.source as PendingReviewSource, submittedAt: review.submittedAt };
+}
+
+export async function createPendingReview(command: SubmitReviewCommand, dependencies: ReviewSubmissionDependencies = {}): Promise<PublicSubmittedReview> {
+  const input = validateReviewSubmissionInput(command.input);
+  const db = dependencies.db ?? (prisma as unknown as PendingReviewDb);
+  const now = dependencies.now?.() ?? new Date();
+  try {
+    const review = await db.productReview.create({ data: { shopId: command.shopId, customerProfileId: command.customerProfileId, reviewRequestId: command.reviewRequestId ?? null, megaskaOrderId: input.orderId, shopifyOrderId: input.orderId, shopifyLineItemId: input.orderLineId, shopifyProductId: input.productId, shopifyVariantId: input.variantId, source: command.source, status: "PENDING_MODERATION", rating: input.rating, title: input.title, body: input.body, customerDisplayName: "Customer", verifiedPurchase: true, productTitleSnapshot: input.productId, variantTitleSnapshot: null, productHandleSnapshot: null, submittedAt: now, publishedAt: null } });
+    return publicSubmittedReview(review);
+  } catch (error) {
+    if (isDuplicateReviewError(error)) throw new ReviewSubmissionDomainError("ALREADY_REVIEWED");
     throw error;
   }
 }

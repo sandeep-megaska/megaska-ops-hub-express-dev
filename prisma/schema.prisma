@@ -1368,6 +1368,10 @@ enum ProductReviewStatus {
 
 enum ProductReviewSource {
   VERIFIED_PURCHASE
+  CUSTOMER_DASHBOARD
+  PRODUCT_PAGE
+  REVIEW_REQUEST_EMAIL
+  REVIEW_REQUEST_WHATSAPP
   MANUAL_IMPORT
   MERCHANT_CREATED
 }
@@ -1608,6 +1612,8 @@ model ProductReview {
   @@index([shopId, shopifyProductId, status, publishedAt])
   @@index([shopId, customerProfileId, submittedAt])
   @@index([megaskaOrderId])
+  // One customer may submit only one review for a purchased order line within a shop; another order line for the same product remains reviewable.
+  @@unique([shopId, customerProfileId, shopifyLineItemId])
   @@index([shopId, status, submittedAt])
 }
 
