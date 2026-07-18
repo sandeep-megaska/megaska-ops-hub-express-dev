@@ -1,8 +1,7 @@
 import type { NextRequest } from "next/server";
-import { prisma } from "../../../../../services/db/prisma.ts";
 import { resolveReviewAccessFromCustomerSession } from "../../../../../services/reviews/review-submission-access.ts";
 import { getReviewSettings } from "../../../../../services/reviews/review-settings.ts";
-import { isOrderDeliveredForReview } from "../../../../../services/orders/canonical-delivery.ts";
+import { listEligibleReviewPurchases } from "../../../../../services/reviews/review-eligible-purchases.ts";
 import { allowedOrigin, rateLimit, reply } from "../../../../../services/reviews/review-submission-http.ts";
 import { normalizeShopifyProductId } from "../../../../../services/reviews/review-storefront-query.ts";
 
@@ -17,14 +16,6 @@ export async function GET(request: NextRequest) {
   if (!access.ok) return reply({ ok: false, errorCode: "UNAUTHENTICATED" }, 401);
   const settings = await getReviewSettings(access.shopId);
   if (!settings.reviewsEnabled) return reply({ ok: false, errorCode: "REVIEWS_DISABLED", purchases: [] }, 410);
-  const rows = await prisma.reviewRequest.findMany({
-    where: { shopId: access.shopId, customerProfileId: access.customerProfileId, shopifyProductId: productId, suppressedAt: null, canceledAt: null },
-    include: { megaskaOrder: { select: { id: true, shopId: true, customerProfileId: true, shopifyOrderName: true, deliveredAt: true, status: true } }, review: { select: { id: true } } },
-    orderBy: [{ deliveredAtSnapshot: "desc" }, { createdAt: "desc" }],
-    take: 25,
-  });
-  const purchases = rows
-    .filter((row) => row.megaskaOrder && row.megaskaOrder.customerProfileId === access.customerProfileId && isOrderDeliveredForReview(row.megaskaOrder) && !row.review)
-    .map((row) => ({ orderId: row.megaskaOrderId, orderLineId: row.shopifyLineItemId, productId: row.shopifyProductId, variantId: row.shopifyVariantId, variantTitle: row.variantTitleSnapshot, orderName: row.shopifyOrderName || row.megaskaOrder.shopifyOrderName, deliveredAt: (row.deliveredAtSnapshot || row.megaskaOrder.deliveredAt)?.toISOString() || null, eligible: true }));
+  const purchases = (await listEligibleReviewPurchases({ shopId: access.shopId, customerProfileId: access.customerProfileId, productId, take: 25 })).map(({ productTitle: _productTitle, productImageUrl: _productImageUrl, ...purchase }) => ({ ...purchase, eligible: true }));
   return reply({ ok: true, purchases });
 }

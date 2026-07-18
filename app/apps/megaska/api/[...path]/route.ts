@@ -64,6 +64,7 @@ const STOREFRONT_API_PREFIXES = [
   "runtime/config",
   "reviews/submission/",
   "reviews/storefront/",
+  "reviews/customer",
 ];
 
 function isStorefrontApiPath(path: string) {
@@ -100,7 +101,7 @@ async function proxyInternalApi(request: NextRequest, context: { params: Promise
       : await requireShopFromAppProxy(request);
     const moduleKey = resolveModuleKey(proxyPath);
 
-    if (!moduleKey && proxyPath !== "runtime/config" && !proxyPath.startsWith("reviews/submission/") && !proxyPath.startsWith("reviews/storefront/")) {
+    if (!moduleKey && proxyPath !== "runtime/config" && proxyPath !== "reviews/customer" && !proxyPath.startsWith("reviews/submission/") && !proxyPath.startsWith("reviews/storefront/")) {
       return NextResponse.json({ ok: false, error: "API route is not available through the Megaska app proxy" }, { status: 404 });
     }
 
