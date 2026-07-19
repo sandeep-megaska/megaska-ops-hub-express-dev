@@ -38,6 +38,7 @@ export async function POST(request: NextRequest) {
   try {
     const order = await markOrderDeliveredForDevelopment({
       shopId: resolved.shop.id,
+      shopDomain: resolved.shop.shopDomain,
       orderId: input.orderId,
       deliveredAt,
       actor: resolved.shop.shopDomain,
