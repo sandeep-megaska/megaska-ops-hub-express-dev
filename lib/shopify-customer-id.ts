@@ -15,8 +15,11 @@ export type ShopifyCustomerIdDiagnosis = {
 };
 
 /** Classifies an external identifier without extracting digits from malformed input. */
-export function diagnoseShopifyCustomerId(value: string | bigint | number | null | undefined): ShopifyCustomerIdDiagnosis {
+export function diagnoseShopifyCustomerId(value: unknown): ShopifyCustomerIdDiagnosis {
   if (value === null || value === undefined) return { category: "EMPTY", canonicalId: null };
+  if (typeof value !== "string" && typeof value !== "number" && typeof value !== "bigint") {
+    return { category: "NON_NUMERIC", canonicalId: null };
+  }
   if (typeof value === "number" && (!Number.isSafeInteger(value) || value < 0)) {
     return { category: "NON_NUMERIC", canonicalId: null };
   }
@@ -32,11 +35,11 @@ export function diagnoseShopifyCustomerId(value: string | bigint | number | null
 }
 
 /** Returns Shopify's canonical numeric customer id, or null for invalid input. */
-export function normalizeShopifyCustomerId(value: string | bigint | number | null | undefined): string | null {
+export function normalizeShopifyCustomerId(value: unknown): string | null {
   return diagnoseShopifyCustomerId(value).canonicalId;
 }
 
-export function requireShopifyCustomerId(value: string | bigint | number | null | undefined): string {
+export function requireShopifyCustomerId(value: unknown): string {
   const normalized = normalizeShopifyCustomerId(value);
   if (!normalized) throw new Error("Malformed Shopify customer ID");
   return normalized;
