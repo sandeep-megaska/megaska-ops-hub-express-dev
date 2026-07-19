@@ -12,6 +12,11 @@ export type ReconciliationProfile = {
 export type DiscoveryFilters = { shopId: string; customerProfileId?: string; phoneHash?: string; shopifyCustomerId?: string; limit?: number };
 type Db = any;
 
+export class CustomerIdentityReconciliationError extends Error {
+  readonly code: string;
+  constructor(code: string, message: string) { super(message); this.code = code; this.name = "CustomerIdentityReconciliationError"; }
+}
+
 const RAW_OWNERSHIP_TABLES = ["ExpressCheckoutIntent", "ExpressCheckoutAddressSnapshot"] as const;
 const TRUSTED_FIELDS = ["shopifyCustomerId", "phoneE164"] as const;
 
@@ -95,16 +100,50 @@ async function sourceState(db: Db, shopId: string, profileIds: string[]) {
   return { profiles, movements, wallets };
 }
 
+async function mergeSafety(db: Db, shopId: string, sourceIds: string[], targetId: string) {
+  const mappings = await db.customerIdentityMerge.findMany({
+    where: { shopId, OR: [{ sourceCustomerProfileId: { in: [...sourceIds, targetId] } }, { targetCustomerProfileId: { in: sourceIds } }] },
+  });
+  if (mappings.some((m: any) => sourceIds.includes(m.sourceCustomerProfileId) && m.targetCustomerProfileId !== targetId))
+    throw new CustomerIdentityReconciliationError("SOURCE_ALREADY_MERGED", "A source profile is already mapped to a different target");
+  if (mappings.some((m: any) => m.sourceCustomerProfileId === targetId || sourceIds.includes(m.targetCustomerProfileId)))
+    throw new CustomerIdentityReconciliationError("MERGE_CYCLE", "The requested mapping would create or extend a merge cycle");
+  return mappings;
+}
+
+export function reviewCollisionKeys(rows: Array<{ id: string; customerProfileId: string | null; shopId?: string; orderId?: string | null; productId?: string | null; shopifyLineItemId?: string | null }>, sourceIds: string[], targetId: string) {
+  const seen = new Map<string, string>(); const collisions: Array<{ key: string; recordIds: string[] }> = [];
+  for (const row of rows) {
+    const owner = sourceIds.includes(row.customerProfileId ?? "") ? targetId : row.customerProfileId;
+    const businessKey = row.shopifyLineItemId ?? [row.orderId, row.productId].filter(Boolean).join(":");
+    if (!owner || !businessKey) continue;
+    const key = `${row.shopId ?? ""}:${owner}:${businessKey}`; const prior = seen.get(key);
+    if (prior && prior !== row.id) collisions.push({ key, recordIds: [prior, row.id].sort() }); else seen.set(key, row.id);
+  }
+  return collisions;
+}
+
+async function reviewConflicts(db: Db, shopId: string, sourceIds: string[], targetId: string) {
+  const owners = [...sourceIds, targetId];
+  const requests = (await db.reviewRequest.findMany({ where: { shopId, customerProfileId: { in: owners } }, select: { id: true, shopId: true, customerProfileId: true, megaskaOrderId: true, shopifyProductId: true, shopifyLineItemId: true } })).map((r: any) => ({ ...r, orderId: r.megaskaOrderId, productId: r.shopifyProductId }));
+  const reviews = (await db.productReview.findMany({ where: { shopId, customerProfileId: { in: owners } }, select: { id: true, shopId: true, customerProfileId: true, megaskaOrderId: true, shopifyProductId: true, shopifyLineItemId: true } })).map((r: any) => ({ ...r, orderId: r.megaskaOrderId, productId: r.shopifyProductId }));
+  return [...reviewCollisionKeys(requests, sourceIds, targetId), ...reviewCollisionKeys(reviews, sourceIds, targetId)];
+}
+
 export async function discoverDuplicateCustomerProfiles(db: Db, filters: DiscoveryFilters) {
   if (!filters.shopId?.trim()) throw new Error("shopId is required; cross-tenant discovery is prohibited");
   const limit = Math.min(Math.max(filters.limit ?? 100, 1), 1000);
-  const rows: ReconciliationProfile[] = await db.customerProfile.findMany({ where: { shopId: filters.shopId, ...(filters.customerProfileId ? { id: filters.customerProfileId } : {}), ...(filters.shopifyCustomerId ? { shopifyCustomerId: { in: [String(filters.shopifyCustomerId), `gid://shopify/Customer/${normalizeShopifyCustomerId(filters.shopifyCustomerId)}`] } } : {}) }, orderBy: [{ createdAt: "asc" }, { id: "asc" }], take: limit });
+  const anchor = filters.customerProfileId ? await db.customerProfile.findFirst({ where: { id: filters.customerProfileId, shopId: filters.shopId } }) : null;
+  if (filters.customerProfileId && !anchor) throw new CustomerIdentityReconciliationError("PROFILE_NOT_FOUND", "The discovery anchor does not exist in this shop");
+  const requestedShopifyId = filters.shopifyCustomerId ?? anchor?.shopifyCustomerId;
+  const normalized = requestedShopifyId ? normalizeShopifyCustomerId(requestedShopifyId) : null;
+  const rows: ReconciliationProfile[] = await db.customerProfile.findMany({ where: { shopId: filters.shopId, ...(normalized ? { shopifyCustomerId: { in: [normalized, `gid://shopify/Customer/${normalized}`] } } : {}) }, orderBy: [{ createdAt: "asc" }, { id: "asc" }], take: limit });
   const filtered = filters.phoneHash ? rows.filter((p) => p.phoneE164 && phoneHash(p.phoneE164) === filters.phoneHash) : rows;
   const enriched = await Promise.all(filtered.map(async (p) => ({ ...p, activeSessionCount: await db.authSession.count({ where: { customerProfileId: p.id, revokedAt: null, expiresAt: { gt: new Date() } } }), ownershipCount: (await dependencies(db, [p.id])).reduce((sum: number, x: any) => sum + x.count, 0) })));
   return groupCandidates(enriched).map((profiles) => ({ profiles, conflicts: trustedConflicts(profiles) }));
 }
 
-export async function createReconciliationPlan(db: Db, input: { shopId: string; profileIds: string[]; createdBy: string }) {
+export async function createReconciliationPlan(db: Db, input: { shopId: string; profileIds: string[]; createdBy: string; targetProfileId?: string; reasonCode?: string }) {
   if (!input.shopId || input.profileIds.length < 2) throw new Error("shopId and at least two profile IDs are required");
   const state = await sourceState(db, input.shopId, [...new Set(input.profileIds)].sort());
   if (state.profiles.length !== new Set(input.profileIds).size) throw new Error("Every profile must exist in the specified shop");
@@ -114,15 +153,21 @@ export async function createReconciliationPlan(db: Db, input: { shopId: string; 
     activeSessionCount: await db.authSession.count({ where: { customerProfileId: p.id, revokedAt: null, expiresAt: { gt: new Date() } } }),
     ownershipCount: (await dependencies(db, [p.id])).reduce((n: number, movement: any) => n + movement.count, 0),
   })));
-  const { canonical, reason } = selectCanonicalProfile(rankedProfiles);
+  const selected = selectCanonicalProfile(rankedProfiles);
+  const canonical = input.targetProfileId ? rankedProfiles.find((p: any) => p.id === input.targetProfileId) : selected.canonical;
+  if (!canonical) throw new CustomerIdentityReconciliationError("TARGET_NOT_FOUND", "The explicit target must be in the planned profile set and shop");
+  const reason = input.targetProfileId ? "OPERATOR_APPROVED_TARGET" : selected.reason;
   const duplicates = state.profiles.filter((p: any) => p.id !== canonical.id);
+  await mergeSafety(db, input.shopId, duplicates.map((p: any) => p.id), canonical.id);
   const currencyOwners = new Map<string, Set<string>>();
   for (const wallet of state.wallets) currencyOwners.set(wallet.currency, new Set([...(currencyOwners.get(wallet.currency) ?? []), wallet.customerProfileId]));
+  const sourceWalletPresent = state.wallets.some((wallet: any) => wallet.customerProfileId !== canonical.id);
   const walletCollision = [...currencyOwners.values()].some((owners) => owners.size > 1);
+  const reviewCollisions = await reviewConflicts(db, input.shopId, duplicates.map((p: any) => p.id), canonical.id);
   const evidence = [...new Set([shopify(canonical) && "NORMALIZED_SHOPIFY_CUSTOMER_ID", canonical.phoneVerifiedAt && "VERIFIED_E164_PHONE"].filter(Boolean))];
-  const classification: ReconciliationClassification = conflicts.length ? "BLOCKED_CONFLICT" : walletCollision ? "MANUAL_REVIEW" : evidence.length ? "SAFE_AUTOMATIC" : "MANUAL_REVIEW";
+  const classification: ReconciliationClassification = conflicts.length || reviewCollisions.length ? "BLOCKED_CONFLICT" : walletCollision || sourceWalletPresent ? "MANUAL_REVIEW" : evidence.length ? "SAFE_AUTOMATIC" : "MANUAL_REVIEW";
   const sourceStateChecksum = reconciliationChecksum(state);
-  const plan = { version: 1, shopId: input.shopId, canonicalCustomerProfileId: canonical.id, canonicalSelectionReason: reason, duplicateCustomerProfileIds: duplicates.map((p: any) => p.id).sort(), matchingEvidence: evidence, classification, conflicts: [...conflicts, ...(walletCollision ? ["MULTIPLE_WALLETS_SAME_CURRENCY_REQUIRES_FINANCIAL_REVIEW"] : [])], proposedFieldEnrichment: fillOnlyEnrichment(canonical, duplicates), dependentRecordMovements: state.movements.filter((x: any) => x.count).map(({ tableName, columnName, count, ids }: any) => ({ tableName, columnName, count, recordIds: ids })), walletStrategy: walletCollision ? "BLOCKED_MANUAL_LEDGER_MERGE" : "REPOINT_SINGLE_ACCOUNT_AND_PRESERVE_LEDGER", sessionStrategy: "REPOINT_NON_CONFLICTING_SESSIONS_PRESERVE_EXPIRY", orderStrategy: "OWNERSHIP_REFERENCE_ONLY", reviewStrategy: "OWNERSHIP_REFERENCE_ONLY", sourceStateChecksum };
+  const plan = { version: 2, shopId: input.shopId, reasonCode: input.reasonCode ?? "HISTORICAL_DUPLICATE", normalizedShopifyCustomerId: shopify(canonical), canonicalCustomerProfileId: canonical.id, canonicalSelectionReason: reason, duplicateCustomerProfileIds: duplicates.map((p: any) => p.id).sort(), matchingEvidence: evidence, classification, conflicts: [...conflicts, ...(sourceWalletPresent ? ["SOURCE_WALLET_REQUIRES_FINANCIAL_REVIEW"] : []), ...(walletCollision ? ["MULTIPLE_WALLETS_SAME_CURRENCY_REQUIRES_FINANCIAL_REVIEW"] : []), ...(reviewCollisions.length ? ["REVIEW_UNIQUENESS_COLLISION"] : [])], reviewCollisions, proposedFieldEnrichment: fillOnlyEnrichment(canonical, duplicates), dependentRecordMovements: state.movements.filter((x: any) => x.count).map(({ tableName, columnName, count, ids }: any) => ({ tableName, columnName, count, recordIds: ids })), walletStrategy: sourceWalletPresent ? "BLOCKED_SOURCE_WALLET_REQUIRES_EXPLICIT_PLAN" : "PRESERVE_TARGET_WALLET_AND_LEDGER", sessionStrategy: "REPOINT_NON_CONFLICTING_SESSIONS_PRESERVE_EXPIRY", orderStrategy: "OWNERSHIP_REFERENCE_ONLY", reviewStrategy: reviewCollisions.length ? "BLOCKED_UNRESOLVED_COLLISION" : "OWNERSHIP_REFERENCE_ONLY", sourceRetirementStrategy: "MERGE_MAPPING_AND_CLEAR_ACTIVE_SHOPIFY_ID", sourceStateChecksum };
   const checksum = reconciliationChecksum(plan);
   return db.customerIdentityReconciliationPlan.create({ data: { id: randomUUID(), shopId: input.shopId, canonicalCustomerProfileId: canonical.id, sourceCustomerProfileIds: plan.duplicateCustomerProfileIds, classification, createdBy: input.createdBy, checksum, sourceStateChecksum, plan } });
 }
@@ -148,6 +193,8 @@ export async function applyReconciliationPlan(db: Db, input: { shopId: string; p
     const state = await sourceState(tx, input.shopId, ids);
     if (reconciliationChecksum(state) !== plan.sourceStateChecksum) return { status: "PLAN_STALE", planId: plan.id };
     const payload = plan.plan as any;
+    await mergeSafety(tx, input.shopId, plan.sourceCustomerProfileIds, plan.canonicalCustomerProfileId);
+    if (await reviewConflicts(tx, input.shopId, plan.sourceCustomerProfileIds, plan.canonicalCustomerProfileId).then((x) => x.length)) throw new CustomerIdentityReconciliationError("REVIEW_CONFLICT", "Review ownership would violate a business uniqueness key");
     await tx.customerIdentityReconciliationPlan.update({ where: { id: plan.id }, data: { status: "APPLYING" } });
     const enrichment = payload.proposedFieldEnrichment ?? {};
     await tx.customerProfile.update({ where: { id: plan.canonicalCustomerProfileId }, data: enrichment });
@@ -158,6 +205,7 @@ export async function applyReconciliationPlan(db: Db, input: { shopId: string; p
       else await tx.$executeRawUnsafe(sql, plan.canonicalCustomerProfileId, plan.sourceCustomerProfileIds);
     }
     await tx.customerIdentityMerge.createMany({ data: plan.sourceCustomerProfileIds.map((sourceCustomerProfileId: string) => ({ id: randomUUID(), shopId: input.shopId, sourceCustomerProfileId, targetCustomerProfileId: plan.canonicalCustomerProfileId, planId: plan.id, mergedAt: new Date() })) });
+    await tx.customerProfile.updateMany({ where: { id: { in: plan.sourceCustomerProfileIds }, shopId: input.shopId }, data: { shopifyCustomerId: null } });
     const remaining = await dependencies(tx, plan.sourceCustomerProfileIds);
     if (remaining.some((x: any) => x.count)) throw new Error("VERIFICATION_FAILED: active dependent references remain");
     const afterState = await sourceState(tx, input.shopId, [plan.canonicalCustomerProfileId]);

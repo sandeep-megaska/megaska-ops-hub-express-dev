@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { fillOnlyEnrichment, groupCandidates, reconciliationChecksum, selectCanonicalProfile, trustedConflicts } from "./customer-identity-reconciliation.ts";
+import { fillOnlyEnrichment, groupCandidates, reconciliationChecksum, reviewCollisionKeys, selectCanonicalProfile, trustedConflicts } from "./customer-identity-reconciliation.ts";
 
 const profile = (id: string, values: Record<string, unknown> = {}) => ({ id, shopId: "shop", shopifyCustomerId: null, phoneE164: null, phoneVerifiedAt: null, email: null, createdAt: new Date(`2020-01-0${id}T00:00:00Z`), updatedAt: new Date(0), ...values });
 
@@ -24,4 +24,13 @@ test("trusted conflicts block and enrichment is fill-only", () => {
 test("checksum is deterministic and detects source changes", () => {
   assert.equal(reconciliationChecksum({ b: 2, a: 1 }), reconciliationChecksum({ a: 1, b: 2 }));
   assert.notEqual(reconciliationChecksum({ a: 1 }), reconciliationChecksum({ a: 2 }));
+});
+
+test("review collision preview applies the target owner before comparing business keys", () => {
+  const rows = [
+    { id: "source-review", shopId: "shop", customerProfileId: "source", shopifyLineItemId: "line-1" },
+    { id: "target-review", shopId: "shop", customerProfileId: "target", shopifyLineItemId: "line-1" },
+  ];
+  assert.deepEqual(reviewCollisionKeys(rows, ["source"], "target"), [{ key: "shop:target:line-1", recordIds: ["source-review", "target-review"] }]);
+  assert.deepEqual(reviewCollisionKeys(rows.slice(0, 1), ["source"], "target"), []);
 });
