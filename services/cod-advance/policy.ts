@@ -85,9 +85,34 @@ function safePercentageRound(amountPaise: number, basisPoints: number): number |
 export function calculateCodAdvancePolicy(input: CodAdvancePolicyInput): CodAdvancePolicyResult {
   const reasons: string[] = [];
 
-  if (!input.enabled) addReason(reasons, "disabled");
+  // Checkout amounts are shared by normal and Partial COD and must always be
+  // safe. Advance settings, however, are irrelevant when the module is off.
   if (!isValidNonNegativeInteger(input.orderTotalPaise)) addReason(reasons, "invalid_order_total");
   if (!isValidNonNegativeInteger(input.storeCreditAppliedPaise)) addReason(reasons, "invalid_store_credit_amount");
+  if (isValidNonNegativeInteger(input.orderTotalPaise) && isValidNonNegativeInteger(input.storeCreditAppliedPaise)) {
+    if (input.storeCreditAppliedPaise > input.orderTotalPaise) addReason(reasons, "store_credit_exceeds_order_total");
+  }
+
+  const sharedInputsValid = reasons.length === 0;
+  if (!input.enabled) {
+    addReason(reasons, "disabled");
+    if (!sharedInputsValid) return invalidResult(input, reasons, false);
+
+    const customerCashLiabilityPaise = input.orderTotalPaise - input.storeCreditAppliedPaise;
+    return {
+      available: true,
+      eligible: true,
+      requiresAdvance: false,
+      reasons,
+      orderTotalPaise: input.orderTotalPaise,
+      storeCreditAppliedPaise: input.storeCreditAppliedPaise,
+      customerCashLiabilityPaise,
+      advanceAmountPaise: 0,
+      codBalanceAmountPaise: customerCashLiabilityPaise,
+    };
+  }
+
+  // From this point onward validation applies only to Partial COD settings.
   if (!isValidNonNegativeInteger(input.fixedAdvanceAmountPaise)) addReason(reasons, "invalid_fixed_advance");
 
   const minimumAdvanceValid = validateNullableMoney(input, "minimumAdvanceAmountPaise", reasons);
@@ -115,13 +140,8 @@ export function calculateCodAdvancePolicy(input: CodAdvancePolicyInput): CodAdva
     addReason(reasons, "minimum_advance_exceeds_maximum_advance");
   }
 
-  if (isValidNonNegativeInteger(input.orderTotalPaise) && isValidNonNegativeInteger(input.storeCreditAppliedPaise)) {
-    if (input.storeCreditAppliedPaise > input.orderTotalPaise) addReason(reasons, "store_credit_exceeds_order_total");
-  }
-
-  const structurallyValid = input.enabled && !reasons.some((reason) =>
+  const structurallyValid = !reasons.some((reason) =>
     [
-      "disabled",
       "invalid_order_total",
       "invalid_store_credit_amount",
       "store_credit_exceeds_order_total",
