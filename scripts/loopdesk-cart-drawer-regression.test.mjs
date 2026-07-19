@@ -3,24 +3,6 @@ import { readFileSync } from "node:fs";
 
 const source = readFileSync(new URL("../extensions/megaska-otp/assets/loopdesk-cart-drawer.js", import.meta.url), "utf8");
 const css = readFileSync(new URL("../extensions/megaska-otp/assets/loopdesk-cart-drawer.css", import.meta.url), "utf8");
-const embed = readFileSync(new URL("../extensions/megaska-otp/blocks/loopdesk-cart-drawer-embed.liquid", import.meta.url), "utf8");
-
-const bootstrap = embed.match(/function installBootstrapGuard\(\) \{[\s\S]*?\n      \}\n\n      var bootstrap = installBootstrapGuard\(\);/);
-assert.ok(bootstrap, "preload bootstrap should be installed synchronously");
-assert.match(bootstrap[0], /\['pointerdown', 'touchstart', 'mousedown', 'click', 'keydown'\]/, "Cases A-B: guard should capture every early cart interaction type");
-assert.match(bootstrap[0], /new URL\(anchor\.href, window\.location\.href\)[\s\S]*url\.origin !== window\.location\.origin[\s\S]*\^\\\/cart/, "Case C: nested same-origin cart anchors should resolve conservatively");
-assert.match(bootstrap[0], /event\.preventDefault\(\);[\s\S]*event\.stopPropagation\(\);[\s\S]*event\.stopImmediatePropagation/, "Case A: early cart navigation and theme handlers should be stopped");
-assert.match(bootstrap[0], /state\.pendingOpen = true;[\s\S]*state\.pendingTrigger = trigger;[\s\S]*ensureDrawerAssetLoaded\(\);/, "Cases A-C: an early interaction should queue an open and request the asset");
-assert.match(bootstrap[0], /state\.pendingOpen && state\.pendingTrigger === trigger && now - state\.lastInteractionAt < 700/, "Case F: pointer/mouse/click events for one trigger should be deduplicated");
-assert.match(bootstrap[0], /if \(event\.type === 'keydown' && event\.repeat\) return;/, "Case F: repeated keyboard activation should be ignored");
-assert.match(bootstrap[0], /if \(state\.loaderPromise\) return state\.loaderPromise;/, "Cases A-F: one shared promise should make asset loading idempotent");
-assert.match(bootstrap[0], /querySelectorAll\('script\[src\]'\)[\s\S]*candidate\.src === absoluteAssetUrl[\s\S]*if \(shouldAppend\) document\.head\.appendChild\(script\);/, "asset loader should reuse a drawer script emitted by another embed");
-assert.match(bootstrap[0], /replayPendingOpen[\s\S]*state\.pendingOpen = false;[\s\S]*LoopDeskCartController\.open\(\)/, "Cases B-E: a pending open should replay exactly once through the controller");
-assert.match(bootstrap[0], /script\.addEventListener\('error'[\s\S]*assetFailed[\s\S]*setTimeout[\s\S]*10000/, "Case G: errors and bounded timeout should release bootstrap ownership");
-assert.match(bootstrap[0], /'#loopdesk-cart-drawer-root'[\s\S]*'\[data-loopdesk-view-cart\]'[\s\S]*'\[name="checkout"\]'[\s\S]*'\[name="add"\]'/, "Case J: app-owned view cart, checkout, and add controls should be excluded");
-assert.match(embed, /bootstrap\.ensureDrawerAssetLoaded\(\);[\s\S]*runtime config request started[\s\S]*fetch\(runtimeUrl/, "Cases A-E: asset loading should start before the parallel runtime request");
-assert.match(embed, /runtimeOwnsCart[\s\S]*applyRuntimeConfig[\s\S]*bootstrap\.release\('runtime-theme-mode'\)/, "Cases D and I: late runtime config should update the controller or restore theme ownership");
-assert.match(embed, /\{% if loopdesk_cart_drawer_enabled %\}[\s\S]*installBootstrapGuard/, "Case H: Liquid should emit the bootstrap only for an enabled embed");
 
 const ownershipDecision = source.match(/function cartOwnershipDecision\(capability\) \{[\s\S]*?\n  \}\n\n  function isLoopDeskDrawerActive/);
 assert.ok(ownershipDecision, "cart ownership decision helper should exist");

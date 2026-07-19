@@ -56,157 +56,6 @@
       var couponBusy = false;
       var couponMountPromise = null;
 
-      function bootstrapDebug(message, payload) {
-        if (window.LOOPDESK_CART_DRAWER_DEBUG !== true || !window.console) return;
-        window.console.debug('[LoopDesk Cart Bootstrap] ' + message, payload || {});
-      }
-
-      function installBootstrapGuard() {
-        if (window.LoopDeskCartBootstrap) return window.LoopDeskCartBootstrap;
-        var eventNames = ['pointerdown', 'touchstart', 'mousedown', 'click', 'keydown'];
-        var state = {
-          enabled: true,
-          assetRequested: false,
-          assetLoaded: false,
-          pendingOpen: false,
-          pendingTrigger: null,
-          pendingEventType: null,
-          lastInteractionAt: 0,
-          loaderPromise: null,
-          failureTimer: null
-        };
-
-        function excluded(element) {
-          return Boolean(element && element.closest && element.closest([
-            '#loopdesk-cart-drawer-root',
-            '[data-loopdesk-view-cart]',
-            '[data-loopdesk-cart-page]',
-            '[data-loopdesk-app-owned]',
-            '[name="checkout"]',
-            '[href*="/checkout"]',
-            '[name="add"]',
-            '[data-add-to-cart]',
-            '[class*="add-to-cart" i]',
-            '[data-cart-quantity]',
-            '[name="updates[]"]',
-            '[data-cart-remove]',
-            '[class*="remove" i]',
-            '[name="discount"]',
-            '[data-discount]',
-            '[data-coupon]'
-          ].join(',')));
-        }
-
-        function resolveTrigger(target) {
-          if (!target || !target.closest || excluded(target)) return null;
-          var anchor = target.closest('a[href]');
-          if (anchor) {
-            var url;
-            try { url = new URL(anchor.href, window.location.href); } catch (_error) { return null; }
-            if (url.origin !== window.location.origin || !/^\/cart\/?$/.test(url.pathname)) return null;
-            return anchor;
-          }
-          var control = target.closest('button,[role="button"],input[type="button"],input[type="submit"]');
-          if (!control) return null;
-          var identity = [control.getAttribute('name'), control.getAttribute('id'), control.getAttribute('class'), control.getAttribute('aria-label'), control.getAttribute('aria-controls'), control.getAttribute('data-cart'), control.getAttribute('data-drawer')].join(' ');
-          return /(?:^|[^a-z])(cart|bag)(?:[^a-z]|$)/i.test(identity) ? control : null;
-        }
-
-        function release(reason) {
-          if (!state.enabled) return;
-          state.enabled = false;
-          eventNames.forEach(function (name) { document.removeEventListener(name, intercept, true); });
-          if (state.failureTimer) window.clearTimeout(state.failureTimer);
-          bootstrapDebug('bootstrap guard released', { reason: reason });
-          if (reason === 'asset-failed') bootstrapDebug('native fallback restored');
-        }
-
-        function replayPendingOpen() {
-          if (!state.pendingOpen || !window.LoopDeskCartController || typeof window.LoopDeskCartController.open !== 'function') return;
-          state.pendingOpen = false;
-          state.pendingTrigger = null;
-          state.pendingEventType = null;
-          bootstrapDebug('pending open replayed');
-          window.LoopDeskCartController.open();
-        }
-
-        function controllerReady() {
-          state.assetLoaded = true;
-          bootstrapDebug('drawer controller ready');
-          replayPendingOpen();
-          release('controller-ready');
-        }
-
-        function assetFailed() {
-          state.pendingOpen = false;
-          state.pendingTrigger = null;
-          bootstrapDebug('asset load failed');
-          release('asset-failed');
-        }
-
-        function ensureDrawerAssetLoaded() {
-          if (state.loaderPromise) return state.loaderPromise;
-          state.assetRequested = true;
-          bootstrapDebug('drawer asset load requested', { src: drawerAssetUrl });
-          state.loaderPromise = new Promise(function (resolve, reject) {
-            if (window.LoopDeskCartController) { controllerReady(); observeDrawer(); resolve(window.LoopDeskCartController); return; }
-            var absoluteAssetUrl = new URL(drawerAssetUrl, window.location.href).href;
-            var script = Array.prototype.find.call(document.querySelectorAll('script[src]'), function (candidate) { return candidate.src === absoluteAssetUrl; });
-            var shouldAppend = !script;
-            if (!script) {
-              script = document.createElement('script');
-              script.src = drawerAssetUrl;
-              script.defer = true;
-              script.setAttribute('data-loopdesk-cart-drawer-asset', '');
-            }
-            script.addEventListener('load', function () {
-              if (!window.LoopDeskCartController) { assetFailed(); reject(new Error('LoopDesk cart controller unavailable')); return; }
-              controllerReady();
-              observeDrawer();
-              resolve(window.LoopDeskCartController);
-            }, { once:true });
-            script.addEventListener('error', function () { assetFailed(); reject(new Error('LoopDesk cart drawer failed to load')); }, { once:true });
-            if (shouldAppend) document.head.appendChild(script);
-            state.failureTimer = window.setTimeout(function () {
-              if (!state.assetLoaded) { assetFailed(); reject(new Error('LoopDesk cart drawer load timed out')); }
-            }, 10000);
-          });
-          state.loaderPromise.catch(function () {});
-          return state.loaderPromise;
-        }
-
-        function intercept(event) {
-          if (!state.enabled) return;
-          if (event.type === 'keydown' && (event.key !== 'Enter' && event.key !== ' ')) return;
-          if (event.type === 'keydown' && event.repeat) return;
-          var trigger = resolveTrigger(event.target);
-          if (!trigger) return;
-          event.preventDefault();
-          event.stopPropagation();
-          if (event.stopImmediatePropagation) event.stopImmediatePropagation();
-          var now = Date.now();
-          var duplicate = state.pendingOpen && state.pendingTrigger === trigger && now - state.lastInteractionAt < 700;
-          state.lastInteractionAt = now;
-          if (!duplicate) {
-            state.pendingOpen = true;
-            state.pendingTrigger = trigger;
-            state.pendingEventType = event.type;
-            bootstrapDebug('bootstrap cart trigger intercepted', { eventType: event.type });
-          }
-          ensureDrawerAssetLoaded();
-        }
-
-        state.release = release;
-        state.replayPendingOpen = replayPendingOpen;
-        state.ensureDrawerAssetLoaded = ensureDrawerAssetLoaded;
-        eventNames.forEach(function (name) { document.addEventListener(name, intercept, true); });
-        window.LoopDeskCartBootstrap = state;
-        bootstrapDebug('bootstrap guard installed');
-        return state;
-      }
-
-      var bootstrap = installBootstrapGuard();
-
       function mergeRuntimeConfig(payload) {
         if (!payload || payload.ok !== true || !payload.config) return;
         window.LoopDeskConfig = Object.assign({}, window.LoopDeskConfig || {}, payload.config, {
@@ -217,17 +66,6 @@
           promotions: payload.config.promotions || ((window.LoopDeskConfig && window.LoopDeskConfig.promotions) || { rules: [] }),
           shopDomain: shopDomain
         });
-        bootstrapDebug('runtime config applied', { enabled: window.LoopDeskConfig.enabled, drawerMode: window.LoopDeskConfig.cart && window.LoopDeskConfig.cart.drawerMode });
-        var runtimeOwnsCart = window.LoopDeskConfig.enabled !== false && (!window.LoopDeskConfig.cart || window.LoopDeskConfig.cart.drawerMode !== 'theme');
-        if (window.LoopDeskCartController && typeof window.LoopDeskCartController.applyRuntimeConfig === 'function') {
-          window.LoopDeskCartController.applyRuntimeConfig(window.LoopDeskConfig);
-        }
-        if (!runtimeOwnsCart) {
-          bootstrap.pendingOpen = false;
-          bootstrap.pendingTrigger = null;
-          bootstrap.release('runtime-theme-mode');
-          return;
-        }
         window.LOOPDESK_CART_DRAWER_CONFIG = Object.assign({}, window.LOOPDESK_CART_DRAWER_CONFIG || {}, {
           enabled: window.LoopDeskConfig.enabled,
           drawerMode: window.LoopDeskConfig.cart && window.LoopDeskConfig.cart.drawerMode,
@@ -452,13 +290,20 @@
         removeCoupon();
       }, true);
 
-      bootstrap.ensureDrawerAssetLoaded();
-      if (typeof fetch !== 'function') return;
-      bootstrapDebug('runtime config request started', { url: runtimeUrl });
+      function loadDrawerAsset() {
+        var script = document.createElement('script');
+        script.src = drawerAssetUrl;
+        script.defer = true;
+        script.addEventListener('load', observeDrawer, { once:true });
+        document.head.appendChild(script);
+      }
+
+      if (typeof fetch !== 'function') { loadDrawerAsset(); return; }
       fetch(runtimeUrl, { credentials:'same-origin', cache:'no-store' })
         .then(function (response) { return response.ok ? response.json() : null; })
         .then(mergeRuntimeConfig)
-        .catch(function () {});
+        .catch(function () {})
+        .then(loadDrawerAsset);
     })();
   </script>
 {% endif %}
