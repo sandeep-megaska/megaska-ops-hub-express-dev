@@ -347,6 +347,40 @@ let prisma;
 try {
   validateArguments();
   prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }) });
+  const db = prisma;
+  const REQUIRED_DELEGATES = [
+    "customerProfile",
+    "authSession",
+    "oTPChallenge",
+    "orderActionRequest",
+    "codAdvanceIntent",
+    "megaskaOrder",
+    "reviewRequest",
+    "productReview",
+    "walletAccount",
+    "walletTransaction",
+    "walletReservation",
+    "refundRequest",
+    "gstDocument",
+    "gstParty",
+    "checkoutRecoveryToken",
+    "customerIdentityReconciliationPlan",
+    "customerIdentityReconciliationAudit",
+    "customerIdentityMerge",
+  ];
+
+  for (const delegate of REQUIRED_DELEGATES) {
+    if (!db[delegate]) {
+      throw new Error(
+        `Missing Prisma delegate: ${delegate}. Available delegates: ${
+          Reflect.ownKeys(db)
+            .filter((key) => typeof key === "string" && !key.startsWith("_"))
+            .sort()
+            .join(", ")
+        }`
+      );
+    }
+  }
   const { source, target } = await loadProfiles(prisma);
   const [sourceCounts, mergeScalarReferences, collisions, walletPlan] = await Promise.all([
     dependencyCounts(prisma, SOURCE_ID),
@@ -382,7 +416,7 @@ try {
   }
 } catch (error) {
   process.exitCode = 1;
-  console.error(JSON.stringify({ status: "ERROR", error: error?.message ?? String(error), ...(error?.details === undefined ? {} : { details: error.details }) }));
+  console.error(error?.stack ?? error);
 } finally {
   if (prisma) await prisma.$disconnect();
 }
