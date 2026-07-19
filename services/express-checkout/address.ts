@@ -1,3 +1,5 @@
+import { CustomerIdentityRepository, type IdentityTransaction } from "../customers/customer-identity-repository";
+
 export type ExpressCheckoutAddressInput = {
   name: string | null;
   phone: string | null;
@@ -29,9 +31,6 @@ type AddressSnapshotRecord = {
 };
 
 type PrismaLike = {
-  customerProfile: {
-    updateMany(args: object): Promise<unknown>;
-  };
   expressCheckoutAddressSnapshot: {
     findFirst(args: object): Promise<AddressSnapshotRecord | null>;
     update(args: object): Promise<AddressSnapshotRecord>;
@@ -99,14 +98,10 @@ export async function saveCustomerProfileAddress(
   const { firstName, lastName } = splitName(name);
   const profileCompletedAt = isCompleteExpressCheckoutAddress(input.address) ? new Date() : undefined;
 
-  await db.customerProfile.updateMany({
-    where: { id: input.customerProfileId, shopId: input.shopId },
-    data: {
+  await new CustomerIdentityRepository().updateCustomerProfile(db as unknown as IdentityTransaction, input.shopId, input.customerProfileId, {
       fullName: name,
       firstName,
       lastName,
-      phoneE164: clean(input.address.phone),
-      email: clean(input.address.email),
       addressLine1: clean(input.address.address1),
       addressLine2: clean(input.address.address2),
       city: clean(input.address.city),
@@ -114,7 +109,6 @@ export async function saveCustomerProfileAddress(
       postalCode: clean(input.address.zip),
       countryRegion: clean(input.address.country),
       ...(profileCompletedAt ? { profileCompletedAt } : {}),
-    },
   });
 }
 

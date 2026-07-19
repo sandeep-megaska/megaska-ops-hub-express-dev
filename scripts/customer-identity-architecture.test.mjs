@@ -7,6 +7,7 @@ const root = path.resolve(import.meta.dirname, "..");
 const repositoryPath = path.join(root, "services/customers/customer-identity-repository.ts");
 const writePattern = /\b(?:prisma|tx|db)\.customerProfile\.(?:create|update|delete|upsert)\s*\(/g;
 const ignored = new Set(["generated", "node_modules", ".git", ".next"]);
+const nonProductionWriteAllowlist = new Set(["scripts/dev-repair-customer-profile-duplicate.mjs"]);
 
 async function sourceFiles(directory) {
   const entries = await readdir(directory, { withFileTypes: true });
@@ -32,14 +33,14 @@ test("canonical identity infrastructure has its required boundaries", async () =
   assert.match(await readFile(path.join(root, "services/customers/canonical-customer-resolver.ts"), "utf8"), /IDENTITY_CONFLICT/);
 });
 
-test("direct CustomerProfile write enforcement inventory (warning mode)", async (t) => {
+test("production code cannot write CustomerProfile outside CustomerIdentityRepository", async () => {
   const violations = [];
   for (const file of await sourceFiles(root)) {
     if (file === repositoryPath || file.endsWith("customer-identity-architecture.test.mjs")) continue;
+    if (nonProductionWriteAllowlist.has(path.relative(root, file))) continue;
     const source = await readFile(file, "utf8");
     if (writePattern.test(source)) violations.push(path.relative(root, file));
     writePattern.lastIndex = 0;
   }
-  if (violations.length) t.diagnostic(`WARNING: legacy direct CustomerProfile writes remain until adoption: ${violations.sort().join(", ")}`);
-  assert.ok(true, "warning-mode inventory must not change existing runtime behavior");
+  assert.deepEqual(violations.sort(), [], `direct CustomerProfile writes: ${violations.sort().join(", ")}`);
 });

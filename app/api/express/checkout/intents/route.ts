@@ -13,6 +13,7 @@ import {
   latestCustomerAddressSnapshot,
   saveCustomerProfileAddress,
 } from "../../../../../services/express-checkout/address";
+import { CanonicalCustomerResolver } from "../../../../../services/customers/canonical-customer-resolver";
 
 export const runtime = "nodejs";
 
@@ -192,6 +193,16 @@ export async function POST(req: NextRequest) {
 
   if (!customerProfileId) {
     return jsonWithCors(req, { ok: false, error: "Customer profile required" }, { status: 401 });
+  }
+
+  const identity = await new CanonicalCustomerResolver().resolveFromCheckout({
+    shopId: shop.shopId,
+    shopifyCustomerId: auth.customer.shopifyCustomerId,
+    phone: auth.customer.phoneE164,
+    phoneVerified: Boolean(auth.customer.phoneVerifiedAt),
+  });
+  if (!identity.customerProfile || identity.customerProfile.id !== customerProfileId) {
+    return jsonWithCors(req, { ok: false, error: "IDENTITY_CONFLICT" }, { status: 409 });
   }
 
   const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;

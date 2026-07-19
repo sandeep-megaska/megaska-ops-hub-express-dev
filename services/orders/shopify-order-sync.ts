@@ -3,19 +3,14 @@ import type { getShopifyOrderForReviewSync, ShopifyReviewSourceOrder } from "../
 import { decideReviewCandidateLine, normalizeReviewText, normalizeVariantTitle, normalizeHttpsImageUrl } from "../reviews/review-candidate-policy.ts";
 import type { createOrGetReviewRequest } from "../reviews/review-foundation.ts";
 
-export type CanonicalShopifyOrderSyncErrorCode = "INVALID_ORDER_ID" | "SHOPIFY_ORDER_NOT_FOUND" | "SHOPIFY_CUSTOMER_REQUIRED";
+export type CanonicalShopifyOrderSyncErrorCode = "INVALID_ORDER_ID" | "SHOPIFY_ORDER_NOT_FOUND" | "SHOPIFY_CUSTOMER_REQUIRED" | "IDENTITY_CONFLICT";
 export class CanonicalShopifyOrderSyncError extends Error {
   readonly code: CanonicalShopifyOrderSyncErrorCode;
   constructor(code: CanonicalShopifyOrderSyncErrorCode) { super(code); this.code = code; this.name = "CanonicalShopifyOrderSyncError"; }
 }
 
 type CanonicalOrder = { id: string; shopId: string; customerProfileId: string; shopifyOrderId: string | null; shopifyOrderName: string; status: string; deliveredAt: Date | null; metadata?: Record<string, unknown> | null };
-type Customer = { id: string; shopId: string | null; shopifyCustomerId: string | null };
 type SyncDb = {
-  customerProfile: {
-    findFirst(args: unknown): Promise<Customer | null>;
-    create(args: unknown): Promise<Customer>;
-  };
   megaskaOrder: {
     findFirst(args: unknown): Promise<CanonicalOrder | null>;
     create(args: unknown): Promise<CanonicalOrder>;
@@ -26,6 +21,7 @@ type Dependencies = {
   db?: SyncDb;
   fetchOrder?: typeof getShopifyOrderForReviewSync;
   createOrderLine?: typeof createOrGetReviewRequest;
+  resolveIdentity?: (input: { shopId: string; shopifyCustomerId: unknown }) => Promise<{ customerProfile: { id: string } | null }>;
 };
 
 export function normalizeShopifyOrderIdentifier(value: unknown) {
@@ -56,8 +52,13 @@ export async function syncCanonicalShopifyOrder(input: { shopId: string; shopDom
   if (!source) throw new CanonicalShopifyOrderSyncError("SHOPIFY_ORDER_NOT_FOUND");
   if (!source.customerId) throw new CanonicalShopifyOrderSyncError("SHOPIFY_CUSTOMER_REQUIRED");
 
-  let customer = await db.customerProfile.findFirst({ where: { shopId, shopifyCustomerId: source.customerId } });
-  if (!customer) customer = await db.customerProfile.create({ data: { shopId, shopifyCustomerId: source.customerId } });
+  const resolveIdentity = dependencies.resolveIdentity ?? (async (identity) => {
+    const { CanonicalCustomerResolver } = await import("../customers/canonical-customer-resolver.ts");
+    return new CanonicalCustomerResolver().resolveFromShopifyOrder(identity);
+  });
+  const identity = await resolveIdentity({ shopId, shopifyCustomerId: source.customerId });
+  if (!identity.customerProfile) throw new CanonicalShopifyOrderSyncError("IDENTITY_CONFLICT");
+  const customer = identity.customerProfile;
 
   let order = await db.megaskaOrder.findFirst({ where: { shopId, OR: [{ shopifyOrderId: source.shopifyOrderId }, { shopifyOrderName: source.shopifyOrderName }] } });
   const data = {

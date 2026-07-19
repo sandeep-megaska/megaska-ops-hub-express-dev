@@ -7,7 +7,6 @@ import {
   getSessionTokenFromRequest,
 } from "../../../../services/auth/session";
 import {
-  findShopifyCustomerIdByIdentity,
   isShopifyAdminConfigured,
 } from "../../../../services/shopify/admin";
 import { getMegaskaCustomerDashboardData } from "../../../../services/shopify/dashboard";
@@ -239,42 +238,8 @@ export async function GET(req: NextRequest) {
 
     const customer = session.customer;
 
-    let resolvedShopifyCustomerId = String(
-      customer.shopifyCustomerId || "",
-    ).trim();
-
-    if (isShopifyAdminConfigured()) {
-      let emailMatchId = "";
-      let phoneMatchId = "";
-
-      if (customer.email) {
-        emailMatchId =
-          (await findShopifyCustomerIdByIdentity({
-            shopDomain: shop.shopDomain,
-            email: customer.email,
-          })) || "";
-      }
-
-      if (!emailMatchId && customer.phoneE164) {
-        phoneMatchId =
-          (await findShopifyCustomerIdByIdentity({
-            shopDomain: shop.shopDomain,
-            phoneE164: customer.phoneE164,
-          })) || "";
-      }
-
-      const bestMatch = emailMatchId || phoneMatchId;
-
-      if (bestMatch && bestMatch !== resolvedShopifyCustomerId) {
-        resolvedShopifyCustomerId = bestMatch;
-
-        await prisma.customerProfile.update({
-          where: { id: customer.id },
-          data: { shopifyCustomerId: bestMatch },
-        });
-      }
-    }
-
+    // Identity is resolved upstream (OTP/sync/checkout). Dashboard is a consumer only.
+    const resolvedShopifyCustomerId = String(customer.shopifyCustomerId || "").trim();
     let shopifyDashboard = null;
 
     if (isShopifyAdminConfigured()) {
