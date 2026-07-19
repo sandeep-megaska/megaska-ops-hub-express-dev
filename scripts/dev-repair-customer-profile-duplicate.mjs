@@ -35,10 +35,39 @@ try {
 
     const order = await tx.megaskaOrder.findUnique({ where: { id: orderId } });
     const review = await tx.reviewRequest.findUnique({ where: { id: reviewRequestId } });
-    if (!order || order.customerProfileId !== duplicateId || order.shopId !== keep.shopId) throw new Error("Specified order is not owned by the duplicate profile/shop");
-    if (!review || review.customerProfileId !== duplicateId || review.shopId !== keep.shopId) throw new Error("Specified review request is not owned by the duplicate profile/shop");
-    await tx.megaskaOrder.update({ where: { id: orderId }, data: { customerProfileId: keepId } });
-    await tx.reviewRequest.update({ where: { id: reviewRequestId }, data: { customerProfileId: keepId } });
+   if (
+  !order ||
+  order.shopId !== keep.shopId ||
+  ![keepId, duplicateId].includes(order.customerProfileId)
+) {
+  throw new Error(
+    "Specified order is not owned by either the keep or duplicate profile in the expected shop",
+  );
+}
+
+if (
+  !review ||
+  review.shopId !== keep.shopId ||
+  ![keepId, duplicateId].includes(review.customerProfileId)
+) {
+  throw new Error(
+    "Specified review request is not owned by either the keep or duplicate profile in the expected shop",
+  );
+}
+
+if (order.customerProfileId === duplicateId) {
+  await tx.megaskaOrder.update({
+    where: { id: orderId },
+    data: { customerProfileId: keepId },
+  });
+}
+
+if (review.customerProfileId === duplicateId) {
+  await tx.reviewRequest.update({
+    where: { id: reviewRequestId },
+    data: { customerProfileId: keepId },
+  });
+}
 
     const foreignKeys = await tx.$queryRaw`
       SELECT tc.table_name AS "tableName", kcu.column_name AS "columnName"
