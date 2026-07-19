@@ -11,6 +11,8 @@ test("Shopify GID and numeric forms normalize to one identity", () => {
   assert.equal(normalizeShopifyCustomerId("gid://shopify/Customer/123"), "123");
   assert.equal(normalizeShopifyCustomerId(" 123 "), "123");
   assert.equal(normalizeShopifyCustomerId("gid://shopify/Order/123"), null);
+  assert.equal(normalizeShopifyCustomerId({ id: "123" }), null);
+  assert.equal(normalizeShopifyCustomerId(true), null);
 });
 
 test("email case and surrounding whitespace normalize consistently", () => {
