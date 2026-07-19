@@ -33,7 +33,7 @@ try {
     console.log(JSON.stringify({ mode: "DISCOVER", shopId, readOnly: true, groups }, null, 2));
   } else if (mode === "plan") {
     const ids = String(args["profile-ids"] || "").split(",").map((id) => id.trim()).filter(Boolean);
-    const plan = await createReconciliationPlan(prisma, { shopId, profileIds: ids, createdBy: actor });
+    const plan = await createReconciliationPlan(prisma, { shopId, profileIds: ids, createdBy: actor, targetProfileId: args["target-profile-id"] ? String(args["target-profile-id"]) : undefined, reasonCode: args["reason-code"] ? String(args["reason-code"]) : undefined });
     report(plan);
   } else if (mode === "approve") {
     if (!args["plan-id"] || !args.confirm) throw new Error("--plan-id and --confirm=<checksum> are required to approve");
