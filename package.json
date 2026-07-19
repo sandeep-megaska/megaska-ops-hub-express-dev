@@ -15,7 +15,8 @@
     "dev:seed:mock-tracking": "ALLOW_MOCK_TRACKING_SEED=true node scripts/dev-seed-mock-tracking.mjs",
     "dev:repair:customer-identity": "node scripts/dev-repair-customer-profile-duplicate.mjs",
     "typecheck": "tsc --noEmit",
-    "test:customer-identity-architecture": "node --test scripts/customer-identity-architecture.test.mjs"
+    "test:customer-identity-architecture": "node --test scripts/customer-identity-architecture.test.mjs",
+    "identity:reconcile": "node scripts/customer-identity-reconcile.mjs"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.6.0",

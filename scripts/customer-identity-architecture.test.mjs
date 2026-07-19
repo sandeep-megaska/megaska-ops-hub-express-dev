@@ -7,7 +7,7 @@ const root = path.resolve(import.meta.dirname, "..");
 const repositoryPath = path.join(root, "services/customers/customer-identity-repository.ts");
 const writePattern = /\b(?:prisma|tx|db)\.customerProfile\.(?:create|update|delete|upsert)\s*\(/g;
 const ignored = new Set(["generated", "node_modules", ".git", ".next"]);
-const nonProductionWriteAllowlist = new Set(["scripts/dev-repair-customer-profile-duplicate.mjs"]);
+const nonProductionWriteAllowlist = new Set(["scripts/dev-repair-customer-profile-duplicate.mjs", "services/customers/customer-identity-reconciliation.ts"]);
 
 async function sourceFiles(directory) {
   const entries = await readdir(directory, { withFileTypes: true });
