@@ -18,6 +18,7 @@ import {
 } from "../../../../../../../services/express-checkout/shopify-admin";
 import { CHECKOUT_INTENT_EXPIRY_MESSAGE, markCheckoutIntentExpiredIfNeeded } from "../../../../../../../lib/express-checkout/expiry";
 import { consumeStoreCreditReservationForOrder, getActiveStoreCreditReservation, releaseStoreCreditReservation } from "../../../../../../../services/express-checkout/store-credit";
+import { normalizeShopifyCustomerId } from "../../../../../../../lib/shopify-customer-id";
 
 export const runtime = "nodejs";
 
@@ -462,7 +463,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
   const discount = Number.isFinite(discountValue) && discountValue > 0
     ? { title: "Express checkout discount", value: discountValue, valueType: "FIXED_AMOUNT" }
     : undefined;
-  const rawCustomerId = auth.customer.shopifyCustomerId || undefined;
+  const rawCustomerId = auth.customer.shopifyCustomerId ? normalizeShopifyCustomerId(auth.customer.shopifyCustomerId) : undefined;
   const resolvedCustomerGid = toShopifyCustomerGid(rawCustomerId);
   const draftOrderInput: JsonRecord = {
     lineItems,

@@ -11,6 +11,7 @@ import {
   isShopifyAdminConfigured,
 } from "../../../../services/shopify/admin";
 import { getMegaskaCustomerDashboardData } from "../../../../services/shopify/dashboard";
+import { normalizeShopifyCustomerId } from "../../../../lib/shopify-customer-id";
 import {
   ShopResolutionError,
   requireShopFromRequest,
@@ -239,9 +240,9 @@ export async function GET(req: NextRequest) {
 
     const customer = session.customer;
 
-    let resolvedShopifyCustomerId = String(
-      customer.shopifyCustomerId || "",
-    ).trim();
+    let resolvedShopifyCustomerId = customer.shopifyCustomerId
+      ? normalizeShopifyCustomerId(customer.shopifyCustomerId)
+      : "";
 
     if (isShopifyAdminConfigured()) {
       let emailMatchId = "";
@@ -263,7 +264,8 @@ export async function GET(req: NextRequest) {
           })) || "";
       }
 
-      const bestMatch = emailMatchId || phoneMatchId;
+      const bestMatchRaw = emailMatchId || phoneMatchId;
+      const bestMatch = bestMatchRaw ? normalizeShopifyCustomerId(bestMatchRaw) : "";
 
       if (bestMatch && bestMatch !== resolvedShopifyCustomerId) {
         resolvedShopifyCustomerId = bestMatch;

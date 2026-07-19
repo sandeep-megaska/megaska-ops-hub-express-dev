@@ -4,6 +4,7 @@ import { hashSessionToken } from "../../../../services/auth/session";
 import { prisma } from "../../../../services/db/prisma";
 import { parseAmountToMinorUnits } from "../../../../services/wallet";
 import { createWalletReservation } from "../../../../services/wallet-reservation";
+import { normalizeShopifyCustomerId } from "../../../../lib/shopify-customer-id";
 import {
   ShopResolutionError,
   requireShopFromRequest,
@@ -83,7 +84,7 @@ export async function POST(req: NextRequest) {
         ? session.customer.phoneVerifiedAt.toISOString()
         : "";
     const customerProfileId = String(session.customer.id || "").trim();
-    const shopifyCustomerId = String(session.customer.shopifyCustomerId || "").trim();
+    const shopifyCustomerId = session.customer.shopifyCustomerId ? normalizeShopifyCustomerId(session.customer.shopifyCustomerId) : "";
     const resolvedCartId = resolveCartId({
       cartId: body?.cartId,
       cartToken: body?.cartToken,

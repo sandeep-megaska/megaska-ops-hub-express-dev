@@ -27,7 +27,7 @@ function harness() {
   const customers: any[] = [], orders: any[] = [], lines: any[] = [];
   const db = {
     customerProfile: {
-      findFirst: async ({ where }: any) => customers.find((row) => row.shopId === where.shopId && row.shopifyCustomerId === where.shopifyCustomerId) ?? null,
+      findFirst: async ({ where }: any) => customers.find((row) => row.shopId === where.shopId && (where.shopifyCustomerId.in ?? [where.shopifyCustomerId]).includes(row.shopifyCustomerId)) ?? null,
       create: async ({ data }: any) => { const row = { id: `customer-${customers.length + 1}`, ...data }; customers.push(row); return row; },
     },
     megaskaOrder: {

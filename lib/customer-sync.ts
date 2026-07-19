@@ -1,10 +1,10 @@
-import { prisma } from "../services/db/prisma";
 import {
   normalizeEmail,
   normalizePhone,
   normalizeShopifyCustomerId,
 } from "./customer-normalize";
 import { getShopifyCustomersForSync } from "../services/shopify/admin";
+import { resolveShopifyCustomerProfile } from "../services/customers/shopify-profile";
 
 type SyncArgs = {
   shopId: string;
@@ -43,11 +43,6 @@ export async function syncCustomersForShop({
         normalizePhone(customer.defaultPhoneNumber?.phoneNumber, defaultCountry) ||
         normalizePhone(customer.defaultAddress?.phone, defaultCountry);
 
-      if (!shopifyCustomerId) {
-        skipped += 1;
-        continue;
-      }
-
       const payload = {
         shopId,
         shopifyCustomerId,
@@ -64,51 +59,7 @@ export async function syncCustomersForShop({
         countryRegion: customer.defaultAddress?.country || null,
       };
 
-      let existing = await prisma.customerProfile.findUnique({
-        where: {
-          shopId_shopifyCustomerId: {
-            shopId,
-            shopifyCustomerId,
-          },
-        },
-      });
-
-      if (!existing && phone) {
-        existing = await prisma.customerProfile.findFirst({
-          where: {
-            shopId,
-            phoneE164: phone,
-          },
-          orderBy: {
-            createdAt: "desc",
-          },
-        });
-      }
-
-      if (!existing && email) {
-        existing = await prisma.customerProfile.findFirst({
-          where: {
-            shopId,
-            email,
-          },
-          orderBy: {
-            createdAt: "desc",
-          },
-        });
-      }
-
-      if (existing) {
-        await prisma.customerProfile.update({
-          where: {
-            id: existing.id,
-          },
-          data: payload,
-        });
-      } else {
-        await prisma.customerProfile.create({
-          data: payload,
-        });
-      }
+      await resolveShopifyCustomerProfile({ shopId, shopifyCustomerId, data: payload });
 
       upserted += 1;
     }
@@ -182,10 +133,6 @@ export async function syncSingleCustomerForShop({
     normalizePhone(customer.defaultPhoneNumber?.phoneNumber, defaultCountry) ||
     normalizePhone(customer.defaultAddress?.phone, defaultCountry);
 
-  if (!shopifyCustomerId) {
-    throw new Error("Matched customer is missing Shopify customer id");
-  }
-
   const payload = {
     shopId,
     shopifyCustomerId,
@@ -202,51 +149,7 @@ export async function syncSingleCustomerForShop({
     countryRegion: customer.defaultAddress?.country || null,
   };
 
-  let existing = await prisma.customerProfile.findUnique({
-    where: {
-      shopId_shopifyCustomerId: {
-        shopId,
-        shopifyCustomerId,
-      },
-    },
-  });
-
-  if (!existing && finalPhone) {
-    existing = await prisma.customerProfile.findFirst({
-      where: {
-        shopId,
-        phoneE164: finalPhone,
-      },
-      orderBy: {
-        createdAt: "desc",
-      },
-    });
-  }
-
-  if (!existing && finalEmail) {
-    existing = await prisma.customerProfile.findFirst({
-      where: {
-        shopId,
-        email: finalEmail,
-      },
-      orderBy: {
-        createdAt: "desc",
-      },
-    });
-  }
-
-  if (existing) {
-    await prisma.customerProfile.update({
-      where: {
-        id: existing.id,
-      },
-      data: payload,
-    });
-  } else {
-    await prisma.customerProfile.create({
-      data: payload,
-    });
-  }
+  await resolveShopifyCustomerProfile({ shopId, shopifyCustomerId, data: payload });
 
   return {
     success: true,

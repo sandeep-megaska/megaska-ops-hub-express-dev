@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { withCors, handleOptions } from "../../_lib/cors";
 import { prisma } from "../../../../services/db/prisma";
 import { hashSessionToken, getSessionTokenFromRequest } from "../../../../services/auth/session";
+import { normalizeShopifyCustomerId } from "../../../../lib/shopify-customer-id";
 import {
   resolveCartId,
   updateCartAttributes,
@@ -65,7 +66,7 @@ export async function POST(req: NextRequest) {
 
     const customer = session.customer;
     const customerProfileId = String(customer.id || "").trim();
-    const shopifyCustomerId = String(customer.shopifyCustomerId || "").trim();
+    const shopifyCustomerId = customer.shopifyCustomerId ? normalizeShopifyCustomerId(customer.shopifyCustomerId) : "";
     const phone = String(customer.phoneE164 || "").trim();
     const phoneVerifiedAt =
       customer.phoneVerifiedAt instanceof Date

@@ -11,6 +11,7 @@ import {
   updateOrderPhone,
 } from "../../../../../services/shopify/admin";
 import { normalizeShopDomain } from "../../../../../services/shopify/shop-resolver";
+import { normalizeShopifyCustomerId } from "../../../../../lib/shopify-customer-id";
 
 type ShopifyOrderWebhookPayload = {
   id?: number | string;
@@ -245,7 +246,8 @@ export async function POST(req: NextRequest) {
   const phoneVerified = String(attributes.megaska_phone_verified || "").trim() === "true";
   const authSource = String(attributes.megaska_auth_source || "otp").trim();
   const customerProfileId = String(attributes.megaska_customer_profile_id || "").trim();
-  const shopifyCustomerId = String(attributes.megaska_shopify_customer_id || "").trim();
+  const rawShopifyCustomerId = String(attributes.megaska_shopify_customer_id || "").trim();
+  const shopifyCustomerId = rawShopifyCustomerId ? normalizeShopifyCustomerId(rawShopifyCustomerId) : "";
   const verificationCompletedAt = String(attributes.megaska_auth_verified_at || "").trim();
 
   const walletReservationId = String(attributes.megaska_wallet_reservation_id || "").trim();

@@ -2,6 +2,8 @@ import { prisma } from "../db/prisma.ts";
 import type { getShopifyOrderForReviewSync, ShopifyReviewSourceOrder } from "../shopify/order-review-source.ts";
 import { decideReviewCandidateLine, normalizeReviewText, normalizeVariantTitle, normalizeHttpsImageUrl } from "../reviews/review-candidate-policy.ts";
 import type { createOrGetReviewRequest } from "../reviews/review-foundation.ts";
+import { normalizeShopifyCustomerId, shopifyCustomerIdStorageForms } from "../../lib/shopify-customer-id.ts";
+import { resolveShopifyCustomerProfile } from "../customers/shopify-profile.ts";
 
 export type CanonicalShopifyOrderSyncErrorCode = "INVALID_ORDER_ID" | "SHOPIFY_ORDER_NOT_FOUND" | "SHOPIFY_CUSTOMER_REQUIRED";
 export class CanonicalShopifyOrderSyncError extends Error {
@@ -26,6 +28,7 @@ type Dependencies = {
   db?: SyncDb;
   fetchOrder?: typeof getShopifyOrderForReviewSync;
   createOrderLine?: typeof createOrGetReviewRequest;
+  resolveCustomer?: (input: { shopId: string; shopifyCustomerId: unknown }) => Promise<Customer>;
 };
 
 export function normalizeShopifyOrderIdentifier(value: unknown) {
@@ -56,8 +59,13 @@ export async function syncCanonicalShopifyOrder(input: { shopId: string; shopDom
   if (!source) throw new CanonicalShopifyOrderSyncError("SHOPIFY_ORDER_NOT_FOUND");
   if (!source.customerId) throw new CanonicalShopifyOrderSyncError("SHOPIFY_CUSTOMER_REQUIRED");
 
-  let customer = await db.customerProfile.findFirst({ where: { shopId, shopifyCustomerId: source.customerId } });
-  if (!customer) customer = await db.customerProfile.create({ data: { shopId, shopifyCustomerId: source.customerId } });
+  const canonicalCustomerId = normalizeShopifyCustomerId(source.customerId);
+  let customer: Customer;
+  if (dependencies.resolveCustomer) customer = await dependencies.resolveCustomer({ shopId, shopifyCustomerId: canonicalCustomerId });
+  else if (dependencies.db) {
+    customer = await db.customerProfile.findFirst({ where: { shopId, shopifyCustomerId: { in: shopifyCustomerIdStorageForms(canonicalCustomerId) } } })
+      ?? await db.customerProfile.create({ data: { shopId, shopifyCustomerId: canonicalCustomerId } });
+  } else customer = await resolveShopifyCustomerProfile({ shopId, shopifyCustomerId: canonicalCustomerId });
 
   let order = await db.megaskaOrder.findFirst({ where: { shopId, OR: [{ shopifyOrderId: source.shopifyOrderId }, { shopifyOrderName: source.shopifyOrderName }] } });
   const data = {
