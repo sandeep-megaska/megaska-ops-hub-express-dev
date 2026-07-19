@@ -104,6 +104,8 @@
   var cartTriggerTakeoverTimer = null;
   var suppressNextCartClickUntil = 0;
   var suppressedCartTrigger = null;
+  var deferredCartOpen = null;
+  var deferredCartOpenTimers = [];
   var diagnosticActions = {};
   var elements = {};
 
@@ -398,7 +400,10 @@
 
   function getCapabilityResult() {
     var root = getLoopDeskRoot();
-    var rootAvailable = Boolean(root || document.body);
+    // A loading document can receive a cart interaction before <body> exists.
+    // The root is still mountable as soon as parsing reaches it, so do not give
+    // theme navigation ownership during that short window.
+    var rootAvailable = Boolean(root || document.body || document.documentElement);
     var result = {
       assetsLoaded: Boolean(window.__LOOPDESK_CART_DRAWER_LOADED__),
       cartAjaxAvailable: canUseCartAjax(),
@@ -610,9 +615,9 @@
     if (!href) return false;
     try {
       var url = new URL(href, window.location.origin);
-      return url.origin === window.location.origin && url.pathname.indexOf("/cart") !== -1;
+      return url.origin === window.location.origin && /(?:^|\/)cart\/?$/.test(url.pathname);
     } catch (_error) {
-      return String(href).indexOf("/cart") !== -1;
+      return /(?:^|\/)cart\/?(?:[?#].*)?$/.test(String(href));
     }
   }
 
@@ -769,11 +774,6 @@
       attributes: true,
       attributeFilter: ["class", "href", "aria-label", "aria-controls", "data-cart", "data-cart-drawer"]
     });
-  }
-
-  function fallbackToCartPage(trigger) {
-    var href = trigger && trigger.getAttribute && trigger.getAttribute("href");
-    window.location.href = href && hasCartPath(href) ? href : "/cart";
   }
 
   function getItemImage(item) {
@@ -1098,31 +1098,65 @@
     event.preventDefault();
     event.stopPropagation();
     if (event.stopImmediatePropagation) event.stopImmediatePropagation();
-    if (action === "pointerdown" || action === "touchstart" || action === "mousedown") {
+    if (action === "pointerdown" || action === "touchstart" || action === "mousedown" || action === "keydown") {
       suppressNextCartClickUntil = Date.now() + 750;
       suppressedCartTrigger = trigger;
       debugLogOnce(action + "-suppressed", action + " suppressed", { trigger: getElementDescriptor(trigger) }, true);
     } else if (action === "click") {
       debugLogOnce("click-suppressed", "click suppressed", { trigger: getElementDescriptor(trigger) }, true);
-    } else if (action === "keydown") {
-      debugLogOnce("keydown-suppressed", "keydown suppressed", { trigger: getElementDescriptor(trigger), key: event.key }, true);
     }
-    fetchCart().then(function () {
-      if (state.error) {
-        fallbackToCartPage(trigger);
-        return;
-      }
-      setOpen(true);
+    openLoopDeskCartFromTrigger(trigger, action).then(function () {
       debugLogOnce("loopdesk-drawer-opened-from-trigger", "LoopDesk drawer opened", { trigger: getElementDescriptor(trigger), action: action }, true);
       scheduleNativeCartPanelCleanup();
-    }).catch(function () {
-      fallbackToCartPage(trigger);
     });
     return false;
   }
 
+  function sameCartTrigger(left, right) {
+    return Boolean(left === right || (left && left.contains && left.contains(right)) || (right && right.contains && right.contains(left)));
+  }
+
+  function isDuplicateCartTriggerEvent(event, trigger) {
+    if (event.type === "keydown") return Boolean(event.repeat);
+    return suppressNextCartClickUntil > Date.now() && sameCartTrigger(suppressedCartTrigger, trigger);
+  }
+
+  function clearDeferredCartOpen() {
+    deferredCartOpenTimers.forEach(function (timer) { window.clearTimeout(timer); });
+    deferredCartOpenTimers = [];
+    deferredCartOpen = null;
+  }
+
+  function flushDeferredCartOpen() {
+    if (!deferredCartOpen || !document.body) return false;
+    var pending = deferredCartOpen;
+    clearDeferredCartOpen();
+    if (!isDrawerAvailable()) mount();
+    if (!isDrawerAvailable()) return false;
+    refreshAndMaybeOpen(true);
+    debugLog("deferred cart open mounted", { trigger: getElementDescriptor(pending.trigger), action: pending.action }, true);
+    return true;
+  }
+
+  function openLoopDeskCartFromTrigger(trigger, action) {
+    if (isDrawerAvailable()) return refreshAndMaybeOpen(true);
+    if (document.body) {
+      mount();
+      if (isDrawerAvailable()) return refreshAndMaybeOpen(true);
+    }
+
+    // Parsing can deliver an interaction before body/root mounting. Keep one
+    // bounded request and retry only at lifecycle/short fixed checkpoints.
+    deferredCartOpen = deferredCartOpen || { trigger: trigger, action: action };
+    [0, 50, 150, 300].forEach(function (delay) {
+      deferredCartOpenTimers.push(window.setTimeout(flushDeferredCartOpen, delay));
+    });
+    document.addEventListener("DOMContentLoaded", flushDeferredCartOpen, { once: true });
+    debugLog("cart open deferred until mount", { trigger: getElementDescriptor(trigger), action: action }, true);
+    return Promise.resolve();
+  }
+
   function handleCartTriggerEvent(event) {
-    if (!isDrawerAvailable()) return;
     if (event.type === "keydown" && event.key !== "Enter" && event.key !== " ") return;
 
     var trigger = findCartTrigger(event.target);
@@ -1137,14 +1171,15 @@
       return;
     }
 
-    if (event.type === "click" && suppressNextCartClickUntil > Date.now() && (suppressedCartTrigger === trigger || (suppressedCartTrigger && suppressedCartTrigger.contains && suppressedCartTrigger.contains(trigger)) || (trigger.contains && trigger.contains(suppressedCartTrigger)))) {
+    if (isDuplicateCartTriggerEvent(event, trigger)) {
       event.preventDefault();
       event.stopPropagation();
       if (event.stopImmediatePropagation) event.stopImmediatePropagation();
-      debugLogOnce("click-suppressed", "click suppressed", { trigger: getElementDescriptor(trigger) }, true);
+      debugLogOnce(event.type + "-duplicate-suppressed", "open suppressed as duplicate", { eventType: event.type, trigger: getElementDescriptor(trigger), ownershipMode: state.cartOwnershipMode, rootMounted: Boolean(getLoopDeskRoot()) }, true);
       return false;
     }
     if (event.type === "click" || event.type === "pointerdown" || event.type === "mousedown" || event.type === "touchstart" || event.type === "keydown") {
+      debugLog("cart trigger intercepted", { eventType: event.type, trigger: getElementDescriptor(trigger), ownershipMode: state.cartOwnershipMode, rootMounted: Boolean(getLoopDeskRoot()), takeoverAlreadyApplied: Boolean(getConnectedTakeoverRecord(trigger) || trigger.getAttribute && trigger.getAttribute("data-loopdesk-cart-trigger") === "true") }, true);
       return ownCartTriggerEvent(event, trigger, event.type);
     }
   }
@@ -1219,7 +1254,7 @@
     debugLog("capability result", getCapabilityResult(), true);
     refreshPromotionRuntime("init").then(function (applied) { if (!applied && !hasPromotionRules()) schedulePromotionRuntimeRefresh("init-delayed", 750); });
     refreshAndMaybeOpen(false);
-    scheduleCartTriggerTakeover("mount");
+    applyCartTriggerTakeover();
     observeCartTriggerTakeoverTargets();
   }
 
@@ -1855,6 +1890,8 @@
   listenForCheckoutIntent();
   scheduleCheckoutCtaScan();
   observeCheckoutCtaTargets();
-  scheduleCartTriggerTakeover("init");
+  // Delegation is authoritative; this synchronous compatibility takeover only
+  // replaces triggers that are already present and owned by LoopDesk.
+  applyCartTriggerTakeover();
   observeCartTriggerTakeoverTargets();
 })();

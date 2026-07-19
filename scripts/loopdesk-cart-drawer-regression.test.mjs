@@ -20,6 +20,23 @@ assert.ok(triggerHandler, "cart trigger handler should exist");
 assert.match(triggerHandler[0], /var active = isLoopDeskDrawerActive\(\);/, "cart trigger handler should evaluate active ownership");
 assert.match(triggerHandler[0], /return ownCartTriggerEvent\(event, trigger, event\.type\);/, "active ownership should route cart icon events to LoopDesk drawer opening");
 
+// CART-UAT-1A: delegated capture is the navigation-safety boundary. These
+// checks intentionally cover the source contract without advancing takeover's
+// debounce timer, because cloning must only be a compatibility enhancement.
+assert.match(source, /function listenForCartLinks\(\) \{[\s\S]*\["pointerdown", "mousedown", "touchstart", "click", "keydown"\][\s\S]*document\.addEventListener\(eventName, handleCartTriggerEvent, true\)/, "Case A: every cart interaction should be captured synchronously at document level");
+assert.doesNotMatch(triggerHandler[0], /isDrawerAvailable\(\)\) return/, "Case A: interception must not wait for takeover or a mounted root");
+assert.match(source, /function findCartTrigger\(target\) \{[\s\S]*target\.closest\("a\[href\]"\)[\s\S]*hasCartPath/, "Case B: nested SVG/path targets should resolve through their closest cart anchor");
+assert.doesNotMatch(triggerHandler[0], /if \([^\n]*data-loopdesk-cart-trigger/, "Cases A-C: delegated interception must not require a cloned/owned trigger marker");
+assert.match(source, /function scheduleCartTriggerTakeover\(reason\)[\s\S]*}, 80\);/, "Case C fixture: mutation takeover remains debounced");
+assert.match(source, /applyCartTriggerTakeover\(\);\n  observeCartTriggerTakeoverTargets\(\);/, "Case C: present triggers get synchronous compatibility takeover while delegated capture protects replacements");
+assert.match(triggerHandler[0], /event\.key !== "Enter" && event\.key !== " "/, "Case D: Enter and Space should be the only intercepted key activations");
+assert.match(source, /function isDuplicateCartTriggerEvent\(event, trigger\)[\s\S]*event\.type === "keydown"[\s\S]*suppressNextCartClickUntil > Date\.now\(\)[\s\S]*sameCartTrigger/, "Case E: one pointer/mouse/click interaction should have one open path");
+assert.match(source, /function ownCartTriggerEvent\(event, trigger, action\) \{[\s\S]*event\.preventDefault\(\);[\s\S]*event\.stopPropagation\(\);[\s\S]*event\.stopImmediatePropagation/, "owned cart interactions should prevent default and both propagation paths");
+assert.match(source, /function isInsideLoopDeskDrawer\(element\)[\s\S]*closest\("#" \+ ROOT_ID\)/, "Case F: LoopDesk View Cart remains excluded by the drawer-root boundary");
+assert.match(triggerHandler[0], /if \(!active\) \{[\s\S]*fallback theme behavior allowed[\s\S]*return;/, "Case G: inactive ownership should preserve normal theme navigation");
+assert.match(source, /function openLoopDeskCartFromTrigger\(trigger, action\)[\s\S]*deferredCartOpen[\s\S]*\[0, 50, 150, 300\][\s\S]*DOMContentLoaded/, "Case H: an early interaction should use bounded deferred mount/open retries");
+assert.doesNotMatch(source.match(/function ownCartTriggerEvent\(event, trigger, action\)[\s\S]*?\n  \}/)[0], /fallbackToCartPage/, "an owned interaction must never fall through to /cart after interception");
+
 const controllerOpen = source.match(/window\.LoopDeskCartController = \{[\s\S]*?open: function \(\) \{[\s\S]*?\n    \},/);
 assert.ok(controllerOpen, "manual controller open helper should exist");
 assert.match(controllerOpen[0], /return refreshAndMaybeOpen\(true\);/, "manual open helper should open the drawer for debugging");
