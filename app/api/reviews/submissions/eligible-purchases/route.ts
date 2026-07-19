@@ -24,6 +24,9 @@ export async function GET(request: NextRequest) {
     productIdCandidates: shopifyProductIdCandidates(productId),
     ...result.diagnostics,
   });
-  const purchases = result.purchases.map(({ productTitle: _productTitle, productImageUrl: _productImageUrl, ...purchase }) => ({ ...purchase, eligible: true }));
+  // The persisted review request is the canonical source for the purchased
+  // product identity. Keep these presentation fields in the response so the
+  // storefront never has to mistake a variant title or order number for it.
+  const purchases = result.purchases.map((purchase) => ({ ...purchase, verifiedPurchase: true, eligible: true }));
   return reply({ ok: true, purchases });
 }
