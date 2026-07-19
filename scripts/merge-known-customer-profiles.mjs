@@ -1,273 +1,388 @@
 #!/usr/bin/env node
 import "dotenv/config";
-import { createHash } from "node:crypto";
 import { PrismaClient } from "../generated/prisma/client.js";
 import { PrismaPg } from "@prisma/adapter-pg";
 
-// Deliberately hard-coded: this is a one-time, pair-specific operational repair,
-// not another entry point to the generic identity reconciliation engine.
 const SHOP_ID = "3ea59c93-efbd-41d6-aede-7787b2e1eaee";
 const SOURCE_ID = "d058f0e6-2544-4852-ae48-c4c8263162c9";
 const TARGET_ID = "c2281142-a9dc-468a-99da-848a725e62dc";
-const CONFIRMATION = "MERGE_D058_INTO_C228";
-const ACTOR = "Sandeep";
+const CONFIRM_TOKEN = "MERGE_D058_INTO_C228";
 
-const args = new Set(process.argv.slice(2));
-const apply = args.has("--apply");
-if (apply && !args.has(`--confirm=${CONFIRMATION}`)) {
-  throw new Error(`Apply mode requires both --apply and --confirm=${CONFIRMATION}`);
-}
-if (!apply && [...args].some((arg) => arg.startsWith("--confirm="))) {
-  throw new Error("--confirm is accepted only together with --apply");
-}
-if ([...args].some((arg) => arg !== "--apply" && arg !== `--confirm=${CONFIRMATION}`)) {
-  throw new Error("Unknown argument. This script accepts only --apply and the exact confirmation token.");
-}
-if (SOURCE_ID === TARGET_ID) throw new Error("SOURCE and TARGET must be different");
-if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL is required");
+const args = process.argv.slice(2);
+const apply = args.includes("--apply");
+const expectedConfirmation = `--confirm=${CONFIRM_TOKEN}`;
 
-const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }) });
-
-const relations = [
-  ["authSession", "AuthSession"],
-  ["oTPChallenge", "OTPChallenge"],
-  ["codAdvanceIntent", "CodAdvanceIntent"],
-  ["megaskaOrder", "MegaskaOrder"],
-  ["orderActionRequest", "OrderActionRequest"],
-  ["productReview", "ProductReview"],
-  ["reviewRequest", "ReviewRequest"],
-  ["walletTransaction", "WalletTransaction"],
-  ["walletReservation", "WalletReservation"],
-  ["refundRequest", "RefundRequest"],
-  ["gstDocument", "GstDocument"],
-  ["gstParty", "GstParty"],
-  ["expressCheckoutIntent", "ExpressCheckoutIntent"],
-  ["checkoutRecoveryToken", "CheckoutRecoveryToken"],
-  ["expressCheckoutAddressSnapshot", "ExpressCheckoutAddressSnapshot"],
+const DIRECT_DEPENDENCIES = [
+  ["AuthSession", "authSession", "customerProfileId"],
+  ["OTPChallenge", "oTPChallenge", "customerProfileId"],
+  ["OrderActionRequest", "orderActionRequest", "customerProfileId"],
+  ["CodAdvanceIntent", "codAdvanceIntent", "customerProfileId"],
+  ["MegaskaOrder", "megaskaOrder", "customerProfileId"],
+  ["ReviewRequest", "reviewRequest", "customerProfileId"],
+  ["ProductReview", "productReview", "customerProfileId"],
+  ["WalletAccount", "walletAccount", "customerProfileId"],
+  ["WalletTransaction", "walletTransaction", "customerProfileId"],
+  ["WalletReservation", "walletReservation", "customerProfileId"],
+  ["RefundRequest", "refundRequest", "customerProfileId"],
+  ["GstDocument", "gstDocument", "customerProfileId"],
+  ["GstParty", "gstParty", "customerProfileId"],
+  ["CheckoutRecoveryToken", "checkoutRecoveryToken", "customerProfileId"],
+  ["CustomerIdentityReconciliationPlan", "customerIdentityReconciliationPlan", "canonicalCustomerProfileId"],
+  ["CustomerIdentityReconciliationAudit", "customerIdentityReconciliationAudit", "canonicalCustomerProfileId"],
 ];
 
-const shopScopedModels = new Set([
-  "OTPChallenge", "CodAdvanceIntent", "MegaskaOrder", "ProductReview", "ReviewRequest",
-  "WalletTransaction", "RefundRequest", "GstDocument", "ExpressCheckoutIntent",
-  "CheckoutRecoveryToken", "ExpressCheckoutAddressSnapshot",
-]);
+const NON_WALLET_UPDATES = DIRECT_DEPENDENCIES.filter(([, delegate]) => ![
+  "walletAccount",
+  "walletTransaction",
+  "walletReservation",
+  "customerIdentityReconciliationPlan",
+  "customerIdentityReconciliationAudit",
+].includes(delegate));
+
+const FILL_ONLY_FIELDS = [
+  "phoneE164",
+  "fullName",
+  "firstName",
+  "lastName",
+  "email",
+  "addressLine1",
+  "addressLine2",
+  "city",
+  "stateProvince",
+  "postalCode",
+  "countryRegion",
+  "phoneVerifiedAt",
+  "profileCompletedAt",
+];
+
+function fail(message, details) {
+  const error = new Error(message);
+  if (details !== undefined) error.details = details;
+  throw error;
+}
+
+function validateArguments() {
+  const allowed = new Set(["--apply", expectedConfirmation]);
+  const unknown = args.filter((arg) => !allowed.has(arg));
+  if (unknown.length) fail("Unknown command-line argument", { unknown });
+  if (args.filter((arg) => arg === "--apply").length > 1 || args.filter((arg) => arg === expectedConfirmation).length > 1) {
+    fail("Command-line arguments must not be repeated");
+  }
+  if (apply && !args.includes(expectedConfirmation)) {
+    fail("Apply mode requires the exact confirmation token", { required: `--apply ${expectedConfirmation}` });
+  }
+  if (!apply && args.some((arg) => arg.startsWith("--confirm="))) {
+    fail("--confirm may only be used with --apply");
+  }
+  if (SOURCE_ID === TARGET_ID) fail("SOURCE_ID and TARGET_ID must differ");
+  if (!process.env.DATABASE_URL) fail("DATABASE_URL is required");
+}
 
 function normalizeShopifyCustomerId(value) {
   if (value == null || String(value).trim() === "") return null;
-  const text = String(value).trim();
-  const match = text.match(/^(?:gid:\/\/shopify\/Customer\/)?([0-9]+)$/i);
-  if (!match) throw new Error(`Unsupported Shopify customer ID form: ${text}`);
+  const match = String(value).trim().match(/^(?:gid:\/\/shopify\/Customer\/)?([0-9]+)$/i);
+  if (!match) fail("Unsupported Shopify customer ID format", { value: String(value) });
   return match[1];
 }
 
-function hash(value) {
-  return createHash("sha256").update(JSON.stringify(value)).digest("hex");
+function sanitizedProfile(profile) {
+  return Object.fromEntries(Object.entries(profile).filter(([key]) => !/token|secret|password|hash/i.test(key)));
 }
 
-async function countsFor(db, customerProfileId) {
-  const counts = {};
-  for (const [delegate, model] of relations) {
-    counts[model] = await db[delegate].count({ where: { customerProfileId } });
-  }
-  // Per the operational requirement, WalletAccount discovery is intentionally
-  // keyed only by customerProfileId; its actual schema shopId is validated later.
-  counts.WalletAccount = await db.walletAccount.count({ where: { customerProfileId } });
-  counts.CustomerIdentityReconciliationPlan = await db.customerIdentityReconciliationPlan.count({
-    where: { canonicalCustomerProfileId: customerProfileId },
-  });
-  counts.CustomerIdentityReconciliationAudit = await db.customerIdentityReconciliationAudit.count({
-    where: { canonicalCustomerProfileId: customerProfileId },
-  });
-  return counts;
+function diagnostic(label, value) {
+  process.stderr.write(`${JSON.stringify({ [label]: value })}\n`);
 }
 
-async function loadAndValidate(db) {
+async function dependencyCounts(db, customerProfileId) {
+  const entries = await Promise.all(DIRECT_DEPENDENCIES.map(async ([name, delegate, field]) => [
+    name,
+    await db[delegate].count({ where: { [field]: customerProfileId } }),
+  ]));
+  return Object.fromEntries(entries);
+}
+
+async function mergeScalarCounts(db, customerProfileId) {
+  const [asSource, asTarget] = await Promise.all([
+    db.customerIdentityMerge.count({ where: { sourceCustomerProfileId: customerProfileId } }),
+    db.customerIdentityMerge.count({ where: { targetCustomerProfileId: customerProfileId } }),
+  ]);
+  return { sourceCustomerProfileId: asSource, targetCustomerProfileId: asTarget };
+}
+
+async function loadProfiles(db) {
   const [source, target] = await Promise.all([
     db.customerProfile.findUnique({ where: { id: SOURCE_ID } }),
     db.customerProfile.findUnique({ where: { id: TARGET_ID } }),
   ]);
-  if (!source || !target) throw new Error(`Both profiles must exist (source=${Boolean(source)}, target=${Boolean(target)})`);
+  if (!source || !target) fail("Both SOURCE and TARGET profiles must exist", { sourceExists: Boolean(source), targetExists: Boolean(target) });
   if (source.shopId !== SHOP_ID || target.shopId !== SHOP_ID) {
-    throw new Error("Both profiles must belong to the hard-coded shop");
-  }
-
-  const [targetSessions, targetVerifiedOtps, sourceOrders, sourceReviews, sourceReviewRequests] = await Promise.all([
-    db.authSession.count({ where: { customerProfileId: TARGET_ID } }),
-    db.oTPChallenge.count({ where: { customerProfileId: TARGET_ID, status: "VERIFIED" } }),
-    db.megaskaOrder.count({ where: { customerProfileId: SOURCE_ID } }),
-    db.productReview.count({ where: { customerProfileId: SOURCE_ID } }),
-    db.reviewRequest.count({ where: { customerProfileId: SOURCE_ID } }),
-  ]);
-  if (targetSessions + targetVerifiedOtps === 0) throw new Error("TARGET is not proven to be the OTP/login profile");
-  if (sourceOrders + sourceReviews + sourceReviewRequests === 0) {
-    throw new Error("SOURCE is not proven to be the historical order/review profile");
+    fail("Both profiles must belong to SHOP_ID", { sourceShopId: source.shopId, targetShopId: target.shopId, expectedShopId: SHOP_ID });
   }
 
   const sourceShopifyId = normalizeShopifyCustomerId(source.shopifyCustomerId);
   const targetShopifyId = normalizeShopifyCustomerId(target.shopifyCustomerId);
   if (sourceShopifyId && targetShopifyId && sourceShopifyId !== targetShopifyId) {
-    throw new Error("Profiles have different Shopify customer identities; refusing to guess");
+    fail("SOURCE and TARGET represent different Shopify customers", { sourceShopifyId, targetShopifyId });
   }
-  const canonicalShopifyId = targetShopifyId ?? sourceShopifyId;
-  if (canonicalShopifyId) {
-    const peers = await db.customerProfile.findMany({
-      where: { shopId: SHOP_ID, shopifyCustomerId: { not: null }, id: { notIn: [SOURCE_ID, TARGET_ID] } },
-      select: { id: true, shopifyCustomerId: true },
-    });
-    const conflict = peers.find((peer) => normalizeShopifyCustomerId(peer.shopifyCustomerId) === canonicalShopifyId);
-    if (conflict) throw new Error(`Canonical Shopify identity is already active on profile ${conflict.id}`);
-  }
-
-  const sourceCounts = await countsFor(db, SOURCE_ID);
-  return { source, target, sourceCounts, canonicalShopifyId };
+  return { source, target };
 }
 
-async function validateTenantOwnership(db) {
-  for (const [delegate, model] of relations) {
-    if (!shopScopedModels.has(model)) continue;
-    const count = await db[delegate].count({ where: { customerProfileId: SOURCE_ID, shopId: { not: SHOP_ID } } });
-    if (count) throw new Error(`${model} has ${count} SOURCE rows outside the expected shop`);
-  }
-  const wallets = await db.walletAccount.findMany({ where: { customerProfileId: { in: [SOURCE_ID, TARGET_ID] } } });
-  const wrongWallets = wallets.filter((wallet) => wallet.shopId !== SHOP_ID);
-  if (wrongWallets.length) throw new Error(`WalletAccount has ${wrongWallets.length} rows outside the expected shop`);
-  return wallets;
-}
-
-async function validateUniqueConflicts(db, wallets) {
-  const priorMerge = await db.customerIdentityMerge.findUnique({ where: { sourceCustomerProfileId: SOURCE_ID }, select: { id: true } });
-  if (priorMerge) throw new Error(`SOURCE already has a merge record: ${priorMerge.id}`);
+async function productReviewCollisions(db) {
   const sourceReviews = await db.productReview.findMany({
     where: { customerProfileId: SOURCE_ID, shopifyLineItemId: { not: null } },
     select: { id: true, shopId: true, shopifyLineItemId: true },
   });
+  const collisions = [];
   for (const review of sourceReviews) {
-    const conflict = await db.productReview.findFirst({
-      where: { customerProfileId: TARGET_ID, shopId: review.shopId, shopifyLineItemId: review.shopifyLineItemId },
+    const target = await db.productReview.findFirst({
+      where: {
+        customerProfileId: TARGET_ID,
+        shopId: review.shopId,
+        shopifyLineItemId: review.shopifyLineItemId,
+      },
       select: { id: true },
     });
-    if (conflict) throw new Error(`ProductReview unique conflict: ${review.id} conflicts with ${conflict.id}`);
+    if (target) collisions.push({ sourceProductReviewId: review.id, targetProductReviewId: target.id });
   }
-  const keys = new Set();
-  for (const wallet of wallets) {
-    const key = `${wallet.customerProfileId}:${wallet.currency}`;
-    if (keys.has(key)) throw new Error(`Unexpected duplicate wallet currency ${wallet.currency}`);
-    keys.add(key);
-  }
+  return collisions;
 }
 
-async function assertWalletLedger(db, wallet) {
-  const rows = await db.walletTransaction.findMany({
-    where: { walletAccountId: wallet.id }, select: { direction: true, amount: true, currency: true, customerProfileId: true, shopId: true },
-  });
-  const ledgerBalance = rows.reduce((sum, row) => sum + (row.direction === "CREDIT" ? row.amount : -row.amount), 0);
-  if (rows.some((row) => row.currency !== wallet.currency || row.customerProfileId !== wallet.customerProfileId || row.shopId !== wallet.shopId)) {
-    throw new Error(`Wallet ${wallet.id} has inconsistent ledger ownership/currency`);
+async function inspectWallet(db, wallet) {
+  if (wallet.shopId !== SHOP_ID) fail("Wallet belongs to an unexpected shop", { walletId: wallet.id, shopId: wallet.shopId });
+  const [transactions, reservations] = await Promise.all([
+    db.walletTransaction.findMany({
+      where: { walletAccountId: wallet.id },
+      select: { id: true, shopId: true, customerProfileId: true, currency: true },
+    }),
+    db.walletReservation.findMany({
+      where: { walletAccountId: wallet.id },
+      select: { id: true, shopId: true, customerProfileId: true, currency: true },
+    }),
+  ]);
+  const invalidTransactions = transactions.filter((row) => row.shopId !== wallet.shopId || row.customerProfileId !== wallet.customerProfileId || row.currency !== wallet.currency);
+  const invalidReservations = reservations.filter((row) => row.shopId !== wallet.shopId || row.customerProfileId !== wallet.customerProfileId || row.currency !== wallet.currency);
+  if (invalidTransactions.length || invalidReservations.length) {
+    fail("Wallet ledger ownership or currency is inconsistent; refusing to guess", {
+      walletId: wallet.id,
+      invalidTransactionIds: invalidTransactions.map(({ id }) => id),
+      invalidReservationIds: invalidReservations.map(({ id }) => id),
+    });
   }
-  if (ledgerBalance !== wallet.currentBalance) {
-    throw new Error(`Wallet ${wallet.id} balance ${wallet.currentBalance} does not reconcile to ledger ${ledgerBalance}`);
-  }
-  const active = await db.walletReservation.aggregate({
-    where: { walletAccountId: wallet.id, status: "ACTIVE" }, _sum: { reservedAmount: true },
-  });
-  if ((active._sum.reservedAmount ?? 0) > wallet.currentBalance) {
-    throw new Error(`Wallet ${wallet.id} active reservations exceed its balance`);
-  }
-  return { ledgerBalance, transactionCount: rows.length };
+  return { transactionCount: transactions.length, reservationCount: reservations.length };
 }
 
-async function mergeWallets(db, wallets, movedCounts) {
+async function buildWalletPlan(db) {
+  const wallets = await db.walletAccount.findMany({
+    where: { customerProfileId: { in: [SOURCE_ID, TARGET_ID] } },
+    orderBy: [{ currency: "asc" }, { customerProfileId: "asc" }],
+  });
   const sourceWallets = wallets.filter((wallet) => wallet.customerProfileId === SOURCE_ID);
-  const targetByCurrency = new Map(wallets.filter((wallet) => wallet.customerProfileId === TARGET_ID).map((wallet) => [wallet.currency, wallet]));
+  const targetByKey = new Map(wallets.filter((wallet) => wallet.customerProfileId === TARGET_ID).map((wallet) => [`${wallet.shopId}:${wallet.currency}`, wallet]));
+  const plan = [];
   for (const sourceWallet of sourceWallets) {
-    await assertWalletLedger(db, sourceWallet);
-    const targetWallet = targetByCurrency.get(sourceWallet.currency);
+    const sourceDetails = await inspectWallet(db, sourceWallet);
+    const targetWallet = targetByKey.get(`${sourceWallet.shopId}:${sourceWallet.currency}`);
     if (!targetWallet) {
-      movedCounts.WalletAccount += (await db.walletAccount.updateMany({ where: { id: sourceWallet.id, customerProfileId: SOURCE_ID }, data: { customerProfileId: TARGET_ID } })).count;
-      movedCounts.WalletTransaction += (await db.walletTransaction.updateMany({ where: { walletAccountId: sourceWallet.id, customerProfileId: SOURCE_ID }, data: { customerProfileId: TARGET_ID } })).count;
-      movedCounts.WalletReservation += (await db.walletReservation.updateMany({ where: { walletAccountId: sourceWallet.id, customerProfileId: SOURCE_ID }, data: { customerProfileId: TARGET_ID } })).count;
-      await assertWalletLedger(db, { ...sourceWallet, customerProfileId: TARGET_ID });
-      targetByCurrency.set(sourceWallet.currency, { ...sourceWallet, customerProfileId: TARGET_ID });
+      plan.push({
+        action: "REASSIGN_WALLET",
+        currency: sourceWallet.currency,
+        sourceWalletId: sourceWallet.id,
+        currentBalance: sourceWallet.currentBalance,
+        ...sourceDetails,
+      });
+      continue;
+    }
+    const targetDetails = await inspectWallet(db, targetWallet);
+    plan.push({
+      action: "CONSOLIDATE_WALLETS",
+      currency: sourceWallet.currency,
+      sourceWalletId: sourceWallet.id,
+      targetWalletId: targetWallet.id,
+      sourceCurrentBalance: sourceWallet.currentBalance,
+      targetCurrentBalance: targetWallet.currentBalance,
+      expectedCurrentBalance: sourceWallet.currentBalance + targetWallet.currentBalance,
+      sourceTransactionCount: sourceDetails.transactionCount,
+      sourceReservationCount: sourceDetails.reservationCount,
+      targetTransactionCount: targetDetails.transactionCount,
+      targetReservationCount: targetDetails.reservationCount,
+    });
+  }
+  return plan;
+}
+
+function fillOnlyData(source, target) {
+  const data = {};
+  for (const field of FILL_ONLY_FIELDS) {
+    const targetEmpty = target[field] == null || (typeof target[field] === "string" && target[field].trim() === "");
+    const sourcePresent = source[field] != null && (typeof source[field] !== "string" || source[field].trim() !== "");
+    if (targetEmpty && sourcePresent) data[field] = source[field];
+  }
+  return data;
+}
+
+async function applyWalletPlan(tx, walletPlan, movedCounts) {
+  for (const item of walletPlan) {
+    if (item.action === "REASSIGN_WALLET") {
+      movedCounts.WalletTransaction += (await tx.walletTransaction.updateMany({
+        where: { walletAccountId: item.sourceWalletId, customerProfileId: SOURCE_ID },
+        data: { customerProfileId: TARGET_ID },
+      })).count;
+      movedCounts.WalletReservation += (await tx.walletReservation.updateMany({
+        where: { walletAccountId: item.sourceWalletId, customerProfileId: SOURCE_ID },
+        data: { customerProfileId: TARGET_ID },
+      })).count;
+      await tx.walletAccount.update({ where: { id: item.sourceWalletId }, data: { customerProfileId: TARGET_ID } });
+      movedCounts.WalletAccount += 1;
       continue;
     }
 
-    await assertWalletLedger(db, targetWallet);
-    const expectedBalance = targetWallet.currentBalance + sourceWallet.currentBalance;
-    movedCounts.WalletTransaction += (await db.walletTransaction.updateMany({ where: { walletAccountId: sourceWallet.id, customerProfileId: SOURCE_ID }, data: { walletAccountId: targetWallet.id, customerProfileId: TARGET_ID } })).count;
-    movedCounts.WalletReservation += (await db.walletReservation.updateMany({ where: { walletAccountId: sourceWallet.id, customerProfileId: SOURCE_ID }, data: { walletAccountId: targetWallet.id, customerProfileId: TARGET_ID } })).count;
-    await db.walletAccount.update({ where: { id: targetWallet.id }, data: { currentBalance: expectedBalance } });
-    await db.walletAccount.delete({ where: { id: sourceWallet.id } });
+    diagnostic("walletBalanceChange", {
+      currency: item.currency,
+      sourceWalletId: item.sourceWalletId,
+      targetWalletId: item.targetWalletId,
+      before: { source: item.sourceCurrentBalance, target: item.targetCurrentBalance },
+      after: item.expectedCurrentBalance,
+    });
+    movedCounts.WalletTransaction += (await tx.walletTransaction.updateMany({
+      where: { walletAccountId: item.sourceWalletId, customerProfileId: SOURCE_ID },
+      data: { walletAccountId: item.targetWalletId, customerProfileId: TARGET_ID },
+    })).count;
+    movedCounts.WalletReservation += (await tx.walletReservation.updateMany({
+      where: { walletAccountId: item.sourceWalletId, customerProfileId: SOURCE_ID },
+      data: { walletAccountId: item.targetWalletId, customerProfileId: TARGET_ID },
+    })).count;
+    const [transactionsLeft, reservationsLeft] = await Promise.all([
+      tx.walletTransaction.count({ where: { walletAccountId: item.sourceWalletId } }),
+      tx.walletReservation.count({ where: { walletAccountId: item.sourceWalletId } }),
+    ]);
+    if (transactionsLeft || reservationsLeft) {
+      fail("SOURCE wallet still has ledger dependencies", { walletId: item.sourceWalletId, transactionsLeft, reservationsLeft });
+    }
+    await tx.walletAccount.update({
+      where: { id: item.targetWalletId },
+      data: { currentBalance: item.expectedCurrentBalance },
+    });
+    await tx.walletAccount.delete({ where: { id: item.sourceWalletId } });
     movedCounts.WalletAccount += 1;
-    const surviving = { ...targetWallet, currentBalance: expectedBalance };
-    await assertWalletLedger(db, surviving);
-    targetByCurrency.set(sourceWallet.currency, surviving);
+  }
+}
+
+async function assertProductReviewUniqueness(tx) {
+  const targetReviews = await tx.productReview.findMany({
+    where: { customerProfileId: TARGET_ID, shopifyLineItemId: { not: null } },
+    select: { id: true, shopId: true, shopifyLineItemId: true },
+  });
+  const seen = new Map();
+  for (const review of targetReviews) {
+    const key = `${review.shopId}:${review.shopifyLineItemId}`;
+    if (seen.has(key)) fail("ProductReview uniqueness verification failed", { conflictingProductReviewIds: [seen.get(key), review.id] });
+    seen.set(key, review.id);
   }
 }
 
 async function executeMerge(tx) {
-  const validation = await loadAndValidate(tx);
-  const wallets = await validateTenantOwnership(tx);
-  await validateUniqueConflicts(tx, wallets);
-  const movedCounts = Object.fromEntries(Object.keys(validation.sourceCounts).map((model) => [model, 0]));
+  const { source, target } = await loadProfiles(tx);
+  const sourceCounts = await dependencyCounts(tx, SOURCE_ID);
+  const collisions = await productReviewCollisions(tx);
+  if (collisions.length) fail("ProductReview collisions prevent the merge", { productReviewCollisions: collisions });
+  const walletPlan = await buildWalletPlan(tx);
+  const movedCounts = Object.fromEntries(DIRECT_DEPENDENCIES.map(([name]) => [name, 0]));
 
-  // Retire the duplicate representation first, then install one numeric canonical identity on TARGET.
-  if (validation.source.shopifyCustomerId != null) await tx.customerProfile.update({ where: { id: SOURCE_ID }, data: { shopifyCustomerId: null } });
-  if (validation.target.shopifyCustomerId !== validation.canonicalShopifyId) {
-    await tx.customerProfile.update({ where: { id: TARGET_ID }, data: { shopifyCustomerId: validation.canonicalShopifyId } });
+  const profileData = fillOnlyData(source, target);
+  if (Object.keys(profileData).length) await tx.customerProfile.update({ where: { id: TARGET_ID }, data: profileData });
+
+  await applyWalletPlan(tx, walletPlan, movedCounts);
+  for (const [name, delegate, field] of NON_WALLET_UPDATES) {
+    movedCounts[name] = (await tx[delegate].updateMany({ where: { [field]: SOURCE_ID }, data: { [field]: TARGET_ID } })).count;
   }
+  movedCounts.CustomerIdentityReconciliationPlan = (await tx.customerIdentityReconciliationPlan.updateMany({
+    where: { canonicalCustomerProfileId: SOURCE_ID }, data: { canonicalCustomerProfileId: TARGET_ID },
+  })).count;
+  movedCounts.CustomerIdentityReconciliationAudit = (await tx.customerIdentityReconciliationAudit.updateMany({
+    where: { canonicalCustomerProfileId: SOURCE_ID }, data: { canonicalCustomerProfileId: TARGET_ID },
+  })).count;
 
-  await mergeWallets(tx, wallets, movedCounts);
-  for (const [delegate, model] of relations) {
-    if (model === "WalletTransaction" || model === "WalletReservation") continue;
-    movedCounts[model] = (await tx[delegate].updateMany({ where: { customerProfileId: SOURCE_ID }, data: { customerProfileId: TARGET_ID } })).count;
+  await tx.customerIdentityMerge.updateMany({
+    where: { targetCustomerProfileId: SOURCE_ID, sourceCustomerProfileId: { not: SOURCE_ID } },
+    data: { targetCustomerProfileId: TARGET_ID },
+  });
+
+  const remainingSourceDependencies = await dependencyCounts(tx, SOURCE_ID);
+  if (Object.values(remainingSourceDependencies).some((count) => count !== 0)) {
+    fail("SOURCE still has direct dependencies", { remainingSourceDependencies });
   }
-  movedCounts.CustomerIdentityReconciliationPlan = (await tx.customerIdentityReconciliationPlan.updateMany({ where: { canonicalCustomerProfileId: SOURCE_ID }, data: { canonicalCustomerProfileId: TARGET_ID } })).count;
-  movedCounts.CustomerIdentityReconciliationAudit = (await tx.customerIdentityReconciliationAudit.updateMany({ where: { canonicalCustomerProfileId: SOURCE_ID }, data: { canonicalCustomerProfileId: TARGET_ID } })).count;
-
-  const remaining = await countsFor(tx, SOURCE_ID);
-  const remainingTotal = Object.values(remaining).reduce((sum, count) => sum + count, 0);
-  if (remainingTotal !== 0) throw new Error(`SOURCE still has dependencies: ${JSON.stringify(remaining)}`);
-  const postCounts = await countsFor(tx, TARGET_ID);
-  for (const model of ["MegaskaOrder", "ProductReview", "ReviewRequest"]) {
-    if (postCounts[model] < validation.sourceCounts[model]) throw new Error(`${model} movement verification failed`);
-  }
-  if (postCounts.AuthSession + postCounts.OTPChallenge === 0) throw new Error("TARGET lost OTP/login identity evidence");
-
-  const auditState = { shopId: SHOP_ID, sourceProfileId: SOURCE_ID, targetProfileId: TARGET_ID, actor: ACTOR, movedCounts, verification: "VERIFIED" };
-  const beforeHash = hash({ source: validation.source, target: validation.target, counts: validation.sourceCounts });
-  const afterHash = hash(auditState);
-  const checksum = hash({ ...auditState, timestamp: new Date().toISOString() });
-  const plan = await tx.customerIdentityReconciliationPlan.create({ data: {
-    shopId: SHOP_ID, canonicalCustomerProfileId: TARGET_ID, sourceCustomerProfileIds: [SOURCE_ID],
-    classification: "KNOWN_DUPLICATE_ONE_TIME_MERGE", status: "APPLIED", createdBy: ACTOR,
-    approvedBy: ACTOR, approvedAt: new Date(), appliedAt: new Date(), checksum,
-    sourceStateChecksum: beforeHash, plan: auditState,
-  } });
-  await tx.customerIdentityMerge.create({ data: { shopId: SHOP_ID, sourceCustomerProfileId: SOURCE_ID, targetCustomerProfileId: TARGET_ID, planId: plan.id } });
-  await tx.customerIdentityReconciliationAudit.create({ data: {
-    planId: plan.id, shopId: SHOP_ID, canonicalCustomerProfileId: TARGET_ID,
-    sourceCustomerProfileIds: [SOURCE_ID], classification: "KNOWN_DUPLICATE_ONE_TIME_MERGE",
-    affectedRecordCounts: movedCounts, result: "MERGED_AND_VERIFIED", actor: ACTOR,
-    beforeIntegrityHash: beforeHash, afterIntegrityHash: afterHash,
-  } });
+  await assertProductReviewUniqueness(tx);
+  const retained = await tx.customerProfile.findUnique({ where: { id: TARGET_ID }, select: { id: true, shopId: true, shopifyCustomerId: true } });
+  if (!retained || retained.shopId !== SHOP_ID) fail("TARGET no longer belongs to SHOP_ID");
+  if (retained.shopifyCustomerId !== target.shopifyCustomerId) fail("TARGET Shopify identity changed unexpectedly");
 
   await tx.customerProfile.delete({ where: { id: SOURCE_ID } });
-  if (await tx.customerProfile.findUnique({ where: { id: SOURCE_ID }, select: { id: true } })) throw new Error("SOURCE deletion verification failed");
-  return { status: "MERGED_AND_VERIFIED", sourceProfileId: SOURCE_ID, targetProfileId: TARGET_ID, movedCounts, remainingSourceDependencies: 0, sourceDeleted: true };
+  const [deletedSource, survivingTarget, finalTargetCounts, targetWallets] = await Promise.all([
+    tx.customerProfile.findUnique({ where: { id: SOURCE_ID }, select: { id: true } }),
+    tx.customerProfile.findUnique({ where: { id: TARGET_ID }, select: { id: true, shopId: true } }),
+    dependencyCounts(tx, TARGET_ID),
+    tx.walletAccount.findMany({
+      where: { customerProfileId: TARGET_ID },
+      select: { id: true, shopId: true, currency: true, currentBalance: true },
+      orderBy: { currency: "asc" },
+    }),
+  ]);
+  if (deletedSource) fail("SOURCE deletion verification failed");
+  if (!survivingTarget || survivingTarget.shopId !== SHOP_ID) fail("TARGET survival verification failed");
+  diagnostic("finalTargetDependencyCounts", finalTargetCounts);
+  diagnostic("targetWalletBalances", targetWallets);
+  return {
+    status: "MERGED_AND_VERIFIED",
+    shopId: SHOP_ID,
+    sourceProfileId: SOURCE_ID,
+    targetProfileId: TARGET_ID,
+    movedCounts,
+    remainingSourceDependencies,
+    sourceDeleted: true,
+    targetWallets,
+  };
 }
 
+let prisma;
 try {
-  const validation = await loadAndValidate(prisma);
-  const wallets = await validateTenantOwnership(prisma);
-  await validateUniqueConflicts(prisma, wallets);
-  for (const wallet of wallets) await assertWalletLedger(prisma, wallet);
-  console.log(JSON.stringify({ mode: apply ? "APPLY" : "DRY_RUN", shopId: SHOP_ID, sourceProfileId: SOURCE_ID, targetProfileId: TARGET_ID, countsBeforeChanges: validation.sourceCounts }, null, 2));
-  if (!apply) {
-    console.log(JSON.stringify({ status: "DRY_RUN_VERIFIED", changesApplied: false, applyRequires: `--apply --confirm=${CONFIRMATION}` }, null, 2));
-  } else {
-    const result = await prisma.$transaction(executeMerge, { isolationLevel: "Serializable", maxWait: 10_000, timeout: 60_000 });
-    console.log(JSON.stringify(result, null, 2));
+  validateArguments();
+  prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }) });
+  const { source, target } = await loadProfiles(prisma);
+  const [sourceCounts, mergeScalarReferences, collisions, walletPlan] = await Promise.all([
+    dependencyCounts(prisma, SOURCE_ID),
+    mergeScalarCounts(prisma, SOURCE_ID),
+    productReviewCollisions(prisma),
+    buildWalletPlan(prisma),
+  ]);
+  diagnostic("profiles", { source: sanitizedProfile(source), target: sanitizedProfile(target) });
+  diagnostic("sourceDependencyCounts", sourceCounts);
+  diagnostic("customerIdentityMergeScalarReferences", mergeScalarReferences);
+  if (collisions.length) {
+    diagnostic("productReviewCollisions", collisions);
+    fail("ProductReview collisions prevent the merge", { conflictingProductReviewIds: collisions });
   }
+
+  if (!apply) {
+    console.log(JSON.stringify({
+      status: "DRY_RUN",
+      shopId: SHOP_ID,
+      sourceProfileId: SOURCE_ID,
+      targetProfileId: TARGET_ID,
+      sourceCounts,
+      productReviewCollisions: collisions,
+      walletPlan,
+    }));
+  } else {
+    const result = await prisma.$transaction(executeMerge, {
+      isolationLevel: "Serializable",
+      maxWait: 10_000,
+      timeout: 60_000,
+    });
+    console.log(JSON.stringify(result));
+  }
+} catch (error) {
+  process.exitCode = 1;
+  console.error(JSON.stringify({ status: "ERROR", error: error?.message ?? String(error), ...(error?.details === undefined ? {} : { details: error.details }) }));
 } finally {
-  await prisma.$disconnect();
+  if (prisma) await prisma.$disconnect();
 }
