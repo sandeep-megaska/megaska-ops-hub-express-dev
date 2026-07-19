@@ -4,12 +4,12 @@ import { getReviewSettings } from "./review-settings.ts";
 
 export type ReviewSubmissionEligibilityInput = { shopId: string; customerProfileId: string; orderId: string; orderLineId: string; productId: string; variantId?: string | null };
 export type ReviewSubmissionEligibilityReason = "REVIEWS_DISABLED" | "CUSTOMER_NOT_FOUND" | "ORDER_NOT_FOUND" | "ORDER_NOT_OWNED" | "ORDER_NOT_DELIVERED" | "ORDER_LINE_NOT_FOUND" | "PRODUCT_MISMATCH" | "VARIANT_MISMATCH" | "ALREADY_REVIEWED";
-export type ReviewSubmissionEligibilityResult = { eligible: true; verifiedPurchase: true; shopId: string; customerProfileId: string; orderId: string; orderLineId: string; productId: string; variantId: string | null } | { eligible: false; reason: ReviewSubmissionEligibilityReason };
+export type ReviewSubmissionEligibilityResult = { eligible: true; verifiedPurchase: true; shopId: string; customerProfileId: string; orderId: string; orderLineId: string; productId: string; variantId: string | null; productTitle: string; variantTitle: string | null; orderName: string | null } | { eligible: false; reason: ReviewSubmissionEligibilityReason };
 
 type Settings = { reviewsEnabled: boolean };
 type Customer = { id: string; shopId: string | null };
-type Order = { id: string; shopId: string; customerProfileId: string; shopifyOrderId?: string | null; deliveredAt: Date | null; status: string };
-type OrderLine = { id: string; shopId: string; customerProfileId: string; megaskaOrderId: string; shopifyOrderId: string; shopifyLineItemId: string; shopifyProductId: string; shopifyVariantId: string | null };
+type Order = { id: string; shopId: string; customerProfileId: string; shopifyOrderId?: string | null; shopifyOrderName?: string | null; deliveredAt: Date | null; status: string };
+type OrderLine = { id: string; shopId: string; customerProfileId: string; megaskaOrderId: string; shopifyOrderId: string; shopifyLineItemId: string; shopifyProductId: string; shopifyVariantId: string | null; productTitleSnapshot?: string; variantTitleSnapshot?: string | null; shopifyOrderName?: string | null };
 type ExistingReview = { id: string; status: string };
 export type ReviewSubmissionEligibilityDependencies = {
   getReviewSettings?: (shopId: string) => Promise<Settings>;
@@ -26,9 +26,9 @@ function defaults(db: Db): Required<Omit<ReviewSubmissionEligibilityDependencies
   return {
     getReviewSettings: (shopId) => getReviewSettings(shopId, db as never),
     findCustomer: ({ shopId, customerProfileId }) => db.customerProfile.findFirst({ where: { id: customerProfileId, shopId }, select: { id: true, shopId: true } }) as Promise<Customer | null>,
-    findOrder: ({ shopId, orderId }) => db.megaskaOrder.findFirst({ where: { id: orderId, shopId }, select: { id: true, shopId: true, customerProfileId: true, shopifyOrderId: true, deliveredAt: true, status: true } }) as Promise<Order | null>,
+    findOrder: ({ shopId, orderId }) => db.megaskaOrder.findFirst({ where: { id: orderId, shopId }, select: { id: true, shopId: true, customerProfileId: true, shopifyOrderId: true, shopifyOrderName: true, deliveredAt: true, status: true } }) as Promise<Order | null>,
     findOrderLine: async ({ shopId, orderId, orderLineId }) => {
-      const request = await db.reviewRequest.findFirst({ where: { shopId, megaskaOrderId: orderId, shopifyLineItemId: orderLineId }, select: { id: true, shopId: true, customerProfileId: true, megaskaOrderId: true, shopifyOrderId: true, shopifyLineItemId: true, shopifyProductId: true, shopifyVariantId: true } });
+      const request = await db.reviewRequest.findFirst({ where: { shopId, megaskaOrderId: orderId, shopifyLineItemId: orderLineId }, select: { id: true, shopId: true, customerProfileId: true, megaskaOrderId: true, shopifyOrderId: true, shopifyOrderName: true, shopifyLineItemId: true, shopifyProductId: true, shopifyVariantId: true, productTitleSnapshot: true, variantTitleSnapshot: true } });
       return request ? { ...request, shopifyVariantId: request.shopifyVariantId ?? null } : null;
     },
     findExistingReview: ({ shopId, customerProfileId, orderLineId }) => db.productReview.findFirst({ where: { shopId, customerProfileId, shopifyLineItemId: orderLineId, status: { in: ["PENDING_MODERATION", "PUBLISHED", "REJECTED"] } }, select: { id: true, status: true } }) as Promise<ExistingReview | null>,
@@ -53,5 +53,7 @@ export async function evaluateReviewSubmissionEligibility(input: ReviewSubmissio
   const canonicalVariantId = id(line.shopifyVariantId) || null;
   if (variantId && canonicalVariantId && variantId !== canonicalVariantId) return { eligible: false, reason: "VARIANT_MISMATCH" };
   if (await deps.findExistingReview({ shopId, customerProfileId, orderLineId: line.shopifyLineItemId })) return { eligible: false, reason: "ALREADY_REVIEWED" };
-  return { eligible: true, verifiedPurchase: true, shopId, customerProfileId, orderId: order.id, orderLineId: line.shopifyLineItemId, productId: line.shopifyProductId, variantId: canonicalVariantId };
+  const productTitle = id(line.productTitleSnapshot);
+  if (!productTitle) return { eligible: false, reason: "ORDER_LINE_NOT_FOUND" };
+  return { eligible: true, verifiedPurchase: true, shopId, customerProfileId, orderId: order.id, orderLineId: line.shopifyLineItemId, productId: line.shopifyProductId, variantId: canonicalVariantId, productTitle, variantTitle: id(line.variantTitleSnapshot) || null, orderName: id(line.shopifyOrderName) || id(order.shopifyOrderName) || null };
 }

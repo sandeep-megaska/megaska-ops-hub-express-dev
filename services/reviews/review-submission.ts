@@ -6,6 +6,7 @@ import { defaultReviewDisplayName } from "./review-display-name.ts";
 import { recalculateProductReviewAggregate } from "./review-foundation.ts";
 import { validateReviewSubmissionInput, type ReviewSubmissionInput } from "./review-submission-input.ts";
 import { evaluateReviewSubmissionEligibility, type ReviewSubmissionEligibilityDependencies, type ReviewSubmissionEligibilityReason } from "./review-submission-eligibility.ts";
+import { sendNewReviewAdminNotification, type NewReviewAdminNotificationInput } from "./review-admin-notification.ts";
 
 type Db = typeof prisma;
 export type ReviewSubmissionDomainErrorCode = ReviewTokenErrorCode | "REVIEW_ALREADY_SUBMITTED" | "REVIEW_SHOP_MISMATCH" | "REVIEWS_DISABLED" | "REVIEW_PRODUCT_UNAVAILABLE" | "REVIEW_CUSTOMER_SESSION_MISMATCH";
@@ -40,7 +41,7 @@ export async function submitVerifiedReview(input: { token: unknown; shopId: stri
   if (title.error || body.error) return { ok: false, errorCode: "REVIEW_VALIDATION_FAILED", fieldErrors: { ...(title.error ? { title: title.error } : {}), ...(body.error ? { body: body.error } : {}) } };
   const token = normalizeReviewToken(input.token); if (!token) return { ok: false, errorCode: "REVIEW_TOKEN_INVALID" };
   try {
-    return await db.$transaction(async (tx) => {
+    const committed = await db.$transaction(async (tx) => {
       const request = await tx.reviewRequest.findUnique({ where: { tokenHash: hashReviewToken(token) }, include: { review: true, customerProfile: { select: { firstName: true, lastName: true } } } });
       if (!request || request.shopId !== input.shopId) return { ok: false as const, errorCode: request ? "REVIEW_SHOP_MISMATCH" as const : "REVIEW_TOKEN_INVALID" as const };
       if (request.review) { await tx.reviewRequest.update({ where: { id: request.id }, data: { status: "COMPLETED", completedAt: request.completedAt || now, tokenHash: null, tokenExpiresAt: null } }); return { ok: false as const, errorCode: "REVIEW_ALREADY_SUBMITTED" as const }; }
@@ -55,8 +56,15 @@ export async function submitVerifiedReview(input: { token: unknown; shopId: stri
       const review = await tx.productReview.create({ data: { shopId: request.shopId, customerProfileId: request.customerProfileId, reviewRequestId: request.id, megaskaOrderId: request.megaskaOrderId, shopifyOrderId: request.shopifyOrderId, shopifyLineItemId: request.shopifyLineItemId, shopifyProductId: request.shopifyProductId, shopifyVariantId: request.shopifyVariantId, source: "VERIFIED_PURCHASE", status, rating, title: title.value, body: body.value, customerDisplayName: display.value, verifiedPurchase: true, productTitleSnapshot: request.productTitleSnapshot, variantTitleSnapshot: request.variantTitleSnapshot, productHandleSnapshot: request.productHandleSnapshot, publishedAt: status === "PUBLISHED" ? now : null } });
       await tx.reviewRequest.update({ where: { id: request.id }, data: { status: "COMPLETED", completedAt: now, tokenHash: null, tokenExpiresAt: null } });
       if (status === "PUBLISHED") await recalculateProductReviewAggregate(request.shopId, request.shopifyProductId, tx);
-      return { ok: true as const, review: { status: review.status as "PENDING_MODERATION" | "PUBLISHED", verifiedPurchase: true as const } };
+      return {
+        ok: true as const,
+        review: { status: review.status as "PENDING_MODERATION" | "PUBLISHED", verifiedPurchase: true as const },
+        notification: { shopId: request.shopId, reviewId: review.id, rating: review.rating, title: review.title, body: review.body, customerDisplayName: review.customerDisplayName, productTitle: review.productTitleSnapshot, variantTitle: review.variantTitleSnapshot, orderName: request.shopifyOrderName, verifiedPurchase: review.verifiedPurchase, status: review.status as "PENDING_MODERATION" | "PUBLISHED", submittedAt: review.submittedAt } satisfies NewReviewAdminNotificationInput,
+      };
     });
+    if (!committed.ok) return committed;
+    await sendNewReviewAdminNotification(committed.notification);
+    return { ok: true, review: committed.review };
   } catch (error) {
     if ((error as { code?: string }).code === "P2002") return { ok: false, errorCode: "REVIEW_ALREADY_SUBMITTED" };
     throw error;
@@ -67,9 +75,9 @@ export async function submitVerifiedReview(input: { token: unknown; shopId: stri
 export type PendingReviewSource = "CUSTOMER_DASHBOARD" | "PRODUCT_PAGE" | "REVIEW_REQUEST_EMAIL" | "REVIEW_REQUEST_WHATSAPP";
 export type SubmitReviewCommand = { shopId: string; customerProfileId: string; source: PendingReviewSource; reviewRequestId?: string | null; input: ReviewSubmissionInput };
 export type PublicSubmittedReview = { id: string; productId: string; variantId: string | null; orderId: string; orderLineId: string; rating: number; title: string | null; body: string | null; verifiedPurchase: boolean; status: "PENDING_MODERATION"; source: PendingReviewSource; submittedAt: Date };
-type CreatedPendingReview = { id: string; shopifyProductId: string; shopifyVariantId: string | null; shopifyOrderId: string | null; shopifyLineItemId: string | null; rating: number; title: string | null; body: string | null; verifiedPurchase: boolean; status: string; source: string; submittedAt: Date };
+type CreatedPendingReview = { id: string; shopId: string; shopifyProductId: string; shopifyVariantId: string | null; shopifyOrderId: string | null; shopifyLineItemId: string | null; rating: number; title: string | null; body: string | null; customerDisplayName: string; verifiedPurchase: boolean; productTitleSnapshot: string; variantTitleSnapshot: string | null; status: string; source: string; submittedAt: Date };
 type PendingReviewDb = { productReview: { create(args: { data: Record<string, unknown> }): Promise<CreatedPendingReview> }; reviewRequest?: { updateMany(args: { where: Record<string, unknown>; data: Record<string, unknown> }): Promise<{ count: number }> }; $transaction?: <T>(fn: (tx: PendingReviewDb) => Promise<T>) => Promise<T> };
-export type ReviewSubmissionDependencies = { db?: PendingReviewDb; now?: () => Date };
+export type ReviewSubmissionDependencies = { db?: PendingReviewDb; now?: () => Date; notifyAdmin?: typeof sendNewReviewAdminNotification };
 
 export type ReviewSubmissionApiDomainErrorCode = ReviewSubmissionEligibilityReason | "REQUEST_NOT_ELIGIBLE" | "TOKEN_CONSUMED";
 export class ReviewSubmissionDomainError extends Error {
@@ -86,16 +94,31 @@ function publicSubmittedReview(review: CreatedPendingReview): PublicSubmittedRev
   return { id: review.id, productId: review.shopifyProductId, variantId: review.shopifyVariantId, orderId: review.shopifyOrderId || "", orderLineId: review.shopifyLineItemId || "", rating: review.rating, title: review.title, body: review.body, verifiedPurchase: review.verifiedPurchase, status: "PENDING_MODERATION", source: review.source as PendingReviewSource, submittedAt: review.submittedAt };
 }
 
-export async function createPendingReview(command: SubmitReviewCommand, dependencies: ReviewSubmissionDependencies = {}): Promise<PublicSubmittedReview> {
+async function createPendingReviewRecord(command: SubmitReviewCommand, dependencies: ReviewSubmissionDependencies, snapshot?: { productTitle: string; variantTitle: string | null }): Promise<CreatedPendingReview> {
   const input = validateReviewSubmissionInput(command.input);
   const db = dependencies.db ?? (prisma as unknown as PendingReviewDb);
   const now = dependencies.now?.() ?? new Date();
   try {
-    const review = await db.productReview.create({ data: { shopId: command.shopId, customerProfileId: command.customerProfileId, reviewRequestId: command.reviewRequestId ?? null, megaskaOrderId: input.orderId, shopifyOrderId: input.orderId, shopifyLineItemId: input.orderLineId, shopifyProductId: input.productId, shopifyVariantId: input.variantId, source: command.source, status: "PENDING_MODERATION", rating: input.rating, title: input.title, body: input.body, customerDisplayName: "Customer", verifiedPurchase: true, productTitleSnapshot: input.productId, variantTitleSnapshot: null, productHandleSnapshot: null, submittedAt: now, publishedAt: null } });
-    return publicSubmittedReview(review);
+    return await db.productReview.create({ data: { shopId: command.shopId, customerProfileId: command.customerProfileId, reviewRequestId: command.reviewRequestId ?? null, megaskaOrderId: input.orderId, shopifyOrderId: input.orderId, shopifyLineItemId: input.orderLineId, shopifyProductId: input.productId, shopifyVariantId: input.variantId, source: command.source, status: "PENDING_MODERATION", rating: input.rating, title: input.title, body: input.body, customerDisplayName: "Customer", verifiedPurchase: true, productTitleSnapshot: snapshot?.productTitle ?? input.productId, variantTitleSnapshot: snapshot?.variantTitle ?? null, productHandleSnapshot: null, submittedAt: now, publishedAt: null } });
   } catch (error) {
     if (isDuplicateReviewError(error)) throw new ReviewSubmissionDomainError("ALREADY_REVIEWED");
     throw error;
+  }
+}
+
+export async function createPendingReview(command: SubmitReviewCommand, dependencies: ReviewSubmissionDependencies = {}): Promise<PublicSubmittedReview> {
+  return publicSubmittedReview(await createPendingReviewRecord(command, dependencies));
+}
+
+function pendingNotification(review: CreatedPendingReview, orderName: string | null): NewReviewAdminNotificationInput {
+  return { shopId: review.shopId, reviewId: review.id, rating: review.rating, title: review.title, body: review.body, customerDisplayName: review.customerDisplayName, productTitle: review.productTitleSnapshot, variantTitle: review.variantTitleSnapshot, orderName, verifiedPurchase: review.verifiedPurchase, status: "PENDING_MODERATION", submittedAt: review.submittedAt };
+}
+
+async function notifyAfterReviewCommit(input: NewReviewAdminNotificationInput, notify: typeof sendNewReviewAdminNotification) {
+  try {
+    await notify(input);
+  } catch (error) {
+    console.error("[REVIEWS]", { operation: "admin_submission_notification_failed", reviewId: input.reviewId, shopId: input.shopId, errorName: error instanceof Error ? error.name : null });
   }
 }
 
@@ -105,7 +128,9 @@ export async function submitEligibleReview(command: SubmitReviewCommand, depende
   const input = validateReviewSubmissionInput(command.input);
   const eligibility = await evaluateReviewSubmissionEligibility({ shopId: command.shopId, customerProfileId: command.customerProfileId, orderId: input.orderId, orderLineId: input.orderLineId, productId: input.productId, variantId: input.variantId }, dependencies.eligibility);
   if (!eligibility.eligible) throw new ReviewSubmissionDomainError(eligibility.reason);
-  return createPendingReview({ ...command, shopId: eligibility.shopId, customerProfileId: eligibility.customerProfileId, input: { ...input, orderId: eligibility.orderId, orderLineId: eligibility.orderLineId, productId: eligibility.productId, variantId: eligibility.variantId } }, dependencies);
+  const review = await createPendingReviewRecord({ ...command, shopId: eligibility.shopId, customerProfileId: eligibility.customerProfileId, input: { ...input, orderId: eligibility.orderId, orderLineId: eligibility.orderLineId, productId: eligibility.productId, variantId: eligibility.variantId } }, dependencies, { productTitle: eligibility.productTitle, variantTitle: eligibility.variantTitle });
+  await notifyAfterReviewCommit(pendingNotification(review, eligibility.orderName), dependencies.notifyAdmin ?? sendNewReviewAdminNotification);
+  return publicSubmittedReview(review);
 }
 
 
@@ -113,13 +138,19 @@ export async function submitEligibleReviewWithTokenConsumption(command: SubmitRe
   const db = (dependencies.db ?? prisma) as PendingReviewDb;
   if (!command.reviewRequestId) throw new ReviewSubmissionDomainError("REQUEST_NOT_ELIGIBLE");
   if (!db.$transaction) throw new Error("Review submission token consumption requires a transaction-capable database client.");
-  return db.$transaction(async (tx) => {
-    const review = await submitEligibleReview(command, { ...dependencies, db: tx, eligibility: { ...dependencies.eligibility, db: tx as never } as never });
+  const committed = await db.$transaction(async (tx) => {
+    const input = validateReviewSubmissionInput(command.input);
+    const eligibility = await evaluateReviewSubmissionEligibility({ shopId: command.shopId, customerProfileId: command.customerProfileId, orderId: input.orderId, orderLineId: input.orderLineId, productId: input.productId, variantId: input.variantId }, { ...dependencies.eligibility, db: tx as never });
+    if (!eligibility.eligible) throw new ReviewSubmissionDomainError(eligibility.reason);
+    const created = await createPendingReviewRecord({ ...command, shopId: eligibility.shopId, customerProfileId: eligibility.customerProfileId, input: { ...input, orderId: eligibility.orderId, orderLineId: eligibility.orderLineId, productId: eligibility.productId, variantId: eligibility.variantId } }, { ...dependencies, db: tx }, { productTitle: eligibility.productTitle, variantTitle: eligibility.variantTitle });
+    const review = publicSubmittedReview(created);
     const consumed = await tx.reviewRequest?.updateMany({
       where: { id: command.reviewRequestId, shopId: command.shopId, customerProfileId: command.customerProfileId, tokenConsumedAt: null, submittedReviewId: null, tokenRevokedAt: null },
       data: { tokenConsumedAt: review.submittedAt, submittedAt: review.submittedAt, submittedReviewId: review.id, status: "COMPLETED", completedAt: review.submittedAt },
     });
     if (!consumed || consumed.count !== 1) throw new ReviewSubmissionDomainError("TOKEN_CONSUMED");
-    return review;
+    return { review, notification: pendingNotification(created, eligibility.orderName) };
   });
+  await notifyAfterReviewCommit(committed.notification, dependencies.notifyAdmin ?? sendNewReviewAdminNotification);
+  return committed.review;
 }
