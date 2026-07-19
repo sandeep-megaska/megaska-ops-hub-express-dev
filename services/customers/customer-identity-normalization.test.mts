@@ -10,7 +10,7 @@ test("adversarial Indian phone representations normalize to one identity", () =>
 test("Shopify GID and numeric forms normalize to one identity", () => {
   assert.equal(normalizeShopifyCustomerId("gid://shopify/Customer/123"), "123");
   assert.equal(normalizeShopifyCustomerId(" 123 "), "123");
-  assert.throws(() => normalizeShopifyCustomerId("gid://shopify/Order/123"), /malformed/);
+  assert.equal(normalizeShopifyCustomerId("gid://shopify/Order/123"), null);
 });
 
 test("email case and surrounding whitespace normalize consistently", () => {

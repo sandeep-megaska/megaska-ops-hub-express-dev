@@ -43,9 +43,17 @@ export interface CanonicalCustomerResolution {
 }
 
 export interface CustomerIdentityResolutionEvent {
-  event: "customer_identity_resolution";
+  event: "customer_profile_shopify_resolution";
   resolver: "CanonicalCustomerResolver";
-  source: string;
+  caller: string;
+  inputIdentifierType: "NUMERIC" | "CUSTOMER_GID" | "INVALID_OR_ABSENT";
+  canonicalIdentifierPresent: boolean;
+  resolutionSource: CustomerIdentityMatch | "CREATED" | "CONFLICT";
+  existingProfileFound: boolean;
+  profileCreated: boolean;
+  phoneFallbackUsed: boolean;
+  duplicateCandidateDetected: boolean;
+  uniqueConflictRecovered: boolean;
   matchedBy: CustomerIdentityMatch[];
   outcome: CustomerIdentityOutcome;
   customerProfileId: string | null;

@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { normalizeShopifyCustomerId } from "../../lib/shopify-customer-id.ts";
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- Prisma transaction clients and introspected FK rows are deliberately structural. */
 
@@ -13,12 +14,6 @@ type Db = any;
 
 const RAW_OWNERSHIP_TABLES = ["ExpressCheckoutIntent", "ExpressCheckoutAddressSnapshot"] as const;
 const TRUSTED_FIELDS = ["shopifyCustomerId", "phoneE164"] as const;
-
-function normalizeShopifyCustomerId(value: unknown): string | null {
-  const match = String(value ?? "").trim().match(/^(?:gid:\/\/shopify\/Customer\/)?(\d+)$/);
-  if (!match && value) throw new Error("Shopify customer ID is malformed");
-  return match?.[1] ?? null;
-}
 
 function stable(value: unknown): string {
   if (value === null || typeof value !== "object") return JSON.stringify(value);

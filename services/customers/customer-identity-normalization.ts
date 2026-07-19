@@ -1,7 +1,6 @@
 import { InvalidCustomerIdentityError } from "./customer-identity-errors.ts";
+export { normalizeShopifyCustomerId } from "../../lib/shopify-customer-id.ts";
 
-const SHOPIFY_CUSTOMER_GID = /^gid:\/\/shopify\/Customer\/(\d+)$/;
-const NUMERIC_ID = /^\d+$/;
 const COUNTRY_CALLING_CODES: Readonly<Record<string, string>> = { IN: "91", US: "1", CA: "1", GB: "44", AU: "61", AE: "971", KW: "965" };
 
 export function normalizeWhitespace(value?: string | null): string | null {
@@ -20,17 +19,6 @@ export function normalizeEmail(value?: string | null): string | null {
   if (!email) return null;
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new InvalidCustomerIdentityError("Email is malformed");
   return email;
-}
-
-export function normalizeShopifyCustomerId(value: unknown): string | null {
-  if (value === undefined || value === null || value === "") return null;
-  if (typeof value !== "string" && typeof value !== "number" && typeof value !== "bigint") {
-    throw new InvalidCustomerIdentityError("Shopify customer ID is malformed");
-  }
-  const candidate = String(value).trim();
-  const id = NUMERIC_ID.test(candidate) ? candidate : SHOPIFY_CUSTOMER_GID.exec(candidate)?.[1];
-  if (!id) throw new InvalidCustomerIdentityError("Shopify customer ID is malformed");
-  return id;
 }
 
 /** Produces E.164. National numbers require an explicitly supported country (India by default). */

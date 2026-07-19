@@ -1,5 +1,5 @@
 import type { CustomerProfile, Prisma } from "../../generated/prisma/index.js";
-import { InvalidCustomerIdentityError } from "./customer-identity-errors";
+import { InvalidCustomerIdentityError } from "./customer-identity-errors.ts";
 import {
   normalizeCountry,
   normalizeCustomerAttributes,
@@ -7,15 +7,16 @@ import {
   normalizePhone,
   normalizeShopifyCustomerId,
   normalizeWhitespace,
-} from "./customer-identity-normalization";
-import { CustomerIdentityRepository, type IdentityTransaction } from "./customer-identity-repository";
+} from "./customer-identity-normalization.ts";
+import { CustomerIdentityRepository, type IdentityTransaction } from "./customer-identity-repository.ts";
 import type {
   CanonicalCustomerResolution,
   CustomerIdentityAttributes,
   CustomerIdentityLogger,
   CustomerIdentityMatch,
   ResolveCanonicalCustomerInput,
-} from "./customer-identity-types";
+} from "./customer-identity-types.ts";
+import { diagnoseShopifyCustomerId } from "../../lib/shopify-customer-id.ts";
 
 const defaultLogger: CustomerIdentityLogger = (event) => console.info(event.event, event);
 
@@ -92,10 +93,20 @@ export class CanonicalCustomerResolver {
       });
     });
 
+    const diagnosis = typeof input.shopifyCustomerId === "string" || typeof input.shopifyCustomerId === "number" || typeof input.shopifyCustomerId === "bigint" || input.shopifyCustomerId == null
+      ? diagnoseShopifyCustomerId(input.shopifyCustomerId) : { category: "NON_NUMERIC" as const };
     this.logger({
-      event: "customer_identity_resolution",
+      event: "customer_profile_shopify_resolution",
       resolver: "CanonicalCustomerResolver",
-      source,
+      caller: source,
+      inputIdentifierType: diagnosis.category === "VALID_NUMERIC" ? "NUMERIC" : diagnosis.category === "VALID_CUSTOMER_GID" ? "CUSTOMER_GID" : "INVALID_OR_ABSENT",
+      canonicalIdentifierPresent: Boolean(shopifyCustomerId),
+      resolutionSource: resolution.outcome === "CREATED" ? "CREATED" : resolution.outcome === "IDENTITY_CONFLICT" ? "CONFLICT" : resolution.matchedBy[0] ?? "CREATED",
+      existingProfileFound: resolution.outcome !== "CREATED" && resolution.outcome !== "IDENTITY_CONFLICT",
+      profileCreated: resolution.outcome === "CREATED",
+      phoneFallbackUsed: resolution.matchedBy.includes("VERIFIED_PHONE") && !resolution.matchedBy.includes("SHOPIFY_CUSTOMER_ID"),
+      duplicateCandidateDetected: resolution.conflicts.some((conflict) => conflict.code === "MULTIPLE_PROFILES"),
+      uniqueConflictRecovered: false,
       matchedBy: resolution.matchedBy,
       outcome: resolution.outcome,
       customerProfileId: resolution.customerProfile?.id ?? null,
@@ -111,8 +122,11 @@ export class CanonicalCustomerResolver {
     matchedBy: CustomerIdentityMatch[],
     input: { shopifyCustomerId: string | null; phoneE164: string | null; phoneVerified: boolean; email: string | null; emailVerified: boolean; attributes: CustomerIdentityAttributes; source: string; identifiersPresent: { shopifyCustomerId: boolean; verifiedPhone: boolean; verifiedEmail: boolean } },
   ): Promise<CanonicalCustomerResolution> {
+    const storedShopifyCustomerId = profile.shopifyCustomerId
+      ? normalizeShopifyCustomerId(profile.shopifyCustomerId)
+      : null;
     const incompatible = Boolean(
-      (input.shopifyCustomerId && profile.shopifyCustomerId && input.shopifyCustomerId !== profile.shopifyCustomerId) ||
+      (input.shopifyCustomerId && profile.shopifyCustomerId && input.shopifyCustomerId !== storedShopifyCustomerId) ||
       (input.phoneVerified && input.phoneE164 && profile.phoneE164 && input.phoneE164 !== profile.phoneE164) ||
       (input.emailVerified && input.email && profile.email && input.email !== profile.email)
     );
@@ -124,6 +138,7 @@ export class CanonicalCustomerResolver {
     const data: Prisma.CustomerProfileUncheckedUpdateInput = missingAttributeUpdates(profile, input.attributes);
     let linked = false;
     if (input.shopifyCustomerId && !profile.shopifyCustomerId) { data.shopifyCustomerId = input.shopifyCustomerId; linked = true; }
+    else if (input.shopifyCustomerId && profile.shopifyCustomerId !== input.shopifyCustomerId) data.shopifyCustomerId = input.shopifyCustomerId;
     if (input.phoneE164 && !profile.phoneE164) data.phoneE164 = input.phoneE164;
     if (input.phoneVerified && input.phoneE164 && !profile.phoneVerifiedAt) data.phoneVerifiedAt = new Date();
     if (input.emailVerified && input.email && !profile.email) data.email = input.email;
