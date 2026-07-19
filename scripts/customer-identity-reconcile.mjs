@@ -17,7 +17,16 @@ const modes = ["discover", "plan", "approve", "apply"].filter((mode) => args[mod
 if (modes.length > 1) throw new Error("Choose exactly one mode; DISCOVER, PLAN, and APPLY never chain");
 const mode = modes[0] ?? "discover";
 const actor = String(args.actor || process.env.IDENTITY_RECONCILIATION_ACTOR || "operator-cli");
-const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }) });
+const prisma = new PrismaClient({
+  adapter: new PrismaPg({
+    connectionString: process.env.DATABASE_URL,
+  }),
+  transactionOptions: {
+    maxWait: 10_000,
+    timeout: 60_000,
+    isolationLevel: "Serializable",
+  },
+});
 
 function report(plan) {
   const payload = plan.plan;
