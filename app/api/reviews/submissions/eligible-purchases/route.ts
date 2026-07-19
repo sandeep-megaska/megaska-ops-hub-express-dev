@@ -17,6 +17,7 @@ export async function GET(request: NextRequest) {
   const settings = await getReviewSettings(access.shopId);
   if (!settings.reviewsEnabled) return reply({ ok: false, errorCode: "REVIEWS_DISABLED", purchases: [] }, 410);
   const result = await listEligibleReviewPurchasesWithDiagnostics({ shopId: access.shopId, customerProfileId: access.customerProfileId, productId, take: 25 });
+  const ownership = result.diagnostics.ownershipTrace;
   console.info({
     event: "review_eligibility_resolution",
     shopId: access.shopId,
@@ -31,6 +32,25 @@ export async function GET(request: NextRequest) {
     existingReviewFound: result.diagnostics.diagnosticContext.existingReviewFound,
     identityMergeDetected: result.diagnostics.diagnosticContext.identityMergeDetected,
     requestSource: result.diagnostics.diagnosticContext.requestSource,
+    failingOwnershipPredicate: ownership?.failingPredicate ?? null,
+    authenticatedCustomerProfileId: ownership?.authenticatedCustomerProfileId ?? access.customerProfileId,
+    canonicalCustomerProfileId: ownership?.canonicalCustomerProfileId ?? result.diagnostics.diagnosticContext.canonicalCustomerProfileId,
+    reviewRequestCustomerProfileId: ownership?.reviewRequestCustomerProfileId ?? null,
+    canonicalReviewRequestCustomerProfileId: ownership?.canonicalReviewRequestCustomerProfileId ?? null,
+    orderCustomerProfileId: ownership?.orderCustomerProfileId ?? null,
+    canonicalOrderCustomerProfileId: ownership?.canonicalOrderCustomerProfileId ?? null,
+    authenticatedToCanonical: ownership?.authenticatedToCanonical ?? "NOT_APPLICABLE",
+    reviewRequestToCanonical: ownership?.reviewRequestToCanonical ?? "MISSING",
+    orderToCanonical: ownership?.orderToCanonical ?? "MISSING",
+    reviewRequestToOrder: ownership?.reviewRequestToOrder ?? "MISSING",
+    canonicalReviewRequestToSession: ownership?.canonicalReviewRequestToSession ?? "MISSING",
+    canonicalOrderToSession: ownership?.canonicalOrderToSession ?? "MISSING",
+    canonicalReviewRequestToOrder: ownership?.canonicalReviewRequestToOrder ?? "MISSING",
+    reviewRequestTenantMatch: ownership?.reviewRequestTenantMatch ?? false,
+    orderTenantMatch: ownership?.orderTenantMatch ?? false,
+    mergeLookupAttempted: ownership?.mergeLookupAttempted ?? false,
+    reviewRequestId: ownership?.reviewRequestId ?? null,
+    orderId: ownership?.orderId ?? null,
   });
   // The persisted review request is the canonical source for the purchased
   // product identity. Keep these presentation fields in the response so the

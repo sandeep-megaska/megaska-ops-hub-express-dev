@@ -23,7 +23,7 @@ test("canonical merged profile resolves a delivered purchase and reports an exis
   const row = { id: "request", customerProfileId: "target", megaskaOrderId: "order", shopifyLineItemId: "line", shopifyProductId: "gid://shopify/Product/123", shopifyVariantId: "gid://shopify/ProductVariant/456", productTitleSnapshot: "Tea", variantTitleSnapshot: null, productImageUrlSnapshot: null, shopifyOrderName: "#1", deliveredAtSnapshot: deliveredAt, review: { id: "review", customerProfileId: "target" }, megaskaOrder: { id: "order", shopId: "shop", customerProfileId: "target", shopifyOrderName: "#1", deliveredAt, status: "DELIVERED" } };
   const db = {
     customerProfile: { findFirst: async (args: unknown) => { const { where } = args as { where: { id: string } }; return ["source", "target"].includes(where.id) ? { id: where.id } : null; } },
-    customerIdentityMerge: { findFirst: async () => ({ targetCustomerProfileId: "target" }) },
+    customerIdentityMerge: { findMany: async (args: unknown) => { const { where } = args as { where: { OR: Array<{ sourceCustomerProfileId?: string }> } }; return where.OR.some((part) => part.sourceCustomerProfileId === "source") ? [{ shopId: "shop", sourceCustomerProfileId: "source", targetCustomerProfileId: "target" }] : []; } },
     reviewRequest: { findMany: async (args: unknown) => { const { where } = args as { where: { customerProfileId?: string } }; return !where.customerProfileId || where.customerProfileId === "target" ? [row] : []; } },
   } as never;
   const result = await resolveReviewEligibility({ shopId: "shop", customerProfileId: "source", productId: "123" }, db);

@@ -1,12 +1,13 @@
 import { prisma } from "../db/prisma.ts";
 import { diagnoseOrderDeliveryForReview } from "../orders/canonical-delivery.ts";
 import { normalizeShopifyProductId, shopifyProductIdCandidates } from "./shopify-product-id.ts";
+import { buildReviewOwnershipTrace, resolveCanonicalOwnership, type ReviewOwnershipTrace } from "./review-ownership-diagnostic.ts";
 
 type Purchase = { orderId: string; orderLineId: string; productId: string; variantId: string | null; productTitle: string; variantTitle: string | null; productImageUrl: string | null; orderName: string; deliveredAt: string | null; existingReviewFound: boolean };
-type Row = { id: string; customerProfileId: string; megaskaOrderId: string; shopifyLineItemId: string; shopifyProductId: string; shopifyVariantId: string | null; productTitleSnapshot: string; variantTitleSnapshot: string | null; productImageUrlSnapshot: string | null; shopifyOrderName: string | null; deliveredAtSnapshot: Date | null; megaskaOrder: { id: string; shopId: string; customerProfileId: string; shopifyOrderName: string; deliveredAt: Date | null; status: string } | null; review: { id: string; customerProfileId: string | null } | null };
+type Row = { id: string; shopId: string; customerProfileId: string; megaskaOrderId: string; shopifyLineItemId: string; shopifyProductId: string; shopifyVariantId: string | null; productTitleSnapshot: string; variantTitleSnapshot: string | null; productImageUrlSnapshot: string | null; shopifyOrderName: string | null; deliveredAtSnapshot: Date | null; megaskaOrder: { id: string; shopId: string; customerProfileId: string; shopifyOrderName: string; deliveredAt: Date | null; status: string } | null; review: { id: string; customerProfileId: string | null } | null };
 type Db = {
   customerProfile: { findFirst(args: unknown): Promise<{ id: string } | null> };
-  customerIdentityMerge: { findFirst(args: unknown): Promise<{ targetCustomerProfileId: string } | null> };
+  customerIdentityMerge: { findMany(args: unknown): Promise<{ sourceCustomerProfileId: string; targetCustomerProfileId: string; shopId: string }[]> };
   reviewRequest: { findMany(args: unknown): Promise<Row[]> };
 };
 type DbInput = Db | typeof prisma;
@@ -43,8 +44,8 @@ export type ReviewEligibilityDiagnosticContext = {
 };
 
 export type ReviewEligibilityDiagnostic =
-  | { eligible: true; code: "ELIGIBLE"; customerProfileId: string; eligibleOrderId: string; eligibleOrderLineId: string; reviewRequestId: string; existingReviewId?: string; diagnosticContext: ReviewEligibilityDiagnosticContext }
-  | { eligible: false; code: ReviewEligibilityFailureCode; diagnosticContext: ReviewEligibilityDiagnosticContext };
+  | { eligible: true; code: "ELIGIBLE"; customerProfileId: string; eligibleOrderId: string; eligibleOrderLineId: string; reviewRequestId: string; existingReviewId?: string; diagnosticContext: ReviewEligibilityDiagnosticContext; ownershipTrace: ReviewOwnershipTrace }
+  | { eligible: false; code: ReviewEligibilityFailureCode; diagnosticContext: ReviewEligibilityDiagnosticContext; ownershipTrace?: ReviewOwnershipTrace };
 
 type Input = { shopId: string; customerProfileId: string; productId?: string; take?: number; requestSource?: ReviewEligibilityDiagnosticContext["requestSource"] };
 function context(input: Input, values: Partial<ReviewEligibilityDiagnosticContext> = {}): ReviewEligibilityDiagnosticContext {
@@ -68,11 +69,8 @@ function context(input: Input, values: Partial<ReviewEligibilityDiagnosticContex
 }
 
 async function canonicalCustomer(shopId: string, profileId: string, db: Db) {
-  const customer = await db.customerProfile.findFirst({ where: { id: profileId, shopId }, select: { id: true } });
-  const merge = await db.customerIdentityMerge.findFirst({ where: { shopId, sourceCustomerProfileId: profileId }, select: { targetCustomerProfileId: true } });
-  if (!merge) return { customerProfileId: customer?.id ?? null, mergeDetected: false, conflict: false };
-  const target = await db.customerProfile.findFirst({ where: { id: merge.targetCustomerProfileId, shopId }, select: { id: true } });
-  return { customerProfileId: target?.id ?? null, mergeDetected: true, conflict: !target };
+  const resolution = await resolveCanonicalOwnership(db, shopId, profileId);
+  return { customerProfileId: resolution.canonicalId, mergeDetected: resolution.detected, conflict: resolution.conflict };
 }
 
 /**
@@ -102,10 +100,18 @@ export async function resolveReviewEligibility(input: Input, db: DbInput = prism
   ]) as unknown as [Row[], Row[]];
   diagnosticContext = { ...diagnosticContext, reviewRequestFound: allProductRows.length > 0, productLineFound: allProductRows.length > 0, reviewRequestCountBeforeCustomerProfileFilter: allProductRows.length, reviewRequestCountAfterCustomerProfileFilter: ownedRows.length };
   if (!allProductRows.length) return { purchases: [], diagnostics: { eligible: false, code: "PRODUCT_NOT_FOUND_IN_ORDER", diagnosticContext } };
-  if (!ownedRows.length) return { purchases: [], diagnostics: { eligible: false, code: "CUSTOMER_OWNERSHIP_MISMATCH", diagnosticContext } };
+  if (!ownedRows.length) {
+    const candidate = allProductRows[0];
+    const ownershipTrace = await buildReviewOwnershipTrace({ shopId: input.shopId, authenticatedCustomerProfileId: input.customerProfileId, reviewRequest: candidate, order: candidate.megaskaOrder }, repository);
+    return { purchases: [], diagnostics: { eligible: false, code: "CUSTOMER_OWNERSHIP_MISMATCH", diagnosticContext, ownershipTrace } };
+  }
 
   const tenantOwned = ownedRows.filter((row) => row.megaskaOrder?.shopId === input.shopId && row.megaskaOrder.customerProfileId === identity.customerProfileId);
-  if (!tenantOwned.length) return { purchases: [], diagnostics: { eligible: false, code: "CUSTOMER_OWNERSHIP_MISMATCH", diagnosticContext } };
+  if (!tenantOwned.length) {
+    const candidate = ownedRows[0];
+    const ownershipTrace = await buildReviewOwnershipTrace({ shopId: input.shopId, authenticatedCustomerProfileId: input.customerProfileId, reviewRequest: candidate, order: candidate.megaskaOrder }, repository);
+    return { purchases: [], diagnostics: { eligible: false, code: "CUSTOMER_OWNERSHIP_MISMATCH", diagnosticContext, ownershipTrace } };
+  }
   const delivered = tenantOwned.filter((row) => diagnoseOrderDeliveryForReview(row.megaskaOrder!).delivered);
   diagnosticContext = { ...diagnosticContext, deliveredOrderFound: delivered.length > 0 };
   if (!delivered.length) {
@@ -115,8 +121,9 @@ export async function resolveReviewEligibility(input: Input, db: DbInput = prism
 
   const purchases = delivered.map((row) => ({ orderId: row.megaskaOrderId, orderLineId: row.shopifyLineItemId, productId: row.shopifyProductId, variantId: row.shopifyVariantId, productTitle: row.productTitleSnapshot, variantTitle: row.variantTitleSnapshot, productImageUrl: row.productImageUrlSnapshot, orderName: row.shopifyOrderName || row.megaskaOrder!.shopifyOrderName, deliveredAt: (row.deliveredAtSnapshot || row.megaskaOrder!.deliveredAt)?.toISOString() || null, existingReviewFound: Boolean(row.review) }));
   const selected = delivered[0];
+  const ownershipTrace = await buildReviewOwnershipTrace({ shopId: input.shopId, authenticatedCustomerProfileId: input.customerProfileId, reviewRequest: selected, order: selected.megaskaOrder }, repository);
   diagnosticContext = { ...diagnosticContext, eligibleOrderFound: true, existingReviewFound: delivered.some((row) => Boolean(row.review)) };
-  return { purchases, diagnostics: { eligible: true, code: "ELIGIBLE", customerProfileId: identity.customerProfileId, eligibleOrderId: selected.megaskaOrderId, eligibleOrderLineId: selected.shopifyLineItemId, reviewRequestId: selected.id, ...(selected.review?.id ? { existingReviewId: selected.review.id } : {}), diagnosticContext } };
+  return { purchases, diagnostics: { eligible: true, code: "ELIGIBLE", customerProfileId: identity.customerProfileId, eligibleOrderId: selected.megaskaOrderId, eligibleOrderLineId: selected.shopifyLineItemId, reviewRequestId: selected.id, ...(selected.review?.id ? { existingReviewId: selected.review.id } : {}), diagnosticContext, ownershipTrace } };
 }
 
 export async function listEligibleReviewPurchases(input: Input, db: DbInput = prisma) { return (await resolveReviewEligibility(input, db)).purchases; }

@@ -21,7 +21,7 @@ function db(rows: ReturnType<typeof row>[]) {
   const matching = (where: TestWhere) => rows.filter((item) => item.shopId === where.shopId && (!where.customerProfileId || item.customerProfileId === where.customerProfileId) && (!where.shopifyProductId || where.shopifyProductId.in.includes(item.shopifyProductId as string)) && item.suppressedAt === null && item.canceledAt === null);
   return {
     customerProfile: { findFirst: async ({ where }: { where: { id: string; shopId: string } }) => where.shopId === "shop-1" ? { id: where.id } : null },
-    customerIdentityMerge: { findFirst: async () => null },
+    customerIdentityMerge: { findMany: async () => [] },
     reviewRequest: { findMany: async ({ where }: { where: Record<string, unknown> }) => matching(where) },
   } as never;
 }
