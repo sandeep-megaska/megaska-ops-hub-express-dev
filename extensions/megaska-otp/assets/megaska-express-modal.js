@@ -189,15 +189,18 @@
     cod.requiresAdvance = Boolean(body.requiresAdvance || body.paymentMode === "PARTIAL_COD");
     cod.paymentMode = cod.requiresAdvance ? "PARTIAL_COD" : "COD";
     cod.reasons = Array.isArray(body.reasons) ? body.reasons : [];
-    cod.codAdvanceIntentId = body.codAdvanceIntentId || cod.codAdvanceIntentId || null;
+    cod.codAdvanceIntentId = cod.requiresAdvance ? (body.codAdvanceIntentId || null) : null;
     cod.orderTotalPaise = Number(body.orderTotalPaise || 0);
     cod.storeCreditAppliedPaise = Number(body.storeCreditAppliedPaise || 0);
     cod.customerCashLiabilityPaise = Number(body.customerCashLiabilityPaise || body.cashLiabilityPaise || 0);
     cod.advanceAmountPaise = Number(body.advanceAmountPaise || body.advancePaidPaise || 0);
     cod.codBalanceAmountPaise = Number(body.codBalanceAmountPaise || 0);
     cod.currency = body.currency || cod.currency || "INR";
-    cod.customerTitle = String(body.customerTitle || ""); cod.customerMessage = String(body.customerMessage || body.policyText || ""); cod.policyText = String(body.policyText || ""); cod.expiresAt = body.expiresAt || null;
-    cod.error = body.message && (!cod.available || !cod.eligible) ? String(body.message) : cod.error;
+    cod.customerTitle = cod.requiresAdvance ? String(body.customerTitle || "") : "";
+    cod.customerMessage = cod.requiresAdvance ? String(body.customerMessage || body.policyText || "") : "";
+    cod.policyText = cod.requiresAdvance ? String(body.policyText || "") : "";
+    cod.expiresAt = body.expiresAt || null;
+    cod.error = body.message && (!cod.available || !cod.eligible) ? String(body.message) : "";
   }
 
   function isCurrentCodPolicyRequest(requestId, requestIntentId) {

@@ -20,12 +20,44 @@ function policy(overrides: Partial<CodAdvancePolicyInput> = {}) {
   return calculateCodAdvancePolicy({ ...baseInput, ...overrides });
 }
 
-test("disabled policy", () => {
+test("disabled policy falls through to normal COD", () => {
   const result = policy({ enabled: false });
+  assert.equal(result.available, true);
+  assert.equal(result.eligible, true);
+  assert.equal(result.requiresAdvance, false);
+  assert.equal(result.customerCashLiabilityPaise, 200000);
+  assert.equal(result.advanceAmountPaise, 0);
+  assert.equal(result.codBalanceAmountPaise, 200000);
+  assert.deepEqual(result.reasons, ["disabled"]);
+});
+
+test("disabled policy ignores stale invalid Partial COD configuration", () => {
+  const result = policy({
+    enabled: false,
+    fixedAdvanceAmountPaise: -1,
+    advanceType: "PERCENTAGE",
+    percentageBasisPoints: null,
+    minimumAdvanceAmountPaise: -1,
+    maximumAdvanceAmountPaise: -2,
+    minOrderAmountPaise: -3,
+    maxOrderAmountPaise: -4,
+    storeCreditAppliedPaise: 50000,
+  });
+
+  assert.equal(result.available, true);
+  assert.equal(result.eligible, true);
+  assert.equal(result.requiresAdvance, false);
+  assert.equal(result.advanceAmountPaise, 0);
+  assert.equal(result.codBalanceAmountPaise, 150000);
+  assert.deepEqual(result.reasons, ["disabled"]);
+});
+
+test("disabled policy still rejects invalid shared checkout amounts", () => {
+  const result = policy({ enabled: false, orderTotalPaise: -1, fixedAdvanceAmountPaise: -1 });
   assert.equal(result.available, false);
   assert.equal(result.eligible, false);
   assert.equal(result.requiresAdvance, false);
-  assert.deepEqual(result.reasons, ["disabled"]);
+  assert.deepEqual(result.reasons, ["invalid_order_total", "disabled"]);
 });
 
 test("fixed ₹300 on ₹2,000 order", () => {

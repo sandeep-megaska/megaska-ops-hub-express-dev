@@ -39,13 +39,19 @@ function existingIntent(overrides: Record<string, unknown> = {}) {
   return { id: "old", shopId: "shop-1", customerProfileId: "customer-1", expressCheckoutIntentId: "intent-1", status: "CREATED", pricingFingerprint: "old-fp", settingsVersion: 1, advanceAmountPaise: 12000, codBalanceAmountPaise: 98000, expiresAt: future(), createdAt: new Date(), paidAt: null, consumedAt: null, shopifyOrderId: null, ...overrides };
 }
 
-test("disabled settings returns unavailable safe DTO", async () => {
+test("disabled settings returns normal COD without creating an advance intent", async () => {
   const h = dbHarness();
   const dto = await resolve({ db: h.db, state: h.state, settings: settings({ enabled: false }) });
-  assert.equal(dto.available, false);
-  assert.equal(dto.eligible, false);
+  assert.equal(dto.available, true);
+  assert.equal(dto.eligible, true);
+  assert.equal(dto.requiresAdvance, false);
+  assert.equal(dto.advanceAmountPaise, 0);
+  assert.equal(dto.codBalanceAmountPaise, 110000);
   assert.equal(dto.codAdvanceIntentId, null);
   assert.equal(dto.paymentMode, "COD");
+  assert.equal(dto.customerTitle, null);
+  assert.equal(dto.customerMessage, null);
+  assert.equal(dto.policyText, null);
   assert.equal(h.state.created.length, 0);
   assert.equal(h.state.updated.length, 0);
   assert.equal(h.state.transactionCount, 0);
