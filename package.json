@@ -14,7 +14,8 @@
     "postinstall": "prisma generate",
     "dev:seed:mock-tracking": "ALLOW_MOCK_TRACKING_SEED=true node scripts/dev-seed-mock-tracking.mjs",
     "dev:repair:customer-identity": "node scripts/dev-repair-customer-profile-duplicate.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:customer-identity-architecture": "node --test scripts/customer-identity-architecture.test.mjs"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.6.0",
