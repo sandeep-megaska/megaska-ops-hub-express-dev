@@ -83,8 +83,30 @@ export function groupCandidates(profiles: ReconciliationProfile[]) {
 
 async function dependencies(db: Db, ids: string[]) {
   const foreignKeys = await db.$queryRawUnsafe(`SELECT DISTINCT tc.table_name AS "tableName", kcu.column_name AS "columnName" FROM information_schema.table_constraints tc JOIN information_schema.key_column_usage kcu ON tc.constraint_name=kcu.constraint_name AND tc.constraint_schema=kcu.constraint_schema JOIN information_schema.constraint_column_usage ccu ON tc.constraint_name=ccu.constraint_name AND tc.constraint_schema=ccu.constraint_schema WHERE tc.constraint_type='FOREIGN KEY' AND ccu.table_name='CustomerProfile' AND ccu.column_name='id' ORDER BY tc.table_name,kcu.column_name`);
-  const refs = [...foreignKeys, ...RAW_OWNERSHIP_TABLES.map((tableName) => ({ tableName, columnName: "customerProfileId" }))]
-    .filter((ref, index, all) => all.findIndex((x) => x.tableName === ref.tableName && x.columnName === ref.columnName) === index);
+  const RECONCILIATION_CONTROL_TABLES = new Set([
+  "CustomerIdentityReconciliationPlan",
+  "CustomerIdentityReconciliationAudit",
+  "CustomerIdentityMerge",
+]);
+
+const refs = [
+  ...foreignKeys,
+  ...RAW_OWNERSHIP_TABLES.map((tableName) => ({
+    tableName,
+    columnName: "customerProfileId",
+  })),
+]
+  .filter(
+    (ref) => !RECONCILIATION_CONTROL_TABLES.has(ref.tableName),
+  )
+  .filter(
+    (ref, index, all) =>
+      all.findIndex(
+        (candidate) =>
+          candidate.tableName === ref.tableName &&
+          candidate.columnName === ref.columnName,
+      ) === index,
+  );
   const rows = [];
   for (const ref of refs) {
     const found = await db.$queryRawUnsafe(`SELECT "id", "${ref.columnName}" AS "customerProfileId" FROM "${ref.tableName}" WHERE "${ref.columnName}" = ANY($1::text[]) ORDER BY "id"`, ids);
