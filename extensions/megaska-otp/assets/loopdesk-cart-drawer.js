@@ -1873,26 +1873,6 @@
     close: function () { setOpen(false); },
     render: render,
     refresh: function () { return refreshAndMaybeOpen(false); },
-    applyRuntimeConfig: function (runtimeConfig) {
-      config = normalizeConfig(runtimeConfig || {});
-      window.LoopDeskConfig = config;
-      window.LOOPDESK_CART_DRAWER_CONFIG = Object.assign({}, window.LOOPDESK_CART_DRAWER_CONFIG || {}, {
-        enabled: config.enabled,
-        drawerMode: config.cart.drawerMode,
-        openAfterAddToCart: config.cart.openAfterAddToCart,
-        expressCheckoutButtonEnabled: config.cart.expressCheckoutButtonEnabled,
-        viewCartButtonEnabled: config.cart.viewCartButtonEnabled,
-        primaryColor: config.branding.primaryColor,
-        checkoutButtonText: config.labels.expressCheckoutText,
-        buttonText: config.labels.expressCheckoutText,
-        showPoweredBy: config.branding.showPoweredBy
-      });
-      cartOwnershipDecision(getCapabilityResult());
-      if (state.cart) ensureOfferProducts(eligiblePromotionRules(state.cart));
-      render();
-      debugLog("runtime config applied", { enabled: config.enabled, drawerMode: config.cart.drawerMode });
-      return Object.assign({}, config);
-    },
     acquireHost: acquireHost,
     getState: function () { return Object.assign({}, state); },
     debugState: debugState,
