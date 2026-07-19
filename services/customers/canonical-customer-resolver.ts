@@ -30,10 +30,13 @@ function missingAttributeUpdates(profile: CustomerProfile, attributes: CustomerI
 }
 
 export class CanonicalCustomerResolver {
-  constructor(
-    private readonly repository = new CustomerIdentityRepository(),
-    private readonly logger: CustomerIdentityLogger = defaultLogger,
-  ) {}
+  private readonly repository: CustomerIdentityRepository;
+  private readonly logger: CustomerIdentityLogger;
+
+  constructor(repository = new CustomerIdentityRepository(), logger: CustomerIdentityLogger = defaultLogger) {
+    this.repository = repository;
+    this.logger = logger;
+  }
 
   async resolveCanonicalCustomerProfile(input: ResolveCanonicalCustomerInput): Promise<CanonicalCustomerResolution> {
     const shopId = normalizeWhitespace(input.shopId);
@@ -46,6 +49,11 @@ export class CanonicalCustomerResolver {
     const country = normalizeCountry(input.country) ?? "IN";
     const phoneE164 = normalizePhone(input.phone, country);
     const attributes = cleanAttributes(input.customerAttributes);
+    const identifiersPresent = {
+      shopifyCustomerId: Boolean(shopifyCustomerId),
+      verifiedPhone: Boolean(phoneE164 && input.phoneVerified),
+      verifiedEmail: Boolean(email && input.emailVerified),
+    };
     if (!shopifyCustomerId && !(phoneE164 && input.phoneVerified) && !(email && input.emailVerified)) {
       throw new InvalidCustomerIdentityError("At least one canonical or verified customer identifier is required");
     }
@@ -62,7 +70,9 @@ export class CanonicalCustomerResolver {
       const matchedBy = [...new Set(candidates.flatMap((candidate) => candidate.matchedBy))];
 
       if (candidates.length > 1) {
-        return this.conflict(matchedBy, candidates.map((candidate) => candidate.customerProfile.id));
+        const ids = candidates.map((candidate) => candidate.customerProfile.id);
+        await this.repository.recordIdentityConflict(tx, { shopId, source, customerProfileIds: ids, identifiersPresent });
+        return this.conflict(matchedBy, ids);
       }
       if (candidates.length === 0) {
         const customerProfile = await this.repository.createCustomerProfile(tx, {
@@ -77,7 +87,8 @@ export class CanonicalCustomerResolver {
       }
 
       return this.resolveExisting(tx, shopId, candidates[0].customerProfile, candidates[0].matchedBy, {
-        shopifyCustomerId, phoneE164, phoneVerified: Boolean(input.phoneVerified), email, attributes,
+        shopifyCustomerId, phoneE164, phoneVerified: Boolean(input.phoneVerified), email,
+        emailVerified: Boolean(input.emailVerified), attributes, source, identifiersPresent,
       });
     });
 
@@ -98,21 +109,24 @@ export class CanonicalCustomerResolver {
     shopId: string,
     profile: CustomerProfile,
     matchedBy: CustomerIdentityMatch[],
-    input: { shopifyCustomerId: string | null; phoneE164: string | null; phoneVerified: boolean; email: string | null; attributes: CustomerIdentityAttributes },
+    input: { shopifyCustomerId: string | null; phoneE164: string | null; phoneVerified: boolean; email: string | null; emailVerified: boolean; attributes: CustomerIdentityAttributes; source: string; identifiersPresent: { shopifyCustomerId: boolean; verifiedPhone: boolean; verifiedEmail: boolean } },
   ): Promise<CanonicalCustomerResolution> {
     const incompatible = Boolean(
       (input.shopifyCustomerId && profile.shopifyCustomerId && input.shopifyCustomerId !== profile.shopifyCustomerId) ||
       (input.phoneVerified && input.phoneE164 && profile.phoneE164 && input.phoneE164 !== profile.phoneE164) ||
-      (input.email && profile.email && input.email !== profile.email)
+      (input.emailVerified && input.email && profile.email && input.email !== profile.email)
     );
-    if (incompatible) return this.conflict(matchedBy, [profile.id], "IDENTIFIER_ALREADY_LINKED");
+    if (incompatible) {
+      await this.repository.recordIdentityConflict(tx, { shopId, source: input.source, customerProfileIds: [profile.id], identifiersPresent: input.identifiersPresent });
+      return this.conflict(matchedBy, [profile.id], "IDENTIFIER_ALREADY_LINKED");
+    }
 
     const data: Prisma.CustomerProfileUncheckedUpdateInput = missingAttributeUpdates(profile, input.attributes);
     let linked = false;
     if (input.shopifyCustomerId && !profile.shopifyCustomerId) { data.shopifyCustomerId = input.shopifyCustomerId; linked = true; }
     if (input.phoneE164 && !profile.phoneE164) data.phoneE164 = input.phoneE164;
     if (input.phoneVerified && input.phoneE164 && !profile.phoneVerifiedAt) data.phoneVerifiedAt = new Date();
-    if (input.email && !profile.email) data.email = input.email;
+    if (input.emailVerified && input.email && !profile.email) data.email = input.email;
 
     if (Object.keys(data).length === 0) return { outcome: "MATCHED", matchedBy, customerProfile: profile, conflicts: [] };
     const customerProfile = await this.repository.updateCustomerProfile(tx, shopId, profile.id, data);

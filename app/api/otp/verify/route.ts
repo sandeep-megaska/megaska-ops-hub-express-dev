@@ -16,6 +16,7 @@ import {
   ShopResolutionError,
   requireStorefrontShopFromRequest,
 } from "../../../../services/shopify/shop";
+import { CanonicalCustomerResolver } from "../../../../services/customers/canonical-customer-resolver";
 
 export async function OPTIONS(req: NextRequest) {
   return handleOptions(req);
@@ -244,34 +245,11 @@ export async function POST(req: NextRequest) {
 
     const now = new Date();
 
-    let customerProfile = await prisma.customerProfile.findFirst({
-      where: {
-        shopId: shop.id,
-        phoneE164,
-      },
-      orderBy: {
-        createdAt: "desc",
-      },
-    });
-
-    if (!customerProfile) {
-      customerProfile = await prisma.customerProfile.create({
-        data: {
-          shopId: shop.id,
-          phoneE164,
-          phoneVerifiedAt: now,
-        },
-      });
-    } else if (!customerProfile.phoneVerifiedAt) {
-      customerProfile = await prisma.customerProfile.update({
-        where: {
-          id: customerProfile.id,
-        },
-        data: {
-          phoneVerifiedAt: now,
-        },
-      });
+    const identity = await new CanonicalCustomerResolver().resolveFromOTP({ shopId: shop.id, phone: phoneE164 });
+    if (!identity.customerProfile) {
+      return withCors(req, NextResponse.json({ error: "IDENTITY_CONFLICT" }, { status: 409 }));
     }
+    const customerProfile = identity.customerProfile;
 
     const verifiedChallenge = await prisma.oTPChallenge.update({
       where: { id: challenge.id },

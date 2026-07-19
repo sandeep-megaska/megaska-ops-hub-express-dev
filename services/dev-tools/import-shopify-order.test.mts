@@ -26,17 +26,13 @@ const source = {
 function harness() {
   const customers: any[] = [], orders: any[] = [], lines: any[] = [];
   const db = {
-    customerProfile: {
-      findFirst: async ({ where }: any) => customers.find((row) => row.shopId === where.shopId && row.shopifyCustomerId === where.shopifyCustomerId) ?? null,
-      create: async ({ data }: any) => { const row = { id: `customer-${customers.length + 1}`, ...data }; customers.push(row); return row; },
-    },
     megaskaOrder: {
       findFirst: async ({ where }: any) => orders.find((row) => row.shopId === where.shopId && (row.shopifyOrderId === where.OR[0].shopifyOrderId || row.shopifyOrderName === where.OR[1].shopifyOrderName)) ?? null,
       create: async ({ data }: any) => { const row = { id: `order-${orders.length + 1}`, deliveredAt: null, ...data }; orders.push(row); return row; },
       update: async ({ where, data }: any) => { const row = orders.find((item) => item.id === where.id); Object.assign(row, data); return row; },
     },
   };
-  const deps = { db, fetchOrder: async () => source, createOrderLine: async (input: any) => { const existing = lines.find((line) => line.shopId === input.shopId && line.shopifyOrderId === input.shopifyOrderId && line.shopifyLineItemId === input.shopifyLineItemId); if (existing) return existing; const row = { id: `line-${lines.length + 1}`, ...input }; lines.push(row); return row; } };
+  const deps = { db, fetchOrder: async () => source, resolveIdentity: async ({ shopId, shopifyCustomerId }: any) => { let row = customers.find((item) => item.shopId === shopId && item.shopifyCustomerId === shopifyCustomerId); if (!row) { row = { id: `customer-${customers.length + 1}`, shopId, shopifyCustomerId }; customers.push(row); } return { customerProfile: row }; }, createOrderLine: async (input: any) => { const existing = lines.find((line) => line.shopId === input.shopId && line.shopifyOrderId === input.shopifyOrderId && line.shopifyLineItemId === input.shopifyLineItemId); if (existing) return existing; const row = { id: `line-${lines.length + 1}`, ...input }; lines.push(row); return row; } };
   return { customers, orders, lines, deps };
 }
 
@@ -55,7 +51,7 @@ test("sync is tenant scoped, idempotent, links the customer, creates lines, and 
   assert.equal(state.lines[0].megaskaOrderId, first.id);
   assert.equal(first.deliveredAt, null);
   assert.notEqual(first.status, "DELIVERED");
-  assert.equal(first.metadata.shopifyDeliveredAt, source.deliveredAt);
+  assert.equal(first.metadata?.shopifyDeliveredAt, source.deliveredAt);
 });
 
 test("development import creates one candidate when refundable quantity equals quantity and preserves delivery on rerun", async () => {

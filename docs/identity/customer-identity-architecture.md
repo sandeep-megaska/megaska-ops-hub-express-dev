@@ -45,3 +45,11 @@ Existing schema limitations remain explicit: phone and email are not unique, ema
 6. In separately approved phases, quarantine/repair historical duplicates, reconcile dependent ownership, persist verification metadata, make `shopId` required, and introduce uniqueness constraints.
 
 Historical merges, ownership repair, and wallet/session/order/review rewrites must never be folded into an adapter rollout.
+
+## Canonical identity adoption (IDENTITY-1A.3)
+
+**Adoption complete. No active identity bypasses remain.**
+
+OTP verification, Shopify order import, Express Checkout, customer synchronization, and profile completion now adopt the canonical resolver/repository boundary. Dashboard, wallet, store credit, reviews, cancellation, exchange, issue reporting, refunds, timeline, tracking, notifications, and analytics consume the canonical profile ID produced upstream and do not resolve identity themselves.
+
+An `IDENTITY_CONFLICT` never merges profiles or changes ownership. The resolver leaves customer data unchanged and writes a `CUSTOMER_IDENTITY_CONFLICT` audit event with the shop, source, conflicting profile IDs, timestamp, and identifier-presence booleans. Raw phone numbers, email addresses, OTPs, addresses, and tokens are excluded from identity-resolution logs and conflict audit payloads.

@@ -10,6 +10,8 @@ import {
   ShopResolutionError,
   requireShopFromRequest,
 } from "../../../../services/shopify/shop";
+import { CustomerIdentityRepository } from "../../../../services/customers/customer-identity-repository";
+import { CanonicalCustomerResolver } from "../../../../services/customers/canonical-customer-resolver";
 
 function normalizeEmail(emailRaw: string) {
   return emailRaw.trim().toLowerCase();
@@ -137,11 +139,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    let updatedCustomer = await prisma.customerProfile.update({
-      where: {
-        id: session.customer.id,
-      },
-      data: {
+    const identityRepository = new CustomerIdentityRepository();
+    let updatedCustomer = await identityRepository.updateProfileById(shop.id, session.customer.id, {
         firstName,
         lastName,
         fullName,
@@ -153,7 +152,6 @@ export async function POST(req: NextRequest) {
         postalCode,
         countryRegion,
         profileCompletedAt: now,
-      },
     });
 
     let shopifySync:
@@ -193,10 +191,16 @@ export async function POST(req: NextRequest) {
           phoneE164: updatedCustomer.phoneE164,
         });
 
-        updatedCustomer = await prisma.customerProfile.update({
-          where: { id: updatedCustomer.id },
-          data: { shopifyCustomerId: syncResult.shopifyCustomerId },
+        const identity = await new CanonicalCustomerResolver().resolveFromCheckout({
+          shopId: shop.id,
+          shopifyCustomerId: syncResult.shopifyCustomerId,
+          phone: updatedCustomer.phoneE164,
+          phoneVerified: Boolean(updatedCustomer.phoneVerifiedAt),
         });
+        if (!identity.customerProfile || identity.customerProfile.id !== updatedCustomer.id) {
+          throw new Error("IDENTITY_CONFLICT");
+        }
+        updatedCustomer = identity.customerProfile;
 
         if (syncResult.source === "existing") {
           console.log("[SHOPIFY SYNC] existing Shopify customer linked", {

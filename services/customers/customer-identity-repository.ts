@@ -9,7 +9,13 @@ type Candidate = { customerProfile: CustomerProfile; matchedBy: CustomerIdentity
 const RETRYABLE_CODES = new Set(["P2002", "P2034"]);
 
 export class CustomerIdentityRepository {
-  constructor(private readonly db: IdentityDb = prisma, private readonly maxTransactionAttempts = 3) {}
+  private readonly db: IdentityDb;
+  private readonly maxTransactionAttempts: number;
+
+  constructor(db: IdentityDb = prisma, maxTransactionAttempts = 3) {
+    this.db = db;
+    this.maxTransactionAttempts = maxTransactionAttempts;
+  }
 
   findByCanonicalShopifyCustomer(tx: IdentityTransaction, shopId: string, shopifyCustomerId: string) {
     return tx.customerProfile.findMany({ where: { shopId, shopifyCustomerId } });
@@ -30,6 +36,30 @@ export class CustomerIdentityRepository {
 
   updateCustomerProfile(tx: IdentityTransaction, shopId: string, id: string, data: Prisma.CustomerProfileUncheckedUpdateInput) {
     return tx.customerProfile.update({ where: { id, shopId }, data });
+  }
+
+  updateProfileById(shopId: string, id: string, data: Prisma.CustomerProfileUncheckedUpdateInput) {
+    return this.runInIdentityTransaction(shopId, (tx) => this.updateCustomerProfile(tx, shopId, id, data));
+  }
+
+  recordIdentityConflict(tx: IdentityTransaction, input: {
+    shopId: string; source: string; customerProfileIds: string[];
+    identifiersPresent: { shopifyCustomerId: boolean; verifiedPhone: boolean; verifiedEmail: boolean };
+  }) {
+    return tx.auditEvent.create({
+      data: {
+        actorType: "system",
+        eventType: "CUSTOMER_IDENTITY_CONFLICT",
+        entityType: "CustomerProfile",
+        entityId: input.customerProfileIds[0] ?? null,
+        payload: {
+          shopId: input.shopId,
+          source: input.source,
+          conflictingProfileIds: [...new Set(input.customerProfileIds)].sort(),
+          identifiersPresent: input.identifiersPresent,
+        },
+      },
+    });
   }
 
   linkShopifyCustomer(tx: IdentityTransaction, shopId: string, id: string, shopifyCustomerId: string) {
