@@ -42,19 +42,42 @@ test("submitEligibleReview rejects ineligible submissions before creating review
 test("submitEligibleReview creates with canonical eligibility identifiers", async () => {
   const { submitEligibleReview } = await import("./review-submission.ts");
   let data: Record<string, unknown> | undefined;
+  let notifications = 0;
   await submitEligibleReview({ ...command, input: { ...command.input, orderId: "browser-order", orderLineId: "browser-line", productId: "canonical-product", variantId: undefined } }, {
     db: { productReview: { create: async (args: { data: Record<string, unknown> }) => { data = args.data; return { id: "review", ...args.data }; } } } as never,
     eligibility: {
       getReviewSettings: async () => ({ reviewsEnabled: true }),
       findCustomer: async () => ({ id: "trusted-customer", shopId: "trusted-shop" }),
       findOrder: async () => ({ id: "canonical-order", shopId: "trusted-shop", customerProfileId: "trusted-customer", deliveredAt: new Date(), status: "DELIVERED" }),
-      findOrderLine: async () => ({ id: "request", shopId: "trusted-shop", customerProfileId: "trusted-customer", megaskaOrderId: "canonical-order", shopifyOrderId: "shopify-order", shopifyLineItemId: "canonical-line", shopifyProductId: "canonical-product", shopifyVariantId: "canonical-variant" }),
+      findOrderLine: async () => ({ id: "request", shopId: "trusted-shop", customerProfileId: "trusted-customer", megaskaOrderId: "canonical-order", shopifyOrderId: "shopify-order", shopifyLineItemId: "canonical-line", shopifyProductId: "canonical-product", shopifyVariantId: "canonical-variant", productTitleSnapshot: "Canonical Product", variantTitleSnapshot: "Blue" }),
       findExistingReview: async () => null,
       isDelivered: () => true,
     },
+    notifyAdmin: async () => { notifications += 1; },
   } as never);
   assert.equal(data?.megaskaOrderId, "canonical-order");
   assert.equal(data?.shopifyLineItemId, "canonical-line");
   assert.equal(data?.shopifyProductId, "canonical-product");
   assert.equal(data?.shopifyVariantId, "canonical-variant");
+  assert.equal(data?.productTitleSnapshot, "Canonical Product");
+  assert.equal(data?.variantTitleSnapshot, "Blue");
+  assert.equal(notifications, 1);
+});
+
+test("submitEligibleReview does not notify for a duplicate eligibility retry", async () => {
+  const { submitEligibleReview } = await import("./review-submission.ts");
+  let notifications = 0;
+  await assert.rejects(() => submitEligibleReview(command, {
+    db: { productReview: { create: async () => { throw new Error("must not create"); } } } as never,
+    notifyAdmin: async () => { notifications += 1; },
+    eligibility: {
+      getReviewSettings: async () => ({ reviewsEnabled: true }),
+      findCustomer: async () => ({ id: "trusted-customer", shopId: "trusted-shop" }),
+      findOrder: async () => ({ id: "order", shopId: "trusted-shop", customerProfileId: "trusted-customer", deliveredAt: new Date(), status: "DELIVERED" }),
+      findOrderLine: async () => ({ id: "request", shopId: "trusted-shop", customerProfileId: "trusted-customer", megaskaOrderId: "order", shopifyOrderId: "order", shopifyLineItemId: "line-1", shopifyProductId: "product", shopifyVariantId: null, productTitleSnapshot: "Product" }),
+      findExistingReview: async () => ({ id: "existing", status: "PENDING_MODERATION" }),
+      isDelivered: () => true,
+    },
+  } as never), (error) => error instanceof ReviewSubmissionDomainError && error.code === "ALREADY_REVIEWED");
+  assert.equal(notifications, 0);
 });
