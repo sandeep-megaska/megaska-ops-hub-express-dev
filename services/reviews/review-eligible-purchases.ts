@@ -1,5 +1,6 @@
 import { prisma } from "../db/prisma.ts";
 import { isOrderDeliveredForReview } from "../orders/canonical-delivery.ts";
+import { shopifyProductIdCandidates } from "./shopify-product-id.ts";
 
 type Db = typeof prisma;
 
@@ -11,7 +12,7 @@ export type ReviewEligibilityDiagnostics = {
 
 const baseWhere = (input: { shopId: string; productId?: string }) => ({
   shopId: input.shopId,
-  ...(input.productId ? { shopifyProductId: input.productId } : {}),
+  ...(input.productId ? { shopifyProductId: { in: shopifyProductIdCandidates(input.productId) } } : {}),
   suppressedAt: null,
   canceledAt: null,
   review: null,
