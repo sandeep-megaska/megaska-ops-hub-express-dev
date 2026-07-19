@@ -118,7 +118,25 @@ const refs = [
 async function sourceState(db: Db, shopId: string, profileIds: string[]) {
   const profiles = await db.customerProfile.findMany({ where: { shopId, id: { in: profileIds } }, orderBy: { id: "asc" } });
   const movements = await dependencies(db, profileIds);
-  const wallets = await db.walletAccount.findMany({ where: { shopId, customerProfileId: { in: profileIds } }, orderBy: [{ currency: "asc" }, { id: "asc" }], include: { transactions: { orderBy: { id: "asc" } }, reservations: { orderBy: { id: "asc" } } } });
+  const wallets = await db.walletAccount.findMany({
+  where: {
+    customerProfileId: {
+      in: profileIds,
+    },
+  },
+  orderBy: [
+    { currency: "asc" },
+    { id: "asc" },
+  ],
+  include: {
+    transactions: {
+      orderBy: { id: "asc" },
+    },
+    reservations: {
+      orderBy: { id: "asc" },
+    },
+  },
+});
   return { profiles, movements, wallets };
 }
 
