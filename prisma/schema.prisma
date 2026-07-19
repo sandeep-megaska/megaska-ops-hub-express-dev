@@ -43,6 +43,8 @@ model CustomerProfile {
   recoveryTokens      CheckoutRecoveryToken[]
   reviewRequests      ReviewRequest[]
   productReviews      ProductReview[]
+  identityPlans       CustomerIdentityReconciliationPlan[]
+  identityAudits      CustomerIdentityReconciliationAudit[]
 
   @@unique([shopId, shopifyCustomerId])
   @@index([shopId])
@@ -113,6 +115,82 @@ model Shop {
   reviewRequestDeliveryAttempts ProductReviewRequestDeliveryAttempt[]
   productReviewRevisions        ProductReviewRevision[]
   productReviewAggregates       ProductReviewAggregate[]
+  identityReconciliationPlans   CustomerIdentityReconciliationPlan[]
+  identityReconciliationAudits  CustomerIdentityReconciliationAudit[]
+  identityMerges                CustomerIdentityMerge[]
+}
+
+enum CustomerIdentityReconciliationStatus {
+  DRAFT
+  APPROVED
+  APPLYING
+  APPLIED
+  FAILED
+  CANCELLED
+}
+
+model CustomerIdentityReconciliationPlan {
+  id                         String                               @id @default(uuid())
+  shopId                     String
+  canonicalCustomerProfileId String
+  sourceCustomerProfileIds   String[]
+  classification             String
+  status                     CustomerIdentityReconciliationStatus @default(DRAFT)
+  createdBy                  String
+  approvedBy                 String?
+  approvedAt                 DateTime?
+  appliedAt                  DateTime?
+  checksum                   String                               @unique
+  sourceStateChecksum        String
+  plan                       Json
+  failureReason              String?
+  createdAt                  DateTime                             @default(now())
+  updatedAt                  DateTime                             @updatedAt
+
+  shop      Shop                                  @relation(fields: [shopId], references: [id], onDelete: Restrict)
+  canonical CustomerProfile                       @relation(fields: [canonicalCustomerProfileId], references: [id], onDelete: Restrict)
+  merges    CustomerIdentityMerge[]
+  audits    CustomerIdentityReconciliationAudit[]
+
+  @@index([shopId, status, createdAt])
+}
+
+model CustomerIdentityMerge {
+  id                      String   @id @default(uuid())
+  shopId                  String
+  sourceCustomerProfileId String   @unique
+  targetCustomerProfileId String
+  planId                  String
+  mergedAt                DateTime @default(now())
+
+  shop Shop                               @relation(fields: [shopId], references: [id], onDelete: Restrict)
+  plan CustomerIdentityReconciliationPlan @relation(fields: [planId], references: [id], onDelete: Restrict)
+
+  @@index([shopId, targetCustomerProfileId])
+  @@index([planId])
+}
+
+model CustomerIdentityReconciliationAudit {
+  id                         String   @id @default(uuid())
+  planId                     String
+  shopId                     String
+  canonicalCustomerProfileId String
+  sourceCustomerProfileIds   String[]
+  classification             String
+  affectedRecordCounts       Json
+  result                     String
+  failureReason              String?
+  actor                      String
+  beforeIntegrityHash        String
+  afterIntegrityHash         String?
+  createdAt                  DateTime @default(now())
+
+  plan      CustomerIdentityReconciliationPlan @relation(fields: [planId], references: [id], onDelete: Restrict)
+  shop      Shop                               @relation(fields: [shopId], references: [id], onDelete: Restrict)
+  canonical CustomerProfile                    @relation(fields: [canonicalCustomerProfileId], references: [id], onDelete: Restrict)
+
+  @@index([shopId, createdAt])
+  @@index([planId])
 }
 
 enum MerchantUsageType {
