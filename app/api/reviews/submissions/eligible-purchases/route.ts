@@ -3,7 +3,7 @@ import { resolveReviewAccessFromCustomerSession } from "../../../../../services/
 import { getReviewSettings } from "../../../../../services/reviews/review-settings.ts";
 import { listEligibleReviewPurchasesWithDiagnostics } from "../../../../../services/reviews/review-eligible-purchases.ts";
 import { allowedOrigin, rateLimit, reply } from "../../../../../services/reviews/review-submission-http.ts";
-import { normalizeShopifyProductId, shopifyProductIdCandidates } from "../../../../../services/reviews/shopify-product-id.ts";
+import { normalizeShopifyProductId } from "../../../../../services/reviews/shopify-product-id.ts";
 
 export const dynamic = "force-dynamic";
 
@@ -17,12 +17,20 @@ export async function GET(request: NextRequest) {
   const settings = await getReviewSettings(access.shopId);
   if (!settings.reviewsEnabled) return reply({ ok: false, errorCode: "REVIEWS_DISABLED", purchases: [] }, 410);
   const result = await listEligibleReviewPurchasesWithDiagnostics({ shopId: access.shopId, customerProfileId: access.customerProfileId, productId, take: 25 });
-  console.info("[REVIEW ELIGIBLE PURCHASES DIAGNOSTIC]", {
+  console.info({
+    event: "review_eligibility_resolution",
     shopId: access.shopId,
-    customerProfileId: access.customerProfileId,
-    normalizedProductId: productId,
-    productIdCandidates: shopifyProductIdCandidates(productId),
-    ...result.diagnostics,
+    customerProfileId: result.diagnostics.diagnosticContext.canonicalCustomerProfileId,
+    productIdentifierType: result.diagnostics.diagnosticContext.productIdentifierType,
+    orderSourceQueried: result.diagnostics.diagnosticContext.orderSourceQueried,
+    resultCode: result.diagnostics.code,
+    eligibleOrderFound: result.diagnostics.diagnosticContext.eligibleOrderFound,
+    deliveredOrderFound: result.diagnostics.diagnosticContext.deliveredOrderFound,
+    productLineFound: result.diagnostics.diagnosticContext.productLineFound,
+    reviewRequestFound: result.diagnostics.diagnosticContext.reviewRequestFound,
+    existingReviewFound: result.diagnostics.diagnosticContext.existingReviewFound,
+    identityMergeDetected: result.diagnostics.diagnosticContext.identityMergeDetected,
+    requestSource: result.diagnostics.diagnosticContext.requestSource,
   });
   // The persisted review request is the canonical source for the purchased
   // product identity. Keep these presentation fields in the response so the

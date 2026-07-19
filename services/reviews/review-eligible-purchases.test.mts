@@ -18,8 +18,12 @@ async function list(rows: ReturnType<typeof row>[]) {
 
 function db(rows: ReturnType<typeof row>[]) {
   type TestWhere = { shopId?: unknown; customerProfileId?: unknown; shopifyProductId?: { in: string[] } };
-  const matching = (where: TestWhere) => rows.filter((item) => item.shopId === where.shopId && (!where.customerProfileId || item.customerProfileId === where.customerProfileId) && (!where.shopifyProductId || where.shopifyProductId.in.includes(item.shopifyProductId as string)) && item.suppressedAt === null && item.canceledAt === null && item.review === null);
-  return { reviewRequest: { count: async ({ where }: { where: Record<string, unknown> }) => matching(where).length, findMany: async ({ where }: { where: Record<string, unknown> }) => matching(where) } } as never;
+  const matching = (where: TestWhere) => rows.filter((item) => item.shopId === where.shopId && (!where.customerProfileId || item.customerProfileId === where.customerProfileId) && (!where.shopifyProductId || where.shopifyProductId.in.includes(item.shopifyProductId as string)) && item.suppressedAt === null && item.canceledAt === null);
+  return {
+    customerProfile: { findFirst: async ({ where }: { where: { id: string; shopId: string } }) => where.shopId === "shop-1" ? { id: where.id } : null },
+    customerIdentityMerge: { findFirst: async () => null },
+    reviewRequest: { findMany: async ({ where }: { where: Record<string, unknown> }) => matching(where) },
+  } as never;
 }
 
 test("returns delivered matching purchases, including a line refunded after delivery", async () => {
@@ -67,13 +71,14 @@ test("matching products from another shop remain excluded", async () => {
   assert.deepEqual(purchases, []);
 });
 
-test("excludes existing reviews and suppressed or canceled requests", async () => {
+test("existing reviews do not erase purchase eligibility; suppressed or canceled requests remain excluded", async () => {
   const purchases = await list([
     row({ id: "reviewed", review: { id: "review-1" } }),
     row({ id: "suppressed", suppressedAt: deliveredAt }),
     row({ id: "canceled", canceledAt: deliveredAt }),
   ]);
-  assert.deepEqual(purchases, []);
+  assert.equal(purchases.length, 1);
+  assert.equal(purchases[0].existingReviewFound, true);
 });
 
 test("diagnostics prove a session profile mismatch without broadening customer access", async () => {
@@ -83,9 +88,6 @@ test("diagnostics prove a session profile mismatch without broadening customer a
   );
 
   assert.deepEqual(result.purchases, []);
-  assert.deepEqual(result.diagnostics, {
-    reviewRequestCountBeforeCustomerProfileFilter: 1,
-    reviewRequestCountAfterCustomerProfileFilter: 0,
-    finalCountAfterCanonicalDeliveryChecks: 0,
-  });
+  assert.equal(result.diagnostics.eligible, false);
+  assert.equal(result.diagnostics.code, "CUSTOMER_OWNERSHIP_MISMATCH");
 });

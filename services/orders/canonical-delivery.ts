@@ -14,7 +14,16 @@ export function chooseCanonicalDeliveryTimestamp(existing: Pick<Order,"delivered
 }
 
 export function isOrderDeliveredForReview(order: { deliveredAt: Date | null; status: string }) {
- return Boolean(order.deliveredAt) && order.status === "DELIVERED";
+ return diagnoseOrderDeliveryForReview(order).delivered;
+}
+
+const recognizedOrderStatuses = new Set(["ORDER_CONFIRMED", "PROCESSING", "PACKED", "READY_FOR_PICKUP", "PICKED_UP", "IN_TRANSIT", "OUT_FOR_DELIVERY", "DELIVERED", "DELIVERY_FAILED", "RTO_INITIATED", "RTO_DELIVERED", "CANCELLED", "RETURN_REQUESTED", "RETURN_IN_TRANSIT", "REFUNDED"]);
+export function diagnoseOrderDeliveryForReview(order: { deliveredAt: Date | null; status: string }): { delivered: true; code: "ELIGIBLE" } | { delivered: false; code: "ORDER_NOT_DELIVERED" | "DELIVERY_STATE_UNRECOGNIZED" | "DELIVERED_AT_MISSING" } {
+ const status=order.status.trim().toUpperCase();
+ if(!recognizedOrderStatuses.has(status)) return {delivered:false,code:"DELIVERY_STATE_UNRECOGNIZED"};
+ if(status==="DELIVERED"&&!order.deliveredAt) return {delivered:false,code:"DELIVERED_AT_MISSING"};
+ if(status!=="DELIVERED") return {delivered:false,code:"ORDER_NOT_DELIVERED"};
+ return {delivered:true,code:"ELIGIBLE"};
 }
 
 export async function recordCanonicalOrderDelivery(input:RecordCanonicalDeliveryInput, db:DeliveryDb=prisma as unknown as DeliveryDb) {
