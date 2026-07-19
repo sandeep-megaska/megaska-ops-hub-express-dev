@@ -18,6 +18,7 @@
     "test:customer-identity-architecture": "node --test scripts/customer-identity-architecture.test.mjs",
     "identity:reconcile": "node scripts/customer-identity-reconcile.mjs",
     "identity:verify": "node scripts/customer-identity-integrity.mjs",
+    "identity:merge-known": "node scripts/merge-known-customer-profiles.mjs",
     "review:diagnose-eligibility": "node scripts/review-diagnose-eligibility.mjs",
     "review:diagnose-ownership": "node scripts/review-diagnose-ownership.mjs"
   },
