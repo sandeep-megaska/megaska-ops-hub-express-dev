@@ -1,8 +1,11 @@
 export type CustomerIdentityErrorCode = "INVALID_INPUT" | "IDENTITY_TRANSACTION_FAILED";
 
 export class CustomerIdentityError extends Error {
-  constructor(public readonly code: CustomerIdentityErrorCode, message: string, options?: ErrorOptions) {
+  public readonly code: CustomerIdentityErrorCode;
+
+  constructor(code: CustomerIdentityErrorCode, message: string, options?: ErrorOptions) {
     super(message, options);
+    this.code = code;
     this.name = "CustomerIdentityError";
   }
 }
