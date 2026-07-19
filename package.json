@@ -16,7 +16,8 @@
     "dev:repair:customer-identity": "node scripts/dev-repair-customer-profile-duplicate.mjs",
     "typecheck": "tsc --noEmit",
     "test:customer-identity-architecture": "node --test scripts/customer-identity-architecture.test.mjs",
-    "identity:reconcile": "node scripts/customer-identity-reconcile.mjs"
+    "identity:reconcile": "node scripts/customer-identity-reconcile.mjs",
+    "identity:verify": "node scripts/customer-identity-integrity.mjs"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.6.0",

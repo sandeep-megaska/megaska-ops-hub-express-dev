@@ -1,4 +1,4 @@
-import { InvalidCustomerIdentityError } from "./customer-identity-errors";
+import { InvalidCustomerIdentityError } from "./customer-identity-errors.ts";
 
 const SHOPIFY_CUSTOMER_GID = /^gid:\/\/shopify\/Customer\/(\d+)$/;
 const NUMERIC_ID = /^\d+$/;
