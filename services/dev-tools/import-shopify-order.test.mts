@@ -3,6 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { assertDevelopmentOrderImportEnabled, importShopifyOrderForDevelopment } from "./import-shopify-order.ts";
 import { normalizeShopifyOrderIdentifier, syncCanonicalShopifyOrder } from "../orders/shopify-order-sync.ts";
+import { normalizeShopifyCustomerId } from "../../lib/shopify-customer-id.ts";
 
 test("guard requires its exact flag and independently rejects both production signals", () => {
   assert.throws(() => assertDevelopmentOrderImportEnabled({}), /DEV_HELPER_DISABLED/);
@@ -32,7 +33,7 @@ function harness() {
       update: async ({ where, data }: any) => { const row = orders.find((item) => item.id === where.id); Object.assign(row, data); return row; },
     },
   };
-  const deps = { db, fetchOrder: async () => source, resolveIdentity: async ({ shopId, shopifyCustomerId }: any) => { let row = customers.find((item) => item.shopId === shopId && item.shopifyCustomerId === shopifyCustomerId); if (!row) { row = { id: `customer-${customers.length + 1}`, shopId, shopifyCustomerId }; customers.push(row); } return { customerProfile: row }; }, createOrderLine: async (input: any) => { const existing = lines.find((line) => line.shopId === input.shopId && line.shopifyOrderId === input.shopifyOrderId && line.shopifyLineItemId === input.shopifyLineItemId); if (existing) return existing; const row = { id: `line-${lines.length + 1}`, ...input }; lines.push(row); return row; } };
+  const deps = { db, fetchOrder: async () => source, resolveIdentity: async ({ shopId, shopifyCustomerId }: any) => { const canonicalId = normalizeShopifyCustomerId(shopifyCustomerId); let row = customers.find((item) => item.shopId === shopId && item.shopifyCustomerId === canonicalId); if (!row) { row = { id: `customer-${customers.length + 1}`, shopId, shopifyCustomerId: canonicalId }; customers.push(row); } return { customerProfile: row }; }, createOrderLine: async (input: any) => { const existing = lines.find((line) => line.shopId === input.shopId && line.shopifyOrderId === input.shopifyOrderId && line.shopifyLineItemId === input.shopifyLineItemId); if (existing) return existing; const row = { id: `line-${lines.length + 1}`, ...input }; lines.push(row); return row; } };
   return { customers, orders, lines, deps };
 }
 
@@ -52,6 +53,16 @@ test("sync is tenant scoped, idempotent, links the customer, creates lines, and 
   assert.equal(first.deliveredAt, null);
   assert.notEqual(first.status, "DELIVERED");
   assert.equal(first.metadata?.shopifyDeliveredAt, source.deliveredAt);
+});
+
+test("order synchronization reuses a numeric OTP owner when Shopify supplies a customer GID", async () => {
+  const state = harness();
+  state.customers.push({ id: "otp-profile", shopId: "shop-a", shopifyCustomerId: "9", walletId: "wallet-1" });
+  const order = await syncCanonicalShopifyOrder({ shopId: "shop-a", shopDomain: "a.myshopify.com", orderIdentifier: "123" }, state.deps as any);
+  assert.equal(state.customers.length, 1);
+  assert.equal(order.customerProfileId, "otp-profile");
+  assert.equal(state.lines[0].customerProfileId, "otp-profile");
+  assert.equal(state.customers[0].walletId, "wallet-1");
 });
 
 test("development import creates one candidate when refundable quantity equals quantity and preserves delivery on rerun", async () => {

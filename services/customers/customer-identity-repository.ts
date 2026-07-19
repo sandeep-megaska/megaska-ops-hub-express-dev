@@ -1,5 +1,5 @@
 import type { CustomerProfile, Prisma } from "../../generated/prisma/index.js";
-import { prisma } from "../db/prisma";
+import { prisma } from "../db/prisma.ts";
 import type { CustomerIdentityMatch } from "./customer-identity-types";
 
 type IdentityTransaction = Prisma.TransactionClient;
@@ -18,7 +18,11 @@ export class CustomerIdentityRepository {
   }
 
   findByCanonicalShopifyCustomer(tx: IdentityTransaction, shopId: string, shopifyCustomerId: string) {
-    return tx.customerProfile.findMany({ where: { shopId, shopifyCustomerId } });
+    // Transitional read compatibility is required until the staged normalization
+    // migration has run. Multiple matches are returned as an operator conflict.
+    return tx.customerProfile.findMany({
+      where: { shopId, shopifyCustomerId: { in: [shopifyCustomerId, `gid://shopify/Customer/${shopifyCustomerId}`] } },
+    });
   }
 
   findByCanonicalPhone(tx: IdentityTransaction, shopId: string, phoneE164: string) {
