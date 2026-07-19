@@ -238,5 +238,8 @@ export async function applyReconciliationPlan(db: Db, input: { shopId: string; p
     await tx.customerIdentityReconciliationAudit.create({ data: { id: randomUUID(), planId: plan.id, shopId: input.shopId, canonicalCustomerProfileId: plan.canonicalCustomerProfileId, sourceCustomerProfileIds: plan.sourceCustomerProfileIds, classification: plan.classification, affectedRecordCounts: Object.fromEntries(payload.dependentRecordMovements.map((x: any) => [x.tableName, x.count])), result: "VERIFIED", actor: input.actor, beforeIntegrityHash: plan.sourceStateChecksum, afterIntegrityHash: afterHash } });
     await tx.customerIdentityReconciliationPlan.update({ where: { id: plan.id }, data: { status: "APPLIED", appliedAt: new Date() } });
     return { status: "VERIFIED", planId: plan.id, checksum: plan.checksum };
-  }, { isolationLevel: "Serializable" });
-}
+  }, {
+  isolationLevel: "Serializable",
+  maxWait: 10_000,
+  timeout: 60_000,
+});
