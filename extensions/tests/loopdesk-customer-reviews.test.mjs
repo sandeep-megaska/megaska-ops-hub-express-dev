@@ -4,6 +4,8 @@ import test from "node:test";
 
 const dashboard = readFileSync("extensions/megaska-otp/assets/loopdesk-customer-dashboard.js", "utf8");
 const form = readFileSync("extensions/megaska-otp/assets/loopdesk-product-reviews.js", "utf8");
+const formStyles = readFileSync("extensions/megaska-otp/assets/loopdesk-product-reviews.css", "utf8");
+const eligiblePurchasesRoute = readFileSync("app/api/reviews/submissions/eligible-purchases/route.ts", "utf8");
 const block = readFileSync("extensions/megaska-otp/blocks/loopdesk-customer-dashboard.liquid", "utf8");
 const expressCheckout = readFileSync("extensions/megaska-otp/assets/megaska-express-modal.js", "utf8");
 
@@ -43,6 +45,35 @@ test("logged-in Write Review continues without OTP or checkout", () => {
 
 test("cancelled review authentication clears only the pending review", () => {
   assert.match(form, /addEventListener\("megaska:otp-cancelled",function\(\)\{pending=null\}\)/);
+});
+
+test("review form keeps canonical product identity separate from variant metadata", () => {
+  assert.match(eligiblePurchasesRoute, /\.\.\.purchase, verifiedPurchase: true/);
+  assert.doesNotMatch(eligiblePurchasesRoute, /productTitle: _productTitle/);
+  assert.match(form, /p\.productTitle\|\|p\.lineItemProductTitle\|\|p\.storefrontProductTitle\|\|"Purchased product"/);
+  assert.match(form, /v\.toLowerCase\(\)===\"default title\"/);
+  assert.match(form, /return\"Size: \"\+v/);
+  assert.match(form, /p\.verifiedPurchase===true/);
+  assert.match(form, /loopdesk-review-product-image/);
+});
+
+test("review dialog owns scrolling while its header and footer remain outside the scroll body", () => {
+  assert.match(form, /loopdesk-review-form-header/);
+  assert.match(form, /loopdesk-review-form-body/);
+  assert.match(form, /loopdesk-review-form-footer/);
+  assert.match(formStyles, /max-height:min\(860px,calc\(100dvh - 32px\)\)/);
+  assert.match(formStyles, /\.loopdesk-review-form-body\{min-height:0;overflow-y:auto;overscroll-behavior:contain/);
+  assert.match(formStyles, /\.loopdesk-review-form-dialog\{[^}]*overflow:hidden/);
+  assert.match(form, /document\.body\.style\.top=\"-\"\+scrollY\+\"px\"/);
+});
+
+test("rating remains ordered, labelled, keyboard operable, and submission is duplicate-safe", () => {
+  assert.match(form, /\[1,2,3,4,5\]\.map/);
+  assert.match(form, /aria-label=\"'\+n\+\(n===1\?' star':' stars'\)/);
+  assert.match(form, /e\.key!==\"ArrowLeft\"&&e\.key!==\"ArrowRight\"/);
+  assert.match(form, /if\(busy\)return/);
+  assert.match(form, /btn\.disabled=true/);
+  assert.match(form, /btn\.textContent=\"Submitting…\"/);
 });
 
 test("Express Checkout keeps its existing OTP callback continuation", () => {
