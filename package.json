@@ -13,6 +13,7 @@
     "billing:verify-catalog": "node scripts/verify-commercial-catalog.mjs",
     "postinstall": "prisma generate",
     "dev:seed:mock-tracking": "ALLOW_MOCK_TRACKING_SEED=true node scripts/dev-seed-mock-tracking.mjs",
+    "dev:repair:customer-identity": "node scripts/dev-repair-customer-profile-duplicate.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

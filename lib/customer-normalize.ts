@@ -28,6 +28,4 @@ export function normalizePhone(
   return null;
 }
 
-export function normalizeShopifyCustomerId(gid: string): string {
-  return String(gid || "").split("/").pop() || String(gid || "");
-}
+export { normalizeShopifyCustomerId } from "./shopify-customer-id";
