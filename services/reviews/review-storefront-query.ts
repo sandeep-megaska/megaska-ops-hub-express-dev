@@ -1,11 +1,12 @@
 import { prisma } from "../db/prisma.ts";
-import { projectPublicReviewMedia, type PublicReviewMedia } from "./review-media-public-projection.ts";
+import { projectPublicReviewMedia, type PublicReviewMedia, type ReviewMediaPublicProjectionInput } from "./review-media-public-projection.ts";
 import { isReviewSort, type ReviewSort } from "./review-sort.ts";
 import { normalizeShopifyProductId, shopifyProductIdCandidates } from "./shopify-product-id.ts";
 
 export { normalizeShopifyProductId } from "./shopify-product-id.ts";
 export type { ReviewSort } from "./review-sort.ts";
 export type PublicProductReview = { id:string; rating:number; title:string|null; body:string|null; customerDisplayName:string; verifiedPurchase:boolean; productTitleSnapshot:string; variantTitleSnapshot:string|null; createdAt:Date; publishedAt:Date|null; media:PublicReviewMedia[]; merchantReply?:{body:string;authorLabel:string;createdAt:Date;updatedAt:Date}|null };
+type StorefrontReviewRecord = Omit<PublicProductReview, "media"> & { media: ReviewMediaPublicProjectionInput[] };
 export type ProductReviewSummary = { averageRating:number; reviewCount:number; rating1Count:number; rating2Count:number; rating3Count:number; rating4Count:number; rating5Count:number };
 type Rating={rating:number};
 type Db={productReview:{findMany(args:unknown):Promise<unknown[]>;count(args:unknown):Promise<number>}};
@@ -20,7 +21,7 @@ export async function getPublishedProductReviews({shopId,shopifyProductId,page=1
   const productIdCandidates=shopifyProductIdCandidates(normalizedProductId),productWhere={shopId,shopifyProductId:{in:productIdCandidates}},visibleWhere={...productWhere,status:"PUBLISHED" as const,publishedAt:{not:null},hiddenAt:null,deletedAt:null};
   const current=Math.max(1,Math.floor(page)),take=Math.min(25,Math.max(1,Math.floor(pageSize))),orderBy=sort==="HIGHEST_RATING"?[{rating:"desc"},{publishedAt:"desc"},{id:"desc"}]:sort==="LOWEST_RATING"?[{rating:"asc"},{publishedAt:"desc"},{id:"desc"}]:[{publishedAt:"desc"},{createdAt:"desc"},{id:"desc"}];
   const [countBeforePublicationFilters,rawItems,totalCount,rawRatings]=await Promise.all([db.productReview.count({where:productWhere}),db.productReview.findMany({where:visibleWhere,select,orderBy,skip:(current-1)*take,take}),db.productReview.count({where:visibleWhere}),db.productReview.findMany({where:visibleWhere,select:{rating:true}})]);
-  const items=rawItems as PublicProductReview[],ratings=rawRatings as Rating[];
+  const items=rawItems as StorefrontReviewRecord[],ratings=rawRatings as Rating[];
   console.info("review_storefront_product_list",{shopId,rawProductId:String(shopifyProductId),normalizedProductId,productIdCandidates,countBeforePublicationFilters,countAfterPublicationFilters:totalCount,returnedReviewIds:items.map(item=>item.id)});
   const totalPages=Math.ceil(totalCount/take);return {items:items.map(item=>({...item,media:projectPublicReviewMedia(item.media||[])})),summary:summarize(ratings),page:current,pageSize:take,totalCount,totalPages,hasNextPage:current<totalPages,hasPreviousPage:current>1};
 }
