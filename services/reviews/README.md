@@ -40,7 +40,9 @@ Order delivered → ReviewRequest PENDING_ELIGIBILITY
 
 ## Delivered-order candidate synchronization
 
-Candidate synchronization is an internal service only. It fetches one authoritative Shopify order by the persisted Shopify order ID, outside database transactions, and requires canonical `MegaskaOrder.deliveredAt`. It never accepts a caller token, sends email, creates review tokens, exposes a route, or activates customer-facing behavior.
+Candidate synchronization is wired as best-effort post-delivery work after the canonical delivery transaction commits. It fetches one authoritative Shopify order by the persisted Shopify order ID outside database transactions and requires canonical `MegaskaOrder.status = DELIVERED` with `MegaskaOrder.deliveredAt`; repeat delivery evidence safely re-runs the idempotent synchronization so earlier failures can repair themselves. A synchronization failure is safely logged and never reverses delivery or changes the delivery acknowledgment.
+
+Existing delivered orders are repaired in bounded, cursor-paginated batches through the authenticated `POST /api/internal/workers/reviews/sync-delivered-candidates` worker, using the same `REVIEW_PROCESSOR_SECRET` convention as review lifecycle processing. Targeted development/UAT repair is available at protected `POST /api/admin/dev-tools/orders/sync-review-candidates`; it uses the delivery helper feature/environment gate plus authenticated HMAC-verified embedded-admin shop context. Neither route returns customer data or provider details. Candidate synchronization itself never sends customer email, creates a review token, schedules delivery, submits a review, or mutates delivery.
 
 ```
 Canonical delivered order
@@ -59,6 +61,8 @@ PENDING_ELIGIBILITY / ELIGIBLE / BLOCKED
 Quantity does not multiply requests: the uniqueness boundary is Shopify order + Shopify line item. Fully removed lines, gift cards, shipping/tip-like custom lines, and lines without a Shopify product are skipped; a real zero-price promotional product remains reviewable. Shopify `refundableQuantity` is not treated as refunded quantity, so it does not disqualify a purchased line. Re-sync is idempotent and races re-read the unique request. Existing source omissions are retained rather than deleted.
 
 Snapshots preserve historical non-empty title, handle, image, and variant values. Only explicit missing/placeholder values are enriched; immutable Shopify order, line-item, and product IDs are never updated. Unsent delivery snapshots may follow canonical delivery, while advanced workflow states retain their historical delivery snapshot. Candidate synchronization only creates/enriches; the separate eligibility engine remains responsible for status decisions.
+
+The lifecycle boundary is: **delivery ingestion → candidate synchronization → eligibility → optional scheduling → optional request delivery → customer submission**. Each later stage remains independently controlled by its own worker and feature flags.
 
 ## Internal review-request delivery (REVIEW-1A.5)
 Delivery is deliberately disabled unless `REVIEW_REQUEST_DELIVERY_ENABLED=true`; it also requires a safe `REVIEW_SUBMISSION_BASE_URL`. The later REVIEW-1A.6 submission endpoint consumes only valid sent tokens; delivery itself remains disabled by default. Eligible requests are re-evaluated, then atomically claimed as `SCHEDULED` before a final revalidation and send through the tenant-aware shared Resend service. Customer email is read only from `CustomerProfile`; accepted sends reuse existing email usage metering with a stable request idempotency key.

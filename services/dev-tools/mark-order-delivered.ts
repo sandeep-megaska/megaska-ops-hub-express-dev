@@ -1,5 +1,6 @@
 import { prisma } from "../db/prisma.ts";
 import { recordCanonicalOrderDelivery } from "../orders/canonical-delivery.ts";
+import { synchronizeDeliveredOrderReviewCandidatesBestEffort } from "../reviews/review-delivery-integration.ts";
 
 export type DevDeliveryHelperErrorCode =
   | "DEV_HELPER_DISABLED"
@@ -55,12 +56,14 @@ type DevDeliveryDb = {
 type Dependencies = {
   db?: DevDeliveryDb;
   transition?: typeof recordCanonicalOrderDelivery;
+  synchronizeReviews?: typeof synchronizeDeliveredOrderReviewCandidatesBestEffort;
   env?: Environment;
   log?: (event: Record<string, unknown>) => void;
 };
 
 export type MarkOrderDeliveredForDevelopmentInput = {
   shopId: string;
+  shopDomain?: string;
   orderId: string;
   deliveredAt?: Date;
   actor?: string | null;
@@ -117,6 +120,13 @@ export async function markOrderDeliveredForDevelopment(
     updatedRecords: alreadyDelivered ? [] : ["MegaskaOrder"],
     automationsExecuted: false,
   };
+  const reviewSync = input.shopDomain
+    ? await (dependencies.synchronizeReviews ?? synchronizeDeliveredOrderReviewCandidatesBestEffort)({
+        shopId,
+        megaskaOrderId: canonical.id,
+        shopDomain: input.shopDomain,
+      })
+    : null;
   (dependencies.log ?? console.info)({
     event: "development_order_marked_delivered",
     shopId,
@@ -128,5 +138,5 @@ export async function markOrderDeliveredForDevelopment(
     automationsExecuted: false,
     deploymentEnvironment: dependencies.env?.VERCEL_ENV ?? process.env.VERCEL_ENV ?? dependencies.env?.LOOPDESK_ENV ?? process.env.LOOPDESK_ENV ?? dependencies.env?.NODE_ENV ?? process.env.NODE_ENV ?? null,
   });
-  return result;
+  return { ...result, reviewSync };
 }
