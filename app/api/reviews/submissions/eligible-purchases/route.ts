@@ -3,7 +3,7 @@ import { resolveReviewAccessFromCustomerSession } from "../../../../../services/
 import { getReviewSettings } from "../../../../../services/reviews/review-settings.ts";
 import { listEligibleReviewPurchasesWithDiagnostics } from "../../../../../services/reviews/review-eligible-purchases.ts";
 import { allowedOrigin, rateLimit, reply } from "../../../../../services/reviews/review-submission-http.ts";
-import { normalizeShopifyProductId } from "../../../../../services/reviews/review-storefront-query.ts";
+import { normalizeShopifyProductId, shopifyProductIdCandidates } from "../../../../../services/reviews/shopify-product-id.ts";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +21,7 @@ export async function GET(request: NextRequest) {
     shopId: access.shopId,
     customerProfileId: access.customerProfileId,
     normalizedProductId: productId,
+    productIdCandidates: shopifyProductIdCandidates(productId),
     ...result.diagnostics,
   });
   const purchases = result.purchases.map(({ productTitle: _productTitle, productImageUrl: _productImageUrl, ...purchase }) => ({ ...purchase, eligible: true }));
