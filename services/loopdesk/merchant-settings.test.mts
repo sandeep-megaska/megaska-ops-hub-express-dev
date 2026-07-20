@@ -132,6 +132,33 @@ test("normalizes cart intelligence defaults disabled", () => {
   assert.equal(settings.upsellsEnabled, false);
   assert.equal(settings.bundlesEnabled, false);
   assert.equal(settings.aiRecommendationsEnabled, false);
+  assert.equal(settings.trustBadges.enabled, false);
+  assert.equal(settings.trustBadges.items.length, 6);
+  assert.ok(settings.trustBadges.items.every((item) => !item.enabled));
+});
+
+test("normalizes, sanitizes, limits, and orders trust badges", () => {
+  const settings = normalizeCartIntelligenceSettings({ trustBadges: {
+    enabled: true, placement: "BELOW_CHECKOUT_BUTTON", layout: "ROW", items: [
+      { id: "second", enabled: true, icon: "support", label: `<b>${"x".repeat(70)}</b>`, sortOrder: 2 },
+      { id: "first", enabled: true, icon: "not-an-icon", label: "Fast dispatch", sortOrder: 1 },
+    ],
+  } });
+  assert.deepEqual(settings.trustBadges.items.map((item) => item.id), ["first", "second"]);
+  assert.equal(settings.trustBadges.items[0].icon, "custom");
+  assert.equal(settings.trustBadges.items[1].label.length, 60);
+  assert.doesNotMatch(settings.trustBadges.items[1].label, /[<>]/);
+});
+
+test("trust badge validation rejects malformed configuration", () => {
+  const errors = validateCartIntelligenceSettingsPatch({ trustBadges: {
+    enabled: true, placement: "ABOVE_CART", layout: "LIST",
+    items: [{ enabled: true, icon: "remote-svg", label: "x".repeat(61), sortOrder: "first" }],
+  } });
+  assert.match(errors.join(" "), /placement is invalid/);
+  assert.match(errors.join(" "), /layout is invalid/);
+  assert.match(errors.join(" "), /icon is invalid/);
+  assert.match(errors.join(" "), /60 characters or fewer/);
 });
 
 test("cart intelligence public runtime exposes normalized free-shipping config", () => {
@@ -155,6 +182,7 @@ test("cart intelligence public runtime exposes normalized free-shipping config",
   assert.equal(progress.progressBarText, "Spend more for free shipping");
   assert.equal(runtime.dynamicBannerText, undefined);
   assert.equal(runtime.secret, undefined);
+  assert.equal((runtime.trustBadges as { enabled: boolean }).enabled, true);
 });
 
 test("existing stored threshold remains a backward-compatible optional fallback", () => {

@@ -128,7 +128,12 @@ assert.match(source, /function freeShippingProgressViewModel\(cart\)[\s\S]*SHOPI
 assert.match(source, /intelligence\.enabled && progress\.enabled && threshold && source/, "progress visibility must require both Cart Intelligence flags and a resolved threshold source");
 assert.match(source, /role="progressbar"[\s\S]*aria-valuemin="0"[\s\S]*aria-valuemax="100"[\s\S]*aria-valuenow=/, "free-shipping progress must expose accessible progressbar values");
 assert.match(source, /remaining === 0 \? "You’ve unlocked free shipping"/, "only a reached threshold should render unlocked free-shipping copy");
-assert.match(source, /document\.addEventListener\("loopdesk:runtime-config"[\s\S]*config\.cartIntelligence = intelligence;[\s\S]*render\(\)/, "late runtime configuration should rerender without controlling drawer asset loading");
+assert.match(source, /document\.addEventListener\("loopdesk:runtime-config"[\s\S]*config\.cartIntelligence = normalizeCartIntelligence\(intelligence\);[\s\S]*render\(\)/, "late runtime configuration should normalize and rerender without controlling drawer asset loading");
 assert.match(css, /\.loopdesk-cart-drawer__shipping-progress-track[\s\S]*\.loopdesk-cart-drawer__shipping-progress-track span/, "free-shipping progress should use drawer-scoped styles");
+assert.match(source, /function renderTrustBadges\(placement\)[\s\S]*intelligence\.enabled !== true[\s\S]*badges\.enabled !== true[\s\S]*item\.enabled && item\.label/, "trust badges should require both master switches and render only enabled labeled items");
+assert.match(source, /function normalizeCartIntelligence\(value\)[\s\S]*items\.length > 6[\s\S]*icons\.indexOf\(item\.icon\)[\s\S]*slice\(0, 60\)/, "malformed icons and badge counts should fail closed while labels are length limited");
+assert.match(source, /aria-label="Store assurances"/, "trust badges should expose an accessible group label");
+assert.match(source, /viewBox="0 0 24 24" aria-hidden="true" focusable="false"/, "trust badge icons should be decorative and hidden from assistive technology");
+assert.match(css, /\.loopdesk-cart-drawer__trust-badges--grid[\s\S]*grid-template-columns:[^;]*repeat\(2/, "trust badges should have a responsive compact grid");
 
 console.log("LoopDesk cart drawer CONFIG-2B regression checks passed");

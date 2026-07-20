@@ -260,13 +260,28 @@
       },
       enabled: bool(firstDefined(raw.enabled, legacy.enabled), DEFAULT_CONFIG.enabled),
       cartOwnershipMode: text(cart.cartOwnershipMode || legacy.cartOwnershipMode, DEFAULT_CONFIG.cartOwnershipMode),
-      cartIntelligence: isPlainObject(raw.cart_intelligence_config || raw.cartIntelligence) ? (raw.cart_intelligence_config || raw.cartIntelligence) : { enabled: false, freeShippingProgress: { enabled: false } },
+      cartIntelligence: normalizeCartIntelligence(raw.cart_intelligence_config || raw.cartIntelligence),
       promotions: isPlainObject(raw.promotions) && Array.isArray(raw.promotions.rules) ? { rules: raw.promotions.rules } : { rules: [] }
     };
     configDiagnostics("runtime config normalized", { drawerMode: normalized.cart.drawerMode }, true);
     if (Object.keys(legacy).length) configDiagnostics("legacy config merged", { keys: Object.keys(legacy) }, true);
     configDiagnostics("defaults applied", { merchantName: normalized.branding.merchantName }, true);
     return normalized;
+  }
+
+  function normalizeCartIntelligence(value) {
+    if (!isPlainObject(value)) return { enabled: false, freeShippingProgress: { enabled: false }, trustBadges: null };
+    var badges = value.trustBadges;
+    if (!isPlainObject(badges) || !Array.isArray(badges.items) || badges.items.length > 6 || ["BELOW_TOTALS", "BELOW_CHECKOUT_BUTTON"].indexOf(badges.placement) === -1 || ["ROW", "GRID"].indexOf(badges.layout) === -1) {
+      return Object.assign({}, value, { trustBadges: null });
+    }
+    var icons = ["secure-payment", "delivery", "exchange", "cod", "support", "authenticity", "custom"];
+    var items = badges.items.map(function (item, index) {
+      if (!isPlainObject(item) || icons.indexOf(item.icon) === -1 || typeof item.label !== "string") return null;
+      return { id: text(item.id, "badge-" + index).slice(0, 64), enabled: item.enabled === true, icon: item.icon, label: item.label.replace(/[<>]/g, "").replace(/javascript:/gi, "").trim().slice(0, 60), sortOrder: Number.isFinite(Number(item.sortOrder)) ? Number(item.sortOrder) : index };
+    });
+    if (items.some(function (item) { return !item; })) return Object.assign({}, value, { trustBadges: null });
+    return Object.assign({}, value, { trustBadges: { enabled: badges.enabled === true, placement: badges.placement, layout: badges.layout, items: items.sort(function (a, b) { return a.sortOrder - b.sortOrder; }) } });
   }
 
   function debugLog(message, payload, force) {
@@ -980,12 +995,34 @@
     return '<section class="loopdesk-cart-drawer__shipping-progress" aria-live="polite"><p class="loopdesk-cart-drawer__shipping-progress-text">' + escapeHtml(message) + '</p><div class="loopdesk-cart-drawer__shipping-progress-track" role="progressbar" aria-label="Free shipping progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + viewModel.progressPercent + '"><span style="width:' + viewModel.progressPercent + '%"></span></div></section>';
   }
 
+  function trustBadgeIcon(icon) {
+    var paths = {
+      "secure-payment": '<path d="M12 3l7 3v5c0 4.6-3 8-7 10-4-2-7-5.4-7-10V6l7-3z"/><path d="M9 12l2 2 4-4"/>',
+      delivery: '<path d="M3 6h11v10H3zM14 9h4l3 3v4h-7z"/><circle cx="7" cy="18" r="2"/><circle cx="18" cy="18" r="2"/>',
+      exchange: '<path d="M7 7h11l-3-3M17 17H6l3 3M18 7l-3 3M6 17l3-3"/>',
+      cod: '<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10h5M7 14h3M16 10v4"/>',
+      support: '<path d="M4 13v-2a8 8 0 0116 0v2M4 13h3v5H5a1 1 0 01-1-1v-4zM20 13h-3v5h2a1 1 0 001-1v-4zM17 18c-1 2-3 3-5 3"/>',
+      authenticity: '<path d="M12 3l2.2 2.2 3.1-.4.4 3.1L20 10l-1.6 2.7.8 3-3 .8-1.5 2.7-2.7-1.5-2.7 1.5-1.5-2.7-3-.8.8-3L4 10l2.3-2.1.4-3.1 3.1.4L12 3z"/><path d="M9 11.5l2 2 4-4"/>',
+      custom: '<circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01"/>'
+    };
+    return '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">' + paths[icon] + '</svg>';
+  }
+
+  function renderTrustBadges(placement) {
+    var intelligence = config.cartIntelligence;
+    var badges = intelligence && intelligence.trustBadges;
+    if (!intelligence || intelligence.enabled !== true || !badges || badges.enabled !== true || badges.placement !== placement) return "";
+    var items = badges.items.filter(function (item) { return item.enabled && item.label; });
+    if (!items.length) return "";
+    return '<section class="loopdesk-cart-drawer__trust-badges loopdesk-cart-drawer__trust-badges--' + badges.layout.toLowerCase() + '" aria-label="Store assurances">' + items.map(function (item) { return '<div class="loopdesk-cart-drawer__trust-badge">' + trustBadgeIcon(item.icon) + '<span>' + escapeHtml(item.label) + '</span></div>'; }).join("") + '</section>';
+  }
+
   document.addEventListener("loopdesk:runtime-config", function (event) {
     var runtimeConfig = event && event.detail && event.detail.config;
     if (!isPlainObject(runtimeConfig)) return;
     var intelligence = runtimeConfig.cart_intelligence_config || runtimeConfig.cartIntelligence;
     if (!isPlainObject(intelligence)) return;
-    config.cartIntelligence = intelligence;
+    config.cartIntelligence = normalizeCartIntelligence(intelligence);
     render();
   });
 
@@ -1006,6 +1043,8 @@
       : renderFreeShippingProgress(cart) + renderLines(cart);
 
     elements.subtotal.textContent = money(cart ? cart.total_price : 0, cart && cart.currency);
+    elements.trustBelowTotals.innerHTML = renderTrustBadges("BELOW_TOTALS");
+    elements.trustBelowCheckout.innerHTML = renderTrustBadges("BELOW_CHECKOUT_BUTTON");
     elements.count.textContent = itemCount ? "(" + itemCount + ")" : "";
     elements.express.hidden = !config.cart.expressCheckoutButtonEnabled;
     elements.express.disabled = !hasItems || state.loading || state.expressCheckoutLock;
@@ -1225,7 +1264,7 @@
       '<aside class="loopdesk-cart-drawer" aria-hidden="true" aria-label="Cart" role="dialog">',
       '<header class="loopdesk-cart-drawer__header"><div class="loopdesk-cart-drawer__brand">' + logo + '<div><h2>' + escapeHtml(config.branding.merchantName || config.branding.storeName) + ' <span data-loopdesk-cart-count></span></h2><p>Your bag</p></div></div><button type="button" class="loopdesk-cart-drawer__close" aria-label="Close cart">×</button></header>',
       '<div class="loopdesk-cart-drawer__body"></div>',
-      '<footer class="loopdesk-cart-drawer__footer"><div class="loopdesk-cart-drawer__subtotal"><span>Subtotal</span><strong data-loopdesk-cart-subtotal></strong></div><button type="button" class="loopdesk-cart-drawer__express" data-loopdesk-express-checkout></button><a class="loopdesk-cart-drawer__view-cart" href="/cart"></a><p class="loopdesk-cart-drawer__microcopy"></p><p class="loopdesk-cart-drawer__powered"></p></footer>',
+      '<footer class="loopdesk-cart-drawer__footer"><div class="loopdesk-cart-drawer__subtotal"><span>Subtotal</span><strong data-loopdesk-cart-subtotal></strong></div><div data-loopdesk-trust-below-totals></div><button type="button" class="loopdesk-cart-drawer__express" data-loopdesk-express-checkout></button><div data-loopdesk-trust-below-checkout></div><a class="loopdesk-cart-drawer__view-cart" href="/cart"></a><p class="loopdesk-cart-drawer__microcopy"></p><p class="loopdesk-cart-drawer__powered"></p></footer>',
       '</aside>',
     ].join("");
   }
@@ -1252,6 +1291,8 @@
       body: hostRoot.querySelector(".loopdesk-cart-drawer__body"),
       close: hostRoot.querySelector(".loopdesk-cart-drawer__close"),
       subtotal: hostRoot.querySelector("[data-loopdesk-cart-subtotal]"),
+      trustBelowTotals: hostRoot.querySelector("[data-loopdesk-trust-below-totals]"),
+      trustBelowCheckout: hostRoot.querySelector("[data-loopdesk-trust-below-checkout]"),
       count: hostRoot.querySelector("[data-loopdesk-cart-count]"),
       express: hostRoot.querySelector(".loopdesk-cart-drawer__express"),
       viewCart: hostRoot.querySelector(".loopdesk-cart-drawer__view-cart"),
