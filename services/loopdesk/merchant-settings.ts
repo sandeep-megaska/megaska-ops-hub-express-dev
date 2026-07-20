@@ -373,19 +373,6 @@ export function toCartIntelligencePublicRuntimeConfig(
     cartGoalProgress: settings.cartGoalProgress,
   };
 }
-  export function toCartIntelligencePublicRuntimeConfig(
-  settings: CartIntelligenceSettings
-): CartIntelligencePublicRuntimeConfig {
-  return {
-    enabled: settings.enabled,
-    cartDrawerModules: normalizeCartDrawerModules(settings.cartDrawerModules),
-    trustBadges: normalizeTrustBadges(
-      settings.trustBadges,
-      settings.trustBadgesEnabled
-    ),
-    cartGoalProgress: settings.cartGoalProgress,
-  };
-}
 
 export function validateLoopDeskMerchantSettingsPatch(
   patch: unknown,
