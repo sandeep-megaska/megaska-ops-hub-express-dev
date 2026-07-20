@@ -5,6 +5,25 @@ import vm from "node:vm";
 
 const drawerPath = new URL("../megaska-otp/assets/loopdesk-cart-drawer.js", import.meta.url);
 const source = fs.readFileSync(drawerPath, "utf8");
+const drawerCssPath = new URL("../megaska-otp/assets/loopdesk-cart-drawer.css", import.meta.url);
+const drawerCss = fs.readFileSync(drawerCssPath, "utf8");
+
+test("drawer CSS keeps the wider panel and scrollbar-free scrolling viewport safe", () => {
+  assert.match(drawerCss, /\.loopdesk-cart-drawer\s*\{[^}]*width:\s*min\(520px, 100vw\);[^}]*max-width:\s*100vw;/s);
+  assert.match(drawerCss, /\.loopdesk-cart-drawer__body\s*\{[^}]*overflow-y:\s*auto;[^}]*scrollbar-width:\s*none;[^}]*-ms-overflow-style:\s*none;/s);
+  assert.doesNotMatch(drawerCss, /\.loopdesk-cart-drawer__body\s*\{[^}]*overflow-y:\s*hidden;/s);
+  assert.match(drawerCss, /\.loopdesk-cart-drawer__body::\-webkit-scrollbar\s*\{[^}]*display:\s*none;[^}]*width:\s*0;[^}]*height:\s*0;/s);
+  assert.match(drawerCss, /@media \(max-width:\s*640px\)[\s\S]*?\.loopdesk-cart-drawer\s*\{[^}]*width:\s*100vw;[^}]*max-width:\s*100vw;/);
+});
+
+test("drawer CSS uses wrapping layouts instead of horizontal trust badge scrolling", () => {
+  assert.match(drawerCss, /\.loopdesk-cart-drawer__trust-badges\s*\{[^}]*grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\);/s);
+  assert.match(drawerCss, /\.loopdesk-cart-drawer__trust-badge span\s*\{[^}]*overflow-wrap:\s*anywhere;/s);
+  assert.doesNotMatch(drawerCss, /\.loopdesk-cart-drawer__trust-badges--row\s*\{[^}]*(?:overflow-x:\s*auto|display:\s*flex)/s);
+  assert.match(drawerCss, /\.loopdesk-cart-drawer__title\s*\{[^}]*min-width:\s*0;[^}]*overflow-wrap:\s*anywhere;/s);
+  assert.match(drawerCss, /\.loopdesk-cart-savings__title\s*\{[^}]*min-width:0;[^}]*overflow-wrap:anywhere;/s);
+  assert.match(drawerCss, /\.loopdesk-cart-drawer__express,[\s\S]*?\.loopdesk-cart-drawer__view-cart\s*\{[^}]*width:\s*100%;/);
+});
 
 function moduleApi(modules, sessionStorage) {
   const window = {
