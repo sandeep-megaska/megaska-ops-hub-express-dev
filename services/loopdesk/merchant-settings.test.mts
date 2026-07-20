@@ -128,12 +128,13 @@ test("normalizes cart intelligence defaults disabled", () => {
   assert.equal(settings.enabled, false);
   assert.equal(settings.freeShippingProgressEnabled, false);
   assert.equal(settings.freeShippingThreshold, 0);
+  assert.equal(settings.freeShippingSourceMode, "SHOPIFY_ONLY");
   assert.equal(settings.upsellsEnabled, false);
   assert.equal(settings.bundlesEnabled, false);
   assert.equal(settings.aiRecommendationsEnabled, false);
 });
 
-test("cart intelligence public runtime exposes only safe flags threshold and display text", () => {
+test("cart intelligence public runtime exposes normalized free-shipping config", () => {
   const settings = normalizeCartIntelligenceSettings({
     enabled: true,
     freeShippingProgressEnabled: true,
@@ -149,10 +150,18 @@ test("cart intelligence public runtime exposes only safe flags threshold and dis
   });
   const runtime = toCartIntelligencePublicRuntimeConfig(settings) as Record<string, unknown>;
   assert.equal(runtime.enabled, true);
-  assert.equal(runtime.freeShippingThreshold, 999);
-  assert.equal(runtime.progressBarText, "Spend more for free shipping");
-  assert.equal(runtime.dynamicBannerText, "Members get early access");
+  const progress = runtime.freeShippingProgress as Record<string, unknown>;
+  assert.equal(progress.fallbackThresholdMinor, 99900);
+  assert.equal(progress.progressBarText, "Spend more for free shipping");
+  assert.equal(runtime.dynamicBannerText, undefined);
   assert.equal(runtime.secret, undefined);
+});
+
+test("existing stored threshold remains a backward-compatible optional fallback", () => {
+  const settings = normalizeCartIntelligenceSettings({ freeShippingThreshold: "725" });
+  assert.equal(settings.freeShippingThreshold, 725);
+  assert.equal(settings.freeShippingSourceMode, "SHOPIFY_ONLY");
+  assert.equal(toCartIntelligencePublicRuntimeConfig(settings).freeShippingProgress.fallbackThresholdMinor, 72500);
 });
 
 test("validates cart intelligence patch fields", () => {

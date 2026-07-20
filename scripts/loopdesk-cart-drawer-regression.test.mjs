@@ -124,4 +124,11 @@ assert.match(source, /refreshPromotionRuntime\("init"\)\.then\(function \(applie
 assert.match(source, /function maybeRefreshPromotionsForCart\(cart\) \{[\s\S]*cartNonEmptyAttempted[\s\S]*Number\(cart\.item_count \|\| 0\) <= 0[\s\S]*refreshPromotionRuntime\("cart-non-empty"\);[\s\S]*\}/, "cart becoming non-empty should trigger one additional empty-promotion recovery attempt");
 assert.match(source, /then\(function \(cart\) \{ state\.cart = cart; maybeRefreshPromotionsForCart\(cart\); \}\)/, "normal cart fetch should remain operational and only opportunistically invoke promotion recovery");
 
+assert.match(source, /function freeShippingProgressViewModel\(cart\)[\s\S]*SHOPIFY_WITH_FALLBACK[\s\S]*\["NOT_CONFIGURED", "UNSUPPORTED"\][\s\S]*progress\.resolutionStatus/, "free-shipping fallback must be explicit and must not override ambiguous Shopify rules");
+assert.match(source, /intelligence\.enabled && progress\.enabled && threshold && source/, "progress visibility must require both Cart Intelligence flags and a resolved threshold source");
+assert.match(source, /role="progressbar"[\s\S]*aria-valuemin="0"[\s\S]*aria-valuemax="100"[\s\S]*aria-valuenow=/, "free-shipping progress must expose accessible progressbar values");
+assert.match(source, /remaining === 0 \? "You’ve unlocked free shipping"/, "only a reached threshold should render unlocked free-shipping copy");
+assert.match(source, /document\.addEventListener\("loopdesk:runtime-config"[\s\S]*config\.cartIntelligence = intelligence;[\s\S]*render\(\)/, "late runtime configuration should rerender without controlling drawer asset loading");
+assert.match(css, /\.loopdesk-cart-drawer__shipping-progress-track[\s\S]*\.loopdesk-cart-drawer__shipping-progress-track span/, "free-shipping progress should use drawer-scoped styles");
+
 console.log("LoopDesk cart drawer CONFIG-2B regression checks passed");

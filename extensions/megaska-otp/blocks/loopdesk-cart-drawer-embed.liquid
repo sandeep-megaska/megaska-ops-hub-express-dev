@@ -79,6 +79,7 @@
           showPoweredBy: window.LoopDeskConfig.branding && window.LoopDeskConfig.branding.showPoweredBy,
           shopDomain: shopDomain
         });
+        document.dispatchEvent(new CustomEvent('loopdesk:runtime-config', { detail: { config: payload.config } }));
       }
 
       function formatMoney(amount) {
