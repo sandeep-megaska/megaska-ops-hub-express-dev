@@ -11,7 +11,9 @@ type CompilerFunctionPayload = Omit<LoopDeskFunctionRule, "compilationVersion" |
 
 export function compilationContractVersion(rule: CompiledRuleRecord): 1 | 2 {
   const payload = rule.currentCompilation?.functionPayload as { functionContractVersion?: unknown } | null;
-  return payload?.functionContractVersion === 2 ? 2 : 1;
+  if (payload?.functionContractVersion === 2) return 2;
+  if (payload?.functionContractVersion === undefined || payload.functionContractVersion === 1) return 1;
+  throw new Error(`Rule ${rule.id} uses unsupported Function contract version ${JSON.stringify(payload.functionContractVersion)}.`);
 }
 
 export function mapCompilationToFunctionRule(rule: CompiledRuleRecord): LoopDeskFunctionRule {
