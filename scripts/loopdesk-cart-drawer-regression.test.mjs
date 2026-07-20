@@ -124,10 +124,13 @@ assert.match(source, /refreshPromotionRuntime\("init"\)\.then\(function \(applie
 assert.match(source, /function maybeRefreshPromotionsForCart\(cart\) \{[\s\S]*cartNonEmptyAttempted[\s\S]*Number\(cart\.item_count \|\| 0\) <= 0[\s\S]*refreshPromotionRuntime\("cart-non-empty"\);[\s\S]*\}/, "cart becoming non-empty should trigger one additional empty-promotion recovery attempt");
 assert.match(source, /then\(function \(cart\) \{ state\.cart = cart; maybeRefreshPromotionsForCart\(cart\); \}\)/, "normal cart fetch should remain operational and only opportunistically invoke promotion recovery");
 
-assert.match(source, /function freeShippingProgressViewModel\(cart\)[\s\S]*SHOPIFY_WITH_FALLBACK[\s\S]*\["NOT_CONFIGURED", "UNSUPPORTED"\][\s\S]*progress\.resolutionStatus/, "free-shipping fallback must be explicit and must not override ambiguous Shopify rules");
-assert.match(source, /intelligence\.enabled && progress\.enabled && threshold && source/, "progress visibility must require both Cart Intelligence flags and a resolved threshold source");
-assert.match(source, /role="progressbar"[\s\S]*aria-valuemin="0"[\s\S]*aria-valuemax="100"[\s\S]*aria-valuenow=/, "free-shipping progress must expose accessible progressbar values");
-assert.match(source, /remaining === 0 \? "You’ve unlocked free shipping"/, "only a reached threshold should render unlocked free-shipping copy");
+assert.match(source, /function cartGoalProgressViewModel\(cart\)[\s\S]*intelligence\.enabled === true && progress\.enabled === true[\s\S]*Number\.isFinite\(threshold\) && threshold > 0/, "goal progress must require both flags and a valid positive merchant target");
+assert.match(source, /remaining = Math\.max\(0, threshold - subtotal\)[\s\S]*unlocked = remaining === 0[\s\S]*progressPercent: unlocked \? 100 : Math\.min\(100, Math\.max\(0, Math\.round/, "goal progress must handle below, exact, and above-target subtotals and cap percentage");
+assert.match(source, /visible: !\(unlocked && progress\.hideAfterUnlock === true\)/, "unlocked goal must hide only when configured");
+assert.match(source, /unlocked \? String\(progress\.unlockedText[\s\S]*String\(progress\.progressText/, "goal progress must use merchant-authored locked and unlocked messages");
+assert.match(source, /replace\(\/\\\{amount\\\}\/g, money\(viewModel\.remainingAmountMinor, viewModel\.currency\)\)/, "remaining amount must use the existing currency formatter");
+assert.match(source, /role="progressbar"[\s\S]*aria-valuemin="0"[\s\S]*aria-valuemax="100"[\s\S]*aria-valuenow=/, "cart goal progress must expose accessible progressbar values");
+assert.doesNotMatch(source, /deliveryProfiles|resolvedShopifyThresholdMinor|SHOPIFY_WITH_FALLBACK/, "cart goal progress must not read or infer Shopify shipping configuration");
 assert.match(source, /document\.addEventListener\("loopdesk:runtime-config"[\s\S]*config\.cartIntelligence = normalizeCartIntelligence\(intelligence\);[\s\S]*render\(\)/, "late runtime configuration should normalize and rerender without controlling drawer asset loading");
 assert.match(css, /\.loopdesk-cart-drawer__shipping-progress-track[\s\S]*\.loopdesk-cart-drawer__shipping-progress-track span/, "free-shipping progress should use drawer-scoped styles");
 assert.match(source, /function renderTrustBadges\(placement\)[\s\S]*intelligence\.enabled !== true[\s\S]*badges\.enabled !== true[\s\S]*item\.enabled && item\.label/, "trust badges should require both master switches and render only enabled labeled items");

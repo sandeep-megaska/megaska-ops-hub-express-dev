@@ -144,7 +144,7 @@ export default async function InstallationWizardPage({ searchParams }: PageProps
   const delhiveryComplete = Boolean(delhivery.enabled && delhivery.hasApiToken && delhivery.pickupLocation && delhivery.originPincode);
   const razorpayComplete = Boolean(razorpay.enabled && razorpay.keyId && razorpay.hasKeySecret);
   const runtimeComplete = Boolean(runtimeConfig.cart && runtimeConfig.branding && runtimeConfig.cartIntelligence && runtimeConfig.razorpay && runtimeConfig.delhivery);
-  const cartIntelligenceConfigured = Boolean(cartIntelligence.enabled || cartIntelligence.freeShippingProgressEnabled || cartIntelligence.trustBadgesEnabled || cartIntelligence.dynamicBannerEnabled || cartIntelligence.upsellsEnabled || cartIntelligence.bundlesEnabled || cartIntelligence.aiRecommendationsEnabled || cartIntelligence.freeShippingThreshold > 0);
+  const cartIntelligenceConfigured = Boolean(cartIntelligence.enabled || cartIntelligence.cartGoalProgress.enabled || cartIntelligence.trustBadgesEnabled || cartIntelligence.dynamicBannerEnabled || cartIntelligence.upsellsEnabled || cartIntelligence.bundlesEnabled || cartIntelligence.aiRecommendationsEnabled || (cartIntelligence.cartGoalProgress.targetAmountMinor || 0) > 0);
   const cartNeedsAttention = settings.cart.drawerMode === "loopdesk" || settings.cart.drawerMode === "auto";
   const ready = installationComplete && runtimeComplete && missingCoreEnv.length === 0 && brandingComplete && delhiveryComplete && razorpayComplete;
 
@@ -227,7 +227,7 @@ export default async function InstallationWizardPage({ searchParams }: PageProps
           title="Cart Intelligence setup status"
           status={cartIntelligenceConfigured ? "Complete" : "Incomplete"}
           description="Shows merchant-configurable Cart Intelligence setup status. This is configuration foundation only and may require later activation before any storefront feature renders."
-          details={<p>Module key: <strong>cart_intelligence_config</strong>. Master enabled: <strong>{cartIntelligence.enabled ? "Yes" : "No"}</strong>. Free shipping progress: <strong>{cartIntelligence.freeShippingProgressEnabled ? "Yes" : "No"}</strong>. Threshold: <strong>{cartIntelligence.freeShippingThreshold}</strong>. Upsells, bundles, and AI flags are saved as safe public flags only.</p>}
+          details={<p>Module key: <strong>cart_intelligence_config</strong>. Master enabled: <strong>{cartIntelligence.enabled ? "Yes" : "No"}</strong>. Cart goal progress: <strong>{cartIntelligence.cartGoalProgress.enabled ? "Yes" : "No"}</strong>. Target: <strong>{cartIntelligence.cartGoalProgress.targetAmountMinor == null ? "Not set" : cartIntelligence.cartGoalProgress.targetAmountMinor / 100}</strong>. Upsells, bundles, and AI flags are saved as safe public flags only.</p>}
           actions={<LinkButton href={`${settingsHref}#cart-intelligence`}>Open Cart Intelligence settings</LinkButton>}
         />
         <WizardStep

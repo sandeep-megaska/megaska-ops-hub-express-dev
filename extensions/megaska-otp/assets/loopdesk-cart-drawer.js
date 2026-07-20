@@ -315,18 +315,30 @@
   }
 
   function normalizeCartIntelligence(value) {
-    if (!isPlainObject(value)) return { enabled: false, freeShippingProgress: { enabled: false }, trustBadges: null };
+    if (!isPlainObject(value)) return { enabled: false, cartGoalProgress: { enabled: false }, trustBadges: null };
+    var rawGoal = isPlainObject(value.cartGoalProgress) ? value.cartGoalProgress : (isPlainObject(value.freeShippingProgress) ? value.freeShippingProgress : {});
+    var rawTarget = firstDefined(rawGoal.targetAmountMinor, rawGoal.fallbackThresholdMinor);
+    var target = Number(rawTarget);
+    var goal = {
+      enabled: rawGoal.enabled === true,
+      goalType: "FREE_SHIPPING",
+      goalName: text(rawGoal.goalName, "Free Shipping").slice(0, 80),
+      targetAmountMinor: Number.isFinite(target) ? Math.round(target) : null,
+      progressText: text(firstDefined(rawGoal.progressText, rawGoal.progressBarText), "You’re {amount} away from free shipping").slice(0, 160),
+      unlockedText: text(rawGoal.unlockedText, "You’ve unlocked free shipping").slice(0, 160),
+      hideAfterUnlock: rawGoal.hideAfterUnlock === true
+    };
     var badges = value.trustBadges;
     if (!isPlainObject(badges) || !Array.isArray(badges.items) || badges.items.length > 6 || ["BELOW_TOTALS", "BELOW_CHECKOUT_BUTTON"].indexOf(badges.placement) === -1 || ["ROW", "GRID"].indexOf(badges.layout) === -1) {
-      return Object.assign({}, value, { trustBadges: null });
+      return Object.assign({}, value, { cartGoalProgress: goal, trustBadges: null });
     }
     var icons = ["secure-payment", "delivery", "exchange", "cod", "support", "authenticity", "custom"];
     var items = badges.items.map(function (item, index) {
       if (!isPlainObject(item) || icons.indexOf(item.icon) === -1 || typeof item.label !== "string") return null;
       return { id: text(item.id, "badge-" + index).slice(0, 64), enabled: item.enabled === true, icon: item.icon, label: item.label.replace(/[<>]/g, "").replace(/javascript:/gi, "").trim().slice(0, 60), sortOrder: Number.isFinite(Number(item.sortOrder)) ? Number(item.sortOrder) : index };
     });
-    if (items.some(function (item) { return !item; })) return Object.assign({}, value, { trustBadges: null });
-    return Object.assign({}, value, { trustBadges: { enabled: badges.enabled === true, placement: badges.placement, layout: badges.layout, items: items.sort(function (a, b) { return a.sortOrder - b.sortOrder; }) } });
+    if (items.some(function (item) { return !item; })) return Object.assign({}, value, { cartGoalProgress: goal, trustBadges: null });
+    return Object.assign({}, value, { cartGoalProgress: goal, trustBadges: { enabled: badges.enabled === true, placement: badges.placement, layout: badges.layout, items: items.sort(function (a, b) { return a.sortOrder - b.sortOrder; }) } });
   }
 
   function debugLog(message, payload, force) {
@@ -1016,28 +1028,24 @@
     }).join("");
   }
 
-  function freeShippingProgressViewModel(cart) {
+  function cartGoalProgressViewModel(cart) {
     var intelligence = config.cartIntelligence || {};
-    var progress = intelligence.freeShippingProgress || {};
+    var progress = intelligence.cartGoalProgress || {};
     var subtotal = Math.max(0, Number(cart && (cart.items_subtotal_price || cart.total_price) || 0));
     var currency = String(cart && cart.currency || "").toUpperCase();
-    var mode = String(progress.sourceMode || "SHOPIFY_ONLY");
-    var shopifyUsable = progress.resolutionStatus === "AVAILABLE" && Number(progress.resolvedShopifyThresholdMinor) > 0 && String(progress.resolvedCurrency || "").toUpperCase() === currency;
-    var threshold = shopifyUsable ? Number(progress.resolvedShopifyThresholdMinor) : null;
-    var source = shopifyUsable ? "SHOPIFY_DELIVERY_PROFILE" : null;
-    var fallbackAllowed = mode === "MANUAL_DISPLAY_ONLY" || (mode === "SHOPIFY_WITH_FALLBACK" && ["NOT_CONFIGURED", "UNSUPPORTED"].indexOf(progress.resolutionStatus) !== -1);
-    if (fallbackAllowed && !threshold && Number(progress.fallbackThresholdMinor) > 0) { threshold = Number(progress.fallbackThresholdMinor); source = "MERCHANT_FALLBACK"; }
-    var visible = Boolean(intelligence.enabled && progress.enabled && threshold && source);
-    if (!visible) return { visible: false, status: progress.resolutionStatus || "UNSUPPORTED", source: null, currency: null, thresholdMinor: null, currentSubtotalMinor: subtotal, remainingMinor: null, progressPercent: null, message: null };
+    var threshold = Number(progress.targetAmountMinor);
+    var visible = Boolean(intelligence.enabled === true && progress.enabled === true && Number.isFinite(threshold) && threshold > 0);
+    if (!visible) return { visible: false, goalType: "FREE_SHIPPING", goalName: progress.goalName || "Free Shipping", currency: currency || null, targetAmountMinor: 0, currentSubtotalMinor: subtotal, remainingAmountMinor: 0, progressPercent: 0, unlocked: false, message: "" };
     var remaining = Math.max(0, threshold - subtotal);
-    return { visible: true, status: remaining === 0 ? "UNLOCKED" : "AVAILABLE", source: source, currency: currency, thresholdMinor: threshold, currentSubtotalMinor: subtotal, remainingMinor: remaining, progressPercent: remaining === 0 ? 100 : Math.min(100, Math.max(0, Math.round(subtotal / threshold * 100))), message: remaining === 0 ? "You’ve unlocked free shipping" : String(progress.progressBarText || "You're {amount} away from free shipping") };
+    var unlocked = remaining === 0;
+    return { visible: !(unlocked && progress.hideAfterUnlock === true), goalType: "FREE_SHIPPING", goalName: progress.goalName || "Free Shipping", currency: currency || null, targetAmountMinor: threshold, currentSubtotalMinor: subtotal, remainingAmountMinor: remaining, progressPercent: unlocked ? 100 : Math.min(100, Math.max(0, Math.round(subtotal / threshold * 100))), unlocked: unlocked, message: unlocked ? String(progress.unlockedText || "You’ve unlocked free shipping") : String(progress.progressText || "You’re {amount} away from free shipping") };
   }
 
-  function renderFreeShippingProgress(cart) {
-    var viewModel = freeShippingProgressViewModel(cart);
+  function renderCartGoalProgress(cart) {
+    var viewModel = cartGoalProgressViewModel(cart);
     if (!viewModel.visible) return "";
-    var message = viewModel.status === "UNLOCKED" ? viewModel.message : viewModel.message.replace(/\{amount\}/g, money(viewModel.remainingMinor, viewModel.currency));
-    return '<section class="loopdesk-cart-drawer__shipping-progress" aria-live="polite"><p class="loopdesk-cart-drawer__shipping-progress-text">' + escapeHtml(message) + '</p><div class="loopdesk-cart-drawer__shipping-progress-track" role="progressbar" aria-label="Free shipping progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + viewModel.progressPercent + '"><span style="width:' + viewModel.progressPercent + '%"></span></div></section>';
+    var message = viewModel.unlocked ? viewModel.message : viewModel.message.replace(/\{amount\}/g, money(viewModel.remainingAmountMinor, viewModel.currency));
+    return '<section class="loopdesk-cart-drawer__shipping-progress" aria-live="polite"><p class="loopdesk-cart-drawer__shipping-progress-text">' + escapeHtml(message) + '</p><div class="loopdesk-cart-drawer__shipping-progress-track" role="progressbar" aria-label="' + escapeHtml(viewModel.goalName) + ' progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + viewModel.progressPercent + '"><span style="width:' + viewModel.progressPercent + '%"></span></div></section>';
   }
 
   function trustBadgeIcon(icon) {
@@ -1071,56 +1079,68 @@
     render();
   });
 
-  function render() {
-    var cart = state.cart;
-    var itemCount = cart && typeof cart.item_count === "number" ? cart.item_count : 0;
-    var hasItems = itemCount > 0;
+ function render() {
+  var cart = state.cart;
+  var itemCount = cart && typeof cart.item_count === "number" ? cart.item_count : 0;
+  var hasItems = itemCount > 0;
 
-    if (!elements.panel) return;
-    elements.panel.setAttribute("aria-hidden", state.open ? "false" : "true");
-    elements.overlay.hidden = !state.open;
-    if (elements.root) elements.root.classList.toggle("loopdesk-cart-drawer--open", state.open);
-    document.documentElement.classList.toggle("loopdesk-cart-drawer-is-open", state.open);
-    if (document.body) document.body.classList.toggle("loopdesk-cart-drawer-is-open", state.open);
+  if (!elements.panel) return;
+  elements.panel.setAttribute("aria-hidden", state.open ? "false" : "true");
+  elements.overlay.hidden = !state.open;
+  if (elements.root) elements.root.classList.toggle("loopdesk-cart-drawer--open", state.open);
+  document.documentElement.classList.toggle("loopdesk-cart-drawer-is-open", state.open);
+  if (document.body) document.body.classList.toggle("loopdesk-cart-drawer-is-open", state.open);
 
-    var slotContext = { cart: cart, cartIntelligence: config.cartIntelligence, promotions: config.promotions, state: state, money: money };
-    elements.body.innerHTML = state.error
-      ? '<div class="loopdesk-cart-drawer__error">We could not load your cart. You can still use the cart page.</div>'
-      : renderFreeShippingProgress(cart)
-        + renderCartDrawerSlot("BEFORE_CART_LINES", slotContext)
-        + renderLines(cart)
-        + renderCartDrawerSlot("AFTER_CART_LINES", slotContext)
-        + renderCartDrawerSlot("BEFORE_PROMOTIONS", slotContext)
-        + renderOffers(cart)
-        + renderCartDrawerSlot("AFTER_PROMOTIONS", slotContext)
-        + renderCartDrawerSlot("BEFORE_COUPON", slotContext)
-        + '<span data-loopdesk-slot="AFTER_COUPON">' + renderCartDrawerSlot("AFTER_COUPON", slotContext) + '</span>';
+  var slotContext = {
+    cart: cart,
+    cartIntelligence: config.cartIntelligence,
+    promotions: config.promotions,
+    state: state,
+    money: money
+  };
 
-    elements.subtotal.textContent = money(cart ? cart.total_price : 0, cart && cart.currency);
-    renderBoundSlot("BEFORE_TOTALS", slotContext);
-    renderBoundSlot("AFTER_TOTALS", slotContext);
-    renderBoundSlot("BEFORE_CHECKOUT", slotContext);
-    renderBoundSlot("AFTER_CHECKOUT", slotContext);
-    renderBoundSlot("BEFORE_FOOTER", slotContext);
-    renderBoundSlot("AFTER_FOOTER", slotContext);
-    elements.trustBelowTotals.innerHTML = renderTrustBadges("BELOW_TOTALS");
-    elements.trustBelowCheckout.innerHTML = renderTrustBadges("BELOW_CHECKOUT_BUTTON");
-    elements.count.textContent = itemCount ? "(" + itemCount + ")" : "";
-    elements.express.hidden = !config.cart.expressCheckoutButtonEnabled;
-    elements.express.disabled = !hasItems || state.loading || state.expressCheckoutLock;
-    elements.express.setAttribute("aria-disabled", elements.express.disabled ? "true" : "false");
-    elements.express.classList.toggle("is-loading", state.expressCheckoutLock);
-    if (state.expressCheckoutLock) {
-      elements.express.textContent = "Opening checkout...";
-    } else if (!hasItems) {
-      elements.express.textContent = "Add items to checkout";
-    } else {
-      elements.express.textContent = config.labels.expressCheckoutText;
-    }
-    elements.viewCart.hidden = !config.cart.viewCartButtonEnabled;
-    if (elements.poweredBy) elements.poweredBy.hidden = config.branding.showPoweredBy === false;
+  elements.body.innerHTML = state.error
+    ? '<div class="loopdesk-cart-drawer__error">We could not load your cart. You can still use the cart page.</div>'
+    : renderCartGoalProgress(cart)
+      + renderCartDrawerSlot("BEFORE_CART_LINES", slotContext)
+      + renderLines(cart)
+      + renderCartDrawerSlot("AFTER_CART_LINES", slotContext)
+      + renderCartDrawerSlot("BEFORE_PROMOTIONS", slotContext)
+      + renderOffers(cart)
+      + renderCartDrawerSlot("AFTER_PROMOTIONS", slotContext)
+      + renderCartDrawerSlot("BEFORE_COUPON", slotContext)
+      + '<span data-loopdesk-slot="AFTER_COUPON">'
+      + renderCartDrawerSlot("AFTER_COUPON", slotContext)
+      + '</span>';
+
+  elements.subtotal.textContent = money(cart ? cart.total_price : 0, cart && cart.currency);
+  renderBoundSlot("BEFORE_TOTALS", slotContext);
+  renderBoundSlot("AFTER_TOTALS", slotContext);
+  renderBoundSlot("BEFORE_CHECKOUT", slotContext);
+  renderBoundSlot("AFTER_CHECKOUT", slotContext);
+  renderBoundSlot("BEFORE_FOOTER", slotContext);
+  renderBoundSlot("AFTER_FOOTER", slotContext);
+
+  elements.trustBelowTotals.innerHTML = renderTrustBadges("BELOW_TOTALS");
+  elements.trustBelowCheckout.innerHTML = renderTrustBadges("BELOW_CHECKOUT_BUTTON");
+
+  elements.count.textContent = itemCount ? "(" + itemCount + ")" : "";
+  elements.express.hidden = !config.cart.expressCheckoutButtonEnabled;
+  elements.express.disabled = !hasItems || state.loading || state.expressCheckoutLock;
+  elements.express.setAttribute("aria-disabled", elements.express.disabled ? "true" : "false");
+  elements.express.classList.toggle("is-loading", state.expressCheckoutLock);
+
+  if (state.expressCheckoutLock) {
+    elements.express.textContent = "Opening checkout...";
+  } else if (!hasItems) {
+    elements.express.textContent = "Add items to checkout";
+  } else {
+    elements.express.textContent = config.labels.expressCheckoutText;
   }
 
+  elements.viewCart.hidden = !config.cart.viewCartButtonEnabled;
+  if (elements.poweredBy) elements.poweredBy.hidden = config.branding.showPoweredBy === false;
+}
   function setOpen(open) {
     state.hostMode = LOOPDESK_HOST_MODE;
     if (open) rememberBodyLockState();

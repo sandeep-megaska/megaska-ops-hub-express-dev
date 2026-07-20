@@ -2,8 +2,6 @@ import { prisma } from "../db/prisma";
 import { getDelhiveryRuntimeConfig, type DelhiveryPublicRuntimeConfig } from "../delhivery/config";
 import { getRazorpayRuntimeConfig, type RazorpayPublicRuntimeConfig } from "../razorpay/config";
 import { shopifyAdminGraphql } from "../shopify/admin";
-import { readShopifyFreeShipping } from "../cart-intelligence/free-shipping/shopify-reader.server";
-import type { FreeShippingSourceMode, ShopifyFreeShippingAudit } from "../cart-intelligence/free-shipping/types";
 import { cartDrawerModuleDefaults } from "../cart-intelligence/modules/defaults";
 import { normalizeCartDrawerModules } from "../cart-intelligence/modules/normalize";
 import type { CartDrawerModulesRuntime } from "../cart-intelligence/modules/types";
@@ -75,10 +73,7 @@ export type LoopDeskMerchantSettings = {
 
 export type CartIntelligenceSettings = {
   enabled: boolean;
-  freeShippingProgressEnabled: boolean;
-  freeShippingThreshold: number;
-  freeShippingSourceMode: FreeShippingSourceMode;
-  progressBarText: string;
+  cartGoalProgress: CartGoalProgressConfig;
   trustBadgesEnabled: boolean;
   trustBadges: TrustBadgeConfig;
   dynamicBannerEnabled: boolean;
@@ -89,6 +84,16 @@ export type CartIntelligenceSettings = {
   cartDrawerModules: CartDrawerModulesRuntime;
 };
 
+export type CartGoalProgressConfig = {
+  enabled: boolean;
+  goalType: "FREE_SHIPPING";
+  goalName: string;
+  targetAmountMinor: number | null;
+  progressText: string;
+  unlockedText: string;
+  hideAfterUnlock: boolean;
+};
+
 export type TrustBadgeIcon = "secure-payment" | "delivery" | "exchange" | "cod" | "support" | "authenticity" | "custom";
 export type TrustBadgeItem = { id: string; enabled: boolean; icon: TrustBadgeIcon; label: string; sortOrder: number };
 export type TrustBadgeConfig = { enabled: boolean; placement: "BELOW_TOTALS" | "BELOW_CHECKOUT_BUTTON"; layout: "ROW" | "GRID"; items: TrustBadgeItem[] };
@@ -97,19 +102,7 @@ export type CartIntelligencePublicRuntimeConfig = {
   enabled: boolean;
   cartDrawerModules: CartDrawerModulesRuntime;
   trustBadges: TrustBadgeConfig;
-  freeShippingProgress: {
-    enabled: boolean;
-    sourceMode: FreeShippingSourceMode;
-    fallbackThresholdMinor: number | null;
-    progressBarText: string;
-    resolvedShopifyThresholdMinor: number | null;
-    resolvedCurrency: string | null;
-    resolutionStatus: string;
-    resolutionSource: "SHOPIFY_DELIVERY_PROFILE" | null;
-    sourceProfile: string | null;
-    lastResolvedAt: string | null;
-    diagnostic: ShopifyFreeShippingAudit;
-  };
+  cartGoalProgress: CartGoalProgressConfig;
 };
 
 export type LoopDeskPublicRuntimeConfig = Pick<
@@ -245,9 +238,6 @@ function status(
     ? value
     : fallback;
 }
-function freeShippingSourceMode(value: unknown): FreeShippingSourceMode {
-  return value === "SHOPIFY_WITH_FALLBACK" || value === "MANUAL_DISPLAY_ONLY" ? value : "SHOPIFY_ONLY";
-}
 const TRUST_BADGE_ICONS = ["secure-payment", "delivery", "exchange", "cod", "support", "authenticity", "custom"] as const;
 const DEFAULT_TRUST_BADGES: TrustBadgeItem[] = [
   { id: "secure-payments", enabled: false, icon: "secure-payment", label: "Secure payments", sortOrder: 0 },
@@ -285,10 +275,7 @@ export function normalizeCartIntelligenceSettings(input: unknown): CartIntellige
   });
   return {
     enabled: bool(raw.enabled, false),
-    freeShippingProgressEnabled: bool(raw.freeShippingProgressEnabled, false),
-    freeShippingThreshold: numberValue(raw.freeShippingThreshold, 0),
-    freeShippingSourceMode: freeShippingSourceMode(raw.freeShippingSourceMode),
-    progressBarText: text(raw.progressBarText, "You're {amount} away from free shipping", 160),
+    cartGoalProgress: normalizeCartGoalProgressConfig(raw),
     trustBadgesEnabled: bool(raw.trustBadgesEnabled, isRecord(raw.trustBadges) ? bool(raw.trustBadges.enabled, false) : false),
     trustBadges: normalizeTrustBadges(raw.trustBadges, bool(raw.trustBadgesEnabled, false)),
     dynamicBannerEnabled: bool(raw.dynamicBannerEnabled, false),
@@ -297,6 +284,32 @@ export function normalizeCartIntelligenceSettings(input: unknown): CartIntellige
     bundlesEnabled: bool(raw.bundlesEnabled, false),
     aiRecommendationsEnabled: bool(raw.aiRecommendationsEnabled, false),
     cartDrawerModules: raw.cartDrawerModules === undefined ? defaultModules : normalizeCartDrawerModules(raw.cartDrawerModules),
+  };
+}
+
+export function normalizeCartGoalProgressConfig(input: unknown): CartGoalProgressConfig {
+  const root = isRecord(input) ? input : {};
+  const nested = isRecord(root.cartGoalProgress)
+    ? root.cartGoalProgress
+    : isRecord(root.freeShippingProgress) ? root.freeShippingProgress : {};
+  const enabled = nested.enabled ?? root.cartGoalProgressEnabled ?? root.freeShippingProgressEnabled;
+  const minor = nested.targetAmountMinor ?? root.targetAmountMinor ?? nested.fallbackThresholdMinor ?? root.fallbackThresholdMinor;
+  const major = root.targetAmount ?? root.freeShippingThreshold ?? root.fallbackThreshold ?? nested.freeShippingThreshold ?? nested.fallbackThreshold;
+  const hasMinor = minor !== undefined && minor !== null && minor !== "";
+  const hasMajor = major !== undefined && major !== null && major !== "";
+  const parsedMinor = hasMinor ? Number(minor) : NaN;
+  const parsedMajor = hasMajor ? Number(major) : NaN;
+  const targetAmountMinor = Number.isFinite(parsedMinor)
+    ? Math.round(parsedMinor)
+    : Number.isFinite(parsedMajor) ? Math.round(parsedMajor * 100) : null;
+  return {
+    enabled: bool(enabled, false),
+    goalType: "FREE_SHIPPING",
+    goalName: text(nested.goalName ?? root.goalName, "Free Shipping", 80),
+    targetAmountMinor,
+    progressText: text(nested.progressText ?? root.progressText ?? nested.progressBarText ?? root.progressBarText, "You’re {amount} away from free shipping", 160),
+    unlockedText: text(nested.unlockedText ?? root.unlockedText, "You’ve unlocked free shipping", 160),
+    hideAfterUnlock: bool(nested.hideAfterUnlock ?? root.hideAfterUnlock, false),
   };
 }
 
@@ -313,18 +326,20 @@ export function validateCartIntelligenceSettingsPatch(patch: unknown): string[] 
   };
   [
     ["enabled", "Cart Intelligence Enabled"],
-    ["freeShippingProgressEnabled", "Free Shipping Progress Enabled"],
+    ["cartGoalProgressEnabled", "Cart Goal Progress Enabled"],
     ["trustBadgesEnabled", "Trust Badges Enabled"],
     ["dynamicBannerEnabled", "Dynamic Banner Enabled"],
     ["upsellsEnabled", "Upsells Enabled"],
     ["bundlesEnabled", "Bundles Enabled"],
     ["aiRecommendationsEnabled", "AI Recommendations Enabled"],
   ].forEach(([key, label]) => validateBool(raw[key], label));
-  if (raw.freeShippingThreshold !== undefined && !Number.isFinite(Number(raw.freeShippingThreshold))) {
-    errors.push("Fallback Free Shipping Display Threshold must be a number.");
+  if (raw.targetAmount !== undefined && !Number.isFinite(Number(raw.targetAmount))) {
+    errors.push("Goal Target Amount must be a number.");
   }
-  if (raw.freeShippingSourceMode !== undefined && !["SHOPIFY_ONLY", "SHOPIFY_WITH_FALLBACK", "MANUAL_DISPLAY_ONLY"].includes(String(raw.freeShippingSourceMode))) errors.push("Free Shipping Source is invalid.");
-  validateText(raw.progressBarText, "Progress Bar Text", 160);
+  validateText(raw.goalName, "Goal Name", 80);
+  validateText(raw.progressText, "Progress Message", 160);
+  validateText(raw.unlockedText, "Unlocked Message", 160);
+  validateBool(raw.hideAfterUnlock, "Hide After Unlock");
   validateText(raw.dynamicBannerText, "Dynamic Banner Text", 160);
   if (raw.trustBadges !== undefined) {
     if (!isRecord(raw.trustBadges)) errors.push("Trust Badges must be an object.");
@@ -345,9 +360,31 @@ export function validateCartIntelligenceSettingsPatch(patch: unknown): string[] 
   return errors;
 }
 
-export function toCartIntelligencePublicRuntimeConfig(settings: CartIntelligenceSettings, audit?: ShopifyFreeShippingAudit): CartIntelligencePublicRuntimeConfig {
-  const resolution = audit || { status: "UNSUPPORTED" as const, thresholdMinor: null, currency: null, profileId: null, profileName: null, profileCount: 0, applicableProfileCount: 0, reason: "Shopify resolution data unavailable", resolvedAt: null };
-  return { enabled: settings.enabled, cartDrawerModules: normalizeCartDrawerModules(settings.cartDrawerModules), trustBadges: normalizeTrustBadges(settings.trustBadges, settings.trustBadgesEnabled), freeShippingProgress: { enabled: settings.freeShippingProgressEnabled, sourceMode: settings.freeShippingSourceMode, fallbackThresholdMinor: settings.freeShippingThreshold > 0 ? Math.round(settings.freeShippingThreshold * 100) : null, progressBarText: settings.progressBarText, resolvedShopifyThresholdMinor: resolution.status === "AVAILABLE" ? resolution.thresholdMinor : null, resolvedCurrency: resolution.currency, resolutionStatus: resolution.status, resolutionSource: resolution.status === "AVAILABLE" ? "SHOPIFY_DELIVERY_PROFILE" : null, sourceProfile: resolution.profileName, lastResolvedAt: resolution.resolvedAt, diagnostic: resolution } };
+export function toCartIntelligencePublicRuntimeConfig(
+  settings: CartIntelligenceSettings
+): CartIntelligencePublicRuntimeConfig {
+  return {
+    enabled: settings.enabled,
+    cartDrawerModules: normalizeCartDrawerModules(settings.cartDrawerModules),
+    trustBadges: normalizeTrustBadges(
+      settings.trustBadges,
+      settings.trustBadgesEnabled
+    ),
+    cartGoalProgress: settings.cartGoalProgress,
+  };
+}
+  export function toCartIntelligencePublicRuntimeConfig(
+  settings: CartIntelligenceSettings
+): CartIntelligencePublicRuntimeConfig {
+  return {
+    enabled: settings.enabled,
+    cartDrawerModules: normalizeCartDrawerModules(settings.cartDrawerModules),
+    trustBadges: normalizeTrustBadges(
+      settings.trustBadges,
+      settings.trustBadgesEnabled
+    ),
+    cartGoalProgress: settings.cartGoalProgress,
+  };
 }
 
 export function validateLoopDeskMerchantSettingsPatch(
@@ -791,11 +828,6 @@ export async function getCartIntelligenceSettings(shopId: string) {
   return { ...settings, enabled: Boolean(stored?.enabled && settings.enabled) };
 }
 
-export async function getCartIntelligenceAdminResolution(shopId: string) {
-  const shop = await db().shop.findUnique({ where: { id: shopId }, select: { shopName: true, shopDomain: true, primaryDomain: true, myshopifyDomain: true } });
-  return shop?.shopDomain ? readShopifyFreeShipping({ shopDomain: shop.shopDomain }) : readShopifyFreeShipping({ shopDomain: "" });
-}
-
 export async function updateCartIntelligenceSettings(shopId: string, patch: unknown) {
   const errors = validateCartIntelligenceSettingsPatch(patch);
   if (errors.length) throw new Error(errors.join(" "));
@@ -810,16 +842,14 @@ export async function updateCartIntelligenceSettings(shopId: string, patch: unkn
 }
 
 export async function getLoopDeskRuntimeConfig(shopId: string) {
-  const [settings, cartIntelligence, promotions, delhivery, razorpay, shop] = await Promise.all([
+  const [settings, cartIntelligence, promotions, delhivery, razorpay] = await Promise.all([
     getLoopDeskMerchantSettings(shopId),
     getCartIntelligenceSettings(shopId),
     getCompiledPromotionRuntime(shopId),
     getDelhiveryRuntimeConfig(shopId),
     getRazorpayRuntimeConfig(shopId),
-    db().shop.findUnique({ where: { id: shopId }, select: { shopName: true, shopDomain: true, primaryDomain: true, myshopifyDomain: true } }),
   ]);
-  const audit = shop?.shopDomain ? await readShopifyFreeShipping({ shopDomain: shop.shopDomain }) : undefined;
-  const cartIntelligenceRuntime = toCartIntelligencePublicRuntimeConfig(cartIntelligence, audit);
+  const cartIntelligenceRuntime = toCartIntelligencePublicRuntimeConfig(cartIntelligence);
   return { ...toLoopDeskPublicRuntimeConfig(settings), cartIntelligence: cartIntelligenceRuntime, cart_intelligence_config: cartIntelligenceRuntime, promotions, delhivery, razorpay };
 }
 export const normalizeLoopDeskRuntimeConfig = normalizeLoopDeskMerchantSettings;
