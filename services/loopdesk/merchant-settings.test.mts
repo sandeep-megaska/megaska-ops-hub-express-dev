@@ -151,7 +151,7 @@ test("cart drawer module config is normalized and remains backward compatible", 
   ] });
   const runtime = toCartIntelligencePublicRuntimeConfig(settings);
   assert.ok(runtime.cartDrawerModules.modules.some((module) => module.key === "DYNAMIC_BANNER"));
-  assert.equal(runtime.freeShippingProgress.enabled, false);
+  assert.equal(runtime.cartGoalProgress.enabled, false);
   assert.equal(runtime.trustBadges.enabled, false);
 });
 

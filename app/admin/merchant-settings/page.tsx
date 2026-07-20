@@ -640,6 +640,26 @@ export default async function MerchantSettingsPage({
               );
             })}
           </div>
+          <div className="grid gap-4 rounded-xl border border-gray-200 bg-white p-4">
+            <div>
+              <h3 className="font-semibold text-gray-950">Cart Drawer Modules</h3>
+              <p className={helpClass}>Module ordering controls optional cart sections only. Core cart items, totals and checkout remain fixed for safety.</p>
+            </div>
+            <div className="hidden grid-cols-[2fr_1fr_2fr_7rem] gap-3 text-xs font-semibold uppercase tracking-wide text-gray-500 md:grid">
+              <span>Module</span><span>Enabled</span><span>Placement</span><span>Order</span>
+            </div>
+            {configurableCartModules.map(({ key, label }) => {
+              const configuredModule = cartIntelligence.cartDrawerModules.modules.find((candidate) => candidate.key === key);
+              return (
+                <div key={key} className="grid items-end gap-3 rounded-lg border border-gray-200 bg-gray-50 p-3 md:grid-cols-[2fr_1fr_2fr_7rem]">
+                  <strong className="text-sm text-gray-900">{label}</strong>
+                  <Check label="Enabled" name={`cartDrawerModuleEnabled:${key}`} defaultChecked={configuredModule?.enabled === true} />
+                  <label className="grid gap-2 text-sm font-medium text-gray-800"><span>Placement</span><select className="rounded-lg border border-gray-300 bg-white px-3 py-2" name={`cartDrawerModuleSlot:${key}`} defaultValue={configuredModule?.slot || "AFTER_CHECKOUT"}>{CART_DRAWER_MODULE_SLOTS.map((slot) => <option key={slot} value={slot}>{slot.replaceAll("_", " ").toLowerCase()}</option>)}</select></label>
+                  <Field label="Order" name={`cartDrawerModuleOrder:${key}`} type="number" defaultValue={String(configuredModule?.sortOrder ?? 100)} />
+                </div>
+              );
+            })}
+          </div>
         </section>
 
         <section id="razorpay" className={`${cardClass} grid gap-5`}>
