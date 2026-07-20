@@ -2,6 +2,8 @@ import { prisma } from "../db/prisma";
 import { getDelhiveryRuntimeConfig, type DelhiveryPublicRuntimeConfig } from "../delhivery/config";
 import { getRazorpayRuntimeConfig, type RazorpayPublicRuntimeConfig } from "../razorpay/config";
 import { shopifyAdminGraphql } from "../shopify/admin";
+import { readShopifyFreeShipping } from "../cart-intelligence/free-shipping/shopify-reader.server";
+import type { FreeShippingSourceMode, ShopifyFreeShippingAudit } from "../cart-intelligence/free-shipping/types";
 
 export const LOOPDESK_RUNTIME_CONFIG_MODULE_KEY = "loopdesk_runtime_config";
 export const CART_INTELLIGENCE_CONFIG_MODULE_KEY = "cart_intelligence_config";
@@ -72,6 +74,7 @@ export type CartIntelligenceSettings = {
   enabled: boolean;
   freeShippingProgressEnabled: boolean;
   freeShippingThreshold: number;
+  freeShippingSourceMode: FreeShippingSourceMode;
   progressBarText: string;
   trustBadgesEnabled: boolean;
   dynamicBannerEnabled: boolean;
@@ -81,7 +84,22 @@ export type CartIntelligenceSettings = {
   aiRecommendationsEnabled: boolean;
 };
 
-export type CartIntelligencePublicRuntimeConfig = CartIntelligenceSettings;
+export type CartIntelligencePublicRuntimeConfig = {
+  enabled: boolean;
+  freeShippingProgress: {
+    enabled: boolean;
+    sourceMode: FreeShippingSourceMode;
+    fallbackThresholdMinor: number | null;
+    progressBarText: string;
+    resolvedShopifyThresholdMinor: number | null;
+    resolvedCurrency: string | null;
+    resolutionStatus: string;
+    resolutionSource: "SHOPIFY_DELIVERY_PROFILE" | null;
+    sourceProfile: string | null;
+    lastResolvedAt: string | null;
+    diagnostic: ShopifyFreeShippingAudit;
+  };
+};
 
 export type LoopDeskPublicRuntimeConfig = Pick<
   LoopDeskMerchantSettings,
@@ -216,6 +234,9 @@ function status(
     ? value
     : fallback;
 }
+function freeShippingSourceMode(value: unknown): FreeShippingSourceMode {
+  return value === "SHOPIFY_WITH_FALLBACK" || value === "MANUAL_DISPLAY_ONLY" ? value : "SHOPIFY_ONLY";
+}
 function section(raw: Record<string, unknown>, name: string) {
   return isRecord(raw[name]) ? raw[name] : raw;
 }
@@ -227,6 +248,7 @@ export function normalizeCartIntelligenceSettings(input: unknown): CartIntellige
     enabled: bool(raw.enabled, false),
     freeShippingProgressEnabled: bool(raw.freeShippingProgressEnabled, false),
     freeShippingThreshold: numberValue(raw.freeShippingThreshold, 0),
+    freeShippingSourceMode: freeShippingSourceMode(raw.freeShippingSourceMode),
     progressBarText: text(raw.progressBarText, "You're {amount} away from free shipping", 160),
     trustBadgesEnabled: bool(raw.trustBadgesEnabled, false),
     dynamicBannerEnabled: bool(raw.dynamicBannerEnabled, false),
@@ -258,15 +280,17 @@ export function validateCartIntelligenceSettingsPatch(patch: unknown): string[] 
     ["aiRecommendationsEnabled", "AI Recommendations Enabled"],
   ].forEach(([key, label]) => validateBool(raw[key], label));
   if (raw.freeShippingThreshold !== undefined && !Number.isFinite(Number(raw.freeShippingThreshold))) {
-    errors.push("Free Shipping Threshold must be a number.");
+    errors.push("Fallback Free Shipping Display Threshold must be a number.");
   }
+  if (raw.freeShippingSourceMode !== undefined && !["SHOPIFY_ONLY", "SHOPIFY_WITH_FALLBACK", "MANUAL_DISPLAY_ONLY"].includes(String(raw.freeShippingSourceMode))) errors.push("Free Shipping Source is invalid.");
   validateText(raw.progressBarText, "Progress Bar Text", 160);
   validateText(raw.dynamicBannerText, "Dynamic Banner Text", 160);
   return errors;
 }
 
-export function toCartIntelligencePublicRuntimeConfig(settings: CartIntelligenceSettings): CartIntelligencePublicRuntimeConfig {
-  return { ...settings };
+export function toCartIntelligencePublicRuntimeConfig(settings: CartIntelligenceSettings, audit?: ShopifyFreeShippingAudit): CartIntelligencePublicRuntimeConfig {
+  const resolution = audit || { status: "UNSUPPORTED" as const, thresholdMinor: null, currency: null, profileId: null, profileName: null, profileCount: 0, applicableProfileCount: 0, reason: "Shopify resolution data unavailable", resolvedAt: null };
+  return { enabled: settings.enabled, freeShippingProgress: { enabled: settings.freeShippingProgressEnabled, sourceMode: settings.freeShippingSourceMode, fallbackThresholdMinor: settings.freeShippingThreshold > 0 ? Math.round(settings.freeShippingThreshold * 100) : null, progressBarText: settings.progressBarText, resolvedShopifyThresholdMinor: resolution.status === "AVAILABLE" ? resolution.thresholdMinor : null, resolvedCurrency: resolution.currency, resolutionStatus: resolution.status, resolutionSource: resolution.status === "AVAILABLE" ? "SHOPIFY_DELIVERY_PROFILE" : null, sourceProfile: resolution.profileName, lastResolvedAt: resolution.resolvedAt, diagnostic: resolution } };
 }
 
 export function validateLoopDeskMerchantSettingsPatch(
@@ -710,6 +734,11 @@ export async function getCartIntelligenceSettings(shopId: string) {
   return { ...settings, enabled: Boolean(stored?.enabled && settings.enabled) };
 }
 
+export async function getCartIntelligenceAdminResolution(shopId: string) {
+  const shop = await db().shop.findUnique({ where: { id: shopId }, select: { shopName: true, shopDomain: true, primaryDomain: true, myshopifyDomain: true } });
+  return shop?.shopDomain ? readShopifyFreeShipping({ shopDomain: shop.shopDomain }) : readShopifyFreeShipping({ shopDomain: "" });
+}
+
 export async function updateCartIntelligenceSettings(shopId: string, patch: unknown) {
   const errors = validateCartIntelligenceSettingsPatch(patch);
   if (errors.length) throw new Error(errors.join(" "));
@@ -724,13 +753,16 @@ export async function updateCartIntelligenceSettings(shopId: string, patch: unkn
 }
 
 export async function getLoopDeskRuntimeConfig(shopId: string) {
-  const [settings, cartIntelligence, promotions, delhivery, razorpay] = await Promise.all([
+  const [settings, cartIntelligence, promotions, delhivery, razorpay, shop] = await Promise.all([
     getLoopDeskMerchantSettings(shopId),
     getCartIntelligenceSettings(shopId),
     getCompiledPromotionRuntime(shopId),
     getDelhiveryRuntimeConfig(shopId),
     getRazorpayRuntimeConfig(shopId),
+    db().shop.findUnique({ where: { id: shopId }, select: { shopName: true, shopDomain: true, primaryDomain: true, myshopifyDomain: true } }),
   ]);
-  return { ...toLoopDeskPublicRuntimeConfig(settings), cartIntelligence: toCartIntelligencePublicRuntimeConfig(cartIntelligence), promotions, delhivery, razorpay };
+  const audit = shop?.shopDomain ? await readShopifyFreeShipping({ shopDomain: shop.shopDomain }) : undefined;
+  const cartIntelligenceRuntime = toCartIntelligencePublicRuntimeConfig(cartIntelligence, audit);
+  return { ...toLoopDeskPublicRuntimeConfig(settings), cartIntelligence: cartIntelligenceRuntime, cart_intelligence_config: cartIntelligenceRuntime, promotions, delhivery, razorpay };
 }
 export const normalizeLoopDeskRuntimeConfig = normalizeLoopDeskMerchantSettings;

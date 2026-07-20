@@ -2,6 +2,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import {
   getCartIntelligenceSettings,
+  getCartIntelligenceAdminResolution,
   getLoopDeskMerchantSettings,
   updateCartIntelligenceSettings,
   updateLoopDeskMerchantSettings,
@@ -150,6 +151,7 @@ async function saveMerchantSettings(
       enabled: formData.get("cartIntelligenceEnabled") === "on",
       freeShippingProgressEnabled: formData.get("freeShippingProgressEnabled") === "on",
       freeShippingThreshold: formData.get("freeShippingThreshold"),
+      freeShippingSourceMode: formData.get("freeShippingSourceMode"),
       progressBarText: formData.get("progressBarText"),
       trustBadgesEnabled: formData.get("trustBadgesEnabled") === "on",
       dynamicBannerEnabled: formData.get("dynamicBannerEnabled") === "on",
@@ -323,9 +325,10 @@ export default async function MerchantSettingsPage({
         </div>
       </main>
     );
-  const [settings, cartIntelligence, delhivery, razorpay, notificationSettings, otpSettings] = await Promise.all([
+  const [settings, cartIntelligence, cartIntelligenceResolution, delhivery, razorpay, notificationSettings, otpSettings] = await Promise.all([
     getLoopDeskMerchantSettings(resolved.shop.id),
     getCartIntelligenceSettings(resolved.shop.id),
+    getCartIntelligenceAdminResolution(resolved.shop.id),
     getDelhiveryAdminConfig(resolved.shop.id),
     getRazorpayAdminConfig(resolved.shop.id),
     getMerchantNotificationSettings(resolved.shop.id),
@@ -520,10 +523,25 @@ export default async function MerchantSettingsPage({
 
 
         <section id="cart-intelligence" className={`${cardClass} grid gap-5`}>
-          <SectionHeader title="Cart Intelligence" description="Future-ready cart intelligence configuration only. These settings save to ShopModuleConfig with moduleKey cart_intelligence_config and do not render upsells, bundles, AI blocks, checkout changes, payment changes, analytics, or order logic." />
-          <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm font-medium text-blue-900">
-            These features are configuration-ready and may require later activation before they affect storefront behavior.
+          <SectionHeader title="Cart Intelligence" description="Shopify-aware storefront guidance. Shopify remains the authority for shipping rates and checkout eligibility." />
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-medium text-amber-900">
+            This progress bar is informational and does not modify Shopify shipping rates or guarantee destination-specific eligibility.
           </div>
+          <div className="grid gap-2 rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700 md:grid-cols-2">
+            <p><strong>Status:</strong> {cartIntelligenceResolution.status === "AVAILABLE" ? "Shopify threshold detected" : cartIntelligenceResolution.status === "NOT_CONFIGURED" ? "No Shopify threshold found" : cartIntelligenceResolution.status === "AMBIGUOUS" ? "Multiple or ambiguous Shopify rules" : cartIntelligenceResolution.reason.includes("scope") ? "Required Shopify scope unavailable" : "Shopify rule unsupported"}</p>
+            <p><strong>Detected threshold:</strong> {cartIntelligenceResolution.thresholdMinor ? `${cartIntelligenceResolution.currency} ${(cartIntelligenceResolution.thresholdMinor / 100).toFixed(2)}` : "—"}</p>
+            <p><strong>Source profile:</strong> {cartIntelligenceResolution.profileName || "—"}</p>
+            <p><strong>Last synchronization:</strong> {cartIntelligenceResolution.resolvedAt ? new Date(cartIntelligenceResolution.resolvedAt).toLocaleString() : "—"}</p>
+            {cartIntelligence.freeShippingSourceMode === "MANUAL_DISPLAY_ONLY" ? <p className="font-semibold text-amber-800 md:col-span-2">Manual fallback active — storefront message only; Shopify may still charge shipping.</p> : null}
+          </div>
+          <label className="grid gap-2 text-sm font-medium text-gray-800">
+            <span>Free Shipping Source</span>
+            <select className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-950 shadow-sm" name="freeShippingSourceMode" defaultValue={cartIntelligence.freeShippingSourceMode}>
+              <option value="SHOPIFY_ONLY">Sync from Shopify</option>
+              <option value="SHOPIFY_WITH_FALLBACK">Shopify with fallback</option>
+              <option value="MANUAL_DISPLAY_ONLY">Manual display only</option>
+            </select>
+          </label>
           <div className="grid gap-3 md:grid-cols-2">
             <Check label="Cart Intelligence Enabled" name="cartIntelligenceEnabled" defaultChecked={cartIntelligence.enabled} help="Master public flag for future Cart Intelligence experiences; disabled by default." />
             <Check label="Free Shipping Progress Enabled" name="freeShippingProgressEnabled" defaultChecked={cartIntelligence.freeShippingProgressEnabled} help="Stores whether a future free-shipping progress indicator may be shown." />
@@ -534,8 +552,8 @@ export default async function MerchantSettingsPage({
             <Check label="AI Recommendations Enabled" name="aiRecommendationsEnabled" defaultChecked={cartIntelligence.aiRecommendationsEnabled} help="Configuration flag only; no AI recommendations are implemented in this phase." />
           </div>
           <div className="grid gap-4 md:grid-cols-3">
-            <Field label="Free Shipping Threshold" name="freeShippingThreshold" type="number" defaultValue={String(cartIntelligence.freeShippingThreshold)} help="Public threshold value for future display only; no shipping calculation changes." />
-            <Field label="Progress Bar Text" name="progressBarText" defaultValue={cartIntelligence.progressBarText} help="Public copy for a future free-shipping progress bar." />
+            <Field label="Fallback Free Shipping Display Threshold" name="freeShippingThreshold" type="number" defaultValue={String(cartIntelligence.freeShippingThreshold)} help="Optional display-only fallback. Existing stored threshold values remain compatible." />
+            <Field label="Progress Bar Text" name="progressBarText" defaultValue={cartIntelligence.progressBarText} help="Use {amount} for the formatted remaining amount." />
             <Field label="Dynamic Banner Text" name="dynamicBannerText" defaultValue={cartIntelligence.dynamicBannerText} help="Public copy for a future cart banner." />
           </div>
         </section>

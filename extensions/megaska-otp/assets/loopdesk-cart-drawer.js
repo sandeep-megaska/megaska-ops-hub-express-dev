@@ -260,6 +260,7 @@
       },
       enabled: bool(firstDefined(raw.enabled, legacy.enabled), DEFAULT_CONFIG.enabled),
       cartOwnershipMode: text(cart.cartOwnershipMode || legacy.cartOwnershipMode, DEFAULT_CONFIG.cartOwnershipMode),
+      cartIntelligence: isPlainObject(raw.cart_intelligence_config || raw.cartIntelligence) ? (raw.cart_intelligence_config || raw.cartIntelligence) : { enabled: false, freeShippingProgress: { enabled: false } },
       promotions: isPlainObject(raw.promotions) && Array.isArray(raw.promotions.rules) ? { rules: raw.promotions.rules } : { rules: [] }
     };
     configDiagnostics("runtime config normalized", { drawerMode: normalized.cart.drawerMode }, true);
@@ -955,6 +956,39 @@
     }).join("") + renderOffers(cart);
   }
 
+  function freeShippingProgressViewModel(cart) {
+    var intelligence = config.cartIntelligence || {};
+    var progress = intelligence.freeShippingProgress || {};
+    var subtotal = Math.max(0, Number(cart && (cart.items_subtotal_price || cart.total_price) || 0));
+    var currency = String(cart && cart.currency || "").toUpperCase();
+    var mode = String(progress.sourceMode || "SHOPIFY_ONLY");
+    var shopifyUsable = progress.resolutionStatus === "AVAILABLE" && Number(progress.resolvedShopifyThresholdMinor) > 0 && String(progress.resolvedCurrency || "").toUpperCase() === currency;
+    var threshold = shopifyUsable ? Number(progress.resolvedShopifyThresholdMinor) : null;
+    var source = shopifyUsable ? "SHOPIFY_DELIVERY_PROFILE" : null;
+    var fallbackAllowed = mode === "MANUAL_DISPLAY_ONLY" || (mode === "SHOPIFY_WITH_FALLBACK" && ["NOT_CONFIGURED", "UNSUPPORTED"].indexOf(progress.resolutionStatus) !== -1);
+    if (fallbackAllowed && !threshold && Number(progress.fallbackThresholdMinor) > 0) { threshold = Number(progress.fallbackThresholdMinor); source = "MERCHANT_FALLBACK"; }
+    var visible = Boolean(intelligence.enabled && progress.enabled && threshold && source);
+    if (!visible) return { visible: false, status: progress.resolutionStatus || "UNSUPPORTED", source: null, currency: null, thresholdMinor: null, currentSubtotalMinor: subtotal, remainingMinor: null, progressPercent: null, message: null };
+    var remaining = Math.max(0, threshold - subtotal);
+    return { visible: true, status: remaining === 0 ? "UNLOCKED" : "AVAILABLE", source: source, currency: currency, thresholdMinor: threshold, currentSubtotalMinor: subtotal, remainingMinor: remaining, progressPercent: remaining === 0 ? 100 : Math.min(100, Math.max(0, Math.round(subtotal / threshold * 100))), message: remaining === 0 ? "You’ve unlocked free shipping" : String(progress.progressBarText || "You're {amount} away from free shipping") };
+  }
+
+  function renderFreeShippingProgress(cart) {
+    var viewModel = freeShippingProgressViewModel(cart);
+    if (!viewModel.visible) return "";
+    var message = viewModel.status === "UNLOCKED" ? viewModel.message : viewModel.message.replace(/\{amount\}/g, money(viewModel.remainingMinor, viewModel.currency));
+    return '<section class="loopdesk-cart-drawer__shipping-progress" aria-live="polite"><p class="loopdesk-cart-drawer__shipping-progress-text">' + escapeHtml(message) + '</p><div class="loopdesk-cart-drawer__shipping-progress-track" role="progressbar" aria-label="Free shipping progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + viewModel.progressPercent + '"><span style="width:' + viewModel.progressPercent + '%"></span></div></section>';
+  }
+
+  document.addEventListener("loopdesk:runtime-config", function (event) {
+    var runtimeConfig = event && event.detail && event.detail.config;
+    if (!isPlainObject(runtimeConfig)) return;
+    var intelligence = runtimeConfig.cart_intelligence_config || runtimeConfig.cartIntelligence;
+    if (!isPlainObject(intelligence)) return;
+    config.cartIntelligence = intelligence;
+    render();
+  });
+
   function render() {
     var cart = state.cart;
     var itemCount = cart && typeof cart.item_count === "number" ? cart.item_count : 0;
@@ -969,7 +1003,7 @@
 
     elements.body.innerHTML = state.error
       ? '<div class="loopdesk-cart-drawer__error">We could not load your cart. You can still use the cart page.</div>'
-      : renderLines(cart);
+      : renderFreeShippingProgress(cart) + renderLines(cart);
 
     elements.subtotal.textContent = money(cart ? cart.total_price : 0, cart && cart.currency);
     elements.count.textContent = itemCount ? "(" + itemCount + ")" : "";
