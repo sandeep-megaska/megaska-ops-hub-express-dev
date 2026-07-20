@@ -10,6 +10,8 @@ import {
   attachAddressSnapshotToIntent,
   saveCustomerProfileAddress,
 } from "../../../../../../../services/express-checkout/address";
+import { addressInvalidationReason } from "../../../../../../../services/storefront-pricing/pricing-mutation-fingerprints";
+import { invalidateAndOptionallyRefreshCheckoutPricing } from "../../../../../../../services/storefront-pricing/pricing-snapshot-orchestration";
 
 export const runtime = "nodejs";
 
@@ -147,6 +149,11 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     return jsonWithCors(req, { ok: false, error: "Intent expired" }, { status: 409 });
   }
 
+  const previousAddress = await prisma.expressCheckoutAddressSnapshot.findFirst({
+    where: { shopId: shop.shopId, intentId, customerProfileId },
+    orderBy: { createdAt: "desc" },
+  });
+
   const addressForStorage = {
     name: address.name,
     phone: address.phone,
@@ -191,6 +198,22 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
       customerProfileId,
     },
   });
+
+  const invalidationReason = addressInvalidationReason(previousAddress ? {
+    countryCode: previousAddress.country,
+    provinceCode: previousAddress.province,
+    postalCode: previousAddress.zip,
+    city: previousAddress.city,
+  } : null, {
+    countryCode: addressSnapshot.country,
+    provinceCode: addressSnapshot.province,
+    postalCode: addressSnapshot.zip,
+    city: addressSnapshot.city,
+  });
+  if (invalidationReason) {
+    const pricing = await invalidateAndOptionallyRefreshCheckoutPricing({ shopId: shop.shopId, checkoutIntentId: intentId, reason: invalidationReason, refresh: true, refreshReason: "address_confirmed" });
+    if (!pricing.ok) return jsonWithCors(req, { ok: false, error: "Pricing refresh required", code: pricing.code }, { status: pricing.retryable ? 503 : 409 });
+  }
 
   return jsonWithCors(req, { ok: true, intent: updatedIntent, addressSnapshot }, { status: 201 });
 }

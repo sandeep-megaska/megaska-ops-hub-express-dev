@@ -14,6 +14,8 @@ import {
   saveCustomerProfileAddress,
 } from "../../../../../services/express-checkout/address";
 import { CanonicalCustomerResolver } from "../../../../../services/customers/canonical-customer-resolver";
+import { cartSnapshotPricingFingerprint, checkoutDiscountFingerprint, checkoutShippingFingerprint } from "../../../../../services/storefront-pricing/pricing-mutation-fingerprints";
+import { invalidateAndOptionallyRefreshCheckoutPricing } from "../../../../../services/storefront-pricing/pricing-snapshot-orchestration";
 
 export const runtime = "nodejs";
 
@@ -276,6 +278,10 @@ export async function POST(req: NextRequest) {
     : null;
 
   if (reusableIntent) {
+    const previousDiscounts = await prisma.expressCheckoutDiscount.findMany({ where: { shopId: shop.shopId, intentId: reusableIntent.id }, orderBy: { createdAt: "desc" } });
+    const previousCartFingerprint = cartSnapshotPricingFingerprint(reusableIntent.cartSnapshot);
+    const previousShippingFingerprint = checkoutShippingFingerprint({ shippingAmountPaise: reusableIntent.shippingAmountPaise, currency: reusableIntent.currency });
+    const previousDiscountFingerprint = checkoutDiscountFingerprint(previousDiscounts);
     const updatedIntent = cartSnapshot !== undefined || capturedDiscount
       ? await prisma.expressCheckoutIntent.update({
           where: { id: reusableIntent.id },
@@ -310,6 +316,17 @@ export async function POST(req: NextRequest) {
       customerProfileId,
       customer: auth.customer,
     });
+
+    const updatedDiscounts = await prisma.expressCheckoutDiscount.findMany({ where: { shopId: shop.shopId, intentId: updatedIntent.id }, orderBy: { createdAt: "desc" } });
+    const cartChanged = cartSnapshot !== undefined && previousCartFingerprint !== cartSnapshotPricingFingerprint(updatedIntent.cartSnapshot);
+    const couponChanged = previousDiscountFingerprint !== checkoutDiscountFingerprint(updatedDiscounts);
+    const shippingChanged = previousShippingFingerprint !== checkoutShippingFingerprint({ shippingAmountPaise: updatedIntent.shippingAmountPaise, currency: updatedIntent.currency });
+    if (cartChanged || couponChanged || shippingChanged) {
+      const reason = cartChanged ? "cart_changed" as const : couponChanged ? "coupon_changed" as const : "shipping_method_changed" as const;
+      const refresh = !cartChanged;
+      const pricing = await invalidateAndOptionallyRefreshCheckoutPricing({ shopId: shop.shopId, checkoutIntentId: updatedIntent.id, reason, refresh, refreshReason: couponChanged ? "coupon_confirmed" : shippingChanged ? "shipping_confirmed" : "cart_confirmed" });
+      if (!pricing.ok) return jsonWithCors(req, { ok: false, error: "Pricing refresh required", code: pricing.code }, { status: pricing.retryable ? 503 : 409 });
+    }
 
     const intent = await prisma.expressCheckoutIntent.findFirst({
       where: { id: updatedIntent.id },

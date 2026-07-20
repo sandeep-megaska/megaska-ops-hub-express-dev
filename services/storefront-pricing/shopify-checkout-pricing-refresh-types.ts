@@ -7,6 +7,7 @@ export type ShopifyPricingRefreshFailureCode =
   | "draft_order_create_failed" | "draft_order_update_failed"
   | "draft_order_response_invalid" | "draft_order_currency_missing"
   | "draft_order_pricing_invalid" | "pricing_snapshot_persist_failed"
+  | "pricing_inputs_changed"
   | "shopify_unavailable";
 
 export type ShopifyCheckoutPricingRefreshResult =

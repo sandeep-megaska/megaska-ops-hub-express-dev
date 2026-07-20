@@ -3,6 +3,7 @@ import { prisma } from "../db/prisma.ts";
 import { CheckoutPricingSnapshotService } from "./pricing-snapshot-service.ts";
 import { ShopifyCheckoutPricingSnapshotRepository } from "./pricing-snapshot-repository.ts";
 import { addressPricingFingerprint, cartPricingFingerprint, pricingInputFingerprint } from "./pricing-snapshot-fingerprint.ts";
+import { cartSnapshotPricingFingerprint } from "./pricing-mutation-fingerprints.ts";
 import { taxSummaryFromShopifyDraftOrder } from "./tax-summary.ts";
 import type { ShopifyCheckoutPricingRefreshInput, ShopifyCheckoutPricingRefreshResult, ShopifyPricingRefreshFailureCode } from "./shopify-checkout-pricing-refresh-types.ts";
 
@@ -62,6 +63,12 @@ export async function refreshShopifyCheckoutPricing(input: ShopifyCheckoutPricin
       if (!address) return fail("address_missing");
       const shop = await tx.shop.findFirst({ where: { id: input.shopId }, select: { shopDomain: true } }); if (!shop) return fail("checkout_intent_shop_mismatch");
       const previous = await tx.shopifyCheckoutPricingSnapshot.findFirst({ where: { shopId: input.shopId, checkoutIntentId: input.checkoutIntentId }, select: { shopifyDraftOrderId: true } });
+      const expectedFingerprints = {
+        cart: cartSnapshotPricingFingerprint(intent.cartSnapshot) ?? cartPricingFingerprint(cartLines),
+        address: addressPricingFingerprint({ countryCode: address.country, provinceCode: address.province, postalCode: address.zip, city: address.city }),
+        shipping: pricingInputFingerprint({ title: "Shipping", amountMinor: intent.shippingAmountPaise, currency: intent.currency }),
+        discount: pricingInputFingerprint((intent.discounts || []).map((d: any) => ({ type: d.type, code: d.code || null, rawShopifyPayload: d.rawShopifyPayload || null }))),
+      };
       const reusedDraftOrder = Boolean(previous?.shopifyDraftOrderId); const { firstName, lastName } = names(address.name);
       const draftInput = { lineItems: cartLines, shippingAddress: { firstName, lastName, address1: address.address1, address2: address.address2 || undefined, city: address.city, province: address.province, country: address.country, zip: address.zip, phone: address.phone }, shippingLine: { title: "Shipping", price: (intent.shippingAmountPaise / 100).toFixed(2) }, customAttributes: [{ key: "megaska_express_intent_id", value: intent.id }] };
       const mutation = reusedDraftOrder
@@ -77,10 +84,23 @@ export async function refreshShopifyCheckoutPricing(input: ShopifyCheckoutPricin
       try { currency = validateShopMoney(draft); taxSummary = taxSummaryFromShopifyDraftOrder(draft, { currencyExponent: exponent(String(draft.currencyCode).toUpperCase()) }); }
       catch (error) { return fail(error instanceof Error && error.message === "currency missing" ? "draft_order_currency_missing" : "draft_order_pricing_invalid"); }
       const authoritativeAt = safeDate(draft.updatedAt, now);
+      const latestIntent = await tx.expressCheckoutIntent.findFirst({ where: { id: input.checkoutIntentId, shopId: input.shopId }, include: { discounts: { where: { shopId: input.shopId }, orderBy: { createdAt: "desc" } } } });
+      const latestAddress = await tx.expressCheckoutAddressSnapshot.findFirst({ where: { shopId: input.shopId, intentId: input.checkoutIntentId, ...(intent.customerProfileId ? { customerProfileId: intent.customerProfileId } : {}) }, orderBy: { createdAt: "desc" } });
+      const latestLines = lines(latestIntent?.cartSnapshot);
+      const latestFingerprints = latestIntent && latestAddress && latestLines.length ? {
+        cart: cartSnapshotPricingFingerprint(latestIntent.cartSnapshot) ?? cartPricingFingerprint(latestLines),
+        address: addressPricingFingerprint({ countryCode: latestAddress.country, provinceCode: latestAddress.province, postalCode: latestAddress.zip, city: latestAddress.city }),
+        shipping: pricingInputFingerprint({ title: "Shipping", amountMinor: latestIntent.shippingAmountPaise, currency: latestIntent.currency }),
+        discount: pricingInputFingerprint((latestIntent.discounts || []).map((d: any) => ({ type: d.type, code: d.code || null, rawShopifyPayload: d.rawShopifyPayload || null }))),
+      } : null;
+      if (!latestFingerprints || Object.keys(expectedFingerprints).some((key) => expectedFingerprints[key as keyof typeof expectedFingerprints] !== latestFingerprints[key as keyof typeof latestFingerprints])) {
+        audit("refresh_discarded", { shopId: input.shopId, checkoutIntentPublicId: intent.id, reason: input.reason, resultStatus: "failed", failureCode: "pricing_inputs_changed" });
+        return fail("pricing_inputs_changed", true);
+      }
       let snapshot;
       try {
         const snapshotService = dependencies.snapshots ?? new CheckoutPricingSnapshotService(new ShopifyCheckoutPricingSnapshotRepository(tx));
-        snapshot = await snapshotService.recordAuthoritativePricingSnapshot({ shopId: input.shopId, checkoutIntentId: input.checkoutIntentId, snapshot: { source: "SHOPIFY", shopifyDraftOrderId: draft.id, currency, subtotalMinor: taxSummary.subtotal, discountsMinor: taxSummary.discounts, shippingMinor: taxSummary.shipping, totalTaxMinor: taxSummary.totalTax, totalPayableMinor: taxSummary.totalPayable, taxesIncluded: taxSummary.taxesIncluded, taxSummary, refreshReason: input.reason, authoritativeAt, cartFingerprint: cartPricingFingerprint(cartLines), addressFingerprint: addressPricingFingerprint({ countryCode: address.country, provinceCode: address.province, postalCode: address.zip, city: address.city }), shippingFingerprint: pricingInputFingerprint({ title: "Shipping", amountMinor: intent.shippingAmountPaise, currency: intent.currency }), discountFingerprint: pricingInputFingerprint((intent.discounts || []).map((d: any) => ({ type: d.type, code: d.code || null, rawShopifyPayload: d.rawShopifyPayload || null }))) } });
+        snapshot = await snapshotService.recordAuthoritativePricingSnapshot({ shopId: input.shopId, checkoutIntentId: input.checkoutIntentId, snapshot: { source: "SHOPIFY", shopifyDraftOrderId: draft.id, currency, subtotalMinor: taxSummary.subtotal, discountsMinor: taxSummary.discounts, shippingMinor: taxSummary.shipping, totalTaxMinor: taxSummary.totalTax, totalPayableMinor: taxSummary.totalPayable, taxesIncluded: taxSummary.taxesIncluded, taxSummary, refreshReason: input.reason, authoritativeAt, cartFingerprint: expectedFingerprints.cart, addressFingerprint: expectedFingerprints.address, shippingFingerprint: expectedFingerprints.shipping, discountFingerprint: expectedFingerprints.discount } });
       } catch { return fail("pricing_snapshot_persist_failed", true); }
       if (!snapshot) return fail("pricing_snapshot_persist_failed", true);
       audit("refresh_succeeded", { shopId: input.shopId, checkoutIntentPublicId: intent.id, reason: input.reason, operation: reusedDraftOrder ? "update" : "create", reusedDraftOrder, shopifyDraftOrderId: draft.id, snapshotPublicId: snapshot.publicId, currency, totalPayable: taxSummary.totalPayable, totalTax: taxSummary.totalTax, taxesIncluded: taxSummary.taxesIncluded, resultStatus: "succeeded", timestamp: now.toISOString() });
