@@ -119,6 +119,7 @@ model Shop {
   identityReconciliationPlans   CustomerIdentityReconciliationPlan[]
   identityReconciliationAudits  CustomerIdentityReconciliationAudit[]
   identityMerges                CustomerIdentityMerge[]
+  checkoutPricingSnapshots      ShopifyCheckoutPricingSnapshot[]
 }
 
 enum CustomerIdentityReconciliationStatus {
@@ -2661,6 +2662,11 @@ enum ExpressCheckoutDiscountType {
   AUTOMATIC
 }
 
+enum ShopifyCheckoutPricingSnapshotStatus {
+  CURRENT
+  INVALIDATED
+}
+
 enum CheckoutRecoveryType {
   CHECKOUT_ABANDONMENT
   PAYMENT_ABANDONMENT
@@ -2699,13 +2705,51 @@ model ExpressCheckoutIntent {
   payments         ExpressCheckoutPayment[]
   orderLink        ExpressCheckoutOrderLink?
   recoveryTokens   CheckoutRecoveryToken[]
+  pricingSnapshots ShopifyCheckoutPricingSnapshot[]
 
   @@index([shopId, id])
+  @@unique([shopId, id])
   @@index([shopId, customerProfileId])
   @@index([shopId, status])
   @@index([shopId, sessionTokenHash])
   @@index([shopId, cartToken])
   @@index([shopId, shopifyCartId])
+}
+
+model ShopifyCheckoutPricingSnapshot {
+  id                     String                               @id @default(uuid())
+  publicId               String                               @unique @default(uuid())
+  shopId                 String
+  checkoutIntentId       String
+  shopifyDraftOrderId    String?
+  source                 String                               @default("SHOPIFY")
+  status                 ShopifyCheckoutPricingSnapshotStatus @default(CURRENT)
+  currency               String?
+  subtotalMinor          Int?
+  discountsMinor         Int?
+  shippingMinor          Int?
+  totalTaxMinor          Int?
+  totalPayableMinor      Int?
+  taxesIncluded          Boolean?
+  taxSummary             Json?
+  cartFingerprint        String?
+  addressFingerprint     String?
+  shippingFingerprint    String?
+  discountFingerprint    String?
+  storeCreditFingerprint String?
+  refreshReason          String?
+  invalidatedAt          DateTime?
+  invalidationReason     String?
+  authoritativeAt        DateTime?
+  createdAt              DateTime                             @default(now())
+  updatedAt              DateTime                             @updatedAt
+
+  shop           Shop                  @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  checkoutIntent ExpressCheckoutIntent @relation(fields: [shopId, checkoutIntentId], references: [shopId, id], onDelete: Cascade)
+
+  @@unique([shopId, checkoutIntentId])
+  @@index([shopId, status])
+  @@index([shopId, shopifyDraftOrderId])
 }
 
 model CheckoutRecoveryToken {
