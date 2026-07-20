@@ -1053,6 +1053,11 @@
     }, 0);
   }
 
+  function rewardQuantityCap(rule) {
+    var reward = rule && rule.reward || {};
+    return Number(reward.configuration && reward.configuration.quantityCap || reward.maximumQuantity || 1);
+  }
+
   function promotionLineProperties(item) {
     return item && item.properties && typeof item.properties === "object" ? item.properties : {};
   }
@@ -1084,7 +1089,7 @@
       if (!rule.offer || !rule.offer.handle) return false;
       if (!triggerMatches(cart, rule)) return false;
       if (centsFromDecimal(rule.trigger && rule.trigger.minimumCartSubtotal) > Number(cart.items_subtotal_price || cart.total_price || 0)) return false;
-      if (rewardQuantityInCart(cart, rule) >= Number(rule.reward && rule.reward.maximumQuantity || 1)) return false;
+      if (rewardQuantityInCart(cart, rule) >= rewardQuantityCap(rule)) return false;
       var product = state.offerProducts[rule.ruleId];
       return !product || (Array.isArray(product.variants) && product.variants.some(function (variant) { return variant.available !== false; }));
     }).sort(function (a, b) { return Number(a.priority || 0) - Number(b.priority || 0); });

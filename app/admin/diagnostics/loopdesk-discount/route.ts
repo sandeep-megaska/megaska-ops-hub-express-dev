@@ -29,7 +29,7 @@ type DiscountNodeDiagnostic = {
 
 type ShopifyFunctionNode = { id?: string | null; handle?: string | null; title?: string | null; apiType?: string | null; appKey?: string | null };
 type RuntimeSyncStateRow = { shopifyAutomaticDiscountId: string | null; lastDeployedConfigurationVersion: number | null; lastDeployedConfigurationHash: string | null; lastDeployedRuleCount: number | null; lastSuccessfulSyncAt: Date | null; synchronizationState: string | null; lastAttemptedAt: Date | null; lastErrorCode: string | null; lastErrorMessage: string | null; updatedAt: Date };
-type DiagnosticRule = { ruleId?: unknown; compilationVersion?: unknown; trigger?: { sourceGroups?: Array<{ productGids?: unknown }> }; offer?: { productGid?: unknown }; reward?: { type?: unknown; value?: unknown; maximumQuantity?: unknown } };
+type DiagnosticRule = { ruleId?: unknown; compilationVersion?: unknown; trigger?: { sourceGroups?: Array<{ productGids?: unknown }> }; offer?: { productGid?: unknown }; reward?: { scope?: unknown; method?: unknown; configuration?: { value?: unknown; quantityCap?: unknown }; type?: unknown; value?: unknown; maximumQuantity?: unknown } };
 type DiagnosticConfig = { configurationVersion?: unknown; configurationHash?: unknown; rules?: DiagnosticRule[] };
 
 function diagnosticSecret() { return String(process.env.ADMIN_OPS_KEY || process.env.INTERNAL_DIAGNOSTIC_SECRET || "").trim(); }
@@ -131,9 +131,10 @@ export async function GET(req: NextRequest) {
     mismatch("compilationVersion", EXPECTED_COMPILATION_VERSION, currentRule?.compilationVersion ?? null),
     arrayIncludesMismatch("triggerProductGids", EXPECTED_TRIGGER_PRODUCT_GID, triggerProductGids),
     mismatch("offerProductGid", EXPECTED_OFFER_PRODUCT_GID, currentRule?.offer?.productGid ?? null),
-    mismatch("rewardType", EXPECTED_REWARD.type, currentRule?.reward?.type ?? null),
-    mismatch("rewardValue", EXPECTED_REWARD.value, normalizeRewardValue(currentRule?.reward?.value)),
-    mismatch("rewardMaximumQuantity", EXPECTED_REWARD.maximumQuantity, currentRule?.reward?.maximumQuantity ?? null),
+    mismatch("rewardScope", "product", currentRule?.reward?.scope ?? (currentRule?.reward?.type ? "product" : null)),
+    mismatch("rewardMethod", "percentage", currentRule?.reward?.method ?? (currentRule?.reward?.type === EXPECTED_REWARD.type ? "percentage" : null)),
+    mismatch("rewardValue", EXPECTED_REWARD.value, normalizeRewardValue(currentRule?.reward?.configuration?.value ?? currentRule?.reward?.value)),
+    mismatch("rewardMaximumQuantity", EXPECTED_REWARD.maximumQuantity, currentRule?.reward?.configuration?.quantityCap ?? currentRule?.reward?.maximumQuantity ?? null),
   ].filter(Boolean);
 
   return NextResponse.json({

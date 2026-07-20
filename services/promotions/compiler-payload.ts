@@ -1,6 +1,7 @@
 import { PROMOTION_COMPILER_SCHEMA_VERSION, type PromotionCompilerResult, type PromotionCompilerRuleInput, type PromotionSourceMembershipGroup } from "./compiler-domain.ts";
 import { sha256Hex } from "./compiler-hash.ts";
 import { canonicalCollectionGid, canonicalDecimalString, canonicalOptionalText, canonicalProductGid, canonicalProductType, canonicalUtcIso, PromotionCompilerNormalizationError } from "./compiler-normalization.ts";
+import { normalizePromotionReward } from "./reward-strategy.ts";
 
 function refId(ref: PromotionCompilerRuleInput["triggerReferences"][number], index: number) { return ref.id || ref.referenceGid || ref.normalizedValue || ref.referenceValue || `${ref.sourceType}:${index}`; }
 function sortedGroups(groups: PromotionSourceMembershipGroup[]) { return [...groups].map((g) => ({ ...g, productGids: [...new Set(g.productGids)].sort() })).sort((a, b) => `${a.sourceType}:${a.sourceReferenceId}`.localeCompare(`${b.sourceType}:${b.sourceReferenceId}`)); }
@@ -8,6 +9,11 @@ function sortedGroups(groups: PromotionSourceMembershipGroup[]) { return [...gro
 export function compilePromotionRule(input: PromotionCompilerRuleInput): PromotionCompilerResult {
   const offerProductGid = canonicalProductGid(input.offerProductGid);
   const offerProductHandle = canonicalOptionalText(input.offerProductHandle);
+  const normalizedReward = normalizePromotionReward(
+    { type: input.rewardType, value: canonicalDecimalString(input.rewardValue), maximumQuantity: input.maximumRewardQuantity },
+    { productGid: offerProductGid, quantityCap: input.maximumRewardQuantity },
+  );
+  if (!normalizedReward.ok || !normalizedReward.validation.executable) throw new PromotionCompilerNormalizationError(`Reward is not executable: ${normalizedReward.ok ? "unsupported reward" : normalizedReward.issues.map((entry) => entry.code).join(", ")}.`);
   const groups = sortedGroups(input.triggerReferences.map((ref, index): PromotionSourceMembershipGroup => {
     const sourceReferenceId = refId(ref, index);
     if (ref.sourceType === "PRODUCT") { const gid = canonicalProductGid(ref.referenceGid); return { sourceReferenceId, sourceType: "PRODUCT", sourceGid: gid, productGids: [gid], unresolved: false }; }
@@ -22,7 +28,7 @@ export function compilePromotionRule(input: PromotionCompilerRuleInput): Promoti
     priority: input.priority,
     trigger: { type: input.triggerType, matchMode: input.triggerMatchMode, minimumQuantity: input.minimumTriggerQuantity, minimumCartSubtotal: input.minimumCartSubtotal == null ? null : canonicalDecimalString(input.minimumCartSubtotal), sourceGroups: groups },
     offer: { productGid: offerProductGid, handle: offerProductHandle },
-    reward: { type: input.rewardType, value: canonicalDecimalString(input.rewardValue), maximumQuantity: input.maximumRewardQuantity },
+    reward: normalizedReward.reward,
     schedule: { startsAt: canonicalUtcIso(input.startsAt), endsAt: canonicalUtcIso(input.endsAt) },
     combinesWith: { productDiscounts: Boolean(input.combinesWithProductDiscounts), orderDiscounts: Boolean(input.combinesWithOrderDiscounts), shippingDiscounts: Boolean(input.combinesWithShippingDiscounts) },
   };

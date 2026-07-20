@@ -1,5 +1,6 @@
 import { sha256Hex } from "../compiler-hash.ts";
-import type { PromotionRewardType } from "../domain.ts";
+import type { CanonicalPromotionReward } from "../reward-strategy.ts";
+import { normalizePromotionReward } from "../reward-strategy.ts";
 
 export const LOOPDESK_FUNCTION_SCHEMA_VERSION = 1 as const;
 export const LOOPDESK_FUNCTION_HANDLE = "loopdesk-discount-function" as const;
@@ -36,7 +37,7 @@ export type LoopDeskFunctionRule = {
     sourceGroups: LoopDeskFunctionSourceGroup[];
   };
   offer: { productGid: string; handle: string | null };
-  reward: { type: PromotionRewardType; value: string; maximumQuantity: number };
+  reward: CanonicalPromotionReward;
 };
 
 export type LoopDeskFunctionConfiguration = {
@@ -73,7 +74,9 @@ export function validateAndCanonicalizeFunctionRule(rule: LoopDeskFunctionRule):
     if (typeof group.sourceGid !== "string" || !group.sourceGid.trim()) throw new Error(`Function sourceGid is required for rule ${rule.ruleId}.`);
     return { sourceReferenceId: group.sourceReferenceId, sourceType: group.sourceType, sourceGid: group.sourceGid, productGids: [...new Set(group.productGids)].sort(), unresolved: Boolean(group.unresolved) };
   }).sort((a, b) => `${a.sourceType}:${a.sourceReferenceId}:${a.sourceGid}`.localeCompare(`${b.sourceType}:${b.sourceReferenceId}:${b.sourceGid}`));
-  return { schemaVersion: 1, ruleId: rule.ruleId, compilationVersion: rule.compilationVersion, status: rule.status, priority: rule.priority, trigger: { type: rule.trigger.type, matchMode: rule.trigger.matchMode, minimumQuantity: rule.trigger.minimumQuantity, minimumCartSubtotal: rule.trigger.minimumCartSubtotal, sourceGroups: groups }, offer: { productGid: rule.offer.productGid, handle: typeof rule.offer.handle === "string" && rule.offer.handle.trim() ? rule.offer.handle.trim() : null }, reward: { type: rule.reward.type, value: rule.reward.value, maximumQuantity: rule.reward.maximumQuantity } };
+  const normalizedReward = normalizePromotionReward(rule.reward, { productGid: rule.offer.productGid, quantityCap: 1 });
+  if (!normalizedReward.ok || !normalizedReward.validation.executable) throw new Error(`Function reward is not executable for rule ${rule.ruleId}.`);
+  return { schemaVersion: 1, ruleId: rule.ruleId, compilationVersion: rule.compilationVersion, status: rule.status, priority: rule.priority, trigger: { type: rule.trigger.type, matchMode: rule.trigger.matchMode, minimumQuantity: rule.trigger.minimumQuantity, minimumCartSubtotal: rule.trigger.minimumCartSubtotal, sourceGroups: groups }, offer: { productGid: rule.offer.productGid, handle: typeof rule.offer.handle === "string" && rule.offer.handle.trim() ? rule.offer.handle.trim() : null }, reward: normalizedReward.reward };
 }
 
 export function assertFunctionConfigurationEqual(expected: LoopDeskFunctionConfiguration, actual: unknown) {

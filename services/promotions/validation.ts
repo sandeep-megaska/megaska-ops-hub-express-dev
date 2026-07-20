@@ -1,5 +1,6 @@
 import type { PromotionRuleValidationInput, PromotionTriggerReferenceInput, PromotionValidationError, PromotionValidationResult } from "./domain.ts";
 import { normalizeDate, normalizeProductType, normalizeRewardValue, normalizeShopifyCollectionGid, normalizeShopifyProductGid } from "./normalization.ts";
+import { normalizePromotionReward } from "./reward-strategy.ts";
 
 const TEXT_LIMITS = {
   name: 120,
@@ -45,10 +46,8 @@ export function validatePromotionRule(input: PromotionRuleValidationInput): Prom
   if (startsAt && endsAt && startsAt.getTime() >= endsAt.getTime()) add(errors, "endsAt", "End date must be after start date.");
 
   const rewardValue = normalizeRewardValue(input.rewardValue);
-  if (rewardValue == null) add(errors, "rewardValue", "Reward value must be numeric.");
-  else if (input.rewardType === "PERCENTAGE_OFF" && (rewardValue <= 0 || rewardValue > 100)) add(errors, "rewardValue", "Percentage discounts must be greater than 0 and no more than 100.");
-  else if (input.rewardType === "FIXED_AMOUNT_OFF" && rewardValue <= 0) add(errors, "rewardValue", "Fixed amount discounts must be greater than 0.");
-  else if (input.rewardType === "FIXED_PRICE" && rewardValue < 0) add(errors, "rewardValue", "Fixed promotional prices must be zero or greater.");
+  const reward = normalizePromotionReward({ type: input.rewardType, value: rewardValue, maximumQuantity: input.maximumRewardQuantity }, { productGid: input.offerProductGid, quantityCap: input.maximumRewardQuantity });
+  if (!reward.ok) reward.issues.filter((entry) => !["configuration.productGid", "configuration.quantityCap"].includes(entry.field ?? "")).forEach((entry) => add(errors, "rewardValue", entry.message));
 
   for (const field of ["heading", "badgeText", "customerMessage", "ctaText"] as const) {
     const value = input[field];

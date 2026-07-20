@@ -1,4 +1,5 @@
 import type { PromotionRewardType, PromotionRuleStatus, PromotionTriggerMatchMode, PromotionTriggerType } from "./domain.ts";
+import type { CanonicalPromotionReward } from "./reward-strategy.ts";
 
 export const PROMOTION_COMPILER_SCHEMA_VERSION = 1 as const;
 export type PromotionCompilerSchemaVersion = typeof PROMOTION_COMPILER_SCHEMA_VERSION;
@@ -58,7 +59,7 @@ export type PromotionCompilerSourceSnapshot = {
   priority: number;
   trigger: { type: PromotionTriggerType; matchMode: PromotionTriggerMatchMode; minimumQuantity: number; minimumCartSubtotal: string | null; sourceGroups: PromotionSourceMembershipGroup[] };
   offer: { productGid: string; handle: string | null };
-  reward: { type: PromotionRewardType; value: string; maximumQuantity: number };
+  reward: CanonicalPromotionReward;
   schedule: { startsAt: string | null; endsAt: string | null };
   combinesWith: { productDiscounts: boolean; orderDiscounts: boolean; shippingDiscounts: boolean };
 };

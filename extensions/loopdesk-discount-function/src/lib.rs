@@ -13,7 +13,7 @@ mod tests {
 
     use crate::{
         config::{
-            parse_config, FunctionRule, MatchMode, OfferConfig, RewardConfig, RewardType,
+            parse_config, FunctionRule, LegacyRewardConfig, MatchMode, OfferConfig, RewardConfig, RewardType,
             RuleStatus, SourceGroup, TriggerConfig,
         },
         decimal::Decimal,
@@ -46,11 +46,11 @@ mod tests {
                 product_gid: "gid://shopify/Product/2".into(),
                 handle: None,
             },
-            reward: RewardConfig {
+            reward: RewardConfig::Legacy(LegacyRewardConfig {
                 reward_type,
                 value: value.into(),
                 maximum_quantity,
-            },
+            }),
         }
     }
 
