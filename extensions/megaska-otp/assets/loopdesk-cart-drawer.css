@@ -291,6 +291,30 @@
   font-size: 20px;
 }
 
+.loopdesk-tier-progress { max-width:100%; margin:16px 0; padding:16px; overflow:hidden; border:1px solid #dbe3ee; border-radius:var(--loopdesk-radius, 16px); background:#f8fafc; }
+.loopdesk-tier-progress p, .loopdesk-tier-progress h3 { margin:0; }
+.loopdesk-tier-progress__eyebrow { color:var(--loopdesk-primary, #111827); font-size:15px; font-weight:800; }
+.loopdesk-tier-progress h3 { margin-top:3px; color:#475569; font-size:12px; font-weight:500; line-height:1.4; }
+.loopdesk-tier-progress__bar { margin-top:18px; }
+.loopdesk-tier-progress ol { display:grid; grid-template-columns:repeat(var(--tier-count, 3), minmax(0, 1fr)); margin:0; padding:0; list-style:none; }
+.loopdesk-tier-progress__tier { position:relative; display:flex; min-width:0; flex-direction:column; align-items:center; color:#64748b; text-align:center; }
+.loopdesk-tier-progress__marker { z-index:1; display:grid; width:20px; height:20px; place-items:center; border:2px solid #cbd5e1; border-radius:50%; background:#fff; color:#fff; font-size:11px; }
+.loopdesk-tier-progress__connector { position:absolute; top:8px; left:50%; width:100%; height:4px; overflow:hidden; background:#dbe3ee; }
+.loopdesk-tier-progress__connector i { display:block; height:100%; background:var(--loopdesk-accent, #2563eb); }
+.loopdesk-tier-progress__tier.is-unlocked .loopdesk-tier-progress__marker, .loopdesk-tier-progress__tier.is-current .loopdesk-tier-progress__marker { border-color:var(--loopdesk-accent, #2563eb); background:var(--loopdesk-accent, #2563eb); }
+.loopdesk-tier-progress__tier.is-current .loopdesk-tier-progress__marker { box-shadow:0 0 0 4px rgba(37,99,235,.16); }
+.loopdesk-tier-progress__range { min-width:0; margin-top:8px; font-size:10px; line-height:1.25; overflow-wrap:anywhere; }
+.loopdesk-tier-progress__tier strong { margin-top:2px; color:var(--loopdesk-text, #111827); font-size:11px; line-height:1.2; }
+.loopdesk-tier-progress__status { display:grid; gap:2px; margin-top:15px !important; font-size:12px; line-height:1.45; }
+.loopdesk-tier-progress__status-title { color:#15803d; }
+.loopdesk-tier-progress small { display:block; margin-top:9px; color:#64748b; font-size:10px; }
+
+@media (max-width: 380px) {
+  .loopdesk-tier-progress { padding:13px 10px; }
+  .loopdesk-tier-progress__range { font-size:9px; }
+  .loopdesk-tier-progress__tier strong { font-size:10px; }
+}
+
 .loopdesk-cart-drawer__trust-badges {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

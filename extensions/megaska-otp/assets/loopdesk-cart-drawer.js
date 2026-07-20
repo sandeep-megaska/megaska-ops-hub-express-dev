@@ -1192,6 +1192,61 @@
     return '<section class="loopdesk-cart-drawer__shipping-progress" aria-live="polite"><p class="loopdesk-cart-drawer__shipping-progress-text">' + escapeHtml(message) + '</p><div class="loopdesk-cart-drawer__shipping-progress-track" role="progressbar" aria-label="' + escapeHtml(viewModel.goalName) + ' progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + viewModel.progressPercent + '"><span style="width:' + viewModel.progressPercent + '%"></span></div></section>';
   }
 
+  // Shopify's AJAX `original_total_price` is the closest safe storefront projection of
+  // cart.cost.subtotalAmount: it is merchandise-only and is not reduced by automatic or code discounts.
+  function tierQualifyingSubtotal(cart) {
+    var minor = cart && Number(cart.original_total_price);
+    return Number.isFinite(minor) && minor >= 0 ? minor / 100 : null;
+  }
+
+  function activeOrderTierRule() {
+    var rules = config.promotions && Array.isArray(config.promotions.rules) ? config.promotions.rules : [];
+    return rules.filter(function (rule) {
+      var reward = rule && rule.reward;
+      var configuration = reward && reward.configuration;
+      return rule.status === "ACTIVE" && rule.compilation && rule.compilation.status === "READY" && isScheduleActive(rule) && reward.scope === "order" && reward.method === "percentage" && configuration && configuration.basis === "eligible_merchandise_subtotal";
+    }).sort(function (a, b) { return Number(b.priority || 0) - Number(a.priority || 0) || String(a.ruleId || "").localeCompare(String(b.ruleId || "")); })[0] || null;
+  }
+
+  function tierProgressViewModel(cart) {
+    var rule = activeOrderTierRule();
+    var subtotal = tierQualifyingSubtotal(cart);
+    var evaluator = window.LoopDeskTierProgress && window.LoopDeskTierProgress.buildTierProgressViewModel;
+    if (!rule || subtotal === null || typeof evaluator !== "function") return null;
+    var configuration = rule.reward.configuration;
+    var tiers = Array.isArray(configuration.tiers) ? configuration.tiers.map(function (tier, index) { return { publicId: tier.publicId || tier.id, position: Number.isInteger(tier.position) ? tier.position : index, minimumSubtotal: tier.minimumSubtotal, maximumSubtotal: tier.maximumSubtotal, percentage: tier.percentage }; }) : [];
+    var model = evaluator({ qualifyingSubtotal: subtotal, tiers: tiers, currencyCode: String(cart.currency || "").toUpperCase(), promotionPublicId: rule.publicId || rule.ruleId || null, selectionMode: configuration.selectionMode, continuityMode: configuration.continuityMode });
+    return model && model.enabled ? model : null;
+  }
+
+  function majorMoney(amount, currency) {
+    try { return new Intl.NumberFormat(undefined, { style: "currency", currency: currency, minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(amount); }
+    catch (_error) { return String(amount) + " " + currency; }
+  }
+
+  function tierRangeLabel(tier, currency) {
+    if (tier.maximumSubtotal === null) return majorMoney(tier.minimumSubtotal, currency) + "+";
+    var digits = 2;
+    try { digits = new Intl.NumberFormat(undefined, { style: "currency", currency: currency }).resolvedOptions().maximumFractionDigits; } catch (_error) {}
+    var unit = Math.pow(10, -digits);
+    return majorMoney(tier.minimumSubtotal, currency) + "–" + majorMoney(Math.max(tier.minimumSubtotal, tier.maximumSubtotal - unit), currency);
+  }
+
+  function displayPercentage(value) { return Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 }); }
+
+  function renderTierProgress(cart) {
+    var model = tierProgressViewModel(cart);
+    if (!model) return "";
+    var statusTitle = model.message.title ? '<strong class="loopdesk-tier-progress__status-title">' + escapeHtml(model.message.title) + '</strong>' : '';
+    var description = model.message.description.replace("{amount}", model.amountToNextTier === null ? "" : majorMoney(model.amountToNextTier, model.currencyCode));
+    var markers = model.tiers.map(function (tier, index) {
+      var stateName = tier.isCurrent ? "current" : tier.isUnlocked ? "unlocked" : tier.isNext ? "next" : "locked";
+      var connector = index < model.tiers.length - 1 ? '<span class="loopdesk-tier-progress__connector"><i style="width:' + (tier.isUnlocked ? (tier.isCurrent ? model.progressPercent : 100) : 0) + '%"></i></span>' : '';
+      return '<li class="loopdesk-tier-progress__tier is-' + stateName + '"><span class="loopdesk-tier-progress__marker" aria-hidden="true">' + (tier.isUnlocked && !tier.isCurrent ? '&#10003;' : '') + '</span>' + connector + '<span class="loopdesk-tier-progress__range">' + escapeHtml(tierRangeLabel(tier, model.currencyCode)) + '</span><strong>' + escapeHtml(displayPercentage(tier.percentage)) + '% OFF</strong></li>';
+    }).join("");
+    return '<section class="loopdesk-tier-progress" style="--tier-count:' + model.tiers.length + '" aria-labelledby="loopdesk-tier-progress-title" aria-live="polite"><p class="loopdesk-tier-progress__eyebrow">' + escapeHtml(model.message.eyebrow) + '</p><h3 id="loopdesk-tier-progress-title">Your cart discount increases as you add more.</h3><div class="loopdesk-tier-progress__bar" role="progressbar" aria-label="Cart discount progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + model.progressPercent + '"><ol>' + markers + '</ol></div><p class="loopdesk-tier-progress__status">' + statusTitle + '<span>' + escapeHtml(description) + '</span></p><small>Discount applied automatically at checkout.</small></section>';
+  }
+
   function trustBadgeIcon(icon) {
     var paths = {
       "secure-payment": '<path d="M12 3l7 3v5c0 4.6-3 8-7 10-4-2-7-5.4-7-10V6l7-3z"/><path d="M9 12l2 2 4-4"/>',
@@ -1249,6 +1304,7 @@
       + renderCartDrawerSlot("BEFORE_CART_LINES", slotContext)
       + renderLines(cart)
       + renderCartDrawerSlot("AFTER_CART_LINES", slotContext)
+      + renderTierProgress(cart)
       + renderCartDrawerSlot("BEFORE_PROMOTIONS", slotContext)
       + renderOffers(cart)
       + renderCartDrawerSlot("AFTER_PROMOTIONS", slotContext)

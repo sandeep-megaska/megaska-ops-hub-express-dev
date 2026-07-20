@@ -882,11 +882,14 @@ export async function getCompiledPromotionRuntime(shopId: string, deps: RuntimeP
     if (isRecord(payload) && (payload.status || row.status) === "ACTIVE" && scheduled(payload, now)) next.push({ row, payload });
     return next;
   }, []);
-  const offers = await resolveRuntimeOfferProducts(shop?.shopDomain || shop?.myshopifyDomain || shop?.primaryDomain || null, candidates.map(({ payload }) => offerProductGid(payload)), deps);
+  const productCandidates = candidates.filter(({ payload }) => !(isRecord(payload.reward) && payload.reward.scope === "order"));
+  const offers = await resolveRuntimeOfferProducts(shop?.shopDomain || shop?.myshopifyDomain || shop?.primaryDomain || null, productCandidates.map(({ payload }) => offerProductGid(payload)), deps);
 
   return {
     rules: candidates
       .map(({ row, payload }) => {
+        const isOrderTier = isRecord(payload.reward) && payload.reward.scope === "order";
+        if (isOrderTier) return { ...payload, ruleId: payload.ruleId || row.id, priority: payload.priority ?? row.priority, status: payload.status || row.status, compilation: { version: row.currentCompilation!.version, status: row.currentCompilation!.status } };
         const product = offers.get(offerProductGid(payload));
         if (!product) return null;
         return { ...payload, ruleId: payload.ruleId || row.id, priority: payload.priority ?? row.priority, status: payload.status || row.status, offer: { ...(isRecord(payload.offer) ? payload.offer : {}), productGid: product.productGid, handle: product.handle, title: product.title, imageUrl: product.imageUrl }, compilation: { id: row.currentCompilation!.id, version: row.currentCompilation!.version, status: row.currentCompilation!.status } };
