@@ -95,6 +95,7 @@ model Shop {
   installationEvents            ShopInstallationEvent[]
   recoveryTokens                CheckoutRecoveryToken[]
   promotionRules                PromotionRule[]
+  promotionOrderTiers           PromotionOrderTier[]
   promotionAuditLogs            PromotionAuditLog[]
   promotionRuntimeSyncState     PromotionRuntimeSyncState?
   merchantNotificationSettings  MerchantNotificationSettings?
@@ -721,6 +722,30 @@ enum PromotionRewardType {
   FIXED_PRICE
 }
 
+enum PromotionRewardScope {
+  PRODUCT
+  ORDER
+}
+
+enum PromotionRewardMethod {
+  PERCENTAGE
+  FIXED_AMOUNT
+  FIXED_PRICE
+}
+
+enum PromotionTierSelectionMode {
+  HIGHEST_ELIGIBLE
+}
+
+enum PromotionTierContinuityMode {
+  CONTINUOUS
+  ALLOW_GAPS
+}
+
+enum PromotionOrderDiscountBasis {
+  ELIGIBLE_MERCHANDISE_SUBTOTAL
+}
+
 enum PromotionCompilationStatus {
   PENDING
   COMPILING
@@ -748,44 +773,50 @@ enum PromotionCompilationReason {
 }
 
 model PromotionRule {
-  id                            String                    @id @default(uuid())
+  id                            String                       @id @default(uuid())
   shopId                        String
   name                          String
   description                   String?
-  status                        PromotionRuleStatus       @default(DRAFT)
-  priority                      Int                       @default(0)
+  status                        PromotionRuleStatus          @default(DRAFT)
+  priority                      Int                          @default(0)
   triggerType                   PromotionTriggerType
-  triggerMatchMode              PromotionTriggerMatchMode @default(ANY)
-  minimumTriggerQuantity        Int                       @default(1)
-  minimumCartSubtotal           Decimal?                  @db.Decimal(18, 4)
+  triggerMatchMode              PromotionTriggerMatchMode    @default(ANY)
+  minimumTriggerQuantity        Int                          @default(1)
+  minimumCartSubtotal           Decimal?                     @db.Decimal(18, 4)
   offerProductGid               String
   offerProductHandle            String?
   offerProductTitle             String?
   offerProductImageUrl          String?
   rewardType                    PromotionRewardType
-  rewardValue                   Decimal                   @db.Decimal(18, 4)
-  maximumRewardQuantity         Int                       @default(1)
+  rewardValue                   Decimal                      @db.Decimal(18, 4)
+  rewardScope                   PromotionRewardScope         @default(PRODUCT)
+  rewardMethod                  PromotionRewardMethod?
+  tierSelectionMode             PromotionTierSelectionMode?
+  tierContinuityMode            PromotionTierContinuityMode?
+  orderDiscountBasis            PromotionOrderDiscountBasis?
+  maximumRewardQuantity         Int                          @default(1)
   heading                       String?
   badgeText                     String?
   customerMessage               String?
   ctaText                       String?
-  combinesWithProductDiscounts  Boolean                   @default(false)
-  combinesWithOrderDiscounts    Boolean                   @default(true)
-  combinesWithShippingDiscounts Boolean                   @default(true)
+  combinesWithProductDiscounts  Boolean                      @default(false)
+  combinesWithOrderDiscounts    Boolean                      @default(true)
+  combinesWithShippingDiscounts Boolean                      @default(true)
   startsAt                      DateTime?
   endsAt                        DateTime?
-  currentCompilationId          String?                   @unique
+  currentCompilationId          String?                      @unique
   compiledAt                    DateTime?
   createdByType                 String?
   createdById                   String?
   updatedByType                 String?
   updatedById                   String?
   archivedAt                    DateTime?
-  createdAt                     DateTime                  @default(now())
-  updatedAt                     DateTime                  @updatedAt
+  createdAt                     DateTime                     @default(now())
+  updatedAt                     DateTime                     @updatedAt
 
   shop               Shop                        @relation(fields: [shopId], references: [id], onDelete: Cascade)
   triggerReferences  PromotionTriggerReference[]
+  orderTiers         PromotionOrderTier[]
   compilations       PromotionCompilation[]      @relation("PromotionRuleCompilations")
   auditLogs          PromotionAuditLog[]
   currentCompilation PromotionCompilation?       @relation("PromotionRuleCurrentCompilation", fields: [currentCompilationId], references: [id], onDelete: SetNull)
@@ -796,6 +827,26 @@ model PromotionRule {
   @@index([shopId, triggerType])
   @@index([shopId, offerProductGid])
   @@index([shopId, archivedAt])
+}
+
+model PromotionOrderTier {
+  id              String   @id @default(uuid())
+  publicId        String
+  shopId          String
+  promotionRuleId String
+  minimumSubtotal Decimal  @db.Decimal(18, 4)
+  maximumSubtotal Decimal? @db.Decimal(18, 4)
+  percentage      Decimal  @db.Decimal(8, 4)
+  position        Int
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  shop          Shop          @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  promotionRule PromotionRule @relation(fields: [promotionRuleId], references: [id], onDelete: Cascade)
+
+  @@unique([promotionRuleId, publicId])
+  @@index([shopId, promotionRuleId])
+  @@index([promotionRuleId, position])
 }
 
 model PromotionTriggerReference {
@@ -1691,11 +1742,11 @@ model ProductReview {
   editTokens            ProductReviewEditToken[]
   revisions             ProductReviewRevision[]
 
+  // One customer may submit only one review for a purchased order line within a shop; another order line for the same product remains reviewable.
+  @@unique([shopId, customerProfileId, shopifyLineItemId])
   @@index([shopId, shopifyProductId, status, publishedAt])
   @@index([shopId, customerProfileId, submittedAt])
   @@index([megaskaOrderId])
-  // One customer may submit only one review for a purchased order line within a shop; another order line for the same product remains reviewable.
-  @@unique([shopId, customerProfileId, shopifyLineItemId])
   @@index([shopId, status, submittedAt])
 }
 
