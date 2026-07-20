@@ -79,6 +79,7 @@ export type CartIntelligenceSettings = {
   dynamicBannerEnabled: boolean;
   dynamicBannerText: string;
   dynamicBanner: CartDynamicBannerConfig;
+  savingsSummary: CartSavingsSummaryConfig;
   upsellsEnabled: boolean;
   bundlesEnabled: boolean;
   aiRecommendationsEnabled: boolean;
@@ -110,6 +111,18 @@ export type CartDynamicBannerConfig = {
   visibility: { emptyCart: boolean; cartWithItems: boolean };
 };
 
+export type CartSavingsSummaryConfig = {
+  enabled: boolean;
+  title: string;
+  placement: CartDrawerModuleSlot;
+  sortOrder: number;
+  showTotalSavings: boolean;
+  showOfferSavings: boolean;
+  showCouponSavings: boolean;
+  showCompareAtSavings: boolean;
+  hideZeroRows: boolean;
+};
+
 export type TrustBadgeIcon = "secure-payment" | "delivery" | "exchange" | "cod" | "support" | "authenticity" | "custom";
 export type TrustBadgeItem = { id: string; enabled: boolean; icon: TrustBadgeIcon; label: string; sortOrder: number };
 export type TrustBadgeConfig = { enabled: boolean; placement: "BELOW_TOTALS" | "BELOW_CHECKOUT_BUTTON"; layout: "ROW" | "GRID"; items: TrustBadgeItem[] };
@@ -120,6 +133,7 @@ export type CartIntelligencePublicRuntimeConfig = {
   trustBadges: TrustBadgeConfig;
   cartGoalProgress: CartGoalProgressConfig;
   dynamicBanner: CartDynamicBannerConfig;
+  savingsSummary: CartSavingsSummaryConfig;
 };
 
 export type LoopDeskPublicRuntimeConfig = Pick<
@@ -290,6 +304,29 @@ export const DEFAULT_CART_DYNAMIC_BANNER_CONFIG: CartDynamicBannerConfig = {
   visibility: { emptyCart: true, cartWithItems: true },
 };
 
+export const DEFAULT_CART_SAVINGS_SUMMARY_CONFIG: CartSavingsSummaryConfig = {
+  enabled: false, title: "You Saved", placement: "BEFORE_TOTALS", sortOrder: 20,
+  showTotalSavings: true, showOfferSavings: true, showCouponSavings: true,
+  showCompareAtSavings: true, hideZeroRows: true,
+};
+
+export function normalizeCartSavingsSummaryConfig(input: unknown): CartSavingsSummaryConfig {
+  const raw = isRecord(input) ? input : {};
+  const title = typeof raw.title === "string" ? stripHtml(raw.title.trim()).slice(0, 80) : "";
+  const order = typeof raw.sortOrder === "number" ? raw.sortOrder : Number(raw.sortOrder);
+  return {
+    enabled: bool(raw.enabled, false),
+    title: title || "You Saved",
+    placement: CART_DRAWER_MODULE_SLOTS.includes(raw.placement as CartDrawerModuleSlot) ? raw.placement as CartDrawerModuleSlot : "BEFORE_TOTALS",
+    sortOrder: Number.isFinite(order) && order >= 0 && order <= 999 ? Math.round(order) : 20,
+    showTotalSavings: bool(raw.showTotalSavings, true),
+    showOfferSavings: bool(raw.showOfferSavings, true),
+    showCouponSavings: bool(raw.showCouponSavings, true),
+    showCompareAtSavings: bool(raw.showCompareAtSavings, true),
+    hideZeroRows: bool(raw.hideZeroRows, true),
+  };
+}
+
 const DYNAMIC_BANNER_STYLES = ["INFO", "SUCCESS", "WARNING", "NEUTRAL", "BRAND"] as const;
 const DYNAMIC_BANNER_ALIGNMENTS = ["LEFT", "CENTER"] as const;
 
@@ -337,6 +374,7 @@ export function normalizeCartIntelligenceSettings(input: unknown): CartIntellige
     trustBadgesEnabled: bool(raw.trustBadgesEnabled, isRecord(raw.trustBadges) ? bool(raw.trustBadges.enabled, false) : false),
   });
   const dynamicBanner = normalizeCartDynamicBannerConfig(raw.dynamicBanner, raw);
+  const savingsSummary = normalizeCartSavingsSummaryConfig(raw.savingsSummary);
   return {
     enabled: bool(raw.enabled, false),
     cartGoalProgress: normalizeCartGoalProgressConfig(raw),
@@ -345,6 +383,7 @@ export function normalizeCartIntelligenceSettings(input: unknown): CartIntellige
     dynamicBannerEnabled: bool(raw.dynamicBannerEnabled, false),
     dynamicBannerText: text(raw.dynamicBannerText, "Limited-time cart offers may appear here.", 240),
     dynamicBanner,
+    savingsSummary,
     upsellsEnabled: bool(raw.upsellsEnabled, false),
     bundlesEnabled: bool(raw.bundlesEnabled, false),
     aiRecommendationsEnabled: bool(raw.aiRecommendationsEnabled, false),
@@ -426,6 +465,24 @@ export function validateCartIntelligenceSettingsPatch(patch: unknown): string[] 
       else { validateBool(banner.visibility.emptyCart, "Dynamic Banner Empty Cart Visibility"); validateBool(banner.visibility.cartWithItems, "Dynamic Banner Cart With Items Visibility"); }
     }
   }
+  if (raw.savingsSummary !== undefined) {
+    if (!isRecord(raw.savingsSummary)) errors.push("Savings Summary must be an object.");
+    else {
+      const summary = raw.savingsSummary;
+      validateBool(summary.enabled, "Savings Summary Enabled");
+      validateText(summary.title, "Savings Summary Title", 80);
+      if (summary.placement !== undefined && !CART_DRAWER_MODULE_SLOTS.includes(summary.placement as CartDrawerModuleSlot)) errors.push("Savings Summary placement is invalid.");
+      if (summary.sortOrder !== undefined) {
+        const order = Number(summary.sortOrder);
+        if (!Number.isFinite(order) || order < 0 || order > 999) errors.push("Savings Summary order must be between 0 and 999.");
+      }
+      validateBool(summary.showTotalSavings, "Show Total Savings");
+      validateBool(summary.showOfferSavings, "Show Offer Savings");
+      validateBool(summary.showCouponSavings, "Show Coupon Savings");
+      validateBool(summary.showCompareAtSavings, "Show Retail Savings");
+      validateBool(summary.hideZeroRows, "Hide Rows with Zero Savings");
+    }
+  }
   if (raw.trustBadges !== undefined) {
     if (!isRecord(raw.trustBadges)) errors.push("Trust Badges must be an object.");
     else {
@@ -449,8 +506,10 @@ export function toCartIntelligencePublicRuntimeConfig(
   settings: CartIntelligenceSettings
 ): CartIntelligencePublicRuntimeConfig {
   const dynamicBanner = normalizeCartDynamicBannerConfig(settings.dynamicBanner, settings);
-  const modules = normalizeCartDrawerModules(settings.cartDrawerModules).modules.filter((module) => module.key !== "DYNAMIC_BANNER");
+  const savingsSummary = normalizeCartSavingsSummaryConfig(settings.savingsSummary);
+  const modules = normalizeCartDrawerModules(settings.cartDrawerModules).modules.filter((module) => module.key !== "DYNAMIC_BANNER" && module.key !== "SAVINGS_SUMMARY");
   modules.push({ key: "DYNAMIC_BANNER", enabled: dynamicBanner.enabled, slot: dynamicBanner.placement, sortOrder: dynamicBanner.sortOrder, settings: dynamicBanner });
+  modules.push({ key: "SAVINGS_SUMMARY", enabled: savingsSummary.enabled, slot: savingsSummary.placement, sortOrder: savingsSummary.sortOrder, settings: savingsSummary });
   return {
     enabled: settings.enabled,
     cartDrawerModules: { schemaVersion: 1, modules },
@@ -460,6 +519,7 @@ export function toCartIntelligencePublicRuntimeConfig(
     ),
     cartGoalProgress: settings.cartGoalProgress,
     dynamicBanner,
+    savingsSummary,
   };
 }
 
