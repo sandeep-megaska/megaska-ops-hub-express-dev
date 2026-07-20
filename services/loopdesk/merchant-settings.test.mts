@@ -98,6 +98,18 @@ test("public runtime config excludes integration and analytics settings", () => 
   assert.equal((runtime.general as { merchantName: string }).merchantName, "LoopDesk");
 });
 
+test("compiled order tiers publish without product enrichment and product offers remain guarded", async () => {
+  const order = compiledRule("order-rule", "");
+  order.currentCompilation.storefrontPayload = {
+    ...order.currentCompilation.storefrontPayload,
+    reward: { scope: "order", method: "percentage", configuration: { selectionMode: "highest_eligible", continuityMode: "allow_gaps", basis: "eligible_merchandise_subtotal", tiers: [{ id: "tier-public", minimumSubtotal: "1", percentage: "5" }] } },
+  };
+  const runtime = await getCompiledPromotionRuntime("shop-1", { database: promotionRuntimeDb([order]) as any, graphql: async () => { throw new Error("order tiers must not request products"); } });
+  assert.equal(runtime.rules.length, 1);
+  assert.equal((runtime.rules[0] as any).reward.configuration.tiers[0].id, "tier-public");
+  assert.equal((runtime.rules[0] as any).compilation.id, undefined);
+});
+
 test("legacy runtime shape remains available", () => {
   const settings = normalizeLoopDeskMerchantSettings({
     labels: { checkoutButtonText: "Checkout now" },
