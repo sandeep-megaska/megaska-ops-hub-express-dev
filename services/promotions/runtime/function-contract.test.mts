@@ -30,6 +30,16 @@ test("rule mapper excludes compiler-only and presentation keys", () => {
   assert.equal("combinesWith" in rule, false);
 });
 
+test("rule mapper preserves and canonicalizes order rewards", () => {
+  const base = fixture.rules[0];
+  const rule = mapCompilationToFunctionRule({ id: "order-1", status: "ACTIVE", priority: 2, currentCompilation: { version: 1, status: "READY", functionPayload: { ...base, reward: { scope: "order", method: "percentage", configuration: { selectionMode: "highest_eligible", continuityMode: "continuous", basis: "eligible_merchandise_subtotal", tiers: [
+    { id: "high", minimumSubtotal: "100.00", percentage: "15.0" },
+    { id: "low", minimumSubtotal: "0.0", maximumSubtotal: "100.000", percentage: "10.00" },
+  ] } } } } });
+  assert.equal(rule.reward.scope, "order");
+  assert.deepEqual((rule.reward as any).configuration.tiers.map((tier: any) => tier.id), ["low", "high"]);
+});
+
 test("compilationVersion must be positive", () => {
   assert.throws(() => mapCompilationToFunctionRule({ id: "r1", status: "ACTIVE", priority: 1, currentCompilation: { version: 0, status: "READY", functionPayload: fixture.rules[0] } }), /positive/);
 });

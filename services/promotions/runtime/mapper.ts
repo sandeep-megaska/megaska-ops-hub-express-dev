@@ -1,4 +1,4 @@
-import { validateAndCanonicalizeFunctionRule, type LoopDeskFunctionRule } from "./function-contract.ts";
+import { validateAndCanonicalizeFunctionRule, type LoopDeskFunctionRule, type LoopDeskOrderFunctionRule, type LoopDeskProductFunctionRule } from "./function-contract.ts";
 
 type CompiledRuleRecord = {
   id: string;
@@ -15,7 +15,7 @@ export function mapCompilationToFunctionRule(rule: CompiledRuleRecord): LoopDesk
   if (!Number.isInteger(compilation.version) || compilation.version <= 0) throw new Error(`Rule ${rule.id} compilationVersion must be a positive integer.`);
   const payload = compilation.functionPayload as CompilerFunctionPayload | null;
   if (!payload || typeof payload !== "object") throw new Error(`Rule ${rule.id} compilation is missing Function payload.`);
-  return validateAndCanonicalizeFunctionRule({
+  const mappedRule = {
     schemaVersion: 1,
     ruleId: String(payload.ruleId ?? rule.id),
     compilationVersion: compilation.version,
@@ -29,6 +29,9 @@ export function mapCompilationToFunctionRule(rule: CompiledRuleRecord): LoopDesk
       sourceGroups: payload.trigger.sourceGroups.map((group) => ({ sourceReferenceId: String(group.sourceReferenceId), sourceType: String(group.sourceType), sourceGid: String(group.sourceGid || ""), productGids: group.productGids, unresolved: group.unresolved })),
     },
     offer: { productGid: String(payload.offer.productGid), handle: typeof payload.offer.handle === "string" ? payload.offer.handle : null },
-    reward: payload.reward as LoopDeskFunctionRule["reward"],
-  });
+  } satisfies Omit<LoopDeskFunctionRule, "reward">;
+  if ((payload.reward as { scope?: unknown } | null)?.scope === "order") {
+    return validateAndCanonicalizeFunctionRule({ ...mappedRule, reward: payload.reward as LoopDeskOrderFunctionRule["reward"] });
+  }
+  return validateAndCanonicalizeFunctionRule({ ...mappedRule, reward: payload.reward as LoopDeskProductFunctionRule["reward"] });
 }
