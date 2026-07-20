@@ -77,6 +77,7 @@ export type CartIntelligenceSettings = {
   freeShippingSourceMode: FreeShippingSourceMode;
   progressBarText: string;
   trustBadgesEnabled: boolean;
+  trustBadges: TrustBadgeConfig;
   dynamicBannerEnabled: boolean;
   dynamicBannerText: string;
   upsellsEnabled: boolean;
@@ -84,8 +85,13 @@ export type CartIntelligenceSettings = {
   aiRecommendationsEnabled: boolean;
 };
 
+export type TrustBadgeIcon = "secure-payment" | "delivery" | "exchange" | "cod" | "support" | "authenticity" | "custom";
+export type TrustBadgeItem = { id: string; enabled: boolean; icon: TrustBadgeIcon; label: string; sortOrder: number };
+export type TrustBadgeConfig = { enabled: boolean; placement: "BELOW_TOTALS" | "BELOW_CHECKOUT_BUTTON"; layout: "ROW" | "GRID"; items: TrustBadgeItem[] };
+
 export type CartIntelligencePublicRuntimeConfig = {
   enabled: boolean;
+  trustBadges: TrustBadgeConfig;
   freeShippingProgress: {
     enabled: boolean;
     sourceMode: FreeShippingSourceMode;
@@ -237,6 +243,30 @@ function status(
 function freeShippingSourceMode(value: unknown): FreeShippingSourceMode {
   return value === "SHOPIFY_WITH_FALLBACK" || value === "MANUAL_DISPLAY_ONLY" ? value : "SHOPIFY_ONLY";
 }
+const TRUST_BADGE_ICONS = ["secure-payment", "delivery", "exchange", "cod", "support", "authenticity", "custom"] as const;
+const DEFAULT_TRUST_BADGES: TrustBadgeItem[] = [
+  { id: "secure-payments", enabled: false, icon: "secure-payment", label: "Secure payments", sortOrder: 0 },
+  { id: "fast-dispatch", enabled: false, icon: "delivery", label: "Fast dispatch", sortOrder: 1 },
+  { id: "cash-on-delivery", enabled: false, icon: "cod", label: "Cash on delivery", sortOrder: 2 },
+  { id: "easy-exchange", enabled: false, icon: "exchange", label: "Easy exchange", sortOrder: 3 },
+  { id: "customer-support", enabled: false, icon: "support", label: "Customer support", sortOrder: 4 },
+  { id: "authentic-products", enabled: false, icon: "authenticity", label: "Authentic products", sortOrder: 5 },
+];
+function normalizeTrustBadges(value: unknown, legacyEnabled = false): TrustBadgeConfig {
+  const raw = isRecord(value) ? value : {};
+  const inputItems = Array.isArray(raw.items) ? raw.items.slice(0, 6) : DEFAULT_TRUST_BADGES;
+  const items = inputItems.map((value, index) => {
+    const item = isRecord(value) ? value : {};
+    const icon = TRUST_BADGE_ICONS.includes(item.icon as TrustBadgeIcon) ? item.icon as TrustBadgeIcon : "custom";
+    return { id: text(item.id, `badge-${index + 1}`, 64), enabled: bool(item.enabled, false), icon, label: text(item.label, "", 60), sortOrder: Math.round(numberValue(item.sortOrder, index, 0, 999)) };
+  }).sort((a, b) => a.sortOrder - b.sortOrder);
+  return {
+    enabled: bool(raw.enabled, legacyEnabled),
+    placement: raw.placement === "BELOW_CHECKOUT_BUTTON" ? "BELOW_CHECKOUT_BUTTON" : "BELOW_TOTALS",
+    layout: raw.layout === "ROW" ? "ROW" : "GRID",
+    items,
+  };
+}
 function section(raw: Record<string, unknown>, name: string) {
   return isRecord(raw[name]) ? raw[name] : raw;
 }
@@ -250,7 +280,8 @@ export function normalizeCartIntelligenceSettings(input: unknown): CartIntellige
     freeShippingThreshold: numberValue(raw.freeShippingThreshold, 0),
     freeShippingSourceMode: freeShippingSourceMode(raw.freeShippingSourceMode),
     progressBarText: text(raw.progressBarText, "You're {amount} away from free shipping", 160),
-    trustBadgesEnabled: bool(raw.trustBadgesEnabled, false),
+    trustBadgesEnabled: bool(raw.trustBadgesEnabled, isRecord(raw.trustBadges) ? bool(raw.trustBadges.enabled, false) : false),
+    trustBadges: normalizeTrustBadges(raw.trustBadges, bool(raw.trustBadgesEnabled, false)),
     dynamicBannerEnabled: bool(raw.dynamicBannerEnabled, false),
     dynamicBannerText: text(raw.dynamicBannerText, "Limited-time cart offers may appear here.", 160),
     upsellsEnabled: bool(raw.upsellsEnabled, false),
@@ -285,12 +316,28 @@ export function validateCartIntelligenceSettingsPatch(patch: unknown): string[] 
   if (raw.freeShippingSourceMode !== undefined && !["SHOPIFY_ONLY", "SHOPIFY_WITH_FALLBACK", "MANUAL_DISPLAY_ONLY"].includes(String(raw.freeShippingSourceMode))) errors.push("Free Shipping Source is invalid.");
   validateText(raw.progressBarText, "Progress Bar Text", 160);
   validateText(raw.dynamicBannerText, "Dynamic Banner Text", 160);
+  if (raw.trustBadges !== undefined) {
+    if (!isRecord(raw.trustBadges)) errors.push("Trust Badges must be an object.");
+    else {
+      validateBool(raw.trustBadges.enabled, "Trust Badges Enabled");
+      if (raw.trustBadges.placement !== undefined && !["BELOW_TOTALS", "BELOW_CHECKOUT_BUTTON"].includes(String(raw.trustBadges.placement))) errors.push("Trust Badges placement is invalid.");
+      if (raw.trustBadges.layout !== undefined && !["ROW", "GRID"].includes(String(raw.trustBadges.layout))) errors.push("Trust Badges layout is invalid.");
+      if (!Array.isArray(raw.trustBadges.items) || raw.trustBadges.items.length > 6) errors.push("Trust Badges must contain no more than six items.");
+      else raw.trustBadges.items.forEach((value, index) => {
+        if (!isRecord(value)) { errors.push(`Trust Badge ${index + 1} is invalid.`); return; }
+        validateBool(value.enabled, `Trust Badge ${index + 1} Enabled`);
+        if (!TRUST_BADGE_ICONS.includes(value.icon as TrustBadgeIcon)) errors.push(`Trust Badge ${index + 1} icon is invalid.`);
+        validateText(value.label, `Trust Badge ${index + 1} label`, 60);
+        if (!Number.isFinite(Number(value.sortOrder))) errors.push(`Trust Badge ${index + 1} order must be a number.`);
+      });
+    }
+  }
   return errors;
 }
 
 export function toCartIntelligencePublicRuntimeConfig(settings: CartIntelligenceSettings, audit?: ShopifyFreeShippingAudit): CartIntelligencePublicRuntimeConfig {
   const resolution = audit || { status: "UNSUPPORTED" as const, thresholdMinor: null, currency: null, profileId: null, profileName: null, profileCount: 0, applicableProfileCount: 0, reason: "Shopify resolution data unavailable", resolvedAt: null };
-  return { enabled: settings.enabled, freeShippingProgress: { enabled: settings.freeShippingProgressEnabled, sourceMode: settings.freeShippingSourceMode, fallbackThresholdMinor: settings.freeShippingThreshold > 0 ? Math.round(settings.freeShippingThreshold * 100) : null, progressBarText: settings.progressBarText, resolvedShopifyThresholdMinor: resolution.status === "AVAILABLE" ? resolution.thresholdMinor : null, resolvedCurrency: resolution.currency, resolutionStatus: resolution.status, resolutionSource: resolution.status === "AVAILABLE" ? "SHOPIFY_DELIVERY_PROFILE" : null, sourceProfile: resolution.profileName, lastResolvedAt: resolution.resolvedAt, diagnostic: resolution } };
+  return { enabled: settings.enabled, trustBadges: normalizeTrustBadges(settings.trustBadges, settings.trustBadgesEnabled), freeShippingProgress: { enabled: settings.freeShippingProgressEnabled, sourceMode: settings.freeShippingSourceMode, fallbackThresholdMinor: settings.freeShippingThreshold > 0 ? Math.round(settings.freeShippingThreshold * 100) : null, progressBarText: settings.progressBarText, resolvedShopifyThresholdMinor: resolution.status === "AVAILABLE" ? resolution.thresholdMinor : null, resolvedCurrency: resolution.currency, resolutionStatus: resolution.status, resolutionSource: resolution.status === "AVAILABLE" ? "SHOPIFY_DELIVERY_PROFILE" : null, sourceProfile: resolution.profileName, lastResolvedAt: resolution.resolvedAt, diagnostic: resolution } };
 }
 
 export function validateLoopDeskMerchantSettingsPatch(

@@ -154,6 +154,18 @@ async function saveMerchantSettings(
       freeShippingSourceMode: formData.get("freeShippingSourceMode"),
       progressBarText: formData.get("progressBarText"),
       trustBadgesEnabled: formData.get("trustBadgesEnabled") === "on",
+      trustBadges: {
+        enabled: formData.get("trustBadgesEnabled") === "on",
+        placement: formData.get("trustBadgesPlacement"),
+        layout: formData.get("trustBadgesLayout"),
+        items: Array.from({ length: 6 }, (_, index) => ({
+          id: formData.get(`trustBadgeId${index}`),
+          enabled: formData.get(`trustBadgeEnabled${index}`) === "on",
+          icon: formData.get(`trustBadgeIcon${index}`),
+          label: formData.get(`trustBadgeLabel${index}`),
+          sortOrder: formData.get(`trustBadgeSortOrder${index}`),
+        })),
+      },
       dynamicBannerEnabled: formData.get("dynamicBannerEnabled") === "on",
       dynamicBannerText: formData.get("dynamicBannerText"),
       upsellsEnabled: formData.get("upsellsEnabled") === "on",
@@ -545,11 +557,27 @@ export default async function MerchantSettingsPage({
           <div className="grid gap-3 md:grid-cols-2">
             <Check label="Cart Intelligence Enabled" name="cartIntelligenceEnabled" defaultChecked={cartIntelligence.enabled} help="Master public flag for future Cart Intelligence experiences; disabled by default." />
             <Check label="Free Shipping Progress Enabled" name="freeShippingProgressEnabled" defaultChecked={cartIntelligence.freeShippingProgressEnabled} help="Stores whether a future free-shipping progress indicator may be shown." />
-            <Check label="Trust Badges Enabled" name="trustBadgesEnabled" defaultChecked={cartIntelligence.trustBadgesEnabled} help="Stores whether future public trust badge display is allowed." />
             <Check label="Dynamic Banner Enabled" name="dynamicBannerEnabled" defaultChecked={cartIntelligence.dynamicBannerEnabled} help="Stores whether a future cart banner may be shown." />
             <Check label="Upsells Enabled" name="upsellsEnabled" defaultChecked={cartIntelligence.upsellsEnabled} help="Configuration flag only; no upsell logic is implemented in this phase." />
             <Check label="Bundles Enabled" name="bundlesEnabled" defaultChecked={cartIntelligence.bundlesEnabled} help="Configuration flag only; no bundle logic is implemented in this phase." />
             <Check label="AI Recommendations Enabled" name="aiRecommendationsEnabled" defaultChecked={cartIntelligence.aiRecommendationsEnabled} help="Configuration flag only; no AI recommendations are implemented in this phase." />
+          </div>
+          <div className="grid gap-4 rounded-xl border border-gray-200 bg-gray-50 p-4">
+            <div className="grid gap-3 md:grid-cols-3">
+              <Check label="Trust Badges Enabled" name="trustBadgesEnabled" defaultChecked={cartIntelligence.trustBadges.enabled} help="Master switch. Individual claims remain disabled until you approve them." />
+              <label className="grid gap-2 text-sm font-medium text-gray-800"><span>Placement</span><select className="rounded-lg border border-gray-300 bg-white px-3 py-2" name="trustBadgesPlacement" defaultValue={cartIntelligence.trustBadges.placement}><option value="BELOW_TOTALS">Below totals</option><option value="BELOW_CHECKOUT_BUTTON">Below checkout button</option></select></label>
+              <label className="grid gap-2 text-sm font-medium text-gray-800"><span>Layout</span><select className="rounded-lg border border-gray-300 bg-white px-3 py-2" name="trustBadgesLayout" defaultValue={cartIntelligence.trustBadges.layout}><option value="GRID">Grid</option><option value="ROW">Row</option></select></label>
+            </div>
+            <p className={helpClass}>Up to six plain-text badges. Enabling a badge confirms that its claim is accurate for your store.</p>
+            {cartIntelligence.trustBadges.items.map((item, index) => (
+              <div key={item.id} className="grid items-end gap-3 rounded-lg border border-gray-200 bg-white p-3 md:grid-cols-[1fr_2fr_7rem_auto]">
+                <input type="hidden" name={`trustBadgeId${index}`} value={item.id} />
+                <label className="grid gap-2 text-sm font-medium"><span>Icon</span><select className="rounded-lg border border-gray-300 px-3 py-2" name={`trustBadgeIcon${index}`} defaultValue={item.icon}><option value="secure-payment">Secure payment</option><option value="delivery">Delivery</option><option value="exchange">Exchange</option><option value="cod">Cash on delivery</option><option value="support">Support</option><option value="authenticity">Authenticity</option><option value="custom">General</option></select></label>
+                <Field label={`Badge ${index + 1} label`} name={`trustBadgeLabel${index}`} defaultValue={item.label} />
+                <Field label="Order" name={`trustBadgeSortOrder${index}`} type="number" defaultValue={String(item.sortOrder)} />
+                <Check label="Enabled" name={`trustBadgeEnabled${index}`} defaultChecked={item.enabled} />
+              </div>
+            ))}
           </div>
           <div className="grid gap-4 md:grid-cols-3">
             <Field label="Fallback Free Shipping Display Threshold" name="freeShippingThreshold" type="number" defaultValue={String(cartIntelligence.freeShippingThreshold)} help="Optional display-only fallback. Existing stored threshold values remain compatible." />
