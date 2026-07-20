@@ -1,5 +1,7 @@
 export type ShopifyPricingSourceType = "ajax-cart" | "storefront-cart";
 
+export type { PricingDiagnostics, ShopifyTaxLine, TaxSummary } from "./tax-summary";
+
 export type MinorMoney = {
   amount: number | null;
   currencyCode: string | null;
