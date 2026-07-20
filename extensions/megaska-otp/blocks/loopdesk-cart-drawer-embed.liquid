@@ -53,6 +53,7 @@
       var drawerAssetUrl = {{ 'loopdesk-cart-drawer.js' | asset_url | json }};
       var shopDomain = {{ shop.permanent_domain | json }};
       var runtimeUrl = "/apps/megaska/api/runtime/config?shop=" + encodeURIComponent(shopDomain) + "&_loopdesk_runtime=" + Date.now();
+      var drawerAssetRequested = false;
       var couponBusy = false;
       var couponMountPromise = null;
 
@@ -291,6 +292,9 @@
       }, true);
 
       function loadDrawerAsset() {
+        if (drawerAssetRequested) return;
+        drawerAssetRequested = true;
+
         var script = document.createElement('script');
         script.src = drawerAssetUrl;
         script.defer = true;
@@ -298,12 +302,14 @@
         document.head.appendChild(script);
       }
 
-      if (typeof fetch !== 'function') { loadDrawerAsset(); return; }
-      fetch(runtimeUrl, { credentials:'same-origin', cache:'no-store' })
-        .then(function (response) { return response.ok ? response.json() : null; })
-        .then(mergeRuntimeConfig)
-        .catch(function () {})
-        .then(loadDrawerAsset);
+      loadDrawerAsset();
+
+      if (typeof fetch === 'function') {
+        fetch(runtimeUrl, { credentials:'same-origin', cache:'no-store' })
+          .then(function (response) { return response.ok ? response.json() : null; })
+          .then(mergeRuntimeConfig)
+          .catch(function () {});
+      }
     })();
   </script>
 {% endif %}
