@@ -4,6 +4,7 @@ export {
   getLoopDeskRuntimeConfig,
   getCartIntelligenceSettings,
   normalizeCartGoalProgressConfig,
+  normalizeCartDynamicBannerConfig,
   normalizeCartIntelligenceSettings,
   toCartIntelligencePublicRuntimeConfig,
   normalizeLoopDeskRuntimeConfig,
@@ -13,6 +14,7 @@ export {
   type LoopDeskPublicRuntimeConfig,
   type CartIntelligenceSettings,
   type CartIntelligencePublicRuntimeConfig,
+  type CartDynamicBannerConfig,
 } from "./merchant-settings";
 export {
   CART_DRAWER_MODULE_KEYS,
