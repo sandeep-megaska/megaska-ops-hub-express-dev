@@ -6,6 +6,18 @@ export type PromotionRewardScope = (typeof promotionRewardScopes)[number];
 export const promotionRewardMethods = ["percentage", "fixed_amount", "fixed_price"] as const;
 export type PromotionRewardMethod = (typeof promotionRewardMethods)[number];
 
+export type RewardCapability = "supported" | "planned" | "unsupported" | "not_applicable";
+export const REWARD_CAPABILITIES: Readonly<Record<PromotionRewardScope, Readonly<Record<PromotionRewardMethod, RewardCapability>>>> = {
+  product: { percentage: "supported", fixed_amount: "supported", fixed_price: "supported" },
+  order: { percentage: "planned", fixed_amount: "unsupported", fixed_price: "unsupported" },
+  shipping: { percentage: "unsupported", fixed_amount: "unsupported", fixed_price: "unsupported" },
+  store_credit: { percentage: "not_applicable", fixed_amount: "planned", fixed_price: "not_applicable" },
+};
+
+export function rewardCapability(scope: PromotionRewardScope, method: PromotionRewardMethod): RewardCapability {
+  return REWARD_CAPABILITIES[scope][method];
+}
+
 export type PromotionRewardConfiguration = {
   value: string;
   productGid: string;
@@ -53,7 +65,7 @@ export function canonicalRewardMethod(type: PromotionRewardType): PromotionRewar
 
 export function validateCanonicalPromotionReward(reward: CanonicalPromotionReward): RewardValidationResult {
   const issues: RewardValidationIssue[] = [];
-  if (reward.scope !== "product") issues.push(issue("unsupported_scope", "scope", `Reward scope '${reward.scope}' is not executable.`));
+  if (rewardCapability(reward.scope, reward.method) !== "supported") issues.push(issue("unsupported_scope", "scope", `Reward scope '${reward.scope}' is not executable.`));
   if (!promotionRewardMethods.includes(reward.method)) issues.push(issue("unsupported_method", "method", "Reward method is not supported."));
   const value = normalizeNumericValue(reward.configuration.value);
   if (value === null) issues.push(issue("invalid_value", "configuration.value", "Reward value must be numeric."));
