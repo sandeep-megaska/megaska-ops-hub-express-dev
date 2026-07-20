@@ -13,8 +13,10 @@ mod tests {
 
     use crate::{
         config::{
-            parse_config, FunctionRule, LegacyRewardConfig, MatchMode, OfferConfig, RewardConfig, RewardType,
-            RuleStatus, SourceGroup, TriggerConfig,
+            parse_config, CanonicalRewardConfig, CanonicalRewardConfiguration, FunctionRule,
+            LegacyRewardConfig, MatchMode, OfferConfig, OrderDiscountTier, RewardConfig,
+            RewardMethod, RewardScope, RewardType, RuleStatus, SourceGroup,
+            TieredOrderPercentageConfiguration, TriggerConfig,
         },
         decimal::Decimal,
         eligibility::{allocations, conditions_met, Cart, Line},
@@ -54,6 +56,34 @@ mod tests {
         }
     }
 
+    fn order_rule(id: &str, priority: i64, tiers: Vec<OrderDiscountTier>) -> FunctionRule {
+        let mut value = rule(RewardType::PercentageOff, "10", 1);
+        value.rule_id = id.into();
+        value.priority = priority;
+        value.reward = RewardConfig::Canonical(CanonicalRewardConfig {
+            scope: RewardScope::Order,
+            method: RewardMethod::Percentage,
+            configuration: CanonicalRewardConfiguration::Order(
+                TieredOrderPercentageConfiguration {
+                    selection_mode: "highest_eligible".into(),
+                    continuity_mode: "allow_gaps".into(),
+                    basis: "eligible_merchandise_subtotal".into(),
+                    tiers,
+                },
+            ),
+        });
+        value
+    }
+
+    fn tier(id: &str, minimum: &str, maximum: Option<&str>, percentage: &str) -> OrderDiscountTier {
+        OrderDiscountTier {
+            id: id.into(),
+            minimum_subtotal: minimum.into(),
+            maximum_subtotal: maximum.map(Into::into),
+            percentage: percentage.into(),
+        }
+    }
+
     fn trigger_line() -> Line {
         Line {
             id: "trigger".into(),
@@ -88,6 +118,84 @@ mod tests {
     #[test]
     fn malformed_config_fails_closed() {
         assert!(parse_config("{bad").is_err());
+    }
+
+    #[test]
+    fn contract_versions_are_explicit_and_unknown_versions_fail_closed() {
+        let legacy = include_str!("../../../shared/fixtures/loopdesk-function-configuration.json");
+        assert_eq!(parse_config(legacy).unwrap().function_contract_version, 1);
+        let v2 = legacy.replacen("{", "{\"functionContractVersion\":2,", 1);
+        assert_eq!(parse_config(&v2).unwrap().function_contract_version, 2);
+        assert!(parse_config(&v2.replace(
+            "\"functionContractVersion\":2",
+            "\"functionContractVersion\":3"
+        ))
+        .is_err());
+    }
+
+    #[test]
+    fn order_tiers_use_inclusive_minimum_exclusive_maximum_and_gaps() {
+        let rule = order_rule(
+            "order",
+            1,
+            vec![
+                tier("a", "100", Some("200"), "10"),
+                tier("b", "250", None, "20"),
+            ],
+        );
+        assert_eq!(
+            rewards::order_candidate(&rule, &Decimal::parse("100").unwrap())
+                .unwrap()
+                .source_tier_id,
+            "a"
+        );
+        assert!(rewards::order_candidate(&rule, &Decimal::parse("200").unwrap()).is_none());
+        assert_eq!(
+            rewards::order_candidate(&rule, &Decimal::parse("250").unwrap())
+                .unwrap()
+                .source_tier_id,
+            "b"
+        );
+    }
+
+    #[test]
+    fn malformed_overlapping_and_invalid_percentage_tiers_fail_closed() {
+        for tiers in [
+            vec![],
+            vec![
+                tier("a", "0", Some("20"), "10"),
+                tier("b", "10", None, "20"),
+            ],
+            vec![tier("a", "bad", None, "10")],
+            vec![tier("a", "0", None, "101")],
+        ] {
+            assert!(rewards::order_candidate(
+                &order_rule("order", 1, tiers),
+                &Decimal::parse("10").unwrap()
+            )
+            .is_none());
+        }
+    }
+
+    #[test]
+    fn order_conflicts_use_priority_benefit_then_public_id() {
+        let subtotal = Decimal::parse("100").unwrap();
+        let low = order_rule("z", 9, vec![tier("t", "0", None, "50")]);
+        let first = order_rule("b", 10, vec![tier("t", "0", None, "10")]);
+        let benefit = order_rule("a", 10, vec![tier("t", "0", None, "20")]);
+        assert_eq!(
+            rewards::resolve_order_candidate([&low, &first, &benefit].into_iter(), &subtotal)
+                .unwrap()
+                .source_rule_id,
+            "a"
+        );
+        let stable = order_rule("0", 10, vec![tier("t", "0", None, "20")]);
+        assert_eq!(
+            rewards::resolve_order_candidate([&benefit, &stable].into_iter(), &subtotal)
+                .unwrap()
+                .source_rule_id,
+            "0"
+        );
     }
 
     #[test]

@@ -13,12 +13,17 @@ pub fn cart_lines_discounts_generate_run(
 pub fn run(
     input: schema::cart_lines_discounts_generate_run::Input,
 ) -> schema::CartLinesDiscountsGenerateRunResult {
-    if !input
+    let product_enabled = input
         .discount()
         .discount_classes()
         .iter()
-        .any(|c| matches!(c, schema::DiscountClass::Product))
-    {
+        .any(|c| matches!(c, schema::DiscountClass::Product));
+    let order_enabled = input
+        .discount()
+        .discount_classes()
+        .iter()
+        .any(|c| matches!(c, schema::DiscountClass::Order));
+    if !product_enabled && !order_enabled {
         return empty_result();
     }
     let Some(raw) = input
@@ -43,31 +48,61 @@ pub fn run(
     let cart = eligibility::Cart::from_input(&input);
     let mut candidates = Vec::new();
     let mut claimed = std::collections::BTreeSet::new();
-    for rule in &cfg.rules {
-        if !rule.is_executable() || !eligibility::conditions_met(rule, &cart) {
-            continue;
-        }
-        let allocations = eligibility::allocations(rule, &cart, &claimed);
-        for allocation in allocations {
-            if let Some(candidate) = rewards::candidate(rule, allocation.line, allocation.quantity)
-            {
-                claimed.insert(allocation.line.id.clone());
-                candidates.push(candidate);
+    if product_enabled {
+        for rule in &cfg.rules {
+            if !rule.is_executable() || !eligibility::conditions_met(rule, &cart) {
+                continue;
+            }
+            let allocations = eligibility::allocations(rule, &cart, &claimed);
+            for allocation in allocations {
+                if let Some(candidate) =
+                    rewards::candidate(rule, allocation.line, allocation.quantity)
+                {
+                    claimed.insert(allocation.line.id.clone());
+                    candidates.push(candidate);
+                }
             }
         }
     }
-    if candidates.is_empty() {
-        empty_result()
-    } else {
-        schema::CartLinesDiscountsGenerateRunResult {
-            operations: vec![schema::CartOperation::ProductDiscountsAdd(
-                schema::ProductDiscountsAddOperation {
-                    selection_strategy: schema::ProductDiscountSelectionStrategy::All,
-                    candidates,
-                },
-            )],
+    let mut operations = Vec::new();
+    if !candidates.is_empty() {
+        operations.push(schema::CartOperation::ProductDiscountsAdd(
+            schema::ProductDiscountsAddOperation {
+                selection_strategy: schema::ProductDiscountSelectionStrategy::All,
+                candidates,
+            },
+        ));
+    }
+    if order_enabled && cfg.function_contract_version == 2 {
+        if let Some(order) = cart.subtotal.as_ref().and_then(|subtotal| {
+            rewards::resolve_order_candidate(
+                cfg.rules.iter().filter(|rule| rule.is_executable()),
+                subtotal,
+            )
+        }) {
+            if let Some(value) = order.percentage.to_shopify_decimal() {
+                operations.push(schema::CartOperation::OrderDiscountsAdd(
+                    schema::OrderDiscountsAddOperation {
+                        selection_strategy: schema::OrderDiscountSelectionStrategy::First,
+                        candidates: vec![schema::OrderDiscountCandidate {
+                            associated_discount_code: None,
+                            conditions: None,
+                            message: Some("LoopDesk order promotion".into()),
+                            targets: vec![schema::OrderDiscountCandidateTarget::OrderSubtotal(
+                                schema::OrderSubtotalTarget {
+                                    excluded_cart_line_ids: vec![],
+                                },
+                            )],
+                            value: schema::OrderDiscountCandidateValue::Percentage(
+                                schema::Percentage { value },
+                            ),
+                        }],
+                    },
+                ));
+            }
         }
     }
+    schema::CartLinesDiscountsGenerateRunResult { operations }
 }
 
 fn empty_result() -> schema::CartLinesDiscountsGenerateRunResult {
