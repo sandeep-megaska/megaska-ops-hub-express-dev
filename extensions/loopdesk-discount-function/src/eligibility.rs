@@ -123,10 +123,13 @@ pub fn allocations<'a>(
     cart: &'a Cart,
     claimed: &std::collections::BTreeSet<String>,
 ) -> Vec<Allocation<'a>> {
-    if rule.reward.maximum_quantity <= 0 {
+    let Some((_, _, maximum_quantity, configured_product_gid)) = rule.reward.executable_product() else {
+        return vec![];
+    };
+    if maximum_quantity <= 0 || (!configured_product_gid.is_empty() && configured_product_gid != rule.offer.product_gid) {
         return vec![];
     }
-    let mut remain = rule.reward.maximum_quantity;
+    let mut remain = maximum_quantity;
     let mut out = Vec::new();
     let mut lines: Vec<_> = cart.lines.iter().collect();
     lines.sort_by_key(|l| l.index);

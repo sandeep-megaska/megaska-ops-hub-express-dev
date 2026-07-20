@@ -40,6 +40,21 @@ pub enum RewardType {
     FixedPrice,
 }
 #[derive(Clone, Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum RewardScope {
+    Product,
+    Order,
+    Shipping,
+    StoreCredit,
+}
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum RewardMethod {
+    Percentage,
+    FixedAmount,
+    FixedPrice,
+}
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct TriggerConfig {
     #[serde(rename = "type")]
@@ -68,11 +83,42 @@ pub struct OfferConfig {
 }
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct RewardConfig {
+pub struct LegacyRewardConfig {
     #[serde(rename = "type")]
     pub reward_type: RewardType,
     pub value: String,
     pub maximum_quantity: i64,
+}
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CanonicalRewardConfiguration {
+    pub value: String,
+    pub product_gid: String,
+    #[serde(default)]
+    pub variant_gid: Option<String>,
+    pub quantity_cap: i64,
+}
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CanonicalRewardConfig {
+    pub scope: RewardScope,
+    pub method: RewardMethod,
+    pub configuration: CanonicalRewardConfiguration,
+}
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[serde(untagged)]
+pub enum RewardConfig {
+    Canonical(CanonicalRewardConfig),
+    Legacy(LegacyRewardConfig),
+}
+impl RewardConfig {
+    pub fn executable_product(&self) -> Option<(RewardMethod, &str, i64, &str)> {
+        match self {
+            Self::Canonical(value) if matches!(value.scope, RewardScope::Product) => Some((value.method.clone(), &value.configuration.value, value.configuration.quantity_cap, &value.configuration.product_gid)),
+            Self::Legacy(value) => Some((match value.reward_type { RewardType::PercentageOff => RewardMethod::Percentage, RewardType::FixedAmountOff => RewardMethod::FixedAmount, RewardType::FixedPrice => RewardMethod::FixedPrice }, &value.value, value.maximum_quantity, "")),
+            _ => None,
+        }
+    }
 }
 impl FunctionRule {
     pub fn is_executable(&self) -> bool {

@@ -1,5 +1,5 @@
 use crate::{
-    config::{FunctionRule, RewardType},
+    config::{FunctionRule, RewardMethod},
     decimal::Decimal,
     eligibility::Line,
     schema,
@@ -12,9 +12,11 @@ pub fn candidate(
     if quantity <= 0 {
         return None;
     }
-    let value = match rule.reward.reward_type {
-        RewardType::PercentageOff => {
-            let v = Decimal::parse(&rule.reward.value)?;
+    let (method, configured_value, quantity_cap, configured_product_gid) = rule.reward.executable_product()?;
+    if quantity_cap <= 0 || (!configured_product_gid.is_empty() && configured_product_gid != rule.offer.product_gid) { return None; }
+    let value = match method {
+        RewardMethod::Percentage => {
+            let v = Decimal::parse(configured_value)?;
             if !v.is_positive() || v > Decimal::parse("100")? {
                 return None;
             }
@@ -22,8 +24,8 @@ pub fn candidate(
                 value: v.to_shopify_decimal()?,
             })
         }
-        RewardType::FixedAmountOff => {
-            let v = Decimal::parse(&rule.reward.value)?;
+        RewardMethod::FixedAmount => {
+            let v = Decimal::parse(configured_value)?;
             if !v.is_positive() {
                 return None;
             }
@@ -34,8 +36,8 @@ pub fn candidate(
                 },
             )
         }
-        RewardType::FixedPrice => {
-            let fixed = Decimal::parse(&rule.reward.value)?;
+        RewardMethod::FixedPrice => {
+            let fixed = Decimal::parse(configured_value)?;
             if fixed.is_negative() {
                 return None;
             }

@@ -43,6 +43,6 @@ test("deterministically sorts rules, source groups and product gids", () => {
 
 test("changed reward, trigger, compilation version and configuration version change hash", () => {
   const base = assembleFunctionConfiguration({ configurationVersion: 1, rules: fixture.rules as any });
-  for (const rules of [ [{ ...fixture.rules[0], reward: { ...fixture.rules[0].reward, value: "50.00" } }], [{ ...fixture.rules[0], trigger: { ...fixture.rules[0].trigger, minimumQuantity: 2 } }], [{ ...fixture.rules[0], compilationVersion: 4 }] ] as any[]) assert.notEqual(assembleFunctionConfiguration({ configurationVersion: 1, rules }).configurationHash, base.configurationHash);
+  for (const rules of [ [{ ...fixture.rules[0], reward: { ...fixture.rules[0].reward, configuration: { ...fixture.rules[0].reward.configuration, value: "50" } } }], [{ ...fixture.rules[0], trigger: { ...fixture.rules[0].trigger, minimumQuantity: 2 } }], [{ ...fixture.rules[0], compilationVersion: 4 }] ] as any[]) assert.notEqual(assembleFunctionConfiguration({ configurationVersion: 1, rules }).configurationHash, base.configurationHash);
   assert.notEqual(assembleFunctionConfiguration({ configurationVersion: 2, rules: fixture.rules as any }).configurationHash, base.configurationHash);
 });

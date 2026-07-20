@@ -7,7 +7,7 @@ type CompiledRuleRecord = {
   currentCompilation?: { version: number; status: string; functionPayload?: unknown } | null;
 };
 
-type CompilerFunctionPayload = Omit<LoopDeskFunctionRule, "compilationVersion"> & { compilationVersion?: number };
+type CompilerFunctionPayload = Omit<LoopDeskFunctionRule, "compilationVersion" | "reward"> & { compilationVersion?: number; reward: unknown };
 
 export function mapCompilationToFunctionRule(rule: CompiledRuleRecord): LoopDeskFunctionRule {
   const compilation = rule.currentCompilation;
@@ -29,6 +29,6 @@ export function mapCompilationToFunctionRule(rule: CompiledRuleRecord): LoopDesk
       sourceGroups: payload.trigger.sourceGroups.map((group) => ({ sourceReferenceId: String(group.sourceReferenceId), sourceType: String(group.sourceType), sourceGid: String(group.sourceGid || ""), productGids: group.productGids, unresolved: group.unresolved })),
     },
     offer: { productGid: String(payload.offer.productGid), handle: typeof payload.offer.handle === "string" ? payload.offer.handle : null },
-    reward: { type: payload.reward.type, value: String(payload.reward.value), maximumQuantity: Number(payload.reward.maximumQuantity) },
+    reward: payload.reward as LoopDeskFunctionRule["reward"],
   });
 }

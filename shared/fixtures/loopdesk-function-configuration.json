@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "configurationVersion": 1,
-  "configurationHash": "138a1d6b96c139614a050d6d8cbedc18905fe5b1717e03f97b6d80507721bbdb",
+  "configurationHash": "da06aa258d90790a42387d64cbddf2353540b1ea91f633262bb2f44f73024531",
   "rules": [
     {
       "schemaVersion": 1,
@@ -32,9 +32,13 @@
         "handle": "offer-product"
       },
       "reward": {
-        "type": "PERCENTAGE_OFF",
-        "value": "100.00",
-        "maximumQuantity": 1
+        "scope": "product",
+        "method": "percentage",
+        "configuration": {
+          "value": "100",
+          "productGid": "gid://shopify/Product/999",
+          "quantityCap": 1
+        }
       }
     }
   ]

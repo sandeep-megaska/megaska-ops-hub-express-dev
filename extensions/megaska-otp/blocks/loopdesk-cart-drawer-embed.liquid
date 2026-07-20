@@ -106,11 +106,13 @@
 
       function offerPrice(originalPrice, rule) {
         var reward = rule && rule.reward || {};
-        var value = Number(reward.value || 0);
+        var configuration = reward.configuration || {};
+        var value = Number(configuration.value !== undefined ? configuration.value : reward.value || 0);
+        var method = reward.method || ({ PERCENTAGE_OFF: "percentage", FIXED_AMOUNT_OFF: "fixed_amount", FIXED_PRICE: "fixed_price" })[reward.type];
         if (!Number.isFinite(value)) value = 0;
-        if (reward.type === "PERCENTAGE_OFF") return Math.max(0, originalPrice * (1 - value / 100));
-        if (reward.type === "FIXED_AMOUNT_OFF") return Math.max(0, originalPrice - value);
-        if (reward.type === "FIXED_PRICE") return Math.max(0, value);
+        if (method === "percentage") return Math.max(0, originalPrice * (1 - value / 100));
+        if (method === "fixed_amount") return Math.max(0, originalPrice - value);
+        if (method === "fixed_price") return Math.max(0, value);
         return originalPrice;
       }
 

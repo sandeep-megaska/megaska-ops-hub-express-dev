@@ -1,6 +1,7 @@
 import type { PromotionRuleStatus } from "./domain.ts";
 import { listPromotionRules, type PromotionRuleRecord } from "./repository.server.ts";
 import { getPromotionListCompilationReadModels, type PromotionAdminExecutionCode, type PromotionAdminTone } from "./compiler-admin-read-model.server.ts";
+import { normalizePromotionReward, productRewardStrategy } from "./reward-strategy.ts";
 
 export type PromotionAdminStatusFilter = PromotionRuleStatus | "ALL";
 
@@ -21,9 +22,11 @@ export type PromotionAdminListItem = {
 };
 
 export function formatPromotionReward(rule: Pick<PromotionRuleRecord, "rewardType" | "rewardValue">) {
-  const value = Number(rule.rewardValue ?? 0);
-  if (rule.rewardType === "PERCENTAGE_OFF") return `${value}% off`;
-  if (rule.rewardType === "FIXED_AMOUNT_OFF") return `₹${value} off`;
+  const normalized = normalizePromotionReward({ type: rule.rewardType, value: rule.rewardValue, maximumQuantity: 1 }, { productGid: "gid://shopify/Product/1", quantityCap: 1 });
+  if (!normalized.ok || !productRewardStrategy.supports(normalized.reward)) return "Invalid reward";
+  const value = Number(normalized.reward.configuration.value);
+  if (normalized.reward.method === "percentage") return `${value}% off`;
+  if (normalized.reward.method === "fixed_amount") return `₹${value} off`;
   return `Fixed price ₹${value}`;
 }
 
