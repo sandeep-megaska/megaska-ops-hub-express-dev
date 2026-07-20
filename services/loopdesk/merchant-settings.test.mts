@@ -9,6 +9,7 @@ import {
   getCompiledPromotionRuntime,
   mergeLoopDeskMerchantSettings,
   normalizeCartGoalProgressConfig,
+  normalizeCartDynamicBannerConfig,
   normalizeCartIntelligenceSettings,
   normalizeLoopDeskMerchantSettings,
   toCartIntelligencePublicRuntimeConfig,
@@ -149,8 +150,8 @@ test("cart drawer module config is normalized and remains backward compatible", 
     { key: "LOYALTY", enabled: true, slot: "BEFORE_TOTALS", sortOrder: 30 },
   ] });
   const runtime = toCartIntelligencePublicRuntimeConfig(settings);
-  assert.deepEqual(runtime.cartDrawerModules, settings.cartDrawerModules);
-  assert.equal(runtime.freeShippingProgress.enabled, false);
+  assert.ok(runtime.cartDrawerModules.modules.some((module) => module.key === "DYNAMIC_BANNER"));
+  assert.equal(runtime.cartGoalProgress.enabled, false);
   assert.equal(runtime.trustBadges.enabled, false);
 });
 
@@ -200,8 +201,37 @@ test("cart intelligence public runtime exposes only normalized cart goal config"
   assert.equal(runtime.freeShippingProgress, undefined);
   assert.equal(progress.resolutionStatus, undefined);
   assert.equal(runtime.dynamicBannerText, undefined);
+  assert.equal((runtime.dynamicBanner as { message: string }).message, "Members get early access");
   assert.equal(runtime.secret, undefined);
   assert.equal((runtime.trustBadges as { enabled: boolean }).enabled, true);
+});
+
+test("normalizes dynamic banner defaults, legacy values, and canonical precedence", () => {
+  assert.deepEqual(normalizeCartDynamicBannerConfig(undefined), {
+    enabled: false, message: "", placement: "BEFORE_CART_LINES", sortOrder: 10, style: "INFO", alignment: "CENTER",
+    dismissible: false, showIcon: true, linkLabel: null, linkUrl: null, openLinkInNewTab: false,
+    visibility: { emptyCart: true, cartWithItems: true },
+  });
+  const legacy = normalizeCartDynamicBannerConfig(undefined, { dynamicBannerEnabled: true, dynamicBannerText: " Legacy banner " });
+  assert.equal(legacy.enabled, true); assert.equal(legacy.message, "Legacy banner");
+  const canonical = normalizeCartDynamicBannerConfig({ enabled: false, message: " Canonical ", placement: "NOPE", sortOrder: Infinity, style: "LOUD", alignment: "RIGHT" }, { dynamicBannerEnabled: true, dynamicBannerText: "Legacy" });
+  assert.equal(canonical.enabled, false); assert.equal(canonical.message, "Canonical"); assert.equal(canonical.placement, "BEFORE_CART_LINES");
+  assert.equal(canonical.sortOrder, 10); assert.equal(canonical.style, "INFO"); assert.equal(canonical.alignment, "CENTER");
+});
+
+test("dynamic banner URL normalization allows safe links and rejects script links", () => {
+  for (const linkUrl of ["https://example.com/deal", "http://example.com", "/collections/sale", "mailto:help@example.com", "tel:+15551234"]) {
+    assert.equal(normalizeCartDynamicBannerConfig({ linkUrl }).linkUrl, linkUrl);
+  }
+  for (const linkUrl of ["javascript:alert(1)", "data:text/html,bad", "vbscript:bad", "//evil.example", "not a url"]) {
+    assert.equal(normalizeCartDynamicBannerConfig({ linkUrl }).linkUrl, null);
+  }
+});
+
+test("dynamic banner validation rejects unsafe and malformed enabled configuration", () => {
+  const errors = validateCartIntelligenceSettingsPatch({ dynamicBanner: { enabled: true, message: "", placement: "BAD", sortOrder: 1000, style: "LOUD", alignment: "RIGHT", linkUrl: "javascript:alert(1)", visibility: { emptyCart: "yes", cartWithItems: true } } });
+  assert.match(errors.join(" "), /required when enabled/); assert.match(errors.join(" "), /Link URL/); assert.match(errors.join(" "), /placement/); assert.match(errors.join(" "), /order/); assert.match(errors.join(" "), /style/); assert.match(errors.join(" "), /alignment/); assert.match(errors.join(" "), /Empty Cart Visibility/);
+  assert.deepEqual(validateCartIntelligenceSettingsPatch({ dynamicBanner: { enabled: false, message: "", placement: "BEFORE_CART_LINES", sortOrder: 10, style: "INFO", alignment: "CENTER", linkUrl: "", visibility: { emptyCart: true, cartWithItems: true } } }), []);
 });
 
 test("legacy threshold and progress text migrate at read time", () => {

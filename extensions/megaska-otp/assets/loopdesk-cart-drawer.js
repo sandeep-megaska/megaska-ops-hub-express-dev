@@ -198,12 +198,62 @@
       }).join("");
   }
 
+  function bannerHash(value) {
+    var hash = 2166136261;
+    for (var index = 0; index < value.length; index += 1) { hash ^= value.charCodeAt(index); hash = Math.imul(hash, 16777619); }
+    return (hash >>> 0).toString(36);
+  }
+
+  function safeBannerUrl(value) {
+    if (typeof value !== "string" || !value.trim() || value.trim().length > 500 || /[<>\s]/.test(value.trim())) return null;
+    var next = value.trim();
+    if (next.charAt(0) === "/") return next.indexOf("//") === 0 ? null : next;
+    try { var parsed = new URL(next); return ((parsed.protocol === "http:" || parsed.protocol === "https:") && parsed.hostname) || ((parsed.protocol === "mailto:" || parsed.protocol === "tel:") && parsed.pathname) ? next : null; }
+    catch (_error) { return null; }
+  }
+
+  function bannerDismissalKey(settings) {
+    var shop = window.Shopify && window.Shopify.shop || window.LoopDeskConfig && (window.LoopDeskConfig.shop || window.LoopDeskConfig.shopDomain) || "unknown-shop";
+    var material = JSON.stringify([settings.message, settings.style, settings.alignment, settings.showIcon, settings.linkLabel, settings.linkUrl, settings.openLinkInNewTab]);
+    return "loopdesk:cart-banner-dismissed:" + bannerHash(String(shop).toLowerCase()) + ":" + bannerHash(material);
+  }
+
+  function isBannerDismissed(key) { try { return window.sessionStorage && window.sessionStorage.getItem(key) === "1"; } catch (_error) { return false; } }
+  function dismissBanner(key) { try { if (window.sessionStorage) window.sessionStorage.setItem(key, "1"); } catch (_error) {} }
+
+  function renderDynamicBannerModule(context) {
+    try {
+      var module = context && context.module;
+      var settings = module && isPlainObject(module.settings) ? module.settings : {};
+      var message = typeof settings.message === "string" ? settings.message.trim().slice(0, 240) : "";
+      if (!module || module.enabled !== true || !message) return "";
+      var hasItems = Boolean(context && context.cart && Number(context.cart.item_count || 0) > 0);
+      var visibility = isPlainObject(settings.visibility) ? settings.visibility : {};
+      if (hasItems ? visibility.cartWithItems === false : visibility.emptyCart === false) return "";
+      var styles = ["INFO", "SUCCESS", "WARNING", "NEUTRAL", "BRAND"];
+      var style = styles.indexOf(settings.style) === -1 ? "INFO" : settings.style;
+      var alignment = settings.alignment === "LEFT" ? "LEFT" : "CENTER";
+      var key = bannerDismissalKey(settings);
+      if (settings.dismissible === true && isBannerDismissed(key)) return "";
+      var linkUrl = safeBannerUrl(settings.linkUrl);
+      var linkLabel = typeof settings.linkLabel === "string" ? settings.linkLabel.trim().slice(0, 60) : "";
+      var icon = settings.showIcon === false ? "" : '<span class="loopdesk-cart-banner__icon" aria-hidden="true">' + (style === "WARNING" ? "!" : style === "SUCCESS" ? "✓" : "i") + '</span>';
+      var link = linkUrl && linkLabel ? '<a class="loopdesk-cart-banner__link" href="' + escapeHtml(linkUrl) + '"' + (settings.openLinkInNewTab === true ? ' target="_blank" rel="noopener noreferrer"' : "") + '>' + escapeHtml(linkLabel) + '</a>' : "";
+      var dismiss = settings.dismissible === true ? '<button type="button" class="loopdesk-cart-banner__dismiss" data-loopdesk-cart-banner-dismiss="' + escapeHtml(key) + '" aria-label="Dismiss banner">×</button>' : "";
+      return '<section class="loopdesk-cart-banner loopdesk-cart-banner--' + style.toLowerCase() + ' loopdesk-cart-banner--' + alignment.toLowerCase() + '" role="' + (style === "WARNING" ? "alert" : "status") + '">' + icon + '<div class="loopdesk-cart-banner__content"><p>' + escapeHtml(message) + '</p>' + link + '</div>' + dismiss + '</section>';
+    } catch (error) { debugLog("dynamic banner renderer failed", { error: error && error.message }); return ""; }
+  }
+
+  moduleRegistry.DYNAMIC_BANNER = renderDynamicBannerModule;
+
   window.LoopDeskCartDrawerModules = {
     normalize: normalizeCartDrawerModules,
     renderCartDrawerSlot: renderCartDrawerSlot,
     registerRenderer: function (key, renderer) {
       if (CART_DRAWER_MODULE_KEYS.indexOf(key) !== -1 && (renderer === null || typeof renderer === "function")) moduleRegistry[key] = renderer;
-    }
+    },
+    renderDynamicBannerModule: renderDynamicBannerModule,
+    safeBannerUrl: safeBannerUrl
   };
 
   if (!config.enabled || window.__LOOPDESK_CART_DRAWER_LOADED__) return;
@@ -1388,6 +1438,12 @@
 
     if (elements.close) elements.close.addEventListener("click", function () { setOpen(false); });
     if (elements.overlay) elements.overlay.addEventListener("click", function () { setOpen(false); });
+    hostRoot.addEventListener("click", function (event) {
+      var button = event.target && event.target.closest && event.target.closest("[data-loopdesk-cart-banner-dismiss]");
+      if (!button || !hostRoot.contains(button)) return;
+      dismissBanner(button.getAttribute("data-loopdesk-cart-banner-dismiss"));
+      render();
+    });
     if (elements.express) {
       elements.express.textContent = config.labels.expressCheckoutText;
       elements.express.addEventListener("click", function (event) { interceptCheckout(event, "loopdesk-cart-drawer"); });
