@@ -624,3 +624,18 @@ body.loopdesk-cart-drawer-is-open #loopdesk-cart-drawer-root .loopdesk-cart-draw
   background: var(--loopdesk-primary, #111827);
   transition: width 180ms ease;
 }
+
+.loopdesk-cart-banner { display:flex; align-items:flex-start; gap:10px; margin:0 0 12px; padding:11px 12px; border:1px solid transparent; border-radius:12px; color:#1e3a5f; background:#eff6ff; font-size:13px; line-height:1.4; }
+.loopdesk-cart-banner--success { color:#14532d; background:#f0fdf4; border-color:#bbf7d0; }
+.loopdesk-cart-banner--warning { color:#713f12; background:#fffbeb; border-color:#fde68a; }
+.loopdesk-cart-banner--neutral { color:#374151; background:#f8fafc; border-color:#e5e7eb; }
+.loopdesk-cart-banner--brand { color:var(--loopdesk-text, #111827); background:color-mix(in srgb, var(--loopdesk-primary, #111827) 10%, white); border-color:color-mix(in srgb, var(--loopdesk-primary, #111827) 22%, white); }
+.loopdesk-cart-banner--info { border-color:#bfdbfe; }
+.loopdesk-cart-banner--center { justify-content:center; text-align:center; }
+.loopdesk-cart-banner--left { text-align:left; }
+.loopdesk-cart-banner__icon { display:inline-grid; flex:0 0 20px; place-items:center; width:20px; height:20px; border:1px solid currentColor; border-radius:50%; font-size:11px; font-weight:800; }
+.loopdesk-cart-banner__content { min-width:0; }
+.loopdesk-cart-banner__content p { margin:0; overflow-wrap:anywhere; }
+.loopdesk-cart-banner__link { display:inline-block; margin-top:4px; color:inherit; font-weight:700; text-decoration:underline; text-underline-offset:2px; }
+.loopdesk-cart-banner__dismiss { flex:0 0 auto; width:24px; height:24px; margin:-3px -4px -3px 0; border:0; border-radius:6px; color:inherit; background:transparent; font-size:18px; line-height:1; cursor:pointer; }
+.loopdesk-cart-banner__link:focus-visible, .loopdesk-cart-banner__dismiss:focus-visible { outline:2px solid currentColor; outline-offset:2px; }

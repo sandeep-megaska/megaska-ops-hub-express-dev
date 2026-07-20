@@ -170,6 +170,20 @@ async function saveMerchantSettings(
       },
       dynamicBannerEnabled: formData.get("dynamicBannerEnabled") === "on",
       dynamicBannerText: formData.get("dynamicBannerText"),
+      dynamicBanner: {
+        enabled: formData.get("dynamicBannerEnabled") === "on",
+        message: formData.get("dynamicBannerMessage"),
+        placement: formData.get("dynamicBannerPlacement"),
+        sortOrder: formData.get("dynamicBannerSortOrder"),
+        style: formData.get("dynamicBannerStyle"),
+        alignment: formData.get("dynamicBannerAlignment"),
+        showIcon: formData.get("dynamicBannerShowIcon") === "on",
+        dismissible: formData.get("dynamicBannerDismissible") === "on",
+        linkLabel: formData.get("dynamicBannerLinkLabel"),
+        linkUrl: formData.get("dynamicBannerLinkUrl"),
+        openLinkInNewTab: formData.get("dynamicBannerOpenLinkInNewTab") === "on",
+        visibility: { emptyCart: formData.get("dynamicBannerEmptyCart") === "on", cartWithItems: formData.get("dynamicBannerCartWithItems") === "on" },
+      },
       upsellsEnabled: formData.get("upsellsEnabled") === "on",
       bundlesEnabled: formData.get("bundlesEnabled") === "on",
       aiRecommendationsEnabled: formData.get("aiRecommendationsEnabled") === "on",
@@ -557,7 +571,6 @@ export default async function MerchantSettingsPage({
           <div className="grid gap-3 md:grid-cols-2">
             <Check label="Cart Intelligence Enabled" name="cartIntelligenceEnabled" defaultChecked={cartIntelligence.enabled} help="Master public flag for future Cart Intelligence experiences; disabled by default." />
             <Check label="Cart Goal Progress Enabled" name="cartGoalProgressEnabled" defaultChecked={cartIntelligence.cartGoalProgress.enabled} help="Shows the merchant-authored display goal in the cart drawer." />
-            <Check label="Dynamic Banner Enabled" name="dynamicBannerEnabled" defaultChecked={cartIntelligence.dynamicBannerEnabled} help="Stores whether a future cart banner may be shown." />
             <Check label="Upsells Enabled" name="upsellsEnabled" defaultChecked={cartIntelligence.upsellsEnabled} help="Configuration flag only; no upsell logic is implemented in this phase." />
             <Check label="Bundles Enabled" name="bundlesEnabled" defaultChecked={cartIntelligence.bundlesEnabled} help="Configuration flag only; no bundle logic is implemented in this phase." />
             <Check label="AI Recommendations Enabled" name="aiRecommendationsEnabled" defaultChecked={cartIntelligence.aiRecommendationsEnabled} help="Configuration flag only; no AI recommendations are implemented in this phase." />
@@ -585,7 +598,27 @@ export default async function MerchantSettingsPage({
             <Field label="Progress Message" name="progressText" defaultValue={cartIntelligence.cartGoalProgress.progressText} help="Use {amount} for the formatted remaining amount." />
             <Field label="Unlocked Message" name="unlockedText" defaultValue={cartIntelligence.cartGoalProgress.unlockedText} />
             <Check label="Hide After Unlock" name="hideAfterUnlock" defaultChecked={cartIntelligence.cartGoalProgress.hideAfterUnlock} help="Hide the goal after the subtotal reaches the target." />
-            <Field label="Dynamic Banner Text" name="dynamicBannerText" defaultValue={cartIntelligence.dynamicBannerText} help="Public copy for a future cart banner." />
+          </div>
+          <div className="grid gap-4 rounded-xl border border-gray-200 bg-gray-50 p-4">
+            <div><h3 className="font-semibold text-gray-950">Dynamic Banner</h3><p className={helpClass}>Dynamic Banner is display-only. It does not change prices, discounts, shipping or checkout.</p></div>
+            <div className="grid gap-3 md:grid-cols-3">
+              <Check label="Enable Dynamic Banner" name="dynamicBannerEnabled" defaultChecked={cartIntelligence.dynamicBanner.enabled} />
+              <Check label="Show Icon" name="dynamicBannerShowIcon" defaultChecked={cartIntelligence.dynamicBanner.showIcon} />
+              <Check label="Allow Dismiss" name="dynamicBannerDismissible" defaultChecked={cartIntelligence.dynamicBanner.dismissible} />
+              <Check label="Open Link in New Tab" name="dynamicBannerOpenLinkInNewTab" defaultChecked={cartIntelligence.dynamicBanner.openLinkInNewTab} />
+              <Check label="Show on Empty Cart" name="dynamicBannerEmptyCart" defaultChecked={cartIntelligence.dynamicBanner.visibility.emptyCart} />
+              <Check label="Show when Cart Has Items" name="dynamicBannerCartWithItems" defaultChecked={cartIntelligence.dynamicBanner.visibility.cartWithItems} />
+            </div>
+            <TextArea label="Message" name="dynamicBannerMessage" defaultValue={cartIntelligence.dynamicBanner.message} help="Required when enabled. Maximum 240 characters; plain text only." />
+            <input type="hidden" name="dynamicBannerText" value={cartIntelligence.dynamicBanner.message} />
+            <div className="grid gap-4 md:grid-cols-4">
+              <label className="grid gap-2 text-sm font-medium text-gray-800"><span>Placement</span><select className="rounded-lg border border-gray-300 bg-white px-3 py-2" name="dynamicBannerPlacement" defaultValue={cartIntelligence.dynamicBanner.placement}>{[["BEFORE_CART_LINES","Top of cart"],["AFTER_CART_LINES","After cart items"],["BEFORE_PROMOTIONS","Before offers"],["AFTER_PROMOTIONS","After offers"],["BEFORE_COUPON","Before coupon"],["AFTER_COUPON","After coupon"],["BEFORE_TOTALS","Before totals"],["AFTER_TOTALS","After totals"],["BEFORE_CHECKOUT","Before checkout button"],["AFTER_CHECKOUT","After checkout button"]].map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+              <Field label="Order" name="dynamicBannerSortOrder" type="number" defaultValue={String(cartIntelligence.dynamicBanner.sortOrder)} />
+              <label className="grid gap-2 text-sm font-medium text-gray-800"><span>Style</span><select className="rounded-lg border border-gray-300 bg-white px-3 py-2" name="dynamicBannerStyle" defaultValue={cartIntelligence.dynamicBanner.style}>{["INFO","SUCCESS","WARNING","NEUTRAL","BRAND"].map(value => <option key={value} value={value}>{value[0] + value.slice(1).toLowerCase()}</option>)}</select></label>
+              <label className="grid gap-2 text-sm font-medium text-gray-800"><span>Text Alignment</span><select className="rounded-lg border border-gray-300 bg-white px-3 py-2" name="dynamicBannerAlignment" defaultValue={cartIntelligence.dynamicBanner.alignment}><option value="LEFT">Left</option><option value="CENTER">Center</option></select></label>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2"><Field label="Link Label" name="dynamicBannerLinkLabel" defaultValue={cartIntelligence.dynamicBanner.linkLabel || ""} /><Field label="Link URL" name="dynamicBannerLinkUrl" defaultValue={cartIntelligence.dynamicBanner.linkUrl || ""} help="Optional: http, https, mailto, tel, or a relative path beginning with /." /></div>
+            {cartIntelligence.dynamicBanner.message ? <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-center text-sm font-medium text-blue-950">Preview: {cartIntelligence.dynamicBanner.message}</div> : null}
           </div>
           <div className="grid gap-4 rounded-xl border border-gray-200 bg-white p-4">
             <div>

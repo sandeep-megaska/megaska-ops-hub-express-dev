@@ -4,7 +4,7 @@ import { getRazorpayRuntimeConfig, type RazorpayPublicRuntimeConfig } from "../r
 import { shopifyAdminGraphql } from "../shopify/admin";
 import { cartDrawerModuleDefaults } from "../cart-intelligence/modules/defaults";
 import { normalizeCartDrawerModules } from "../cart-intelligence/modules/normalize";
-import type { CartDrawerModulesRuntime } from "../cart-intelligence/modules/types";
+import { CART_DRAWER_MODULE_SLOTS, type CartDrawerModulesRuntime, type CartDrawerModuleSlot } from "../cart-intelligence/modules/types";
 
 export const LOOPDESK_RUNTIME_CONFIG_MODULE_KEY = "loopdesk_runtime_config";
 export const CART_INTELLIGENCE_CONFIG_MODULE_KEY = "cart_intelligence_config";
@@ -78,6 +78,7 @@ export type CartIntelligenceSettings = {
   trustBadges: TrustBadgeConfig;
   dynamicBannerEnabled: boolean;
   dynamicBannerText: string;
+  dynamicBanner: CartDynamicBannerConfig;
   upsellsEnabled: boolean;
   bundlesEnabled: boolean;
   aiRecommendationsEnabled: boolean;
@@ -94,6 +95,21 @@ export type CartGoalProgressConfig = {
   hideAfterUnlock: boolean;
 };
 
+export type CartDynamicBannerConfig = {
+  enabled: boolean;
+  message: string;
+  placement: CartDrawerModuleSlot;
+  sortOrder: number;
+  style: "INFO" | "SUCCESS" | "WARNING" | "NEUTRAL" | "BRAND";
+  alignment: "LEFT" | "CENTER";
+  dismissible: boolean;
+  showIcon: boolean;
+  linkLabel: string | null;
+  linkUrl: string | null;
+  openLinkInNewTab: boolean;
+  visibility: { emptyCart: boolean; cartWithItems: boolean };
+};
+
 export type TrustBadgeIcon = "secure-payment" | "delivery" | "exchange" | "cod" | "support" | "authenticity" | "custom";
 export type TrustBadgeItem = { id: string; enabled: boolean; icon: TrustBadgeIcon; label: string; sortOrder: number };
 export type TrustBadgeConfig = { enabled: boolean; placement: "BELOW_TOTALS" | "BELOW_CHECKOUT_BUTTON"; layout: "ROW" | "GRID"; items: TrustBadgeItem[] };
@@ -103,6 +119,7 @@ export type CartIntelligencePublicRuntimeConfig = {
   cartDrawerModules: CartDrawerModulesRuntime;
   trustBadges: TrustBadgeConfig;
   cartGoalProgress: CartGoalProgressConfig;
+  dynamicBanner: CartDynamicBannerConfig;
 };
 
 export type LoopDeskPublicRuntimeConfig = Pick<
@@ -266,6 +283,52 @@ function section(raw: Record<string, unknown>, name: string) {
   return isRecord(raw[name]) ? raw[name] : raw;
 }
 
+export const DEFAULT_CART_DYNAMIC_BANNER_CONFIG: CartDynamicBannerConfig = {
+  enabled: false, message: "", placement: "BEFORE_CART_LINES", sortOrder: 10,
+  style: "INFO", alignment: "CENTER", dismissible: false, showIcon: true,
+  linkLabel: null, linkUrl: null, openLinkInNewTab: false,
+  visibility: { emptyCart: true, cartWithItems: true },
+};
+
+const DYNAMIC_BANNER_STYLES = ["INFO", "SUCCESS", "WARNING", "NEUTRAL", "BRAND"] as const;
+const DYNAMIC_BANNER_ALIGNMENTS = ["LEFT", "CENTER"] as const;
+
+export function isSafeCartDynamicBannerUrl(value: unknown): value is string {
+  if (typeof value !== "string" || !value.trim() || value.trim().length > 500 || /[<>\s]/.test(value.trim())) return false;
+  const next = value.trim();
+  if (next.startsWith("/")) return !next.startsWith("//");
+  try {
+    const parsed = new URL(next);
+    if (parsed.protocol === "http:" || parsed.protocol === "https:") return Boolean(parsed.hostname);
+    if (parsed.protocol === "mailto:" || parsed.protocol === "tel:") return Boolean(parsed.pathname);
+    return false;
+  } catch { return false; }
+}
+
+export function normalizeCartDynamicBannerConfig(input: unknown, legacySettings?: unknown): CartDynamicBannerConfig {
+  const hasCanonical = isRecord(input);
+  const raw = hasCanonical ? input : {};
+  const legacy = isRecord(legacySettings) ? legacySettings : {};
+  const messageSource = hasCanonical ? raw.message : legacy.dynamicBannerText;
+  const message = typeof messageSource === "string" ? stripHtml(messageSource.trim()).slice(0, 240) : "";
+  const label = typeof raw.linkLabel === "string" ? stripHtml(raw.linkLabel.trim()).slice(0, 60) : "";
+  const candidateUrl = typeof raw.linkUrl === "string" ? raw.linkUrl.trim().slice(0, 500) : "";
+  const visibility = isRecord(raw.visibility) ? raw.visibility : {};
+  const order = typeof raw.sortOrder === "number" ? raw.sortOrder : Number(raw.sortOrder);
+  return {
+    enabled: hasCanonical ? bool(raw.enabled, false) : bool(legacy.dynamicBannerEnabled, false),
+    message,
+    placement: CART_DRAWER_MODULE_SLOTS.includes(raw.placement as CartDrawerModuleSlot) ? raw.placement as CartDrawerModuleSlot : "BEFORE_CART_LINES",
+    sortOrder: Number.isFinite(order) && order >= 0 && order <= 999 ? Math.round(order) : 10,
+    style: DYNAMIC_BANNER_STYLES.includes(raw.style as CartDynamicBannerConfig["style"]) ? raw.style as CartDynamicBannerConfig["style"] : "INFO",
+    alignment: DYNAMIC_BANNER_ALIGNMENTS.includes(raw.alignment as CartDynamicBannerConfig["alignment"]) ? raw.alignment as CartDynamicBannerConfig["alignment"] : "CENTER",
+    dismissible: bool(raw.dismissible, false), showIcon: bool(raw.showIcon, true),
+    linkLabel: label || null, linkUrl: isSafeCartDynamicBannerUrl(candidateUrl) ? candidateUrl : null,
+    openLinkInNewTab: bool(raw.openLinkInNewTab, false),
+    visibility: { emptyCart: bool(visibility.emptyCart, true), cartWithItems: bool(visibility.cartWithItems, true) },
+  };
+}
+
 
 export function normalizeCartIntelligenceSettings(input: unknown): CartIntelligenceSettings {
   const raw = isRecord(input) ? input : {};
@@ -273,13 +336,15 @@ export function normalizeCartIntelligenceSettings(input: unknown): CartIntellige
     cartGoalProgressEnabled: bool(raw.freeShippingProgressEnabled, false),
     trustBadgesEnabled: bool(raw.trustBadgesEnabled, isRecord(raw.trustBadges) ? bool(raw.trustBadges.enabled, false) : false),
   });
+  const dynamicBanner = normalizeCartDynamicBannerConfig(raw.dynamicBanner, raw);
   return {
     enabled: bool(raw.enabled, false),
     cartGoalProgress: normalizeCartGoalProgressConfig(raw),
     trustBadgesEnabled: bool(raw.trustBadgesEnabled, isRecord(raw.trustBadges) ? bool(raw.trustBadges.enabled, false) : false),
     trustBadges: normalizeTrustBadges(raw.trustBadges, bool(raw.trustBadgesEnabled, false)),
     dynamicBannerEnabled: bool(raw.dynamicBannerEnabled, false),
-    dynamicBannerText: text(raw.dynamicBannerText, "Limited-time cart offers may appear here.", 160),
+    dynamicBannerText: text(raw.dynamicBannerText, "Limited-time cart offers may appear here.", 240),
+    dynamicBanner,
     upsellsEnabled: bool(raw.upsellsEnabled, false),
     bundlesEnabled: bool(raw.bundlesEnabled, false),
     aiRecommendationsEnabled: bool(raw.aiRecommendationsEnabled, false),
@@ -340,7 +405,27 @@ export function validateCartIntelligenceSettingsPatch(patch: unknown): string[] 
   validateText(raw.progressText, "Progress Message", 160);
   validateText(raw.unlockedText, "Unlocked Message", 160);
   validateBool(raw.hideAfterUnlock, "Hide After Unlock");
-  validateText(raw.dynamicBannerText, "Dynamic Banner Text", 160);
+  validateText(raw.dynamicBannerText, "Dynamic Banner Text", 240);
+  if (raw.dynamicBanner !== undefined) {
+    if (!isRecord(raw.dynamicBanner)) errors.push("Dynamic Banner must be an object.");
+    else {
+      const banner = raw.dynamicBanner;
+      validateBool(banner.enabled, "Dynamic Banner Enabled");
+      validateText(banner.message, "Dynamic Banner Message", 240);
+      if (banner.enabled === true && (typeof banner.message !== "string" || !banner.message.trim())) errors.push("Dynamic Banner Message is required when enabled.");
+      validateText(banner.linkLabel, "Dynamic Banner Link Label", 60);
+      validateText(banner.linkUrl, "Dynamic Banner Link URL", 500);
+      if (typeof banner.linkUrl === "string" && banner.linkUrl.trim() && !isSafeCartDynamicBannerUrl(banner.linkUrl)) errors.push("Dynamic Banner Link URL must use http, https, mailto, tel, or a relative path.");
+      if (!CART_DRAWER_MODULE_SLOTS.includes(banner.placement as CartDrawerModuleSlot)) errors.push("Dynamic Banner placement is invalid.");
+      const order = Number(banner.sortOrder);
+      if (!Number.isFinite(order) || order < 0 || order > 999) errors.push("Dynamic Banner order must be between 0 and 999.");
+      if (!DYNAMIC_BANNER_STYLES.includes(banner.style as CartDynamicBannerConfig["style"])) errors.push("Dynamic Banner style is invalid.");
+      if (!DYNAMIC_BANNER_ALIGNMENTS.includes(banner.alignment as CartDynamicBannerConfig["alignment"])) errors.push("Dynamic Banner alignment is invalid.");
+      validateBool(banner.dismissible, "Dynamic Banner Allow Dismiss"); validateBool(banner.showIcon, "Dynamic Banner Show Icon"); validateBool(banner.openLinkInNewTab, "Dynamic Banner Open Link in New Tab");
+      if (!isRecord(banner.visibility)) errors.push("Dynamic Banner visibility must be an object.");
+      else { validateBool(banner.visibility.emptyCart, "Dynamic Banner Empty Cart Visibility"); validateBool(banner.visibility.cartWithItems, "Dynamic Banner Cart With Items Visibility"); }
+    }
+  }
   if (raw.trustBadges !== undefined) {
     if (!isRecord(raw.trustBadges)) errors.push("Trust Badges must be an object.");
     else {
@@ -363,14 +448,18 @@ export function validateCartIntelligenceSettingsPatch(patch: unknown): string[] 
 export function toCartIntelligencePublicRuntimeConfig(
   settings: CartIntelligenceSettings
 ): CartIntelligencePublicRuntimeConfig {
+  const dynamicBanner = normalizeCartDynamicBannerConfig(settings.dynamicBanner, settings);
+  const modules = normalizeCartDrawerModules(settings.cartDrawerModules).modules.filter((module) => module.key !== "DYNAMIC_BANNER");
+  modules.push({ key: "DYNAMIC_BANNER", enabled: dynamicBanner.enabled, slot: dynamicBanner.placement, sortOrder: dynamicBanner.sortOrder, settings: dynamicBanner });
   return {
     enabled: settings.enabled,
-    cartDrawerModules: normalizeCartDrawerModules(settings.cartDrawerModules),
+    cartDrawerModules: { schemaVersion: 1, modules },
     trustBadges: normalizeTrustBadges(
       settings.trustBadges,
       settings.trustBadgesEnabled
     ),
     cartGoalProgress: settings.cartGoalProgress,
+    dynamicBanner,
   };
 }
 
