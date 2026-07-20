@@ -8,6 +8,7 @@ import vm from "node:vm";
 import {
   getCompiledPromotionRuntime,
   mergeLoopDeskMerchantSettings,
+  normalizeCartGoalProgressConfig,
   normalizeCartIntelligenceSettings,
   normalizeLoopDeskMerchantSettings,
   toCartIntelligencePublicRuntimeConfig,
@@ -126,9 +127,9 @@ test("validates merchant settings admin patch fields", () => {
 test("normalizes cart intelligence defaults disabled", () => {
   const settings = normalizeCartIntelligenceSettings({});
   assert.equal(settings.enabled, false);
-  assert.equal(settings.freeShippingProgressEnabled, false);
-  assert.equal(settings.freeShippingThreshold, 0);
-  assert.equal(settings.freeShippingSourceMode, "SHOPIFY_ONLY");
+  assert.equal(settings.cartGoalProgress.enabled, false);
+  assert.equal(settings.cartGoalProgress.targetAmountMinor, null);
+  assert.equal(settings.cartGoalProgress.goalType, "FREE_SHIPPING");
   assert.equal(settings.upsellsEnabled, false);
   assert.equal(settings.bundlesEnabled, false);
   assert.equal(settings.aiRecommendationsEnabled, false);
@@ -161,7 +162,7 @@ test("trust badge validation rejects malformed configuration", () => {
   assert.match(errors.join(" "), /60 characters or fewer/);
 });
 
-test("cart intelligence public runtime exposes normalized free-shipping config", () => {
+test("cart intelligence public runtime exposes only normalized cart goal config", () => {
   const settings = normalizeCartIntelligenceSettings({
     enabled: true,
     freeShippingProgressEnabled: true,
@@ -177,30 +178,46 @@ test("cart intelligence public runtime exposes normalized free-shipping config",
   });
   const runtime = toCartIntelligencePublicRuntimeConfig(settings) as Record<string, unknown>;
   assert.equal(runtime.enabled, true);
-  const progress = runtime.freeShippingProgress as Record<string, unknown>;
-  assert.equal(progress.fallbackThresholdMinor, 99900);
-  assert.equal(progress.progressBarText, "Spend more for free shipping");
+  const progress = runtime.cartGoalProgress as Record<string, unknown>;
+  assert.equal(progress.targetAmountMinor, 99900);
+  assert.equal(progress.progressText, "Spend more for free shipping");
+  assert.equal(runtime.freeShippingProgress, undefined);
+  assert.equal(progress.resolutionStatus, undefined);
   assert.equal(runtime.dynamicBannerText, undefined);
   assert.equal(runtime.secret, undefined);
   assert.equal((runtime.trustBadges as { enabled: boolean }).enabled, true);
 });
 
-test("existing stored threshold remains a backward-compatible optional fallback", () => {
+test("legacy threshold and progress text migrate at read time", () => {
   const settings = normalizeCartIntelligenceSettings({ freeShippingThreshold: "725" });
-  assert.equal(settings.freeShippingThreshold, 725);
-  assert.equal(settings.freeShippingSourceMode, "SHOPIFY_ONLY");
-  assert.equal(toCartIntelligencePublicRuntimeConfig(settings).freeShippingProgress.fallbackThresholdMinor, 72500);
+  assert.equal(settings.cartGoalProgress.targetAmountMinor, 72500);
+  assert.equal(toCartIntelligencePublicRuntimeConfig(settings).cartGoalProgress.targetAmountMinor, 72500);
+  assert.equal(normalizeCartGoalProgressConfig({ progressBarText: "Legacy copy" }).progressText, "Legacy copy");
+});
+
+test("removed Shopify resolution fields are ignored safely", () => {
+  const goal = normalizeCartGoalProgressConfig({
+    freeShippingProgressEnabled: true,
+    fallbackThresholdMinor: 50000,
+    resolvedShopifyThresholdMinor: 1,
+    resolutionStatus: "AVAILABLE",
+    resolutionSource: "SHOPIFY_DELIVERY_PROFILE",
+    lastResolvedAt: "yesterday",
+  });
+  assert.equal(goal.enabled, true);
+  assert.equal(goal.targetAmountMinor, 50000);
+  assert.equal((goal as unknown as Record<string, unknown>).resolutionStatus, undefined);
 });
 
 test("validates cart intelligence patch fields", () => {
   const errors = validateCartIntelligenceSettingsPatch({
     enabled: "yes",
-    freeShippingThreshold: "not-a-number",
-    progressBarText: "x".repeat(161),
+    targetAmount: "not-a-number",
+    progressText: "x".repeat(161),
   });
   assert.match(errors.join(" "), /Cart Intelligence Enabled/);
-  assert.match(errors.join(" "), /Free Shipping Threshold/);
-  assert.match(errors.join(" "), /Progress Bar Text/);
+  assert.match(errors.join(" "), /Goal Target Amount/);
+  assert.match(errors.join(" "), /Progress Message/);
 });
 
 test("compiled promotion runtime enriches a valid offer product from Shopify Admin", async () => {

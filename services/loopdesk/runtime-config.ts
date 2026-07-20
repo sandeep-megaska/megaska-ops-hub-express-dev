@@ -3,7 +3,7 @@ export {
   CART_INTELLIGENCE_CONFIG_MODULE_KEY,
   getLoopDeskRuntimeConfig,
   getCartIntelligenceSettings,
-  getCartIntelligenceAdminResolution,
+  normalizeCartGoalProgressConfig,
   normalizeCartIntelligenceSettings,
   toCartIntelligencePublicRuntimeConfig,
   normalizeLoopDeskRuntimeConfig,
