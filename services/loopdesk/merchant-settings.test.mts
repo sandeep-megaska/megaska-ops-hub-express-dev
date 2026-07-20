@@ -136,6 +136,22 @@ test("normalizes cart intelligence defaults disabled", () => {
   assert.equal(settings.trustBadges.enabled, false);
   assert.equal(settings.trustBadges.items.length, 6);
   assert.ok(settings.trustBadges.items.every((item) => !item.enabled));
+  assert.equal(settings.cartDrawerModules.schemaVersion, 1);
+  assert.equal(settings.cartDrawerModules.modules.find((module) => module.key === "PROMOTIONS")?.enabled, true);
+});
+
+test("cart drawer module config is normalized and remains backward compatible", () => {
+  const settings = normalizeCartIntelligenceSettings({ cartDrawerModules: { schemaVersion: 99, modules: [
+    { key: "LOYALTY", enabled: true, slot: "BEFORE_TOTALS", sortOrder: 30, settings: "malformed" },
+    { key: "UNKNOWN", enabled: true, slot: "BEFORE_TOTALS", sortOrder: 1 },
+  ] } });
+  assert.deepEqual(settings.cartDrawerModules, { schemaVersion: 1, modules: [
+    { key: "LOYALTY", enabled: true, slot: "BEFORE_TOTALS", sortOrder: 30 },
+  ] });
+  const runtime = toCartIntelligencePublicRuntimeConfig(settings);
+  assert.deepEqual(runtime.cartDrawerModules, settings.cartDrawerModules);
+  assert.equal(runtime.freeShippingProgress.enabled, false);
+  assert.equal(runtime.trustBadges.enabled, false);
 });
 
 test("normalizes, sanitizes, limits, and orders trust badges", () => {

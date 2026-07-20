@@ -2,6 +2,9 @@ import { prisma } from "../db/prisma";
 import { getDelhiveryRuntimeConfig, type DelhiveryPublicRuntimeConfig } from "../delhivery/config";
 import { getRazorpayRuntimeConfig, type RazorpayPublicRuntimeConfig } from "../razorpay/config";
 import { shopifyAdminGraphql } from "../shopify/admin";
+import { cartDrawerModuleDefaults } from "../cart-intelligence/modules/defaults";
+import { normalizeCartDrawerModules } from "../cart-intelligence/modules/normalize";
+import type { CartDrawerModulesRuntime } from "../cart-intelligence/modules/types";
 
 export const LOOPDESK_RUNTIME_CONFIG_MODULE_KEY = "loopdesk_runtime_config";
 export const CART_INTELLIGENCE_CONFIG_MODULE_KEY = "cart_intelligence_config";
@@ -78,6 +81,7 @@ export type CartIntelligenceSettings = {
   upsellsEnabled: boolean;
   bundlesEnabled: boolean;
   aiRecommendationsEnabled: boolean;
+  cartDrawerModules: CartDrawerModulesRuntime;
 };
 
 export type CartGoalProgressConfig = {
@@ -96,6 +100,7 @@ export type TrustBadgeConfig = { enabled: boolean; placement: "BELOW_TOTALS" | "
 
 export type CartIntelligencePublicRuntimeConfig = {
   enabled: boolean;
+  cartDrawerModules: CartDrawerModulesRuntime;
   trustBadges: TrustBadgeConfig;
   cartGoalProgress: CartGoalProgressConfig;
 };
@@ -264,6 +269,10 @@ function section(raw: Record<string, unknown>, name: string) {
 
 export function normalizeCartIntelligenceSettings(input: unknown): CartIntelligenceSettings {
   const raw = isRecord(input) ? input : {};
+  const defaultModules = cartDrawerModuleDefaults({
+    cartGoalProgressEnabled: bool(raw.freeShippingProgressEnabled, false),
+    trustBadgesEnabled: bool(raw.trustBadgesEnabled, isRecord(raw.trustBadges) ? bool(raw.trustBadges.enabled, false) : false),
+  });
   return {
     enabled: bool(raw.enabled, false),
     cartGoalProgress: normalizeCartGoalProgressConfig(raw),
@@ -274,6 +283,7 @@ export function normalizeCartIntelligenceSettings(input: unknown): CartIntellige
     upsellsEnabled: bool(raw.upsellsEnabled, false),
     bundlesEnabled: bool(raw.bundlesEnabled, false),
     aiRecommendationsEnabled: bool(raw.aiRecommendationsEnabled, false),
+    cartDrawerModules: raw.cartDrawerModules === undefined ? defaultModules : normalizeCartDrawerModules(raw.cartDrawerModules),
   };
 }
 
@@ -350,8 +360,18 @@ export function validateCartIntelligenceSettingsPatch(patch: unknown): string[] 
   return errors;
 }
 
-export function toCartIntelligencePublicRuntimeConfig(settings: CartIntelligenceSettings): CartIntelligencePublicRuntimeConfig {
-  return { enabled: settings.enabled, trustBadges: normalizeTrustBadges(settings.trustBadges, settings.trustBadgesEnabled), cartGoalProgress: settings.cartGoalProgress };
+export function toCartIntelligencePublicRuntimeConfig(
+  settings: CartIntelligenceSettings
+): CartIntelligencePublicRuntimeConfig {
+  return {
+    enabled: settings.enabled,
+    cartDrawerModules: normalizeCartDrawerModules(settings.cartDrawerModules),
+    trustBadges: normalizeTrustBadges(
+      settings.trustBadges,
+      settings.trustBadgesEnabled
+    ),
+    cartGoalProgress: settings.cartGoalProgress,
+  };
 }
 
 export function validateLoopDeskMerchantSettingsPatch(
