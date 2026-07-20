@@ -8,6 +8,7 @@
   const state = {
     intentId: new URLSearchParams(window.location.search).get("intent") || "",
     intent: null,
+    pricing: null,
     status: "loading",
     busy: null,
     error: null,
@@ -150,13 +151,45 @@
     return data;
   }
 
-  function formatMoney(paise, currency) {
-    const amount = Number(paise || 0) / 100;
+  function formatMoney(minorUnits, currency) {
+    const currencyCode = String(currency || "INR").toUpperCase();
     try {
-      return new Intl.NumberFormat("en-IN", { style: "currency", currency: currency || "INR" }).format(amount);
+      const formatter = new Intl.NumberFormat("en-IN", { style: "currency", currency: currencyCode });
+      const exponent = formatter.resolvedOptions().maximumFractionDigits;
+      return formatter.format(Number(minorUnits || 0) / (10 ** exponent));
     } catch (_error) {
-      return `₹${amount.toFixed(2)}`;
+      return `${currencyCode} ${Number(minorUnits || 0)}`;
     }
+  }
+
+  function pricingSummary(intent) {
+    const pricing = state.pricing;
+    const isPricingMutation = state.busy === "address" || state.busy === "discount";
+    const status = isPricingMutation ? "REFRESHING" : pricing?.status;
+    const current = status === "CURRENT" && pricing?.authoritative;
+    const values = current ? pricing : {
+      currency: intent.currency,
+      subtotalMinor: intent.subtotalAmountPaise,
+      discountsMinor: intent.discountAmountPaise,
+      shippingMinor: intent.shippingAmountPaise,
+      totalPayableMinor: intent.totalAmountPaise,
+      taxesIncluded: null,
+      taxLines: [],
+      totalTaxMinor: null,
+    };
+    const currency = values.currency || intent.currency;
+    const taxLines = (Array.isArray(values.taxLines) ? values.taxLines : []).filter((line) => Number(line?.amountMinor || 0) !== 0 && String(line?.title || "").trim());
+    const renderedTaxLines = taxLines.length ? taxLines : Number(values.totalTaxMinor || 0) > 0 ? [{ title: "Tax", amountMinor: values.totalTaxMinor }] : [];
+    const stateMessage = status === "REFRESHING" ? "Recalculating shipping, discounts and tax…" : status === "INVALIDATED" ? "Your latest total is being recalculated." : status === "UNAVAILABLE" || !pricing ? "Estimated prices — we couldn’t confirm the latest total." : "";
+    const rows = [
+      `<p><span>Subtotal</span><strong>${formatMoney(values.subtotalMinor, currency)}</strong></p>`,
+      `<p><span>Delivery</span><strong>${Number(values.shippingMinor || 0) === 0 ? "Free" : formatMoney(values.shippingMinor, currency)}</strong></p>`,
+      Number(values.discountsMinor || 0) > 0 ? `<p><span>Discount</span><strong>−${formatMoney(values.discountsMinor, currency)}</strong></p>` : "",
+      ...renderedTaxLines.map((line) => `<p class="megaska-express-tax-row"><span>${values.taxesIncluded === true ? "Includes " : ""}${escapeHtml(line.title)}</span><strong>${formatMoney(line.amountMinor, currency)}</strong></p>`),
+      `<p class="megaska-express-total"><span>${current ? "Total" : "Estimated total"}</span><strong>${formatMoney(values.totalPayableMinor, currency)}</strong></p>`,
+    ];
+    const retry = status === "UNAVAILABLE" || !pricing ? ` <button type="button" class="megaska-express-link-btn" data-express-action="retry-pricing">Retry</button>` : "";
+    return `${stateMessage ? `<p class="megaska-express-pricing-state" role="status" aria-live="polite">${escapeHtml(stateMessage)}${retry}</p>` : ""}${rows.join("")}`;
   }
 
   function latestAddress() {
@@ -295,6 +328,7 @@
   async function refreshIntent() {
     const data = await apiFetch(`/express/checkout/intents/${encodeURIComponent(state.intentId)}`);
     state.intent = data.intent;
+    state.pricing = data.pricing || null;
     state.discountCode = state.intent?.discounts?.[0]?.code || "";
     state.status = "ready";
     state.addressEditing = !addressIsComplete(state.intent?.addressSnapshots?.[0]);
@@ -327,7 +361,6 @@
     const lockedPhone = intent.phoneSnapshot || address.phone || "";
     const addressComplete = addressIsComplete(address);
     const showAddressForm = state.addressEditing || !addressComplete;
-    const deliveryAmount = Number(intent.shippingAmountPaise || 0) === 0 ? "Free" : formatMoney(intent.shippingAmountPaise, intent.currency);
     const placeOrderLabel = state.orderSubmitting ? (selectedMethod === "COD" ? "Placing order..." : "Opening secure payment...") : selectedDisplayConfig.cta;
 
     root.innerHTML = `
@@ -351,10 +384,7 @@
                   </article>`).join("") : `<p class="megaska-express-muted">Cart details are unavailable for this intent.</p>`}
               </div>
               <div class="megaska-express-totals">
-                <p><span>Subtotal</span><strong>${formatMoney(intent.subtotalAmountPaise, intent.currency)}</strong></p>
-                <p><span>Delivery</span><strong>${deliveryAmount}</strong></p>
-                ${Number(intent.discountAmountPaise || 0) > 0 && discounts.length ? (() => { const discount = discountMeta(discounts[0]); return `<p><span>Discount: ${escapeHtml(discount.code)}<br><small>You saved ${formatMoney(intent.discountAmountPaise, intent.currency)}</small></span><strong>- ${formatMoney(intent.discountAmountPaise, intent.currency)}</strong></p>`; })() : ""}
-                <p class="megaska-express-total"><span>Total</span><strong>${formatMoney(intent.totalAmountPaise, intent.currency)}</strong></p>
+                ${pricingSummary(intent)}
               </div>
             </section>
 
@@ -580,6 +610,13 @@
       }
       if (action === "change-address") {
         state.addressEditing = true;
+        render();
+        return;
+      }
+      if (action === "retry-pricing") {
+        setBusy("pricing");
+        await refreshIntent();
+        state.busy = null;
         render();
         return;
       }

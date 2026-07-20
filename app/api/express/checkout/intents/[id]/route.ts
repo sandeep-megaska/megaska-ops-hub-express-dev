@@ -7,6 +7,8 @@ import {
   requireExpressCheckoutShop,
 } from "../../../../../../lib/express-checkout/safety";
 import { getExpressCheckoutSettings } from "../../../../../../services/express-checkout/settings";
+import { checkoutPricingView } from "../../../../../../services/storefront-pricing/checkout-pricing-view";
+import { ShopifyCheckoutPricingSnapshotRepository } from "../../../../../../services/storefront-pricing/pricing-snapshot-repository";
 import {
   attachAddressSnapshotToIntent,
   customerProfileToExpressAddress,
@@ -121,6 +123,10 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
   );
 
   const settings = await getExpressCheckoutSettings(shop.shopId);
+  const snapshot = await new ShopifyCheckoutPricingSnapshotRepository().getByCheckoutIntent({
+    shopId: shop.shopId,
+    checkoutIntentId: intentId,
+  });
 
-  return jsonWithCors(req, { ok: true, intent, customerDefaultAddress: hasCustomerAddress ? customerAddress : null, settings });
+  return jsonWithCors(req, { ok: true, intent, customerDefaultAddress: hasCustomerAddress ? customerAddress : null, settings, pricing: checkoutPricingView(snapshot) });
 }
