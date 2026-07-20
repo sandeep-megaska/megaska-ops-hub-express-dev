@@ -1,5 +1,6 @@
 import type { PromotionRewardType, PromotionRuleStatus, PromotionTriggerMatchMode, PromotionTriggerType } from "./domain.ts";
 import type { CanonicalPromotionReward } from "./reward-strategy.ts";
+import type { TieredOrderPercentageReward } from "./tiered-order-discount.ts";
 
 export const PROMOTION_COMPILER_SCHEMA_VERSION = 1 as const;
 export type PromotionCompilerSchemaVersion = typeof PROMOTION_COMPILER_SCHEMA_VERSION;
@@ -30,6 +31,9 @@ export type PromotionCompilerRuleInput = {
   rewardType: PromotionRewardType;
   rewardValue: DecimalLike;
   maximumRewardQuantity: number;
+  rewardScope?: "PRODUCT" | "ORDER";
+  tierContinuityMode?: "CONTINUOUS" | "ALLOW_GAPS" | null;
+  orderTiers?: Array<{ publicId: string; minimumSubtotal: DecimalLike; maximumSubtotal?: DecimalLike | null; percentage: DecimalLike; position: number }>;
   startsAt?: Date | string | null;
   endsAt?: Date | string | null;
   combinesWithProductDiscounts: boolean;
@@ -59,7 +63,7 @@ export type PromotionCompilerSourceSnapshot = {
   priority: number;
   trigger: { type: PromotionTriggerType; matchMode: PromotionTriggerMatchMode; minimumQuantity: number; minimumCartSubtotal: string | null; sourceGroups: PromotionSourceMembershipGroup[] };
   offer: { productGid: string; handle: string | null };
-  reward: CanonicalPromotionReward;
+  reward: CanonicalPromotionReward | TieredOrderPercentageReward;
   schedule: { startsAt: string | null; endsAt: string | null };
   combinesWith: { productDiscounts: boolean; orderDiscounts: boolean; shippingDiscounts: boolean };
 };

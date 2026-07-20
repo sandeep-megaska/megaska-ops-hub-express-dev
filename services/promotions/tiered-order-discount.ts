@@ -101,7 +101,7 @@ export function validateTieredOrderReward(reward: { scope: unknown; method: unkn
   if (!tiers.length) issues.push(issue("TIER_REQUIRED", "At least one tier is required.", undefined, "configuration.tiers"));
   const ids = new Set<string>();
   for (const tier of tiers) {
-    if (!tier.id?.trim()) issues.push(issue("TIER_ID_INVALID", "A stable public tier ID is required.", tier, "id"));
+    if (!/^[A-Za-z0-9_-]{1,80}$/.test(tier.id?.trim() ?? "")) issues.push(issue("TIER_ID_INVALID", "Use a stable tier ID containing only letters, numbers, underscores, or hyphens.", tier, "id"));
     else if (ids.has(tier.id)) issues.push(issue("TIER_DUPLICATE_ID", "Tier IDs must be unique.", tier, "id")); else ids.add(tier.id);
     const min = parseDecimal(tier.minimumSubtotal); const max = tier.maximumSubtotal === undefined ? undefined : parseDecimal(tier.maximumSubtotal); const pct = parseDecimal(tier.percentage);
     if (!min) issues.push(issue("TIER_DECIMAL_MALFORMED", "Minimum subtotal must be a plain decimal value.", tier, "minimumSubtotal"));

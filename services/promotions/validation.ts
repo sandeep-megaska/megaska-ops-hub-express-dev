@@ -36,8 +36,8 @@ export function validatePromotionRule(input: PromotionRuleValidationInput): Prom
   if (name.length > TEXT_LIMITS.name) add(errors, "name", `Name must be ${TEXT_LIMITS.name} characters or fewer.`);
   if (input.priority !== undefined && !Number.isInteger(input.priority)) add(errors, "priority", "Priority must be an integer.");
   if (!Number.isInteger(input.minimumTriggerQuantity) || Number(input.minimumTriggerQuantity) < 1) add(errors, "minimumTriggerQuantity", "Minimum trigger quantity must be at least 1.");
-  if (!Number.isInteger(input.maximumRewardQuantity) || Number(input.maximumRewardQuantity) < 1) add(errors, "maximumRewardQuantity", "Maximum reward quantity must be at least 1.");
-  if (!normalizeShopifyProductGid(input.offerProductGid)) add(errors, "offerProductGid", "Offer product must be a canonical Shopify Product GID.");
+  if ((input as typeof input & { rewardScope?: string }).rewardScope !== "ORDER" && (!Number.isInteger(input.maximumRewardQuantity) || Number(input.maximumRewardQuantity) < 1)) add(errors, "maximumRewardQuantity", "Maximum reward quantity must be at least 1.");
+  if ((input as typeof input & { rewardScope?: string }).rewardScope !== "ORDER" && !normalizeShopifyProductGid(input.offerProductGid)) add(errors, "offerProductGid", "Offer product must be a canonical Shopify Product GID.");
 
   const startsAt = normalizeDate(input.startsAt);
   const endsAt = normalizeDate(input.endsAt);
@@ -47,7 +47,7 @@ export function validatePromotionRule(input: PromotionRuleValidationInput): Prom
 
   const rewardValue = normalizeRewardValue(input.rewardValue);
   const reward = normalizePromotionReward({ type: input.rewardType, value: rewardValue, maximumQuantity: input.maximumRewardQuantity }, { productGid: input.offerProductGid, quantityCap: input.maximumRewardQuantity });
-  if (!reward.ok) reward.issues.filter((entry) => !["configuration.productGid", "configuration.quantityCap"].includes(entry.field ?? "")).forEach((entry) => add(errors, "rewardValue", entry.message));
+  if ((input as typeof input & { rewardScope?: string }).rewardScope !== "ORDER" && !reward.ok) reward.issues.filter((entry) => !["configuration.productGid", "configuration.quantityCap"].includes(entry.field ?? "")).forEach((entry) => add(errors, "rewardValue", entry.message));
 
   for (const field of ["heading", "badgeText", "customerMessage", "ctaText"] as const) {
     const value = input[field];
