@@ -24,6 +24,7 @@ export function compilePromotionRule(input: PromotionCompilerRuleInput): Promoti
     throw new PromotionCompilerNormalizationError("Unsupported trigger source type.");
   }));
   const base = {
+    functionContractVersion: 2 as const,
     schemaVersion: PROMOTION_COMPILER_SCHEMA_VERSION,
     ruleId: input.id,
     status: input.status,

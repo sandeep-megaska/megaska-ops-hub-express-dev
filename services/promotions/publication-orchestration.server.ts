@@ -1,6 +1,7 @@
 import type { PromotionRuleStatus } from "./domain.ts";
 import { compilePromotionRule } from "./compiler.server.ts";
 import { synchronizePromotionFunctionConfiguration } from "./runtime/synchronization.server.ts";
+import { prisma } from "../db/prisma.ts";
 
 type SavedPromotion = { id: string; status: PromotionRuleStatus };
 type PublicationDeps = { compiler?: typeof compilePromotionRule; synchronizer?: typeof synchronizePromotionFunctionConfiguration };
@@ -39,4 +40,14 @@ export async function publishPromotionStatusChange(shopId: string, shopDomain: s
   }
   const sync = await synchronizeRuntime(shopId, deps);
   return { compile, sync };
+}
+
+/** Manual repair always recompiles every publishable shop rule before invoking the one shop-level synchronizer. */
+export async function manuallySynchronizePromotionConfiguration(shopId: string, shopDomain: string | null | undefined, deps: PublicationDeps & { ruleReader?: { findMany(args: object): Promise<Array<{ id: string }>> } } = {}) {
+  const compiler = deps.compiler ?? compilePromotionRule;
+  const ruleReader = deps.ruleReader ?? prisma.promotionRule;
+  const rules = await ruleReader.findMany({ where: { shopId, status: { in: ["ACTIVE", "PAUSED"] }, archivedAt: null }, select: { id: true }, orderBy: { id: "asc" } });
+  for (const rule of rules) await compiler({ shopId, shopDomain, promotionRuleId: rule.id, reason: "MANUAL_RECOMPILE" });
+  const synchronizer = deps.synchronizer ?? synchronizePromotionFunctionConfiguration;
+  return synchronizer({ shopId });
 }

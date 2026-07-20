@@ -53,9 +53,15 @@ test("order-capable provisioning creates and verifies PRODUCT plus ORDER classes
   await ensureAutomaticDiscountClasses((async (_query: string, variables: any) => {
     updateInput = variables.automaticAppDiscount;
     return { discountAutomaticAppUpdate: { automaticAppDiscount: { ...appDiscount, discountClasses: ["PRODUCT", "ORDER"] }, userErrors: [] } };
-  }) as any, null, ownerId, true);
+  }) as any, null, ownerId, ["PRODUCT"], true);
   assert.deepEqual(updateInput.discountClasses, ["PRODUCT", "ORDER"]);
-  await assert.rejects(() => ensureAutomaticDiscountClasses((async () => ({ discountAutomaticAppUpdate: { automaticAppDiscount: { ...appDiscount, discountClasses: ["PRODUCT"] }, userErrors: [] } })) as any, null, ownerId, true), /missing the ORDER/);
+  await assert.rejects(() => ensureAutomaticDiscountClasses((async () => ({ discountAutomaticAppUpdate: { automaticAppDiscount: { ...appDiscount, discountClasses: ["PRODUCT"] }, userErrors: [] } })) as any, null, ownerId, ["PRODUCT"], true), /missing the ORDER/);
+});
+
+test("class upgrade preserves existing supported discount classes", async () => {
+  let updateInput: any;
+  await ensureAutomaticDiscountClasses((async (_query: string, variables: any) => { updateInput = variables.automaticAppDiscount; return { discountAutomaticAppUpdate: { automaticAppDiscount: { ...appDiscount, discountClasses: variables.automaticAppDiscount.discountClasses }, userErrors: [] } }; }) as any, null, ownerId, ["SHIPPING", "PRODUCT"], true);
+  assert.deepEqual(updateInput.discountClasses, ["SHIPPING", "PRODUCT", "ORDER"]);
 });
 
 test("writeFunctionConfigurationMetafield uses DiscountNode ownerId and verification reads canonical metafield", async () => {

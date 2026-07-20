@@ -52,6 +52,15 @@ export type LoopDeskFunctionConfiguration = {
   rules: LoopDeskFunctionRule[];
 };
 
+export type PromotionFunctionCapabilities = { contractVersion: "V1" | "V2"; supportsProductDiscounts: boolean; supportsOrderDiscounts: boolean };
+
+/** Capability is owned by the canonical configuration being published, not stale Shopify or browser state. */
+export function resolveFunctionCapabilities(compilation: Pick<LoopDeskFunctionConfiguration, "functionContractVersion">): PromotionFunctionCapabilities {
+  return compilation.functionContractVersion === 2
+    ? { contractVersion: "V2", supportsProductDiscounts: true, supportsOrderDiscounts: true }
+    : { contractVersion: "V1", supportsProductDiscounts: true, supportsOrderDiscounts: false };
+}
+
 export type OrderPublicationBlockingReason =
   | "order_function_contract_unsupported" | "order_discount_class_missing" | "order_reward_invalid"
   | "order_runtime_not_synchronized" | "order_combination_state_unverified" | "order_contract_hash_unverified";
@@ -68,8 +77,14 @@ export function canPublishOrderRewards(input: OrderPublicationGateInput): { allo
 }
 
 export type PromotionRuntimeSyncResult =
-  | { ok: true; outcome: "CREATED" | "UPDATED" | "UNCHANGED"; automaticDiscountId: string; configurationVersion: number; configurationHash: string; ruleCount: number; verifiedAt: string }
+  | { ok: true; outcome: "CREATED" | "UPDATED" | "UNCHANGED"; automaticDiscountId: string; configurationVersion: number; configurationHash: string; ruleCount: number; verifiedAt: string; diagnostics?: PromotionSynchronizationDiagnostics }
   | { ok: false; code: string; message: string; retryable: boolean };
+
+export type PromotionSynchronizationDiagnostics = {
+  compiledContractVersion: "V1" | "V2"; configuredFunctionContractVersion: "V1" | "V2";
+  productRuleCount: number; orderRuleCount: number; requiredDiscountClasses: string[]; actualDiscountClasses: string[];
+  automaticDiscountId: string; configurationHashMatched: boolean; synchronization: "healthy"; publicationBlockers: string[];
+};
 
 export function buildConfigurationHash(input: { configurationVersion: number; rules: LoopDeskFunctionRule[]; functionContractVersion?: 1 | 2 }) {
   return sha256Hex({ ...(input.functionContractVersion === 2 ? { functionContractVersion: 2 } : {}), schemaVersion: LOOPDESK_FUNCTION_SCHEMA_VERSION, configurationVersion: input.configurationVersion, rules: input.rules });

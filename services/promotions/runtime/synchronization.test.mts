@@ -20,12 +20,13 @@ function db(overrides = {}) {
 
 function graphql(log: any[], options: { ambiguous?: boolean; badReadback?: boolean; expandedReadback?: boolean; storedNodeId?: string; createdNodeId?: string } = {}) {
   let discount: any = options.storedNodeId ? { id: options.storedNodeId, metafield: null, title: "LoopDesk Universal Promotions", discountClasses: ["PRODUCT"], appDiscountType: { functionId: "gid://shopify/AppFunction/1" } } : null;
-  const node = (id: string, badReadback = false) => ({ id, metafield: discount?.metafield ? (badReadback ? { ...discount.metafield, value: "{}" } : { ...discount.metafield, namespace: options.expandedReadback ? "app--123456789--loopdesk-promotions" : discount.metafield.namespace }) : null, discount: { discountId: id, title: "LoopDesk Universal Promotions", status: "ACTIVE", discountClasses: ["PRODUCT"], appDiscountType: { functionId: "gid://shopify/AppFunction/1" } } });
+  const node = (id: string, badReadback = false) => ({ id, metafield: discount?.metafield ? (badReadback ? { ...discount.metafield, value: "{}" } : { ...discount.metafield, namespace: options.expandedReadback ? "app--123456789--loopdesk-promotions" : discount.metafield.namespace }) : null, discount: { discountId: id, title: "LoopDesk Universal Promotions", status: "ACTIVE", discountClasses: discount?.discountClasses ?? ["PRODUCT"], combinesWith: discount?.combinesWith ?? { orderDiscounts: true, productDiscounts: true, shippingDiscounts: true }, appDiscountType: { functionId: "gid://shopify/AppFunction/1" } } });
   return async (query: string, variables: any = {}) => {
     log.push({ query, variables });
     if (query.includes("shopifyFunctions")) return { shopifyFunctions: { nodes: [{ id: "gid://shopify/AppFunction/1", handle: "loopdesk-discount-function", title: "LoopDesk", apiType: "discounts" }] } };
     if (query.includes("discountNodes")) return { discountNodes: { nodes: options.ambiguous ? [node("gid://shopify/DiscountNode/1"), node("gid://shopify/DiscountNode/2")] : discount ? [node(discount.id)] : [] } };
     if (query.includes("discountAutomaticAppCreate")) { discount = { id: options.createdNodeId ?? "gid://shopify/DiscountNode/1", title: "LoopDesk Universal Promotions", discountClasses: ["PRODUCT"], appDiscountType: { functionId: "gid://shopify/AppFunction/1" } }; return { discountAutomaticAppCreate: { automaticAppDiscount: { discountId: discount.id, title: discount.title, discountClasses: discount.discountClasses, appDiscountType: discount.appDiscountType }, userErrors: [] } }; }
+    if (query.includes("discountAutomaticAppUpdate")) { discount = { ...discount, ...variables.automaticAppDiscount }; return { discountAutomaticAppUpdate: { automaticAppDiscount: { discountId: discount.id, title: discount.title, discountClasses: discount.discountClasses, combinesWith: discount.combinesWith, appDiscountType: discount.appDiscountType }, userErrors: [] } }; }
     if (query.includes("metafieldsSet")) { discount.metafield = variables.metafields[0]; return { metafieldsSet: { metafields: [{ id: "mf1" }], userErrors: [] } }; }
     if (query.includes("discountNode")) return { discountNode: discount?.id === variables.id ? node(variables.id, options.badReadback) : null };
     throw new Error("unexpected query");
@@ -124,4 +125,20 @@ test("sync persists replacement ID instead of stale ID", async () => {
 
   assert.equal(result.ok, true);
   assert.equal(database.state.shopifyAutomaticDiscountId, "gid://shopify/DiscountNode/replacement");
+});
+
+test("V2 combined configuration upgrades PRODUCT-only discount in place without creating a duplicate", async () => {
+  const productPayload: any = { schemaVersion: 1, functionContractVersion: 2, ruleId: "product", status: "ACTIVE", priority: 1, trigger: { type: "PRODUCT", matchMode: "ANY", minimumQuantity: 1, minimumCartSubtotal: null, sourceGroups: [{ sourceReferenceId: "p", sourceType: "PRODUCT", sourceGid: "gid://shopify/Product/1", productGids: ["gid://shopify/Product/1"], unresolved: false }] }, offer: { productGid: "gid://shopify/Product/2", handle: null }, reward: { scope: "product", method: "percentage", configuration: { productGid: "gid://shopify/Product/2", value: "10", quantityCap: 1 } } };
+  const orderPayload: any = { ...productPayload, ruleId: "order", priority: 2, offer: { productGid: "", handle: null }, reward: { scope: "order", method: "percentage", configuration: { selectionMode: "highest_eligible", continuityMode: "continuous", basis: "eligible_merchandise_subtotal", tiers: [{ id: "tier", minimumSubtotal: "0", percentage: "10" }] } } };
+  const database = db(); database.state.shopifyAutomaticDiscountId = "gid://shopify/DiscountNode/existing";
+  database.promotionRule = { findMany: async () => [{ id: "product", status: "ACTIVE", priority: 1, currentCompilation: { version: 1, status: "READY", functionPayload: productPayload } }, { id: "order", status: "ACTIVE", priority: 2, currentCompilation: { version: 1, status: "READY", functionPayload: orderPayload } }] };
+  const log: any[] = [];
+  const result = await synchronizePromotionFunctionConfiguration({ shopId: "shop-1" }, { database, graphql: graphql(log, { storedNodeId: "gid://shopify/DiscountNode/existing" }) as any });
+  assert.equal(result.ok, true);
+  assert.equal(log.some((call) => call.query.includes("discountAutomaticAppCreate")), false);
+  const classUpdate = log.find((call) => call.query.includes("UpdateDiscountClasses"));
+  assert.deepEqual(classUpdate.variables.automaticAppDiscount.discountClasses, ["PRODUCT", "ORDER"]);
+  const published = JSON.parse(log.find((call) => call.query.includes("metafieldsSet")).variables.metafields[0].value);
+  assert.equal(published.functionContractVersion, 2);
+  assert.deepEqual(published.rules.map((rule: any) => rule.reward.scope), ["product", "order"]);
 });
