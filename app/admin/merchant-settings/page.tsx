@@ -6,7 +6,6 @@ import {
   updateCartIntelligenceSettings,
   updateLoopDeskMerchantSettings,
 } from "../../../services/loopdesk/merchant-settings";
-import { CART_DRAWER_MODULE_SLOTS, type CartDrawerModuleKey } from "../../../services/cart-intelligence/modules/types";
 import {
   getDelhiveryAdminConfig,
   updateDelhiveryConfig,
@@ -98,6 +97,7 @@ async function saveMerchantSettings(
   embeddedContext.delete("error");
   let redirectUrl = `/admin/merchant-settings?${embeddedContext.toString()}`;
   try {
+    const currentCartIntelligence = await getCartIntelligenceSettings(shopId);
     await updateLoopDeskMerchantSettings(shopId, {
       general: {
         merchantName: formData.get("merchantName"),
@@ -169,7 +169,7 @@ async function saveMerchantSettings(
         })),
       },
       dynamicBannerEnabled: formData.get("dynamicBannerEnabled") === "on",
-      dynamicBannerText: formData.get("dynamicBannerText"),
+      dynamicBannerText: formData.get("dynamicBannerMessage"),
       dynamicBanner: {
         enabled: formData.get("dynamicBannerEnabled") === "on",
         message: formData.get("dynamicBannerMessage"),
@@ -195,18 +195,10 @@ async function saveMerchantSettings(
         showCompareAtSavings: formData.get("savingsSummaryShowRetail") === "on",
         hideZeroRows: formData.get("savingsSummaryHideZeroRows") === "on",
       },
-      upsellsEnabled: formData.get("upsellsEnabled") === "on",
-      bundlesEnabled: formData.get("bundlesEnabled") === "on",
-      aiRecommendationsEnabled: formData.get("aiRecommendationsEnabled") === "on",
-      cartDrawerModules: {
-        schemaVersion: 1,
-        modules: ["CART_GOAL_PROGRESS", "TRUST_BADGES", "CHECKOUT_REASSURANCE"].map((key) => ({
-          key,
-          enabled: formData.get(`cartDrawerModuleEnabled:${key}`) === "on",
-          slot: formData.get(`cartDrawerModuleSlot:${key}`),
-          sortOrder: formData.get(`cartDrawerModuleOrder:${key}`),
-        })),
-      },
+      upsellsEnabled: currentCartIntelligence.upsellsEnabled,
+      bundlesEnabled: currentCartIntelligence.bundlesEnabled,
+      aiRecommendationsEnabled: currentCartIntelligence.aiRecommendationsEnabled,
+      cartDrawerModules: currentCartIntelligence.cartDrawerModules,
     });
     await updateRazorpayConfig(shopId, {
       enabled: formData.get("razorpayEnabled") === "on",
@@ -382,11 +374,6 @@ export default async function MerchantSettingsPage({
     getMerchantOtpSettings(resolved.shop.id),
   ]);
   const platformTwilio = getPlatformTwilioConfigurationStatus();
-  const configurableCartModules: Array<{ key: CartDrawerModuleKey; label: string }> = [
-    { key: "CART_GOAL_PROGRESS", label: "Cart Goal Progress" },
-    { key: "TRUST_BADGES", label: "Trust Badges" },
-    { key: "CHECKOUT_REASSURANCE", label: "Checkout Reassurance" },
-  ];
   const shopParam = encodeURIComponent(resolved.shop.shopDomain);
   const saveAction = saveMerchantSettings.bind(
     null,
@@ -426,7 +413,7 @@ export default async function MerchantSettingsPage({
           {params.error}
         </div>
       ) : null}
-      <form action={saveAction} className="grid gap-6">
+      <form action={saveAction} className="grid gap-6 pb-24">
         <input type="hidden" name="shop" value={resolved.shop.shopDomain} />
         {embeddedContextHiddenInputs(params).map(([key, value]) => <input key={key} type="hidden" name={`embeddedContext:${key}`} value={value} />)}
         <section className={`${cardClass} grid gap-5`}>
@@ -574,121 +561,399 @@ export default async function MerchantSettingsPage({
         </section>
 
 
-        <section id="cart-intelligence" className={`${cardClass} grid gap-5`}>
-          <SectionHeader title="Cart Intelligence" description="Merchant-configured storefront guidance for the cart drawer." />
-          <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-medium text-amber-900">
-            This is a storefront display goal only. It does not change Shopify shipping rates, discounts, or checkout eligibility. Configure the corresponding rule separately in Shopify.
+        <section id="cart-intelligence" className="grid gap-5">
+          <div className={`${cardClass} grid gap-4`}>
+            <SectionHeader
+              title="Cart Intelligence"
+              description="Cart Intelligence controls optional display modules in the LoopDesk cart drawer."
+            />
+            <Check
+              label="Enable Cart Intelligence"
+              name="cartIntelligenceEnabled"
+              defaultChecked={cartIntelligence.enabled}
+              help="Master switch for Cart Intelligence display modules."
+            />
+            <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-medium leading-6 text-amber-900">
+              These modules are display-only and do not change Shopify pricing,
+              shipping, discounts, or checkout eligibility.
+            </p>
           </div>
-          <div className="grid gap-3 md:grid-cols-2">
-            <Check label="Cart Intelligence Enabled" name="cartIntelligenceEnabled" defaultChecked={cartIntelligence.enabled} help="Master public flag for future Cart Intelligence experiences; disabled by default." />
-            <Check label="Cart Goal Progress Enabled" name="cartGoalProgressEnabled" defaultChecked={cartIntelligence.cartGoalProgress.enabled} help="Shows the merchant-authored display goal in the cart drawer." />
-            <Check label="Upsells Enabled" name="upsellsEnabled" defaultChecked={cartIntelligence.upsellsEnabled} help="Configuration flag only; no upsell logic is implemented in this phase." />
-            <Check label="Bundles Enabled" name="bundlesEnabled" defaultChecked={cartIntelligence.bundlesEnabled} help="Configuration flag only; no bundle logic is implemented in this phase." />
-            <Check label="AI Recommendations Enabled" name="aiRecommendationsEnabled" defaultChecked={cartIntelligence.aiRecommendationsEnabled} help="Configuration flag only; no AI recommendations are implemented in this phase." />
-          </div>
-          <div className="grid gap-4 rounded-xl border border-gray-200 bg-gray-50 p-4">
-            <div className="grid gap-3 md:grid-cols-3">
-              <Check label="Trust Badges Enabled" name="trustBadgesEnabled" defaultChecked={cartIntelligence.trustBadges.enabled} help="Master switch. Individual claims remain disabled until you approve them." />
-              <label className="grid gap-2 text-sm font-medium text-gray-800"><span>Placement</span><select className="rounded-lg border border-gray-300 bg-white px-3 py-2" name="trustBadgesPlacement" defaultValue={cartIntelligence.trustBadges.placement}><option value="BELOW_TOTALS">Below totals</option><option value="BELOW_CHECKOUT_BUTTON">Below checkout button</option></select></label>
-              <label className="grid gap-2 text-sm font-medium text-gray-800"><span>Layout</span><select className="rounded-lg border border-gray-300 bg-white px-3 py-2" name="trustBadgesLayout" defaultValue={cartIntelligence.trustBadges.layout}><option value="GRID">Grid</option><option value="ROW">Row</option></select></label>
+
+          <fieldset className={`${cardClass} grid min-w-0 gap-4`}>
+            <legend className="sr-only">Cart Goal Progress settings</legend>
+            <div>
+              <h3 className="text-base font-semibold text-gray-950">
+                Cart Goal Progress
+              </h3>
+              <p className={helpClass}>
+                Show progress toward a merchant-defined cart goal without
+                changing Shopify pricing or shipping rules.
+              </p>
             </div>
-            <p className={helpClass}>Up to six plain-text badges. Enabling a badge confirms that its claim is accurate for your store.</p>
+            <Check
+              label="Enable Cart Goal Progress"
+              name="cartGoalProgressEnabled"
+              defaultChecked={cartIntelligence.cartGoalProgress.enabled}
+            />
+            <div className="grid min-w-0 gap-4 md:grid-cols-2 lg:grid-cols-3">
+              <Field
+                label="Goal Name"
+                name="goalName"
+                defaultValue={cartIntelligence.cartGoalProgress.goalName}
+              />
+              <Field
+                label="Goal Target Amount"
+                name="targetAmount"
+                type="number"
+                defaultValue={
+                  cartIntelligence.cartGoalProgress.targetAmountMinor == null
+                    ? ""
+                    : String(
+                        cartIntelligence.cartGoalProgress.targetAmountMinor /
+                          100,
+                      )
+                }
+                help="Storefront display amount in the store currency."
+              />
+              <Check
+                label="Hide After Unlock"
+                name="hideAfterUnlock"
+                defaultChecked={
+                  cartIntelligence.cartGoalProgress.hideAfterUnlock
+                }
+                help="Hide the goal after the subtotal reaches the target."
+              />
+              <div className="md:col-span-2 lg:col-span-3">
+                <Field
+                  label="Progress Message"
+                  name="progressText"
+                  defaultValue={cartIntelligence.cartGoalProgress.progressText}
+                  help="Use {amount} for the formatted remaining amount."
+                />
+              </div>
+              <div className="md:col-span-2 lg:col-span-3">
+                <Field
+                  label="Unlocked Message"
+                  name="unlockedText"
+                  defaultValue={cartIntelligence.cartGoalProgress.unlockedText}
+                />
+              </div>
+            </div>
+          </fieldset>
+
+          <fieldset className={`${cardClass} grid min-w-0 gap-4`}>
+            <legend className="sr-only">Dynamic Banner settings</legend>
+            <div>
+              <h3 className="text-base font-semibold text-gray-950">
+                Dynamic Banner
+              </h3>
+              <p className={helpClass}>
+                Display a contextual cart message without changing prices,
+                discounts, shipping, or checkout.
+              </p>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+              <Check
+                label="Enable Dynamic Banner"
+                name="dynamicBannerEnabled"
+                defaultChecked={cartIntelligence.dynamicBanner.enabled}
+              />
+              <Check
+                label="Show Icon"
+                name="dynamicBannerShowIcon"
+                defaultChecked={cartIntelligence.dynamicBanner.showIcon}
+              />
+              <Check
+                label="Allow Dismiss"
+                name="dynamicBannerDismissible"
+                defaultChecked={cartIntelligence.dynamicBanner.dismissible}
+              />
+              <Check
+                label="Open Link in New Tab"
+                name="dynamicBannerOpenLinkInNewTab"
+                defaultChecked={cartIntelligence.dynamicBanner.openLinkInNewTab}
+              />
+              <Check
+                label="Show on Empty Cart"
+                name="dynamicBannerEmptyCart"
+                defaultChecked={
+                  cartIntelligence.dynamicBanner.visibility.emptyCart
+                }
+              />
+              <Check
+                label="Show when Cart Has Items"
+                name="dynamicBannerCartWithItems"
+                defaultChecked={
+                  cartIntelligence.dynamicBanner.visibility.cartWithItems
+                }
+              />
+            </div>
+            <TextArea
+              label="Message"
+              name="dynamicBannerMessage"
+              defaultValue={cartIntelligence.dynamicBanner.message}
+              help="Required when enabled. Maximum 240 characters; plain text only."
+            />
+            <div className="grid min-w-0 gap-4 md:grid-cols-2 lg:grid-cols-[minmax(0,1.5fr)_7rem_minmax(0,1fr)_minmax(0,1fr)]">
+              <label className="grid min-w-0 gap-2 text-sm font-medium text-gray-800">
+                <span>Placement</span>
+                <select
+                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
+                  name="dynamicBannerPlacement"
+                  defaultValue={cartIntelligence.dynamicBanner.placement}
+                >
+                  {[
+                    ["BEFORE_CART_LINES", "Top of cart"],
+                    ["AFTER_CART_LINES", "After cart items"],
+                    ["BEFORE_PROMOTIONS", "Before offers"],
+                    ["AFTER_PROMOTIONS", "After offers"],
+                    ["BEFORE_COUPON", "Before coupon"],
+                    ["AFTER_COUPON", "After coupon"],
+                    ["BEFORE_TOTALS", "Before totals"],
+                    ["AFTER_TOTALS", "After totals"],
+                    ["BEFORE_CHECKOUT", "Before checkout button"],
+                    ["AFTER_CHECKOUT", "After checkout button"],
+                  ].map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <Field
+                label="Order"
+                name="dynamicBannerSortOrder"
+                type="number"
+                defaultValue={String(cartIntelligence.dynamicBanner.sortOrder)}
+              />
+              <label className="grid min-w-0 gap-2 text-sm font-medium text-gray-800">
+                <span>Style</span>
+                <select
+                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
+                  name="dynamicBannerStyle"
+                  defaultValue={cartIntelligence.dynamicBanner.style}
+                >
+                  {["INFO", "SUCCESS", "WARNING", "NEUTRAL", "BRAND"].map(
+                    (value) => (
+                      <option key={value} value={value}>
+                        {value[0] + value.slice(1).toLowerCase()}
+                      </option>
+                    ),
+                  )}
+                </select>
+              </label>
+              <label className="grid min-w-0 gap-2 text-sm font-medium text-gray-800">
+                <span>Text Alignment</span>
+                <select
+                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
+                  name="dynamicBannerAlignment"
+                  defaultValue={cartIntelligence.dynamicBanner.alignment}
+                >
+                  <option value="LEFT">Left</option>
+                  <option value="CENTER">Center</option>
+                </select>
+              </label>
+            </div>
+            <div className="grid min-w-0 gap-4 md:grid-cols-2">
+              <Field
+                label="Link Label"
+                name="dynamicBannerLinkLabel"
+                defaultValue={cartIntelligence.dynamicBanner.linkLabel || ""}
+              />
+              <Field
+                label="Link URL"
+                name="dynamicBannerLinkUrl"
+                defaultValue={cartIntelligence.dynamicBanner.linkUrl || ""}
+                help="Optional: http, https, mailto, tel, or a relative path beginning with /."
+              />
+            </div>
+          </fieldset>
+
+          <fieldset className={`${cardClass} grid min-w-0 gap-4`}>
+            <legend className="sr-only">Savings Summary settings</legend>
+            <div>
+              <h3 className="text-base font-semibold text-gray-950">
+                Savings Summary
+              </h3>
+              <p className={helpClass}>
+                Summarize available cart savings without changing prices,
+                discounts, or checkout totals.
+              </p>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+              <Check
+                label="Enable Savings Summary"
+                name="savingsSummaryEnabled"
+                defaultChecked={cartIntelligence.savingsSummary.enabled}
+              />
+              <Check
+                label="Show Total Savings"
+                name="savingsSummaryShowTotal"
+                defaultChecked={
+                  cartIntelligence.savingsSummary.showTotalSavings
+                }
+              />
+              <Check
+                label="Show Offer Savings"
+                name="savingsSummaryShowOffer"
+                defaultChecked={
+                  cartIntelligence.savingsSummary.showOfferSavings
+                }
+              />
+              <Check
+                label="Show Coupon Savings"
+                name="savingsSummaryShowCoupon"
+                defaultChecked={
+                  cartIntelligence.savingsSummary.showCouponSavings
+                }
+              />
+              <Check
+                label="Show Retail Savings"
+                name="savingsSummaryShowRetail"
+                defaultChecked={
+                  cartIntelligence.savingsSummary.showCompareAtSavings
+                }
+              />
+              <Check
+                label="Hide Rows with Zero Savings"
+                name="savingsSummaryHideZeroRows"
+                defaultChecked={cartIntelligence.savingsSummary.hideZeroRows}
+              />
+            </div>
+            <div className="grid min-w-0 gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,1.5fr)_7rem]">
+              <Field
+                label="Title"
+                name="savingsSummaryTitle"
+                defaultValue={cartIntelligence.savingsSummary.title}
+                help="Plain text, maximum 80 characters."
+              />
+              <label className="grid min-w-0 gap-2 text-sm font-medium text-gray-800">
+                <span>Placement</span>
+                <select
+                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
+                  name="savingsSummaryPlacement"
+                  defaultValue={cartIntelligence.savingsSummary.placement}
+                >
+                  {[
+                    ["BEFORE_CART_LINES", "Top of cart"],
+                    ["AFTER_CART_LINES", "After cart items"],
+                    ["BEFORE_PROMOTIONS", "Before offers"],
+                    ["AFTER_PROMOTIONS", "After offers"],
+                    ["BEFORE_COUPON", "Before coupon"],
+                    ["AFTER_COUPON", "After coupon"],
+                    ["BEFORE_TOTALS", "Before totals"],
+                    ["AFTER_TOTALS", "After totals"],
+                    ["BEFORE_CHECKOUT", "Before checkout button"],
+                    ["AFTER_CHECKOUT", "After checkout button"],
+                  ].map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <Field
+                label="Order"
+                name="savingsSummarySortOrder"
+                type="number"
+                defaultValue={String(cartIntelligence.savingsSummary.sortOrder)}
+              />
+            </div>
+          </fieldset>
+
+          <fieldset className={`${cardClass} grid min-w-0 gap-4`}>
+            <legend className="sr-only">Trust Badges settings</legend>
+            <div>
+              <h3 className="text-base font-semibold text-gray-950">
+                Trust Badges
+              </h3>
+              <p className={helpClass}>
+                Show merchant-approved reassurance claims near cart totals or
+                checkout.
+              </p>
+            </div>
+            <div className="grid gap-3 md:grid-cols-3">
+              <Check
+                label="Enable Trust Badges"
+                name="trustBadgesEnabled"
+                defaultChecked={cartIntelligence.trustBadges.enabled}
+                help="Individual claims remain disabled until you approve them."
+              />
+              <label className="grid min-w-0 gap-2 text-sm font-medium text-gray-800">
+                <span>Placement</span>
+                <select
+                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
+                  name="trustBadgesPlacement"
+                  defaultValue={cartIntelligence.trustBadges.placement}
+                >
+                  <option value="BELOW_TOTALS">Below totals</option>
+                  <option value="BELOW_CHECKOUT_BUTTON">
+                    Below checkout button
+                  </option>
+                </select>
+              </label>
+              <label className="grid min-w-0 gap-2 text-sm font-medium text-gray-800">
+                <span>Layout</span>
+                <select
+                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
+                  name="trustBadgesLayout"
+                  defaultValue={cartIntelligence.trustBadges.layout}
+                >
+                  <option value="GRID">Grid</option>
+                  <option value="ROW">Row</option>
+                </select>
+              </label>
+            </div>
+            <p className={helpClass}>
+              Up to six plain-text badges. Enabling a badge confirms that its
+              claim is accurate for your store.
+            </p>
             {cartIntelligence.trustBadges.items.map((item, index) => (
-              <div key={item.id} className="grid items-end gap-3 rounded-lg border border-gray-200 bg-white p-3 md:grid-cols-[1fr_2fr_7rem_auto]">
-                <input type="hidden" name={`trustBadgeId${index}`} value={item.id} />
-                <label className="grid gap-2 text-sm font-medium"><span>Icon</span><select className="rounded-lg border border-gray-300 px-3 py-2" name={`trustBadgeIcon${index}`} defaultValue={item.icon}><option value="secure-payment">Secure payment</option><option value="delivery">Delivery</option><option value="exchange">Exchange</option><option value="cod">Cash on delivery</option><option value="support">Support</option><option value="authenticity">Authenticity</option><option value="custom">General</option></select></label>
-                <Field label={`Badge ${index + 1} label`} name={`trustBadgeLabel${index}`} defaultValue={item.label} />
-                <Field label="Order" name={`trustBadgeSortOrder${index}`} type="number" defaultValue={String(item.sortOrder)} />
-                <Check label="Enabled" name={`trustBadgeEnabled${index}`} defaultChecked={item.enabled} />
+              <div
+                key={item.id}
+                className="grid min-w-0 items-end gap-3 rounded-lg border border-gray-200 bg-gray-50 p-3 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_7rem_auto]"
+              >
+                <input
+                  type="hidden"
+                  name={`trustBadgeId${index}`}
+                  value={item.id}
+                />
+                <label className="grid min-w-0 gap-2 text-sm font-medium">
+                  <span>Icon</span>
+                  <select
+                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
+                    name={`trustBadgeIcon${index}`}
+                    defaultValue={item.icon}
+                  >
+                    <option value="secure-payment">Secure payment</option>
+                    <option value="delivery">Delivery</option>
+                    <option value="exchange">Exchange</option>
+                    <option value="cod">Cash on delivery</option>
+                    <option value="support">Support</option>
+                    <option value="authenticity">Authenticity</option>
+                    <option value="custom">General</option>
+                  </select>
+                </label>
+                <Field
+                  label={`Badge ${index + 1} Label`}
+                  name={`trustBadgeLabel${index}`}
+                  defaultValue={item.label}
+                />
+                <Field
+                  label="Order"
+                  name={`trustBadgeSortOrder${index}`}
+                  type="number"
+                  defaultValue={String(item.sortOrder)}
+                />
+                <Check
+                  label="Enabled"
+                  name={`trustBadgeEnabled${index}`}
+                  defaultChecked={item.enabled}
+                />
               </div>
             ))}
-          </div>
-          <div className="grid gap-4 rounded-xl border border-gray-200 bg-gray-50 p-4">
-            <div><h3 className="font-semibold text-gray-950">Savings Summary</h3><p className={helpClass}>Savings Summary is display-only. It summarizes available cart savings and does not change prices, discounts or checkout totals.</p></div>
-            <div className="grid gap-3 md:grid-cols-3">
-              <Check label="Enable Savings Summary" name="savingsSummaryEnabled" defaultChecked={cartIntelligence.savingsSummary.enabled} />
-              <Check label="Show Total Savings" name="savingsSummaryShowTotal" defaultChecked={cartIntelligence.savingsSummary.showTotalSavings} />
-              <Check label="Show Offer Savings" name="savingsSummaryShowOffer" defaultChecked={cartIntelligence.savingsSummary.showOfferSavings} />
-              <Check label="Show Coupon Savings" name="savingsSummaryShowCoupon" defaultChecked={cartIntelligence.savingsSummary.showCouponSavings} />
-              <Check label="Show Retail Savings" name="savingsSummaryShowRetail" defaultChecked={cartIntelligence.savingsSummary.showCompareAtSavings} />
-              <Check label="Hide Rows with Zero Savings" name="savingsSummaryHideZeroRows" defaultChecked={cartIntelligence.savingsSummary.hideZeroRows} />
-            </div>
-            <div className="grid gap-4 md:grid-cols-3">
-              <Field label="Title" name="savingsSummaryTitle" defaultValue={cartIntelligence.savingsSummary.title} help="Plain text, maximum 80 characters." />
-              <label className="grid gap-2 text-sm font-medium text-gray-800"><span>Placement</span><select className="rounded-lg border border-gray-300 bg-white px-3 py-2" name="savingsSummaryPlacement" defaultValue={cartIntelligence.savingsSummary.placement}>{[["BEFORE_CART_LINES","Top of cart"],["AFTER_CART_LINES","After cart items"],["BEFORE_PROMOTIONS","Before offers"],["AFTER_PROMOTIONS","After offers"],["BEFORE_COUPON","Before coupon"],["AFTER_COUPON","After coupon"],["BEFORE_TOTALS","Before totals"],["AFTER_TOTALS","After totals"],["BEFORE_CHECKOUT","Before checkout button"],["AFTER_CHECKOUT","After checkout button"]].map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-              <Field label="Order" name="savingsSummarySortOrder" type="number" defaultValue={String(cartIntelligence.savingsSummary.sortOrder)} />
-            </div>
-          </div>
-          <div className="grid gap-4 md:grid-cols-3">
-            <Field label="Goal Name" name="goalName" defaultValue={cartIntelligence.cartGoalProgress.goalName} />
-            <Field label="Goal Target Amount" name="targetAmount" type="number" defaultValue={cartIntelligence.cartGoalProgress.targetAmountMinor == null ? "" : String(cartIntelligence.cartGoalProgress.targetAmountMinor / 100)} help="Storefront display amount in the store currency." />
-            <Field label="Progress Message" name="progressText" defaultValue={cartIntelligence.cartGoalProgress.progressText} help="Use {amount} for the formatted remaining amount." />
-            <Field label="Unlocked Message" name="unlockedText" defaultValue={cartIntelligence.cartGoalProgress.unlockedText} />
-            <Check label="Hide After Unlock" name="hideAfterUnlock" defaultChecked={cartIntelligence.cartGoalProgress.hideAfterUnlock} help="Hide the goal after the subtotal reaches the target." />
-          </div>
-          <div className="grid gap-4 rounded-xl border border-gray-200 bg-gray-50 p-4">
-            <div><h3 className="font-semibold text-gray-950">Dynamic Banner</h3><p className={helpClass}>Dynamic Banner is display-only. It does not change prices, discounts, shipping or checkout.</p></div>
-            <div className="grid gap-3 md:grid-cols-3">
-              <Check label="Enable Dynamic Banner" name="dynamicBannerEnabled" defaultChecked={cartIntelligence.dynamicBanner.enabled} />
-              <Check label="Show Icon" name="dynamicBannerShowIcon" defaultChecked={cartIntelligence.dynamicBanner.showIcon} />
-              <Check label="Allow Dismiss" name="dynamicBannerDismissible" defaultChecked={cartIntelligence.dynamicBanner.dismissible} />
-              <Check label="Open Link in New Tab" name="dynamicBannerOpenLinkInNewTab" defaultChecked={cartIntelligence.dynamicBanner.openLinkInNewTab} />
-              <Check label="Show on Empty Cart" name="dynamicBannerEmptyCart" defaultChecked={cartIntelligence.dynamicBanner.visibility.emptyCart} />
-              <Check label="Show when Cart Has Items" name="dynamicBannerCartWithItems" defaultChecked={cartIntelligence.dynamicBanner.visibility.cartWithItems} />
-            </div>
-            <TextArea label="Message" name="dynamicBannerMessage" defaultValue={cartIntelligence.dynamicBanner.message} help="Required when enabled. Maximum 240 characters; plain text only." />
-            <input type="hidden" name="dynamicBannerText" value={cartIntelligence.dynamicBanner.message} />
-            <div className="grid gap-4 md:grid-cols-4">
-              <label className="grid gap-2 text-sm font-medium text-gray-800"><span>Placement</span><select className="rounded-lg border border-gray-300 bg-white px-3 py-2" name="dynamicBannerPlacement" defaultValue={cartIntelligence.dynamicBanner.placement}>{[["BEFORE_CART_LINES","Top of cart"],["AFTER_CART_LINES","After cart items"],["BEFORE_PROMOTIONS","Before offers"],["AFTER_PROMOTIONS","After offers"],["BEFORE_COUPON","Before coupon"],["AFTER_COUPON","After coupon"],["BEFORE_TOTALS","Before totals"],["AFTER_TOTALS","After totals"],["BEFORE_CHECKOUT","Before checkout button"],["AFTER_CHECKOUT","After checkout button"]].map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-              <Field label="Order" name="dynamicBannerSortOrder" type="number" defaultValue={String(cartIntelligence.dynamicBanner.sortOrder)} />
-              <label className="grid gap-2 text-sm font-medium text-gray-800"><span>Style</span><select className="rounded-lg border border-gray-300 bg-white px-3 py-2" name="dynamicBannerStyle" defaultValue={cartIntelligence.dynamicBanner.style}>{["INFO","SUCCESS","WARNING","NEUTRAL","BRAND"].map(value => <option key={value} value={value}>{value[0] + value.slice(1).toLowerCase()}</option>)}</select></label>
-              <label className="grid gap-2 text-sm font-medium text-gray-800"><span>Text Alignment</span><select className="rounded-lg border border-gray-300 bg-white px-3 py-2" name="dynamicBannerAlignment" defaultValue={cartIntelligence.dynamicBanner.alignment}><option value="LEFT">Left</option><option value="CENTER">Center</option></select></label>
-            </div>
-            <div className="grid gap-4 md:grid-cols-2"><Field label="Link Label" name="dynamicBannerLinkLabel" defaultValue={cartIntelligence.dynamicBanner.linkLabel || ""} /><Field label="Link URL" name="dynamicBannerLinkUrl" defaultValue={cartIntelligence.dynamicBanner.linkUrl || ""} help="Optional: http, https, mailto, tel, or a relative path beginning with /." /></div>
-            {cartIntelligence.dynamicBanner.message ? <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-center text-sm font-medium text-blue-950">Preview: {cartIntelligence.dynamicBanner.message}</div> : null}
-          </div>
-          <div className="grid gap-4 rounded-xl border border-gray-200 bg-white p-4">
-            <div>
-              <h3 className="font-semibold text-gray-950">Cart Drawer Modules</h3>
-              <p className={helpClass}>Module ordering controls optional cart sections only. Core cart items, totals and checkout remain fixed for safety.</p>
-            </div>
-            <div className="hidden grid-cols-[2fr_1fr_2fr_7rem] gap-3 text-xs font-semibold uppercase tracking-wide text-gray-500 md:grid">
-              <span>Module</span><span>Enabled</span><span>Placement</span><span>Order</span>
-            </div>
-            {configurableCartModules.map(({ key, label }) => {
-              const configuredModule = cartIntelligence.cartDrawerModules.modules.find((candidate) => candidate.key === key);
-              return (
-                <div key={key} className="grid items-end gap-3 rounded-lg border border-gray-200 bg-gray-50 p-3 md:grid-cols-[2fr_1fr_2fr_7rem]">
-                  <strong className="text-sm text-gray-900">{label}</strong>
-                  <Check label="Enabled" name={`cartDrawerModuleEnabled:${key}`} defaultChecked={configuredModule?.enabled === true} />
-                  <label className="grid gap-2 text-sm font-medium text-gray-800"><span>Placement</span><select className="rounded-lg border border-gray-300 bg-white px-3 py-2" name={`cartDrawerModuleSlot:${key}`} defaultValue={configuredModule?.slot || "AFTER_CHECKOUT"}>{CART_DRAWER_MODULE_SLOTS.map((slot) => <option key={slot} value={slot}>{slot.replaceAll("_", " ").toLowerCase()}</option>)}</select></label>
-                  <Field label="Order" name={`cartDrawerModuleOrder:${key}`} type="number" defaultValue={String(configuredModule?.sortOrder ?? 100)} />
-                </div>
-              );
-            })}
-          </div>
-          <div className="grid gap-4 rounded-xl border border-gray-200 bg-white p-4">
-            <div>
-              <h3 className="font-semibold text-gray-950">Cart Drawer Modules</h3>
-              <p className={helpClass}>Module ordering controls optional cart sections only. Core cart items, totals and checkout remain fixed for safety.</p>
-            </div>
-            <div className="hidden grid-cols-[2fr_1fr_2fr_7rem] gap-3 text-xs font-semibold uppercase tracking-wide text-gray-500 md:grid">
-              <span>Module</span><span>Enabled</span><span>Placement</span><span>Order</span>
-            </div>
-            {configurableCartModules.map(({ key, label }) => {
-              const configuredModule = cartIntelligence.cartDrawerModules.modules.find((candidate) => candidate.key === key);
-              return (
-                <div key={key} className="grid items-end gap-3 rounded-lg border border-gray-200 bg-gray-50 p-3 md:grid-cols-[2fr_1fr_2fr_7rem]">
-                  <strong className="text-sm text-gray-900">{label}</strong>
-                  <Check label="Enabled" name={`cartDrawerModuleEnabled:${key}`} defaultChecked={configuredModule?.enabled === true} />
-                  <label className="grid gap-2 text-sm font-medium text-gray-800"><span>Placement</span><select className="rounded-lg border border-gray-300 bg-white px-3 py-2" name={`cartDrawerModuleSlot:${key}`} defaultValue={configuredModule?.slot || "AFTER_CHECKOUT"}>{CART_DRAWER_MODULE_SLOTS.map((slot) => <option key={slot} value={slot}>{slot.replaceAll("_", " ").toLowerCase()}</option>)}</select></label>
-                  <Field label="Order" name={`cartDrawerModuleOrder:${key}`} type="number" defaultValue={String(configuredModule?.sortOrder ?? 100)} />
-                </div>
-              );
-            })}
-          </div>
+          </fieldset>
         </section>
-
         <section id="razorpay" className={`${cardClass} grid gap-5`}>
           <SectionHeader title="Razorpay" description="Merchant-level Razorpay configuration only. This does not change checkout payment execution, order creation, OTP, cart, Delhivery, analytics, or storefront business logic." />
           <div className="grid gap-3 md:grid-cols-2">
