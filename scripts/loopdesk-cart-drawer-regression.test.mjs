@@ -4,6 +4,16 @@ import { readFileSync } from "node:fs";
 const source = readFileSync(new URL("../extensions/megaska-otp/assets/loopdesk-cart-drawer.js", import.meta.url), "utf8");
 const css = readFileSync(new URL("../extensions/megaska-otp/assets/loopdesk-cart-drawer.css", import.meta.url), "utf8");
 
+const embed = readFileSync(new URL("../extensions/megaska-otp/blocks/loopdesk-cart-drawer-embed.liquid", import.meta.url), "utf8");
+
+const immediateAssetLoad = embed.match(/var drawerAssetRequested = false;[\s\S]*?function loadDrawerAsset\(\) \{[\s\S]*?fetch\(runtimeUrl,/);
+assert.ok(immediateAssetLoad, "drawer asset loading should be declared and requested before the runtime config fetch");
+assert.match(immediateAssetLoad[0], /var drawerAssetRequested = false;[\s\S]*function loadDrawerAsset\(\) \{[\s\S]*if \(drawerAssetRequested\) return;[\s\S]*drawerAssetRequested = true;/, "drawer asset loading should use one idempotent insertion guard");
+assert.match(immediateAssetLoad[0], /loadDrawerAsset\(\);[\s\S]*if \(typeof fetch === 'function'\) \{[\s\S]*fetch\(runtimeUrl,/, "drawer asset loading should start independently before runtime config fetching");
+assert.doesNotMatch(embed, /\.then\(loadDrawerAsset\)/, "runtime config completion must not trigger drawer asset loading");
+assert.doesNotMatch(embed, /LoopDeskCartBootstrap/, "the removed cart bootstrap must remain absent");
+assert.doesNotMatch(embed, /applyRuntimeConfig/, "the removed runtime config application helper must remain absent");
+
 const ownershipDecision = source.match(/function cartOwnershipDecision\(capability\) \{[\s\S]*?\n  \}\n\n  function isLoopDeskDrawerActive/);
 assert.ok(ownershipDecision, "cart ownership decision helper should exist");
 assert.match(ownershipDecision[0], /config\.cart\.drawerMode === "theme"[\s\S]*reason = "theme-mode"/, "theme mode must remain fallback-owned");
