@@ -2549,18 +2549,113 @@ function consumePendingAccountRedirect() {
  async function handleCheckoutTriggerClick(event, triggerEl) {
   if (!checkoutInterceptionEnabled) return;
 
-  // Checkout authentication belongs to the Express Checkout controller. This
-  // generic authentication bundle only detects and delegates checkout intent.
-  if (window.LoopDeskCheckoutBridge?.request) {
-    window.LoopDeskCheckoutBridge.request({
-      event,
-      trigger: triggerEl,
-      interaction: "click",
-    });
+  const targetUrl =
+    triggerEl?.tagName === "A" ? triggerEl.getAttribute("href") : "/checkout";
+
+  const allowed = await ensureMegaskaAuthenticatedBeforeCheckout({
+    event,
+    targetUrl,
+    triggerEl,
+  });
+
+  if (!allowed) {
+    console.log("[Megaska OTP] checkout click intercepted", { targetUrl });
+    return;
   }
-  // If the bridge is deliberately unavailable, leave the event untouched so
-  // Shopify's native checkout remains the explicit fallback.
- }
+
+  const isAnchorCheckoutTrigger = triggerEl?.tagName === "A" && Boolean(targetUrl);
+
+  if (isAnchorCheckoutTrigger) {
+    event.preventDefault();
+
+    const customer = await getCurrentMegaskaCustomer();
+    const prefilledUrl = await buildPrefilledCheckoutUrl(targetUrl, customer);
+
+    console.log("[Megaska Checkout Prefill] checkout handoff start", {
+      source: "interceptedCheckoutAnchor.href",
+      detectedCheckoutUrl: prefilledUrl,
+    });
+
+    const handoff = await runBuyerIdentityHandoff(prefilledUrl, customer);
+
+    if (isCheckoutContinuationBlocked(handoff)) {
+      console.warn("[Megaska Checkout Gate] continuation stopped after handoff", {
+        reason: handoff.reason || "blocked",
+      });
+      openModal("checkout-gate-blocked");
+      return;
+    }
+
+    if (await tryAutoApplyWalletDiscount(handoff)) {
+      return;
+    }
+
+    const finalTargetUrl = handoff?.checkoutUrl || prefilledUrl;
+
+    window.__megaskaCheckoutDebug = {
+      cartId: handoff?.cartId || null,
+      buyerIdentityPayload: {
+        email: String(handoff?.buyerIdentity?.email || "").trim() || null,
+        phone: String(handoff?.buyerIdentity?.phone || "").trim() || null,
+      },
+      mutationResult: handoff || null,
+      checkoutUrl: finalTargetUrl || null,
+    };
+
+    console.log("[Megaska Checkout Prefill] checkout continuation", {
+      mode: "click",
+      finalCheckoutUrl: finalTargetUrl,
+      mutationWaited: true,
+      debugSurface: "window.__megaskaCheckoutDebug",
+    });
+
+    window.location.assign(finalTargetUrl);
+    return;
+  }
+
+  const checkoutForm =
+    triggerEl && typeof triggerEl.closest === "function"
+      ? triggerEl.closest("form")
+      : null;
+
+  if (checkoutForm) {
+    event.preventDefault();
+
+    const customer = await getCurrentMegaskaCustomer();
+    await applyCheckoutPrefillToForm(checkoutForm, customer);
+
+    const submittedAction = checkoutForm.getAttribute("action") || "/checkout";
+    const prefilledUrl = await buildPrefilledCheckoutUrl("/checkout", customer);
+    const handoff = await runBuyerIdentityHandoff(prefilledUrl, customer);
+
+    if (isCheckoutContinuationBlocked(handoff)) {
+      console.warn("[Megaska Checkout Gate] continuation stopped after handoff", {
+        reason: handoff.reason || "blocked",
+      });
+      renderCheckoutGuardError({
+        anchor: checkoutForm,
+        message: "Please verify your mobile number before checkout.",
+      });
+      openModal("checkout-gate-blocked");
+      return;
+    }
+
+    if (await tryAutoApplyWalletDiscount(handoff)) {
+      return;
+    }
+
+    const finalTargetUrl = handoff?.checkoutUrl || prefilledUrl || submittedAction;
+
+    console.log("[Megaska Checkout Prefill] checkout continuation", {
+      mode: "click-form-redirect",
+      formAction: submittedAction,
+      finalCheckoutUrl: finalTargetUrl,
+      prefillApplied: true,
+    });
+
+    window.location.assign(finalTargetUrl);
+  }
+	}
 
   function bindGlobalClickInterceptor() {
     if (globalClickBound) return;
@@ -2636,18 +2731,60 @@ function consumePendingAccountRedirect() {
 
       if (!checkoutIntent) return;
 
-      if (window.LoopDeskCheckoutBridge?.request) {
-        window.LoopDeskCheckoutBridge.request({
-          event,
-          trigger: submitter || fallbackSubmitter,
-          form,
-          interaction: "submit",
-        });
-      }
-      // Generic OTP must not create a checkout continuation. An unavailable or
-      // disabled bridge intentionally leaves native Shopify checkout untouched.
-      return;
+      const allowed = await ensureMegaskaAuthenticatedBeforeCheckout({
+        event,
+        pendingAction: {
+          type: "navigate",
+          url: "/checkout",
+        },
+        triggerEl:
+          submitter ||
+          form.querySelector(
+            "button[name='checkout'], button[name='goto_pp'], input[name='checkout'], input[name='goto_pp'], [data-checkout-button], .shopify-payment-button__button, .checkout-button, .btn-checkout, .mini-cart__checkout, .cart__checkout"
+          ),
+        form,
+      });
 
+      if (!allowed) {
+        console.log("[Megaska OTP] checkout submit intercepted");
+        return;
+      }
+
+      event.preventDefault();
+
+      const customer = await getCurrentMegaskaCustomer();
+      await applyCheckoutPrefillToForm(form, customer);
+
+      const submittedAction = form.getAttribute("action") || "/checkout";
+      const prefilledUrl = await buildPrefilledCheckoutUrl(submittedAction, customer);
+      const handoff = await runBuyerIdentityHandoff(prefilledUrl, customer);
+
+      if (isCheckoutContinuationBlocked(handoff)) {
+        console.warn("[Megaska Checkout Gate] continuation stopped after handoff", {
+          reason: handoff.reason || "blocked",
+        });
+        renderCheckoutGuardError({
+          anchor: form,
+          message: "Please verify your mobile number before checkout.",
+        });
+        openModal("checkout-gate-blocked");
+        return;
+      }
+
+      if (await tryAutoApplyWalletDiscount(handoff)) {
+        return;
+      }
+
+      const finalTargetUrl = handoff?.checkoutUrl || prefilledUrl || submittedAction;
+
+      console.log("[Megaska Checkout Prefill] checkout continuation", {
+        mode: "form-redirect",
+        finalCheckoutUrl: finalTargetUrl,
+        mutationWaited: true,
+        debugSurface: "window.__megaskaCheckoutDebug",
+      });
+
+      window.location.assign(finalTargetUrl);
     },
     true
   );
