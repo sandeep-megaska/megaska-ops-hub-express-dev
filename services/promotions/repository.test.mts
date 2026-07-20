@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { archivePromotionRule, changePromotionRuleStatus, createPromotionRule, getPromotionRuleById, listPromotionCompilations, listPromotionRules, PromotionRuleNotFoundError, PromotionRuleTransitionError, PromotionRuleValidationError, replacePromotionTriggerReferences, updatePromotionRule, type PromotionRuleRecord, type PromotionTriggerReferenceRecord } from "./repository.server.ts";
+import { archivePromotionRule, changePromotionRuleStatus, createPromotionRule, getPromotionRuleById, listPromotionCompilations, listPromotionRules, PromotionRuleNotFoundError, PromotionRuleTransitionError, PromotionRuleValidationError, replacePromotionTriggerReferences, updatePromotionRule, type PromotionOrderTierRecord, type PromotionRuleRecord, type PromotionTriggerReferenceRecord } from "./repository.server.ts";
 
 
 class DecimalLike {
@@ -16,6 +16,7 @@ type Audit = { shopId: string; promotionRuleId: string; action: string; previous
 class Db {
   rules: PromotionRuleRecord[] = [];
   refs: PromotionTriggerReferenceRecord[] = [];
+  tiers: PromotionOrderTierRecord[] = [];
   audits: Audit[] = [];
   compilations = [{ id: "c1", promotionRuleId: "foreign", version: 1, status: "READY", reason: "RULE_UPDATED", sourceHash: "s", triggerType: "PRODUCT" as const, membershipCount: 1 }, { id: "c2", promotionRuleId: "r1", version: 2, status: "READY", reason: "RULE_UPDATED", sourceHash: "s2", triggerType: "PRODUCT" as const, membershipCount: 2 }];
   failAudit = false;
@@ -27,6 +28,7 @@ class Db {
     update: async (_args: any) => { throw new Error("not implemented"); },
   };
   promotionTriggerReference = { deleteMany: async (_args: any) => ({ count: 0 }), createMany: async (_args: any) => ({ count: 0 }) };
+  promotionOrderTier = { deleteMany: async (_args: any) => ({ count: 0 }), createMany: async (_args: any) => ({ count: 0 }) };
   promotionAuditLog = { create: async (_args: any) => ({}) };
   promotionCompilation: { findMany(args: any): Promise<Array<{ id: string; promotionRuleId: string; version: number; status: string; reason: string; sourceHash: string; triggerType: "PRODUCT"; membershipCount: number }>> } = { findMany: async (_args: any) => [] };
   constructor() {
@@ -36,11 +38,13 @@ class Db {
     this.promotionRule.update = async (args: any) => { const rule = this.rules.find((r) => r.id === args.where.id); assert.ok(rule); Object.assign(rule, args.data, { updatedAt: new Date() }); return this.withRefs(rule)!; };
     this.promotionTriggerReference.deleteMany = async (args: any) => { const before = this.refs.length; this.refs = this.refs.filter((r) => r.promotionRuleId !== args.where.promotionRuleId); return { count: before - this.refs.length }; };
     this.promotionTriggerReference.createMany = async (args: any) => { for (const ref of args.data) this.refs.push({ id: `t${this.seq++}`, ...ref }); return { count: args.data.length }; };
+    this.promotionOrderTier.deleteMany = async (args: any) => { const before = this.tiers.length; this.tiers = this.tiers.filter((tier) => tier.promotionRuleId !== args.where.promotionRuleId || tier.shopId !== args.where.shopId); return { count: before - this.tiers.length }; };
+    this.promotionOrderTier.createMany = async (args: any) => { for (const tier of args.data) this.tiers.push({ id: `ot${this.seq++}`, ...tier }); return { count: args.data.length }; };
     this.promotionAuditLog.create = async (args: any) => { if (this.failAudit) throw new Error("audit failed"); this.audits.push(args.data); return args.data; };
     this.promotionCompilation.findMany = async (args: any) => this.compilations.filter((c) => c.promotionRuleId === args.where.promotionRuleId).sort((a, b) => b.version - a.version);
   }
-  withRefs(rule: PromotionRuleRecord | null) { return rule ? { ...rule, triggerReferences: this.refs.filter((r) => r.promotionRuleId === rule.id).sort((a, b) => a.position - b.position) } : null; }
-  async $transaction<T>(fn: (tx: this) => Promise<T>) { const snapshot = JSON.stringify({ rules: this.rules, refs: this.refs, audits: this.audits }); try { return await fn(this); } catch (e) { const s = JSON.parse(snapshot); this.rules = s.rules; this.refs = s.refs; this.audits = s.audits; throw e; } }
+  withRefs(rule: PromotionRuleRecord | null) { return rule ? { ...rule, triggerReferences: this.refs.filter((r) => r.promotionRuleId === rule.id).sort((a, b) => a.position - b.position), orderTiers: this.tiers.filter((tier) => tier.promotionRuleId === rule.id && tier.shopId === rule.shopId).sort((a, b) => a.position - b.position) } : null; }
+  async $transaction<T>(fn: (tx: this) => Promise<T>) { const snapshot = JSON.stringify({ rules: this.rules, refs: this.refs, tiers: this.tiers, audits: this.audits }); try { return await fn(this); } catch (e) { const s = JSON.parse(snapshot); this.rules = s.rules; this.refs = s.refs; this.tiers = s.tiers; this.audits = s.audits; throw e; } }
 }
 
 async function seeded() { const db = new Db(); const rule = await createPromotionRule(base(), db as never); return { db, rule }; }
@@ -48,6 +52,26 @@ async function seeded() { const db = new Db(); const rule = await createPromotio
 test("create rule, normalization, duplicate trigger handling, and audit creation", async () => {
   const db = new Db(); const rule = await createPromotionRule(base(), db as never);
   assert.equal(rule.name, "Sock Offer"); assert.equal(rule.offerProductGid, "gid://shopify/Product/456"); assert.equal(rule.triggerReferences?.length, 1); assert.equal(rule.triggerReferences?.[0].referenceGid, "gid://shopify/Product/123"); assert.equal(db.audits[0].action, "PROMOTION_RULE_CREATED");
+});
+
+const orderReward = { continuityMode: "continuous" as const, tiers: [{ id: "tier-1", minimumSubtotal: "0", maximumSubtotal: "100", percentage: "5" }, { id: "tier-2", minimumSubtotal: "100", percentage: "10" }] };
+
+test("order rewards persist compatibility columns and hydrate transactional tiers without invalid legacy values", async () => {
+  const db = new Db();
+  const rule = await createPromotionRule({ ...base(), rewardScope: "ORDER", rewardType: "" as never, rewardValue: "" as never, offerProductGid: "", orderReward }, db as never);
+  assert.equal(rule.rewardScope, "ORDER"); assert.equal(rule.rewardType, "PERCENTAGE_OFF"); assert.equal(rule.rewardValue, 0); assert.equal(Number.isNaN(rule.rewardValue), false);
+  assert.deepEqual(rule.orderTiers?.map((tier) => tier.publicId), ["tier-1", "tier-2"]);
+});
+
+test("product persistence is unchanged and both reward-scope switches replace tier state", async () => {
+  const db = new Db(); const product = await createPromotionRule(base(), db as never);
+  assert.equal(product.rewardScope, "PRODUCT"); assert.equal(product.rewardType, "PERCENTAGE_OFF"); assert.equal(product.rewardValue, 10); assert.equal(product.offerProductGid, "gid://shopify/Product/456");
+  const order = await updatePromotionRule("shop-a", product.id, { rewardScope: "ORDER", rewardType: "" as never, rewardValue: "" as never, offerProductGid: "", orderReward }, db as never);
+  assert.equal(order.rewardScope, "ORDER"); assert.equal(order.orderTiers?.length, 2);
+  const switched = await updatePromotionRule("shop-a", product.id, { rewardScope: "PRODUCT", rewardType: "FIXED_AMOUNT_OFF", rewardValue: "25", offerProductGid: "789", maximumRewardQuantity: 2 }, db as never);
+  assert.equal(switched.rewardScope, "PRODUCT"); assert.equal(switched.rewardType, "FIXED_AMOUNT_OFF"); assert.equal(switched.rewardValue, 25); assert.equal(switched.offerProductGid, "gid://shopify/Product/789"); assert.deepEqual(switched.orderTiers, []);
+  const orderAgain = await updatePromotionRule("shop-a", product.id, { rewardScope: "ORDER", orderReward }, db as never);
+  assert.equal(orderAgain.rewardScope, "ORDER"); assert.equal(orderAgain.orderTiers?.length, 2);
 });
 
 test("read own-shop rule and reject cross-tenant read/update/archive", async () => {

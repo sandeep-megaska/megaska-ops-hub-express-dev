@@ -11,11 +11,11 @@ export function compilePromotionRule(input: PromotionCompilerRuleInput): Promoti
   const isOrder = input.rewardScope === "ORDER";
   const offerProductGid = isOrder ? canonicalOptionalText(input.offerProductGid) ?? "" : canonicalProductGid(input.offerProductGid);
   const offerProductHandle = canonicalOptionalText(input.offerProductHandle);
-  const normalizedReward = normalizePromotionReward(
+  const normalizedReward = isOrder ? null : normalizePromotionReward(
     { type: input.rewardType, value: canonicalDecimalString(input.rewardValue), maximumQuantity: input.maximumRewardQuantity },
     { productGid: offerProductGid, quantityCap: input.maximumRewardQuantity },
   );
-  if (!isOrder && (!normalizedReward.ok || !normalizedReward.validation.executable)) throw new PromotionCompilerNormalizationError(`Reward is not executable: ${normalizedReward.ok ? "unsupported reward" : normalizedReward.issues.map((entry) => entry.code).join(", ")}.`);
+  if (normalizedReward && (!normalizedReward.ok || !normalizedReward.validation.executable)) throw new PromotionCompilerNormalizationError(`Reward is not executable: ${normalizedReward.ok ? "unsupported reward" : normalizedReward.issues.map((entry) => entry.code).join(", ")}.`);
   const groups = sortedGroups(input.triggerReferences.map((ref, index): PromotionSourceMembershipGroup => {
     const sourceReferenceId = refId(ref, index);
     if (ref.sourceType === "PRODUCT") { const gid = canonicalProductGid(ref.referenceGid); return { sourceReferenceId, sourceType: "PRODUCT", sourceGid: gid, productGids: [gid], unresolved: false }; }
@@ -30,7 +30,7 @@ export function compilePromotionRule(input: PromotionCompilerRuleInput): Promoti
     priority: input.priority,
     trigger: { type: input.triggerType, matchMode: input.triggerMatchMode, minimumQuantity: input.minimumTriggerQuantity, minimumCartSubtotal: input.minimumCartSubtotal == null ? null : canonicalDecimalString(input.minimumCartSubtotal), sourceGroups: groups },
     offer: { productGid: offerProductGid, handle: offerProductHandle },
-    reward: isOrder ? (() => { const reward = { scope: "order" as const, method: "percentage" as const, configuration: { selectionMode: "highest_eligible" as const, continuityMode: input.tierContinuityMode === "ALLOW_GAPS" ? "allow_gaps" as const : "continuous" as const, basis: "eligible_merchandise_subtotal" as const, tiers: (input.orderTiers ?? []).map((tier) => ({ id: tier.publicId, minimumSubtotal: String(tier.minimumSubtotal), ...(tier.maximumSubtotal == null ? {} : { maximumSubtotal: String(tier.maximumSubtotal) }), percentage: String(tier.percentage) })) } }; if (!validateTieredOrderReward(reward).valid) throw new PromotionCompilerNormalizationError("Persisted order tier configuration is invalid."); return canonicalizeTieredOrderReward(reward); })() : (normalizedReward as Extract<typeof normalizedReward, { ok: true }>).reward,
+    reward: isOrder ? (() => { const reward = { scope: "order" as const, method: "percentage" as const, configuration: { selectionMode: "highest_eligible" as const, continuityMode: input.tierContinuityMode === "ALLOW_GAPS" ? "allow_gaps" as const : "continuous" as const, basis: "eligible_merchandise_subtotal" as const, tiers: (input.orderTiers ?? []).map((tier) => ({ id: tier.publicId, minimumSubtotal: String(tier.minimumSubtotal), ...(tier.maximumSubtotal == null ? {} : { maximumSubtotal: String(tier.maximumSubtotal) }), percentage: String(tier.percentage) })) } }; if (!validateTieredOrderReward(reward).valid) throw new PromotionCompilerNormalizationError("Persisted order tier configuration is invalid."); return canonicalizeTieredOrderReward(reward); })() : (normalizedReward as Extract<NonNullable<typeof normalizedReward>, { ok: true }>).reward,
     schedule: { startsAt: canonicalUtcIso(input.startsAt), endsAt: canonicalUtcIso(input.endsAt) },
     combinesWith: { productDiscounts: Boolean(input.combinesWithProductDiscounts), orderDiscounts: Boolean(input.combinesWithOrderDiscounts), shippingDiscounts: Boolean(input.combinesWithShippingDiscounts) },
   };
