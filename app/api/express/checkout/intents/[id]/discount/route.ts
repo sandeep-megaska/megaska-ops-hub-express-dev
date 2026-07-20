@@ -7,6 +7,8 @@ import {
   requireCustomerSessionForShop,
   requireExpressCheckoutShop,
 } from "../../../../../../../lib/express-checkout/safety";
+import { checkoutDiscountFingerprint } from "../../../../../../../services/storefront-pricing/pricing-mutation-fingerprints";
+import { invalidateAndOptionallyRefreshCheckoutPricing } from "../../../../../../../services/storefront-pricing/pricing-snapshot-orchestration";
 
 export const runtime = "nodejs";
 
@@ -191,6 +193,9 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     return jsonWithCors(req, { ok: false, error: "Discount code is not valid for this checkout" }, { status: 400 });
   }
 
+  const previousDiscounts = await prisma.expressCheckoutDiscount.findMany({ where: { shopId: editable.shopId, intentId: editable.intentId }, orderBy: { createdAt: "desc" } });
+  const previousDiscountFingerprint = checkoutDiscountFingerprint(previousDiscounts);
+
   const totalAmountPaise = recalculateTotal(editable.intent, calculatedDiscount.discountAmountPaise);
 
   const result = await prisma.$transaction(async (tx) => {
@@ -239,6 +244,11 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     return { intent, discounts: intent.discounts };
   });
 
+  if (previousDiscountFingerprint !== checkoutDiscountFingerprint(result.discounts)) {
+    const pricing = await invalidateAndOptionallyRefreshCheckoutPricing({ shopId: editable.shopId, checkoutIntentId: editable.intentId, reason: "coupon_changed", refresh: true, refreshReason: "coupon_confirmed" });
+    if (!pricing.ok) return jsonWithCors(req, { ok: false, error: "Pricing refresh required", code: pricing.code }, { status: pricing.retryable ? 503 : 409 });
+  }
+
   return jsonWithCors(req, { ok: true, ...result }, { status: 201 });
 }
 
@@ -250,6 +260,8 @@ export async function DELETE(req: NextRequest, context: { params: Promise<{ id: 
   }
 
   const totalAmountPaise = recalculateTotal(editable.intent, 0);
+  const previousDiscounts = await prisma.expressCheckoutDiscount.findMany({ where: { shopId: editable.shopId, intentId: editable.intentId }, orderBy: { createdAt: "desc" } });
+  const previousDiscountFingerprint = checkoutDiscountFingerprint(previousDiscounts);
 
   const result = await prisma.$transaction(async (tx) => {
     await tx.expressCheckoutDiscount.deleteMany({
@@ -284,6 +296,11 @@ export async function DELETE(req: NextRequest, context: { params: Promise<{ id: 
 
     return { intent, discounts: intent.discounts };
   });
+
+  if (previousDiscountFingerprint !== checkoutDiscountFingerprint(result.discounts)) {
+    const pricing = await invalidateAndOptionallyRefreshCheckoutPricing({ shopId: editable.shopId, checkoutIntentId: editable.intentId, reason: "coupon_changed", refresh: true, refreshReason: "coupon_confirmed" });
+    if (!pricing.ok) return jsonWithCors(req, { ok: false, error: "Pricing refresh required", code: pricing.code }, { status: pricing.retryable ? 503 : 409 });
+  }
 
   return jsonWithCors(req, { ok: true, ...result });
 }
