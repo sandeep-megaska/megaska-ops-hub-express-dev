@@ -317,3 +317,13 @@
 /* Runtime guard: the modal UI no longer uses the old payment logo strip/classes. */
 .megaska-express-payment-icons,
 .megaska-express-payment-card { display: none !important; }
+
+.megaska-express-pricing-state {
+  background: rgba(32, 26, 22, 0.06);
+  border-radius: 8px;
+  font-size: 0.8rem;
+  line-height: 1.35;
+  padding: 8px 10px;
+}
+.megaska-express-tax-row > span { min-width: 0; overflow-wrap: anywhere; }
+.megaska-express-tax-row > strong { flex: 0 0 auto; white-space: nowrap; }
