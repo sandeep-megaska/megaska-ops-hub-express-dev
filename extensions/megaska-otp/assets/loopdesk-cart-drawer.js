@@ -249,45 +249,20 @@
     return Number.isFinite(number) && number > 0 ? Math.min(Number.MAX_SAFE_INTEGER, Math.round(number)) : 0;
   }
 
-  function addSavings(left, right) {
-    return Math.min(Number.MAX_SAFE_INTEGER, savingsMinor(left) + savingsMinor(right));
+
+
+  function promotionPricing(cart) {
+    var builder = window.LoopDeskPromotionPricing && window.LoopDeskPromotionPricing.build;
+    return typeof builder === "function" ? builder(cart) : null;
   }
 
   function buildCartSavingsSummary(context) {
-    var result = { offerSavingsMinor: 0, couponSavingsMinor: 0, compareAtSavingsMinor: 0, totalSavingsMinor: 0 };
-    try {
-      var cart = context && isPlainObject(context.cart) ? context.cart : {};
-      var items = Array.isArray(cart.items) ? cart.items : [];
-      items.forEach(function (item) {
-        if (!isPlainObject(item)) return;
-        var properties = isPlainObject(item.properties) ? item.properties : {};
-        var promotionLine = Boolean(properties._loopdesk_promotion_rule_id || properties._loopdesk_promotion_compilation_version);
-        var quantity = savingsMinor(item.quantity);
-        if (promotionLine) {
-          var originalLine = savingsMinor(item.original_line_price);
-          var finalLine = savingsMinor(item.final_line_price);
-          if (originalLine > finalLine) result.offerSavingsMinor = addSavings(result.offerSavingsMinor, originalLine - finalLine);
-          return;
-        }
-        if (!quantity) return;
-        var variant = isPlainObject(item.variant) ? item.variant : {};
-        var compareAtUnit = savingsMinor(item.compare_at_price || item.compare_at_price_minor || variant.compare_at_price || variant.compareAtPriceMinor);
-        var sellingUnit = savingsMinor(item.original_price || item.price);
-        if (!sellingUnit) {
-          var sellingLine = savingsMinor(item.original_line_price || item.line_price);
-          sellingUnit = sellingLine ? Math.round(sellingLine / quantity) : 0;
-        }
-        if (compareAtUnit > sellingUnit && sellingUnit > 0) {
-          result.compareAtSavingsMinor = addSavings(result.compareAtSavingsMinor, (compareAtUnit - sellingUnit) * quantity);
-        }
-      });
-      var couponState = context && isPlainObject(context.couponState) ? context.couponState : {};
-      if (couponState.confirmed === true || couponState.status === "CONFIRMED" || couponState.status === "APPLIED") {
-        result.couponSavingsMinor = savingsMinor(couponState.confirmedDiscountMinor);
-      }
-      result.totalSavingsMinor = addSavings(addSavings(result.offerSavingsMinor, result.couponSavingsMinor), result.compareAtSavingsMinor);
-    } catch (_error) {}
-    return result;
+    var cart = context && isPlainObject(context.cart) ? context.cart : {};
+    var pricing = context && context.pricing || promotionPricing(cart);
+    if (pricing && pricing.isAuthoritative) {
+      return { offerSavingsMinor: pricing.productPromotionSavings, orderSavingsMinor: pricing.orderPromotionSavings, couponSavingsMinor: pricing.couponSavings, compareAtSavingsMinor: 0, totalSavingsMinor: pricing.totalSavings, breakdownComplete: pricing.breakdownComplete };
+    }
+    return { offerSavingsMinor: 0, orderSavingsMinor: 0, couponSavingsMinor: 0, compareAtSavingsMinor: 0, totalSavingsMinor: 0, breakdownComplete: false };
   }
 
   function renderSavingsSummaryModule(context) {
@@ -300,9 +275,10 @@
       var values = buildCartSavingsSummary(context);
       if (!values.totalSavingsMinor) return "";
       var rows = [
-        { shown: settings.showOfferSavings !== false, label: "Offer savings", value: values.offerSavingsMinor },
-        { shown: settings.showCouponSavings !== false, label: "Coupon savings", value: values.couponSavingsMinor },
-        { shown: settings.showCompareAtSavings !== false, label: "Retail savings", value: values.compareAtSavingsMinor }
+        { shown: values.breakdownComplete && settings.showOfferSavings !== false, label: "Product savings", value: values.offerSavingsMinor },
+        { shown: values.breakdownComplete, label: "Tier discount", value: values.orderSavingsMinor },
+        { shown: values.breakdownComplete && settings.showCouponSavings !== false, label: "Coupon discount", value: values.couponSavingsMinor },
+        { shown: !values.breakdownComplete, label: "Total discount", value: values.totalSavingsMinor }
       ].filter(function (row) { return row.shown && (settings.hideZeroRows !== true || row.value > 0); });
       var showTotal = settings.showTotalSavings !== false;
       if (!showTotal && !rows.length) return "";
@@ -1290,8 +1266,11 @@
   document.documentElement.classList.toggle("loopdesk-cart-drawer-is-open", state.open);
   if (document.body) document.body.classList.toggle("loopdesk-cart-drawer-is-open", state.open);
 
+  var pricing = promotionPricing(cart);
+  if (pricing && pricing.warnings && pricing.warnings.length) debugLog("pricing diagnostics", { warnings: pricing.warnings, totalSavings: pricing.totalSavings, finalPayable: pricing.finalPayableSubtotal, cartFingerprint: pricing.cartFingerprint });
   var slotContext = {
     cart: cart,
+    pricing: pricing,
     cartIntelligence: config.cartIntelligence,
     promotions: config.promotions,
     state: state,
@@ -1313,7 +1292,10 @@
       + renderCartDrawerSlot("AFTER_COUPON", slotContext)
       + '</span>';
 
-  elements.subtotal.textContent = money(cart ? cart.total_price : 0, cart && cart.currency);
+  if (elements.merchandiseSubtotal) elements.merchandiseSubtotal.textContent = money(pricing ? pricing.merchandiseSubtotal : 0, cart && cart.currency);
+  if (elements.savingsRow) elements.savingsRow.hidden = !(pricing && pricing.totalSavings > 0);
+  if (elements.savings) elements.savings.textContent = pricing ? "-" + money(pricing.totalSavings, cart && cart.currency) : "";
+  elements.subtotal.textContent = money(pricing ? pricing.finalPayableSubtotal : (cart ? cart.total_price : 0), cart && cart.currency);
   renderBoundSlot("BEFORE_TOTALS", slotContext);
   renderBoundSlot("AFTER_TOTALS", slotContext);
   renderBoundSlot("BEFORE_CHECKOUT", slotContext);
@@ -1545,7 +1527,7 @@
       '<header class="loopdesk-cart-drawer__header"><div class="loopdesk-cart-drawer__brand">' + logo + '<div><h2>' + escapeHtml(config.branding.merchantName || config.branding.storeName) + ' <span data-loopdesk-cart-count></span></h2><p>Your bag</p></div></div><button type="button" class="loopdesk-cart-drawer__close" aria-label="Close cart">×</button></header>',
       '<div class="loopdesk-cart-drawer__body"></div>',
       '<span data-loopdesk-slot="BEFORE_FOOTER"></span>',
-      '<footer class="loopdesk-cart-drawer__footer"><span data-loopdesk-slot="BEFORE_TOTALS"></span><div class="loopdesk-cart-drawer__subtotal"><span>Subtotal</span><strong data-loopdesk-cart-subtotal></strong></div><span data-loopdesk-slot="AFTER_TOTALS"></span><div data-loopdesk-trust-below-totals></div><span data-loopdesk-slot="BEFORE_CHECKOUT"></span><button type="button" class="loopdesk-cart-drawer__express" data-loopdesk-express-checkout></button><span data-loopdesk-slot="AFTER_CHECKOUT"></span><div data-loopdesk-trust-below-checkout></div><a class="loopdesk-cart-drawer__view-cart" href="/cart"></a><p class="loopdesk-cart-drawer__microcopy"></p><p class="loopdesk-cart-drawer__powered"></p></footer>',
+      '<footer class="loopdesk-cart-drawer__footer"><span data-loopdesk-slot="BEFORE_TOTALS"></span><div class="loopdesk-cart-drawer__subtotal"><span>Merchandise subtotal</span><strong data-loopdesk-cart-merchandise-subtotal></strong></div><div class="loopdesk-cart-drawer__subtotal" data-loopdesk-cart-savings-row hidden><span>Total savings</span><strong data-loopdesk-cart-savings></strong></div><div class="loopdesk-cart-drawer__subtotal loopdesk-cart-drawer__payable"><span>You pay</span><strong data-loopdesk-cart-subtotal></strong></div><span data-loopdesk-slot="AFTER_TOTALS"></span><div data-loopdesk-trust-below-totals></div><span data-loopdesk-slot="BEFORE_CHECKOUT"></span><button type="button" class="loopdesk-cart-drawer__express" data-loopdesk-express-checkout></button><span data-loopdesk-slot="AFTER_CHECKOUT"></span><div data-loopdesk-trust-below-checkout></div><a class="loopdesk-cart-drawer__view-cart" href="/cart"></a><p class="loopdesk-cart-drawer__microcopy"></p><p class="loopdesk-cart-drawer__powered"></p></footer>',
       '<span data-loopdesk-slot="AFTER_FOOTER"></span>',
       '</aside>',
     ].join("");
@@ -1578,6 +1560,9 @@
       body: hostRoot.querySelector(".loopdesk-cart-drawer__body"),
       close: hostRoot.querySelector(".loopdesk-cart-drawer__close"),
       subtotal: hostRoot.querySelector("[data-loopdesk-cart-subtotal]"),
+      merchandiseSubtotal: hostRoot.querySelector("[data-loopdesk-cart-merchandise-subtotal]"),
+      savingsRow: hostRoot.querySelector("[data-loopdesk-cart-savings-row]"),
+      savings: hostRoot.querySelector("[data-loopdesk-cart-savings]"),
       trustBelowTotals: hostRoot.querySelector("[data-loopdesk-trust-below-totals]"),
       trustBelowCheckout: hostRoot.querySelector("[data-loopdesk-trust-below-checkout]"),
       count: hostRoot.querySelector("[data-loopdesk-cart-count]"),

@@ -51,6 +51,7 @@
 
   <script>
     (function () {
+      var pricingAssetUrl = {{ 'loopdesk-promotion-pricing.js' | asset_url | json }};
       var drawerAssetUrl = {{ 'loopdesk-cart-drawer.js' | asset_url | json }};
       var shopDomain = {{ shop.permanent_domain | json }};
       var runtimeUrl = "/apps/megaska/api/runtime/config?shop=" + encodeURIComponent(shopDomain) + "&_loopdesk_runtime=" + Date.now();
@@ -303,11 +304,20 @@
         if (drawerAssetRequested) return;
         drawerAssetRequested = true;
 
-        var script = document.createElement('script');
-        script.src = drawerAssetUrl;
-        script.defer = true;
-        script.addEventListener('load', observeDrawer, { once:true });
-        document.head.appendChild(script);
+        function appendDrawer() {
+          var script = document.createElement('script');
+          script.src = drawerAssetUrl;
+          script.defer = true;
+          script.addEventListener('load', observeDrawer, { once:true });
+          document.head.appendChild(script);
+        }
+        if (window.LoopDeskPromotionPricing) appendDrawer();
+        else {
+          var pricingScript = document.createElement('script');
+          pricingScript.src = pricingAssetUrl;
+          pricingScript.addEventListener('load', appendDrawer, { once:true });
+          document.head.appendChild(pricingScript);
+        }
       }
 
       loadDrawerAsset();

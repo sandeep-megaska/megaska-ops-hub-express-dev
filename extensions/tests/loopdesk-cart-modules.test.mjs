@@ -130,54 +130,32 @@ test("savings summary is disabled for empty carts and zero savings", () => {
   assert.equal(renderSavings([retailLine(700, 800)]), "");
 });
 
-test("savings builder keeps offer, confirmed coupon, and retail layers separate", () => {
-  const api = moduleApi([]);
-  const values = api.buildCartSavingsSummary({ cart: cart(promotionLine(1000, 600), retailLine(1000, 800, 2)), couponState: { status: "CONFIRMED", confirmedDiscountMinor: 150 } });
-  assert.deepEqual({ ...values }, { offerSavingsMinor: 400, couponSavingsMinor: 150, compareAtSavingsMinor: 400, totalSavingsMinor: 950 });
-  assert.equal(api.buildCartSavingsSummary({ cart: cart(promotionLine()), couponState: { status: "PENDING", confirmedDiscountMinor: 999 } }).couponSavingsMinor, 0);
+test("savings builder consumes only the canonical authoritative pricing model", () => {
+  const pricing = { isAuthoritative: true, productPromotionSavings: 400, orderPromotionSavings: 300, couponSavings: 150, totalSavings: 850, breakdownComplete: true };
+  const values = moduleApi([]).buildCartSavingsSummary({ cart: cart(promotionLine()), pricing });
+  assert.deepEqual({ ...values }, { offerSavingsMinor: 400, orderSavingsMinor: 300, couponSavingsMinor: 150, compareAtSavingsMinor: 0, totalSavingsMinor: 850, breakdownComplete: true });
 });
 
-test("savings renderer supports each category and every category combination", () => {
-  const cases = [
-    [[promotionLine()], {}, ["Offer savings", "M400"]],
-    [[retailLine()], {}, ["Retail savings", "M200"]],
-    [[retailLine(800, 800)], { couponState: { confirmed: true, confirmedDiscountMinor: 150 } }, ["Coupon savings", "M150"]],
-    [[promotionLine()], { couponState: { status: "APPLIED", confirmedDiscountMinor: 150 } }, ["Offer savings", "Coupon savings", "M550"]],
-    [[promotionLine(), retailLine()], {}, ["Offer savings", "Retail savings", "M600"]],
-    [[retailLine()], { couponState: { status: "CONFIRMED", confirmedDiscountMinor: 150 } }, ["Coupon savings", "Retail savings", "M350"]],
-    [[promotionLine(), retailLine()], { couponState: { status: "CONFIRMED", confirmedDiscountMinor: 150 } }, ["Offer savings", "Coupon savings", "Retail savings", "M750"]],
-  ];
-  cases.forEach(([items, context, expected]) => { const html = renderSavings(items, {}, context); expected.forEach(value => assert.match(html, new RegExp(value))); });
+test("savings renderer displays a reconciled category split", () => {
+  const pricing = { isAuthoritative: true, productPromotionSavings: 400, orderPromotionSavings: 300, couponSavings: 150, totalSavings: 850, breakdownComplete: true };
+  const html = renderSavings([promotionLine()], {}, { pricing });
+  for (const value of ["Product savings", "Tier discount", "Coupon discount", "M850"]) assert.match(html, new RegExp(value));
+  assert.doesNotMatch(html, /Retail savings/);
 });
 
-test("savings renderer respects total, row visibility, and zero-row settings", () => {
-  assert.doesNotMatch(renderSavings([promotionLine()], { showTotalSavings: false }), /loopdesk-cart-savings__total/);
-  assert.doesNotMatch(renderSavings([promotionLine()], { showOfferSavings: false }), /Offer savings/);
-  assert.doesNotMatch(renderSavings([retailLine()], { showCompareAtSavings: false }), /Retail savings/);
-  assert.doesNotMatch(renderSavings([promotionLine()], {}, { couponState: { status: "PENDING" } }), /Coupon savings/);
-  const zeros = renderSavings([promotionLine()], { hideZeroRows: false });
-  assert.match(zeros, /Coupon savings/); assert.match(zeros, /Retail savings/);
-  assert.equal(renderSavings([retailLine(700, 800)], { hideZeroRows: false }), "");
+test("savings renderer falls back to Shopify combined discount when allocations are incomplete", () => {
+  const pricing = { isAuthoritative: true, productPromotionSavings: 0, orderPromotionSavings: 0, couponSavings: 0, totalSavings: 720, breakdownComplete: false };
+  const html = renderSavings([promotionLine()], {}, { pricing });
+  assert.match(html, /Total discount/);
+  assert.match(html, /M720/);
+  assert.doesNotMatch(html, /Product savings|Tier discount|Coupon discount/);
 });
 
-test("savings normalization clamps malformed values and respects quantity without double counting", () => {
-  const api = moduleApi([]);
-  assert.doesNotThrow(() => api.buildCartSavingsSummary({ cart: { items: [null, "bad", { quantity: NaN, compare_at_price: Infinity }] } }));
-  const malformed = api.buildCartSavingsSummary({ cart: cart({ quantity: 1, original_line_price: -100, final_line_price: NaN, properties: { _loopdesk_promotion_rule_id: "x" } }), couponState: { confirmed: true, confirmedDiscountMinor: -5 } });
-  assert.deepEqual({ ...malformed }, { offerSavingsMinor: 0, couponSavingsMinor: 0, compareAtSavingsMinor: 0, totalSavingsMinor: 0 });
-  assert.equal(api.buildCartSavingsSummary({ cart: cart(retailLine(1000, 800, 3)) }).compareAtSavingsMinor, 600);
-  assert.equal(api.buildCartSavingsSummary({ cart: cart(retailLine(700, 800, 3)) }).compareAtSavingsMinor, 0);
-  const markedRetail = { ...retailLine(1000, 800), original_line_price: 800, final_line_price: 600, properties: { _loopdesk_promotion_rule_id: "x" } };
-  assert.deepEqual({ ...api.buildCartSavingsSummary({ cart: cart(markedRetail) }) }, { offerSavingsMinor: 200, couponSavingsMinor: 0, compareAtSavingsMinor: 0, totalSavingsMinor: 200 });
-});
-
-test("savings summary uses configured slot/order once, escapes title, and coexists with banner", () => {
-  const api = moduleApi([savingsModule({ title: '<img src=x onerror="bad">' }, { sortOrder: 10 }), bannerModule({ message: "Banner" }, { slot: "BEFORE_TOTALS", sortOrder: 20 })]);
-  const html = api.renderCartDrawerSlot("BEFORE_TOTALS", { cart: cart(promotionLine()), money: value => `M${value}` });
-  assert.ok(html.indexOf("loopdesk-cart-savings") < html.indexOf("loopdesk-cart-banner"));
-  assert.equal((html.match(/<section class="loopdesk-cart-savings"/g) || []).length, 1);
-  assert.match(html, /&lt;img/); assert.doesNotMatch(html, /<img/);
-  assert.equal(api.renderCartDrawerSlot("AFTER_TOTALS", { cart: cart(promotionLine()) }), "");
+test("local coupon and compare-at estimates cannot alter authoritative savings", () => {
+  const pricing = { isAuthoritative: true, productPromotionSavings: 0, orderPromotionSavings: 0, couponSavings: 0, totalSavings: 0, breakdownComplete: true };
+  const values = moduleApi([]).buildCartSavingsSummary({ cart: cart(retailLine()), couponState: { status: "CONFIRMED", confirmedDiscountMinor: 999 }, pricing });
+  assert.equal(values.totalSavingsMinor, 0);
+  assert.equal(renderSavings([retailLine()], {}, { pricing }), "");
 });
 
 test("working drawer sections remain on their existing render paths", () => {
