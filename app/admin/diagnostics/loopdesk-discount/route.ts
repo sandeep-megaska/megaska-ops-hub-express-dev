@@ -118,6 +118,12 @@ export async function GET(req: NextRequest) {
   const configuredRewardScopes = Array.from(new Set(rules.map((rule) => String(rule.reward?.scope ?? (rule.reward?.type ? "product" : "unknown"))))).sort();
   const availableDiscountClasses = discount?.discountClasses ?? [];
   const orderRuleCount = rules.filter((rule) => rule.reward?.scope === "order").length;
+  const combinationStatus = discount?.combinesWith ? {
+    productDiscounts: discount.combinesWith.productDiscounts === true ? "Can combine" : "Cannot combine",
+    orderDiscounts: discount.combinesWith.orderDiscounts === true ? "Can combine" : "Cannot combine",
+    shippingDiscounts: discount.combinesWith.shippingDiscounts === true ? "Can combine" : "Cannot combine",
+    verified: true,
+  } : { productDiscounts: "Not verified", orderDiscounts: "Not verified", shippingDiscounts: "Not verified", verified: false };
   const currentRule = rules.find((rule) => rule?.ruleId === EXPECTED_RULE_ID) ?? rules[0] ?? null;
   const triggerProductGids = Array.isArray(currentRule?.trigger?.sourceGroups) ? Array.from(new Set(currentRule.trigger.sourceGroups.flatMap((group) => Array.isArray(group?.productGids) ? group.productGids.map(String) : []))) : [];
   const functionDiagnostic = await readFunctionByHandle(shopDomain, discount?.appDiscountType?.functionId);
@@ -144,7 +150,7 @@ export async function GET(req: NextRequest) {
     ok: true,
     shopDomain,
     expected: { automaticDiscountNodeId: EXPECTED_AUTOMATIC_DISCOUNT_ID, functionHandle: LOOPDESK_FUNCTION_HANDLE, metafield: { namespace: LOOPDESK_FUNCTION_METAFIELD_NAMESPACE, key: LOOPDESK_FUNCTION_METAFIELD_KEY, type: LOOPDESK_FUNCTION_METAFIELD_TYPE }, ruleId: EXPECTED_RULE_ID, compilationVersion: EXPECTED_COMPILATION_VERSION, triggerProductGid: EXPECTED_TRIGGER_PRODUCT_GID, offerProductGid: EXPECTED_OFFER_PRODUCT_GID, reward: EXPECTED_REWARD },
-    automaticDiscount: { nodeId: discountNode?.id ?? null, discountId: discount?.discountId ?? null, title: discount?.title ?? null, status: discount?.status ?? null, functionId: discount?.appDiscountType?.functionId ?? null, discountClasses: discount?.discountClasses ?? null, combinesWith: discount?.combinesWith ?? null },
+    automaticDiscount: { nodeId: discountNode?.id ?? null, discountId: discount?.discountId ?? null, title: discount?.title ?? null, status: discount?.status ?? null, functionId: discount?.appDiscountType?.functionId ?? null, discountClasses: discount?.discountClasses ?? null, combinesWith: discount?.combinesWith ?? null, combinationStatus },
     appDiscountFunction: { queryAvailable: functionDiagnostic.available, expectedHandle: LOOPDESK_FUNCTION_HANDLE, expectedHandleFunction: functionDiagnostic.expectedHandleFunction, linkedFunction: functionDiagnostic.linkedFunction, error: "error" in functionDiagnostic ? functionDiagnostic.error : null },
     metafield: { namespace: discountNode?.metafield?.namespace ?? null, key: discountNode?.metafield?.key ?? null, type: discountNode?.metafield?.type ?? null, rawValue: discountNode?.metafield?.value ?? null, parseError: parsed.error },
     parsedConfiguration: config,
