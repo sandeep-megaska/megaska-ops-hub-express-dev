@@ -244,7 +244,79 @@
     } catch (error) { debugLog("dynamic banner renderer failed", { error: error && error.message }); return ""; }
   }
 
+  function savingsMinor(value) {
+    var number = Number(value);
+    return Number.isFinite(number) && number > 0 ? Math.min(Number.MAX_SAFE_INTEGER, Math.round(number)) : 0;
+  }
+
+  function addSavings(left, right) {
+    return Math.min(Number.MAX_SAFE_INTEGER, savingsMinor(left) + savingsMinor(right));
+  }
+
+  function buildCartSavingsSummary(context) {
+    var result = { offerSavingsMinor: 0, couponSavingsMinor: 0, compareAtSavingsMinor: 0, totalSavingsMinor: 0 };
+    try {
+      var cart = context && isPlainObject(context.cart) ? context.cart : {};
+      var items = Array.isArray(cart.items) ? cart.items : [];
+      items.forEach(function (item) {
+        if (!isPlainObject(item)) return;
+        var properties = isPlainObject(item.properties) ? item.properties : {};
+        var promotionLine = Boolean(properties._loopdesk_promotion_rule_id || properties._loopdesk_promotion_compilation_version);
+        var quantity = savingsMinor(item.quantity);
+        if (promotionLine) {
+          var originalLine = savingsMinor(item.original_line_price);
+          var finalLine = savingsMinor(item.final_line_price);
+          if (originalLine > finalLine) result.offerSavingsMinor = addSavings(result.offerSavingsMinor, originalLine - finalLine);
+          return;
+        }
+        if (!quantity) return;
+        var variant = isPlainObject(item.variant) ? item.variant : {};
+        var compareAtUnit = savingsMinor(item.compare_at_price || item.compare_at_price_minor || variant.compare_at_price || variant.compareAtPriceMinor);
+        var sellingUnit = savingsMinor(item.original_price || item.price);
+        if (!sellingUnit) {
+          var sellingLine = savingsMinor(item.original_line_price || item.line_price);
+          sellingUnit = sellingLine ? Math.round(sellingLine / quantity) : 0;
+        }
+        if (compareAtUnit > sellingUnit && sellingUnit > 0) {
+          result.compareAtSavingsMinor = addSavings(result.compareAtSavingsMinor, (compareAtUnit - sellingUnit) * quantity);
+        }
+      });
+      var couponState = context && isPlainObject(context.couponState) ? context.couponState : {};
+      if (couponState.confirmed === true || couponState.status === "CONFIRMED" || couponState.status === "APPLIED") {
+        result.couponSavingsMinor = savingsMinor(couponState.confirmedDiscountMinor);
+      }
+      result.totalSavingsMinor = addSavings(addSavings(result.offerSavingsMinor, result.couponSavingsMinor), result.compareAtSavingsMinor);
+    } catch (_error) {}
+    return result;
+  }
+
+  function renderSavingsSummaryModule(context) {
+    try {
+      var module = context && context.module;
+      var settings = module && isPlainObject(module.settings) ? module.settings : {};
+      var cart = context && context.cart;
+      var items = cart && Array.isArray(cart.items) ? cart.items : [];
+      if (!module || module.enabled !== true || !items.length || Number(cart.item_count || 0) <= 0) return "";
+      var values = buildCartSavingsSummary(context);
+      if (!values.totalSavingsMinor) return "";
+      var rows = [
+        { shown: settings.showOfferSavings !== false, label: "Offer savings", value: values.offerSavingsMinor },
+        { shown: settings.showCouponSavings !== false, label: "Coupon savings", value: values.couponSavingsMinor },
+        { shown: settings.showCompareAtSavings !== false, label: "Retail savings", value: values.compareAtSavingsMinor }
+      ].filter(function (row) { return row.shown && (settings.hideZeroRows !== true || row.value > 0); });
+      var showTotal = settings.showTotalSavings !== false;
+      if (!showTotal && !rows.length) return "";
+      var formatter = context && typeof context.money === "function" ? context.money : money;
+      var currency = cart.currency;
+      var title = typeof settings.title === "string" && settings.title.trim() ? settings.title.trim().slice(0, 80) : "You Saved";
+      var header = showTotal ? '<div class="loopdesk-cart-savings__header"><h3 class="loopdesk-cart-savings__title">' + escapeHtml(title) + '</h3><strong class="loopdesk-cart-savings__total">' + escapeHtml(formatter(values.totalSavingsMinor, currency)) + '</strong></div>' : '<h3 class="loopdesk-cart-savings__title">' + escapeHtml(title) + '</h3>';
+      var detail = rows.length ? '<dl class="loopdesk-cart-savings__rows">' + rows.map(function (row) { return '<div class="loopdesk-cart-savings__row"><dt class="loopdesk-cart-savings__label">' + row.label + '</dt><dd class="loopdesk-cart-savings__amount">' + escapeHtml(formatter(row.value, currency)) + '</dd></div>'; }).join("") + '</dl>' : "";
+      return '<section class="loopdesk-cart-savings" aria-label="' + escapeHtml(title) + '">' + header + detail + '</section>';
+    } catch (error) { debugLog("savings summary renderer failed", { error: error && error.message }); return ""; }
+  }
+
   moduleRegistry.DYNAMIC_BANNER = renderDynamicBannerModule;
+  moduleRegistry.SAVINGS_SUMMARY = renderSavingsSummaryModule;
 
   window.LoopDeskCartDrawerModules = {
     normalize: normalizeCartDrawerModules,
@@ -253,6 +325,8 @@
       if (CART_DRAWER_MODULE_KEYS.indexOf(key) !== -1 && (renderer === null || typeof renderer === "function")) moduleRegistry[key] = renderer;
     },
     renderDynamicBannerModule: renderDynamicBannerModule,
+    renderSavingsSummaryModule: renderSavingsSummaryModule,
+    buildCartSavingsSummary: buildCartSavingsSummary,
     safeBannerUrl: safeBannerUrl
   };
 
@@ -365,7 +439,7 @@
   }
 
   function normalizeCartIntelligence(value) {
-    if (!isPlainObject(value)) return { enabled: false, cartGoalProgress: { enabled: false }, trustBadges: null };
+    if (!isPlainObject(value)) return { enabled: false, cartGoalProgress: { enabled: false }, trustBadges: null, savingsSummary: normalizeSavingsSummaryConfig(null) };
     var rawGoal = isPlainObject(value.cartGoalProgress) ? value.cartGoalProgress : (isPlainObject(value.freeShippingProgress) ? value.freeShippingProgress : {});
     var rawTarget = firstDefined(rawGoal.targetAmountMinor, rawGoal.fallbackThresholdMinor);
     var target = Number(rawTarget);
@@ -380,15 +454,30 @@
     };
     var badges = value.trustBadges;
     if (!isPlainObject(badges) || !Array.isArray(badges.items) || badges.items.length > 6 || ["BELOW_TOTALS", "BELOW_CHECKOUT_BUTTON"].indexOf(badges.placement) === -1 || ["ROW", "GRID"].indexOf(badges.layout) === -1) {
-      return Object.assign({}, value, { cartGoalProgress: goal, trustBadges: null });
+      return Object.assign({}, value, { cartGoalProgress: goal, trustBadges: null, savingsSummary: normalizeSavingsSummaryConfig(value.savingsSummary) });
     }
     var icons = ["secure-payment", "delivery", "exchange", "cod", "support", "authenticity", "custom"];
     var items = badges.items.map(function (item, index) {
       if (!isPlainObject(item) || icons.indexOf(item.icon) === -1 || typeof item.label !== "string") return null;
       return { id: text(item.id, "badge-" + index).slice(0, 64), enabled: item.enabled === true, icon: item.icon, label: item.label.replace(/[<>]/g, "").replace(/javascript:/gi, "").trim().slice(0, 60), sortOrder: Number.isFinite(Number(item.sortOrder)) ? Number(item.sortOrder) : index };
     });
-    if (items.some(function (item) { return !item; })) return Object.assign({}, value, { cartGoalProgress: goal, trustBadges: null });
-    return Object.assign({}, value, { cartGoalProgress: goal, trustBadges: { enabled: badges.enabled === true, placement: badges.placement, layout: badges.layout, items: items.sort(function (a, b) { return a.sortOrder - b.sortOrder; }) } });
+    if (items.some(function (item) { return !item; })) return Object.assign({}, value, { cartGoalProgress: goal, trustBadges: null, savingsSummary: normalizeSavingsSummaryConfig(value.savingsSummary) });
+    return Object.assign({}, value, { cartGoalProgress: goal, savingsSummary: normalizeSavingsSummaryConfig(value.savingsSummary), trustBadges: { enabled: badges.enabled === true, placement: badges.placement, layout: badges.layout, items: items.sort(function (a, b) { return a.sortOrder - b.sortOrder; }) } });
+  }
+
+  function normalizeSavingsSummaryConfig(value) {
+    var raw = isPlainObject(value) ? value : {};
+    var supportedSlots = ["BEFORE_CART_LINES", "AFTER_CART_LINES", "BEFORE_PROMOTIONS", "AFTER_PROMOTIONS", "BEFORE_COUPON", "AFTER_COUPON", "BEFORE_TOTALS", "AFTER_TOTALS", "BEFORE_CHECKOUT", "AFTER_CHECKOUT", "BEFORE_FOOTER", "AFTER_FOOTER"];
+    var order = typeof raw.sortOrder === "number" ? raw.sortOrder : Number(raw.sortOrder);
+    var title = typeof raw.title === "string" ? raw.title.replace(/[<>]/g, "").trim().slice(0, 80) : "";
+    return {
+      enabled: raw.enabled === true, title: title || "You Saved",
+      placement: supportedSlots.indexOf(raw.placement) === -1 ? "BEFORE_TOTALS" : raw.placement,
+      sortOrder: Number.isFinite(order) && order >= 0 && order <= 999 ? Math.round(order) : 20,
+      showTotalSavings: raw.showTotalSavings !== false, showOfferSavings: raw.showOfferSavings !== false,
+      showCouponSavings: raw.showCouponSavings !== false, showCompareAtSavings: raw.showCompareAtSavings !== false,
+      hideZeroRows: raw.hideZeroRows !== false
+    };
   }
 
   function debugLog(message, payload, force) {

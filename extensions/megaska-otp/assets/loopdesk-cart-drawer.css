@@ -639,3 +639,12 @@ body.loopdesk-cart-drawer-is-open #loopdesk-cart-drawer-root .loopdesk-cart-draw
 .loopdesk-cart-banner__link { display:inline-block; margin-top:4px; color:inherit; font-weight:700; text-decoration:underline; text-underline-offset:2px; }
 .loopdesk-cart-banner__dismiss { flex:0 0 auto; width:24px; height:24px; margin:-3px -4px -3px 0; border:0; border-radius:6px; color:inherit; background:transparent; font-size:18px; line-height:1; cursor:pointer; }
 .loopdesk-cart-banner__link:focus-visible, .loopdesk-cart-banner__dismiss:focus-visible { outline:2px solid currentColor; outline-offset:2px; }
+
+.loopdesk-cart-savings { margin:12px 0; padding:12px 14px; border:1px solid #e5e7eb; border-radius:12px; color:var(--loopdesk-text, #111827); background:#f8fafc; font-size:13px; line-height:1.4; }
+.loopdesk-cart-savings__header, .loopdesk-cart-savings__row { display:flex; align-items:baseline; justify-content:space-between; gap:16px; }
+.loopdesk-cart-savings__title { min-width:0; margin:0; overflow-wrap:anywhere; font-size:14px; font-weight:700; }
+.loopdesk-cart-savings__total { flex:0 0 auto; font-size:15px; font-weight:800; }
+.loopdesk-cart-savings__rows { display:grid; gap:5px; margin:8px 0 0; padding-top:8px; border-top:1px solid #e5e7eb; }
+.loopdesk-cart-savings__row { margin:0; }
+.loopdesk-cart-savings__label { min-width:0; color:#4b5563; overflow-wrap:anywhere; }
+.loopdesk-cart-savings__amount { flex:0 0 auto; margin:0; font-variant-numeric:tabular-nums; font-weight:600; }

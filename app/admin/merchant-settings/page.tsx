@@ -184,6 +184,17 @@ async function saveMerchantSettings(
         openLinkInNewTab: formData.get("dynamicBannerOpenLinkInNewTab") === "on",
         visibility: { emptyCart: formData.get("dynamicBannerEmptyCart") === "on", cartWithItems: formData.get("dynamicBannerCartWithItems") === "on" },
       },
+      savingsSummary: {
+        enabled: formData.get("savingsSummaryEnabled") === "on",
+        title: formData.get("savingsSummaryTitle"),
+        placement: formData.get("savingsSummaryPlacement"),
+        sortOrder: formData.get("savingsSummarySortOrder"),
+        showTotalSavings: formData.get("savingsSummaryShowTotal") === "on",
+        showOfferSavings: formData.get("savingsSummaryShowOffer") === "on",
+        showCouponSavings: formData.get("savingsSummaryShowCoupon") === "on",
+        showCompareAtSavings: formData.get("savingsSummaryShowRetail") === "on",
+        hideZeroRows: formData.get("savingsSummaryHideZeroRows") === "on",
+      },
       upsellsEnabled: formData.get("upsellsEnabled") === "on",
       bundlesEnabled: formData.get("bundlesEnabled") === "on",
       aiRecommendationsEnabled: formData.get("aiRecommendationsEnabled") === "on",
@@ -591,6 +602,22 @@ export default async function MerchantSettingsPage({
                 <Check label="Enabled" name={`trustBadgeEnabled${index}`} defaultChecked={item.enabled} />
               </div>
             ))}
+          </div>
+          <div className="grid gap-4 rounded-xl border border-gray-200 bg-gray-50 p-4">
+            <div><h3 className="font-semibold text-gray-950">Savings Summary</h3><p className={helpClass}>Savings Summary is display-only. It summarizes available cart savings and does not change prices, discounts or checkout totals.</p></div>
+            <div className="grid gap-3 md:grid-cols-3">
+              <Check label="Enable Savings Summary" name="savingsSummaryEnabled" defaultChecked={cartIntelligence.savingsSummary.enabled} />
+              <Check label="Show Total Savings" name="savingsSummaryShowTotal" defaultChecked={cartIntelligence.savingsSummary.showTotalSavings} />
+              <Check label="Show Offer Savings" name="savingsSummaryShowOffer" defaultChecked={cartIntelligence.savingsSummary.showOfferSavings} />
+              <Check label="Show Coupon Savings" name="savingsSummaryShowCoupon" defaultChecked={cartIntelligence.savingsSummary.showCouponSavings} />
+              <Check label="Show Retail Savings" name="savingsSummaryShowRetail" defaultChecked={cartIntelligence.savingsSummary.showCompareAtSavings} />
+              <Check label="Hide Rows with Zero Savings" name="savingsSummaryHideZeroRows" defaultChecked={cartIntelligence.savingsSummary.hideZeroRows} />
+            </div>
+            <div className="grid gap-4 md:grid-cols-3">
+              <Field label="Title" name="savingsSummaryTitle" defaultValue={cartIntelligence.savingsSummary.title} help="Plain text, maximum 80 characters." />
+              <label className="grid gap-2 text-sm font-medium text-gray-800"><span>Placement</span><select className="rounded-lg border border-gray-300 bg-white px-3 py-2" name="savingsSummaryPlacement" defaultValue={cartIntelligence.savingsSummary.placement}>{[["BEFORE_CART_LINES","Top of cart"],["AFTER_CART_LINES","After cart items"],["BEFORE_PROMOTIONS","Before offers"],["AFTER_PROMOTIONS","After offers"],["BEFORE_COUPON","Before coupon"],["AFTER_COUPON","After coupon"],["BEFORE_TOTALS","Before totals"],["AFTER_TOTALS","After totals"],["BEFORE_CHECKOUT","Before checkout button"],["AFTER_CHECKOUT","After checkout button"]].map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+              <Field label="Order" name="savingsSummarySortOrder" type="number" defaultValue={String(cartIntelligence.savingsSummary.sortOrder)} />
+            </div>
           </div>
           <div className="grid gap-4 md:grid-cols-3">
             <Field label="Goal Name" name="goalName" defaultValue={cartIntelligence.cartGoalProgress.goalName} />

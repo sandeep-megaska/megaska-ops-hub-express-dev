@@ -11,6 +11,7 @@ import {
   normalizeCartGoalProgressConfig,
   normalizeCartDynamicBannerConfig,
   normalizeCartIntelligenceSettings,
+  normalizeCartSavingsSummaryConfig,
   normalizeLoopDeskMerchantSettings,
   toCartIntelligencePublicRuntimeConfig,
   toLoopDeskPublicRuntimeConfig,
@@ -139,6 +140,28 @@ test("normalizes cart intelligence defaults disabled", () => {
   assert.ok(settings.trustBadges.items.every((item) => !item.enabled));
   assert.equal(settings.cartDrawerModules.schemaVersion, 1);
   assert.equal(settings.cartDrawerModules.modules.find((module) => module.key === "PROMOTIONS")?.enabled, true);
+  assert.deepEqual(settings.savingsSummary, {
+    enabled: false, title: "You Saved", placement: "BEFORE_TOTALS", sortOrder: 20,
+    showTotalSavings: true, showOfferSavings: true, showCouponSavings: true,
+    showCompareAtSavings: true, hideZeroRows: true,
+  });
+});
+
+test("normalizes savings summary defaults and malformed values", () => {
+  assert.deepEqual(normalizeCartSavingsSummaryConfig(undefined), normalizeCartSavingsSummaryConfig("bad"));
+  const normalized = normalizeCartSavingsSummaryConfig({ enabled: true, title: `  <${"x".repeat(90)}>  `, placement: "BAD", sortOrder: Infinity, showOfferSavings: "yes", hideZeroRows: false, unknown: true });
+  assert.equal(normalized.enabled, true); assert.equal(normalized.title.length, 80);
+  assert.doesNotMatch(normalized.title, /[<>]/); assert.equal(normalized.placement, "BEFORE_TOTALS");
+  assert.equal(normalized.sortOrder, 20); assert.equal(normalized.showOfferSavings, true); assert.equal(normalized.hideZeroRows, false);
+  assert.equal(normalizeCartSavingsSummaryConfig({ title: "   " }).title, "You Saved");
+});
+
+test("savings summary validation is optional and rejects malformed supplied fields", () => {
+  assert.deepEqual(validateCartIntelligenceSettingsPatch({}), []);
+  const errors = validateCartIntelligenceSettingsPatch({ savingsSummary: { title: 1, placement: "BAD", sortOrder: 1000, enabled: "yes", showTotalSavings: "yes" } });
+  assert.match(errors.join(" "), /Title must be text/); assert.match(errors.join(" "), /placement/);
+  assert.match(errors.join(" "), /order/); assert.match(errors.join(" "), /Enabled/); assert.match(errors.join(" "), /Show Total Savings/);
+  assert.match(validateCartIntelligenceSettingsPatch({ savingsSummary: "bad" }).join(" "), /must be an object/);
 });
 
 test("cart drawer module config is normalized and remains backward compatible", () => {
@@ -151,6 +174,7 @@ test("cart drawer module config is normalized and remains backward compatible", 
   ] });
   const runtime = toCartIntelligencePublicRuntimeConfig(settings);
   assert.ok(runtime.cartDrawerModules.modules.some((module) => module.key === "DYNAMIC_BANNER"));
+  assert.equal(runtime.cartDrawerModules.modules.filter((module) => module.key === "SAVINGS_SUMMARY").length, 1);
   assert.equal(runtime.cartGoalProgress.enabled, false);
   assert.equal(runtime.trustBadges.enabled, false);
 });
@@ -232,6 +256,23 @@ test("dynamic banner validation rejects unsafe and malformed enabled configurati
   const errors = validateCartIntelligenceSettingsPatch({ dynamicBanner: { enabled: true, message: "", placement: "BAD", sortOrder: 1000, style: "LOUD", alignment: "RIGHT", linkUrl: "javascript:alert(1)", visibility: { emptyCart: "yes", cartWithItems: true } } });
   assert.match(errors.join(" "), /required when enabled/); assert.match(errors.join(" "), /Link URL/); assert.match(errors.join(" "), /placement/); assert.match(errors.join(" "), /order/); assert.match(errors.join(" "), /style/); assert.match(errors.join(" "), /alignment/); assert.match(errors.join(" "), /Empty Cart Visibility/);
   assert.deepEqual(validateCartIntelligenceSettingsPatch({ dynamicBanner: { enabled: false, message: "", placement: "BEFORE_CART_LINES", sortOrder: 10, style: "INFO", alignment: "CENTER", linkUrl: "", visibility: { emptyCart: true, cartWithItems: true } } }), []);
+});
+
+test("runtime derives exactly one canonical banner and savings summary while preserving modules", () => {
+  const settings = normalizeCartIntelligenceSettings({
+    dynamicBanner: { enabled: true, message: "Banner", placement: "BEFORE_TOTALS", sortOrder: 30 },
+    savingsSummary: { enabled: true, title: "Saved", placement: "BEFORE_TOTALS", sortOrder: 10 },
+    cartDrawerModules: { modules: [
+      { key: "LOYALTY", enabled: true, slot: "BEFORE_TOTALS", sortOrder: 15 },
+      { key: "DYNAMIC_BANNER", enabled: false, slot: "AFTER_TOTALS", sortOrder: 1 },
+      { key: "SAVINGS_SUMMARY", enabled: false, slot: "AFTER_TOTALS", sortOrder: 1 },
+    ] },
+  });
+  const modules = toCartIntelligencePublicRuntimeConfig(settings).cartDrawerModules.modules;
+  assert.equal(modules.filter(module => module.key === "DYNAMIC_BANNER").length, 1);
+  assert.equal(modules.filter(module => module.key === "SAVINGS_SUMMARY").length, 1);
+  assert.ok(modules.some(module => module.key === "LOYALTY"));
+  assert.equal(modules.find(module => module.key === "SAVINGS_SUMMARY")?.sortOrder, 10);
 });
 
 test("legacy threshold and progress text migrate at read time", () => {
