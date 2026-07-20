@@ -81,6 +81,15 @@ test("sync rejects ambiguous canonical discount ownership matches", async () => 
   assert.match(result.message, /ambiguous/i);
 });
 
+test("stored automatic discount does not bypass duplicate detection", async () => {
+  const database = db();
+  database.state.shopifyAutomaticDiscountId = "gid://shopify/DiscountNode/1";
+  const result = await synchronizePromotionFunctionConfiguration({ shopId: "shop-1" }, { database, graphql: graphql([], { storedNodeId: "gid://shopify/DiscountNode/1", ambiguous: true }) as any });
+  assert.equal(result.ok, false);
+  if (result.ok) assert.fail("expected duplicate synchronization blocker");
+  assert.equal(result.code, "sync_automatic_discount_duplicate");
+});
+
 test("sync does not persist success when canonical read-back verification fails", async () => {
   const database = db();
   const result = await synchronizePromotionFunctionConfiguration({ shopId: "shop-1" }, { database, graphql: graphql([], { badReadback: true }) as any, clock: { now: () => new Date("2026-07-12T00:00:00Z") } });
@@ -111,7 +120,7 @@ test("sync creates replacement automatic discount when stored Shopify node is mi
 
   assert.equal(result.ok, true);
   assert.equal(result.ok && result.outcome, "CREATED");
-  assert.equal(log.some((call) => call.query.includes("discountNodes")), false);
+  assert.equal(log.some((call) => call.query.includes("discountNodes")), true);
   assert.equal(log.find((call) => call.query.includes("discountAutomaticAppCreate")).variables.automaticAppDiscount.functionHandle, "loopdesk-discount-function");
   assert.deepEqual(log.find((call) => call.query.includes("discountAutomaticAppCreate")).variables.automaticAppDiscount.discountClasses, ["PRODUCT"]);
   assert.equal(log.find((call) => call.query.includes("metafieldsSet")).variables.metafields[0].ownerId, "gid://shopify/DiscountNode/replacement");
@@ -138,7 +147,19 @@ test("V2 combined configuration upgrades PRODUCT-only discount in place without 
   assert.equal(log.some((call) => call.query.includes("discountAutomaticAppCreate")), false);
   const classUpdate = log.find((call) => call.query.includes("UpdateDiscountClasses"));
   assert.deepEqual(classUpdate.variables.automaticAppDiscount.discountClasses, ["PRODUCT", "ORDER"]);
+  assert.equal("combinesWith" in classUpdate.variables.automaticAppDiscount, false);
   const published = JSON.parse(log.find((call) => call.query.includes("metafieldsSet")).variables.metafields[0].value);
   assert.equal(published.functionContractVersion, 2);
   assert.deepEqual(published.rules.map((rule: any) => rule.reward.scope), ["product", "order"]);
+});
+
+test("unchanged manual retry verifies current state without republishing", async () => {
+  const database = db(); const log: any[] = []; const client = graphql(log);
+  const first = await synchronizePromotionFunctionConfiguration({ shopId: "shop-1" }, { database, graphql: client as any });
+  const writesAfterFirst = log.filter((call) => call.query.includes("metafieldsSet")).length;
+  const second = await synchronizePromotionFunctionConfiguration({ shopId: "shop-1" }, { database, graphql: client as any });
+  assert.equal(first.ok, true); assert.equal(second.ok, true);
+  assert.equal(second.ok && second.outcome, "UNCHANGED");
+  assert.equal(log.filter((call) => call.query.includes("metafieldsSet")).length, writesAfterFirst);
+  assert.equal(first.ok && second.ok && first.configurationHash, second.ok && second.configurationHash);
 });

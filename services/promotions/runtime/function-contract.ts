@@ -52,13 +52,19 @@ export type LoopDeskFunctionConfiguration = {
   rules: LoopDeskFunctionRule[];
 };
 
-export type PromotionFunctionCapabilities = { contractVersion: "V1" | "V2"; supportsProductDiscounts: boolean; supportsOrderDiscounts: boolean };
+export type PromotionDiscountClass = "PRODUCT" | "ORDER";
+export type PromotionFunctionCapabilities = {
+  contractVersion: "V1" | "V2";
+  supportsProductDiscounts: boolean;
+  supportsOrderDiscounts: boolean;
+  requiredDiscountClasses: PromotionDiscountClass[];
+};
 
 /** Capability is owned by the canonical configuration being published, not stale Shopify or browser state. */
-export function resolveFunctionCapabilities(compilation: Pick<LoopDeskFunctionConfiguration, "functionContractVersion">): PromotionFunctionCapabilities {
-  return compilation.functionContractVersion === 2
-    ? { contractVersion: "V2", supportsProductDiscounts: true, supportsOrderDiscounts: true }
-    : { contractVersion: "V1", supportsProductDiscounts: true, supportsOrderDiscounts: false };
+export function resolveFunctionCapabilities(compilation: { functionContractVersion?: unknown }): PromotionFunctionCapabilities {
+  if (compilation.functionContractVersion === 2) return { contractVersion: "V2", supportsProductDiscounts: true, supportsOrderDiscounts: true, requiredDiscountClasses: ["PRODUCT", "ORDER"] };
+  if (compilation.functionContractVersion === undefined || compilation.functionContractVersion === 1) return { contractVersion: "V1", supportsProductDiscounts: true, supportsOrderDiscounts: false, requiredDiscountClasses: ["PRODUCT"] };
+  throw new Error(`Unsupported LoopDesk Function contract version ${JSON.stringify(compilation.functionContractVersion)}.`);
 }
 
 export type OrderPublicationBlockingReason =
@@ -83,11 +89,14 @@ export type PromotionRuntimeSyncResult =
 export type PromotionSynchronizationDiagnostics = {
   compiledContractVersion: "V1" | "V2"; configuredFunctionContractVersion: "V1" | "V2";
   productRuleCount: number; orderRuleCount: number; requiredDiscountClasses: string[]; actualDiscountClasses: string[];
-  automaticDiscountId: string; configurationHashMatched: boolean; synchronization: "healthy"; publicationBlockers: string[];
+  compilationVersion: number; automaticDiscountIdPresent: boolean; automaticDiscountId: string; automaticDiscountFunctionId: string | null;
+  compiledConfigurationHash: string; publishedConfigurationHash: string | null; configurationHashMatched: boolean;
+  metafieldPublicationStatus: "VERIFIED"; verificationStatus: "VERIFIED"; duplicateAutomaticDiscountCount: number;
+  synchronization: "healthy"; publicationBlockers: string[];
 };
 
 export function buildConfigurationHash(input: { configurationVersion: number; rules: LoopDeskFunctionRule[]; functionContractVersion?: 1 | 2 }) {
-  return sha256Hex({ ...(input.functionContractVersion === 2 ? { functionContractVersion: 2 } : {}), schemaVersion: LOOPDESK_FUNCTION_SCHEMA_VERSION, configurationVersion: input.configurationVersion, rules: input.rules });
+  return sha256Hex({ ...(input.functionContractVersion === 2 ? { functionContractVersion: 2, requiredDiscountClasses: ["PRODUCT", "ORDER"] } : {}), schemaVersion: LOOPDESK_FUNCTION_SCHEMA_VERSION, configurationVersion: input.configurationVersion, rules: input.rules });
 }
 
 export function assembleFunctionConfiguration(input: { configurationVersion: number; rules: LoopDeskFunctionRule[]; functionContractVersion?: 1 | 2 }): LoopDeskFunctionConfiguration {

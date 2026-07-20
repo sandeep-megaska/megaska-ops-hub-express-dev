@@ -80,6 +80,18 @@ test("order publication gate fails closed with structured reasons", () => {
 });
 
 test("capability resolution follows the canonical compiled contract", () => {
-  assert.deepEqual(resolveFunctionCapabilities({ functionContractVersion: 2 }), { contractVersion: "V2", supportsProductDiscounts: true, supportsOrderDiscounts: true });
-  assert.deepEqual(resolveFunctionCapabilities({}), { contractVersion: "V1", supportsProductDiscounts: true, supportsOrderDiscounts: false });
+  assert.deepEqual(resolveFunctionCapabilities({ functionContractVersion: 2 }), { contractVersion: "V2", supportsProductDiscounts: true, supportsOrderDiscounts: true, requiredDiscountClasses: ["PRODUCT", "ORDER"] });
+  assert.deepEqual(resolveFunctionCapabilities({}), { contractVersion: "V1", supportsProductDiscounts: true, supportsOrderDiscounts: false, requiredDiscountClasses: ["PRODUCT"] });
+  assert.throws(() => resolveFunctionCapabilities({ functionContractVersion: 3 }), /unsupported/i);
+});
+
+test("V2 hash covers material order reward fields and required classes", () => {
+  const product = fixture.rules[0] as any;
+  const order = { ...product, ruleId: "order-public", reward: { scope: "order", method: "percentage", configuration: { selectionMode: "highest_eligible", continuityMode: "continuous", basis: "eligible_merchandise_subtotal", tiers: [{ id: "tier-public", minimumSubtotal: "1000", percentage: "10" }] } } };
+  const hash = (rule: any, version: 1 | 2 = 2) => assembleFunctionConfiguration({ functionContractVersion: version, configurationVersion: 1, rules: [rule] }).configurationHash;
+  const base = hash(order);
+  assert.notEqual(hash({ ...order, reward: { ...order.reward, configuration: { ...order.reward.configuration, tiers: [{ ...order.reward.configuration.tiers[0], percentage: "12" }] } } }), base);
+  assert.notEqual(hash({ ...order, reward: { ...order.reward, configuration: { ...order.reward.configuration, tiers: [{ ...order.reward.configuration.tiers[0], minimumSubtotal: "1200" }] } } }), base);
+  assert.notEqual(hash({ ...order, reward: { ...order.reward, configuration: { ...order.reward.configuration, continuityMode: "allow_gaps" } } }), base);
+  assert.notEqual(assembleFunctionConfiguration({ configurationVersion: 1, rules: [product] }).configurationHash, assembleFunctionConfiguration({ functionContractVersion: 2, configurationVersion: 1, rules: [product] }).configurationHash);
 });
