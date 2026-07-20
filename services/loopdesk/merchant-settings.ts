@@ -4,6 +4,9 @@ import { getRazorpayRuntimeConfig, type RazorpayPublicRuntimeConfig } from "../r
 import { shopifyAdminGraphql } from "../shopify/admin";
 import { readShopifyFreeShipping } from "../cart-intelligence/free-shipping/shopify-reader.server";
 import type { FreeShippingSourceMode, ShopifyFreeShippingAudit } from "../cart-intelligence/free-shipping/types";
+import { cartDrawerModuleDefaults } from "../cart-intelligence/modules/defaults";
+import { normalizeCartDrawerModules } from "../cart-intelligence/modules/normalize";
+import type { CartDrawerModulesRuntime } from "../cart-intelligence/modules/types";
 
 export const LOOPDESK_RUNTIME_CONFIG_MODULE_KEY = "loopdesk_runtime_config";
 export const CART_INTELLIGENCE_CONFIG_MODULE_KEY = "cart_intelligence_config";
@@ -83,6 +86,7 @@ export type CartIntelligenceSettings = {
   upsellsEnabled: boolean;
   bundlesEnabled: boolean;
   aiRecommendationsEnabled: boolean;
+  cartDrawerModules: CartDrawerModulesRuntime;
 };
 
 export type TrustBadgeIcon = "secure-payment" | "delivery" | "exchange" | "cod" | "support" | "authenticity" | "custom";
@@ -91,6 +95,7 @@ export type TrustBadgeConfig = { enabled: boolean; placement: "BELOW_TOTALS" | "
 
 export type CartIntelligencePublicRuntimeConfig = {
   enabled: boolean;
+  cartDrawerModules: CartDrawerModulesRuntime;
   trustBadges: TrustBadgeConfig;
   freeShippingProgress: {
     enabled: boolean;
@@ -274,6 +279,10 @@ function section(raw: Record<string, unknown>, name: string) {
 
 export function normalizeCartIntelligenceSettings(input: unknown): CartIntelligenceSettings {
   const raw = isRecord(input) ? input : {};
+  const defaultModules = cartDrawerModuleDefaults({
+    cartGoalProgressEnabled: bool(raw.freeShippingProgressEnabled, false),
+    trustBadgesEnabled: bool(raw.trustBadgesEnabled, isRecord(raw.trustBadges) ? bool(raw.trustBadges.enabled, false) : false),
+  });
   return {
     enabled: bool(raw.enabled, false),
     freeShippingProgressEnabled: bool(raw.freeShippingProgressEnabled, false),
@@ -287,6 +296,7 @@ export function normalizeCartIntelligenceSettings(input: unknown): CartIntellige
     upsellsEnabled: bool(raw.upsellsEnabled, false),
     bundlesEnabled: bool(raw.bundlesEnabled, false),
     aiRecommendationsEnabled: bool(raw.aiRecommendationsEnabled, false),
+    cartDrawerModules: raw.cartDrawerModules === undefined ? defaultModules : normalizeCartDrawerModules(raw.cartDrawerModules),
   };
 }
 
@@ -337,7 +347,7 @@ export function validateCartIntelligenceSettingsPatch(patch: unknown): string[] 
 
 export function toCartIntelligencePublicRuntimeConfig(settings: CartIntelligenceSettings, audit?: ShopifyFreeShippingAudit): CartIntelligencePublicRuntimeConfig {
   const resolution = audit || { status: "UNSUPPORTED" as const, thresholdMinor: null, currency: null, profileId: null, profileName: null, profileCount: 0, applicableProfileCount: 0, reason: "Shopify resolution data unavailable", resolvedAt: null };
-  return { enabled: settings.enabled, trustBadges: normalizeTrustBadges(settings.trustBadges, settings.trustBadgesEnabled), freeShippingProgress: { enabled: settings.freeShippingProgressEnabled, sourceMode: settings.freeShippingSourceMode, fallbackThresholdMinor: settings.freeShippingThreshold > 0 ? Math.round(settings.freeShippingThreshold * 100) : null, progressBarText: settings.progressBarText, resolvedShopifyThresholdMinor: resolution.status === "AVAILABLE" ? resolution.thresholdMinor : null, resolvedCurrency: resolution.currency, resolutionStatus: resolution.status, resolutionSource: resolution.status === "AVAILABLE" ? "SHOPIFY_DELIVERY_PROFILE" : null, sourceProfile: resolution.profileName, lastResolvedAt: resolution.resolvedAt, diagnostic: resolution } };
+  return { enabled: settings.enabled, cartDrawerModules: normalizeCartDrawerModules(settings.cartDrawerModules), trustBadges: normalizeTrustBadges(settings.trustBadges, settings.trustBadgesEnabled), freeShippingProgress: { enabled: settings.freeShippingProgressEnabled, sourceMode: settings.freeShippingSourceMode, fallbackThresholdMinor: settings.freeShippingThreshold > 0 ? Math.round(settings.freeShippingThreshold * 100) : null, progressBarText: settings.progressBarText, resolvedShopifyThresholdMinor: resolution.status === "AVAILABLE" ? resolution.thresholdMinor : null, resolvedCurrency: resolution.currency, resolutionStatus: resolution.status, resolutionSource: resolution.status === "AVAILABLE" ? "SHOPIFY_DELIVERY_PROFILE" : null, sourceProfile: resolution.profileName, lastResolvedAt: resolution.resolvedAt, diagnostic: resolution } };
 }
 
 export function validateLoopDeskMerchantSettingsPatch(

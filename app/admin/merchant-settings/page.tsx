@@ -7,6 +7,7 @@ import {
   updateCartIntelligenceSettings,
   updateLoopDeskMerchantSettings,
 } from "../../../services/loopdesk/merchant-settings";
+import { CART_DRAWER_MODULE_SLOTS, type CartDrawerModuleKey } from "../../../services/cart-intelligence/modules/types";
 import {
   getDelhiveryAdminConfig,
   updateDelhiveryConfig,
@@ -171,6 +172,15 @@ async function saveMerchantSettings(
       upsellsEnabled: formData.get("upsellsEnabled") === "on",
       bundlesEnabled: formData.get("bundlesEnabled") === "on",
       aiRecommendationsEnabled: formData.get("aiRecommendationsEnabled") === "on",
+      cartDrawerModules: {
+        schemaVersion: 1,
+        modules: ["CART_GOAL_PROGRESS", "TRUST_BADGES", "CHECKOUT_REASSURANCE"].map((key) => ({
+          key,
+          enabled: formData.get(`cartDrawerModuleEnabled:${key}`) === "on",
+          slot: formData.get(`cartDrawerModuleSlot:${key}`),
+          sortOrder: formData.get(`cartDrawerModuleOrder:${key}`),
+        })),
+      },
     });
     await updateRazorpayConfig(shopId, {
       enabled: formData.get("razorpayEnabled") === "on",
@@ -347,6 +357,11 @@ export default async function MerchantSettingsPage({
     getMerchantOtpSettings(resolved.shop.id),
   ]);
   const platformTwilio = getPlatformTwilioConfigurationStatus();
+  const configurableCartModules: Array<{ key: CartDrawerModuleKey; label: string }> = [
+    { key: "CART_GOAL_PROGRESS", label: "Cart Goal Progress" },
+    { key: "TRUST_BADGES", label: "Trust Badges" },
+    { key: "CHECKOUT_REASSURANCE", label: "Checkout Reassurance" },
+  ];
   const shopParam = encodeURIComponent(resolved.shop.shopDomain);
   const saveAction = saveMerchantSettings.bind(
     null,
@@ -583,6 +598,26 @@ export default async function MerchantSettingsPage({
             <Field label="Fallback Free Shipping Display Threshold" name="freeShippingThreshold" type="number" defaultValue={String(cartIntelligence.freeShippingThreshold)} help="Optional display-only fallback. Existing stored threshold values remain compatible." />
             <Field label="Progress Bar Text" name="progressBarText" defaultValue={cartIntelligence.progressBarText} help="Use {amount} for the formatted remaining amount." />
             <Field label="Dynamic Banner Text" name="dynamicBannerText" defaultValue={cartIntelligence.dynamicBannerText} help="Public copy for a future cart banner." />
+          </div>
+          <div className="grid gap-4 rounded-xl border border-gray-200 bg-white p-4">
+            <div>
+              <h3 className="font-semibold text-gray-950">Cart Drawer Modules</h3>
+              <p className={helpClass}>Module ordering controls optional cart sections only. Core cart items, totals and checkout remain fixed for safety.</p>
+            </div>
+            <div className="hidden grid-cols-[2fr_1fr_2fr_7rem] gap-3 text-xs font-semibold uppercase tracking-wide text-gray-500 md:grid">
+              <span>Module</span><span>Enabled</span><span>Placement</span><span>Order</span>
+            </div>
+            {configurableCartModules.map(({ key, label }) => {
+              const configuredModule = cartIntelligence.cartDrawerModules.modules.find((candidate) => candidate.key === key);
+              return (
+                <div key={key} className="grid items-end gap-3 rounded-lg border border-gray-200 bg-gray-50 p-3 md:grid-cols-[2fr_1fr_2fr_7rem]">
+                  <strong className="text-sm text-gray-900">{label}</strong>
+                  <Check label="Enabled" name={`cartDrawerModuleEnabled:${key}`} defaultChecked={configuredModule?.enabled === true} />
+                  <label className="grid gap-2 text-sm font-medium text-gray-800"><span>Placement</span><select className="rounded-lg border border-gray-300 bg-white px-3 py-2" name={`cartDrawerModuleSlot:${key}`} defaultValue={configuredModule?.slot || "AFTER_CHECKOUT"}>{CART_DRAWER_MODULE_SLOTS.map((slot) => <option key={slot} value={slot}>{slot.replaceAll("_", " ").toLowerCase()}</option>)}</select></label>
+                  <Field label="Order" name={`cartDrawerModuleOrder:${key}`} type="number" defaultValue={String(configuredModule?.sortOrder ?? 100)} />
+                </div>
+              );
+            })}
           </div>
         </section>
 

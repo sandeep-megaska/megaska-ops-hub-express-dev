@@ -184,7 +184,11 @@
         if (!host) return;
         var existing = host.querySelector('[data-loopdesk-coupon]');
         if (existing) existing.outerHTML = couponMarkup(cart);
-        else host.insertAdjacentHTML('beforeend', couponMarkup(cart));
+        else {
+          var afterCouponSlot = host.querySelector('[data-loopdesk-slot="AFTER_COUPON"]');
+          if (afterCouponSlot) afterCouponSlot.insertAdjacentHTML('beforebegin', couponMarkup(cart));
+          else host.insertAdjacentHTML('beforeend', couponMarkup(cart));
+        }
       }
 
       function mountCoupon() {

@@ -55,6 +55,9 @@
   var FORM_MARKER = "__loopdeskCartDrawerFormPatched";
   var LOCATION_MARKER = "__loopdeskCartDrawerLocationPatched";
   var LOOPDESK_HOST_MODE = "NO_THEME_DRAWER";
+  var CART_DRAWER_MODULE_KEYS = ["CART_GOAL_PROGRESS", "DYNAMIC_BANNER", "PROMOTIONS", "QUICK_ADD", "UPSELLS", "BUNDLES", "RECOMMENDATIONS", "COUPON", "SAVINGS_SUMMARY", "STORE_CREDIT", "LOYALTY", "TRUST_BADGES", "CHECKOUT_REASSURANCE"];
+  var CART_DRAWER_MODULE_SLOTS = ["BEFORE_CART_LINES", "AFTER_CART_LINES", "BEFORE_PROMOTIONS", "AFTER_PROMOTIONS", "BEFORE_COUPON", "AFTER_COUPON", "BEFORE_TOTALS", "AFTER_TOTALS", "BEFORE_CHECKOUT", "AFTER_CHECKOUT", "BEFORE_FOOTER", "AFTER_FOOTER"];
+  var moduleRegistry = CART_DRAWER_MODULE_KEYS.reduce(function (registry, key) { registry[key] = null; return registry; }, {});
 
   var THEME_CART_DRAWER_SELECTORS = [
     "cart-drawer",
@@ -95,9 +98,6 @@
     'summary',
     'button'
   ].join(',');
-
-  if (!config.enabled || window.__LOOPDESK_CART_DRAWER_LOADED__) return;
-  window.__LOOPDESK_CART_DRAWER_LOADED__ = true;
 
   var state = { selectedOfferVariants: {}, offerProducts: {}, offerLoading: {}, open: false, loading: false, cart: null, error: "", hostMode: LOOPDESK_HOST_MODE, themeDrawer: null, fallbackReason: "", expressCheckoutLock: false, capability: null, drawerModeActive: false, neutralizedThemeDrawers: [], bodyLockSnapshot: null, removedThemeBodyClasses: [], cartTriggerTakeovers: [], promotionRuntimeRefresh: { attempts: 0, maxAttempts: 3, inFlight: false, delayedTimer: null, cartNonEmptyAttempted: false } };
   var cartTriggerObserver = null;
@@ -163,6 +163,51 @@
   function isPlainObject(value) {
     return Boolean(value && typeof value === "object" && !Array.isArray(value));
   }
+
+  function normalizeCartDrawerModules(value) {
+    if (!isPlainObject(value) || !Array.isArray(value.modules)) return { schemaVersion: 1, modules: [] };
+    var seen = {};
+    var modules = [];
+    value.modules.forEach(function (candidate) {
+      if (!isPlainObject(candidate) || CART_DRAWER_MODULE_KEYS.indexOf(candidate.key) === -1 || CART_DRAWER_MODULE_SLOTS.indexOf(candidate.slot) === -1 || seen[candidate.key]) return;
+      seen[candidate.key] = true;
+      var order = typeof candidate.sortOrder === "number" ? candidate.sortOrder : Number(candidate.sortOrder);
+      modules.push({
+        key: candidate.key,
+        enabled: candidate.enabled === true,
+        slot: candidate.slot,
+        sortOrder: Number.isFinite(order) ? Math.round(order) : 100,
+        settings: isPlainObject(candidate.settings) ? Object.assign({}, candidate.settings) : undefined
+      });
+    });
+    return { schemaVersion: 1, modules: modules };
+  }
+
+  function renderCartDrawerSlot(slot, context) {
+    if (CART_DRAWER_MODULE_SLOTS.indexOf(slot) === -1) return "";
+    var runtime;
+    try { runtime = normalizeCartDrawerModules(config && config.cartIntelligence && config.cartIntelligence.cartDrawerModules); }
+    catch (error) { debugLog("module registry normalization failed", { slot: slot, error: error && error.message }); return ""; }
+    return runtime.modules.filter(function (module) { return module.enabled && module.slot === slot; })
+      .sort(function (left, right) { return left.sortOrder - right.sortOrder || left.key.localeCompare(right.key); })
+      .map(function (module) {
+        var renderer = moduleRegistry[module.key];
+        if (typeof renderer !== "function") return "";
+        try { return String(renderer(Object.assign({}, context || {}, { module: module })) || ""); }
+        catch (error) { debugLog("module renderer failed", { key: module.key, slot: slot, error: error && error.message }); return ""; }
+      }).join("");
+  }
+
+  window.LoopDeskCartDrawerModules = {
+    normalize: normalizeCartDrawerModules,
+    renderCartDrawerSlot: renderCartDrawerSlot,
+    registerRenderer: function (key, renderer) {
+      if (CART_DRAWER_MODULE_KEYS.indexOf(key) !== -1 && (renderer === null || typeof renderer === "function")) moduleRegistry[key] = renderer;
+    }
+  };
+
+  if (!config.enabled || window.__LOOPDESK_CART_DRAWER_LOADED__) return;
+  window.__LOOPDESK_CART_DRAWER_LOADED__ = true;
 
   function text(value, fallback) {
     var next = typeof value === "string" ? value.trim() : "";
@@ -968,7 +1013,7 @@
         "</div>",
         "</article>",
       ].join("");
-    }).join("") + renderOffers(cart);
+    }).join("");
   }
 
   function freeShippingProgressViewModel(cart) {
@@ -1038,11 +1083,26 @@
     document.documentElement.classList.toggle("loopdesk-cart-drawer-is-open", state.open);
     if (document.body) document.body.classList.toggle("loopdesk-cart-drawer-is-open", state.open);
 
+    var slotContext = { cart: cart, cartIntelligence: config.cartIntelligence, promotions: config.promotions, state: state, money: money };
     elements.body.innerHTML = state.error
       ? '<div class="loopdesk-cart-drawer__error">We could not load your cart. You can still use the cart page.</div>'
-      : renderFreeShippingProgress(cart) + renderLines(cart);
+      : renderFreeShippingProgress(cart)
+        + renderCartDrawerSlot("BEFORE_CART_LINES", slotContext)
+        + renderLines(cart)
+        + renderCartDrawerSlot("AFTER_CART_LINES", slotContext)
+        + renderCartDrawerSlot("BEFORE_PROMOTIONS", slotContext)
+        + renderOffers(cart)
+        + renderCartDrawerSlot("AFTER_PROMOTIONS", slotContext)
+        + renderCartDrawerSlot("BEFORE_COUPON", slotContext)
+        + '<span data-loopdesk-slot="AFTER_COUPON">' + renderCartDrawerSlot("AFTER_COUPON", slotContext) + '</span>';
 
     elements.subtotal.textContent = money(cart ? cart.total_price : 0, cart && cart.currency);
+    renderBoundSlot("BEFORE_TOTALS", slotContext);
+    renderBoundSlot("AFTER_TOTALS", slotContext);
+    renderBoundSlot("BEFORE_CHECKOUT", slotContext);
+    renderBoundSlot("AFTER_CHECKOUT", slotContext);
+    renderBoundSlot("BEFORE_FOOTER", slotContext);
+    renderBoundSlot("AFTER_FOOTER", slotContext);
     elements.trustBelowTotals.innerHTML = renderTrustBadges("BELOW_TOTALS");
     elements.trustBelowCheckout.innerHTML = renderTrustBadges("BELOW_CHECKOUT_BUTTON");
     elements.count.textContent = itemCount ? "(" + itemCount + ")" : "";
@@ -1264,9 +1324,16 @@
       '<aside class="loopdesk-cart-drawer" aria-hidden="true" aria-label="Cart" role="dialog">',
       '<header class="loopdesk-cart-drawer__header"><div class="loopdesk-cart-drawer__brand">' + logo + '<div><h2>' + escapeHtml(config.branding.merchantName || config.branding.storeName) + ' <span data-loopdesk-cart-count></span></h2><p>Your bag</p></div></div><button type="button" class="loopdesk-cart-drawer__close" aria-label="Close cart">×</button></header>',
       '<div class="loopdesk-cart-drawer__body"></div>',
-      '<footer class="loopdesk-cart-drawer__footer"><div class="loopdesk-cart-drawer__subtotal"><span>Subtotal</span><strong data-loopdesk-cart-subtotal></strong></div><div data-loopdesk-trust-below-totals></div><button type="button" class="loopdesk-cart-drawer__express" data-loopdesk-express-checkout></button><div data-loopdesk-trust-below-checkout></div><a class="loopdesk-cart-drawer__view-cart" href="/cart"></a><p class="loopdesk-cart-drawer__microcopy"></p><p class="loopdesk-cart-drawer__powered"></p></footer>',
+      '<span data-loopdesk-slot="BEFORE_FOOTER"></span>',
+      '<footer class="loopdesk-cart-drawer__footer"><span data-loopdesk-slot="BEFORE_TOTALS"></span><div class="loopdesk-cart-drawer__subtotal"><span>Subtotal</span><strong data-loopdesk-cart-subtotal></strong></div><span data-loopdesk-slot="AFTER_TOTALS"></span><div data-loopdesk-trust-below-totals></div><span data-loopdesk-slot="BEFORE_CHECKOUT"></span><button type="button" class="loopdesk-cart-drawer__express" data-loopdesk-express-checkout></button><span data-loopdesk-slot="AFTER_CHECKOUT"></span><div data-loopdesk-trust-below-checkout></div><a class="loopdesk-cart-drawer__view-cart" href="/cart"></a><p class="loopdesk-cart-drawer__microcopy"></p><p class="loopdesk-cart-drawer__powered"></p></footer>',
+      '<span data-loopdesk-slot="AFTER_FOOTER"></span>',
       '</aside>',
     ].join("");
+  }
+
+  function renderBoundSlot(slot, context) {
+    var host = elements.root && elements.root.querySelector('[data-loopdesk-slot="' + slot + '"]');
+    if (host) host.innerHTML = renderCartDrawerSlot(slot, context);
   }
 
   function applyCssVariables(target) {
