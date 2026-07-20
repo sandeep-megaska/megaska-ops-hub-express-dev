@@ -12,8 +12,12 @@ type SnapshotDelegate = {
 type PricingSnapshotDb = {
   expressCheckoutIntent: { findFirst(args: object): Promise<{ id: string } | null> };
   shopifyCheckoutPricingSnapshot: SnapshotDelegate;
-  $transaction<T>(fn: (tx: PricingSnapshotDb) => Promise<T>): Promise<T>;
+  $transaction?<T>(fn: (tx: PricingSnapshotDb) => Promise<T>): Promise<T>;
 };
+
+function transaction<T>(db: PricingSnapshotDb, work: (tx: PricingSnapshotDb) => Promise<T>) {
+  return db.$transaction ? db.$transaction(work) : work(db);
+}
 
 function hydrate(row: SnapshotRow | null): ShopifyCheckoutPricingSnapshot | null {
   if (!row) return null;
@@ -33,7 +37,7 @@ export class ShopifyCheckoutPricingSnapshotRepository {
   }
 
   async upsertAuthoritativeSnapshot(input: { shopId: string; checkoutIntentId: string; snapshot: AuthoritativePricingSnapshotInput & { source: "SHOPIFY"; shopifyDraftOrderId: string | null; authoritativeAt: Date } }) {
-    return this.db.$transaction(async (tx) => {
+    return transaction(this.db, async (tx) => {
       const ownedIntent = await tx.expressCheckoutIntent.findFirst({ where: { id: input.checkoutIntentId, shopId: input.shopId }, select: { id: true } });
       if (!ownedIntent) return null;
       const s = input.snapshot;
@@ -48,7 +52,7 @@ export class ShopifyCheckoutPricingSnapshotRepository {
   }
 
   async invalidateSnapshot(input: { shopId: string; checkoutIntentId: string; reason: PricingSnapshotInvalidationReason; invalidatedAt: Date }) {
-    return this.db.$transaction(async (tx) => {
+    return transaction(this.db, async (tx) => {
       const current = await this.getByCheckoutIntent(input, tx);
       if (!current || current.status === "INVALIDATED") return current;
       await tx.shopifyCheckoutPricingSnapshot.updateMany({ where: { shopId: input.shopId, checkoutIntentId: input.checkoutIntentId, status: "CURRENT" }, data: { status: "INVALIDATED", invalidatedAt: input.invalidatedAt, invalidationReason: input.reason } });
