@@ -30,7 +30,7 @@ type DiscountNodeDiagnostic = {
 type ShopifyFunctionNode = { id?: string | null; handle?: string | null; title?: string | null; apiType?: string | null; appKey?: string | null };
 type RuntimeSyncStateRow = { shopifyAutomaticDiscountId: string | null; lastDeployedConfigurationVersion: number | null; lastDeployedConfigurationHash: string | null; lastDeployedRuleCount: number | null; lastSuccessfulSyncAt: Date | null; synchronizationState: string | null; lastAttemptedAt: Date | null; lastErrorCode: string | null; lastErrorMessage: string | null; updatedAt: Date };
 type DiagnosticRule = { ruleId?: unknown; compilationVersion?: unknown; trigger?: { sourceGroups?: Array<{ productGids?: unknown }> }; offer?: { productGid?: unknown }; reward?: { scope?: unknown; method?: unknown; configuration?: { value?: unknown; quantityCap?: unknown }; type?: unknown; value?: unknown; maximumQuantity?: unknown } };
-type DiagnosticConfig = { configurationVersion?: unknown; configurationHash?: unknown; rules?: DiagnosticRule[] };
+type DiagnosticConfig = { functionContractVersion?: unknown; configurationVersion?: unknown; configurationHash?: unknown; rules?: DiagnosticRule[] };
 
 function diagnosticSecret() { return String(process.env.ADMIN_OPS_KEY || process.env.INTERNAL_DIAGNOSTIC_SECRET || "").trim(); }
 function providedSecret(req: NextRequest) {
@@ -115,6 +115,9 @@ export async function GET(req: NextRequest) {
   const parsed = safeParseJson(discountNode?.metafield?.value);
   const config = parsed.ok ? parsed.value as DiagnosticConfig : null;
   const rules = Array.isArray(config?.rules) ? config.rules : [];
+  const configuredRewardScopes = Array.from(new Set(rules.map((rule) => String(rule.reward?.scope ?? (rule.reward?.type ? "product" : "unknown"))))).sort();
+  const availableDiscountClasses = discount?.discountClasses ?? [];
+  const orderRuleCount = rules.filter((rule) => rule.reward?.scope === "order").length;
   const currentRule = rules.find((rule) => rule?.ruleId === EXPECTED_RULE_ID) ?? rules[0] ?? null;
   const triggerProductGids = Array.isArray(currentRule?.trigger?.sourceGroups) ? Array.from(new Set(currentRule.trigger.sourceGroups.flatMap((group) => Array.isArray(group?.productGids) ? group.productGids.map(String) : []))) : [];
   const functionDiagnostic = await readFunctionByHandle(shopDomain, discount?.appDiscountType?.functionId);
@@ -145,7 +148,7 @@ export async function GET(req: NextRequest) {
     appDiscountFunction: { queryAvailable: functionDiagnostic.available, expectedHandle: LOOPDESK_FUNCTION_HANDLE, expectedHandleFunction: functionDiagnostic.expectedHandleFunction, linkedFunction: functionDiagnostic.linkedFunction, error: "error" in functionDiagnostic ? functionDiagnostic.error : null },
     metafield: { namespace: discountNode?.metafield?.namespace ?? null, key: discountNode?.metafield?.key ?? null, type: discountNode?.metafield?.type ?? null, rawValue: discountNode?.metafield?.value ?? null, parseError: parsed.error },
     parsedConfiguration: config,
-    configurationSummary: { version: config?.configurationVersion ?? null, hash: config?.configurationHash ?? null, ruleCount: rules.length, currentRuleId: currentRule?.ruleId ?? null, currentCompilationVersion: currentRule?.compilationVersion ?? null, triggerProductGids, offerProductGid: currentRule?.offer?.productGid ?? null, reward: currentRule?.reward ?? null },
+    configurationSummary: { functionContractVersion: config?.functionContractVersion ?? 1, version: config?.configurationVersion ?? null, hash: config?.configurationHash ?? null, ruleCount: rules.length, configuredRewardScopes, availableDiscountClasses, productExecutionEnabled: availableDiscountClasses.includes("PRODUCT"), orderExecutionEnabled: config?.functionContractVersion === 2 && availableDiscountClasses.includes("ORDER"), orderRuleCount, orderSuppressionReason: orderRuleCount > 0 && (config?.functionContractVersion !== 2 || !availableDiscountClasses.includes("ORDER")) ? (config?.functionContractVersion !== 2 ? "order_function_contract_unsupported" : "order_discount_class_missing") : null, currentRuleId: currentRule?.ruleId ?? null, currentCompilationVersion: currentRule?.compilationVersion ?? null, triggerProductGids, offerProductGid: currentRule?.offer?.productGid ?? null, reward: currentRule?.reward ?? null },
     runtimeSynchronization: { state: syncState, mutationUsesFunctionHandle: true, mutationFunctionHandle: LOOPDESK_FUNCTION_HANDLE, linkedToCurrentDeployedFunctionId: expectedHandleFunctionId && discount?.appDiscountType?.functionId ? expectedHandleFunctionId === discount.appDiscountType.functionId : null },
     mismatches,
   });

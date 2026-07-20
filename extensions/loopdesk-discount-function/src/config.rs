@@ -3,10 +3,15 @@ use serde::Deserialize;
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct FunctionConfig {
+    #[serde(default = "default_contract_version", alias = "version")]
+    pub function_contract_version: u32,
     pub schema_version: u32,
     pub configuration_version: u64,
     pub configuration_hash: String,
     pub rules: Vec<FunctionRule>,
+}
+fn default_contract_version() -> u32 {
+    1
 }
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -91,12 +96,35 @@ pub struct LegacyRewardConfig {
 }
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct CanonicalRewardConfiguration {
+pub struct CanonicalProductRewardConfiguration {
     pub value: String,
     pub product_gid: String,
     #[serde(default)]
     pub variant_gid: Option<String>,
     pub quantity_cap: i64,
+}
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct OrderDiscountTier {
+    pub id: String,
+    pub minimum_subtotal: String,
+    #[serde(default)]
+    pub maximum_subtotal: Option<String>,
+    pub percentage: String,
+}
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct TieredOrderPercentageConfiguration {
+    pub selection_mode: String,
+    pub continuity_mode: String,
+    pub basis: String,
+    pub tiers: Vec<OrderDiscountTier>,
+}
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[serde(untagged)]
+pub enum CanonicalRewardConfiguration {
+    Product(CanonicalProductRewardConfiguration),
+    Order(TieredOrderPercentageConfiguration),
 }
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -114,8 +142,27 @@ pub enum RewardConfig {
 impl RewardConfig {
     pub fn executable_product(&self) -> Option<(RewardMethod, &str, i64, &str)> {
         match self {
-            Self::Canonical(value) if matches!(value.scope, RewardScope::Product) => Some((value.method.clone(), &value.configuration.value, value.configuration.quantity_cap, &value.configuration.product_gid)),
-            Self::Legacy(value) => Some((match value.reward_type { RewardType::PercentageOff => RewardMethod::Percentage, RewardType::FixedAmountOff => RewardMethod::FixedAmount, RewardType::FixedPrice => RewardMethod::FixedPrice }, &value.value, value.maximum_quantity, "")),
+            Self::Canonical(value) if matches!(value.scope, RewardScope::Product) => {
+                match &value.configuration {
+                    CanonicalRewardConfiguration::Product(configuration) => Some((
+                        value.method.clone(),
+                        &configuration.value,
+                        configuration.quantity_cap,
+                        &configuration.product_gid,
+                    )),
+                    _ => None,
+                }
+            }
+            Self::Legacy(value) => Some((
+                match value.reward_type {
+                    RewardType::PercentageOff => RewardMethod::Percentage,
+                    RewardType::FixedAmountOff => RewardMethod::FixedAmount,
+                    RewardType::FixedPrice => RewardMethod::FixedPrice,
+                },
+                &value.value,
+                value.maximum_quantity,
+                "",
+            )),
             _ => None,
         }
     }
@@ -130,7 +177,7 @@ impl FunctionRule {
 }
 pub fn parse_config(raw: &str) -> Result<FunctionConfig, ()> {
     let cfg: FunctionConfig = serde_json::from_str(raw).map_err(|_| ())?;
-    if cfg.schema_version != 1 {
+    if cfg.schema_version != 1 || !matches!(cfg.function_contract_version, 1 | 2) {
         return Err(());
     }
     Ok(cfg)

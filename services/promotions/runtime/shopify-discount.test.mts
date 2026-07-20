@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { assembleFunctionConfiguration } from "./function-contract.ts";
-import { createAutomaticDiscount, findCanonicalAutomaticDiscount, readAutomaticDiscount, verifyDiscountOwnsCanonicalConfiguration, writeFunctionConfigurationMetafield } from "./shopify-discount.server.ts";
+import { createAutomaticDiscount, ensureAutomaticDiscountClasses, findCanonicalAutomaticDiscount, readAutomaticDiscount, verifyDiscountOwnsCanonicalConfiguration, writeFunctionConfigurationMetafield } from "./shopify-discount.server.ts";
 
 const ownerId = "gid://shopify/DiscountNode/1";
 const appDiscount = { discountId: ownerId, title: "LoopDesk Universal Promotions", status: "ACTIVE", discountClasses: ["PRODUCT"], appDiscountType: { appKey: "loopdesk", functionId: "gid://shopify/AppFunction/1" } };
@@ -46,6 +46,16 @@ test("createAutomaticDiscount uses returned discountId directly and reads canoni
   assert.deepEqual(calls.map((call) => call.query.includes("discountAutomaticAppCreate") ? "create" : "read"), ["create", "read"]);
   assert.match(calls[0].query, /automaticAppDiscount \{[^}]*\bdiscountId\b/s);
   assert.doesNotMatch(calls[0].query, /automaticAppDiscount \{[^}]*\bid\b/s);
+});
+
+test("order-capable provisioning creates and verifies PRODUCT plus ORDER classes", async () => {
+  let updateInput: any;
+  await ensureAutomaticDiscountClasses((async (_query: string, variables: any) => {
+    updateInput = variables.automaticAppDiscount;
+    return { discountAutomaticAppUpdate: { automaticAppDiscount: { ...appDiscount, discountClasses: ["PRODUCT", "ORDER"] }, userErrors: [] } };
+  }) as any, null, ownerId, true);
+  assert.deepEqual(updateInput.discountClasses, ["PRODUCT", "ORDER"]);
+  await assert.rejects(() => ensureAutomaticDiscountClasses((async () => ({ discountAutomaticAppUpdate: { automaticAppDiscount: { ...appDiscount, discountClasses: ["PRODUCT"] }, userErrors: [] } })) as any, null, ownerId, true), /missing the ORDER/);
 });
 
 test("writeFunctionConfigurationMetafield uses DiscountNode ownerId and verification reads canonical metafield", async () => {
