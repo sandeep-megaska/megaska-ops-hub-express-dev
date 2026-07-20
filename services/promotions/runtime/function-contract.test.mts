@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import fixture from "../../../shared/fixtures/loopdesk-function-configuration.json" with { type: "json" };
-import { assembleFunctionConfiguration, canPublishOrderRewards, isLoopDeskFunctionMetafieldNamespace } from "./function-contract.ts";
+import { assembleFunctionConfiguration, canPublishOrderRewards, isLoopDeskFunctionMetafieldNamespace, resolveFunctionCapabilities } from "./function-contract.ts";
 import { mapCompilationToFunctionRule } from "./mapper.ts";
 
 test("metafield namespace helper accepts only LoopDesk app-owned identities", () => {
@@ -77,4 +77,9 @@ test("order publication gate fails closed with structured reasons", () => {
   assert.equal(blocked.allowed, false);
   assert.deepEqual(blocked.blockingReasons, ["order_function_contract_unsupported", "order_discount_class_missing", "order_reward_invalid", "order_runtime_not_synchronized", "order_combination_state_unverified", "order_contract_hash_unverified"]);
   assert.equal(canPublishOrderRewards({ deployedFunctionContractVersion: 2, discountClasses: ["PRODUCT", "ORDER"], runtimeValidation: true, synchronizationStatus: "SYNCED", combinationStateVerified: true, contractHashVerified: true }).allowed, true);
+});
+
+test("capability resolution follows the canonical compiled contract", () => {
+  assert.deepEqual(resolveFunctionCapabilities({ functionContractVersion: 2 }), { contractVersion: "V2", supportsProductDiscounts: true, supportsOrderDiscounts: true });
+  assert.deepEqual(resolveFunctionCapabilities({}), { contractVersion: "V1", supportsProductDiscounts: true, supportsOrderDiscounts: false });
 });

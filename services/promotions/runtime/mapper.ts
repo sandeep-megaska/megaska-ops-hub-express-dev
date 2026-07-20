@@ -9,6 +9,11 @@ type CompiledRuleRecord = {
 
 type CompilerFunctionPayload = Omit<LoopDeskFunctionRule, "compilationVersion" | "reward"> & { compilationVersion?: number; reward: unknown };
 
+export function compilationContractVersion(rule: CompiledRuleRecord): 1 | 2 {
+  const payload = rule.currentCompilation?.functionPayload as { functionContractVersion?: unknown } | null;
+  return payload?.functionContractVersion === 2 ? 2 : 1;
+}
+
 export function mapCompilationToFunctionRule(rule: CompiledRuleRecord): LoopDeskFunctionRule {
   const compilation = rule.currentCompilation;
   if (!compilation || compilation.status !== "READY") throw new Error(`Rule ${rule.id} does not have a READY compilation.`);

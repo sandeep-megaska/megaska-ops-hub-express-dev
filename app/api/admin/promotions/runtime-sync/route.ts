@@ -3,7 +3,7 @@ import {
   formatAdminShopResolutionError,
   resolveAdminShopFromRequest,
 } from "../../../../../services/shopify/admin-shop-context.ts";
-import { synchronizePromotionFunctionConfiguration } from "../../../../../services/promotions/runtime/synchronization.server.ts";
+import { manuallySynchronizePromotionConfiguration } from "../../../../../services/promotions/publication-orchestration.server.ts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,9 +23,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const result = await synchronizePromotionFunctionConfiguration({
-    shopId: resolved.shop.id,
-  });
+  const result = await manuallySynchronizePromotionConfiguration(resolved.shop.id, resolved.shop.shopDomain);
 
   if (result.ok) {
     return NextResponse.json(result, {

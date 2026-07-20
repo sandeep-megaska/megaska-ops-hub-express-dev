@@ -38,8 +38,8 @@ export async function readShopifyFunctionByHandle(graphql: ShopifyGraphql, shopD
   return match;
 }
 
-export async function createAutomaticDiscount(graphql: ShopifyGraphql, shopDomain: string | null, startsAt: string, options: { orderRewardsEnabled?: boolean } = {}) {
-  const discountClasses = options.orderRewardsEnabled ? ["PRODUCT", "ORDER"] : ["PRODUCT"];
+export async function createAutomaticDiscount(graphql: ShopifyGraphql, shopDomain: string | null, startsAt: string, options: { supportsOrderDiscounts?: boolean } = {}) {
+  const discountClasses = options.supportsOrderDiscounts ? ["PRODUCT", "ORDER"] : ["PRODUCT"];
   const data = await graphql<{ discountAutomaticAppCreate: { automaticAppDiscount?: DiscountNodeResponse["discount"] | null; userErrors: Array<{ message?: string; field?: string[] }> } }>(`mutation LoopDeskCreateDiscount($automaticAppDiscount: DiscountAutomaticAppInput!) { discountAutomaticAppCreate(automaticAppDiscount: $automaticAppDiscount) { automaticAppDiscount { ${appDiscountSelection} } userErrors { field message } } }`, { automaticAppDiscount: { title: LOOPDESK_AUTOMATIC_DISCOUNT_TITLE, functionHandle: LOOPDESK_FUNCTION_HANDLE, startsAt, discountClasses, combinesWith: combinationInput } }, { shopDomain });
   userErrors(data.discountAutomaticAppCreate.userErrors);
   const discount = data.discountAutomaticAppCreate.automaticAppDiscount;
@@ -57,12 +57,13 @@ export async function ensureAutomaticDiscountCombinations(graphql: ShopifyGraphq
   if (!data.discountAutomaticAppUpdate.automaticAppDiscount) throw new Error("Shopify did not return the updated automatic discount.");
 }
 
-export async function ensureAutomaticDiscountClasses(graphql: ShopifyGraphql, shopDomain: string | null, id: string, orderRewardsEnabled: boolean) {
-  const discountClasses = orderRewardsEnabled ? ["PRODUCT", "ORDER"] : ["PRODUCT"];
+export async function ensureAutomaticDiscountClasses(graphql: ShopifyGraphql, shopDomain: string | null, id: string, existingClasses: readonly string[], supportsOrderDiscounts: boolean) {
+  const required = new Set(existingClasses); required.add("PRODUCT"); if (supportsOrderDiscounts) required.add("ORDER");
+  const discountClasses = [...required];
   const data = await graphql<{ discountAutomaticAppUpdate: { automaticAppDiscount?: DiscountNodeResponse["discount"] | null; userErrors: Array<{ message?: string; field?: string[] }> } }>(`mutation LoopDeskUpdateDiscountClasses($id: ID!, $automaticAppDiscount: DiscountAutomaticAppInput!) { discountAutomaticAppUpdate(id: $id, automaticAppDiscount: $automaticAppDiscount) { automaticAppDiscount { ${appDiscountSelection} } userErrors { field message } } }`, { id, automaticAppDiscount: { discountClasses } }, { shopDomain });
   userErrors(data.discountAutomaticAppUpdate.userErrors);
   const classes = data.discountAutomaticAppUpdate.automaticAppDiscount?.discountClasses ?? [];
-  if (!classes.includes("PRODUCT") || (orderRewardsEnabled && !classes.includes("ORDER"))) throw new Error(orderRewardsEnabled ? "Shopify automatic discount is missing the ORDER discount class." : "Shopify automatic discount is missing the PRODUCT discount class.");
+  if (!classes.includes("PRODUCT") || (supportsOrderDiscounts && !classes.includes("ORDER"))) throw new Error(supportsOrderDiscounts ? "Shopify automatic discount is missing the ORDER discount class." : "Shopify automatic discount is missing the PRODUCT discount class.");
 }
 
 export async function writeFunctionConfigurationMetafield(graphql: ShopifyGraphql, shopDomain: string | null, ownerId: string, configuration: LoopDeskFunctionConfiguration) {
@@ -77,7 +78,7 @@ export function verifyDiscountOwnsCanonicalConfiguration(discount: DiscountSnaps
   if (!discount.appDiscountType?.functionId) throw new Error("Shopify automatic discount is not linked to an app Function.");
   if (expectedFunctionId && discount.appDiscountType.functionId !== expectedFunctionId) throw new Error("Shopify automatic discount is not linked to the current LoopDesk Function.");
   if (!discount.discountClasses?.includes("PRODUCT")) throw new Error("Shopify automatic discount is not configured for the PRODUCT discount class.");
-  if (configuration.rules.some((rule) => rule.reward.scope === "order") && !discount.discountClasses?.includes("ORDER")) throw new Error("Shopify automatic discount is not configured for the ORDER discount class.");
+  if (configuration.functionContractVersion === 2 && !discount.discountClasses?.includes("ORDER")) throw new Error("Shopify automatic discount is not configured for the ORDER discount class.");
   const orderEnabled = configuration.rules.some((rule) => rule.reward.scope === "order");
   if (orderEnabled && (!discount.combinesWith?.productDiscounts || !discount.combinesWith?.shippingDiscounts)) throw new Error("Shopify automatic discount combination state is not verified for order rewards.");
   const metafield = discount.metafield;
