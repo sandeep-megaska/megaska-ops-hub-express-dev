@@ -30,6 +30,13 @@ test("stable source and product ordering produce equal hashes", () => {
   assert.deepEqual(a.sourceSnapshot.trigger.sourceGroups.map((g) => g.productGids), [["gid://shopify/Product/100"], ["gid://shopify/Product/200"]]);
 });
 
+test("order compiler ignores legacy product reward columns and compiles persisted tiers", () => {
+  const result = compilePromotionRule(base({ rewardScope: "ORDER", rewardType: "" as never, rewardValue: Number.NaN, offerProductGid: "", tierContinuityMode: "CONTINUOUS", orderTiers: [{ publicId: "tier-1", minimumSubtotal: "0", maximumSubtotal: "100", percentage: "5", position: 0 }, { publicId: "tier-2", minimumSubtotal: "100", percentage: "10", position: 1 }] }));
+  assert.equal(result.sourceSnapshot.reward.scope, "order");
+  if (result.sourceSnapshot.reward.scope !== "order") assert.fail("expected order reward");
+  assert.deepEqual(result.sourceSnapshot.reward.configuration.tiers.map((tier) => tier.percentage), ["5", "10"]);
+});
+
 test("ANY and ALL match modes preserve source groups", () => {
   assert.equal(compilePromotionRule(base({ triggerMatchMode: "ANY" })).functionPayload.trigger.sourceGroups.length, 2);
   const all = compilePromotionRule(base({ triggerMatchMode: "ALL" }));
