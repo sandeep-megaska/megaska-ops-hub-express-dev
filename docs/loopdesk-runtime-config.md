@@ -66,7 +66,7 @@ The app exposes `/api/runtime/config` (and app-proxy path `/apps/megaska/api/run
 
 Country metadata is resolved from the canonical server catalog. Unknown saved codes are omitted without rewriting the saved settings, duplicate codes are removed, and configured order is preserved. If no known countries remain, the runtime uses the India-only policy shown above. A missing or unavailable OTP settings record also safely yields that India-only default without making the runtime endpoint fail.
 
-The public contract exposes no OTP provider selection, provider status, credentials, fallback configuration, shop ID, or database IDs. The storefront OTP modal does **not** consume this field in this phase: its UI, `+91` normalization, ten-digit validation, requests, and verification remain India-only until a later phase.
+The public contract exposes no OTP provider selection, provider status, credentials, fallback configuration, shop ID, or database IDs. The storefront OTP modal consumes this field directly. One allowed country is rendered as a fixed flag and dial-code prefix; multiple allowed countries are rendered as an accessible selector containing only those entries. Missing or malformed runtime data falls back locally to India, including when the modal opens before runtime configuration is ready. The selected ISO code is sent with OTP requests, and a phone/country snapshot is retained for verification and resend so a pending OTP identity cannot change.
 
 Today, a test merchant config can be supplied by setting `window.LoopDeskConfig` before `loopdesk-cart-drawer.js` loads, or by persisting JSON into `ShopModuleConfig.config` for `moduleKey = "loopdesk_runtime_config"`. A future merchant admin UI/installation wizard will manage these values.
 

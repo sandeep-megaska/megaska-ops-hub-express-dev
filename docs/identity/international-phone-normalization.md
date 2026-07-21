@@ -23,5 +23,4 @@ resolved merchant settings. OTP requests default an omitted country to `IN`, aut
 country against the merchant allow-list before normalizing the phone, and never infer another
 country from a `+` number. Verification uses the same strict country/phone normalization but does
 not re-authorize the current allow-list, so a pending challenge remains verifiable after a merchant
-policy change. The storefront remains India-only and continues omitting `countryCode`; international
-support is active only for API callers that explicitly submit a permitted ISO country code.
+policy change. The storefront submits the national-number input together with the selected `countryCode`. It preserves legacy ten-digit India input behavior, while other configured countries use generic digit sanitization and explicit OTP submission without guessed client-side length validation. After a successful request, verification and resend use the frozen phone/country snapshot; canonical E.164 normalization remains authoritative on the server.
