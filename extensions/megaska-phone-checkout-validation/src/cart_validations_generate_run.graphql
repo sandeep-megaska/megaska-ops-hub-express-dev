@@ -1,18 +1,12 @@
-query CartValidationsGenerateRunInput {
+query CartValidationsGenerateRun {
   cart {
     buyerIdentity {
       phone
     }
-    billingAddress {
-      phone
-      countryCode
-    }
     deliveryGroups {
       deliveryAddress {
-        ... on MailingAddress {
-          phone
-          countryCode
-        }
+        phone
+        countryCode
       }
     }
   }
