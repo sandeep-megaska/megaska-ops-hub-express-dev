@@ -169,6 +169,9 @@
   let accountMenuContainer = null;
   let accountMenuTrigger = null;
   let accountFallbackObserverBound = false;
+  let accountFallbackObserver = null;
+  let accountFallbackTimer = null;
+  let accountFallbackDiscoveryStartedAt = 0;
   let lastLoggedStep = "";
   let desktopAccountContainerObserver = null;
   let observedDesktopAccountContainer = null;
@@ -176,6 +179,7 @@
   const ACCOUNT_FALLBACK_DESKTOP_ID = "megaska-account-fallback-desktop";
   const ACCOUNT_FALLBACK_MOBILE_ID = "megaska-account-fallback-mobile";
   const DEFAULT_MEGASKA_DASHBOARD_URL = "/apps/megaska/account";
+  const ACCOUNT_FALLBACK_DISCOVERY_DELAY_MS = 1500;
 
   const ACCOUNT_TRIGGER_SELECTORS = [
     "[data-megaska-open-login]",
@@ -2718,10 +2722,35 @@ function consumePendingAccountRedirect() {
     if (!href) return false;
     try {
       const url = new URL(href, window.location.origin);
-      return isShopifyNativeAccountPath(url.pathname);
+      return url.origin === window.location.origin && isShopifyNativeAccountPath(url.pathname);
     } catch {
       return false;
     }
+  }
+
+  function getAccountTriggerActionElement(element) {
+    if (!element || typeof element.closest !== "function") return element;
+    return element.closest("a,button,[role='button']") || element;
+  }
+
+  function isUsableAccountEntryTrigger(element) {
+    const actionElement = getAccountTriggerActionElement(element);
+    if (!actionElement || typeof actionElement.getAttribute !== "function") return false;
+    if (actionElement.hasAttribute("disabled") || actionElement.getAttribute("aria-disabled") === "true") {
+      return false;
+    }
+
+    const href = String(actionElement.getAttribute("href") || "").trim();
+    if (href) return isNativeAccountIntentElement(actionElement);
+
+    return Boolean(
+      actionElement.matches?.(
+        "[data-megaska-open-login],[data-account-link],[data-customer-login],button,[role='button']"
+      ) ||
+        element.matches?.(
+          ".header__icon--account,.header__account,.site-nav__link--account,.js__tc,.js_link_acc,.kalles-account-icon,.iccl-user,.icon-user,.site-header__account,.customer-account-link"
+        )
+    );
   }
 
   function resolveAccountDestinationUrl(source) {
@@ -2936,8 +2965,8 @@ function consumePendingAccountRedirect() {
         }
 
         const accountTrigger = findClosestMatchingElement(event, ACCOUNT_TRIGGER_SELECTORS);
-        if (accountTrigger) {
-          await handleAccountTriggerClick(event, accountTrigger);
+        if (accountTrigger && isUsableAccountEntryTrigger(accountTrigger)) {
+          await handleAccountTriggerClick(event, getAccountTriggerActionElement(accountTrigger));
           return;
         }
 
@@ -3141,7 +3170,11 @@ function consumePendingAccountRedirect() {
     );
 
     return triggers.some(
-      (el) => isInMobileContext(el) && isInMobileMenuContainer(el) && isElementActuallyVisible(el)
+      (el) =>
+        isInMobileContext(el) &&
+        isInMobileMenuContainer(el) &&
+        isElementActuallyVisible(getAccountTriggerActionElement(el)) &&
+        isUsableAccountEntryTrigger(el)
     );
   }
 
@@ -3239,7 +3272,14 @@ function consumePendingAccountRedirect() {
   }
 
 function ensureAccountEntryFallbacks() {
-  ensureDesktopAccountFallback();
+  const nativeDesktopEntry = hasVisibleNativeDesktopAccountEntry();
+  const existingDesktopFallback = document.getElementById(ACCOUNT_FALLBACK_DESKTOP_ID);
+  if (nativeDesktopEntry) {
+    existingDesktopFallback?.closest(".megaska-account-fallback-item")?.remove();
+    if (existingDesktopFallback?.isConnected) existingDesktopFallback.remove();
+  } else {
+    ensureDesktopAccountFallback();
+  }
 
   if (!hasVisibleNativeMobileMenuAccountEntry()) {
     const mobileContainer = getMobileAccountContainer();
@@ -3291,12 +3331,35 @@ function ensureDesktopAccountFallback() {
 }
 
 function observeDesktopAccountContainer() {
-  return;
+  scheduleAccountFallbackReconciliation();
 }
 
 function bindAccountFallbackObserver() {
   if (accountFallbackObserverBound) return;
   accountFallbackObserverBound = true;
+  if (typeof MutationObserver !== "function") return;
+
+  accountFallbackObserver = new MutationObserver(() => {
+    if (hasVisibleNativeDesktopAccountEntry()) {
+      const fallback = document.getElementById(ACCOUNT_FALLBACK_DESKTOP_ID);
+      fallback?.closest(".megaska-account-fallback-item")?.remove();
+      if (fallback?.isConnected) fallback.remove();
+    }
+    scheduleAccountFallbackReconciliation();
+  });
+  accountFallbackObserver.observe(document.documentElement, { childList: true, subtree: true });
+}
+
+function scheduleAccountFallbackReconciliation() {
+  if (!accountFallbackDiscoveryStartedAt) accountFallbackDiscoveryStartedAt = Date.now();
+  if (accountFallbackTimer) window.clearTimeout(accountFallbackTimer);
+
+  const elapsed = Date.now() - accountFallbackDiscoveryStartedAt;
+  const delay = Math.max(0, ACCOUNT_FALLBACK_DISCOVERY_DELAY_MS - elapsed);
+  accountFallbackTimer = window.setTimeout(() => {
+    accountFallbackTimer = null;
+    ensureAccountEntryFallbacks();
+  }, delay);
 }
 
   function bindAuthStateSync() {
@@ -3395,7 +3458,10 @@ function hasVisibleNativeDesktopAccountEntry() {
   );
 
   return desktopCandidates.some(
-    (el) => !isInMobileContext(el) && isElementActuallyVisible(el)
+    (el) =>
+      !isInMobileContext(el) &&
+      isElementActuallyVisible(getAccountTriggerActionElement(el)) &&
+      isUsableAccountEntryTrigger(el)
   );
 }
   function hasKnownMegaskaSession() {
@@ -3548,8 +3614,6 @@ function hasVisibleNativeDesktopAccountEntry() {
     bindCartAddSubmitInterceptor();
     bindAuthStateSync();
     ensureModal();
-    ensureAccountEntryFallbacks();
-    ensureDesktopAccountFallback();
     observeDesktopAccountContainer();
     bindAccountFallbackObserver();
     syncAccountUiState();
