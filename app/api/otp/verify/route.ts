@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "../../../../services/db/prisma";
 import {
-  generateSessionToken,
-  hashSessionToken,
+  getSessionTokenFromRequest,
   getCustomerSessionCookieOptions,
   CUSTOMER_SESSION_COOKIE_NAME,
 } from "../../../../services/auth/session";
@@ -20,6 +19,7 @@ import {
   requireStorefrontShopFromRequest,
 } from "../../../../services/shopify/shop";
 import { CanonicalCustomerResolver } from "../../../../services/customers/canonical-customer-resolver";
+import { replaceCustomerSessionAfterOtp } from "../../../../services/auth/customer-session-replacement";
 
 export async function OPTIONS(req: NextRequest) {
   return handleOptions(req);
@@ -252,17 +252,21 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    const sessionToken = generateSessionToken();
-    const sessionTokenHash = hashSessionToken(sessionToken);
-    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    const previousSessionToken = getSessionTokenFromRequest(req);
+    const { sessionToken, session: authSession, previousSession } =
+      await replaceCustomerSessionAfterOtp(
+        { customerProfileId: customerProfile.id, previousSessionToken },
+        prisma,
+      );
 
-    const authSession = await prisma.authSession.create({
-      data: {
-        customerProfileId: customerProfile.id,
-        sessionTokenHash,
-        expiresAt,
-        lastSeenAt: now,
-      },
+    console.info("[OTP VERIFY IDENTITY SWITCH]", {
+      shopId: shop.id,
+      phoneE164,
+      customerProfileId: customerProfile.id,
+      previousSessionId: previousSession?.id || null,
+      previousCustomerProfileId: previousSession?.customerProfileId || null,
+      sessionId: authSession.id,
+      sessionCustomerProfileId: authSession.customerProfileId,
     });
 
     const response = NextResponse.json({
