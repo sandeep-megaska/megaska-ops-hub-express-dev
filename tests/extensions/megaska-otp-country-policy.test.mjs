@@ -90,3 +90,34 @@ test("protected OTP continuation and endpoint behavior remains present", () => {
   assert.match(authSource, /apiFetch\("\/otp\/verify"/);
   assert.doesNotMatch(otpSource, /SESSION_KEY|setSessionToken/);
 });
+
+test("phone helper gives universal country-code guidance", () => {
+  const renderStep = extractFunction("renderStep");
+  assert.match(renderStep, /phoneHint\.textContent = "Enter your mobile number without the country code\."/);
+  assert.doesNotMatch(renderStep, /phoneHint\.textContent = [^;]*10-digit/i);
+});
+
+test("country control remains a sibling of the phone input", () => {
+  assert.match(
+    otpSource,
+    /megaska-otp-phone-wrap megaska-otp-phone-field[\s\S]*data-megaska-country-control[\s\S]*data-megaska-phone-input/,
+  );
+  const renderCountryControl = extractFunction("renderOtpCountryControl");
+  assert.match(renderCountryControl, /control\.textContent = "";/);
+  assert.doesNotMatch(renderCountryControl, /data-megaska-phone-input|megaska-otp-phone-input/);
+  assert.match(renderCountryControl, /control\.appendChild\(trigger\)/);
+  assert.match(renderCountryControl, /control\.appendChild\(menu\)/);
+});
+
+test("collapsed trigger and country options use compact, aligned country content", () => {
+  const renderCountryControl = extractFunction("renderOtpCountryControl");
+  assert.match(renderCountryControl, /megaska-otp-country-iso[^`]*selected\.iso2/);
+  assert.match(renderCountryControl, /megaska-otp-country-dial-code[^`]*selected\.dialCode/);
+  assert.match(renderCountryControl, /megaska-otp-country-iso[^`]*country\.iso2/);
+  assert.match(renderCountryControl, /megaska-otp-country-name[^`]*country\.name/);
+  assert.match(renderCountryControl, /megaska-otp-country-dial-code[^`]*country\.dialCode/);
+
+  const cssSource = readFileSync(new URL("../../extensions/megaska-otp/assets/megaska-otp.css", import.meta.url), "utf8");
+  assert.match(cssSource, /grid-template-columns:\s*32px minmax\(0, 1fr\) auto/);
+  assert.doesNotMatch(cssSource, /megaska-otp-country-option\[aria-selected="true"\]::after/);
+});

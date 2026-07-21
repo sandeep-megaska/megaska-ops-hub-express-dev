@@ -526,7 +526,7 @@
       const prefix = document.createElement("div");
       prefix.className = "megaska-otp-country-prefix";
       prefix.setAttribute("aria-label", `${selected.name} ${selected.dialCode}`);
-      prefix.innerHTML = `<span class="megaska-otp-country-flag">${escapeHtml(selected.flag)}</span><span class="megaska-otp-country-dial-code">${escapeHtml(selected.dialCode)}</span>`;
+      prefix.innerHTML = `<span class="megaska-otp-country-iso">${escapeHtml(selected.iso2)}</span><span class="megaska-otp-country-dial-code">${escapeHtml(selected.dialCode)}</span>`;
       control.appendChild(prefix);
       return;
     }
@@ -538,7 +538,7 @@
     trigger.setAttribute("aria-haspopup", "listbox");
     trigger.setAttribute("aria-expanded", String(state.countryMenuOpen));
     trigger.setAttribute("aria-label", `Select country, currently ${selected.name} ${selected.dialCode}`);
-    trigger.innerHTML = `<span class="megaska-otp-country-flag">${escapeHtml(selected.flag)}</span><span class="megaska-otp-country-dial-code">${escapeHtml(selected.dialCode)}</span><span aria-hidden="true">▾</span>`;
+    trigger.innerHTML = `<span class="megaska-otp-country-iso">${escapeHtml(selected.iso2)}</span><span class="megaska-otp-country-dial-code">${escapeHtml(selected.dialCode)}</span><span aria-hidden="true">▾</span>`;
     trigger.addEventListener("click", (event) => {
       event.stopPropagation();
       state.countryMenuOpen = !state.countryMenuOpen;
@@ -558,7 +558,7 @@
       option.className = "megaska-otp-country-option";
       option.setAttribute("role", "option");
       option.setAttribute("aria-selected", String(country.iso2 === selected.iso2));
-      option.innerHTML = `<span class="megaska-otp-country-flag">${escapeHtml(country.flag)}</span><span class="megaska-otp-country-name">${escapeHtml(country.name)}</span><span class="megaska-otp-country-dial-code">${escapeHtml(country.dialCode)}</span>`;
+      option.innerHTML = `<span class="megaska-otp-country-iso">${escapeHtml(country.iso2)}</span><span class="megaska-otp-country-name">${escapeHtml(country.name)}</span><span class="megaska-otp-country-dial-code">${escapeHtml(country.dialCode)}</span>`;
       option.addEventListener("click", () => selectOtpCountry(country.iso2));
       option.addEventListener("keydown", (event) => {
         const options = Array.from(menu.querySelectorAll('[role="option"]'));
@@ -626,7 +626,7 @@
 
           <div data-megaska-step-phone class="megaska-otp-step-phone">
             <label class="megaska-otp-label" for="megaska-phone-input">Mobile number</label>
-            <div class="megaska-otp-phone-wrap" role="group" aria-label="Mobile number">
+            <div class="megaska-otp-phone-wrap megaska-otp-phone-field" role="group" aria-label="Mobile number">
               <div data-megaska-country-control class="megaska-otp-country-control"></div>
               <input
                 id="megaska-phone-input"
@@ -636,7 +636,7 @@
                 inputmode="numeric"
                 maxlength="10"
                 autocomplete="tel-national"
-                placeholder="98765 43210"
+                placeholder="Mobile number"
                 aria-label="Enter your mobile number"
               />
             </div>
@@ -1017,7 +1017,7 @@
   const selectedCountry = getSelectedOtpCountry();
   phoneInput.value = state.phoneDigits;
   phoneInput.maxLength = selectedCountry.iso2 === "IN" ? 10 : INTERNATIONAL_PHONE_MAX_LENGTH;
-  phoneInput.placeholder = selectedCountry.iso2 === "IN" ? "98765 43210" : "Mobile number";
+  phoneInput.placeholder = "Mobile number";
   phoneDisplay.textContent = maskOtpDestination({
     phoneE164: state.otpRequestPhoneE164,
     phoneInput: state.otpRequestPhoneInput,
@@ -1056,10 +1056,8 @@
   if (state.step === "phone") {
     if (state.requesting) {
       phoneHint.textContent = "Sending OTP...";
-    } else if (selectedCountry.iso2 !== "IN") {
-      phoneHint.textContent = "Enter your mobile number, then select Send OTP.";
-    } else if (state.phoneDigits.length < 10) {
-      phoneHint.textContent = getOtpModalBranding().inputHelperText;
+    } else if (selectedCountry.iso2 !== "IN" || state.phoneDigits.length < 10) {
+      phoneHint.textContent = "Enter your mobile number without the country code.";
     } else {
       phoneHint.textContent = state.normalizedPhone === state.lastRequestedPhone ? "OTP sent. Check your messages." : "Sending OTP automatically...";
     }
