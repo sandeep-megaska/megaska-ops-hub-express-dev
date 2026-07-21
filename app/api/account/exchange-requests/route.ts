@@ -116,12 +116,12 @@ async function resolveTrustedFulfillment(input: {
   }
 
   try {
-    const dashboard = await getMegaskaCustomerDashboardData({
-      shopDomain: input.shopDomain,
-      customerId: input.customerShopifyId,
-      email: input.customerEmail,
-      phoneE164: input.customerPhone,
-    });
+    const dashboard = input.customerShopifyId
+      ? await getMegaskaCustomerDashboardData({
+          shopDomain: input.shopDomain,
+          customerId: input.customerShopifyId,
+        })
+      : null;
 
     const matchingOrder =
       dashboard?.recentOrders.find((order) => {

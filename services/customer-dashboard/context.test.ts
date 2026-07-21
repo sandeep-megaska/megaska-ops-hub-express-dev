@@ -43,6 +43,18 @@ test("revoked session is not returned by filtered query", async () => {
   assert.deepEqual(query.where.expiresAt, { gt: fixedNow });
 });
 
+test("session lookup is constrained to the resolved shop", async () => {
+  let query: { where: { customer?: unknown } };
+  setup({ authSession: { findFirst: async (args: unknown) => { query = args as typeof query; return null; }, update: async () => null } });
+  await assert.rejects(resolveCustomerDashboardContext(req), (error) => error instanceof CustomerDashboardError && error.code === "SESSION_EXPIRED");
+  assert.deepEqual(query.where.customer, { shopId: "shop-1" });
+});
+
+test("legacy unscoped customer session is rejected", async () => {
+  setup({ authSession: { findFirst: async () => ({ id: "session-1", customerProfileId: "cust-1", customer: { id: "cust-1", shopId: null } }), update: async () => null } });
+  await assert.rejects(resolveCustomerDashboardContext(req), (error) => error instanceof CustomerDashboardError && error.code === "SESSION_EXPIRED");
+});
+
 test("valid session returns trusted context and updates lastSeenAt", async () => {
   const { updates } = setup();
   const context = await resolveCustomerDashboardContext(req);

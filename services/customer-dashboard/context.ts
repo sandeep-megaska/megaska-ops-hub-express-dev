@@ -72,7 +72,7 @@ export async function resolveCustomerDashboardContext(req: NextRequest): Promise
 
     const now = dependencies.now();
     const session = await dependencies.authSession.findFirst({
-      where: { sessionTokenHash: dependencies.hashSessionToken(sessionToken), revokedAt: null, expiresAt: { gt: now } },
+      where: { sessionTokenHash: dependencies.hashSessionToken(sessionToken), revokedAt: null, expiresAt: { gt: now }, customer: { shopId: shop.id } },
       include: { customer: true },
       orderBy: { createdAt: "desc" },
     });
@@ -86,9 +86,7 @@ export async function resolveCustomerDashboardContext(req: NextRequest): Promise
       throw new CustomerDashboardError({ code: "CUSTOMER_NOT_FOUND", message: "Customer profile was not found.", status: 404 });
     }
 
-    // AuthSession is not directly shop-scoped in the current Prisma schema. Tenant safety is
-    // enforced through CustomerProfile.shopId where present, without changing legacy session behavior.
-    if (customer.shopId && customer.shopId !== shop.id) {
+    if (session.customerProfileId !== customer.id || customer.shopId !== shop.id) {
       throw new CustomerDashboardError({ code: "SESSION_EXPIRED", message: "Your session has expired. Please verify your phone again.", status: 401 });
     }
 
