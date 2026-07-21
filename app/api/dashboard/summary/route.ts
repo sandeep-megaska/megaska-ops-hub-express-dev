@@ -5,7 +5,6 @@ import { prisma } from "../../../../services/db/prisma";
 import {
   CUSTOMER_SESSION_COOKIE_NAME,
   hashSessionToken,
-  getSessionTokenFromRequest,
 } from "../../../../services/auth/session";
 import {
   isShopifyAdminConfigured,
@@ -40,6 +39,7 @@ import {
 } from "../../../../services/wallet";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 const DELIVERY_REQUIRED_LOCK_REASON =
   "Exchange and issue requests are available only after delivery.";
@@ -216,13 +216,16 @@ export async function GET(req: NextRequest) {
   try {
     const shop = await requireShopFromRequest(req);
 
-    const sessionToken = getSessionTokenFromRequest(req);
     const authorization = req.headers.get("authorization") || "";
     const bearerPresent = authorization.startsWith("Bearer ");
-    const queryTokenPresent = Boolean(req.nextUrl.searchParams.get("token")?.trim());
     const cookiePresent = Boolean(
       req.cookies.get(CUSTOMER_SESSION_COOKIE_NAME)?.value?.trim(),
     );
+    // Never accept browser-provided identity from a dashboard URL. Only an
+    // authenticated bearer credential or the HttpOnly session cookie is trusted.
+    const sessionToken = bearerPresent
+      ? authorization.slice(7).trim()
+      : req.cookies.get(CUSTOMER_SESSION_COOKIE_NAME)?.value?.trim() || "";
     const unresolvedIdentity: DashboardIdentityTrace = {
       shopId: shop.id,
       phoneE164: null,
@@ -234,13 +237,10 @@ export async function GET(req: NextRequest) {
     traceDashboardIdentity("dashboard_api_request", unresolvedIdentity, {
       sessionTokenSource: bearerPresent
         ? "authorization_bearer"
-        : queryTokenPresent
-          ? "query"
-          : cookiePresent
-            ? "cookie"
-            : "none",
+        : cookiePresent
+          ? "cookie"
+          : "none",
       bearerPresent,
-      queryTokenPresent,
       cookiePresent,
     });
     if (!sessionToken) {
@@ -256,6 +256,7 @@ export async function GET(req: NextRequest) {
         sessionTokenHash: hashSessionToken(sessionToken),
         revokedAt: null,
         expiresAt: { gt: now },
+        customer: { shopId: shop.id },
       },
       include: {
         customer: true,
@@ -281,6 +282,12 @@ export async function GET(req: NextRequest) {
     });
 
     const customer = session.customer;
+    if (customer.id !== session.customerProfileId || customer.shopId !== shop.id) {
+      return withCors(
+        req,
+        NextResponse.json({ error: "Invalid or expired session" }, { status: 401 }),
+      );
+    }
     const identity: DashboardIdentityTrace = {
       shopId: shop.id,
       phoneE164: customer.phoneE164,
@@ -300,13 +307,11 @@ export async function GET(req: NextRequest) {
     const resolvedShopifyCustomerId = String(customer.shopifyCustomerId || "").trim();
     let shopifyDashboard = null;
 
-    if (isShopifyAdminConfigured()) {
+    if (isShopifyAdminConfigured() && resolvedShopifyCustomerId) {
       try {
         shopifyDashboard = await getMegaskaCustomerDashboardData({
           shopDomain: shop.shopDomain,
-          customerId: resolvedShopifyCustomerId || null,
-          email: customer.email,
-          phoneE164: customer.phoneE164,
+          customerId: resolvedShopifyCustomerId,
         });
       } catch (error) {
         console.error("[DASHBOARD SUMMARY] Shopify dashboard fetch failed", {
@@ -346,6 +351,7 @@ export async function GET(req: NextRequest) {
     const cancellationRequests = orderNumbers.length
       ? await prisma.orderActionRequest.findMany({
           where: {
+            shopId: shop.id,
             customerProfileId: customer.id,
             requestType: "CANCELLATION",
             orderNumber: { in: orderNumbers },
@@ -381,6 +387,8 @@ export async function GET(req: NextRequest) {
           }
         ).refundRequest.findMany({
           where: {
+            shopId: shop.id,
+            customerProfileId: customer.id,
             orderActionRequestId: {
               in: cancellationRequests.map((request) => request.id),
             },
@@ -422,6 +430,7 @@ export async function GET(req: NextRequest) {
     const exchangeRequests = orderNumbers.length
       ? await prisma.orderActionRequest.findMany({
           where: {
+            shopId: shop.id,
             customerProfileId: customer.id,
             requestType: "EXCHANGE",
             orderNumber: { in: orderNumbers },
@@ -612,6 +621,7 @@ for (const request of exchangeRequests) {
     const issueRequests = orderNumbers.length
       ? await prisma.orderActionRequest.findMany({
           where: {
+            shopId: shop.id,
             customerProfileId: customer.id,
             requestType: "ISSUE",
             orderNumber: { in: orderNumbers },
@@ -885,7 +895,10 @@ for (const request of exchangeRequests) {
       orders,
     };
 
-    return withCors(req, NextResponse.json(response));
+    const jsonResponse = NextResponse.json(response);
+    jsonResponse.headers.set("Cache-Control", "private, no-store, max-age=0");
+    jsonResponse.headers.set("Vary", "Authorization, Cookie");
+    return withCors(req, jsonResponse);
   } catch (error) {
     const status = error instanceof ShopResolutionError ? error.status : 500;
 

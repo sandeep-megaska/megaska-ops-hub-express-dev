@@ -1,5 +1,4 @@
 import { normalizeShopDomain, resolveShopConfig } from "./shop-resolver";
-import { isCanonicalE164, shopifyPhoneSearchVariants } from "./shopify-phone-normalization";
 
 const SHOPIFY_API_VERSION = "2026-01";
 
@@ -180,8 +179,7 @@ function hasRuntimeCredentialConfig() {
   return Boolean(getEnvTrimmed("SHOPIFY_API_KEY") && getEnvTrimmed("SHOPIFY_API_SECRET"));
 }
 
-let cachedRuntimeToken: string | null = null;
-let cachedRuntimeTokenExpiresAt = 0;
+const cachedRuntimeTokens = new Map<string, { token: string; expiresAt: number }>();
 
 async function getRuntimeAdminAccessToken(shopDomain: string) {
   const apiKey = getEnvTrimmed("SHOPIFY_API_KEY");
@@ -191,8 +189,9 @@ async function getRuntimeAdminAccessToken(shopDomain: string) {
   }
 
   const now = Date.now();
-  if (cachedRuntimeToken && cachedRuntimeTokenExpiresAt > now) {
-    return cachedRuntimeToken;
+  const cached = cachedRuntimeTokens.get(shopDomain);
+  if (cached && cached.expiresAt > now) {
+    return cached.token;
   }
 
   const response = await fetch(`https://${shopDomain}/admin/oauth/access_token`, {
@@ -221,9 +220,12 @@ async function getRuntimeAdminAccessToken(shopDomain: string) {
   }
 
   const expiresInSeconds = Number(payload.expires_in || 300);
-  cachedRuntimeToken = payload.access_token;
-  cachedRuntimeTokenExpiresAt = Date.now() + Math.max(30, expiresInSeconds - 60) * 1000;
-  return cachedRuntimeToken;
+  const token = payload.access_token;
+  cachedRuntimeTokens.set(shopDomain, {
+    token,
+    expiresAt: Date.now() + Math.max(30, expiresInSeconds - 60) * 1000,
+  });
+  return token;
 }
 
 async function dashboardGraphql<T>(
@@ -513,33 +515,6 @@ async function fetchCustomerDashboard(input: { customerGid: string; shopDomain?:
   );
 }
 
-async function searchOrdersByIdentity(input: { shopDomain?: string | null; email?: string | null; phoneE164?: string | null }) {
-  const searchTerms: string[] = [];
-  const email = String(input.email || "").trim().toLowerCase();
-  const phone = isCanonicalE164(input.phoneE164) ? input.phoneE164 : null;
-  if (phone) searchTerms.push(...shopifyPhoneSearchVariants(phone).map((variant) => `phone:${variant}`));
-  else if (email) searchTerms.push(`email:${email}`);
-  if (!searchTerms.length) return [];
-
-  const data = await dashboardGraphql<{
-    orders: { nodes?: ShopifyOrderNode[] | null };
-  }>(
-    `
-      query MegaskaOrdersByIdentity($query: String!) {
-        orders(first: 25, query: $query, sortKey: PROCESSED_AT, reverse: true) {
-          nodes {
-            ${ORDER_FRAGMENT}
-          }
-        }
-      }
-    `,
-    { query: searchTerms.join(" OR ") },
-    { shopDomain: input.shopDomain }
-  );
-
-  return data.orders.nodes || [];
-}
-
 function resolveCustomerGid(customerId: string | null | undefined) {
   const trimmed = String(customerId || "").trim();
   if (!trimmed) return "";
@@ -550,35 +525,16 @@ function resolveCustomerGid(customerId: string | null | undefined) {
 
 export async function getMegaskaCustomerDashboardData(input: {
   shopDomain?: string | null;
-  customerId?: string | null;
-  email?: string | null;
-  phoneE164?: string | null;
+  customerId: string;
 }): Promise<MegaskaCustomerDashboardData | null> {
   const customerGid = resolveCustomerGid(input.customerId);
-  let customer: ShopifyCustomerNode | null = null;
-  let customerOrders: ShopifyOrderNode[] = [];
+  if (!customerGid) return null;
 
-  if (customerGid) {
-    const customerData = await fetchCustomerDashboard({ customerGid, shopDomain: input.shopDomain });
-    customer = customerData.customer;
-    customerOrders = customer?.orders?.nodes || [];
-  }
+  const customerData = await fetchCustomerDashboard({ customerGid, shopDomain: input.shopDomain });
+  const customer = customerData.customer;
+  if (!customer || customer.id !== customerGid) return null;
 
-  let orderSearchNodes: ShopifyOrderNode[] = [];
-  if (!customerOrders.length) {
-    orderSearchNodes = await searchOrdersByIdentity({
-      shopDomain: input.shopDomain,
-      email: input.email || customer?.email || null,
-      phoneE164: input.phoneE164 || customer?.phone || null,
-    });
-  }
-
-  const byId = new Map<string, ShopifyOrderNode>();
-  [...customerOrders, ...orderSearchNodes].forEach((order) => {
-    if (order?.id && !byId.has(order.id)) byId.set(order.id, order);
-  });
-
-  const recentOrders = Array.from(byId.values()).map(mapOrder);
+  const recentOrders = (customer.orders?.nodes || []).map(mapOrder);
   const totalOrderCountRaw = customer?.numberOfOrders;
   const totalOrderCount = Math.max(
     typeof totalOrderCountRaw === "number"
@@ -590,19 +546,16 @@ export async function getMegaskaCustomerDashboardData(input: {
   console.log("[SHOPIFY DASHBOARD V2] result", {
     shopDomain: input.shopDomain || null,
     customerGid: customerGid || null,
-    foundCustomer: Boolean(customer),
-    customerOrdersCount: customerOrders.length,
-    orderSearchCount: orderSearchNodes.length,
     mappedOrdersCount: recentOrders.length,
     totalOrderCount,
   });
 
   return {
-    email: customer?.email || recentOrders[0]?.email || input.email || null,
-    phone: customer?.phone || recentOrders[0]?.phone || input.phoneE164 || null,
-    defaultAddress: customer?.defaultAddress || recentOrders[0]?.shippingAddress || null,
+    email: customer.email || null,
+    phone: customer.phone || null,
+    defaultAddress: customer.defaultAddress || null,
     totalOrderCount,
     recentOrders,
-    matchSource: customerOrders.length ? "customer_id" : orderSearchNodes.length ? "order_search" : customer ? "customer_id" : "none",
+    matchSource: "customer_id",
   };
 }
