@@ -1,6 +1,7 @@
 (function () {
   const API_BASE = "/apps/megaska/api";
   const SESSION_KEY = "megaska_session_token";
+  let identityReplacementPending = false;
   const ACCOUNT_ENTRY_SELECTORS = [
     "[data-megaska-open-login]",
     "a[href='/account']",
@@ -291,7 +292,10 @@ console.log("[Megaska Auth] verifyOtp response token", {
 });
 
 if (token) {
+  // Verification is an identity replacement, not an extension of the prior browser session.
+  clearSessionToken();
   setSessionToken(token);
+  identityReplacementPending = true;
   console.log("[Megaska Auth] session token saved", {
     hasStoredToken: Boolean(getSessionToken()),
   });
@@ -698,9 +702,16 @@ if (token) {
 
     document.dispatchEvent(
       new CustomEvent("megaska:auth-state-changed", {
-        detail: { authenticated: session.authenticated, customer: session.customer || null },
+        detail: {
+          authenticated: session.authenticated,
+          customer: session.customer || null,
+          customerProfileId: session.customer?.id || null,
+          sessionToken: session.authenticated ? getSessionToken() : "",
+          identityReplaced: session.authenticated && identityReplacementPending,
+        },
       })
     );
+    identityReplacementPending = false;
 
     return session;
   }
