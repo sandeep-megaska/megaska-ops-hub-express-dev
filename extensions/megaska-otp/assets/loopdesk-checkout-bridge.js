@@ -3,7 +3,7 @@
   var FALLBACK_URL = "/checkout";
   var MARKER = "__LOOPDESK_CHECKOUT_BRIDGE_LOADED__";
   var API_NAME = "LoopDeskCheckoutBridge";
-  var DRAWER_RESUME_KEY = "loopdesk_drawer_resume_express_checkout";
+  var PENDING_INTENT_KEY = "loopdesk_pending_intent";
 
   if (window[MARKER] && window[API_NAME]) return;
   window[MARKER] = true;
@@ -58,6 +58,35 @@
     return Boolean(config && config.enabled === true && config.ready === true && config.provider === "razorpay");
   }
 
+  function setPendingExpressCheckoutIntent(source) {
+    try {
+      window.sessionStorage.setItem(PENDING_INTENT_KEY, JSON.stringify({ type: "express_checkout", source: source || SOURCE }));
+    } catch (_error) {}
+  }
+
+  function getPendingIntent() {
+    try { return JSON.parse(window.sessionStorage.getItem(PENDING_INTENT_KEY) || "null"); } catch (_error) { return null; }
+  }
+
+  function clearPendingIntent() {
+    try { window.sessionStorage.removeItem(PENDING_INTENT_KEY); } catch (_error) {}
+  }
+
+  async function resolveExpressCheckoutReadiness() {
+    var shop = window.MEGASKA_SHOP_DOMAIN || window.LoopDeskConfig && (window.LoopDeskConfig.shopDomain || window.LoopDeskConfig.shop);
+    if (shop && typeof window.fetch === "function") {
+      try {
+        var response = await window.fetch("/apps/megaska/api/runtime/config?shop=" + encodeURIComponent(shop) + "&_loopdesk_checkout_readiness=" + Date.now(), { credentials: "same-origin" });
+        var payload = response.ok ? await response.json() : null;
+        if (payload && payload.config) {
+          window.LoopDeskConfig = Object.assign({}, window.LoopDeskConfig || {}, payload.config);
+        }
+      } catch (_error) {}
+    }
+    var readiness = window.LoopDeskConfig && window.LoopDeskConfig.express_checkout;
+    return readiness || { enabled: false, ready: false, fallback: "shopify_checkout" };
+  }
+
   function matches(element, selector) {
     try { return Boolean(element && element.matches && element.matches(selector)); } catch (_error) { return false; }
   }
@@ -106,18 +135,6 @@
     }
   }
 
-  function setDrawerResumeFlag() {
-    try { window.sessionStorage.setItem(DRAWER_RESUME_KEY, '1'); } catch (_error) {}
-  }
-
-  function clearDrawerResumeFlag() {
-    try { window.sessionStorage.removeItem(DRAWER_RESUME_KEY); } catch (_error) {}
-  }
-
-  function hasDrawerResumeFlag() {
-    try { return window.sessionStorage.getItem(DRAWER_RESUME_KEY) === '1'; } catch (_error) { return false; }
-  }
-
   function closeLoopDeskDrawer() {
     var closeButton = document.querySelector('#loopdesk-cart-drawer-root .loopdesk-cart-drawer__close');
     if (closeButton && typeof closeButton.click === 'function') closeButton.click();
@@ -142,10 +159,18 @@
     return false;
   }
 
-  function open(reason) {
-    if (!isExpressCheckoutReady()) { state.fallbacks += 1; state.lastReason = "express-checkout-not-ready"; window.location.assign(FALLBACK_URL); return; }
+  async function continueExpressCheckout(reason) {
+    var readiness = await resolveExpressCheckoutReadiness();
+    if (!(readiness.enabled === true && readiness.ready === true && readiness.provider === "razorpay")) {
+      state.fallbacks += 1;
+      state.lastReason = "express-checkout-not-ready";
+      clearPendingIntent();
+      window.location.assign(FALLBACK_URL);
+      return;
+    }
     if (lock) return;
     lock = true;
+    clearPendingIntent();
     state.opened += 1;
     state.lastReason = reason || SOURCE;
     window.setTimeout(function () { lock = false; }, 900);
@@ -157,6 +182,10 @@
     window.location.href = FALLBACK_URL;
   }
 
+  function open(reason) {
+    return continueExpressCheckout(reason);
+  }
+
   function stopAndOpen(event, reason) {
     event.preventDefault();
     event.stopPropagation();
@@ -165,30 +194,38 @@
   }
 
   document.addEventListener('click', function (event) {
-    var drawerCheckout = closest(event.target, '#loopdesk-cart-drawer-root [data-loopdesk-express-checkout]');
-    if (!drawerCheckout || hasMegaskaSessionToken() || !isExpressCheckoutReady()) return;
+    var expressCheckout = closest(event.target, '[data-loopdesk-express-checkout]');
+    if (!expressCheckout) return;
 
     event.preventDefault();
     event.stopPropagation();
     if (event.stopImmediatePropagation) event.stopImmediatePropagation();
 
     state.clicks += 1;
-    state.lastReason = 'drawer-otp-required';
-    setDrawerResumeFlag();
-    closeLoopDeskDrawer();
+    var source = closest(expressCheckout, '#loopdesk-cart-drawer-root') ? 'loopdesk-cart-drawer' : 'loopdesk-cart-page';
+    setPendingExpressCheckoutIntent(source);
+
+    if (hasMegaskaSessionToken()) {
+      state.lastReason = 'express-checkout-authenticated';
+      continueExpressCheckout(source);
+      return;
+    }
+
+    state.lastReason = 'express-checkout-otp-required';
+    if (source === 'loopdesk-cart-drawer') closeLoopDeskDrawer();
 
     if (!openDrawerOtp()) {
-      clearDrawerResumeFlag();
-      state.lastReason = 'drawer-otp-bridge-missing';
-      if (window.console) window.console.warn('[LoopDesk Checkout] OTP bridge unavailable for cart drawer checkout');
+      clearPendingIntent();
+      state.lastReason = 'express-checkout-otp-bridge-missing';
+      if (window.console) window.console.warn('[LoopDesk Checkout] OTP bridge unavailable for Express Checkout');
     }
   }, true);
 
   document.addEventListener('megaska:auth-state-changed', function () {
-    if (!hasDrawerResumeFlag() || !hasMegaskaSessionToken()) return;
-    clearDrawerResumeFlag();
+    var intent = getPendingIntent();
+    if (!intent || intent.type !== 'express_checkout' || !hasMegaskaSessionToken()) return;
     closeLoopDeskDrawer();
-    window.setTimeout(function () { open('loopdesk-cart-drawer-auth-resume'); }, 250);
+    window.setTimeout(function () { continueExpressCheckout(intent.source + '-auth-resume'); }, 250);
   });
 
   document.addEventListener('click', function (event) {
@@ -219,7 +256,7 @@
       return {
         loaded: window[MARKER] === true,
         modalApiPresent: Boolean(window.MegaskaExpressCheckout && typeof window.MegaskaExpressCheckout.open === 'function'),
-        drawerResumePending: hasDrawerResumeFlag(),
+        drawerResumePending: Boolean(getPendingIntent() && getPendingIntent().type === 'express_checkout'),
         clicks: state.clicks,
         submits: state.submits,
         opened: state.opened,
