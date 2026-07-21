@@ -2,18 +2,19 @@ import { NextRequest, NextResponse } from "next/server";
 import { hashSessionToken } from "../../../../services/auth/session";
 import { prisma } from "../../../../services/db/prisma";
 
-const SHOPIFY_DEBUG_ORIGIN = "https://megaskastore.myshopify.com";
-
-function applyWalletReservationsCors(response: NextResponse) {
-  response.headers.set("Access-Control-Allow-Origin", SHOPIFY_DEBUG_ORIGIN);
+function applyWalletReservationsCors(req: NextRequest, response: NextResponse) {
+  const origin = req.headers.get("origin") || "";
+  if (/^https:\/\/[a-z0-9][a-z0-9-]*\.myshopify\.com$/i.test(origin)) {
+    response.headers.set("Access-Control-Allow-Origin", origin);
+  }
   response.headers.set("Vary", "Origin");
   response.headers.set("Access-Control-Allow-Methods", "GET, OPTIONS");
   response.headers.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
   return response;
 }
 
-export async function OPTIONS() {
-  return applyWalletReservationsCors(new NextResponse(null, { status: 204 }));
+export async function OPTIONS(req: NextRequest) {
+  return applyWalletReservationsCors(req, new NextResponse(null, { status: 204 }));
 }
 
 export async function GET(req: NextRequest) {
@@ -23,7 +24,7 @@ export async function GET(req: NextRequest) {
   const sessionToken = bearerToken || queryToken;
 
   if (!sessionToken) {
-    return applyWalletReservationsCors(
+    return applyWalletReservationsCors(req,
       NextResponse.json({ ok: false, error: "Session token required" }, { status: 401 })
     );
   }
@@ -44,7 +45,7 @@ export async function GET(req: NextRequest) {
   });
 
   if (!session?.customer) {
-    return applyWalletReservationsCors(
+    return applyWalletReservationsCors(req,
       NextResponse.json({ ok: false, error: "Invalid or expired session" }, { status: 401 })
     );
   }
@@ -70,5 +71,5 @@ export async function GET(req: NextRequest) {
     LIMIT 100
   `;
 
-  return applyWalletReservationsCors(NextResponse.json({ ok: true, reservations }));
+  return applyWalletReservationsCors(req, NextResponse.json({ ok: true, reservations }));
 }

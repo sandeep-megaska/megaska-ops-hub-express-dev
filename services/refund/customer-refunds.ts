@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { prisma } from "../db/prisma";
+import { platformEnvironment } from "../config/environment";
 import { type AuthenticatedExchangeContext } from "../exchange/auth";
 import type { RefundPayoutRail, RefundRequest, RefundStatus } from "../../generated/prisma/index.js";
 
@@ -20,7 +21,7 @@ type RefundWithPayout = RefundRequest & {
 };
 
 function resolveEncryptionKey() {
-  const seed = process.env.REFUND_PAYOUT_ENCRYPTION_KEY || process.env.SESSION_SECRET || "dev-refund-key";
+  const seed = process.env.REFUND_PAYOUT_ENCRYPTION_KEY || platformEnvironment.sessionSecret || "dev-refund-key";
   return crypto.createHash("sha256").update(seed).digest();
 }
 

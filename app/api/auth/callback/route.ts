@@ -34,7 +34,7 @@ async function fetchShopMetadata(shop: string, accessToken: string) {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken },
     body: JSON.stringify({
-      query: `query MegaskaShopInstallMetadata { shop { name myshopifyDomain primaryDomain { host url } } }`,
+      query: `query LoopDeskShopInstallMetadata { shop { name myshopifyDomain primaryDomain { host url } } }`,
     }),
   });
 
@@ -94,7 +94,9 @@ export async function GET(request: NextRequest) {
   const metadata = await fetchShopMetadata(shop, accessToken);
   const encryptedAccessToken = encryptShopifyToken(accessToken);
   const appProxyEnabled = Boolean(process.env.SHOPIFY_APP_PROXY_PREFIX || process.env.SHOPIFY_APP_PROXY_SUBPATH || process.env.SHOPIFY_APP_URL);
-  const checkoutEnabled = shop === "megaskastore.myshopify.com" || String(process.env.EXPRESS_CHECKOUT_ENABLED || "").toLowerCase() === "true";
+  // Installation never depends on a deployment allowlist. Tenant module settings and
+  // Razorpay readiness are the runtime authorities for Express Checkout.
+  const checkoutEnabled = false;
 
   const shopId = crypto.randomUUID();
 

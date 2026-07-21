@@ -16,10 +16,6 @@ export async function POST(req: NextRequest) {
   const rawBody = await req.text();
   const signature = req.headers.get("x-razorpay-signature");
 
-  if (!verifyRazorpayWebhookSignature(rawBody, signature)) {
-    return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
-  }
-
   const payload = (JSON.parse(rawBody || "{}") || {}) as Record<string, unknown>;
   const event = String(payload.event || "");
   const payloadObj = payload["payload"] as Record<string, unknown> | undefined;
@@ -56,6 +52,10 @@ export async function POST(req: NextRequest) {
     if (!codAdvanceIntent) {
       console.info("[RAZORPAY WEBHOOK] No matching RequestPayment or CodAdvanceIntent", { event, paymentLinkId });
       return NextResponse.json({ ok: true, ignored: true });
+    }
+
+    if (!await verifyRazorpayWebhookSignature(codAdvanceIntent.shopId, rawBody, signature)) {
+      return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
     }
 
     if (codAdvanceIntent.status === "ADVANCE_PAID" && status !== "PAID") {
@@ -97,6 +97,10 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({ ok: true, module: "cod_advance" });
+  }
+
+  if (!payment.request.shopId || !await verifyRazorpayWebhookSignature(payment.request.shopId, rawBody, signature)) {
+    return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
   }
 
   if (payment.status === "PAID" && status !== "PAID") {

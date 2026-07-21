@@ -1,7 +1,9 @@
 import crypto from "crypto";
+import { getInternalRazorpayConfig } from "../razorpay/config";
 import { REVERSE_PICKUP_CURRENCY, REVERSE_PICKUP_FEE_PAISE } from "./constants";
 
 type CreatePaymentLinkInput = {
+  shopId: string;
   requestId: string;
   customerName?: string | null;
   customerPhone?: string | null;
@@ -11,21 +13,14 @@ type CreatePaymentLinkInput = {
   expiresAt?: Date | null;
 };
 
-function getCreds() {
-  const keyId = String(process.env.RAZORPAY_KEY_ID || "").trim();
-  const keySecret = String(process.env.RAZORPAY_KEY_SECRET || "").trim();
-  const webhookSecret = String(process.env.RAZORPAY_WEBHOOK_SECRET || "").trim();
-  return { keyId, keySecret, webhookSecret };
-}
-
-export function isRazorpayConfigured() {
-  const { keyId, keySecret } = getCreds();
-  return Boolean(keyId && keySecret);
+export async function isRazorpayConfigured(shopId: string) {
+  const config = await getInternalRazorpayConfig(shopId);
+  return Boolean(config.enabled && config.keyId && config.keySecret);
 }
 
 export async function createReversePickupPaymentLink(input: CreatePaymentLinkInput) {
-  const { keyId, keySecret } = getCreds();
-  if (!keyId || !keySecret) {
+  const { enabled, keyId, keySecret } = await getInternalRazorpayConfig(input.shopId);
+  if (!enabled || !keyId || !keySecret) {
     throw new Error("Razorpay credentials are not configured");
   }
 
@@ -34,7 +29,7 @@ export async function createReversePickupPaymentLink(input: CreatePaymentLinkInp
     amount: input.amount || REVERSE_PICKUP_FEE_PAISE,
     currency: input.currency || REVERSE_PICKUP_CURRENCY,
     accept_partial: false,
-    description: `Megaska exchange reverse pickup fee for ${input.requestId}`,
+    description: `Exchange reverse pickup fee for ${input.requestId}`,
     reference_id: input.requestId,
     customer: {
       name: input.customerName || undefined,
@@ -70,9 +65,9 @@ export async function createReversePickupPaymentLink(input: CreatePaymentLinkInp
   };
 }
 
-export function verifyRazorpayWebhookSignature(rawBody: string, signature: string | null) {
-  const { webhookSecret } = getCreds();
-  if (!webhookSecret || !signature) {
+export async function verifyRazorpayWebhookSignature(shopId: string, rawBody: string, signature: string | null) {
+  const { enabled, webhookSecret } = await getInternalRazorpayConfig(shopId);
+  if (!enabled || !webhookSecret || !signature) {
     return false;
   }
 

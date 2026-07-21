@@ -243,6 +243,7 @@ export async function PATCH(
       !hasActivePendingPaymentLink(reversePickupPayment)
     ) {
       const paymentLink = await createReversePickupPaymentLink({
+        shopId: shop.id,
         requestId: updated.id,
         customerName: updated.customerNameSnapshot,
         customerPhone: updated.customerPhoneSnapshot,

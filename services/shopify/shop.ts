@@ -90,6 +90,7 @@ export async function getShopByDomain(shopDomain: string) {
 }
 
 export async function getDefaultShopFromConfig() {
+  if (process.env.NODE_ENV === "production" || process.env.VERCEL_ENV === "production") return null;
   const envDomain = normalizeShopDomain(trimEnv("SHOPIFY_STORE_DOMAIN"));
   if (!envDomain) return null;
 
@@ -146,9 +147,9 @@ export async function resolveShopConfig(
 
   return {
     id: null,
-    shopDomain: normalizeShopDomain(trimEnv("SHOPIFY_STORE_DOMAIN")),
-    accessToken: trimEnv("SHOPIFY_ADMIN_ACCESS_TOKEN") || null,
-    storefrontAccessToken: trimEnv("SHOPIFY_STOREFRONT_ACCESS_TOKEN") || null,
+    shopDomain: "",
+    accessToken: null,
+    storefrontAccessToken: null,
   };
 }
 

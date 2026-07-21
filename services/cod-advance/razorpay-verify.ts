@@ -32,7 +32,7 @@ export class CodAdvanceRazorpayVerifyError extends Error {
   constructor(status: 400 | 404 | 409 | 503, code: string, message: string) { super(message); this.name = "CodAdvanceRazorpayVerifyError"; this.status = status; this.code = code; }
 }
 
-function secret(deps: Deps) { const value = String(deps.keySecret ?? process.env.RAZORPAY_KEY_SECRET ?? "").trim(); if (!value) throw new CodAdvanceRazorpayVerifyError(503, "RAZORPAY_NOT_CONFIGURED", "Razorpay is not configured"); return value; }
+function secret(deps: Deps) { const value = String(deps.keySecret ?? "").trim(); if (!value) throw new CodAdvanceRazorpayVerifyError(503, "RAZORPAY_NOT_CONFIGURED", "Razorpay is not configured"); return value; }
 function audit(deps: Deps, eventType: string, entityType: string, entityId: string | null, payload?: unknown) { return (deps.audit || (async () => undefined))(eventType, entityType, entityId, payload).catch(() => undefined); }
 function safe(value: unknown) { return JSON.parse(JSON.stringify(value ?? null)); }
 function signatureHash(signature: string) { return crypto.createHash("sha256").update(signature).digest("hex"); }
@@ -71,10 +71,13 @@ async function loadAndValidate(db: Db, input: CodAdvanceRazorpayVerifyInput, pol
 
 export async function verifyCodAdvanceRazorpayPayment(input: CodAdvanceRazorpayVerifyInput, deps: Deps = {}): Promise<CodAdvanceRazorpayVerifyOutput> {
   const db: Db = deps.db || (await import("../db/prisma")).prisma; const now = deps.now?.() || new Date(); const resolvePolicy = deps.resolvePolicy || resolveExpressCheckoutCodPolicy;
+  const tenantConfig = deps.keySecret === undefined ? await (await import("../razorpay/config")).getInternalRazorpayConfig(input.shopId) : null;
+  const resolvedDeps = { ...deps, keySecret: deps.keySecret ?? (tenantConfig?.enabled ? tenantConfig.keySecret : "") };
+  secret(resolvedDeps);
   const policy = await resolvePolicy(input, db, { audit: deps.audit });
   const first = await loadAndValidate(db, input, policy, now);
-  if (!validSignature(input, deps)) { await audit(deps, "cod_advance.payment.signature_invalid", "ExpressCheckoutPayment", first.payment.id, { shopId: input.shopId, checkoutIntentId: input.checkoutIntentId, codAdvanceIntentId: first.cod.id }); throw new CodAdvanceRazorpayVerifyError(400, "RAZORPAY_SIGNATURE_INVALID", "Invalid Razorpay signature"); }
-  const provider = await fetchProviderPayment(input, first.cod.advanceAmountPaise, first.cod.currency, deps);
+  if (!validSignature(input, resolvedDeps)) { await audit(deps, "cod_advance.payment.signature_invalid", "ExpressCheckoutPayment", first.payment.id, { shopId: input.shopId, checkoutIntentId: input.checkoutIntentId, codAdvanceIntentId: first.cod.id }); throw new CodAdvanceRazorpayVerifyError(400, "RAZORPAY_SIGNATURE_INVALID", "Invalid Razorpay signature"); }
+  const provider = await fetchProviderPayment(input, first.cod.advanceAmountPaise, first.cod.currency, resolvedDeps);
   const otherPayment = await db.expressCheckoutPayment.findFirst({ where: { shopId: input.shopId, razorpayPaymentId: input.razorpay_payment_id, id: { not: first.payment.id } } });
   const otherCod = await db.codAdvanceIntent.findFirst({ where: { shopId: input.shopId, razorpayPaymentId: input.razorpay_payment_id, id: { not: first.cod.id } } });
   if (otherPayment || otherCod) throw new CodAdvanceRazorpayVerifyError(409, "RAZORPAY_PAYMENT_CONFLICT", "Razorpay payment id is already attached");

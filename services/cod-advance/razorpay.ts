@@ -1,18 +1,13 @@
 import crypto from "crypto";
+import { getInternalRazorpayConfig } from "../razorpay/config";
 
-export function isCodAdvanceRazorpayConfigured() {
-  return Boolean(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET);
-}
-
-function creds() {
-  return {
-    keyId: String(process.env.RAZORPAY_KEY_ID || "").trim(),
-    keySecret: String(process.env.RAZORPAY_KEY_SECRET || "").trim(),
-    webhookSecret: String(process.env.RAZORPAY_WEBHOOK_SECRET || "").trim(),
-  };
+export async function isCodAdvanceRazorpayConfigured(shopId: string) {
+  const config = await getInternalRazorpayConfig(shopId);
+  return Boolean(config.enabled && config.keyId && config.keySecret);
 }
 
 export async function createCodAdvancePaymentLink(input: {
+  shopId: string;
   intentId: string;
   amountPaise: number;
   currency: string;
@@ -20,8 +15,8 @@ export async function createCodAdvancePaymentLink(input: {
   customerEmail?: string | null;
   customerPhone?: string | null;
 }) {
-  const { keyId, keySecret } = creds();
-  if (!keyId || !keySecret) throw new Error("Razorpay credentials are not configured");
+  const { enabled, keyId, keySecret } = await getInternalRazorpayConfig(input.shopId);
+  if (!enabled || !keyId || !keySecret) throw new Error("Razorpay credentials are not configured");
   const auth = Buffer.from(`${keyId}:${keySecret}`).toString("base64");
   const response = await fetch("https://api.razorpay.com/v1/payment_links", {
     method: "POST",
@@ -30,14 +25,14 @@ export async function createCodAdvancePaymentLink(input: {
       amount: input.amountPaise,
       currency: input.currency || "INR",
       accept_partial: false,
-      description: `Megaska Fixed COD Advance for ${input.intentId}`,
+      description: `Fixed COD Advance for ${input.intentId}`,
       reference_id: input.intentId,
       customer: {
         name: input.customerName || undefined,
         email: input.customerEmail || undefined,
         contact: input.customerPhone || undefined,
       },
-      notes: { megaska_module: "fixed_cod_advance", megaska_cod_advance_intent_id: input.intentId },
+      notes: { loopdesk_module: "fixed_cod_advance", loopdesk_cod_advance_intent_id: input.intentId },
       notify: { sms: true, email: true },
       reminder_enable: true,
       callback_method: "get",
@@ -54,9 +49,9 @@ export async function createCodAdvancePaymentLink(input: {
   };
 }
 
-export function verifyCodAdvanceRazorpayWebhookSignature(rawBody: string, signature: string | null) {
-  const { webhookSecret } = creds();
-  if (!webhookSecret || !signature) return false;
+export async function verifyCodAdvanceRazorpayWebhookSignature(shopId: string, rawBody: string, signature: string | null) {
+  const { enabled, webhookSecret } = await getInternalRazorpayConfig(shopId);
+  if (!enabled || !webhookSecret || !signature) return false;
   const expected = crypto.createHmac("sha256", webhookSecret).update(rawBody).digest("hex");
   return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
 }
