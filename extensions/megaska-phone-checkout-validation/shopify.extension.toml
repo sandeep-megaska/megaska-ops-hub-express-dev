@@ -12,6 +12,6 @@ description = "Validates delivery phone numbers against the checkout address cou
   export = "cartValidationsGenerateRun"
 
   [extensions.build]
-  command = "npm run build"
-  path = "dist/index.wasm"
-  watch = ["src/**/*.js", "src/**/*.graphql"]
+command = ""
+path = "dist/index.wasm"
+watch = ["src/**/*.js", "src/**/*.graphql"]
