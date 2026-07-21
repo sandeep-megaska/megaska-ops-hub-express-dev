@@ -1,0 +1,11 @@
+{
+  "name": "megaska-phone-checkout-validation",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs"
+  },
+  "dependencies": {
+    "libphonenumber-js": "^1.12.24"
+  }
+}

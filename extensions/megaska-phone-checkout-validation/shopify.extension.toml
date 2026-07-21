@@ -1,0 +1,12 @@
+api_version = "2026-01"
+
+[[extensions]]
+name = "Megaska checkout phone validation"
+handle = "megaska-phone-checkout-validation"
+type = "function"
+description = "Validates delivery phone numbers against the checkout address country"
+
+  [[extensions.targeting]]
+  target = "cart.validations.generate.run"
+  input_query = "src/cart_validations_generate_run.graphql"
+  export = "cartValidationsGenerateRun"

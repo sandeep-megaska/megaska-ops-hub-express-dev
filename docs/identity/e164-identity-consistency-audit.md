@@ -17,9 +17,15 @@ The canonical boundary accepts storage-form E.164 (`+` followed by 8–15 digits
 | Shopify Admin lookup | India normalization on every input and email fallback after phone | High | Preserve canonical international input; legacy variants only for `+91`; email is not fallback when phone identity is supplied |
 | Dashboard lookup | Re-normalized every phone as India and combined phone/email searches | High | Linked Shopify customer ID remains primary; otherwise exact canonical phone, with `+91`-only compatibility variants |
 | `services/phone.ts` | Legacy India normalization plus India-only identity comparison | High | Preserve `normalizeIndianPhone`; comparison now accepts exact canonical values only |
-| Checkout phone Function | India-specific address validation | Separate phase | Defer checkout globalization |
+| Checkout phone Function | Address-country validation, independent of identity and OTP session state | Safe | Delivery country wins over billing country; missing country defers validation; explicit international numbers must match the address country |
 | OTP modal extension | Input/display behavior, not server identity resolution | Safe | Keep unchanged |
 | Storefront formatting and masking | Digit cleanup/slicing for presentation | Not identity-related | No change |
+
+## Checkout phone validation boundary
+
+The checkout Function now derives country context from the first delivery address, then the billing address. It never reads OTP policy or session state and does not infer India when address context is absent. A phone entered before Shopify supplies a country is therefore deferred, while a missing phone after the country is known remains an error.
+
+Indian validation retains the established mobile-leading-digit rule and accepts national, `0`, `91`, `091`, and `0091` prefixes. The prior verified-phone cart-attribute comparison and temporary unconditional test block are removed: checkout validation now concerns address-relative delivery contact quality, not authentication. Other countries use the Function-local lightweight phone metadata parser, accept valid national or E.164 formatting, and reject an explicit international number that resolves to a different country.
 
 ## Schema audit
 

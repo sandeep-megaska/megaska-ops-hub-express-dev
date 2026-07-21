@@ -1,18 +1,17 @@
 query CartValidationsGenerateRunInput {
   cart {
-    trustedPhone: attribute(key: "megaska_verified_phone") {
-      value
-    }
-    trustedPhoneVerified: attribute(key: "megaska_phone_verified") {
-      value
-    }
     buyerIdentity {
       phone
+    }
+    billingAddress {
+      phone
+      countryCode
     }
     deliveryGroups {
       deliveryAddress {
         ... on MailingAddress {
           phone
+          countryCode
         }
       }
     }
