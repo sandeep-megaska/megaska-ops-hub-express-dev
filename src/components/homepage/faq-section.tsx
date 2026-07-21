@@ -1,0 +1,2 @@
+import { homepageConfig } from "@/config/homepage"; import { SectionHeading } from "./section-heading";
+export function FaqSection(){return <section className="ld-section" aria-labelledby="faq-title"><SectionHeading id="faq-title" eyebrow="FAQ" title="Common questions before installation." description="Concise answers for merchants evaluating LoopDesk." align="center"/><div className="ld-faq">{homepageConfig.faq.map(([q,a])=><details key={q}><summary>{q}</summary><p>{a}</p></details>)}</div></section>}

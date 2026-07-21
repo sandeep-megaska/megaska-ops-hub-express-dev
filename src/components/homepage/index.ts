@@ -1,0 +1,17 @@
+export { CapabilityCard } from "./capability-card";
+export { CheckoutPaymentsSection } from "./checkout-payments-section";
+export { CommerceGrowthSection } from "./commerce-growth-section";
+export { CommerceLoopSection } from "./commerce-loop-section";
+export { CustomerExperienceSection } from "./customer-experience-section";
+export { FaqSection } from "./faq-section";
+export { FinalCtaSection } from "./final-cta-section";
+export { FounderStorySection } from "./founder-story-section";
+export { HeroSection } from "./hero-section";
+export { Homepage } from "./homepage";
+export { MerchantOperationsSection } from "./merchant-operations-section";
+export { OnePlatformSection } from "./one-platform-section";
+export { PlatformOverviewSection } from "./platform-overview-section";
+export { PostPurchaseSection } from "./post-purchase-section";
+export { PricingSection } from "./pricing-section";
+export { ProblemSection } from "./problem-section";
+export { SectionHeading } from "./section-heading";

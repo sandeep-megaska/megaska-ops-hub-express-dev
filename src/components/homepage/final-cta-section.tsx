@@ -1,0 +1,2 @@
+import { homepageConfig } from "@/config/homepage";
+export function FinalCtaSection(){const c=homepageConfig.finalCta; return <section className="ld-final" aria-labelledby="final-cta-title"><h2 id="final-cta-title">{c.title}</h2><p>{c.description}</p><div className="ld-actions"><a className="ld-button ld-button--light" href={c.primaryCta.href}>{c.primaryCta.label}</a><a className="ld-button ld-button--ghost" href={c.secondaryCta.href}>{c.secondaryCta.label}</a></div></section>}

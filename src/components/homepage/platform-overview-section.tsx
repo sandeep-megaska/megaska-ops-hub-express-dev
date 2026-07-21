@@ -1,0 +1,2 @@
+import { homepageConfig } from "@/config/homepage"; import { CapabilityCard } from "./capability-card"; import { SectionHeading } from "./section-heading";
+export function PlatformOverviewSection() { const p = homepageConfig.platform; return <section className="ld-section" aria-labelledby="platform-title"><SectionHeading id="platform-title" eyebrow={p.eyebrow} title={p.title} description={p.description} align="center"/><div className="ld-card-grid">{p.capabilities.map((cap)=><CapabilityCard key={cap.title} {...cap}/>)}</div></section>; }
