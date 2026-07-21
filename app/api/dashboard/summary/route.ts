@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { withCors, handleOptions } from "../../_lib/cors";
 import { prisma } from "../../../../services/db/prisma";
 import {
+  CUSTOMER_SESSION_COOKIE_NAME,
   hashSessionToken,
   getSessionTokenFromRequest,
 } from "../../../../services/auth/session";
@@ -42,6 +43,23 @@ export const runtime = "nodejs";
 
 const DELIVERY_REQUIRED_LOCK_REASON =
   "Exchange and issue requests are available only after delivery.";
+
+type DashboardIdentityTrace = {
+  shopId: string;
+  phoneE164: string | null;
+  customerProfileId: string | null;
+  shopifyCustomerId: string | null;
+  sessionId: string | null;
+  authenticatedUserId: string | null;
+};
+
+function traceDashboardIdentity(
+  step: string,
+  identity: DashboardIdentityTrace,
+  details: Record<string, unknown> = {},
+) {
+  console.info("[DASHBOARD IDENTITY TRACE]", { step, ...identity, ...details });
+}
 
 function isValidDateValue(value: string | Date | null | undefined) {
   if (!value) return false;
@@ -199,6 +217,32 @@ export async function GET(req: NextRequest) {
     const shop = await requireShopFromRequest(req);
 
     const sessionToken = getSessionTokenFromRequest(req);
+    const authorization = req.headers.get("authorization") || "";
+    const bearerPresent = authorization.startsWith("Bearer ");
+    const queryTokenPresent = Boolean(req.nextUrl.searchParams.get("token")?.trim());
+    const cookiePresent = Boolean(
+      req.cookies.get(CUSTOMER_SESSION_COOKIE_NAME)?.value?.trim(),
+    );
+    const unresolvedIdentity: DashboardIdentityTrace = {
+      shopId: shop.id,
+      phoneE164: null,
+      customerProfileId: null,
+      shopifyCustomerId: null,
+      sessionId: null,
+      authenticatedUserId: null,
+    };
+    traceDashboardIdentity("dashboard_api_request", unresolvedIdentity, {
+      sessionTokenSource: bearerPresent
+        ? "authorization_bearer"
+        : queryTokenPresent
+          ? "query"
+          : cookiePresent
+            ? "cookie"
+            : "none",
+      bearerPresent,
+      queryTokenPresent,
+      cookiePresent,
+    });
     if (!sessionToken) {
       return withCors(
         req,
@@ -237,6 +281,20 @@ export async function GET(req: NextRequest) {
     });
 
     const customer = session.customer;
+    const identity: DashboardIdentityTrace = {
+      shopId: shop.id,
+      phoneE164: customer.phoneE164,
+      customerProfileId: customer.id,
+      shopifyCustomerId: customer.shopifyCustomerId,
+      sessionId: session.id,
+      authenticatedUserId: customer.id,
+    };
+    traceDashboardIdentity("server_authentication", identity, {
+      authSessionCustomerProfileId: session.customerProfileId,
+    });
+    traceDashboardIdentity("customer_profile_resolved", identity, {
+      resolutionSource: "auth_session_customer_relation",
+    });
 
     // Identity is resolved upstream (OTP/sync/checkout). Dashboard is a consumer only.
     const resolvedShopifyCustomerId = String(customer.shopifyCustomerId || "").trim();
@@ -264,6 +322,14 @@ export async function GET(req: NextRequest) {
       : customer.addressLine1
         ? 1
         : 0;
+    traceDashboardIdentity("address_query", identity, {
+      source: shopifyDashboard?.defaultAddress
+        ? "shopify_default_address"
+        : customer.addressLine1
+          ? "customer_profile"
+          : "none",
+      resultCount: savedAddressCount,
+    });
 
     const totalOrders = Number(shopifyDashboard?.totalOrderCount || 0);
     const orderNumbers = Array.isArray(shopifyDashboard?.recentOrders)
@@ -271,6 +337,11 @@ export async function GET(req: NextRequest) {
           .map((order) => String(order?.name || "").trim())
           .filter(Boolean)
       : [];
+    traceDashboardIdentity("orders_query", identity, {
+      source: "shopify_customer",
+      filterShopifyCustomerId: resolvedShopifyCustomerId || null,
+      resultCount: orderNumbers.length,
+    });
 
     const cancellationRequests = orderNumbers.length
       ? await prisma.orderActionRequest.findMany({
@@ -590,6 +661,13 @@ for (const request of exchangeRequests) {
         AND "expiresAt" > NOW()
     `;
     const activeWalletReserved = Number(walletReservedRows[0]?.total || 0);
+    traceDashboardIdentity("wallet_query", identity, {
+      filterShopId: shop.id,
+      filterCustomerProfileId: customer.id,
+      walletAccountId: walletAccount?.id || null,
+      transactionCount: walletTransactions.length,
+      activeReservedAmount: activeWalletReserved,
+    });
 
     const stats = {
       totalOrders,
