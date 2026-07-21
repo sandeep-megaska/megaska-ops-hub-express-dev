@@ -143,3 +143,9 @@ test("existing OTP provider signatures remain unchanged", () => {
   assert.match(source, /export function getOtpProvider\(\)/);
   assert.match(source, /export function getOtpProviderFallbackOrder\(\)/);
 });
+
+test("merchant settings form submits the complete country policy through the OTP save", () => {
+  const source = readFileSync(new URL("../../app/admin/merchant-settings/page.tsx", import.meta.url), "utf8");
+  assert.match(source, /defaultCountryCode:\s*formData\.get\("otpDefaultCountryCode"\)/);
+  assert.match(source, /allowedCountryCodes:\s*formData\.getAll\("otpAllowedCountryCodes"\)/);
+});
