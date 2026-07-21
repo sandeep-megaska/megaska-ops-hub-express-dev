@@ -647,6 +647,8 @@ model MerchantOtpSettings {
   otpEnabled            Boolean         @default(true)
   providerMode          OtpProviderMode @default(PLATFORM_TWILIO)
   allowPlatformFallback Boolean         @default(true)
+  defaultCountryCode    String          @default("IN")
+  allowedCountryCodes   String[]        @default(["IN"])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2707,8 +2709,8 @@ model ExpressCheckoutIntent {
   recoveryTokens   CheckoutRecoveryToken[]
   pricingSnapshots ShopifyCheckoutPricingSnapshot[]
 
-  @@index([shopId, id])
   @@unique([shopId, id])
+  @@index([shopId, id])
   @@index([shopId, customerProfileId])
   @@index([shopId, status])
   @@index([shopId, sessionTokenHash])
