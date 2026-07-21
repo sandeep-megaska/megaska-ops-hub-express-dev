@@ -29,6 +29,8 @@ import {
   MerchantOtpSettingsValidationError,
   getPlatformTwilioConfigurationStatus,
 } from "../../../services/settings/merchant-otp";
+import { OTP_COUNTRY_CATALOG } from "../../../services/settings/otp-country-catalog";
+import OtpCountryPolicyField from "./OtpCountryPolicyField";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -233,6 +235,8 @@ async function saveMerchantSettings(
       otpEnabled: formData.getAll("otpEnabled").at(-1),
       providerMode: formData.get("otpProviderMode"),
       allowPlatformFallback: formData.getAll("otpAllowPlatformFallback").at(-1),
+      defaultCountryCode: formData.get("otpDefaultCountryCode"),
+      allowedCountryCodes: formData.getAll("otpAllowedCountryCodes"),
     });
     await saveMerchantNotificationSettings(shopId, {
       emailEnabled: formData.getAll("notificationEmailEnabled").at(-1),
@@ -490,6 +494,15 @@ export default async function MerchantSettingsPage({
             <Field label="Trust item 2" name="otpTrustItem2" defaultValue={settings.otpModalBranding.trustItems[1]} />
             <Field label="Trust item 3" name="otpTrustItem3" defaultValue={settings.otpModalBranding.trustItems[2]} />
           </div>
+        </section>
+
+        <section id="otp-countries" className={`${cardClass} grid gap-5`}>
+          <SectionHeader title="OTP Login Countries" description="Select the countries whose mobile numbers customers may use for OTP login. Storefront behavior will continue using the existing India-only modal until the storefront globalization phase is enabled." />
+          <OtpCountryPolicyField
+            countries={OTP_COUNTRY_CATALOG}
+            initialAllowedCountryCodes={otpSettings.allowedCountryCodes}
+            initialDefaultCountryCode={otpSettings.defaultCountryCode}
+          />
         </section>
 
         <section id="otp-provider" className={`${cardClass} grid gap-5`}>
