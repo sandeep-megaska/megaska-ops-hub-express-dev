@@ -1628,6 +1628,12 @@
   }
 
   function openLoopDeskExpressCheckout(source) {
+    var readiness = window.LoopDeskConfig && window.LoopDeskConfig.express_checkout;
+    if (!readiness || readiness.enabled !== true || readiness.ready !== true || readiness.provider !== "razorpay") {
+      debugLog("Shopify checkout fallback", { source: source || "checkout-intent", reason: readiness && readiness.ready === false ? "not-ready" : "config-unavailable" }, true);
+      window.location.assign("/checkout");
+      return;
+    }
     if (state.expressCheckoutLock) return;
     state.expressCheckoutLock = true;
     render();

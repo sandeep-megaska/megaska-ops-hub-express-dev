@@ -109,7 +109,7 @@ async function requireEditableIntent(
   const shop = await requireExpressCheckoutShop(req);
 
   if ("error" in shop) {
-    return { response: jsonWithCors(req, { ok: false, error: shop.error }, { status: shop.status }) };
+    return { response: jsonWithCors(req, { ok: false, code: shop.code, error: shop.error }, { status: shop.status }) };
   }
 
   const auth = await requireCustomerSessionForShop(getSessionTokenFromRequest(req), shop.shopId);

@@ -93,6 +93,7 @@
   }
   function restore(control, old) { if (!old) return; if (old.ariaBusy == null) control.removeAttribute("aria-busy"); else control.setAttribute("aria-busy", old.ariaBusy); if ("disabled" in control) control.disabled = old.disabled; if (control.tagName !== "INPUT") control.innerHTML = old.label; }
   function hasToken() { try { return Boolean(String(localStorage.getItem("megaska_session_token") || "").trim()); } catch { return false; } }
+  function isExpressCheckoutReady() { var c = window.LoopDeskConfig && window.LoopDeskConfig.express_checkout; return Boolean(c && c.enabled === true && c.ready === true && c.provider === "razorpay"); }
   function setResume() { try { sessionStorage.setItem(RESUME_KEY, "1"); } catch {} }
   function clearResume() { try { sessionStorage.removeItem(RESUME_KEY); } catch {} }
   function hasResume() { try { return sessionStorage.getItem(RESUME_KEY) === "1"; } catch { return false; } }
@@ -102,6 +103,7 @@
   function notifyCart() { document.dispatchEvent(new CustomEvent("loopdesk:cart:refresh", { detail: { source: "loopdesk-buy-now" } })); document.dispatchEvent(new CustomEvent("cart:refresh", { detail: { source: "loopdesk-buy-now" } })); }
   async function handle(event) {
     var control = isBuyNowControl(event.target); if (!control) return;
+    if (!isExpressCheckoutReady()) return;
     var form = resolveForm(control);
     if (!form) { devLog("[LoopDesk Buy Now] unresolved product form"); return; }
     var data = new FormData(form); var error = validate(form, data);

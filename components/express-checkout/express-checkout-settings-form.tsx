@@ -14,22 +14,27 @@ export function ExpressCheckoutSettingsForm() {
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
+  const [enabled, setEnabled] = useState(false)
+  const [readiness, setReadiness] = useState<{ ready: boolean; expressCheckoutEnabled: boolean; providerConfigured: boolean; providerValidated: boolean; reason: string } | null>(null)
 
   useEffect(() => { (async () => {
     const res = await fetch('/api/admin/express-checkout/settings')
     const data = await res.json().catch(() => ({}))
     if (data.settings) setForm({ codFeeAmountRupees: paiseToRupees(data.settings.codFeeAmountPaise), codInformationText: String(data.settings.codInformationText || DEFAULT_TEXT) })
+    if (data.readiness) { setReadiness(data.readiness); setEnabled(data.readiness.expressCheckoutEnabled) }
   })() }, [])
 
   async function submit(event: React.FormEvent) {
     event.preventDefault(); setLoading(true); setError(''); setMessage('')
-    const res = await fetch('/api/admin/express-checkout/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
+    const res = await fetch('/api/admin/express-checkout/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...form, enabled }) })
     const data = await res.json().catch(() => ({})); setLoading(false)
-    if (!res.ok || !data.ok) setError(data.error || 'Failed to save settings')
+    if (data.readiness) setReadiness(data.readiness)
+    if (!res.ok || !data.ok) { setError(data.error || 'Failed to save settings'); if (data.readiness) setEnabled(data.readiness.expressCheckoutEnabled) }
     else setMessage('Express checkout settings saved.')
   }
 
   return <form onSubmit={submit} className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm space-y-4">
+    <div className="rounded-xl border border-gray-200 p-4 space-y-2"><h2 className="font-semibold text-gray-900">Express Checkout</h2><dl className="grid grid-cols-2 gap-2 text-sm"><dt>Payment provider</dt><dd className="font-medium">Razorpay</dd><dt>Razorpay status</dt><dd className="font-medium">{!readiness?.providerConfigured ? 'Not configured' : readiness.providerValidated ? 'Connected' : 'Validation failed'}</dd><dt>Checkout status</dt><dd className="font-medium">{readiness?.ready ? 'Ready' : 'Disabled'}</dd></dl><label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} /> Enable Express Checkout</label>{readiness?.expressCheckoutEnabled && !readiness.ready ? <p className="text-sm text-amber-700">Express Checkout is enabled in saved settings but is inactive because Razorpay is not ready.</p> : null}<p className="text-xs text-gray-600">LoopDesk Express Checkout currently supports Razorpay for online payments. Configure and validate your Razorpay credentials before enabling Express Checkout. When Express Checkout is disabled, customers continue through Shopify Checkout.</p></div>
     <div><h2 className="text-base font-semibold text-gray-900">Express checkout COD settings</h2><p className="text-sm text-gray-600">Configure COD charge and COD/refund copy shown in the checkout modal.</p></div>
     {error ? <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
     {message ? <p className="rounded-xl bg-green-50 px-3 py-2 text-sm text-green-700">{message}</p> : null}
