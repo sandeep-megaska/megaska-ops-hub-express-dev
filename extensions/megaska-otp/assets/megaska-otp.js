@@ -3,6 +3,52 @@
   const RESEND_SECONDS = 30;
   const SUCCESS_CLOSE_DELAY_MS = 1400;
   const COUNTRY_REGION = "India";
+  const INDIA_OTP_COUNTRY = Object.freeze({ iso2: "IN", name: "India", dialCode: "+91", flag: "🇮🇳" });
+  const INTERNATIONAL_PHONE_MAX_LENGTH = 20;
+
+  function sanitizeOtpCountryPolicy(policy) {
+    const seen = new Set();
+    const allowedCountries = Array.isArray(policy?.allowedCountries)
+      ? policy.allowedCountries.reduce((countries, entry) => {
+          const iso2 = String(entry?.iso2 || "").trim().toUpperCase();
+          const name = String(entry?.name || "").trim();
+          const dialCode = String(entry?.dialCode || "").trim();
+          const flag = String(entry?.flag || "").trim();
+          if (!/^[A-Z]{2}$/.test(iso2) || !name || !/^\+\d+$/.test(dialCode) || !flag || seen.has(iso2)) return countries;
+          seen.add(iso2);
+          countries.push({ iso2, name, dialCode, flag });
+          return countries;
+        }, [])
+      : [];
+    if (!allowedCountries.length) {
+      return { defaultCountryCode: "IN", allowedCountries: [{ ...INDIA_OTP_COUNTRY }] };
+    }
+    const configuredDefault = String(policy?.defaultCountryCode || "").trim().toUpperCase();
+    const defaultCountryCode = allowedCountries.some((country) => country.iso2 === configuredDefault)
+      ? configuredDefault
+      : allowedCountries[0].iso2;
+    return { defaultCountryCode, allowedCountries };
+  }
+
+  function resolveOtpCountryPolicy() {
+    return sanitizeOtpCountryPolicy(window.LoopDeskConfig && window.LoopDeskConfig.otpCountryPolicy);
+  }
+
+  function sanitizePhoneInputForCountry(value, countryCode) {
+    const digits = String(value || "").replace(/\D/g, "");
+    return countryCode === "IN" ? digits.slice(0, 10) : digits.slice(0, INTERNATIONAL_PHONE_MAX_LENGTH);
+  }
+
+  function maskOtpDestination({ phoneE164, phoneInput, country }) {
+    const dialCode = country?.dialCode || "";
+    let nationalDigits = String(phoneE164 || "").replace(/\D/g, "");
+    const dialDigits = dialCode.replace(/\D/g, "");
+    if (dialDigits && nationalDigits.startsWith(dialDigits)) nationalDigits = nationalDigits.slice(dialDigits.length);
+    if (!nationalDigits) nationalDigits = String(phoneInput || "").replace(/\D/g, "");
+    const visible = nationalDigits.slice(-4);
+    const maskedCount = Math.max(4, nationalDigits.length - visible.length);
+    return `${country?.flag ? `${country.flag} ` : ""}${dialCode} ${"•".repeat(maskedCount)}${visible}`.trim();
+  }
   const INDIAN_STATES_AND_UTS = [
     "Andaman and Nicobar Islands",
     "Andhra Pradesh",
@@ -49,6 +95,12 @@
   phoneDigits: "",
   normalizedPhone: "",
   lastRequestedPhone: "",
+  otpCountryPolicy: { defaultCountryCode: "IN", allowedCountries: [{ ...INDIA_OTP_COUNTRY }] },
+  selectedOtpCountryCode: "IN",
+  otpRequestPhoneInput: "",
+  otpRequestCountryCode: "",
+  otpRequestPhoneE164: "",
+  countryMenuOpen: false,
   otpDigits: ["", "", "", ""],
   requesting: false,
   verifying: false,
@@ -230,12 +282,7 @@
     return `+91${digits}`;
   }
 
-  function maskPhone(phoneDigits) {
-    if (!phoneDigits) return "+91 ••••• •••••";
-    const first = phoneDigits.slice(0, 5);
-    const second = phoneDigits.slice(5, 10);
-    return `+91 ${first} ${second}`;
-  }
+
 
   function isBusy() {
     return state.requesting || state.verifying || state.savingProfile;
@@ -287,6 +334,12 @@
     const preservePhone = Boolean(opts.preservePhone);
     const savedPhone = preservePhone ? state.phoneDigits : "";
     const savedNormalizedPhone = preservePhone ? state.normalizedPhone : "";
+    state.otpCountryPolicy = resolveOtpCountryPolicy();
+    state.selectedOtpCountryCode = state.otpCountryPolicy.defaultCountryCode;
+    state.otpRequestPhoneInput = preservePhone ? state.otpRequestPhoneInput : "";
+    state.otpRequestCountryCode = preservePhone ? state.otpRequestCountryCode : "";
+    state.otpRequestPhoneE164 = preservePhone ? state.otpRequestPhoneE164 : "";
+    state.countryMenuOpen = false;
 
     clearResendTimer();
     state.step = preservePhone && savedPhone ? "otp" : "phone";
@@ -439,6 +492,97 @@
     if (privacy) privacy.textContent = branding.privacyText;
   }
 
+  function getOtpCountry(countryCode) {
+    return state.otpCountryPolicy.allowedCountries.find((country) => country.iso2 === countryCode) || null;
+  }
+
+  function getSelectedOtpCountry() {
+    return getOtpCountry(state.selectedOtpCountryCode) || state.otpCountryPolicy.allowedCountries[0] || INDIA_OTP_COUNTRY;
+  }
+
+  function closeOtpCountryMenu(options) {
+    state.countryMenuOpen = false;
+    const control = document.querySelector("[data-megaska-country-control]");
+    if (control) renderOtpCountryControl(control);
+    if (options?.focusTrigger) control?.querySelector("[data-megaska-country-trigger]")?.focus();
+  }
+
+  function selectOtpCountry(countryCode) {
+    if (state.step !== "phone" || state.otpRequestCountryCode || !getOtpCountry(countryCode)) return;
+    state.selectedOtpCountryCode = countryCode;
+    state.phoneDigits = sanitizePhoneInputForCountry(state.phoneDigits, countryCode);
+    state.countryMenuOpen = false;
+    state.errorMessage = "";
+    renderStep();
+    focusPhoneInput();
+  }
+
+  function renderOtpCountryControl(control) {
+    if (!control) return;
+    const selected = getSelectedOtpCountry();
+    const countries = state.otpCountryPolicy.allowedCountries;
+    control.textContent = "";
+    if (countries.length === 1) {
+      const prefix = document.createElement("div");
+      prefix.className = "megaska-otp-country-prefix";
+      prefix.setAttribute("aria-label", `${selected.name} ${selected.dialCode}`);
+      prefix.innerHTML = `<span class="megaska-otp-country-flag">${escapeHtml(selected.flag)}</span><span class="megaska-otp-country-dial-code">${escapeHtml(selected.dialCode)}</span>`;
+      control.appendChild(prefix);
+      return;
+    }
+
+    const trigger = document.createElement("button");
+    trigger.type = "button";
+    trigger.className = "megaska-otp-country-trigger";
+    trigger.dataset.megaskaCountryTrigger = "";
+    trigger.setAttribute("aria-haspopup", "listbox");
+    trigger.setAttribute("aria-expanded", String(state.countryMenuOpen));
+    trigger.setAttribute("aria-label", `Select country, currently ${selected.name} ${selected.dialCode}`);
+    trigger.innerHTML = `<span class="megaska-otp-country-flag">${escapeHtml(selected.flag)}</span><span class="megaska-otp-country-dial-code">${escapeHtml(selected.dialCode)}</span><span aria-hidden="true">▾</span>`;
+    trigger.addEventListener("click", (event) => {
+      event.stopPropagation();
+      state.countryMenuOpen = !state.countryMenuOpen;
+      renderOtpCountryControl(control);
+      if (state.countryMenuOpen) control.querySelector('[role="option"][aria-selected="true"]')?.focus();
+    });
+    control.appendChild(trigger);
+    if (!state.countryMenuOpen) return;
+
+    const menu = document.createElement("div");
+    menu.className = "megaska-otp-country-menu";
+    menu.setAttribute("role", "listbox");
+    menu.setAttribute("aria-label", "Allowed countries");
+    countries.forEach((country) => {
+      const option = document.createElement("button");
+      option.type = "button";
+      option.className = "megaska-otp-country-option";
+      option.setAttribute("role", "option");
+      option.setAttribute("aria-selected", String(country.iso2 === selected.iso2));
+      option.innerHTML = `<span class="megaska-otp-country-flag">${escapeHtml(country.flag)}</span><span class="megaska-otp-country-name">${escapeHtml(country.name)}</span><span class="megaska-otp-country-dial-code">${escapeHtml(country.dialCode)}</span>`;
+      option.addEventListener("click", () => selectOtpCountry(country.iso2));
+      option.addEventListener("keydown", (event) => {
+        const options = Array.from(menu.querySelectorAll('[role="option"]'));
+        const index = options.indexOf(option);
+        if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+          event.preventDefault();
+          options[(index + (event.key === "ArrowDown" ? 1 : -1) + options.length) % options.length].focus();
+        }
+      });
+      menu.appendChild(option);
+    });
+    control.appendChild(menu);
+  }
+
+  function refreshOtpCountryPolicy() {
+    if (state.step !== "phone" || state.requesting || state.otpRequestCountryCode) return false;
+    state.otpCountryPolicy = resolveOtpCountryPolicy();
+    state.selectedOtpCountryCode = state.otpCountryPolicy.defaultCountryCode;
+    state.phoneDigits = sanitizePhoneInputForCountry(state.phoneDigits, state.selectedOtpCountryCode);
+    state.countryMenuOpen = false;
+    if (state.isOpen) renderStep();
+    return true;
+  }
+
   function ensureModal() {
     let modal = document.querySelector("[data-megaska-otp-modal]");
     if (modal) {
@@ -482,11 +626,8 @@
 
           <div data-megaska-step-phone class="megaska-otp-step-phone">
             <label class="megaska-otp-label" for="megaska-phone-input">Mobile number</label>
-            <div class="megaska-otp-phone-wrap" role="group" aria-label="Indian mobile number">
-              <span class="megaska-otp-country" aria-hidden="true">
-                <span class="megaska-otp-flag">🇮🇳</span>
-                <span class="megaska-otp-dial-code">+91</span>
-              </span>
+            <div class="megaska-otp-phone-wrap" role="group" aria-label="Mobile number">
+              <div data-megaska-country-control class="megaska-otp-country-control"></div>
               <input
                 id="megaska-phone-input"
                 data-megaska-phone-input
@@ -496,10 +637,11 @@
                 maxlength="10"
                 autocomplete="tel-national"
                 placeholder="98765 43210"
-                aria-label="Enter 10 digit mobile number"
+                aria-label="Enter your mobile number"
               />
             </div>
             <p class="megaska-otp-hint" data-megaska-phone-hint></p>
+            <button type="button" class="megaska-otp-primary-btn megaska-otp-send-btn" data-megaska-send-otp hidden>Send OTP</button>
             <p class="megaska-otp-trouble" data-megaska-otp-privacy></p>
           </div>
 
@@ -697,6 +839,7 @@
         handleSendOtpClick(event);
       }
     });
+    modal.querySelector("[data-megaska-send-otp]").addEventListener("click", handleSendOtpClick);
     modal.querySelectorAll("[data-megaska-edit-phone]").forEach((editBtn) => {
       editBtn.addEventListener("click", handleEditPhone);
     });
@@ -796,6 +939,9 @@
       });
 
     document.addEventListener("keydown", handleEscClose);
+    document.addEventListener("click", (event) => {
+      if (state.countryMenuOpen && !event.target.closest?.("[data-megaska-country-control]")) closeOtpCountryMenu();
+    });
 
     return modal;
   }
@@ -810,6 +956,8 @@
     stepSuccess: modal.querySelector("[data-megaska-step-success]"),
     phoneInput: modal.querySelector("[data-megaska-phone-input]"),
     phoneHint: modal.querySelector("[data-megaska-phone-hint]"),
+    countryControl: modal.querySelector("[data-megaska-country-control]"),
+    sendOtpBtn: modal.querySelector("[data-megaska-send-otp]"),
     phoneDisplay: modal.querySelector("[data-megaska-phone-display]"),
     otpInputs: Array.from(modal.querySelectorAll("[data-megaska-otp-digit]")),
     resendText: modal.querySelector("[data-megaska-resend-text]"),
@@ -837,6 +985,8 @@
     phoneInput,
     phoneHint,
     phoneDisplay,
+    countryControl,
+    sendOtpBtn,
     otpInputs,
     resendText,
     resendBtn,
@@ -864,8 +1014,18 @@
     console.log("[Megaska OTP] step state changed", { step: state.step });
   }
 
+  const selectedCountry = getSelectedOtpCountry();
   phoneInput.value = state.phoneDigits;
-  phoneDisplay.textContent = maskPhone(state.phoneDigits);
+  phoneInput.maxLength = selectedCountry.iso2 === "IN" ? 10 : INTERNATIONAL_PHONE_MAX_LENGTH;
+  phoneInput.placeholder = selectedCountry.iso2 === "IN" ? "98765 43210" : "Mobile number";
+  phoneDisplay.textContent = maskOtpDestination({
+    phoneE164: state.otpRequestPhoneE164,
+    phoneInput: state.otpRequestPhoneInput,
+    country: getOtpCountry(state.otpRequestCountryCode) || selectedCountry,
+  });
+  renderOtpCountryControl(countryControl);
+  sendOtpBtn.hidden = selectedCountry.iso2 === "IN";
+  sendOtpBtn.disabled = state.requesting || !state.phoneDigits;
   successMessage.textContent = state.successMessage;
 
   profileFirstNameInput.value = state.profileFirstName;
@@ -896,6 +1056,8 @@
   if (state.step === "phone") {
     if (state.requesting) {
       phoneHint.textContent = "Sending OTP...";
+    } else if (selectedCountry.iso2 !== "IN") {
+      phoneHint.textContent = "Enter your mobile number, then select Send OTP.";
     } else if (state.phoneDigits.length < 10) {
       phoneHint.textContent = getOtpModalBranding().inputHelperText;
     } else {
@@ -1011,6 +1173,10 @@
   state.errorMessage = "";
   state.statusMessage = "";
   state.otpDigits = ["", "", "", ""];
+  state.otpRequestPhoneInput = "";
+  state.otpRequestCountryCode = "";
+  state.otpRequestPhoneE164 = "";
+  state.lastRequestedPhone = "";
   renderStep();
   focusPhoneInput();
 }
@@ -1129,71 +1295,85 @@ function needsProfileCompletion() {
     );
   }
 
-  async function submitPhoneIfReady() {
-  if (!isModalOpen()) return;
-  if (state.requesting || state.verifying) return;
-  if (state.phoneDigits.length !== 10) return;
-
-  const normalizedPhone = normalizeIndianPhone(state.phoneDigits);
-  if (!normalizedPhone) {
-    state.errorMessage = "Please enter a valid 10-digit mobile number.";
-    state.statusMessage = "";
-    renderStep();
-    return;
-  }
-
-  if (state.lastRequestedPhone === normalizedPhone) return;
-
-  state.requesting = true;
-  state.errorMessage = "";
- state.statusMessage = "📲 Sending your beach passcode...";
-  console.log("[Megaska OTP] submitting mobile number for OTP", { digitCount: state.phoneDigits.length });
-  state.normalizedPhone = normalizedPhone;
-  state.lastRequestedPhone = normalizedPhone;
-
-  renderOtpStep();
-  startResendTimer();
-
-  try {
-    const otpRequestResponse = await window.MegaskaAuth.requestOtp(normalizedPhone);
-    if (!isModalOpen()) return;
-
-    if (!didOtpRequestSucceed(otpRequestResponse)) {
-      throw new Error(getOtpRequestErrorMessage(otpRequestResponse));
+  async function submitPhoneIfReady(options) {
+    if (!isModalOpen() || state.requesting || state.verifying) return;
+    const country = getSelectedOtpCountry();
+    const isIndia = country.iso2 === "IN";
+    if (isIndia && state.phoneDigits.length !== 10) return;
+    if (!isIndia && !options?.explicit) return;
+    if (!state.phoneDigits) {
+      state.errorMessage = "Enter a valid mobile number for the selected country.";
+      renderStep();
+      return;
     }
 
-    state.requesting = false;
-    state.statusMessage = "";
-    renderStep();
-    console.log("[Megaska OTP] OTP input fields rendered", { count: getModalParts().otpInputs.length });
-    focusOtpInput(0);
-  } catch (error) {
-    state.requesting = false;
-    state.step = "phone";
-    state.statusMessage = "";
-    state.lastRequestedPhone = "";
-    state.errorMessage = error.message || "Could not send OTP. Please try again.";
-    renderStep();
-    focusPhoneInput();
+    const normalizedPhone = isIndia ? normalizeIndianPhone(state.phoneDigits) : state.phoneDigits;
+    if (!normalizedPhone) {
+      state.errorMessage = "Enter a valid mobile number for the selected country.";
+      renderStep();
+      return;
+    }
+    if (state.lastRequestedPhone === normalizedPhone && state.otpRequestCountryCode === country.iso2) return;
+
+    state.requesting = true;
+    state.errorMessage = "";
+    state.statusMessage = "📲 Sending your beach passcode...";
+    state.normalizedPhone = normalizedPhone;
+    state.lastRequestedPhone = normalizedPhone;
+    state.otpRequestPhoneInput = state.phoneDigits;
+    state.otpRequestCountryCode = country.iso2;
+    state.otpRequestPhoneE164 = "";
+    renderOtpStep();
+    startResendTimer();
+
+    try {
+      const otpRequestResponse = await window.MegaskaAuth.requestOtp(state.otpRequestPhoneInput, state.otpRequestCountryCode);
+      if (!isModalOpen()) return;
+      if (!didOtpRequestSucceed(otpRequestResponse)) {
+        const error = new Error(getOtpRequestErrorMessage(otpRequestResponse));
+        error.code = getOtpRequestPayload(otpRequestResponse)?.code || getOtpRequestPayload(otpRequestResponse)?.errorCode;
+        throw error;
+      }
+      const payload = getOtpRequestPayload(otpRequestResponse);
+      state.otpRequestPhoneE164 = String(payload?.phoneE164 || payload?.phone || "");
+      state.requesting = false;
+      state.statusMessage = "";
+      renderStep();
+      focusOtpInput(0);
+    } catch (error) {
+      state.requesting = false;
+      state.step = "phone";
+      state.statusMessage = "";
+      state.lastRequestedPhone = "";
+      state.otpRequestPhoneInput = "";
+      state.otpRequestCountryCode = "";
+      state.otpRequestPhoneE164 = "";
+      if (error.code === "COUNTRY_NOT_ALLOWED") {
+        refreshOtpCountryPolicy();
+        state.errorMessage = "OTP login is no longer available for this country. Select another country.";
+      } else if (["PHONE_REQUIRED", "INVALID_PHONE", "INVALID_COUNTRY"].includes(error.code)) {
+        state.errorMessage = "Enter a valid mobile number for the selected country.";
+      } else {
+        state.errorMessage = error.message || "Could not send OTP. Please try again.";
+      }
+      renderStep();
+      focusPhoneInput();
+    }
   }
-}
+
   function handlePhoneInput(event) {
     if (!isModalOpen()) return;
-
-    state.phoneDigits = sanitizeDigits(event.target.value, 10);
+    const countryCode = getSelectedOtpCountry().iso2;
+    state.phoneDigits = sanitizePhoneInputForCountry(event.target.value, countryCode);
     event.target.value = state.phoneDigits;
     state.errorMessage = "";
     renderStep();
-
-    console.log("[Megaska OTP] mobile input changed", { digitCount: state.phoneDigits.length });
-    submitPhoneIfReady();
+    if (countryCode === "IN") submitPhoneIfReady();
   }
 
   function handleSendOtpClick(event) {
     if (event) event.preventDefault();
-    if (!isModalOpen()) return;
-    console.log("[Megaska OTP] send OTP button clicked", { digitCount: state.phoneDigits.length });
-    submitPhoneIfReady();
+    submitPhoneIfReady({ explicit: true });
   }
 
   function collectOtpDigits() {
@@ -1213,7 +1393,7 @@ function needsProfileCompletion() {
   renderStep();
 
   try {
-    await window.MegaskaAuth.verifyOtp(state.normalizedPhone, otp);
+    await window.MegaskaAuth.verifyOtp(state.otpRequestPhoneInput, otp, state.otpRequestCountryCode);
     const refreshedSession = await window.MegaskaAuth.refreshAuthState();
     state.verifying = false;
     state.statusMessage = "";
@@ -1459,7 +1639,7 @@ setTimeout(() => closeModal("success", { force: true }), SUCCESS_CLOSE_DELAY_MS)
     renderStep();
 
     try {
-      const otpRequestResponse = await window.MegaskaAuth.requestOtp(state.normalizedPhone);
+      const otpRequestResponse = await window.MegaskaAuth.requestOtp(state.otpRequestPhoneInput, state.otpRequestCountryCode);
       if (!didOtpRequestSucceed(otpRequestResponse)) {
         throw new Error(getOtpRequestErrorMessage(otpRequestResponse));
       }
@@ -1483,6 +1663,11 @@ setTimeout(() => closeModal("success", { force: true }), SUCCESS_CLOSE_DELAY_MS)
   }
 
   function handleEscClose(event) {
+    if (event.key === "Escape" && state.countryMenuOpen) {
+      event.preventDefault();
+      closeOtpCountryMenu({ focusTrigger: true });
+      return;
+    }
     if (event.key !== "Escape") return;
     if (!isModalOpen()) return;
     closeModal("escape");
@@ -1501,11 +1686,11 @@ setTimeout(() => closeModal("success", { force: true }), SUCCESS_CLOSE_DELAY_MS)
     }
 
     try {
-      await window.MegaskaAuth.requestOtp(normalizedPhone);
+      await window.MegaskaAuth.requestOtp(phoneDigits, "IN");
       const otp = prompt("Enter the 4-digit OTP:");
       if (!otp) return;
 
-      await window.MegaskaAuth.verifyOtp(normalizedPhone, sanitizeDigits(otp, OTP_LENGTH));
+      await window.MegaskaAuth.verifyOtp(phoneDigits, sanitizeDigits(otp, OTP_LENGTH), "IN");
       await window.MegaskaAuth.refreshAuthState();
       await resumePendingAction();
       alert("Login successful.");
@@ -3312,6 +3497,7 @@ function hasVisibleNativeDesktopAccountEntry() {
   window.addEventListener("loopdesk:runtime-config-ready", () => {
     const modal = document.querySelector("[data-megaska-otp-modal]");
     if (modal) applyOtpModalBranding(modal);
+    refreshOtpCountryPolicy();
   });
 
   document.addEventListener("DOMContentLoaded", init);

@@ -228,12 +228,14 @@
   }
 
   if (!response.ok) {
-    throw new Error(
+    const error = new Error(
       parseApiError(
         data,
         `Request failed (${response.status})`,
       ),
     );
+    error.code = data?.code || data?.errorCode || data?.data?.code || data?.data?.errorCode || "";
+    throw error;
   }
 
   return data;
@@ -257,11 +259,11 @@
     );
   }
 
-  async function requestOtp(phone) {
+  async function requestOtp(phone, countryCode) {
     console.log("[Megaska Auth] OTP request triggered", { endpoint: `${API_BASE}/otp/request` });
     return apiFetch("/otp/request", {
       method: "POST",
-      body: JSON.stringify({ phone }),
+      body: JSON.stringify({ phone, countryCode }),
     });
   }
 
@@ -276,10 +278,10 @@
     });
   }
 
-  async function verifyOtp(phone, otp) {
+  async function verifyOtp(phone, otp, countryCode) {
     const data = await apiFetch("/otp/verify", {
       method: "POST",
-      body: JSON.stringify({ phone, otp }),
+      body: JSON.stringify({ phone, countryCode, otp }),
     });
 
    const token = extractSessionToken(data);

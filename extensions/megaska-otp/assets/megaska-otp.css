@@ -1228,3 +1228,102 @@
 .megaska-express-tax-row > span { min-width:0; overflow-wrap:anywhere; }
 .megaska-express-tax-row > strong { flex:0 0 auto; text-align:right; white-space:nowrap; }
 .megaska-express-pricing-state { background:#f8fafc; border-radius:8px; font-size:.8rem; line-height:1.35; padding:8px 10px; }
+
+/* Merchant-configured country prefix and selector. */
+.megaska-otp-step-phone,
+.megaska-otp-country-control {
+  position: relative;
+}
+
+.megaska-otp-country-prefix,
+.megaska-otp-country-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+  min-height: 44px;
+  padding: 0 12px 0 0;
+  border: 0;
+  border-right: 1px solid #e2e8f0;
+  background: transparent;
+  color: #334155;
+  font: inherit;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.megaska-otp-country-trigger {
+  cursor: pointer;
+}
+
+.megaska-otp-country-trigger:focus-visible,
+.megaska-otp-country-option:focus-visible {
+  outline: 2px solid #0f172a;
+  outline-offset: 2px;
+}
+
+.megaska-otp-country-flag {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.megaska-otp-country-dial-code {
+  font-family: system-ui, -apple-system, sans-serif;
+  white-space: nowrap;
+}
+
+.megaska-otp-country-menu {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 8px);
+  left: -12px;
+  width: min(360px, calc(100vw - 64px));
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 6px;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.2);
+}
+
+.megaska-otp-country-option {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #0f172a;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.megaska-otp-country-option:hover,
+.megaska-otp-country-option[aria-selected="true"] {
+  background: #f1f5f9;
+}
+
+.megaska-otp-country-option[aria-selected="true"]::after {
+  content: "✓";
+  position: absolute;
+  right: 18px;
+  color: #0f172a;
+}
+
+.megaska-otp-country-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-right: 18px;
+}
+
+.megaska-otp-send-btn {
+  margin-top: 10px;
+}
