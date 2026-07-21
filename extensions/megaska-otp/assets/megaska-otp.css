@@ -1222,3 +1222,9 @@
   font-size: 14px;
   font-weight: 600;
 }
+
+/* Shopify-authoritative tax rows remain readable without competing with the final payable. */
+.megaska-express-tax-row { align-items:flex-start !important; }
+.megaska-express-tax-row > span { min-width:0; overflow-wrap:anywhere; }
+.megaska-express-tax-row > strong { flex:0 0 auto; text-align:right; white-space:nowrap; }
+.megaska-express-pricing-state { background:#f8fafc; border-radius:8px; font-size:.8rem; line-height:1.35; padding:8px 10px; }

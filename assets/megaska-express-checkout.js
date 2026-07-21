@@ -178,18 +178,31 @@
       totalTaxMinor: null,
     };
     const currency = values.currency || intent.currency;
-    const taxLines = (Array.isArray(values.taxLines) ? values.taxLines : []).filter((line) => Number(line?.amountMinor || 0) !== 0 && String(line?.title || "").trim());
-    const renderedTaxLines = taxLines.length ? taxLines : Number(values.totalTaxMinor || 0) > 0 ? [{ title: "Tax", amountMinor: values.totalTaxMinor }] : [];
-    const stateMessage = status === "REFRESHING" ? "Recalculating shipping, discounts and tax…" : status === "INVALIDATED" ? "Your latest total is being recalculated." : status === "UNAVAILABLE" || !pricing ? "Estimated prices — we couldn’t confirm the latest total." : "";
+    const taxRows = buildCheckoutTaxDisplayRows(current ? values : null);
+    const stateMessage = status === "REFRESHING" ? "Updating shipping, discounts and tax…" : status === "INVALIDATED" ? "Updating shipping, discounts and tax…" : status === "UNAVAILABLE" || !pricing ? "Estimated prices — we couldn’t confirm the latest total." : "";
     const rows = [
-      `<p><span>Subtotal</span><strong>${formatMoney(values.subtotalMinor, currency)}</strong></p>`,
-      `<p><span>Delivery</span><strong>${Number(values.shippingMinor || 0) === 0 ? "Free" : formatMoney(values.shippingMinor, currency)}</strong></p>`,
+      `<p><span>Merchandise subtotal</span><strong>${formatMoney(values.subtotalMinor, currency)}</strong></p>`,
       Number(values.discountsMinor || 0) > 0 ? `<p><span>Discount</span><strong>−${formatMoney(values.discountsMinor, currency)}</strong></p>` : "",
-      ...renderedTaxLines.map((line) => `<p class="megaska-express-tax-row"><span>${values.taxesIncluded === true ? "Includes " : ""}${escapeHtml(line.title)}</span><strong>${formatMoney(line.amountMinor, currency)}</strong></p>`),
-      `<p class="megaska-express-total"><span>${current ? "Total" : "Estimated total"}</span><strong>${formatMoney(values.totalPayableMinor, currency)}</strong></p>`,
+      `<p><span>Delivery</span><strong>${Number(values.shippingMinor || 0) === 0 ? "Free" : formatMoney(values.shippingMinor, currency)}</strong></p>`,
+      ...taxRows.map((row) => `<p class="megaska-express-tax-row" data-tax-row="${escapeHtml(row.key)}"><span>${escapeHtml(row.label)}</span><strong>${formatMoney(row.amountMinor, currency)}</strong></p>`),
+      `<p class="megaska-express-total"><span>${current ? "You pay" : "Estimated total"}</span><strong>${formatMoney(values.totalPayableMinor, currency)}</strong></p>`,
     ];
     const retry = status === "UNAVAILABLE" || !pricing ? ` <button type="button" class="megaska-express-link-btn" data-express-action="retry-pricing">Retry</button>` : "";
     return `${stateMessage ? `<p class="megaska-express-pricing-state" role="status" aria-live="polite">${escapeHtml(stateMessage)}${retry}</p>` : ""}${rows.join("")}`;
+  }
+
+  function buildCheckoutTaxDisplayRows(pricing) {
+    if (pricing?.status !== "CURRENT" || pricing.authoritative !== true) return [];
+    const detailed = (Array.isArray(pricing.taxLines) ? pricing.taxLines : []).flatMap((line, index) => {
+      const title = String(line?.title || "").replace(/[\u0000-\u001f\u007f-\u009f]/g, " ").replace(/\s+/g, " ").trim().slice(0, 120);
+      const amountMinor = Number(line?.amountMinor);
+      if (!title || !Number.isSafeInteger(amountMinor) || amountMinor <= 0) return [];
+      return [{ key: `tax-line-${index}`, label: pricing.taxesIncluded === true ? `Includes ${title}` : title, amountMinor }];
+    });
+    if (detailed.length) return detailed;
+    const totalTaxMinor = Number(pricing.totalTaxMinor);
+    if (!Number.isSafeInteger(totalTaxMinor) || totalTaxMinor <= 0) return [];
+    return [{ key: "tax-total-fallback", label: pricing.taxesIncluded === true ? "Includes tax" : "Tax", amountMinor: totalTaxMinor }];
   }
 
   function latestAddress() {

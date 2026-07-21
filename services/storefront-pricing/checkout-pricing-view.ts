@@ -1,4 +1,5 @@
 import type { ShopifyCheckoutPricingSnapshot } from "./pricing-snapshot-types.ts";
+import { normalizeCheckoutTaxTitle } from "./checkout-tax-display.ts";
 
 export type ExpressCheckoutPricingView = {
   status: "CURRENT" | "INVALIDATED" | "REFRESHING" | "UNAVAILABLE";
@@ -35,7 +36,7 @@ export function checkoutPricingView(
     totalTaxMinor: snapshot.totalTaxMinor,
     totalPayableMinor: snapshot.totalPayableMinor,
     taxesIncluded: snapshot.taxesIncluded,
-    taxLines: (summary?.taxLines ?? []).map((line) => ({ title: line.title, amountMinor: line.amount, rate: line.rate })),
+    taxLines: (summary?.taxLines ?? []).map((line) => ({ title: normalizeCheckoutTaxTitle(line.title), amountMinor: line.amount, rate: line.rate })),
     authoritativeAt: snapshot.authoritativeAt?.toISOString() ?? null,
     messageCode: status === "CURRENT" ? "pricing_current" : status === "REFRESHING" ? "pricing_recalculating" : "pricing_refresh_required",
   };
