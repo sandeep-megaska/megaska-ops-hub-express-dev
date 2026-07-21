@@ -1,6 +1,6 @@
 (function () {
   var SOURCE = "loopdesk-checkout-bridge";
-  var FALLBACK_URL = "/apps/megaska/checkout";
+  var FALLBACK_URL = "/checkout";
   var MARKER = "__LOOPDESK_CHECKOUT_BRIDGE_LOADED__";
   var API_NAME = "LoopDeskCheckoutBridge";
   var DRAWER_RESUME_KEY = "loopdesk_drawer_resume_express_checkout";
@@ -52,6 +52,11 @@
   ].join(',');
   var lastSubmitter = null;
   var lock = false;
+
+  function isExpressCheckoutReady() {
+    var config = window.LoopDeskConfig && window.LoopDeskConfig.express_checkout;
+    return Boolean(config && config.enabled === true && config.ready === true && config.provider === "razorpay");
+  }
 
   function matches(element, selector) {
     try { return Boolean(element && element.matches && element.matches(selector)); } catch (_error) { return false; }
@@ -138,6 +143,7 @@
   }
 
   function open(reason) {
+    if (!isExpressCheckoutReady()) { state.fallbacks += 1; state.lastReason = "express-checkout-not-ready"; window.location.assign(FALLBACK_URL); return; }
     if (lock) return;
     lock = true;
     state.opened += 1;
@@ -160,7 +166,7 @@
 
   document.addEventListener('click', function (event) {
     var drawerCheckout = closest(event.target, '#loopdesk-cart-drawer-root [data-loopdesk-express-checkout]');
-    if (!drawerCheckout || hasMegaskaSessionToken()) return;
+    if (!drawerCheckout || hasMegaskaSessionToken() || !isExpressCheckoutReady()) return;
 
     event.preventDefault();
     event.stopPropagation();
@@ -188,6 +194,7 @@
   document.addEventListener('click', function (event) {
     var control = findCheckoutControl(event.target);
     if (!control || isExcluded(control)) return;
+    if (!isExpressCheckoutReady()) return;
     lastSubmitter = matches(control, 'button, input') ? control : null;
     state.clicks += 1;
     stopAndOpen(event, 'click');
@@ -200,6 +207,7 @@
     var directCheckout = sameOriginPath(form.getAttribute('action') || '', '/checkout') || (submitter && sameOriginPath(submitter.getAttribute && submitter.getAttribute('formaction') || '', '/checkout'));
     var checkoutSubmitter = submitter && findCheckoutControl(submitter) && !isExcluded(submitter);
     if (!directCheckout && !checkoutSubmitter) return;
+    if (!isExpressCheckoutReady()) return;
     state.submits += 1;
     stopAndOpen(event, 'submit');
   }, true);

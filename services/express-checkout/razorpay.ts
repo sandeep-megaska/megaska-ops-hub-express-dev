@@ -5,6 +5,7 @@ import { ExpressCheckoutOrderFinalizationError, finalizePrepaidExpressCheckoutOr
 import { CheckoutStateDb, transitionCheckoutIntent } from "../../lib/express-checkout/state-machine";
 import { CHECKOUT_INTENT_EXPIRY_MESSAGE, markCheckoutIntentExpiredIfNeeded } from "../../lib/express-checkout/expiry";
 import { getActiveStoreCreditReservation, releaseStoreCreditReservation } from "./store-credit";
+import { getInternalRazorpayConfig } from "../razorpay/config";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -67,9 +68,10 @@ async function resolveActiveShop(shopDomain: string) {
   return shop;
 }
 
-function getRazorpayCredentials() {
-  const keyId = String(process.env.RAZORPAY_KEY_ID || "").trim();
-  const keySecret = String(process.env.RAZORPAY_KEY_SECRET || "").trim();
+async function getRazorpayCredentials(shopId: string) {
+  const config = await getInternalRazorpayConfig(shopId);
+  const keyId = String(config.keyId || "").trim();
+  const keySecret = String(config.keySecret || "").trim();
 
   if (!keyId || !keySecret) {
     throw new ExpressCheckoutRazorpayError(503, "Could not start secure payment. Please try again.", "Razorpay credentials are not configured", "RAZORPAY_NOT_CONFIGURED");
@@ -78,8 +80,8 @@ function getRazorpayCredentials() {
   return { keyId, keySecret };
 }
 
-async function createGatewayOrder(input: { amountPaise: number; currency: string; receipt: string; notes: JsonRecord }) {
-  const { keyId, keySecret } = getRazorpayCredentials();
+async function createGatewayOrder(input: { shopId: string; amountPaise: number; currency: string; receipt: string; notes: JsonRecord }) {
+  const { keyId, keySecret } = await getRazorpayCredentials(input.shopId);
   const response = await fetch("https://api.razorpay.com/v1/orders", {
     method: "POST",
     headers: {
@@ -115,8 +117,8 @@ function signatureHash(signature: string) {
 }
 
 
-async function fetchGatewayPaymentAmountPaise(paymentId: string) {
-  const { keyId, keySecret } = getRazorpayCredentials();
+async function fetchGatewayPaymentAmountPaise(shopId: string, paymentId: string) {
+  const { keyId, keySecret } = await getRazorpayCredentials(shopId);
   const response = await fetch(`https://api.razorpay.com/v1/payments/${encodeURIComponent(paymentId)}`, {
     method: "GET",
     headers: { Authorization: `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString("base64")}` },
@@ -172,7 +174,7 @@ export async function createExpressCheckoutRazorpayOrder(params: CreateParams) {
   const storeCreditAmountPaise = Math.min(Number(storeCreditReservation?.reservedAmount || 0), Math.max(0, intent.totalAmountPaise));
   const remainingAmountPaise = Math.max(0, intent.totalAmountPaise - storeCreditAmountPaise);
   if (remainingAmountPaise <= 0) throw new ExpressCheckoutRazorpayError(409, "No online payment is required after Megaska Store Credit.", "Store Credit covers checkout", "STORE_CREDIT_FULL_COVERAGE");
-  const { keyId } = getRazorpayCredentials();
+  const { keyId } = await getRazorpayCredentials(shop.id);
 
   try {
     return await prisma.$transaction(async (tx) => {
@@ -209,7 +211,7 @@ export async function createExpressCheckoutRazorpayOrder(params: CreateParams) {
         data: { shopId: shop.id, intentId: intent.id, method: "PREPAID", status: "PENDING", amountPaise: remainingAmountPaise, currency: intent.currency },
       });
       const notes = { intentId: intent.id, shopId: shop.id, paymentId: payment.id };
-      const razorpayOrder = await createGatewayOrder({ amountPaise: remainingAmountPaise, currency: intent.currency, receipt: `megaska_express_${intent.id}`.slice(0, 40), notes: { ...notes, storeCreditAmountPaise, walletReservationId: storeCreditReservation?.id || null } });
+      const razorpayOrder = await createGatewayOrder({ shopId: shop.id, amountPaise: remainingAmountPaise, currency: intent.currency, receipt: `megaska_express_${intent.id}`.slice(0, 40), notes: { ...notes, storeCreditAmountPaise, walletReservationId: storeCreditReservation?.id || null } });
       const updatedPayment = await tx.expressCheckoutPayment.update({
         where: { id: payment.id },
         data: { razorpayOrderId: razorpayOrder.id, rawGatewayPayload: safeJson(razorpayOrder) },
@@ -322,7 +324,7 @@ export async function verifyExpressCheckoutRazorpayPayment(params: VerifyParams)
     throw new ExpressCheckoutRazorpayError(409, "Could not verify payment. Please contact support if money was deducted.", "Conflicting Razorpay payment id", "RAZORPAY_PAYMENT_CONFLICT", "RAZORPAY_VERIFY");
   }
 
-  const keySecret = String(process.env.RAZORPAY_KEY_SECRET || "").trim();
+  const { keySecret } = await getRazorpayCredentials(shop.id);
   if (!keySecret) throw new ExpressCheckoutRazorpayError(503, "Could not verify payment. Please contact support if money was deducted.", "Razorpay secret is not configured", "RAZORPAY_NOT_CONFIGURED", "RAZORPAY_VERIFY");
 
   const expected = crypto.createHmac("sha256", keySecret).update(`${params.razorpay_order_id}|${params.razorpay_payment_id}`).digest("hex");
@@ -338,7 +340,7 @@ export async function verifyExpressCheckoutRazorpayPayment(params: VerifyParams)
     throw new ExpressCheckoutRazorpayError(400, "Payment verification failed. Please retry or contact support if money was deducted.", "Invalid Razorpay signature", "RAZORPAY_SIGNATURE_INVALID", "RAZORPAY_VERIFY");
   }
 
-  const paidAmountPaise = await fetchGatewayPaymentAmountPaise(params.razorpay_payment_id);
+  const paidAmountPaise = await fetchGatewayPaymentAmountPaise(shop.id, params.razorpay_payment_id);
   if (paidAmountPaise !== null && paidAmountPaise !== payment.amountPaise) {
     await releaseStoreCreditReservation({ shopId: shop.id, customerProfileId: String(intent.customerProfileId || ""), checkoutIntentId: intent.id, reason: "razorpay-amount-mismatch" });
     console.error("[EXPRESS RAZORPAY] verify_failed", { shopId: shop.id, intentId: intent.id, paymentId: payment.id, reason: "amount_mismatch", expectedAmountPaise: payment.amountPaise, paidAmountPaise });

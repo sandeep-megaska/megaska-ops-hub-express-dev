@@ -101,7 +101,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
   const totalStartedAt = Date.now();
   const shop = await requireExpressCheckoutShop(req);
 
-  if ("error" in shop) return jsonWithCors(req, { ok: false, error: shop.error }, { status: shop.status });
+  if ("error" in shop) return jsonWithCors(req, { ok: false, code: shop.code, error: shop.error }, { status: shop.status });
 
   const auth = await requireCustomerSessionForShop(getSessionTokenFromRequest(req), shop.shopId);
 

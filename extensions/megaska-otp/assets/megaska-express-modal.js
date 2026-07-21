@@ -272,6 +272,12 @@
     const res = await fetch(url.toString(), opts);
     const data = await res.json().catch(() => null);
     if (!res.ok || data?.ok === false) {
+      if (data?.code === "EXPRESS_CHECKOUT_NOT_READY") {
+        state.error = "Express Checkout is currently unavailable. Continuing to secure checkout.";
+        render();
+        window.setTimeout(() => window.location.assign("/checkout"), 500);
+        throw new MegaskaApiError(state.error, { status: res.status, code: data.code });
+      }
       if (path.includes("/razorpay-order")) throw new MegaskaApiError(razorpayOrderCreateMessage(data), { status: res.status, stage: data?.stage || "RAZORPAY_ORDER_CREATE", code: data?.code });
       throw new MegaskaApiError(data?.message || data?.error || `Request failed (${res.status})`, { status: res.status, stage: data?.stage, code: data?.code });
     }

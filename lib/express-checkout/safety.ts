@@ -7,10 +7,12 @@ import {
   requireStorefrontShopFromRequest,
   ShopResolutionError,
 } from "../../services/shopify/shop";
+import { EXPRESS_CHECKOUT_NOT_READY, resolveExpressCheckoutReadiness } from "../../services/express-checkout/readiness";
 
 export type ExpressCheckoutSafetyError = {
   status: 401 | 403;
   error: string;
+  code?: string;
 };
 
 export type ExpressCheckoutShopContext = {
@@ -102,6 +104,11 @@ export async function requireExpressCheckoutShop(
 
   try {
     const shop = await requireStorefrontShopFromRequest(req);
+    const readiness = await resolveExpressCheckoutReadiness(shop.id);
+    if (!readiness.ready) {
+      console.info("express_checkout_shopify_fallback", { shopId: shop.id, entryPoint: req.nextUrl.pathname, ...readiness });
+      return { status: 403, code: EXPRESS_CHECKOUT_NOT_READY, error: "Express Checkout is currently unavailable. Continuing to secure checkout." };
+    }
 
     return {
       shopDomain: shop.shopDomain,

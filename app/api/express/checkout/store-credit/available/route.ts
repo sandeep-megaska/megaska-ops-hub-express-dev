@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 function jsonWithCors(req: NextRequest, body: unknown, init?: ResponseInit) { return withCors(req, NextResponse.json(body, init)); }
 export async function OPTIONS(req: NextRequest) { return handleOptions(req); }
 export async function GET(req: NextRequest) {
-  const shop = await requireExpressCheckoutShop(req); if ("error" in shop) return jsonWithCors(req, { ok: false, error: shop.error }, { status: shop.status });
+  const shop = await requireExpressCheckoutShop(req); if ("error" in shop) return jsonWithCors(req, { ok: false, code: shop.code, error: shop.error }, { status: shop.status });
   const auth = await requireCustomerSessionForShop(getSessionTokenFromRequest(req), shop.shopId); if ("error" in auth) return jsonWithCors(req, { ok: false, error: auth.error }, { status: auth.status });
   const checkoutIntentId = String(new URL(req.url).searchParams.get("checkoutIntentId") || "").trim();
   if (!checkoutIntentId) return jsonWithCors(req, { ok: false, error: "checkoutIntentId required" }, { status: 400 });
