@@ -3,8 +3,8 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
 
-const otpSource = readFileSync(new URL("../assets/megaska-otp.js", import.meta.url), "utf8");
-const authSource = readFileSync(new URL("../assets/megaska-auth.js", import.meta.url), "utf8");
+const otpSource = readFileSync(new URL("../../extensions/megaska-otp/assets/megaska-otp.js", import.meta.url), "utf8");
+const authSource = readFileSync(new URL("../../extensions/megaska-otp/assets/megaska-auth.js", import.meta.url), "utf8");
 
 function extractFunction(name) {
   const start = otpSource.indexOf(`  function ${name}(`);
