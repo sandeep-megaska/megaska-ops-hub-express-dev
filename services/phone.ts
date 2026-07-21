@@ -29,8 +29,13 @@ export function compareMegaskaPhoneIdentity(input: {
   status: PhoneMatchStatus;
   mismatchDetected: boolean;
 } {
-  const verifiedPhoneNormalized = normalizeIndianPhone(input.verifiedPhone) || "";
-  const orderPhoneNormalized = normalizeIndianPhone(input.orderPhone) || "";
+  // Identity comparison is exact. Callers must country-normalize raw Shopify values first.
+  const canonical = (value: string | null | undefined) => {
+    const trimmed = String(value || "").trim();
+    return /^\+[1-9]\d{7,14}$/.test(trimmed) ? trimmed : "";
+  };
+  const verifiedPhoneNormalized = canonical(input.verifiedPhone);
+  const orderPhoneNormalized = canonical(input.orderPhone);
 
   if (!verifiedPhoneNormalized) {
     return {

@@ -1,5 +1,5 @@
 import { normalizeShopDomain, resolveShopConfig } from "./shop-resolver";
-import { normalizeIndianPhoneToE164 } from "./admin";
+import { isCanonicalE164, shopifyPhoneSearchVariants } from "./shopify-phone-normalization";
 
 const SHOPIFY_API_VERSION = "2026-01";
 
@@ -516,9 +516,9 @@ async function fetchCustomerDashboard(input: { customerGid: string; shopDomain?:
 async function searchOrdersByIdentity(input: { shopDomain?: string | null; email?: string | null; phoneE164?: string | null }) {
   const searchTerms: string[] = [];
   const email = String(input.email || "").trim().toLowerCase();
-  const phone = normalizeIndianPhoneToE164(input.phoneE164) || String(input.phoneE164 || "").trim();
-  if (email) searchTerms.push(`email:${email}`);
-  if (phone) searchTerms.push(`phone:${phone}`);
+  const phone = isCanonicalE164(input.phoneE164) ? input.phoneE164 : null;
+  if (phone) searchTerms.push(...shopifyPhoneSearchVariants(phone).map((variant) => `phone:${variant}`));
+  else if (email) searchTerms.push(`email:${email}`);
   if (!searchTerms.length) return [];
 
   const data = await dashboardGraphql<{

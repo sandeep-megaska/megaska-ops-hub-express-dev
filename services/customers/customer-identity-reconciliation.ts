@@ -38,9 +38,10 @@ function shopify(profile: ReconciliationProfile): string | null {
 export function trustedConflicts(profiles: ReconciliationProfile[]) {
   const conflicts: string[] = [];
   const shopifyIds = new Set(profiles.map(shopify).filter(Boolean));
-  const phones = new Set(profiles.filter((p) => p.phoneVerifiedAt && p.phoneE164).map((p) => p.phoneE164));
+  // A different stored E.164 is a different identity, regardless of other matching data.
+  const phones = new Set(profiles.filter((p) => p.phoneE164).map((p) => p.phoneE164));
   if (shopifyIds.size > 1) conflicts.push("CONFLICTING_SHOPIFY_CUSTOMER_IDS");
-  if (phones.size > 1) conflicts.push("CONFLICTING_VERIFIED_PHONES");
+  if (phones.size > 1) conflicts.push("CONFLICTING_E164_PHONES");
   return conflicts;
 }
 

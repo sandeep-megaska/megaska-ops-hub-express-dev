@@ -12,6 +12,11 @@ export type CustomerIdentityOutcome = (typeof CUSTOMER_IDENTITY_OUTCOMES)[number
 export type CustomerIdentitySource = "OTP" | "SHOPIFY_ORDER" | "CHECKOUT" | "CUSTOMER_SYNC" | (string & {});
 export type CustomerIdentityMatch = "SHOPIFY_CUSTOMER_ID" | "VERIFIED_PHONE" | "VERIFIED_EMAIL";
 
+export type CanonicalCustomerIdentityInput = {
+  shopId: string;
+  phoneE164: string;
+};
+
 export type CustomerIdentityAttributes = Partial<Pick<CustomerProfile,
   "fullName" | "firstName" | "lastName" | "addressLine1" | "addressLine2" | "city" |
   "stateProvince" | "postalCode" | "countryRegion"
@@ -21,6 +26,9 @@ export interface ResolveCanonicalCustomerInput {
   shopId: string;
   source: CustomerIdentitySource;
   shopifyCustomerId?: unknown;
+  /** Already-canonical E.164. Raw/local input must be normalized before this boundary. */
+  phoneE164?: string | null;
+  /** @deprecated Migration compatibility only; must already contain canonical E.164. */
   phone?: string | null;
   phoneVerified?: boolean;
   email?: string | null;

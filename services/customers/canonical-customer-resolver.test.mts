@@ -76,3 +76,19 @@ test("wrong resource types are rejected before any profile is created", async ()
   await assert.rejects(() => state.resolver.resolveFromShopifyOrder({ shopId: "shop-a", shopifyCustomerId: "gid://shopify/Order/123" }), /canonical or verified/);
   assert.equal(state.rows.length, 0);
 });
+
+test("shop plus exact canonical E.164 is the customer identity boundary", async () => {
+  const state = repository();
+  const india = await state.resolver.resolveFromOTP({ shopId: "shop-a", phoneE164: "+919539180257" });
+  const indiaAgain = await state.resolver.resolveFromOTP({ shopId: "shop-a", phoneE164: "+919539180257" });
+  const kuwait = await state.resolver.resolveFromOTP({ shopId: "shop-a", phoneE164: "+9656046445" });
+  const otherShop = await state.resolver.resolveFromOTP({ shopId: "shop-b", phoneE164: "+919539180257" });
+  assert.equal(india.customerProfile?.id, indiaAgain.customerProfile?.id);
+  assert.notEqual(india.customerProfile?.id, kuwait.customerProfile?.id);
+  assert.notEqual(india.customerProfile?.id, otherShop.customerProfile?.id);
+});
+
+test("identity resolver rejects ambiguous local input rather than guessing India", async () => {
+  const state = repository();
+  await assert.rejects(() => state.resolver.resolveFromOTP({ shopId: "shop-a", phoneE164: "6046445" }), /canonical E\.164/);
+});
