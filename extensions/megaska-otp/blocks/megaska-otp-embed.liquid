@@ -22,12 +22,14 @@
         new CustomEvent("loopdesk:runtime-config-ready", {
           detail: {
             otpModalBranding:
-              (window.LoopDeskConfig && window.LoopDeskConfig.otpModalBranding) || null
+              (window.LoopDeskConfig && window.LoopDeskConfig.otpModalBranding) || null,
+            otpCountryPolicy:
+              (window.LoopDeskConfig && window.LoopDeskConfig.otpCountryPolicy) || null
           }
         })
       );
     }
-    if (window.LoopDeskConfig && window.LoopDeskConfig.otpModalBranding) {
+    if (window.LoopDeskConfig && window.LoopDeskConfig.otpModalBranding && window.LoopDeskConfig.otpCountryPolicy) {
       dispatchRuntimeConfigReady();
       return;
     }
@@ -37,7 +39,8 @@
       .then(function (payload) {
         if (!payload || !payload.config) return;
         window.LoopDeskConfig = Object.assign({}, window.LoopDeskConfig || {}, payload.config, {
-          otpModalBranding: Object.assign({}, (window.LoopDeskConfig && window.LoopDeskConfig.otpModalBranding) || {}, payload.config.otpModalBranding || {})
+          otpModalBranding: Object.assign({}, (window.LoopDeskConfig && window.LoopDeskConfig.otpModalBranding) || {}, payload.config.otpModalBranding || {}),
+          otpCountryPolicy: payload.config.otpCountryPolicy || (window.LoopDeskConfig && window.LoopDeskConfig.otpCountryPolicy) || null
         });
         dispatchRuntimeConfigReady();
       })

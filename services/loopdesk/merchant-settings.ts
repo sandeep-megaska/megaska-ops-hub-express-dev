@@ -5,6 +5,8 @@ import { shopifyAdminGraphql } from "../shopify/admin";
 import { cartDrawerModuleDefaults } from "../cart-intelligence/modules/defaults";
 import { normalizeCartDrawerModules } from "../cart-intelligence/modules/normalize";
 import { CART_DRAWER_MODULE_SLOTS, type CartDrawerModulesRuntime, type CartDrawerModuleSlot } from "../cart-intelligence/modules/types";
+import { type PublicOtpCountryPolicy } from "../settings/otp-country-policy-public.ts";
+import { getPublicOtpCountryPolicy } from "./otp-country-policy-runtime.ts";
 
 export const LOOPDESK_RUNTIME_CONFIG_MODULE_KEY = "loopdesk_runtime_config";
 export const CART_INTELLIGENCE_CONFIG_MODULE_KEY = "cart_intelligence_config";
@@ -146,6 +148,7 @@ export type LoopDeskPublicRuntimeConfig = Pick<
   promotions?: { rules: unknown[] };
   delhivery?: DelhiveryPublicRuntimeConfig;
   razorpay?: RazorpayPublicRuntimeConfig;
+  otpCountryPolicy: PublicOtpCountryPolicy;
 };
 
 type ShopModuleConfigDelegate = {
@@ -789,7 +792,7 @@ export function mergeLoopDeskMerchantSettings(
 
 export function toLoopDeskPublicRuntimeConfig(
   settings: LoopDeskMerchantSettings,
-): LoopDeskPublicRuntimeConfig {
+): Omit<LoopDeskPublicRuntimeConfig, "otpCountryPolicy"> {
   return {
     general: settings.general,
     branding: settings.branding,
@@ -981,14 +984,16 @@ export async function updateCartIntelligenceSettings(shopId: string, patch: unkn
 }
 
 export async function getLoopDeskRuntimeConfig(shopId: string) {
-  const [settings, cartIntelligence, promotions, delhivery, razorpay] = await Promise.all([
+  const [settings, cartIntelligence, promotions, delhivery, razorpay, otpCountryPolicy] = await Promise.all([
     getLoopDeskMerchantSettings(shopId),
     getCartIntelligenceSettings(shopId),
     getCompiledPromotionRuntime(shopId),
     getDelhiveryRuntimeConfig(shopId),
     getRazorpayRuntimeConfig(shopId),
+    getPublicOtpCountryPolicy(shopId),
   ]);
   const cartIntelligenceRuntime = toCartIntelligencePublicRuntimeConfig(cartIntelligence);
-  return { ...toLoopDeskPublicRuntimeConfig(settings), cartIntelligence: cartIntelligenceRuntime, cart_intelligence_config: cartIntelligenceRuntime, promotions, delhivery, razorpay };
+  return { ...toLoopDeskPublicRuntimeConfig(settings), cartIntelligence: cartIntelligenceRuntime, cart_intelligence_config: cartIntelligenceRuntime, promotions, delhivery, razorpay, otpCountryPolicy };
 }
+
 export const normalizeLoopDeskRuntimeConfig = normalizeLoopDeskMerchantSettings;
