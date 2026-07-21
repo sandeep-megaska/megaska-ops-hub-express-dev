@@ -1,16 +1,16 @@
 import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { compareMegaskaPhoneIdentity, normalizeIndianPhone } from "../../../../../services/phone";
+import { compareMegaskaPhoneIdentity } from "../../../../../services/phone";
 import { prisma } from "../../../../../services/db/prisma";
 import { consumeWalletReservationOnOrder } from "../../../../../services/wallet-reservation";
 import {
   isShopifyAdminConfigured,
-  normalizeIndianPhoneToE164,
   setOrderMegaskaIdentityMetafields,
   updateShopifyOrderEmail,
   updateOrderPhone,
 } from "../../../../../services/shopify/admin";
 import { normalizeShopDomain } from "../../../../../services/shopify/shop-resolver";
+import { isCanonicalE164, normalizeShopifyPhone } from "../../../../../services/shopify/shopify-phone-normalization";
 
 type ShopifyOrderWebhookPayload = {
   id?: number | string;
@@ -21,12 +21,15 @@ type ShopifyOrderWebhookPayload = {
   customer?: {
     email?: string;
     phone?: string;
+    default_address?: { country_code?: string };
   };
   shipping_address?: {
     phone?: string;
+    country_code?: string;
   };
   billing_address?: {
     phone?: string;
+    country_code?: string;
   };
   note_attributes?: Array<{ name?: string; value?: string }>;
   discount_codes?: Array<{ code?: string }>;
@@ -121,6 +124,20 @@ function resolveOrderContactPhone(payload: ShopifyOrderWebhookPayload) {
   ).trim();
 }
 
+export function resolveCanonicalOrderPhone(payload: ShopifyOrderWebhookPayload): string | null {
+  const candidates = [
+    { phone: payload.phone, countryCode: payload.shipping_address?.country_code ?? payload.billing_address?.country_code },
+    { phone: payload.shipping_address?.phone, countryCode: payload.shipping_address?.country_code },
+    { phone: payload.billing_address?.phone, countryCode: payload.billing_address?.country_code },
+    { phone: payload.customer?.phone, countryCode: payload.customer?.default_address?.country_code },
+  ];
+  for (const candidate of candidates) {
+    const result = normalizeShopifyPhone(candidate);
+    if (result.ok) return result.phoneE164;
+  }
+  return null;
+}
+
 function resolveCheckoutContactEmail(payload: ShopifyOrderWebhookPayload) {
   return String(payload.email || payload.contact_email || payload.customer?.email || "").trim();
 }
@@ -140,34 +157,21 @@ async function backfillMissingOrderEmailFromCustomerProfile(
     return;
   }
 
-  const orderPhone = String(order.phone || order.shipping_address?.phone || order.customer?.phone || "").trim();
-  if (!orderPhone) {
-    console.log("[Megaska Order Email Backfill] skipped because no phone", {
-      orderId: orderId || null,
-    });
-    return;
-  }
-
-  const normalizedPhone = normalizeIndianPhoneToE164(orderPhone);
+  const normalizedPhone = resolveCanonicalOrderPhone(order);
   if (!normalizedPhone) {
     console.log("[Megaska Order Email Backfill] skipped because no phone", {
       orderId: orderId || null,
-      phone: orderPhone,
     });
     return;
   }
 
- const customerProfile = await prisma.customerProfile.findFirst({
-  where: {
-    phoneE164: normalizedPhone,
-  },
-  orderBy: {
-    createdAt: "desc",
-  },
-  select: {
-    email: true,
-  },
-});
+  const shop = await prisma.shop.findFirst({ where: { shopDomain }, select: { id: true } });
+  if (!shop) return;
+  const customerProfile = await prisma.customerProfile.findFirst({
+    where: { shopId: shop.id, phoneE164: normalizedPhone },
+    orderBy: { createdAt: "desc" },
+    select: { email: true },
+  });
 
   const profileEmail = String(customerProfile?.email || "").trim().toLowerCase();
   if (!profileEmail) {
@@ -244,7 +248,7 @@ export async function POST(req: NextRequest) {
   const verifiedPhone = String(attributes.megaska_verified_phone || "").trim();
   const phoneVerified = String(attributes.megaska_phone_verified || "").trim() === "true";
   const authSource = String(attributes.megaska_auth_source || "otp").trim();
-  const customerProfileId = String(attributes.megaska_customer_profile_id || "").trim();
+  let customerProfileId = String(attributes.megaska_customer_profile_id || "").trim();
   const shopifyCustomerId = String(attributes.megaska_shopify_customer_id || "").trim();
   const verificationCompletedAt = String(attributes.megaska_auth_verified_at || "").trim();
 
@@ -260,11 +264,12 @@ export async function POST(req: NextRequest) {
   const codAdvancePaid = String(attributes.megaska_cod_advance_paid || "").trim() === "true";
 
   const orderContactPhone = resolveOrderContactPhone(payload);
+  const canonicalOrderPhone = resolveCanonicalOrderPhone(payload);
   const orderContactEmail = resolveCheckoutContactEmail(payload);
 
   const phoneMatch = compareMegaskaPhoneIdentity({
     verifiedPhone,
-    orderPhone: orderContactPhone,
+    orderPhone: canonicalOrderPhone,
   });
 
   console.log("[Megaska Order Identity] webhook received", {
@@ -374,7 +379,21 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const normalizedVerifiedPhone = normalizeIndianPhone(verifiedPhone) || verifiedPhone;
+    if (!isCanonicalE164(verifiedPhone)) {
+      console.warn("[Megaska Order Identity] skipped - verified phone is not canonical E.164", { orderId });
+      return NextResponse.json({ ok: true, skipped: true, reason: "invalid-verified-phone" });
+    }
+    const normalizedVerifiedPhone = verifiedPhone;
+    const tenant = await prisma.shop.findFirst({ where: { shopDomain }, select: { id: true } });
+    const exactProfiles = tenant ? await prisma.customerProfile.findMany({
+      where: { shopId: tenant.id, phoneE164: normalizedVerifiedPhone },
+      select: { id: true },
+      take: 2,
+    }) : [];
+    customerProfileId = exactProfiles.length === 1 ? exactProfiles[0].id : "";
+    if (!customerProfileId) {
+      console.warn("[Megaska Order Identity] canonical phone is unresolved or duplicated; continuing unlinked", { orderId });
+    }
     const correctionEligible = phoneMatch.status === "mismatch" || phoneMatch.status === "missing_order_phone";
 
     let correctionAttempted = false;

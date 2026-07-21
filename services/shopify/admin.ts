@@ -1,5 +1,6 @@
 import { resolveShopifyAdminAccessToken } from "./admin-token";
 import { normalizeShopDomain, resolveShopConfig } from "./shop-resolver";
+import { isCanonicalE164, shopifyPhoneSearchVariants } from "./shopify-phone-normalization";
 
 const SHOPIFY_API_VERSION = "2026-01";
 
@@ -68,11 +69,11 @@ export async function findShopifyCustomerForSync(input: {
   email?: string | null;
 }) {
   const normalizedEmail = String(input.email || "").trim().toLowerCase();
-  const normalizedPhone = normalizeIndianPhoneToE164(input.phone);
+  const normalizedPhone = isCanonicalE164(input.phone) ? input.phone : normalizeIndianPhoneToE164(input.phone);
 
   const searchTerms: string[] = [];
-  if (normalizedEmail) searchTerms.push(`email:${normalizedEmail}`);
-  if (normalizedPhone) searchTerms.push(`phone:${normalizedPhone}`);
+  if (normalizedPhone) searchTerms.push(...shopifyPhoneSearchVariants(normalizedPhone).map((phone) => `phone:${phone}`));
+  else if (normalizedEmail) searchTerms.push(`email:${normalizedEmail}`);
 
   if (!searchTerms.length) {
     throw new Error("Missing phone or email for customer sync");
@@ -560,19 +561,20 @@ export async function findShopifyCustomerIdByIdentity(
   input: ShopifyCustomerLookupInput
 ): Promise<string | null> {
   const email = normalizeEmail(input.email);
-  const phone = normalizeIndianPhoneToE164(input.phoneE164);
+  const phone = isCanonicalE164(input.phoneE164) ? input.phoneE164 : null;
   const options: AdminRequestOptions = {
     shopDomain: input.shopDomain ?? null,
   };
 
-  if (phone) {
-    const customer = await findCustomerByQuery(`phone:${phone}`, options);
+  for (const variant of phone ? shopifyPhoneSearchVariants(phone) : []) {
+    const customer = await findCustomerByQuery(`phone:${variant}`, options);
     if (customer?.id) {
       return parseCustomerId(customer.id);
     }
   }
 
-  if (email) {
+  // Email is only a lookup policy when no canonical phone identity was supplied.
+  if (!phone && email) {
     const customer = await findCustomerByQuery(`email:${email}`, options);
     if (customer?.id) {
       return parseCustomerId(customer.id);

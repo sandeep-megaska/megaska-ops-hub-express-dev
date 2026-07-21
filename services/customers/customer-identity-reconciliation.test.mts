@@ -17,8 +17,13 @@ test("canonical selection is deterministic and prioritizes an active session", (
 test("trusted conflicts block and enrichment is fill-only", () => {
   const canonical = profile("1", { phoneE164: "+911", phoneVerifiedAt: new Date() });
   const duplicate = profile("2", { phoneE164: "+912", phoneVerifiedAt: new Date(), shopifyCustomerId: "42" });
-  assert.deepEqual(trustedConflicts([canonical, duplicate]), ["CONFLICTING_VERIFIED_PHONES"]);
+  assert.deepEqual(trustedConflicts([canonical, duplicate]), ["CONFLICTING_E164_PHONES"]);
   assert.deepEqual(fillOnlyEnrichment(canonical, [duplicate]), { shopifyCustomerId: "42" });
+});
+
+test("distinct E.164 values conflict even when unverified and sharing Shopify identity", () => {
+  const profiles = [profile("1", { phoneE164: "+919876543210", shopifyCustomerId: "42" }), profile("2", { phoneE164: "+96598765432", shopifyCustomerId: "42" })];
+  assert.deepEqual(trustedConflicts(profiles), ["CONFLICTING_E164_PHONES"]);
 });
 
 test("checksum is deterministic and detects source changes", () => {

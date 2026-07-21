@@ -4,7 +4,6 @@ import {
   normalizeCountry,
   normalizeCustomerAttributes,
   normalizeEmail,
-  normalizePhone,
   normalizeShopifyCustomerId,
   normalizeWhitespace,
 } from "./customer-identity-normalization.ts";
@@ -17,6 +16,7 @@ import type {
   ResolveCanonicalCustomerInput,
 } from "./customer-identity-types.ts";
 import { diagnoseShopifyCustomerId } from "../../lib/shopify-customer-id.ts";
+import { isCanonicalE164 } from "../shopify/shopify-phone-normalization.ts";
 
 const defaultLogger: CustomerIdentityLogger = (event) => console.info(event.event, event);
 
@@ -47,8 +47,11 @@ export class CanonicalCustomerResolver {
 
     const shopifyCustomerId = normalizeShopifyCustomerId(input.shopifyCustomerId);
     const email = normalizeEmail(input.email);
-    const country = normalizeCountry(input.country) ?? "IN";
-    const phoneE164 = normalizePhone(input.phone, country);
+    const suppliedPhone = input.phoneE164 ?? input.phone ?? null;
+    if (suppliedPhone != null && !isCanonicalE164(suppliedPhone)) {
+      throw new InvalidCustomerIdentityError("phoneE164 must already be canonical E.164");
+    }
+    const phoneE164 = suppliedPhone;
     const attributes = cleanAttributes(input.customerAttributes);
     const identifiersPresent = {
       shopifyCustomerId: Boolean(shopifyCustomerId),
