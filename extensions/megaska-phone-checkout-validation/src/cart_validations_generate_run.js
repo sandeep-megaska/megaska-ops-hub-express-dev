@@ -1,78 +1,60 @@
+import { validateCheckoutPhone } from "./phone_validation.js";
+
 const PHONE_FIELD_TARGET = "$.cart.deliveryGroups[0].deliveryAddress.phone";
-const VALIDATION_MESSAGE = "MEGASKA TEST BLOCK 123";
+const MESSAGES = {
+  PHONE_REQUIRED: "Enter a mobile number for delivery updates.",
+  INVALID_PHONE: "Enter a valid mobile number for the selected country.",
+  INVALID_COUNTRY: "Enter a valid mobile number for the selected country.",
+  COUNTRY_MISMATCH: "Enter a mobile number that matches the selected delivery country.",
+};
 
-function normalizeIndianPhone(value) {
-  const raw = String(value || "").trim();
-  if (!raw) return "";
+function getCheckoutDetails(input) {
+  const cart = input?.cart;
+  const groups = Array.isArray(cart?.deliveryGroups) ? cart.deliveryGroups : [];
 
-  const digits = raw.replace(/\D/g, "");
-  if (!digits) return "";
-
-  if (digits.length === 10 && /^[6-9]\d{9}$/.test(digits)) {
-    return `+91${digits}`;
-  }
-
-  if (digits.length === 11 && /^0[6-9]\d{9}$/.test(digits)) {
-    return `+91${digits.slice(1)}`;
-  }
-
-  if (digits.length === 12 && /^91[6-9]\d{9}$/.test(digits)) {
-    return `+${digits}`;
-  }
-
-  if (digits.length === 13 && /^091[6-9]\d{9}$/.test(digits)) {
-    return `+91${digits.slice(3)}`;
-  }
-
-  if (digits.length === 14 && /^0091[6-9]\d{9}$/.test(digits)) {
-    return `+91${digits.slice(4)}`;
-  }
-
-  return "";
-}
-
-function getTrustedPhone(input) {
-  return String(input?.cart?.trustedPhone?.value || "").trim();
-}
-
-function getTrustedPhoneVerifiedFlag(input) {
-  const raw = String(input?.cart?.trustedPhoneVerified?.value || "")
-    .trim()
-    .toLowerCase();
-  return raw === "true";
-}
-
-function getCheckoutPhone(input) {
-  const groups = Array.isArray(input?.cart?.deliveryGroups) ? input.cart.deliveryGroups : [];
-
+  // Keep the phone and country from the same first delivery address.
   for (const group of groups) {
-    const phone = String(group?.deliveryAddress?.phone || "").trim();
-    if (phone) return phone;
+    const address = group?.deliveryAddress;
+    if (address?.countryCode) {
+      return {
+        countryCode: address.countryCode,
+        phone: String(address.phone || cart?.buyerIdentity?.phone || "").trim(),
+      };
+    }
   }
 
-  return String(input?.cart?.buyerIdentity?.phone || "").trim();
-}
+  const billingAddress = cart?.billingAddress;
+  if (billingAddress?.countryCode) {
+    return {
+      countryCode: billingAddress.countryCode,
+      phone: String(billingAddress.phone || cart?.buyerIdentity?.phone || "").trim(),
+    };
+  }
 
-function validationResult(errors) {
+  const deliveryPhone = groups
+    .map((group) => String(group?.deliveryAddress?.phone || "").trim())
+    .find(Boolean);
   return {
-    operations: [
-      {
-        validationAdd: {
-          errors,
-        },
-      },
-    ],
+    countryCode: null,
+    phone: deliveryPhone || String(cart?.buyerIdentity?.phone || "").trim(),
   };
 }
 
-function validationError(message, target = PHONE_FIELD_TARGET) {
-  return { message, target };
+function validationResult(errors) {
+  return { operations: [{ validationAdd: { errors } }] };
 }
 
-/**
- * @param {unknown} input
- * @returns {{operations: Array<{validationAdd: {errors: Array<{message: string; target?: string}>}}>} }
- */
+/** @param {unknown} input */
 export function cartValidationsGenerateRun(input) {
-  return validationResult([validationError(VALIDATION_MESSAGE)]);
+  const result = validateCheckoutPhone(getCheckoutDetails(input));
+
+  // Checkout supplies address fields incrementally. Defer until country is known.
+  if (result.valid || result.reason === "COUNTRY_REQUIRED") return validationResult([]);
+
+  return validationResult([
+    {
+      message: MESSAGES[result.reason] || MESSAGES.INVALID_PHONE,
+      target: PHONE_FIELD_TARGET,
+    },
+  ]);
 }
