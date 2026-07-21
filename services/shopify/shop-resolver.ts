@@ -155,6 +155,7 @@ function resolved(shop: ShopRow): ResolvedShopConfig {
 }
 
 export async function getDefaultShopFromConfig() {
+  if (process.env.NODE_ENV === "production" || process.env.VERCEL_ENV === "production") return null;
   const envDomain = normalizeShopDomain(trimEnv("SHOPIFY_STORE_DOMAIN"));
   if (!envDomain) return null;
 
@@ -162,10 +163,7 @@ export async function getDefaultShopFromConfig() {
   if (existing) return existing;
 
   const envAdminToken = trimEnv("SHOPIFY_ADMIN_ACCESS_TOKEN") || null;
-  const envStorefrontToken =
-    process.env.NODE_ENV === "production"
-      ? null
-      : trimEnv("SHOPIFY_STOREFRONT_ACCESS_TOKEN") || null;
+  const envStorefrontToken = trimEnv("SHOPIFY_STOREFRONT_ACCESS_TOKEN") || null;
 
   const rows = await prisma.$queryRawUnsafe<ShopRow[]>(
     `INSERT INTO "Shop" ("id", "shopDomain", "accessToken", "storefrontAccessToken", "isActive", "installedAt", "createdAt", "updatedAt")
@@ -212,9 +210,9 @@ export async function resolveShopConfig(
   return {
     id: null,
     shopDomain: envDomain,
-    accessToken: trimEnv("SHOPIFY_ADMIN_ACCESS_TOKEN") || null,
+    accessToken: null,
     accessTokenEncrypted: null,
-    accessTokenDirect: trimEnv("SHOPIFY_ADMIN_ACCESS_TOKEN") || null,
+    accessTokenDirect: null,
     storefrontAccessToken: envToken,
     storefrontCredentialSource: envToken ? "env_dev_fallback" : "none",
   };

@@ -30,7 +30,17 @@ export class CodAdvanceRazorpayOrderError extends Error {
   }
 }
 
-function key(deps: Deps) { const keyId = String(deps.keyId ?? process.env.RAZORPAY_KEY_ID ?? "").trim(); const keySecret = String(deps.keySecret ?? process.env.RAZORPAY_KEY_SECRET ?? "").trim(); if (!keyId || !keySecret) throw new CodAdvanceRazorpayOrderError(503, "RAZORPAY_NOT_CONFIGURED", "Razorpay is not configured"); return { keyId, keySecret }; }
+async function credentials(shopId: string, deps: Deps) {
+  if (deps.keyId !== undefined || deps.keySecret !== undefined) {
+    const keyId = String(deps.keyId ?? "").trim();
+    const keySecret = String(deps.keySecret ?? "").trim();
+    if (keyId && keySecret) return { keyId, keySecret };
+  }
+  const { getInternalRazorpayConfig } = await import("../razorpay/config");
+  const config = await getInternalRazorpayConfig(shopId);
+  if (!config.enabled || !config.keyId || !config.keySecret) throw new CodAdvanceRazorpayOrderError(503, "RAZORPAY_NOT_CONFIGURED", "Razorpay is not configured");
+  return { keyId: config.keyId, keySecret: config.keySecret };
+}
 function safe(value: unknown) { return JSON.parse(JSON.stringify(value ?? null)); }
 function redactedOrderPayload(order: any) { return safe({ id: order?.id || null, amount: order?.amount ?? null, currency: order?.currency || null, status: order?.status || null, receipt: order?.receipt || null }); }
 function receipt(input: CodAdvanceRazorpayOrderInput, codAdvanceIntentId: string) { return `codadv_${input.checkoutIntentId}_${codAdvanceIntentId}`.replace(/[^a-zA-Z0-9_]/g, "").slice(0, 40); }
@@ -54,8 +64,8 @@ async function loadAndValidate(db: any, input: CodAdvanceRazorpayOrderInput, pol
   return { checkout, cod };
 }
 
-async function createProviderOrder(input: CodAdvanceRazorpayOrderInput, cod: any, paymentId: string, deps: Deps) {
-  const { keyId, keySecret } = key(deps); const fetcher = deps.fetch || fetch;
+async function createProviderOrder(input: CodAdvanceRazorpayOrderInput, cod: any, paymentId: string, deps: Deps, merchantCredentials: { keyId: string; keySecret: string }) {
+  const { keyId, keySecret } = merchantCredentials; const fetcher = deps.fetch || fetch;
   const response = await fetcher("https://api.razorpay.com/v1/orders", { method: "POST", headers: { Authorization: `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString("base64")}`, "Content-Type": "application/json" }, body: JSON.stringify({ amount: cod.advanceAmountPaise, currency: cod.currency, receipt: receipt(input, cod.id), notes: { purpose: "COD_ADVANCE", shopId: input.shopId, checkoutIntentId: input.checkoutIntentId, codAdvanceIntentId: cod.id, paymentRecordId: paymentId } }) });
   const payload = await response.json().catch(() => null) as any;
   if (!response.ok || !payload?.id) throw new CodAdvanceRazorpayOrderError(503, "RAZORPAY_ORDER_CREATION_FAILED", "Razorpay order creation failed");
@@ -65,6 +75,7 @@ async function createProviderOrder(input: CodAdvanceRazorpayOrderInput, cod: any
 export async function createCodAdvanceRazorpayOrder(input: CodAdvanceRazorpayOrderInput, deps: Deps = {}): Promise<CodAdvanceRazorpayOrderOutput> {
   const db: any = deps.db || (await import("../db/prisma")).prisma; const now = deps.now?.() || new Date(); const resolvePolicy = deps.resolvePolicy || resolveExpressCheckoutCodPolicy;
   const policy = await resolvePolicy(input, db, { audit: deps.audit });
+  const merchantCredentials = await credentials(input.shopId, deps);
   const first = await loadAndValidate(db, input, policy, now);
   const fresh = await db.codAdvanceIntent.findFirst({ where: { id: first.cod.id, shopId: input.shopId }, select: { pricingFingerprint: true, settingsVersion: true, advanceAmountPaise: true, codBalanceAmountPaise: true } });
   if (!fresh || fresh.pricingFingerprint !== first.cod.pricingFingerprint || fresh.settingsVersion !== first.cod.settingsVersion || fresh.advanceAmountPaise !== first.cod.advanceAmountPaise || fresh.codBalanceAmountPaise !== first.cod.codBalanceAmountPaise) throw new CodAdvanceRazorpayOrderError(409, "COD_ADVANCE_CHANGED", "COD advance changed");
@@ -80,12 +91,12 @@ export async function createCodAdvanceRazorpayOrder(input: CodAdvanceRazorpayOrd
     const payment = await tx.expressCheckoutPayment.create({ data: { shopId: input.shopId, intentId: input.checkoutIntentId, method: "COD", purpose: "COD_ADVANCE", status: "PENDING", amountPaise: first.cod.advanceAmountPaise, currency: first.cod.currency } });
     return { kind: "new", payment };
   });
-  const out = (payment: any, reused: boolean): CodAdvanceRazorpayOrderOutput => ({ razorpayOrder: { id: payment.razorpayOrderId, amount: first.cod.advanceAmountPaise, currency: first.cod.currency, keyId: key(deps).keyId }, cod: { codAdvanceIntentId: first.cod.id, advanceAmountPaise: first.cod.advanceAmountPaise, codBalanceAmountPaise: first.cod.codBalanceAmountPaise, orderTotalPaise: first.cod.orderAmountPaise, storeCreditAppliedPaise: first.cod.storeCreditAppliedPaise || 0 }, paymentId: payment.id, reused });
+  const out = (payment: any, reused: boolean): CodAdvanceRazorpayOrderOutput => ({ razorpayOrder: { id: payment.razorpayOrderId, amount: first.cod.advanceAmountPaise, currency: first.cod.currency, keyId: merchantCredentials.keyId }, cod: { codAdvanceIntentId: first.cod.id, advanceAmountPaise: first.cod.advanceAmountPaise, codBalanceAmountPaise: first.cod.codBalanceAmountPaise, orderTotalPaise: first.cod.orderAmountPaise, storeCreditAppliedPaise: first.cod.storeCreditAppliedPaise || 0 }, paymentId: payment.id, reused });
   if (reserved.kind === "reused") { await audit(deps, "cod_advance.razorpay_order.reused", "ExpressCheckoutPayment", reserved.payment.id, { shopId: input.shopId, checkoutIntentId: input.checkoutIntentId }); return out(reserved.payment, true); }
   if (reserved.kind === "in_progress") { await audit(deps, "cod_advance.payment_in_progress", "ExpressCheckoutPayment", reserved.payment.id, { shopId: input.shopId, checkoutIntentId: input.checkoutIntentId }); throw new CodAdvanceRazorpayOrderError(409, "PAYMENT_IN_PROGRESS", "Payment is already in progress"); }
   await audit(deps, "cod_advance.payment_attempt.reserved", "ExpressCheckoutPayment", reserved.payment.id, { shopId: input.shopId, checkoutIntentId: input.checkoutIntentId, codAdvanceIntentId: first.cod.id });
   let provider;
-  try { provider = await createProviderOrder(input, first.cod, reserved.payment.id, deps); }
+  try { provider = await createProviderOrder(input, first.cod, reserved.payment.id, deps, merchantCredentials); }
   catch (e) { await db.$transaction((tx: any) => tx.expressCheckoutPayment.update({ where: { id: reserved.payment.id }, data: { status: "FAILED", failureReason: "razorpay_order_creation_failed" } })); await audit(deps, "cod_advance.razorpay_order.failed", "ExpressCheckoutPayment", reserved.payment.id, { shopId: input.shopId, checkoutIntentId: input.checkoutIntentId }); throw e instanceof CodAdvanceRazorpayOrderError ? e : new CodAdvanceRazorpayOrderError(503, "RAZORPAY_ORDER_CREATION_FAILED", "Razorpay order creation failed"); }
   const providerAmount = Number(provider.order.amount); const providerCurrency = String(provider.order.currency || "");
   if (!provider.order.id || providerAmount !== first.cod.advanceAmountPaise || providerCurrency.toUpperCase() !== String(first.cod.currency).toUpperCase()) { await db.$transaction((tx: any) => tx.expressCheckoutPayment.update({ where: { id: reserved.payment.id }, data: { status: "FAILED", providerAmountPaise: Number.isFinite(providerAmount) ? providerAmount : null, providerCurrency: providerCurrency || null, rawGatewayPayload: redactedOrderPayload(provider.order), failureReason: "razorpay_order_validation_failed" } })); await audit(deps, "cod_advance.razorpay_order.failed", "ExpressCheckoutPayment", reserved.payment.id, { shopId: input.shopId, checkoutIntentId: input.checkoutIntentId }); throw new CodAdvanceRazorpayOrderError(503, "RAZORPAY_ORDER_CREATION_FAILED", "Razorpay order creation failed"); }

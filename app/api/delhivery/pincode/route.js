@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { getInternalDelhiveryConfig } from "../../../../services/delhivery/config";
+import { getShopByDomain, normalizeShopDomain } from "../../../../services/shopify/shop";
 
 function withCors(response) {
   response.headers.set("Access-Control-Allow-Origin", "*");
@@ -45,20 +47,25 @@ async function handlePincode(req) {
   }
 
   try {
-    const token = (process.env.DELHIVERY_API_TOKEN || "").trim();
-    const baseUrl =
-      process.env.DELHIVERY_PINCODE_URL ||
-      "https://track.delhivery.com/c/api/pin-codes/json/?filter_codes=pin_code";
-    const originPin = process.env.DELHIVERY_ORIGIN_PIN;
-    const tatBaseUrl =
-      process.env.DELHIVERY_TAT_URL ||
-      "https://track.delhivery.com/api/dc/expected_tat";
+    const requestUrl = new URL(req.url);
+    const shopDomain = normalizeShopDomain(
+      req.headers.get("x-shopify-shop-domain") || requestUrl.searchParams.get("shop")
+    );
+    const shop = shopDomain ? await getShopByDomain(shopDomain) : null;
+    if (!shop?.id || !shop.isActive || shop.uninstalledAt) {
+      return withCors(NextResponse.json({ ok: false, error: "SHOP_UNRESOLVED" }, { status: 400 }));
+    }
+    const config = await getInternalDelhiveryConfig(shop.id);
+    const token = config.apiToken;
+    const baseUrl = "https://track.delhivery.com/c/api/pin-codes/json/?filter_codes=pin_code";
+    const originPin = config.originPincode;
+    const tatBaseUrl = "https://track.delhivery.com/api/dc/expected_tat";
 
-    if (!token) {
+    if (!config.enabled || !token) {
       return withCors(
         NextResponse.json(
-          { ok: false, error: "Delhivery token not configured" },
-          { status: 500 }
+          { ok: false, error: "DELHIVERY_NOT_CONFIGURED" },
+          { status: 503 }
         )
       );
     }

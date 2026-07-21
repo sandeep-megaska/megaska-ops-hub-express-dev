@@ -71,13 +71,6 @@ function buildCartIdFromToken(tokenRaw: string) {
   return `gid://shopify/Cart/${token}`;
 }
 
-function isConfigured() {
-  return Boolean(
-    String(process.env.SHOPIFY_STORE_DOMAIN || "").trim() &&
-      String(process.env.SHOPIFY_STOREFRONT_ACCESS_TOKEN || "").trim()
-  );
-}
-
 type StorefrontRequestOptions = {
   shopDomain?: string | null;
 };
@@ -89,7 +82,7 @@ async function storefrontGraphql<T>(
 ): Promise<StorefrontGraphqlEnvelope<T>> {
   const shopConfig = await resolveShopConfig(normalizeShopDomain(options?.shopDomain));
   const shopDomain = shopConfig.shopDomain;
-  const token = shopConfig.storefrontAccessToken || String(process.env.SHOPIFY_STOREFRONT_ACCESS_TOKEN || "").trim();
+  const token = shopConfig.storefrontAccessToken;
 
   if (!shopDomain || !token) {
     return {
@@ -119,7 +112,10 @@ async function storefrontGraphql<T>(
 }
 
 export function isShopifyStorefrontConfigured() {
-  return isConfigured();
+  // Configuration is tenant-scoped and therefore can only be established while
+  // resolving a shop. Kept for compatibility with callers that use this as a
+  // platform-level preflight.
+  return false;
 }
 
 export function resolveCartId(input: { cartId?: string | null; cartToken?: string | null }) {

@@ -108,6 +108,7 @@ export async function POST(
     const amount = existingPayment?.amount || REVERSE_PICKUP_FEE_PAISE;
     const expiresAt = existingPayment?.expiresAt || getReversePickupPaymentExpiresAt();
     const paymentLink = await createReversePickupPaymentLink({
+      shopId: shop.id,
       requestId: requestRow.id,
       customerName: requestRow.customerNameSnapshot,
       customerPhone: requestRow.customerPhoneSnapshot,
