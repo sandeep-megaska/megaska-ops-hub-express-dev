@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "../../../../services/db/prisma";
 import { withCors, handleOptions } from "../../_lib/cors";
+import { sendOtpWithTwilio } from "../../../../services/auth/otp";
 import {
-  normalizeIndianPhone,
-  sendOtpWithTwilio,
-} from "../../../../services/auth/otp";
+  OtpPhonePolicyError,
+  resolveOtpPhoneForShop,
+} from "../../../../services/auth/otp-phone-policy";
 import { resolveOtpProviderForShop } from "../../../../services/auth/otp-provider-resolver";
 import { recordAcceptedOtpRequestUsage } from "../../../../services/usage/otp-usage";
 import {
@@ -100,23 +101,11 @@ export async function POST(req: NextRequest) {
     const shop = await requireStorefrontShopFromRequest(req);
 
     const body = await req.json();
-    const phoneRaw = String(body?.phone ?? "").trim();
-
-    if (!phoneRaw) {
-      return withCors(
-        req,
-        NextResponse.json({ error: "Phone required" }, { status: 400 })
-      );
-    }
-
-    const phoneE164 = normalizeIndianPhone(phoneRaw);
-
-    if (!phoneE164) {
-      return withCors(
-        req,
-        NextResponse.json({ error: "Invalid phone format" }, { status: 400 })
-      );
-    }
+    const { phoneE164 } = await resolveOtpPhoneForShop({
+      shopId: shop.id,
+      phone: body?.phone,
+      countryCode: body?.countryCode,
+    });
 
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
     const resolution = await resolveOtpProviderForShop(shop.id);
@@ -181,6 +170,15 @@ export async function POST(req: NextRequest) {
       );
     }
   } catch (error) {
+    if (error instanceof OtpPhonePolicyError) {
+      return withCors(
+        req,
+        NextResponse.json(
+          { error: error.message, code: error.code },
+          { status: error.status },
+        ),
+      );
+    }
     console.error("[OTP REQUEST ERROR]", error);
 
     const status =
