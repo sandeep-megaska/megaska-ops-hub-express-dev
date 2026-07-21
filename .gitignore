@@ -52,3 +52,4 @@ extensions/loopdesk-discount-function/dist/function.wasm
 extensions/*/node_modules/
 extensions/loopdesk-discount-function/dist/function.js
 extensions/loopdesk-discount-function/dist/javy-entry.js
+.env*.local
