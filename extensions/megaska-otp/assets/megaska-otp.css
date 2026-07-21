@@ -571,18 +571,48 @@
   line-height: 1;
 }
 
-.megaska-account-fallback__icon svg {
-  width: 18px;
-  height: 18px;
-  fill: currentColor;
+.megaska-account-fallback--desktop {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  min-height: 36px;
+  margin-inline-start: 6px;
+  padding: 0;
+  box-sizing: border-box;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  gap: 0;
+  line-height: 1;
+  vertical-align: middle;
+  text-decoration: none;
+  cursor: pointer;
+  font-size: 0;
 }
 
-.megaska-account-fallback--desktop {
-  color: #000;
-  gap: 0;
-  min-width: 18px;
-  min-height: 18px;
-  font-size: 0;
+.megaska-account-fallback--desktop .megaska-account-fallback__icon svg {
+  display: block;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+}
+
+.megaska-account-fallback--desktop:hover {
+  background: rgba(127, 127, 127, 0.1);
+}
+
+.megaska-account-fallback--desktop:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+.megaska-account-fallback--desktop:active {
+  background: rgba(127, 127, 127, 0.18);
 }
 
 .megaska-account-fallback--desktop .megaska-account-fallback__label {

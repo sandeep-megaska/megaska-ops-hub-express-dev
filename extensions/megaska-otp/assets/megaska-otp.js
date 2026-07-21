@@ -3238,7 +3238,7 @@ function consumePendingAccountRedirect() {
   link.setAttribute("data-megaska-fallback-account", "desktop");
   link.setAttribute("aria-label", "My account");
   link.innerHTML =
-    '<span class="megaska-account-fallback__icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false" aria-hidden="true"><path d="M12 12.5a5 5 0 1 0 0-10 5 5 0 0 0 0 10Zm0 2.5c-4.3 0-8.5 2.2-8.5 5v1.5c0 .6.4 1 1 1h15c.6 0 1-.4 1-1V20c0-2.8-4.2-5-8.5-5Z"/></svg></span><span class="megaska-visually-hidden">My account</span>';
+    '<span class="megaska-account-fallback__icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" focusable="false" aria-hidden="true"><circle cx="12" cy="8" r="3.25"></circle><path d="M5.75 19c.45-3.65 2.55-5.5 6.25-5.5s5.8 1.85 6.25 5.5"></path></svg></span><span class="megaska-visually-hidden">My account</span>';
   return link;
 }
 
