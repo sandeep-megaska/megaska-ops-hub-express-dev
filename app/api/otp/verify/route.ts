@@ -8,10 +8,13 @@ import {
 } from "../../../../services/auth/session";
 import { withCors, handleOptions } from "../../_lib/cors";
 import {
-  normalizeIndianPhone,
   verifyOtpWithMsg91,
   verifyOtpWithTwilio,
 } from "../../../../services/auth/otp";
+import {
+  normalizeOtpPhoneForVerification,
+  OtpPhonePolicyError,
+} from "../../../../services/auth/otp-phone-policy";
 import {
   ShopResolutionError,
   requireStorefrontShopFromRequest,
@@ -27,29 +30,18 @@ export async function POST(req: NextRequest) {
     const shop = await requireStorefrontShopFromRequest(req);
 
     const body = await req.json();
-    const phoneRaw = String(body?.phone ?? "").trim();
     const otpRaw = String(body?.otp ?? "").trim();
 
-    if (!phoneRaw) {
-      return withCors(
-        req,
-        NextResponse.json({ error: "Phone required" }, { status: 400 })
-      );
-    }
+    const { phoneE164 } = await normalizeOtpPhoneForVerification({
+      shopId: shop.id,
+      phone: body?.phone,
+      countryCode: body?.countryCode,
+    });
 
     if (!otpRaw) {
       return withCors(
         req,
         NextResponse.json({ error: "OTP required" }, { status: 400 })
-      );
-    }
-
-    const phoneE164 = normalizeIndianPhone(phoneRaw);
-
-    if (!phoneE164) {
-      return withCors(
-        req,
-        NextResponse.json({ error: "Invalid phone format" }, { status: 400 })
       );
     }
 
@@ -318,6 +310,15 @@ export async function POST(req: NextRequest) {
 
     return withCors(req, response);
   } catch (error) {
+    if (error instanceof OtpPhonePolicyError) {
+      return withCors(
+        req,
+        NextResponse.json(
+          { error: error.message, code: error.code },
+          { status: error.status },
+        ),
+      );
+    }
     console.error("[OTP VERIFY ERROR]", error);
 
     const status =

@@ -16,5 +16,12 @@ normalization only to derive safe output metadata; it does not redefine accepted
 
 This module validates one number against one selected country. Merchant country allow-list
 enforcement remains outside the module, and it does not load merchant settings, a tenant, or a
-database. No OTP request or verification route consumes this service yet, and international OTP
-delivery is **not active**.
+database.
+
+The OTP API boundary in `services/auth/otp-phone-policy.ts` now composes this normalizer with the
+resolved merchant settings. OTP requests default an omitted country to `IN`, authorize that exact
+country against the merchant allow-list before normalizing the phone, and never infer another
+country from a `+` number. Verification uses the same strict country/phone normalization but does
+not re-authorize the current allow-list, so a pending challenge remains verifiable after a merchant
+policy change. The storefront remains India-only and continues omitting `countryCode`; international
+support is active only for API callers that explicitly submit a permitted ISO country code.
