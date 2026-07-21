@@ -76,10 +76,63 @@ test("request and verification payloads include country and verification uses th
 });
 
 test("runtime policy updates are gated to phone entry before a request snapshot", () => {
-  const refresh = extractFunction("refreshOtpCountryPolicy");
-  assert.match(refresh, /state\.step !== "phone"/);
-  assert.match(refresh, /state\.otpRequestCountryCode/);
+  const applyPolicy = extractFunction("applyCountryPolicyToCurrentPhoneStep");
+  assert.match(applyPolicy, /state\.step !== "phone"/);
+  assert.match(applyPolicy, /state\.otpRequestCountryCode/);
   assert.match(otpSource, /loopdesk:runtime-config-ready/);
+});
+
+function createPolicyRuntime() {
+  const runtime = { Set, window: { LoopDeskConfig: {} } };
+  vm.runInNewContext(`
+    const INDIA_OTP_COUNTRY = { iso2: "IN", name: "India", dialCode: "+91", flag: "🇮🇳" };
+    const INTERNATIONAL_PHONE_MAX_LENGTH = 20;
+    let cachedOtpCountryPolicy = null;
+    let otpRuntimePolicyReady = false;
+    function applyCountryPolicyToCurrentPhoneStep() {}
+    ${helperSource}
+    this.policyRuntime = { resolveOtpCountryPolicy, setCachedOtpCountryPolicy };
+  `, runtime);
+  return runtime;
+}
+
+test("a valid runtime policy is cached and missing runtime data cannot downgrade it", () => {
+  const runtime = createPolicyRuntime();
+  runtime.window.LoopDeskConfig.otpCountryPolicy = {
+    defaultCountryCode: "KW",
+    allowedCountries: [KUWAIT, { iso2: "IN", name: "India", dialCode: "+91", flag: "🇮🇳" }],
+  };
+  assert.equal(runtime.policyRuntime.resolveOtpCountryPolicy().defaultCountryCode, "KW");
+  delete runtime.window.LoopDeskConfig.otpCountryPolicy;
+  const cached = plain(runtime.policyRuntime.resolveOtpCountryPolicy());
+  assert.equal(cached.defaultCountryCode, "KW");
+  assert.deepEqual(cached.allowedCountries.map((country) => country.iso2), ["KW", "IN"]);
+});
+
+test("a fresh page without runtime policy retains the India fallback", () => {
+  const runtime = createPolicyRuntime();
+  assert.equal(runtime.policyRuntime.resolveOtpCountryPolicy().defaultCountryCode, "IN");
+});
+
+test("modal hydration is bounded and every reset restores the effective merchant default", () => {
+  const openModal = extractFunction("openModal");
+  const resetModalState = extractFunction("resetModalState");
+  assert.match(openModal, /OTP_POLICY_HYDRATION_TIMEOUT_MS/);
+  assert.match(openModal, /otpPolicyHydrating = true/);
+  assert.match(openModal, /hasUsableOtpCountryPolicy\(window\.LoopDeskConfig\?\.otpCountryPolicy\)/);
+  assert.match(resetModalState, /state\.otpCountryPolicy = resolveOtpCountryPolicy\(\)/);
+  assert.match(resetModalState, /state\.selectedOtpCountryCode = state\.otpCountryPolicy\.defaultCountryCode/);
+  assert.match(resetModalState, /state\.countryMenuOpen = false/);
+  assert.match(resetModalState, /state\.otpRequestCountryCode = preservePhone \? state\.otpRequestCountryCode : ""/);
+});
+
+test("the page cache survives modal reset and delayed policy application cannot alter a frozen request", () => {
+  const resetModalState = extractFunction("resetModalState");
+  const applyPolicy = extractFunction("applyCountryPolicyToCurrentPhoneStep");
+  assert.doesNotMatch(resetModalState, /cachedOtpCountryPolicy\s*=/);
+  assert.doesNotMatch(resetModalState, /otpRuntimePolicyReady\s*=/);
+  assert.match(applyPolicy, /state\.otpRequestCountryCode/);
+  assert.match(otpSource, /requestOtp\(state\.otpRequestPhoneInput, state\.otpRequestCountryCode\)/);
 });
 
 test("protected OTP continuation and endpoint behavior remains present", () => {

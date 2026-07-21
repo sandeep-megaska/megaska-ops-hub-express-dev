@@ -5,6 +5,11 @@
   const COUNTRY_REGION = "India";
   const INDIA_OTP_COUNTRY = Object.freeze({ iso2: "IN", name: "India", dialCode: "+91", flag: "🇮🇳" });
   const INTERNATIONAL_PHONE_MAX_LENGTH = 20;
+  const OTP_POLICY_HYDRATION_TIMEOUT_MS = 400;
+  let cachedOtpCountryPolicy = null;
+  let otpRuntimePolicyReady = false;
+  let modalInteractionId = 0;
+  let policyHydrationTimerId = null;
 
   function sanitizeOtpCountryPolicy(policy) {
     const seen = new Set();
@@ -30,8 +35,39 @@
     return { defaultCountryCode, allowedCountries };
   }
 
+  function hasUsableOtpCountryPolicy(policy) {
+    return Array.isArray(policy?.allowedCountries) && policy.allowedCountries.some((entry) => {
+      const iso2 = String(entry?.iso2 || "").trim().toUpperCase();
+      const name = String(entry?.name || "").trim();
+      const dialCode = String(entry?.dialCode || "").trim();
+      const flag = String(entry?.flag || "").trim();
+      return /^[A-Z]{2}$/.test(iso2) && Boolean(name) && /^\+\d+$/.test(dialCode) && Boolean(flag);
+    });
+  }
+
+  function cloneOtpCountryPolicy(policy) {
+    return {
+      defaultCountryCode: policy.defaultCountryCode,
+      allowedCountries: policy.allowedCountries.map((country) => ({ ...country })),
+    };
+  }
+
+  function setCachedOtpCountryPolicy(rawPolicy, options) {
+    if (!hasUsableOtpCountryPolicy(rawPolicy)) return null;
+    const policy = sanitizeOtpCountryPolicy(rawPolicy);
+    cachedOtpCountryPolicy = cloneOtpCountryPolicy(policy);
+    otpRuntimePolicyReady = true;
+    if (options?.applyToModal !== false) applyCountryPolicyToCurrentPhoneStep(policy);
+    return cloneOtpCountryPolicy(policy);
+  }
+
   function resolveOtpCountryPolicy() {
-    return sanitizeOtpCountryPolicy(window.LoopDeskConfig && window.LoopDeskConfig.otpCountryPolicy);
+    const runtimePolicy = window.LoopDeskConfig && window.LoopDeskConfig.otpCountryPolicy;
+    if (hasUsableOtpCountryPolicy(runtimePolicy)) {
+      return setCachedOtpCountryPolicy(runtimePolicy, { applyToModal: false });
+    }
+    if (otpRuntimePolicyReady && cachedOtpCountryPolicy) return cloneOtpCountryPolicy(cachedOtpCountryPolicy);
+    return sanitizeOtpCountryPolicy(undefined);
   }
 
   function sanitizePhoneInputForCountry(value, countryCode) {
@@ -101,6 +137,8 @@
   otpRequestCountryCode: "",
   otpRequestPhoneE164: "",
   countryMenuOpen: false,
+  countrySelectionTouched: false,
+  otpPolicyHydrating: false,
   otpDigits: ["", "", "", ""],
   requesting: false,
   verifying: false,
@@ -340,6 +378,8 @@
     state.otpRequestCountryCode = preservePhone ? state.otpRequestCountryCode : "";
     state.otpRequestPhoneE164 = preservePhone ? state.otpRequestPhoneE164 : "";
     state.countryMenuOpen = false;
+    state.countrySelectionTouched = false;
+    state.otpPolicyHydrating = false;
 
     clearResendTimer();
     state.step = preservePhone && savedPhone ? "otp" : "phone";
@@ -510,6 +550,7 @@
   function selectOtpCountry(countryCode) {
     if (state.step !== "phone" || state.otpRequestCountryCode || !getOtpCountry(countryCode)) return;
     state.selectedOtpCountryCode = countryCode;
+    state.countrySelectionTouched = true;
     state.phoneDigits = sanitizePhoneInputForCountry(state.phoneDigits, countryCode);
     state.countryMenuOpen = false;
     state.errorMessage = "";
@@ -573,14 +614,29 @@
     control.appendChild(menu);
   }
 
-  function refreshOtpCountryPolicy() {
+  function applyCountryPolicyToCurrentPhoneStep(policy) {
     if (state.step !== "phone" || state.requesting || state.otpRequestCountryCode) return false;
-    state.otpCountryPolicy = resolveOtpCountryPolicy();
-    state.selectedOtpCountryCode = state.otpCountryPolicy.defaultCountryCode;
+    const currentCountryAllowed = policy.allowedCountries.some((country) => country.iso2 === state.selectedOtpCountryCode);
+    state.otpCountryPolicy = cloneOtpCountryPolicy(policy);
+    if (!state.countrySelectionTouched && !state.phoneDigits || !currentCountryAllowed) {
+      state.selectedOtpCountryCode = policy.defaultCountryCode;
+    }
     state.phoneDigits = sanitizePhoneInputForCountry(state.phoneDigits, state.selectedOtpCountryCode);
     state.countryMenuOpen = false;
+    state.otpPolicyHydrating = false;
+    if (policyHydrationTimerId) {
+      clearTimeout(policyHydrationTimerId);
+      policyHydrationTimerId = null;
+    }
     if (state.isOpen) renderStep();
     return true;
+  }
+
+  function refreshOtpCountryPolicy(rawPolicy) {
+    const policy = rawPolicy
+      ? setCachedOtpCountryPolicy(rawPolicy, { applyToModal: false })
+      : resolveOtpCountryPolicy();
+    return policy ? applyCountryPolicyToCurrentPhoneStep(policy) : false;
   }
 
   function ensureModal() {
@@ -1016,6 +1072,7 @@
 
   const selectedCountry = getSelectedOtpCountry();
   phoneInput.value = state.phoneDigits;
+  phoneInput.disabled = state.otpPolicyHydrating || state.requesting;
   phoneInput.maxLength = selectedCountry.iso2 === "IN" ? 10 : INTERNATIONAL_PHONE_MAX_LENGTH;
   phoneInput.placeholder = "Mobile number";
   phoneDisplay.textContent = maskOtpDestination({
@@ -1023,9 +1080,18 @@
     phoneInput: state.otpRequestPhoneInput,
     country: getOtpCountry(state.otpRequestCountryCode) || selectedCountry,
   });
-  renderOtpCountryControl(countryControl);
+  if (state.otpPolicyHydrating) {
+    countryControl.textContent = "";
+    const placeholder = document.createElement("div");
+    placeholder.className = "megaska-otp-country-prefix";
+    placeholder.setAttribute("aria-label", "Loading country options");
+    placeholder.textContent = "--";
+    countryControl.appendChild(placeholder);
+  } else {
+    renderOtpCountryControl(countryControl);
+  }
   sendOtpBtn.hidden = selectedCountry.iso2 === "IN";
-  sendOtpBtn.disabled = state.requesting || !state.phoneDigits;
+  sendOtpBtn.disabled = state.otpPolicyHydrating || state.requesting || !state.phoneDigits;
   successMessage.textContent = state.successMessage;
 
   profileFirstNameInput.value = state.profileFirstName;
@@ -1131,6 +1197,17 @@
     const { modal } = getModalParts();
     state.isOpen = true;
     resetModalState();
+    const interactionId = ++modalInteractionId;
+    const hasImmediatePolicy = otpRuntimePolicyReady || hasUsableOtpCountryPolicy(window.LoopDeskConfig?.otpCountryPolicy);
+    if (!hasImmediatePolicy) {
+      state.otpPolicyHydrating = true;
+      policyHydrationTimerId = setTimeout(() => {
+        policyHydrationTimerId = null;
+        if (interactionId !== modalInteractionId || !state.isOpen || state.step !== "phone" || state.otpRequestCountryCode) return;
+        state.otpPolicyHydrating = false;
+        renderStep();
+      }, OTP_POLICY_HYDRATION_TIMEOUT_MS);
+    }
     modal.hidden = false;
     modal.setAttribute("aria-hidden", "false");
     document.documentElement.classList.add("megaska-otp-open");
@@ -1153,6 +1230,11 @@
 
     const { modal } = getModalParts();
     state.isOpen = false;
+    modalInteractionId += 1;
+    if (policyHydrationTimerId) {
+      clearTimeout(policyHydrationTimerId);
+      policyHydrationTimerId = null;
+    }
     modal.hidden = true;
     modal.setAttribute("aria-hidden", "true");
     document.documentElement.classList.remove("megaska-otp-open");
@@ -3492,10 +3574,12 @@ function hasVisibleNativeDesktopAccountEntry() {
     handleLogoutClick,
   };
 
-  window.addEventListener("loopdesk:runtime-config-ready", () => {
+  window.addEventListener("loopdesk:runtime-config-ready", (event) => {
     const modal = document.querySelector("[data-megaska-otp-modal]");
     if (modal) applyOtpModalBranding(modal);
-    refreshOtpCountryPolicy();
+    const eventPolicy = event?.detail?.otpCountryPolicy;
+    const rawPolicy = hasUsableOtpCountryPolicy(eventPolicy) ? eventPolicy : window.LoopDeskConfig?.otpCountryPolicy;
+    if (hasUsableOtpCountryPolicy(rawPolicy)) refreshOtpCountryPolicy(rawPolicy);
   });
 
   document.addEventListener("DOMContentLoaded", init);

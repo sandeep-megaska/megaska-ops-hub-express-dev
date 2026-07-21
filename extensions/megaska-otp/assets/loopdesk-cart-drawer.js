@@ -37,7 +37,7 @@
     cartOwnershipMode: "fallback"
   };
   var config = normalizeConfig(window.LoopDeskConfig || window.LOOPDESK_CART_DRAWER_CONFIG || window.LoopDeskCartDrawerConfig || {});
-  window.LoopDeskConfig = config;
+  window.LoopDeskConfig = Object.assign({}, window.LoopDeskConfig || {}, config);
   window.LOOPDESK_CART_DRAWER_CONFIG = Object.assign({}, window.LOOPDESK_CART_DRAWER_CONFIG || {}, {
     enabled: config.enabled,
     drawerMode: config.cart.drawerMode,
@@ -571,7 +571,7 @@
 
   function setCartOwnershipMode(mode, reason) {
     config.cartOwnershipMode = mode;
-    window.LoopDeskConfig = config;
+    window.LoopDeskConfig = Object.assign({}, window.LoopDeskConfig || {}, config);
     window.LOOPDESK_CART_DRAWER_CONFIG = Object.assign({}, window.LOOPDESK_CART_DRAWER_CONFIG || {}, {
       cartOwnershipMode: mode,
       ownershipReason: reason
