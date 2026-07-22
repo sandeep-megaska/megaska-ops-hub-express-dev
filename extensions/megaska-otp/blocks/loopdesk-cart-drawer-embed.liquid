@@ -8,7 +8,7 @@
 
 {% if loopdesk_cart_drawer_enabled %}
   {{ 'loopdesk-cart-drawer.css' | asset_url | stylesheet_tag }}
-  <script src="{{ 'loopdesk-tier-progress.js' | asset_url }}"></script>
+  <script src="{{ 'loopdesk-tier-progress.js' | asset_url }}" defer></script>
 
   <style>
     [data-megaska-express-modal] form[data-express-form="discount"],
