@@ -3271,19 +3271,132 @@ function consumePendingAccountRedirect() {
     return null;
   }
 
- function createDesktopAccountFallback() {
-  const dashboardUrl = resolveAccountDestinationUrl();
-  const link = document.createElement("a");
-  link.id = ACCOUNT_FALLBACK_DESKTOP_ID;
-  link.href = dashboardUrl;
-  link.className = "megaska-account-fallback megaska-account-fallback--desktop";
-  link.setAttribute("data-megaska-open-login", "1");
-  link.setAttribute("data-megaska-fallback-account", "desktop");
-  link.setAttribute("aria-label", "My account");
-  link.innerHTML =
-    '<span class="megaska-account-fallback__icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" focusable="false" aria-hidden="true"><circle cx="12" cy="8" r="3.25"></circle><path d="M5.75 19c.45-3.65 2.55-5.5 6.25-5.5s5.8 1.85 6.25 5.5"></path></svg></span><span class="megaska-visually-hidden">My account</span>';
-  return link;
-}
+  const UNSAFE_THEME_CLASS_PATTERN = /(^|[-_])(cart|bag|search|badge|count|bubble|drawer|modal|popup|active|open|loading|avatar|customer-avatar)([-_]|$)|(^|[-_])(js|no-js)([-_]|$)/i;
+  const SAFE_THEME_CLASS_PATTERN = /(^|[-_])(header|site-header|icon|control|action|link|focus|visually-hidden)([-_]|$)/i;
+
+  function safeThemeClasses(element, options) {
+    const opts = options || {};
+    const classes = Array.from(element?.classList || []).filter(
+      (className) => SAFE_THEME_CLASS_PATTERN.test(className) && !UNSAFE_THEME_CLASS_PATTERN.test(className)
+    );
+    if (opts.account && classes.includes("header__icon") && !classes.includes("header__icon--account")) {
+      classes.push("header__icon--account");
+    }
+    if (opts.svg && classes.includes("icon") && !classes.includes("icon-account")) {
+      classes.push("icon-account");
+    }
+    return [...new Set(classes)];
+  }
+
+  function sanitizeThemeOwnedAccountClone(source, dashboardUrl) {
+    const action = getAccountTriggerActionElement(source);
+    if (!action?.matches?.("a")) return null;
+    const clone = action.cloneNode(true);
+    clone.querySelectorAll("script, style, template, form, a, button, input, select, textarea, [class*='avatar' i], [data-customer-avatar], img, [role='menu'], [role='menuitem']").forEach((node) => node.remove());
+    [clone, ...clone.querySelectorAll("*")].forEach((node) => {
+      node.removeAttribute("id");
+      node.removeAttribute("aria-expanded");
+      node.removeAttribute("aria-controls");
+      node.removeAttribute("aria-haspopup");
+      node.removeAttribute("hidden");
+      node.removeAttribute("style");
+      if (node === clone) node.removeAttribute("aria-hidden");
+      Array.from(node.attributes || []).forEach((attribute) => {
+        if (/^on/i.test(attribute.name) || attribute.name.startsWith("data-") || attribute.name === "href") {
+          node.removeAttribute(attribute.name);
+        }
+      });
+      const safeClasses = safeThemeClasses(node, {
+        account: node === clone,
+        svg: String(node.tagName || "").toLowerCase() === "svg",
+      });
+      if (safeClasses.length) node.setAttribute("class", safeClasses.join(" "));
+      else node.removeAttribute("class");
+    });
+    clone.querySelectorAll("title").forEach((node) => node.remove());
+    clone.querySelectorAll("svg").forEach((svg) => {
+      svg.setAttribute("aria-hidden", "true");
+      svg.setAttribute("focusable", "false");
+      svg.removeAttribute("aria-label");
+      svg.removeAttribute("role");
+    });
+    if (!clone.querySelector("svg")) return null;
+    clone.id = ACCOUNT_FALLBACK_DESKTOP_ID;
+    clone.href = dashboardUrl;
+    clone.setAttribute("data-megaska-open-login", "1");
+    clone.setAttribute("data-megaska-fallback-account", "desktop");
+    clone.setAttribute("data-loopdesk-account-control-source", "native-hidden-clone");
+    clone.setAttribute("aria-label", "My account");
+    return clone;
+  }
+
+  function findHiddenThemeAccountControl(container) {
+    const header = container?.closest("header") || document.querySelector("header");
+    if (!header) return null;
+    const candidates = header.querySelectorAll(
+      NATIVE_DESKTOP_ACCOUNT_SELECTORS.map((selector) => `${selector}:not([data-megaska-fallback-account])`).join(",")
+    );
+    for (const candidate of candidates) {
+      const action = getAccountTriggerActionElement(candidate);
+      if (!isInMobileContext(action) && !isElementActuallyVisible(action) && action?.matches?.("a") && action.querySelector("svg")) {
+        return action;
+      }
+    }
+    return null;
+  }
+
+  function findStructuralReference(container) {
+    if (!container) return null;
+    for (const kind of ["search", "cart"]) {
+      for (const selector of HEADER_ICON_REFERENCE_SELECTORS[kind]) {
+        for (const candidate of container.querySelectorAll(selector)) {
+          const action = getAccountTriggerActionElement(candidate);
+          if (!action?.matches?.("a,button") || action.closest("[data-megaska-fallback-account]")) continue;
+          const classes = safeThemeClasses(action, { account: true });
+          const svg = action.querySelector("svg");
+          if (classes.length && svg) return { kind, action, svg, classes };
+        }
+      }
+    }
+    return null;
+  }
+
+  function createDesktopAccountFallback(container) {
+    const dashboardUrl = resolveAccountDestinationUrl();
+    const hiddenAccount = findHiddenThemeAccountControl(container);
+    const hiddenClone = hiddenAccount && sanitizeThemeOwnedAccountClone(hiddenAccount, dashboardUrl);
+    if (hiddenClone) return hiddenClone;
+
+    const reference = findStructuralReference(container);
+    const link = document.createElement("a");
+    link.id = ACCOUNT_FALLBACK_DESKTOP_ID;
+    link.href = dashboardUrl;
+    link.setAttribute("data-megaska-open-login", "1");
+    link.setAttribute("data-megaska-fallback-account", "desktop");
+    link.setAttribute("aria-label", "My account");
+
+    if (reference) {
+      link.className = reference.classes.join(" ");
+      link.setAttribute("data-loopdesk-account-control-source", `reference-${reference.kind}`);
+      const presentation = readSvgPresentation(reference.svg);
+      const themeAccountSvg = findThemeAccountSvg(container, link);
+      const accountSvg = themeAccountSvg || createInferredAccountSvg(presentation);
+      const svgClasses = safeThemeClasses(reference.svg, { svg: true });
+      if (svgClasses.length) accountSvg.setAttribute("class", svgClasses.join(" "));
+      accountSvg.setAttribute("aria-hidden", "true");
+      accountSvg.setAttribute("focusable", "false");
+      link.appendChild(accountSvg);
+      link.setAttribute("data-loopdesk-account-icon-source", themeAccountSvg ? "native-account" : `reference-${reference.kind}`);
+      return link;
+    }
+
+    link.className = "megaska-account-fallback megaska-account-fallback--desktop";
+    link.setAttribute("data-loopdesk-account-control-source", "loopdesk-default");
+    link.setAttribute("data-loopdesk-account-icon-source", "loopdesk-default");
+    link.innerHTML =
+      '<span class="megaska-account-fallback__icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" focusable="false" aria-hidden="true"><circle cx="12" cy="8" r="3.25"></circle><path d="M5.75 19c.45-3.65 2.55-5.5 6.25-5.5s5.8 1.85 6.25 5.5"></path></svg></span><span class="megaska-visually-hidden">My account</span>';
+    return link;
+  }
 
   function clampAccountMetric(value, minimum, maximum, fallback) {
     const number = Number.parseFloat(value);
@@ -3336,19 +3449,10 @@ function consumePendingAccountRedirect() {
   }
 
   function findThemeAccountSvg(container, fallback) {
-    const header = container?.closest("header") || document.querySelector("header");
-    const scope = header || container;
-    if (!scope) return null;
-    const candidates = scope.querySelectorAll(
-      ACCOUNT_TRIGGER_SELECTORS.map((selector) => `${selector}:not([data-megaska-fallback-account])`).join(",")
-    );
-    for (const candidate of candidates) {
-      if (candidate === fallback || candidate.closest("[data-megaska-fallback-account]")) continue;
-      const svg = candidate.matches?.("svg") ? candidate : candidate.querySelector("svg");
-      const sanitized = sanitizeThemeAccountSvg(svg);
-      if (sanitized) return sanitized;
-    }
-    return null;
+    const hidden = findHiddenThemeAccountControl(container);
+    if (!hidden || hidden === fallback || hidden.closest("[data-megaska-fallback-account]")) return null;
+    const svg = hidden.querySelector("svg");
+    return sanitizeThemeAccountSvg(svg);
   }
 
   function readSvgPresentation(svg) {
@@ -3371,17 +3475,8 @@ function consumePendingAccountRedirect() {
   }
 
   function findReferenceSvg(container, fallback) {
-    if (!container) return null;
-    for (const [kind, selectors] of Object.entries(HEADER_ICON_REFERENCE_SELECTORS)) {
-      for (const selector of selectors) {
-        for (const action of container.querySelectorAll(selector)) {
-          if (action === fallback || action.closest("[data-megaska-fallback-account]")) continue;
-          const svg = action.matches?.("svg") ? action : action.querySelector("svg");
-          if (svg?.querySelector(ACCOUNT_ICON_GEOMETRY_SELECTOR) && !svgHasUnsafeReferences(svg)) return { kind, svg };
-        }
-      }
-    }
-    return null;
+    const reference = findStructuralReference(container);
+    return reference && reference.action !== fallback ? reference : null;
   }
 
   function createInferredAccountSvg(presentation) {
@@ -3406,27 +3501,13 @@ function consumePendingAccountRedirect() {
 
   function adaptDesktopAccountFallback(fallback, container) {
     if (!fallback || !container) return;
-    const themeAccountSvg = findThemeAccountSvg(container, fallback);
-    const reference = themeAccountSvg ? null : findReferenceSvg(container, fallback);
-    const presentation = reference ? readSvgPresentation(reference.svg) : { mode: "stroke", width: 22, height: 22, strokeWidth: 1.7, linecap: "round", linejoin: "round" };
-    const source = themeAccountSvg ? "native-account" : reference ? `reference-${reference.kind}` : "loopdesk-default";
-    const geometrySignature = themeAccountSvg ? themeAccountSvg.innerHTML : reference?.svg.innerHTML || "default";
-    const signature = `${source}:${presentation.mode}:${presentation.width}:${presentation.height}:${presentation.strokeWidth}:${presentation.linecap}:${presentation.linejoin}:${geometrySignature}`;
+    if (fallback.getAttribute("data-loopdesk-account-control-source") !== "loopdesk-default") return;
+    const reference = findReferenceSvg(container, fallback);
+    if (!reference) return;
+    const presentation = readSvgPresentation(reference.svg);
+    const signature = `${reference.kind}:${presentation.mode}:${presentation.strokeWidth}`;
     if (fallback.dataset.loopdeskAccountIconSignature === signature) return;
-    const icon = fallback.querySelector(".megaska-account-fallback__icon");
-    icon.replaceChildren(themeAccountSvg || createInferredAccountSvg(presentation));
-    fallback.setAttribute("data-loopdesk-account-icon-source", source);
     fallback.dataset.loopdeskAccountIconSignature = signature;
-    fallback.style.setProperty("--loopdesk-account-icon-size", `${Math.min(presentation.width, presentation.height)}px`);
-    fallback.style.setProperty("--loopdesk-account-stroke-width", String(presentation.strokeWidth));
-
-    const adjacent = Array.from(container.querySelectorAll("a, button")).find((action) => action !== fallback && isElementActuallyVisible(action));
-    if (adjacent) {
-      const style = window.getComputedStyle(adjacent);
-      const controlSize = clampAccountMetric(Math.min(parseFloat(style.width), parseFloat(style.height)), 28, 52, 36);
-      fallback.style.setProperty("--loopdesk-account-control-size", `${controlSize}px`);
-      fallback.style.setProperty("--loopdesk-account-line-height", `${clampAccountMetric(style.lineHeight, 16, 52, controlSize)}px`);
-    }
   }
 
   function createMobileAccountFallback() {
@@ -3497,7 +3578,7 @@ function ensureDesktopAccountFallback() {
     return;
   }
 
-  const fallback = createDesktopAccountFallback();
+  const fallback = createDesktopAccountFallback(desktopContainer);
   const containerTag = String(desktopContainer.tagName || "").toUpperCase();
 
   const cartCandidate = desktopContainer.querySelector(
@@ -3661,12 +3742,15 @@ function hasVisibleNativeDesktopAccountEntry() {
     )
   );
 
-  return desktopCandidates.some(
-    (el) =>
+  return desktopCandidates.some((el) => {
+    const action = getAccountTriggerActionElement(el);
+    const visible =
       !isInMobileContext(el) &&
-      isElementActuallyVisible(getAccountTriggerActionElement(el)) &&
-      isUsableAccountEntryTrigger(el)
-  );
+      isElementActuallyVisible(action) &&
+      isUsableAccountEntryTrigger(el);
+    if (visible) action.setAttribute("data-loopdesk-account-control-source", "native-visible");
+    return visible;
+  });
 }
   function hasKnownMegaskaSession() {
     try {
