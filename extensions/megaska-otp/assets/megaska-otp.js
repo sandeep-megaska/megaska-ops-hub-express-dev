@@ -3254,12 +3254,26 @@ function consumePendingAccountRedirect() {
     return desktopCandidates.some((el) => !isInMobileContext(el));
   }
 
+  function getStructuralAccountContainer() {
+    for (const kind of ["cart", "search"]) {
+      for (const selector of HEADER_ICON_REFERENCE_SELECTORS[kind]) {
+        for (const candidate of document.querySelectorAll(selector)) {
+          if (isInMobileContext(candidate)) continue;
+          const action = getAccountTriggerActionElement(candidate);
+          const parent = action?.parentElement;
+          if (parent) return parent;
+        }
+      }
+    }
+    return null;
+  }
+
   function getDesktopAccountContainer() {
     for (const selector of DESKTOP_ACCOUNT_CONTAINER_SELECTORS) {
       const container = document.querySelector(selector);
       if (container) return container;
     }
-    return null;
+    return getStructuralAccountContainer();
   }
 
   function getMobileAccountContainer() {
