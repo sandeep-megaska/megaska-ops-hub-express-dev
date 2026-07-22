@@ -162,4 +162,19 @@ assert.ok(patchLocationNavigation, "location navigation patch should exist");
 assert.match(patchLocationNavigation[0], /if \(url && url\.pathname === '\/checkout'\)[\s\S]*openLoopDeskExpressCheckout\('navigation-' \+ method\);/, "checkout navigation interception must remain in place");
 assert.match(patchLocationNavigation[0], /if \(url && hasCartPath\(url\.pathname\) && isLoopDeskDrawerActive\(\)\)[\s\S]*refreshAndMaybeOpen\(true\);/, "cart page navigation should be redirected into keeping the drawer open when LoopDesk owns the drawer");
 
+// CART-NAV-2: some themes navigate to /cart via a direct `location.href =`
+// / `window.location =` property assignment rather than .assign()/.replace()
+// after a successful AJAX add — a mechanism no script can intercept, by
+// browser design. Since we can't prevent that navigation, we detect landing
+// on /cart right after such an add and bounce back to where the shopper
+// was, reopening the drawer there, instead of leaving them stranded on the
+// native cart page.
+assert.match(source, /function recordCartAddReturnIntent\(\) \{[\s\S]*?if \(!shouldOpenLoopDeskAfterCartAdd\(\)\) return;/, "a return intent should only be recorded when LoopDesk would actually own the resulting drawer");
+assert.match(source, /function bounceBackFromUnwantedCartPageNavigation\(\) \{[\s\S]*?if \(!hasCartPath\(window\.location\.pathname\)\) return false;/, "the bounce-back should only engage when we actually landed on the cart page");
+assert.match(source, /var parsedReturn = getSameOriginUrl\(returnUrl\);[\s\S]*?if \(!parsedReturn \|\| hasCartPath\(parsedReturn\.pathname\)\) return false;/, "a stored return URL that is itself /cart must not trigger a pointless bounce");
+assert.match(source, /Date\.now\(\) - parsed\.ts > CART_ADD_RETURN_MAX_AGE_MS\) return "";/, "a stale return intent (e.g. from an abandoned flow) must not be honored");
+assert.match(source, /function listenForCartAddFormSubmissions\(\) \{[\s\S]*?if \(!isCartAddUrl\(form\.getAttribute\("action"\) \|\| ""\)\) return;[\s\S]*?recordCartAddReturnIntent\(\);/, "the return intent should be recorded without ever preventing the form's own native submission or side effects");
+assert.match(source, /if \(bounceBackFromUnwantedCartPageNavigation\(\)\) return;\n  if \(document\.readyState === "loading"\)/, "the bounce-back must be checked before the drawer bootstraps on a fresh page load");
+assert.match(source, /refreshAndMaybeOpen\(consumeCartAddReopenIntent\(\)\);/, "landing back after a bounce-back should reopen the drawer once mounted");
+
 console.log("LoopDesk cart drawer CONFIG-2B regression checks passed");

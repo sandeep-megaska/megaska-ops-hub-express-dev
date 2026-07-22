@@ -190,6 +190,72 @@
     return Boolean(url && (url.pathname === "/cart/add" || url.pathname === "/cart/add.js"));
   }
 
+  // Some themes' own add-to-cart JS navigates to /cart after a successful
+  // AJAX add (a direct `location.href =`/`window.location =` assignment,
+  // which no script can intercept — a hard browser platform limitation, not
+  // a gap in our patching). Rather than trying to prevent that native
+  // behavior (which would require disabling the theme's own submit handler
+  // entirely, losing whatever native UI feedback it drives elsewhere), we
+  // let it happen and immediately bounce back to where the shopper was,
+  // then open the LoopDesk drawer there. This works regardless of which
+  // mechanism a given theme uses to redirect.
+  var CART_ADD_RETURN_KEY = "loopdeskCartAddReturnTo";
+  var CART_ADD_REOPEN_KEY = "loopdeskCartAddReopenDrawer";
+  var CART_ADD_RETURN_MAX_AGE_MS = 8000;
+
+  function recordCartAddReturnIntent() {
+    if (!shouldOpenLoopDeskAfterCartAdd()) return;
+    try {
+      sessionStorage.setItem(CART_ADD_RETURN_KEY, JSON.stringify({ url: window.location.href, ts: Date.now() }));
+    } catch (_error) {}
+  }
+
+  function consumeCartAddReturnIntent() {
+    var raw;
+    try { raw = sessionStorage.getItem(CART_ADD_RETURN_KEY); } catch (_error) { return ""; }
+    if (!raw) return "";
+    try { sessionStorage.removeItem(CART_ADD_RETURN_KEY); } catch (_error) {}
+    var parsed;
+    try { parsed = JSON.parse(raw); } catch (_error) { return ""; }
+    if (!parsed || !parsed.url || !parsed.ts || Date.now() - parsed.ts > CART_ADD_RETURN_MAX_AGE_MS) return "";
+    return parsed.url;
+  }
+
+  function consumeCartAddReopenIntent() {
+    try {
+      if (sessionStorage.getItem(CART_ADD_REOPEN_KEY) !== "1") return false;
+      sessionStorage.removeItem(CART_ADD_REOPEN_KEY);
+      return true;
+    } catch (_error) {
+      return false;
+    }
+  }
+
+  function bounceBackFromUnwantedCartPageNavigation() {
+    if (!hasCartPath(window.location.pathname)) return false;
+    var returnUrl = consumeCartAddReturnIntent();
+    if (!returnUrl) return false;
+    var parsedReturn = getSameOriginUrl(returnUrl);
+    if (!parsedReturn || hasCartPath(parsedReturn.pathname)) return false;
+    try { sessionStorage.setItem(CART_ADD_REOPEN_KEY, "1"); } catch (_error) {}
+    try {
+      window.location.replace(returnUrl);
+      return true;
+    } catch (_error) {
+      try { sessionStorage.removeItem(CART_ADD_REOPEN_KEY); } catch (_removeError) {}
+      return false;
+    }
+  }
+
+  function listenForCartAddFormSubmissions() {
+    document.addEventListener("submit", function (event) {
+      var form = event.target;
+      if (!form || form.nodeName !== "FORM") return;
+      if (!isCartAddUrl(form.getAttribute("action") || "")) return;
+      recordCartAddReturnIntent();
+    }, true);
+  }
+
 
   function isPlainObject(value) {
     return Boolean(value && typeof value === "object" && !Array.isArray(value));
@@ -1666,7 +1732,7 @@
     debugLog("selected drawer mode", { mode: config.cart.drawerMode, active: isLoopDeskDrawerActive() }, true);
     debugLog("capability result", getCapabilityResult(), true);
     refreshPromotionRuntime("init").then(function (applied) { if (!applied && !hasPromotionRules()) schedulePromotionRuntimeRefresh("init-delayed", 750); });
-    refreshAndMaybeOpen(false);
+    refreshAndMaybeOpen(consumeCartAddReopenIntent());
     applyCartTriggerTakeover();
     observeCartTriggerTakeoverTargets();
   }
@@ -2302,6 +2368,7 @@
     debugState: debugState,
   };
 
+  if (bounceBackFromUnwantedCartPageNavigation()) return;
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", mount);
   else mount();
   patchFetch();
@@ -2312,6 +2379,7 @@
   listenForCartLinks();
   listenForCartCustomEvents();
   listenForCheckoutIntent();
+  listenForCartAddFormSubmissions();
   scheduleCheckoutCtaScan();
   observeCheckoutCtaTargets();
   // Delegation is authoritative; this synchronous compatibility takeover only
