@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 const source = readFileSync(new URL("../extensions/megaska-otp/assets/loopdesk-checkout-bridge.js", import.meta.url), "utf8");
 
 function body(name, nextName) {
-  const match = source.match(new RegExp(`(?:async )?function ${name}\\([^)]*\\) \\{[\\s\\S]*?\\n  \\}\\n\\n  (?:async )?function ${nextName}`));
+  const match = source.match(new RegExp(`(?:async )?function ${name}\\([^)]*\\) \\{[\\s\\S]*?\\n\\s*\\}\\n\\s*(?:async )?function ${nextName}`));
   assert.ok(match, `${name} should be present before ${nextName}`);
   return match[0];
 }
