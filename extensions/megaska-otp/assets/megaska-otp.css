@@ -576,10 +576,10 @@
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  width: 36px;
-  height: 36px;
-  min-width: 36px;
-  min-height: 36px;
+  width: var(--loopdesk-account-control-size, 36px);
+  height: var(--loopdesk-account-control-size, 36px);
+  min-width: var(--loopdesk-account-control-size, 36px);
+  min-height: var(--loopdesk-account-control-size, 36px);
   margin-inline-start: 6px;
   padding: 0;
   box-sizing: border-box;
@@ -588,7 +588,7 @@
   background: transparent;
   color: inherit;
   gap: 0;
-  line-height: 1;
+  line-height: var(--loopdesk-account-line-height, 1);
   vertical-align: middle;
   text-decoration: none;
   cursor: pointer;
@@ -597,9 +597,14 @@
 
 .megaska-account-fallback--desktop .megaska-account-fallback__icon svg {
   display: block;
-  width: 22px;
-  height: 22px;
+  width: var(--loopdesk-account-icon-size, 22px);
+  height: var(--loopdesk-account-icon-size, 22px);
   flex-shrink: 0;
+}
+
+.megaska-account-fallback--desktop[data-loopdesk-account-icon-source^="reference-"] .megaska-account-fallback__icon svg[stroke],
+.megaska-account-fallback--desktop[data-loopdesk-account-icon-source="loopdesk-default"] .megaska-account-fallback__icon svg[stroke] {
+  stroke-width: var(--loopdesk-account-stroke-width, 1.7);
 }
 
 .megaska-account-fallback--desktop:hover {

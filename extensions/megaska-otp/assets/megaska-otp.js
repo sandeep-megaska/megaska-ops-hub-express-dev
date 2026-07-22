@@ -246,6 +246,12 @@
     "header .my-account",
     "header .my-account a.push_side[href='/account/login']",
   ];
+  const ACCOUNT_ICON_GEOMETRY_SELECTOR = "path, circle, ellipse, rect, line, polyline, polygon, use";
+  const HEADER_ICON_REFERENCE_SELECTORS = Object.freeze({
+    search: ["[aria-label*='search' i]", "[title*='search' i]", ".header__search", ".icon-search", ".search-icon"],
+    cart: ["a[href*='/cart']", "[aria-label*='cart' i]", "[aria-label*='bag' i]", ".cart-icon", ".icon-cart", ".js_car_tt"],
+    action: ["button", "a", "[role='button']"],
+  });
 
   const CHECKOUT_TRIGGER_SELECTORS = [
     "a[href='/checkout']",
@@ -3143,12 +3149,14 @@ function consumePendingAccountRedirect() {
 
   function isElementActuallyVisible(element) {
     if (!element) return false;
-    if ("hidden" in element && element.hidden) return false;
-    if (element.getAttribute("aria-hidden") === "true") return false;
-
-    const style = window.getComputedStyle(element);
-    if (!style) return true;
-    return style.display !== "none" && style.visibility !== "hidden";
+    let current = element;
+    while (current && current.nodeType === 1) {
+      if (("hidden" in current && current.hidden) || current.getAttribute("aria-hidden") === "true") return false;
+      const style = window.getComputedStyle(current);
+      if (style && (style.display === "none" || style.visibility === "hidden")) return false;
+      current = current.parentElement;
+    }
+    return true;
   }
 
   function isInMobileMenuContainer(element) {
@@ -3242,6 +3250,150 @@ function consumePendingAccountRedirect() {
   return link;
 }
 
+  function clampAccountMetric(value, minimum, maximum, fallback) {
+    const number = Number.parseFloat(value);
+    return Number.isFinite(number) && number >= minimum && number <= maximum ? number : fallback;
+  }
+
+  function svgHasUnsafeReferences(svg) {
+    if (!svg || !svg.querySelector(ACCOUNT_ICON_GEOMETRY_SELECTOR)) return true;
+    return Array.from(svg.querySelectorAll("*")).some((node) =>
+      Array.from(node.attributes || []).some((attribute) =>
+        /url\s*\(\s*#/i.test(attribute.value) ||
+        ((attribute.name === "href" || attribute.name === "xlink:href") && !/^\s*#[A-Za-z][\w:.-]*\s*$/.test(attribute.value))
+      )
+    );
+  }
+
+  function expandLocalSvgSymbols(svg) {
+    svg.querySelectorAll("use").forEach((use) => {
+      const reference = use.getAttribute("href") || use.getAttribute("xlink:href") || "";
+      const symbol = reference.startsWith("#") ? document.getElementById(reference.slice(1)) : null;
+      if (!symbol || !symbol.matches("symbol, g") || !symbol.querySelector(ACCOUNT_ICON_GEOMETRY_SELECTOR)) return;
+      const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
+      for (const attribute of use.attributes) {
+        if (attribute.name !== "href" && attribute.name !== "xlink:href") group.setAttribute(attribute.name, attribute.value);
+      }
+      Array.from(symbol.childNodes).forEach((child) => group.appendChild(child.cloneNode(true)));
+      use.replaceWith(group);
+    });
+  }
+
+  function sanitizeThemeAccountSvg(svg) {
+    if (svgHasUnsafeReferences(svg)) return null;
+    const clone = svg.cloneNode(true);
+    expandLocalSvgSymbols(clone);
+    clone.querySelectorAll("script, style, animate, animateMotion, animateTransform, set, foreignObject").forEach((node) => node.remove());
+    [clone, ...clone.querySelectorAll("*")].forEach((node) => {
+      node.removeAttribute("id");
+      node.removeAttribute("aria-label");
+      node.removeAttribute("role");
+      node.removeAttribute("title");
+      Array.from(node.attributes || []).forEach((attribute) => {
+        if (/^on/i.test(attribute.name)) node.removeAttribute(attribute.name);
+      });
+    });
+    clone.querySelectorAll("title").forEach((node) => node.remove());
+    clone.removeAttribute("class");
+    clone.setAttribute("aria-hidden", "true");
+    clone.setAttribute("focusable", "false");
+    return clone.querySelector(ACCOUNT_ICON_GEOMETRY_SELECTOR) ? clone : null;
+  }
+
+  function findThemeAccountSvg(container, fallback) {
+    const header = container?.closest("header") || document.querySelector("header");
+    const scope = header || container;
+    if (!scope) return null;
+    const candidates = scope.querySelectorAll(
+      ACCOUNT_TRIGGER_SELECTORS.map((selector) => `${selector}:not([data-megaska-fallback-account])`).join(",")
+    );
+    for (const candidate of candidates) {
+      if (candidate === fallback || candidate.closest("[data-megaska-fallback-account]")) continue;
+      const svg = candidate.matches?.("svg") ? candidate : candidate.querySelector("svg");
+      const sanitized = sanitizeThemeAccountSvg(svg);
+      if (sanitized) return sanitized;
+    }
+    return null;
+  }
+
+  function readSvgPresentation(svg) {
+    const computed = window.getComputedStyle(svg);
+    const fill = svg.getAttribute("fill") || computed?.fill || "";
+    const stroke = svg.getAttribute("stroke") || computed?.stroke || "";
+    const strokeWidth = svg.getAttribute("stroke-width") || computed?.strokeWidth || "";
+    const fillActive = fill && fill !== "none" && fill !== "transparent";
+    const strokeActive = stroke && stroke !== "none" && stroke !== "transparent";
+    return {
+      mode: strokeActive ? "stroke" : fillActive ? "fill" : "stroke",
+      width: clampAccountMetric(svg.getAttribute("width") || computed?.width, 14, 32, 22),
+      height: clampAccountMetric(svg.getAttribute("height") || computed?.height, 14, 32, 22),
+      strokeWidth: clampAccountMetric(strokeWidth, 1.25, 2.25, 1.7),
+      linecap: ["round", "butt", "square"].includes(svg.getAttribute("stroke-linecap") || computed?.strokeLinecap)
+        ? (svg.getAttribute("stroke-linecap") || computed.strokeLinecap) : "round",
+      linejoin: ["round", "miter", "bevel"].includes(svg.getAttribute("stroke-linejoin") || computed?.strokeLinejoin)
+        ? (svg.getAttribute("stroke-linejoin") || computed.strokeLinejoin) : "round",
+    };
+  }
+
+  function findReferenceSvg(container, fallback) {
+    if (!container) return null;
+    for (const [kind, selectors] of Object.entries(HEADER_ICON_REFERENCE_SELECTORS)) {
+      for (const selector of selectors) {
+        for (const action of container.querySelectorAll(selector)) {
+          if (action === fallback || action.closest("[data-megaska-fallback-account]")) continue;
+          const svg = action.matches?.("svg") ? action : action.querySelector("svg");
+          if (svg?.querySelector(ACCOUNT_ICON_GEOMETRY_SELECTOR) && !svgHasUnsafeReferences(svg)) return { kind, svg };
+        }
+      }
+    }
+    return null;
+  }
+
+  function createInferredAccountSvg(presentation) {
+    const namespace = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(namespace, "svg");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("aria-hidden", "true");
+    svg.setAttribute("focusable", "false");
+    if (presentation.mode === "fill") {
+      svg.setAttribute("fill", "currentColor");
+      svg.innerHTML = '<path d="M12 12a4.25 4.25 0 1 0 0-8.5 4.25 4.25 0 0 0 0 8.5Zm0 1.75c-4.62 0-8 2.42-8 5.75 0 .55.45 1 1 1h14c.55 0 1-.45 1-1 0-3.33-3.38-5.75-8-5.75Z"></path>';
+    } else {
+      svg.setAttribute("fill", "none");
+      svg.setAttribute("stroke", "currentColor");
+      svg.setAttribute("stroke-width", String(presentation.strokeWidth));
+      svg.setAttribute("stroke-linecap", presentation.linecap);
+      svg.setAttribute("stroke-linejoin", presentation.linejoin);
+      svg.innerHTML = '<circle cx="12" cy="8" r="3.25"></circle><path d="M5.75 19c.45-3.65 2.55-5.5 6.25-5.5s5.8 1.85 6.25 5.5"></path>';
+    }
+    return svg;
+  }
+
+  function adaptDesktopAccountFallback(fallback, container) {
+    if (!fallback || !container) return;
+    const themeAccountSvg = findThemeAccountSvg(container, fallback);
+    const reference = themeAccountSvg ? null : findReferenceSvg(container, fallback);
+    const presentation = reference ? readSvgPresentation(reference.svg) : { mode: "stroke", width: 22, height: 22, strokeWidth: 1.7, linecap: "round", linejoin: "round" };
+    const source = themeAccountSvg ? "native-account" : reference ? `reference-${reference.kind}` : "loopdesk-default";
+    const geometrySignature = themeAccountSvg ? themeAccountSvg.innerHTML : reference?.svg.innerHTML || "default";
+    const signature = `${source}:${presentation.mode}:${presentation.width}:${presentation.height}:${presentation.strokeWidth}:${presentation.linecap}:${presentation.linejoin}:${geometrySignature}`;
+    if (fallback.dataset.loopdeskAccountIconSignature === signature) return;
+    const icon = fallback.querySelector(".megaska-account-fallback__icon");
+    icon.replaceChildren(themeAccountSvg || createInferredAccountSvg(presentation));
+    fallback.setAttribute("data-loopdesk-account-icon-source", source);
+    fallback.dataset.loopdeskAccountIconSignature = signature;
+    fallback.style.setProperty("--loopdesk-account-icon-size", `${Math.min(presentation.width, presentation.height)}px`);
+    fallback.style.setProperty("--loopdesk-account-stroke-width", String(presentation.strokeWidth));
+
+    const adjacent = Array.from(container.querySelectorAll("a, button")).find((action) => action !== fallback && isElementActuallyVisible(action));
+    if (adjacent) {
+      const style = window.getComputedStyle(adjacent);
+      const controlSize = clampAccountMetric(Math.min(parseFloat(style.width), parseFloat(style.height)), 28, 52, 36);
+      fallback.style.setProperty("--loopdesk-account-control-size", `${controlSize}px`);
+      fallback.style.setProperty("--loopdesk-account-line-height", `${clampAccountMetric(style.lineHeight, 16, 52, controlSize)}px`);
+    }
+  }
+
   function createMobileAccountFallback() {
     const dashboardUrl = resolveAccountDestinationUrl();
     const item = document.createElement("li");
@@ -3298,7 +3450,17 @@ function ensureAccountEntryFallbacks() {
 function ensureDesktopAccountFallback() {
   const desktopContainer = getDesktopAccountContainer();
   if (!desktopContainer) return;
-  if (document.getElementById(ACCOUNT_FALLBACK_DESKTOP_ID)) return;
+  const existingFallback = document.getElementById(ACCOUNT_FALLBACK_DESKTOP_ID);
+  if (existingFallback) {
+    if (!desktopContainer.contains(existingFallback)) {
+      existingFallback.closest(".megaska-account-fallback-item")?.remove();
+      if (existingFallback.isConnected) existingFallback.remove();
+      ensureDesktopAccountFallback();
+      return;
+    }
+    adaptDesktopAccountFallback(existingFallback, desktopContainer);
+    return;
+  }
 
   const fallback = createDesktopAccountFallback();
   const containerTag = String(desktopContainer.tagName || "").toUpperCase();
@@ -3327,6 +3489,8 @@ function ensureDesktopAccountFallback() {
     }
   }
 
+  adaptDesktopAccountFallback(fallback, desktopContainer);
+
   console.log("[Megaska OTP] desktop account fallback inserted");
 }
 
@@ -3347,7 +3511,12 @@ function bindAccountFallbackObserver() {
     }
     scheduleAccountFallbackReconciliation();
   });
-  accountFallbackObserver.observe(document.documentElement, { childList: true, subtree: true });
+  accountFallbackObserver.observe(document.documentElement, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ["class", "style", "hidden", "aria-hidden"],
+  });
 }
 
 function scheduleAccountFallbackReconciliation() {
