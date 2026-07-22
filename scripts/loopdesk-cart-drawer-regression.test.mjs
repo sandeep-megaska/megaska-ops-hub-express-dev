@@ -149,4 +149,17 @@ assert.match(source, /aria-label="Store assurances"/, "trust badges should expos
 assert.match(source, /viewBox="0 0 24 24" aria-hidden="true" focusable="false"/, "trust badge icons should be decorative and hidden from assistive technology");
 assert.match(css, /\.loopdesk-cart-drawer__trust-badges--grid[\s\S]*grid-template-columns:[^;]*repeat\(2/, "trust badges should have a responsive compact grid");
 
+// CART-NAV-1: with "Cart type: Page" set (required for LoopDesk drawer
+// ownership), some themes redirect to /cart via location.assign/replace
+// after a successful AJAX add-to-cart (their own native "Page" cart-type
+// fallback behavior) even though our fetch/XHR patch already opened the
+// drawer for the same add. That native navigation must be redirected into
+// keeping the drawer open instead of leaving the page, the same way
+// location.assign/replace to /checkout is already redirected into Express
+// Checkout.
+const patchLocationNavigation = source.match(/function patchLocationNavigation\(\) \{[\s\S]*?\n  \}/);
+assert.ok(patchLocationNavigation, "location navigation patch should exist");
+assert.match(patchLocationNavigation[0], /if \(url && url\.pathname === '\/checkout'\)[\s\S]*openLoopDeskExpressCheckout\('navigation-' \+ method\);/, "checkout navigation interception must remain in place");
+assert.match(patchLocationNavigation[0], /if \(url && hasCartPath\(url\.pathname\) && isLoopDeskDrawerActive\(\)\)[\s\S]*refreshAndMaybeOpen\(true\);/, "cart page navigation should be redirected into keeping the drawer open when LoopDesk owns the drawer");
+
 console.log("LoopDesk cart drawer CONFIG-2B regression checks passed");
