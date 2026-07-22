@@ -34,6 +34,8 @@ Read-only placeholders are displayed for Razorpay status, Delhivery status, and 
 
 To use LoopDesk Enhanced Drawer, merchants must disable the native theme drawer by setting the Shopify theme cart type/cart style to **Page**. Branding config affects appearance/text only and must not change cart or checkout functionality.
 
+Setting cart type to **Page** has a side effect worth knowing: some themes' own add-to-cart JS, upon detecting that cart type is Page, redirects the browser to `/cart` after a successful add — even when our fetch/XHR patch already opened the LoopDesk drawer for that same add. `patchLocationNavigation()` in `loopdesk-cart-drawer.js` already redirects `location.assign`/`location.replace` navigation to `/checkout` into Express Checkout; it now does the same for navigation to `/cart` whenever LoopDesk owns the drawer, keeping the shopper on the page with the drawer open instead of losing them to the native cart page. This only covers `.assign()`/`.replace()` calls (the common case) — a theme using a direct `location.href = ...` assignment isn't interceptable this way, since browsers don't allow overriding that setter.
+
 ## Universal cart icon interception
 
 `loopdesk-cart-drawer.js` intercepts clicks on the storefront's cart/bag icon using a broad, theme-agnostic heuristic: it recognizes any link to `/cart`, common ARIA/id/class naming conventions (`cart-icon`, `mini-cart`, `header__icon--cart`, `cart-toggle`, `cart-trigger`, `basket`, etc.), and cart-related SVG icon glyphs (`<use href="#icon-cart">`, `img[alt="Cart"]`). It also listens for the custom events many themes fire when opening their own drawer (`cart:open`, `cart-drawer:open`, `ajaxCart:open`, and similar), and neutralizes/hides the native drawer if it still renders.

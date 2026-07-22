@@ -2150,6 +2150,11 @@
             openLoopDeskExpressCheckout('navigation-' + method);
             return;
           }
+          if (url && hasCartPath(url.pathname) && isLoopDeskDrawerActive()) {
+            debugLog('cart page navigation intercepted', { method: method, target: String(target) });
+            refreshAndMaybeOpen(true);
+            return;
+          }
           return original.apply(window.location, arguments);
         };
       } catch (_error) {}
