@@ -58,7 +58,25 @@ test("normalizes merchant settings defaults", () => {
   assert.equal(settings.general.merchantName, "Demo Store");
   assert.equal(settings.branding.primaryColor, "#111827");
   assert.equal(settings.cart.drawerMode, "auto");
+  assert.equal(settings.cart.customCartTriggerSelector, "");
   assert.equal(settings.integrations.razorpay.status, "not_configured");
+});
+
+test("normalizes and merges a custom cart trigger selector", () => {
+  const settings = normalizeLoopDeskMerchantSettings({
+    cart: { customCartTriggerSelector: "#CartIcon, .site-header__cart-toggle" },
+  });
+  assert.equal(
+    settings.cart.customCartTriggerSelector,
+    "#CartIcon, .site-header__cart-toggle",
+  );
+  const merged = mergeLoopDeskMerchantSettings(settings, {
+    cart: { openAfterAddToCart: true },
+  });
+  assert.equal(
+    merged.cart.customCartTriggerSelector,
+    "#CartIcon, .site-header__cart-toggle",
+  );
 });
 
 test("merges partial config without dropping existing settings", () => {
@@ -127,7 +145,11 @@ test("validates merchant settings admin patch fields", () => {
       primaryColor: "javascript:alert(1)",
       logoUrl: "ftp://example.com/logo.png",
     },
-    cart: { drawerMode: "broken", openAfterAddToCart: "yes" },
+    cart: {
+      drawerMode: "broken",
+      openAfterAddToCart: "yes",
+      customCartTriggerSelector: "x".repeat(501),
+    },
     labels: { expressCheckoutText: "x".repeat(81) },
   });
   assert.match(errors.join(" "), /Primary color/);
@@ -135,6 +157,7 @@ test("validates merchant settings admin patch fields", () => {
   assert.match(errors.join(" "), /Drawer mode/);
   assert.match(errors.join(" "), /Open after add to cart/);
   assert.match(errors.join(" "), /Express checkout text/);
+  assert.match(errors.join(" "), /Custom cart icon selector/);
 });
 
 

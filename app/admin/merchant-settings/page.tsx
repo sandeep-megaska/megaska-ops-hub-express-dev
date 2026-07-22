@@ -127,6 +127,7 @@ async function saveMerchantSettings(
         expressCheckoutButtonEnabled:
           formData.get("expressCheckoutButtonEnabled") === "on",
         viewCartButtonEnabled: formData.get("viewCartButtonEnabled") === "on",
+        customCartTriggerSelector: formData.get("customCartTriggerSelector"),
       },
       checkout: {
         showSecureBadge: formData.get("showSecureBadge") === "on",
@@ -467,6 +468,13 @@ export default async function MerchantSettingsPage({
             <Check label="Express checkout button" name="expressCheckoutButtonEnabled" defaultChecked={settings.cart.expressCheckoutButtonEnabled} help="Keeps Express Checkout visible in drawer." />
             <Check label="View cart button" name="viewCartButtonEnabled" defaultChecked={settings.cart.viewCartButtonEnabled} help="Keeps the standard cart link visible." />
           </div>
+          <Field
+            label="Custom cart icon selector (advanced)"
+            name="customCartTriggerSelector"
+            defaultValue={settings.cart.customCartTriggerSelector}
+            placeholder="#CartIcon, .site-header__cart-toggle"
+            help="Only needed if clicking your theme's cart icon still opens the theme cart. Enter a CSS selector that matches it (comma-separate multiple). Leave blank to use automatic detection."
+          />
         </section>
 
         <section id="otp-modal-branding" className={`${cardClass} grid gap-5`}>

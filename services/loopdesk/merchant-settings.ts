@@ -51,6 +51,7 @@ export type LoopDeskMerchantSettings = {
     expressCheckoutButtonEnabled: boolean;
     viewCartButtonEnabled: boolean;
     nativeDrawerDisabledRequiredMessage: string;
+    customCartTriggerSelector: string;
   };
   checkout: { showSecureBadge: boolean; showTrustCopy: boolean };
   otpModalBranding: {
@@ -619,6 +620,11 @@ export function validateLoopDeskMerchantSettingsPatch(
     "Express checkout button enabled",
   );
   validateBool(cart.viewCartButtonEnabled, "View cart button enabled");
+  validateText(
+    cart.customCartTriggerSelector,
+    "Custom cart icon selector",
+    500,
+  );
   validateBool(checkout.showSecureBadge, "Show secure badge");
   validateBool(checkout.showTrustCopy, "Show trust copy");
   validateUrl(otpModalBranding.logoUrl, "OTP modal logo URL", { httpsOnly: true });
@@ -720,6 +726,7 @@ export function normalizeLoopDeskMerchantSettings(
         "To use LoopDesk Enhanced Drawer, set your theme cart type to Page in Shopify theme settings.",
         220,
       ),
+      customCartTriggerSelector: text(cart.customCartTriggerSelector, "", 500),
     },
     checkout: {
       showSecureBadge: bool(checkout.showSecureBadge, true),
