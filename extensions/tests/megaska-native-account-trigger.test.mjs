@@ -101,7 +101,7 @@ test("native desktop entry suppresses the delayed, idempotent fallback", () => {
   assert.match(reconciliation, /else \{\s*ensureDesktopAccountFallback\(\)/);
   assert.match(scheduling, /ACCOUNT_FALLBACK_DISCOVERY_DELAY_MS - elapsed/);
   assert.match(source, /const existingFallback = document\.getElementById\(ACCOUNT_FALLBACK_DESKTOP_ID\)/);
-  assert.match(source, /adaptDesktopAccountFallback\(existingFallback, desktopContainer\)/);
+  assert.match(source, /if \(existingFallback\)[\s\S]*return;/);
   assert.match(source, /new MutationObserver/);
 });
 

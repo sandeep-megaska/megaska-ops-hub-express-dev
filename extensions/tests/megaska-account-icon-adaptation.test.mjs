@@ -88,18 +88,55 @@ test("search and cart references derive only safe account presentation classes a
   assert.deepEqual(safeThemeClasses(searchSvg, { svg: true }), ["icon", "icon-account"]);
 });
 
+test("structural references render the stable LoopDesk currentColor account glyph", () => {
+  const referenceSvg = new ElementFixture("svg", {
+    class: "icon icon-cart cart-specific",
+    viewBox: "0 0 40 40",
+    fill: "#111",
+    stroke: "rgb(1, 2, 3)",
+  }, [new ElementFixture("path", { d: "REFERENCE-CART-PATH" })]);
+  const createLoopDeskAccountSvg = new Function(
+    "document", "safeThemeClasses",
+    `${functionSource("createLoopDeskAccountSvg", "createDesktopAccountFallback")}; return createLoopDeskAccountSvg;`
+  )(
+    { createElementNS: (_namespace, tagName) => new ElementFixture(tagName) },
+    safeThemeClasses
+  );
+
+  const svg = createLoopDeskAccountSvg(referenceSvg);
+  assert.equal(svg.getAttribute("class"), "icon icon-account");
+  assert.equal(svg.getAttribute("viewBox"), "0 0 24 24");
+  assert.equal(svg.getAttribute("fill"), "none");
+  assert.equal(svg.getAttribute("stroke"), "currentColor");
+  assert.equal(svg.getAttribute("stroke-width"), "1.6");
+  assert.equal(svg.getAttribute("stroke-linecap"), "round");
+  assert.equal(svg.getAttribute("stroke-linejoin"), "round");
+  assert.equal(svg.getAttribute("aria-hidden"), "true");
+  assert.equal(svg.getAttribute("focusable"), "false");
+  assert.match(svg.innerHTML, /<circle[^>]+cx="12"/);
+  assert.match(svg.innerHTML, /<path[^>]+d="M5\.5 20/);
+  assert.doesNotMatch(svg.innerHTML, /REFERENCE-CART-PATH|#111|rgb\(/);
+
+  const unclassedSvg = createLoopDeskAccountSvg(new ElementFixture("svg"));
+  assert.equal(unclassedSvg.getAttribute("width"), "22");
+  assert.equal(unclassedSvg.getAttribute("height"), "22");
+});
+
 test("adapter resolution and reconciliation cover all structural strategies", () => {
-  const creation = functionSource("createDesktopAccountFallback", "clampAccountMetric");
+  const creation = functionSource("createDesktopAccountFallback", "createMobileAccountFallback");
   const insertion = functionSource("ensureDesktopAccountFallback", "observeDesktopAccountContainer");
   const visibility = functionSource("hasVisibleNativeDesktopAccountEntry", "hasKnownMegaskaSession");
   assert.match(creation, /findHiddenThemeAccountControl/);
   assert.match(creation, /sanitizeThemeOwnedAccountClone/);
   assert.match(creation, /findStructuralReference/);
   assert.match(creation, /reference-\$\{reference\.kind\}/);
+  assert.match(creation, /data-loopdesk-account-icon-source", "loopdesk-brand"/);
+  assert.match(creation, /classList\.contains\("svg-wrapper"\)/);
   assert.match(creation, /loopdesk-default/);
   assert.match(insertion, /getElementById\(ACCOUNT_FALLBACK_DESKTOP_ID\)/);
   assert.match(insertion, /insertBefore\(fallback, cartCandidate\)/);
   assert.match(visibility, /native-visible/);
+  assert.doesNotMatch(source, /readSvgPresentation|createInferredAccountSvg|adaptDesktopAccountFallback|loopdeskAccountIconSignature/);
 });
 
 test("neutral fallback CSS is isolated from theme-native account controls", () => {

@@ -602,7 +602,6 @@
   flex-shrink: 0;
 }
 
-.megaska-account-fallback--desktop[data-loopdesk-account-control-source="loopdesk-default"][data-loopdesk-account-icon-source^="reference-"] .megaska-account-fallback__icon svg[stroke],
 .megaska-account-fallback--desktop[data-loopdesk-account-control-source="loopdesk-default"][data-loopdesk-account-icon-source="loopdesk-default"] .megaska-account-fallback__icon svg[stroke] {
   stroke-width: var(--loopdesk-account-stroke-width, 1.7);
 }
