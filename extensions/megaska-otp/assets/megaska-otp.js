@@ -246,7 +246,6 @@
     "header .my-account",
     "header .my-account a.push_side[href='/account/login']",
   ];
-  const ACCOUNT_ICON_GEOMETRY_SELECTOR = "path, circle, ellipse, rect, line, polyline, polygon, use";
   const HEADER_ICON_REFERENCE_SELECTORS = Object.freeze({
     search: ["[aria-label*='search' i]", "[title*='search' i]", ".header__search", ".icon-search", ".search-icon"],
     cart: ["a[href*='/cart']", "[aria-label*='cart' i]", "[aria-label*='bag' i]", ".cart-icon", ".icon-cart", ".js_car_tt"],
@@ -3361,6 +3360,27 @@ function consumePendingAccountRedirect() {
     return null;
   }
 
+  function createLoopDeskAccountSvg(referenceSvg) {
+    const namespace = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(namespace, "svg");
+    const svgClasses = safeThemeClasses(referenceSvg, { svg: true });
+    if (svgClasses.length) svg.setAttribute("class", svgClasses.join(" "));
+    else {
+      svg.setAttribute("width", "22");
+      svg.setAttribute("height", "22");
+    }
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("fill", "none");
+    svg.setAttribute("stroke", "currentColor");
+    svg.setAttribute("stroke-width", "1.6");
+    svg.setAttribute("stroke-linecap", "round");
+    svg.setAttribute("stroke-linejoin", "round");
+    svg.setAttribute("aria-hidden", "true");
+    svg.setAttribute("focusable", "false");
+    svg.innerHTML = '<circle cx="12" cy="7.5" r="3.25"></circle><path d="M5.5 20c.55-4.2 2.75-6.25 6.5-6.25S17.95 15.8 18.5 20"></path>';
+    return svg;
+  }
+
   function createDesktopAccountFallback(container) {
     const dashboardUrl = resolveAccountDestinationUrl();
     const hiddenAccount = findHiddenThemeAccountControl(container);
@@ -3378,15 +3398,19 @@ function consumePendingAccountRedirect() {
     if (reference) {
       link.className = reference.classes.join(" ");
       link.setAttribute("data-loopdesk-account-control-source", `reference-${reference.kind}`);
-      const presentation = readSvgPresentation(reference.svg);
-      const themeAccountSvg = findThemeAccountSvg(container, link);
-      const accountSvg = themeAccountSvg || createInferredAccountSvg(presentation);
-      const svgClasses = safeThemeClasses(reference.svg, { svg: true });
-      if (svgClasses.length) accountSvg.setAttribute("class", svgClasses.join(" "));
-      accountSvg.setAttribute("aria-hidden", "true");
-      accountSvg.setAttribute("focusable", "false");
-      link.appendChild(accountSvg);
-      link.setAttribute("data-loopdesk-account-icon-source", themeAccountSvg ? "native-account" : `reference-${reference.kind}`);
+      const accountSvg = createLoopDeskAccountSvg(reference.svg);
+      const referenceWrapper = reference.svg.parentElement;
+      const usesSafeSvgWrapper = referenceWrapper?.matches?.("span") &&
+        referenceWrapper.classList.contains("svg-wrapper");
+      if (usesSafeSvgWrapper) {
+        const wrapper = document.createElement("span");
+        wrapper.className = "svg-wrapper";
+        wrapper.appendChild(accountSvg);
+        link.appendChild(wrapper);
+      } else {
+        link.appendChild(accountSvg);
+      }
+      link.setAttribute("data-loopdesk-account-icon-source", "loopdesk-brand");
       return link;
     }
 
@@ -3396,118 +3420,6 @@ function consumePendingAccountRedirect() {
     link.innerHTML =
       '<span class="megaska-account-fallback__icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" focusable="false" aria-hidden="true"><circle cx="12" cy="8" r="3.25"></circle><path d="M5.75 19c.45-3.65 2.55-5.5 6.25-5.5s5.8 1.85 6.25 5.5"></path></svg></span><span class="megaska-visually-hidden">My account</span>';
     return link;
-  }
-
-  function clampAccountMetric(value, minimum, maximum, fallback) {
-    const number = Number.parseFloat(value);
-    return Number.isFinite(number) && number >= minimum && number <= maximum ? number : fallback;
-  }
-
-  function svgHasUnsafeReferences(svg) {
-    if (!svg || !svg.querySelector(ACCOUNT_ICON_GEOMETRY_SELECTOR)) return true;
-    return Array.from(svg.querySelectorAll("*")).some((node) =>
-      Array.from(node.attributes || []).some((attribute) =>
-        /url\s*\(\s*#/i.test(attribute.value) ||
-        ((attribute.name === "href" || attribute.name === "xlink:href") && !/^\s*#[A-Za-z][\w:.-]*\s*$/.test(attribute.value))
-      )
-    );
-  }
-
-  function expandLocalSvgSymbols(svg) {
-    svg.querySelectorAll("use").forEach((use) => {
-      const reference = use.getAttribute("href") || use.getAttribute("xlink:href") || "";
-      const symbol = reference.startsWith("#") ? document.getElementById(reference.slice(1)) : null;
-      if (!symbol || !symbol.matches("symbol, g") || !symbol.querySelector(ACCOUNT_ICON_GEOMETRY_SELECTOR)) return;
-      const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
-      for (const attribute of use.attributes) {
-        if (attribute.name !== "href" && attribute.name !== "xlink:href") group.setAttribute(attribute.name, attribute.value);
-      }
-      Array.from(symbol.childNodes).forEach((child) => group.appendChild(child.cloneNode(true)));
-      use.replaceWith(group);
-    });
-  }
-
-  function sanitizeThemeAccountSvg(svg) {
-    if (svgHasUnsafeReferences(svg)) return null;
-    const clone = svg.cloneNode(true);
-    expandLocalSvgSymbols(clone);
-    clone.querySelectorAll("script, style, animate, animateMotion, animateTransform, set, foreignObject").forEach((node) => node.remove());
-    [clone, ...clone.querySelectorAll("*")].forEach((node) => {
-      node.removeAttribute("id");
-      node.removeAttribute("aria-label");
-      node.removeAttribute("role");
-      node.removeAttribute("title");
-      Array.from(node.attributes || []).forEach((attribute) => {
-        if (/^on/i.test(attribute.name)) node.removeAttribute(attribute.name);
-      });
-    });
-    clone.querySelectorAll("title").forEach((node) => node.remove());
-    clone.removeAttribute("class");
-    clone.setAttribute("aria-hidden", "true");
-    clone.setAttribute("focusable", "false");
-    return clone.querySelector(ACCOUNT_ICON_GEOMETRY_SELECTOR) ? clone : null;
-  }
-
-  function findThemeAccountSvg(container, fallback) {
-    const hidden = findHiddenThemeAccountControl(container);
-    if (!hidden || hidden === fallback || hidden.closest("[data-megaska-fallback-account]")) return null;
-    const svg = hidden.querySelector("svg");
-    return sanitizeThemeAccountSvg(svg);
-  }
-
-  function readSvgPresentation(svg) {
-    const computed = window.getComputedStyle(svg);
-    const fill = svg.getAttribute("fill") || computed?.fill || "";
-    const stroke = svg.getAttribute("stroke") || computed?.stroke || "";
-    const strokeWidth = svg.getAttribute("stroke-width") || computed?.strokeWidth || "";
-    const fillActive = fill && fill !== "none" && fill !== "transparent";
-    const strokeActive = stroke && stroke !== "none" && stroke !== "transparent";
-    return {
-      mode: strokeActive ? "stroke" : fillActive ? "fill" : "stroke",
-      width: clampAccountMetric(svg.getAttribute("width") || computed?.width, 14, 32, 22),
-      height: clampAccountMetric(svg.getAttribute("height") || computed?.height, 14, 32, 22),
-      strokeWidth: clampAccountMetric(strokeWidth, 1.25, 2.25, 1.7),
-      linecap: ["round", "butt", "square"].includes(svg.getAttribute("stroke-linecap") || computed?.strokeLinecap)
-        ? (svg.getAttribute("stroke-linecap") || computed.strokeLinecap) : "round",
-      linejoin: ["round", "miter", "bevel"].includes(svg.getAttribute("stroke-linejoin") || computed?.strokeLinejoin)
-        ? (svg.getAttribute("stroke-linejoin") || computed.strokeLinejoin) : "round",
-    };
-  }
-
-  function findReferenceSvg(container, fallback) {
-    const reference = findStructuralReference(container);
-    return reference && reference.action !== fallback ? reference : null;
-  }
-
-  function createInferredAccountSvg(presentation) {
-    const namespace = "http://www.w3.org/2000/svg";
-    const svg = document.createElementNS(namespace, "svg");
-    svg.setAttribute("viewBox", "0 0 24 24");
-    svg.setAttribute("aria-hidden", "true");
-    svg.setAttribute("focusable", "false");
-    if (presentation.mode === "fill") {
-      svg.setAttribute("fill", "currentColor");
-      svg.innerHTML = '<path d="M12 12a4.25 4.25 0 1 0 0-8.5 4.25 4.25 0 0 0 0 8.5Zm0 1.75c-4.62 0-8 2.42-8 5.75 0 .55.45 1 1 1h14c.55 0 1-.45 1-1 0-3.33-3.38-5.75-8-5.75Z"></path>';
-    } else {
-      svg.setAttribute("fill", "none");
-      svg.setAttribute("stroke", "currentColor");
-      svg.setAttribute("stroke-width", String(presentation.strokeWidth));
-      svg.setAttribute("stroke-linecap", presentation.linecap);
-      svg.setAttribute("stroke-linejoin", presentation.linejoin);
-      svg.innerHTML = '<circle cx="12" cy="8" r="3.25"></circle><path d="M5.75 19c.45-3.65 2.55-5.5 6.25-5.5s5.8 1.85 6.25 5.5"></path>';
-    }
-    return svg;
-  }
-
-  function adaptDesktopAccountFallback(fallback, container) {
-    if (!fallback || !container) return;
-    if (fallback.getAttribute("data-loopdesk-account-control-source") !== "loopdesk-default") return;
-    const reference = findReferenceSvg(container, fallback);
-    if (!reference) return;
-    const presentation = readSvgPresentation(reference.svg);
-    const signature = `${reference.kind}:${presentation.mode}:${presentation.strokeWidth}`;
-    if (fallback.dataset.loopdeskAccountIconSignature === signature) return;
-    fallback.dataset.loopdeskAccountIconSignature = signature;
   }
 
   function createMobileAccountFallback() {
@@ -3574,7 +3486,6 @@ function ensureDesktopAccountFallback() {
       ensureDesktopAccountFallback();
       return;
     }
-    adaptDesktopAccountFallback(existingFallback, desktopContainer);
     return;
   }
 
@@ -3604,8 +3515,6 @@ function ensureDesktopAccountFallback() {
       desktopContainer.appendChild(fallback);
     }
   }
-
-  adaptDesktopAccountFallback(fallback, desktopContainer);
 
   console.log("[Megaska OTP] desktop account fallback inserted");
 }
