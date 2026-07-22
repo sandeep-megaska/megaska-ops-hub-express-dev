@@ -571,7 +571,7 @@
   line-height: 1;
 }
 
-.megaska-account-fallback--desktop {
+.megaska-account-fallback--desktop[data-loopdesk-account-control-source="loopdesk-default"] {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -595,32 +595,32 @@
   font-size: 0;
 }
 
-.megaska-account-fallback--desktop .megaska-account-fallback__icon svg {
+.megaska-account-fallback--desktop[data-loopdesk-account-control-source="loopdesk-default"] .megaska-account-fallback__icon svg {
   display: block;
   width: var(--loopdesk-account-icon-size, 22px);
   height: var(--loopdesk-account-icon-size, 22px);
   flex-shrink: 0;
 }
 
-.megaska-account-fallback--desktop[data-loopdesk-account-icon-source^="reference-"] .megaska-account-fallback__icon svg[stroke],
-.megaska-account-fallback--desktop[data-loopdesk-account-icon-source="loopdesk-default"] .megaska-account-fallback__icon svg[stroke] {
+.megaska-account-fallback--desktop[data-loopdesk-account-control-source="loopdesk-default"][data-loopdesk-account-icon-source^="reference-"] .megaska-account-fallback__icon svg[stroke],
+.megaska-account-fallback--desktop[data-loopdesk-account-control-source="loopdesk-default"][data-loopdesk-account-icon-source="loopdesk-default"] .megaska-account-fallback__icon svg[stroke] {
   stroke-width: var(--loopdesk-account-stroke-width, 1.7);
 }
 
-.megaska-account-fallback--desktop:hover {
+.megaska-account-fallback--desktop[data-loopdesk-account-control-source="loopdesk-default"]:hover {
   background: rgba(127, 127, 127, 0.1);
 }
 
-.megaska-account-fallback--desktop:focus-visible {
+.megaska-account-fallback--desktop[data-loopdesk-account-control-source="loopdesk-default"]:focus-visible {
   outline: 2px solid currentColor;
   outline-offset: 2px;
 }
 
-.megaska-account-fallback--desktop:active {
+.megaska-account-fallback--desktop[data-loopdesk-account-control-source="loopdesk-default"]:active {
   background: rgba(127, 127, 127, 0.18);
 }
 
-.megaska-account-fallback--desktop .megaska-account-fallback__label {
+.megaska-account-fallback--desktop[data-loopdesk-account-control-source="loopdesk-default"] .megaska-account-fallback__label {
   display: none !important;
 }
 
@@ -632,7 +632,7 @@
 }
 
 @media (max-width: 1024px) {
-  .megaska-account-fallback--desktop {
+  #megaska-account-fallback-desktop {
     display: none !important;
   }
 
