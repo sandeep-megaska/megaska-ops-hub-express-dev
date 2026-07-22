@@ -30,11 +30,23 @@ test('captures variant, quantity, selling plans, properties, and all FormData fi
   mustContain('body: data');
 });
 
-test('prevents native checkout only after successful form resolution', () => {
-  assert.ok(source.indexOf('if (!form)') < source.indexOf('event.preventDefault()'));
-  mustContain('event.stopPropagation()');
-  mustContain('event.stopImmediatePropagation');
-  mustContain('[LoopDesk Buy Now] unresolved product form');
+test('hides the native dynamic checkout button and injects an app-owned CTA in its place', () => {
+  mustContain('control.style.display = "none"');
+  mustContain('control.style.visibility = "hidden"');
+  mustContain('control.setAttribute("aria-hidden", "true")');
+  mustContain('control.parentNode.insertBefore(createLoopDeskBuyNowCta(), control)');
+  mustContain('[LoopDesk Buy Now] unresolved product form for native button');
+  assert.ok(
+    source.indexOf('function process(root)') < source.indexOf('isExpressCheckoutReady()', source.indexOf('function process(root)')),
+    'replacement should only run once express checkout is ready',
+  );
+});
+
+test('the injected CTA is a same-document button, not reliant on catching a native click', () => {
+  mustContain('button.type = "button"');
+  mustContain('loopdesk-buy-now-cta');
+  mustContain('data-loopdesk-buy-now-cta');
+  mustContain('[LoopDesk Buy Now] unresolved product form"');
 });
 
 test('/cart/add.js is posted exactly once by the owned click path', () => {
@@ -81,4 +93,13 @@ test('add-to-cart, cart drawer, sold-out, dynamic insertion, duplicate load, and
   mustContain('if (window[MARKER] && window[API_NAME]) return');
   mustContain('shopify:section:load');
   mustContain('shopify:block:select');
+});
+
+test('re-scans once the megaska-otp-embed runtime config becomes ready', () => {
+  // loopdesk-buy-now-bridge.js loads via megaska-otp-embed.liquid, which
+  // dispatches "loopdesk:runtime-config-ready" on `window` (not the
+  // document-scoped "loopdesk:runtime-config" the cart drawer embed uses) —
+  // express_checkout readiness may only be populated once that fires.
+  mustContain('window.addEventListener("loopdesk:runtime-config-ready"');
+  assert.ok(!source.includes('document.addEventListener("loopdesk:runtime-config"'));
 });
