@@ -14,6 +14,20 @@ assert.doesNotMatch(embed, /\.then\(loadDrawerAsset\)/, "runtime config completi
 assert.doesNotMatch(embed, /LoopDeskCartBootstrap/, "the removed cart bootstrap must remain absent");
 assert.doesNotMatch(embed, /applyRuntimeConfig/, "the removed runtime config application helper must remain absent");
 
+// CART-NAV-3: the embed's inline bounce-back check is a fast-path duplicate
+// of bounceBackFromUnwantedCartPageNavigation()/recordCartAddReturnIntent()
+// in loopdesk-cart-drawer.js, run synchronously before any deferred asset
+// fetch to minimize the visible flash of the native cart page. It must use
+// the exact same sessionStorage keys and max-age as the main script, or the
+// fast path silently stops working while the slower fallback masks it.
+assert.ok(embed.indexOf('<script>') < embed.indexOf("RETURN_KEY = \"loopdeskCartAddReturnTo\""), "the inline bounce-back check must run before the drawer CSS/asset script tags");
+assert.match(embed, /RETURN_KEY = "loopdeskCartAddReturnTo";/, "the embed's fast-path key must match the main script's CART_ADD_RETURN_KEY");
+assert.match(embed, /REOPEN_KEY = "loopdeskCartAddReopenDrawer";/, "the embed's fast-path key must match the main script's CART_ADD_REOPEN_KEY");
+assert.match(embed, /MAX_AGE_MS = 8000;/, "the embed's fast-path max-age must match the main script's CART_ADD_RETURN_MAX_AGE_MS");
+assert.match(source, /CART_ADD_RETURN_KEY = "loopdeskCartAddReturnTo";/, "the main script's return key must match the embed's fast-path RETURN_KEY");
+assert.match(source, /CART_ADD_REOPEN_KEY = "loopdeskCartAddReopenDrawer";/, "the main script's reopen key must match the embed's fast-path REOPEN_KEY");
+assert.match(source, /CART_ADD_RETURN_MAX_AGE_MS = 8000;/, "the main script's max-age must match the embed's fast-path MAX_AGE_MS");
+
 const ownershipDecision = source.match(/function cartOwnershipDecision\(capability\) \{[\s\S]*?\n  \}\n\n  function isLoopDeskDrawerActive/);
 assert.ok(ownershipDecision, "cart ownership decision helper should exist");
 assert.match(ownershipDecision[0], /config\.cart\.drawerMode === "theme"[\s\S]*reason = "theme-mode"/, "theme mode must remain fallback-owned");
