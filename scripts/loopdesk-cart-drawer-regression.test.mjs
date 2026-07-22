@@ -45,6 +45,16 @@ assert.match(source, /function ownCartTriggerEvent\(event, trigger, action\) \{[
 assert.match(source, /function isInsideLoopDeskDrawer\(element\)[\s\S]*closest\("#" \+ ROOT_ID\)/, "Case F: LoopDesk View Cart remains excluded by the drawer-root boundary");
 assert.match(triggerHandler[0], /if \(!active\) \{[\s\S]*fallback theme behavior allowed[\s\S]*return;/, "Case G: inactive ownership should preserve normal theme navigation");
 assert.match(source, /function openLoopDeskCartFromTrigger\(trigger, action\)[\s\S]*deferredCartOpen[\s\S]*\[0, 50, 150, 300\][\s\S]*DOMContentLoaded/, "Case H: an early interaction should use bounded deferred mount/open retries");
+
+// CART-UNIVERSAL-1: merchants can supply an escape-hatch CSS selector for
+// themes whose cart icon markup doesn't match any known naming convention,
+// and icon glyph text (SVG use/img alt) counts as a positive cart signal.
+assert.match(source, /function getCustomCartTriggerSelector\(\) \{[\s\S]*try \{[\s\S]*document\.querySelectorAll\(trimmed\);[\s\S]*return trimmed;[\s\S]*catch \(_error\) \{[\s\S]*return "";/, "Case I: an invalid merchant-supplied selector must be caught and ignored, not throw");
+assert.match(source, /if \(CUSTOM_CART_TRIGGER_SELECTOR\) \{[\s\S]*var customTrigger = target\.closest\(CUSTOM_CART_TRIGGER_SELECTOR\);[\s\S]*return customTrigger;/, "Case I: a merchant custom selector match should be treated as an authoritative cart trigger");
+assert.match(source, /function iconGlyphText\(element\)[\s\S]*querySelectorAll\("use"\)[\s\S]*getAttribute\("href"\) \|\| [\s\S]*getAttribute\("xlink:href"\)/, "Case J: SVG <use> icon references should count as a cart-icon signal for icon-only triggers");
+assert.match(source, /CART_TRIGGER_KEYWORD_REGEX = \/\\b\(cart\|bag\|basket\|trolley\)\\b/, "Case J: regional cart synonyms (bag/basket/trolley) should be recognized");
+assert.match(source, /document\.querySelectorAll\(COMBINED_CART_TRIGGER_SELECTOR\)/, "Case I: the compatibility takeover should also clone merchant custom-selector triggers");
+assert.match(source, /runtimeConfig\.cart\.customTriggerSelector !== config\.cart\.customTriggerSelector\)[\s\S]*CUSTOM_CART_TRIGGER_SELECTOR = getCustomCartTriggerSelector\(\);/, "Case I: a late-arriving runtime config should refresh the custom selector without a page reload");
 assert.doesNotMatch(source.match(/function ownCartTriggerEvent\(event, trigger, action\)[\s\S]*?\n  \}/)[0], /fallbackToCartPage/, "an owned interaction must never fall through to /cart after interception");
 
 const controllerOpen = source.match(/window\.LoopDeskCartController = \{[\s\S]*?open: function \(\) \{[\s\S]*?\n    \},/);

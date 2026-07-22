@@ -27,7 +27,8 @@
       openAfterAddToCart: false,
       expressCheckoutButtonEnabled: true,
       viewCartButtonEnabled: true,
-      nativeDrawerDisabledRequiredMessage: "To use LoopDesk Enhanced Drawer, set your theme cart type to Page in Shopify theme settings."
+      nativeDrawerDisabledRequiredMessage: "To use LoopDesk Enhanced Drawer, set your theme cart type to Page in Shopify theme settings.",
+      customTriggerSelector: ""
     },
     checkout: {
       showSecureBadge: true,
@@ -88,16 +89,46 @@
     'a[href^="/cart"]',
     'button[name="cart"]',
     '[aria-label*="cart" i]',
+    '[aria-label*="bag" i]',
+    '[aria-label*="basket" i]',
     '[aria-controls*="cart" i]',
     '[id*="cart-icon" i]',
+    '[id*="cart-toggle" i]',
+    '[id*="cart-trigger" i]',
+    '[id*="mini-cart" i]',
     '[class*="cart-icon" i]',
+    '[class*="cart-toggle" i]',
+    '[class*="cart-trigger" i]',
+    '[class*="cart-link" i]',
+    '[class*="cart-count" i]',
+    '[class*="mini-cart" i]',
     '[class*="header__icon--cart" i]',
+    '[class*="header-cart" i]',
+    '[class*="basket" i]',
     '[data-cart]',
     '[data-cart-drawer]',
+    '[data-cart-trigger]',
     '[data-action*="cart" i]',
     'summary',
     'button'
   ].join(',');
+
+  function getCustomCartTriggerSelector() {
+    var raw = config.cart && config.cart.customTriggerSelector;
+    if (!raw || typeof raw !== "string") return "";
+    var trimmed = raw.trim();
+    if (!trimmed) return "";
+    try {
+      document.querySelectorAll(trimmed);
+      return trimmed;
+    } catch (_error) {
+      debugLog("invalid custom cart trigger selector ignored", { selector: trimmed }, true);
+      return "";
+    }
+  }
+  var CUSTOM_CART_TRIGGER_SELECTOR = getCustomCartTriggerSelector();
+  var COMBINED_CART_TRIGGER_SELECTOR = CUSTOM_CART_TRIGGER_SELECTOR ? CART_TRIGGER_SELECTOR + "," + CUSTOM_CART_TRIGGER_SELECTOR : CART_TRIGGER_SELECTOR;
+  var CART_TRIGGER_KEYWORD_REGEX = /\b(cart|bag|basket|trolley)\b|cart-icon|cart-toggle|cart-trigger|cart-link|cart-count|mini-cart|header__icon--cart|header-cart/;
 
   var state = { selectedOfferVariants: {}, offerProducts: {}, offerLoading: {}, open: false, loading: false, cart: null, error: "", hostMode: LOOPDESK_HOST_MODE, themeDrawer: null, fallbackReason: "", expressCheckoutLock: false, capability: null, drawerModeActive: false, neutralizedThemeDrawers: [], bodyLockSnapshot: null, removedThemeBodyClasses: [], cartTriggerTakeovers: [], promotionRuntimeRefresh: { attempts: 0, maxAttempts: 3, inFlight: false, delayedTimer: null, cartNonEmptyAttempted: false } };
   var cartTriggerObserver = null;
@@ -397,7 +428,8 @@
         openAfterAddToCart: bool(firstDefined(cart.openAfterAddToCart, legacy.openAfterAddToCart), DEFAULT_CONFIG.cart.openAfterAddToCart),
         expressCheckoutButtonEnabled: bool(firstDefined(cart.expressCheckoutButtonEnabled, legacy.expressCheckoutButtonEnabled), DEFAULT_CONFIG.cart.expressCheckoutButtonEnabled),
         viewCartButtonEnabled: bool(firstDefined(cart.viewCartButtonEnabled, legacy.viewCartButtonEnabled), DEFAULT_CONFIG.cart.viewCartButtonEnabled),
-        nativeDrawerDisabledRequiredMessage: text(cart.nativeDrawerDisabledRequiredMessage, DEFAULT_CONFIG.cart.nativeDrawerDisabledRequiredMessage)
+        nativeDrawerDisabledRequiredMessage: text(cart.nativeDrawerDisabledRequiredMessage, DEFAULT_CONFIG.cart.nativeDrawerDisabledRequiredMessage),
+        customTriggerSelector: text(cart.customTriggerSelector || legacy.customTriggerSelector, DEFAULT_CONFIG.cart.customTriggerSelector)
       },
       checkout: {
         showSecureBadge: bool(checkout.showSecureBadge, DEFAULT_CONFIG.checkout.showSecureBadge),
@@ -861,17 +893,39 @@
     return /\b(checkout|quantity|qty|increase|decrease|remove|discount|coupon|promo)\b/.test(text) || /\badd(?:\s|-|_)to(?:\s|-|_)cart\b/.test(text);
   }
 
+  function iconGlyphText(element) {
+    if (!element || !element.querySelectorAll) return "";
+    var parts = [];
+    var useNodes = element.querySelectorAll("use");
+    for (var i = 0; i < useNodes.length; i += 1) {
+      parts.push(useNodes[i].getAttribute("href") || useNodes[i].getAttribute("xlink:href") || "");
+    }
+    var glyphNodes = element.querySelectorAll("img[alt], svg[aria-label], symbol[id], [data-icon]");
+    for (var j = 0; j < glyphNodes.length; j += 1) {
+      parts.push(glyphNodes[j].getAttribute("alt") || glyphNodes[j].getAttribute("aria-label") || glyphNodes[j].id || glyphNodes[j].getAttribute("data-icon") || "");
+    }
+    return parts.join(" ").toLowerCase();
+  }
+
   function findCartTrigger(target) {
     if (!target || !target.closest || isInsideLoopDeskDrawer(target)) return null;
     var link = target.closest("a[href]");
     if (link && hasCartPath(link.getAttribute("href")) && !isExcludedCartControl(link)) return link;
 
+    if (CUSTOM_CART_TRIGGER_SELECTOR) {
+      var customTrigger = target.closest(CUSTOM_CART_TRIGGER_SELECTOR);
+      if (customTrigger && !isInsideLoopDeskDrawer(customTrigger) && !isExcludedCartControl(customTrigger)) {
+        debugLogOnce("cart-trigger-matched-custom", "cart trigger matched merchant custom selector", { eventType: "cart-trigger", trigger: getElementDescriptor(customTrigger) }, true);
+        return customTrigger;
+      }
+    }
+
     var trigger = closestSelector(target, CART_TRIGGER_SELECTOR);
     if (!trigger || isInsideLoopDeskDrawer(trigger) || isExcludedCartControl(trigger)) return null;
 
-    var wrapper = trigger.closest && trigger.closest("[class*='cart-icon' i], [id*='cart-icon' i], [class*='header__icon--cart' i], [data-cart], [data-cart-drawer], [aria-controls*='cart' i]");
-    var text = elementText(trigger) + " " + elementText(wrapper || null);
-    if (!hasCartPath(trigger.getAttribute && trigger.getAttribute("href")) && !/\b(cart|bag)\b|cart-icon|header__icon--cart/.test(text)) return null;
+    var wrapper = trigger.closest && trigger.closest("[class*='cart-icon' i], [id*='cart-icon' i], [class*='header__icon--cart' i], [class*='header-cart' i], [class*='cart-toggle' i], [class*='cart-trigger' i], [class*='mini-cart' i], [data-cart], [data-cart-drawer], [data-cart-trigger], [aria-controls*='cart' i]");
+    var text = elementText(trigger) + " " + elementText(wrapper || null) + " " + iconGlyphText(trigger) + " " + iconGlyphText(wrapper || null);
+    if (!hasCartPath(trigger.getAttribute && trigger.getAttribute("href")) && !CART_TRIGGER_KEYWORD_REGEX.test(text)) return null;
     debugLogOnce("cart-trigger-matched", "cart trigger matched selector/type", { eventType: "cart-trigger", trigger: getElementDescriptor(trigger), wrapper: getElementDescriptor(wrapper) }, true);
     return trigger;
   }
@@ -910,7 +964,7 @@
       return;
     }
     var applied = 0;
-    var triggers = Array.prototype.slice.call(document.querySelectorAll(CART_TRIGGER_SELECTOR))
+    var triggers = Array.prototype.slice.call(document.querySelectorAll(COMBINED_CART_TRIGGER_SELECTOR))
       .filter(function (trigger, index, list) {
         return trigger && list.indexOf(trigger) === index && !isInsideLoopDeskDrawer(trigger) && trigger.getAttribute("data-loopdesk-cart-trigger") !== "true" && findCartTrigger(trigger) === trigger && !getConnectedTakeoverRecord(trigger);
       });
@@ -1248,6 +1302,12 @@
   document.addEventListener("loopdesk:runtime-config", function (event) {
     var runtimeConfig = event && event.detail && event.detail.config;
     if (!isPlainObject(runtimeConfig)) return;
+    if (isPlainObject(runtimeConfig.cart) && typeof runtimeConfig.cart.customTriggerSelector === "string" && runtimeConfig.cart.customTriggerSelector !== config.cart.customTriggerSelector) {
+      config.cart.customTriggerSelector = runtimeConfig.cart.customTriggerSelector;
+      CUSTOM_CART_TRIGGER_SELECTOR = getCustomCartTriggerSelector();
+      COMBINED_CART_TRIGGER_SELECTOR = CUSTOM_CART_TRIGGER_SELECTOR ? CART_TRIGGER_SELECTOR + "," + CUSTOM_CART_TRIGGER_SELECTOR : CART_TRIGGER_SELECTOR;
+      scheduleCartTriggerTakeover("runtime-config");
+    }
     var intelligence = runtimeConfig.cart_intelligence_config || runtimeConfig.cartIntelligence;
     if (!isPlainObject(intelligence)) return;
     config.cartIntelligence = normalizeCartIntelligence(intelligence);
