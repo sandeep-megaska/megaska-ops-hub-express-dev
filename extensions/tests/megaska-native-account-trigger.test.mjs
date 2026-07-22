@@ -14,6 +14,70 @@ function functionSource(name, nextName) {
   return source.slice(start, end);
 }
 
+class RuntimeAnchor {
+  constructor(attributes) {
+    this.attributes = new Map(Object.entries(attributes));
+    this.listeners = new Map();
+  }
+
+  getAttribute(name) {
+    return this.attributes.get(name) ?? null;
+  }
+
+  hasAttribute(name) {
+    return this.attributes.has(name);
+  }
+
+  closest(selector) {
+    return this.matches(selector) ? this : null;
+  }
+
+  matches(selector) {
+    return selector.split(",").some((part) => {
+      const candidate = part.trim();
+      if (candidate === "a") return true;
+      if (candidate === "button" || candidate === "[role='button']") return false;
+      if (candidate.startsWith("#")) return this.getAttribute("id") === candidate.slice(1);
+      const attribute = candidate.match(/^\[([^\]]+)\]$/)?.[1];
+      return attribute ? this.hasAttribute(attribute) : false;
+    });
+  }
+
+  addEventListener(type, listener) {
+    this.listeners.set(type, listener);
+  }
+
+  async click() {
+    const event = {
+      target: this,
+      defaultPrevented: false,
+      propagationStopped: false,
+      preventDefault() { this.defaultPrevented = true; },
+      stopPropagation() { this.propagationStopped = true; },
+      stopImmediatePropagation() { this.propagationStopped = true; },
+    };
+    await this.listeners.get("click")?.(event);
+    return event;
+  }
+}
+
+function buildAccountTriggerGuard() {
+  const guardSource = source.slice(
+    source.indexOf("function getAccountTriggerActionElement("),
+    source.indexOf("function resolveAccountDestinationUrl(")
+  );
+  return new Function(
+    "window",
+    "DEFAULT_MEGASKA_DASHBOARD_URL",
+    "resolveAccountDestinationUrl",
+    `${guardSource}; return isUsableAccountEntryTrigger;`
+  )(
+    { location: { origin: "https://shop.example" } },
+    "/apps/megaska/account",
+    () => "/apps/megaska/account"
+  );
+}
+
 test("native account interception is delegated and limited to entry routes", () => {
   const pathGuard = functionSource("isShopifyNativeAccountPath", "isNativeAccountIntentElement");
   const intentGuard = functionSource("isNativeAccountIntentElement", "getAccountTriggerActionElement");
@@ -51,4 +115,86 @@ test("account routing uses OTP pending intent and the LoopDesk dashboard resolve
   assert.match(handler, /window\.location\.assign\(accountDestination\)/);
   assert.doesNotMatch(handler, /MegaskaExpressCheckout|openExpress|express-checkout/i);
   assert.match(source, /const DEFAULT_MEGASKA_DASHBOARD_URL = "\/apps\/megaska\/account"/);
+});
+
+test("desktop LoopDesk fallback dispatches to OTP before navigation and routes authenticated customers", async () => {
+  const isUsableAccountEntryTrigger = buildAccountTriggerGuard();
+  const fallback = new RuntimeAnchor({
+    id: "megaska-account-fallback-desktop",
+    href: "/apps/megaska/account",
+    "data-megaska-open-login": "1",
+    "data-megaska-fallback-account": "desktop",
+    "aria-label": "My account",
+  });
+  assert.equal(isUsableAccountEntryTrigger(fallback), true);
+
+  let authenticated = false;
+  let handlerCalls = 0;
+  let pendingAction = null;
+  const modalSources = [];
+  const navigations = [];
+  const handlerSource = functionSource(
+    "handleAccountTriggerClick",
+    "ensureMegaskaAuthenticatedBeforeCheckout"
+  );
+  const handleAccountTriggerClick = new Function(
+    "hardBlockEvent",
+    "getMegaskaCheckoutGateState",
+    "resolveAccountDestinationUrl",
+    "setPendingAction",
+    "openModal",
+    "handlePromptFallback",
+    "hideAccountMenu",
+    "window",
+    `async ${handlerSource.replace(/async\s*$/, "")}; return handleAccountTriggerClick;`
+  )(
+    (event) => {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    },
+    async () => ({ authenticated, verifiedPhonePresent: authenticated }),
+    () => "/apps/megaska/account",
+    (action) => { pendingAction = action; },
+    (modalSource) => { modalSources.push(modalSource); },
+    async () => {},
+    () => {},
+    { location: { assign: (destination) => navigations.push(destination) } }
+  );
+
+  fallback.addEventListener("click", async (event) => {
+    if (!isUsableAccountEntryTrigger(fallback)) return;
+    handlerCalls += 1;
+    await handleAccountTriggerClick(event, fallback);
+  });
+
+  const guestClick = await fallback.click();
+  assert.equal(handlerCalls, 1, "the delegated account handler should be reached");
+  assert.equal(guestClick.defaultPrevented, true);
+  assert.deepEqual(modalSources, ["account-intercept"]);
+  assert.equal(pendingAction.type, "account-redirect");
+  assert.equal(pendingAction.accountDestination, "/apps/megaska/account");
+  assert.deepEqual(navigations, [], "guest navigation must wait for OTP verification");
+
+  authenticated = true;
+  await fallback.click();
+  assert.equal(handlerCalls, 2);
+  assert.deepEqual(modalSources, ["account-intercept"], "OTP must not reopen for a session");
+  assert.deepEqual(navigations, ["/apps/megaska/account"]);
+});
+
+test("LoopDesk-owned destinations reject logout, cross-origin, and unrelated proxy routes", () => {
+  const isUsableAccountEntryTrigger = buildAccountTriggerGuard();
+  const ownedAnchor = (href) => new RuntimeAnchor({
+    href,
+    "data-megaska-open-login": "1",
+    "data-megaska-fallback-account": "desktop",
+  });
+
+  assert.equal(isUsableAccountEntryTrigger(ownedAnchor("/account/logout")), false);
+  assert.equal(isUsableAccountEntryTrigger(ownedAnchor("https://attacker.example/apps/megaska/account")), false);
+  assert.equal(isUsableAccountEntryTrigger(ownedAnchor("/apps/megaska/unrelated")), false);
+  assert.equal(isUsableAccountEntryTrigger(ownedAnchor("javascript:alert(1)")), false);
+
+  const accountCode = `${functionSource("isSafeLoopDeskAccountDestination", "isUsableAccountEntryTrigger")}\n${functionSource("handleAccountTriggerClick", "ensureMegaskaAuthenticatedBeforeCheckout")}`;
+  assert.doesNotMatch(accountCode, /MegaskaExpressCheckout|openExpress|express-checkout/i);
 });

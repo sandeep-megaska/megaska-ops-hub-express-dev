@@ -2739,11 +2739,46 @@ function consumePendingAccountRedirect() {
     return element.closest("a,button,[role='button']") || element;
   }
 
+  const LOOPDESK_ACCOUNT_TRIGGER_SELECTOR =
+    "[data-megaska-open-login],[data-megaska-fallback-account],#megaska-account-fallback-desktop,#megaska-account-fallback-mobile";
+
+  function isSafeLoopDeskAccountDestination(actionElement) {
+    const href = String(actionElement?.getAttribute?.("href") || "").trim();
+    if (!href) return true;
+
+    let destinationUrl = null;
+    try {
+      destinationUrl = new URL(href, window.location.origin);
+    } catch {
+      return false;
+    }
+    if (destinationUrl.origin !== window.location.origin) return false;
+
+    const destination = `${destinationUrl.pathname}${destinationUrl.search}${destinationUrl.hash}`;
+    const allowedDestinations = new Set([
+      DEFAULT_MEGASKA_DASHBOARD_URL,
+      resolveAccountDestinationUrl(),
+    ]);
+
+    return allowedDestinations.has(destination);
+  }
+
   function isUsableAccountEntryTrigger(element) {
     const actionElement = getAccountTriggerActionElement(element);
     if (!actionElement || typeof actionElement.getAttribute !== "function") return false;
     if (actionElement.hasAttribute("disabled") || actionElement.getAttribute("aria-disabled") === "true") {
       return false;
+    }
+
+    const isLoopDeskOwned = Boolean(
+      actionElement.matches?.(LOOPDESK_ACCOUNT_TRIGGER_SELECTOR) ||
+        element?.matches?.(LOOPDESK_ACCOUNT_TRIGGER_SELECTOR)
+    );
+    if (isLoopDeskOwned) {
+      return Boolean(
+        actionElement.matches?.("a,button,[role='button']") &&
+          isSafeLoopDeskAccountDestination(actionElement)
+      );
     }
 
     const href = String(actionElement.getAttribute("href") || "").trim();
