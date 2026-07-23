@@ -3,7 +3,7 @@ import { prisma as defaultPrisma } from "../db/prisma.ts";
 export const DEFAULT_PRIMARY_COMMERCIAL_PLAN_CODE = "PROFESSIONAL";
 export const REQUIRED_BILLING_FEATURE_CODES = ["OTP", "EMAIL"] as const;
 export const COMMERCIAL_CATALOG_NOT_CONFIGURED = "COMMERCIAL_CATALOG_NOT_CONFIGURED";
-export const COMMERCIAL_CATALOG_SAFE_MESSAGE = "LoopDesk billing is being configured. Please try again shortly.";
+export const COMMERCIAL_CATALOG_SAFE_MESSAGE = "LoopD2C billing is being configured. Please try again shortly.";
 
 type CatalogFeature = { active: boolean; billableFeature: { code: string; active: boolean } };
 type CatalogPlan = { id: string; code: string; active: boolean; currency: string; features: CatalogFeature[] };

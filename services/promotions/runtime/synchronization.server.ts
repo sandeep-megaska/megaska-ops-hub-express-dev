@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { prisma } from "../../db/prisma.ts";
-import { assembleFunctionConfiguration, assertFunctionConfigurationEqual, buildConfigurationHash, resolveFunctionCapabilities, type LoopDeskFunctionConfiguration, type PromotionRuntimeSyncResult } from "./function-contract.ts";
+import { assembleFunctionConfiguration, assertFunctionConfigurationEqual, buildConfigurationHash, isRecognizedAutomaticDiscountTitle, resolveFunctionCapabilities, type LoopDeskFunctionConfiguration, type PromotionRuntimeSyncResult } from "./function-contract.ts";
 import { createAutomaticDiscount, ensureAutomaticDiscountClasses, findCanonicalAutomaticDiscount, readAutomaticDiscount, readShopifyFunctionByHandle, verifyDiscountOwnsCanonicalConfiguration, writeFunctionConfigurationMetafield, type DiscountSnapshot, type ShopifyGraphql } from "./shopify-discount.server.ts";
 import { compilationContractVersion, mapCompilationToFunctionRule } from "./mapper.ts";
 
@@ -53,8 +53,8 @@ export async function synchronizePromotionFunctionConfiguration(input: Input, de
     // records and duplicate active LoopDesk discounts before anything is published.
     const storedDiscount = state.shopifyAutomaticDiscountId ? await readAutomaticDiscount(graphql, shop.shopDomain, state.shopifyAutomaticDiscountId) : null;
     const canonicalDiscount = await findCanonicalAutomaticDiscount(graphql, shop.shopDomain);
-    if (storedDiscount?.title === "LoopDesk Universal Promotions" && canonicalDiscount && storedDiscount.id !== canonicalDiscount.id) throw new Error("Multiple LoopDesk automatic discounts match canonical ownership markers; ownership is ambiguous.");
-    let discount = storedDiscount?.title === "LoopDesk Universal Promotions" ? storedDiscount : canonicalDiscount;
+    if (isRecognizedAutomaticDiscountTitle(storedDiscount?.title) && canonicalDiscount && storedDiscount!.id !== canonicalDiscount.id) throw new Error("Multiple LoopDesk automatic discounts match canonical ownership markers; ownership is ambiguous.");
+    let discount = isRecognizedAutomaticDiscountTitle(storedDiscount?.title) ? storedDiscount : canonicalDiscount;
     let outcome: "CREATED" | "UPDATED" | "UNCHANGED" = state.lastRulesFingerprint === fingerprint ? "UNCHANGED" : "UPDATED";
     if (!discount) { discount = await createAutomaticDiscount(graphql, shop.shopDomain, now.toISOString(), { supportsOrderDiscounts: capabilities.supportsOrderDiscounts }); outcome = "CREATED"; }
     const preservedCombinations = discount.combinesWith ?? null;

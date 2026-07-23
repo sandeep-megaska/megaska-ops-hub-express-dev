@@ -13,5 +13,5 @@ export async function GET(req: NextRequest) {
   const checkoutIntentId = String(new URL(req.url).searchParams.get("checkoutIntentId") || "").trim();
   if (!checkoutIntentId) return jsonWithCors(req, { ok: false, error: "checkoutIntentId required" }, { status: 400 });
   try { const result = await getAvailableStoreCreditForCheckout({ shopId: shop.shopId, customerProfileId: auth.customer.id, checkoutIntentId }); return jsonWithCors(req, { ok: true, availableAmount: result.availableAmount, currency: result.currency, appliedAmount: result.appliedAmount, remainingPayable: result.remainingPayable }); }
-  catch (error) { console.error("[STORE CREDIT CHECKOUT] store_credit_checkout_failed", { shopId: shop.shopId, checkoutIntentId, error: error instanceof Error ? error.message : "Unknown error" }); return jsonWithCors(req, { ok: false, error: "Unable to load Megaska Store Credit right now." }, { status: 500 }); }
+  catch (error) { console.error("[STORE CREDIT CHECKOUT] store_credit_checkout_failed", { shopId: shop.shopId, checkoutIntentId, error: error instanceof Error ? error.message : "Unknown error" }); return jsonWithCors(req, { ok: false, error: "Unable to load Store Credit right now." }, { status: 500 }); }
 }

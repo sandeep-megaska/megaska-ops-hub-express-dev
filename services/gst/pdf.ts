@@ -684,7 +684,7 @@ export async function renderGstPdf(gstDocumentId: string): Promise<GstServiceRes
     ${model.templateConfig.showAmountInWords ? `<p><strong>Amount in Words:</strong> ${escapeHtml(model.amountInWords)}</p>` : ""}
     ${model.templateConfig.showDeclaration && model.declaration ? `<p><strong>Declaration:</strong> ${escapeHtml(model.declaration)}</p>` : ""}
     ${model.templateConfig.showFooterNote ? `<p>${escapeHtml(model.footer)}</p>` : ""}
-    ${model.templateConfig.showFooterLogo ? `<div class="footer-logo">${model.branding.footerLogoSrc ? `<img src="${escapeHtml(model.branding.footerLogoSrc)}" alt="Footer logo" />` : "MEGASKA"}</div>` : ""}
+    ${model.templateConfig.showFooterLogo ? `<div class="footer-logo">${model.branding.footerLogoSrc ? `<img src="${escapeHtml(model.branding.footerLogoSrc)}" alt="Footer logo" />` : escapeHtml(model.supplier.tradeName || model.supplier.name)}</div>` : ""}
     ${model.signature ? `<p style="text-align:right; margin-top:18px;">For ${escapeHtml(model.supplier.name)}<br/><br/>${escapeHtml(model.signature)}</p>` : ""}
   </body></html>`;
 

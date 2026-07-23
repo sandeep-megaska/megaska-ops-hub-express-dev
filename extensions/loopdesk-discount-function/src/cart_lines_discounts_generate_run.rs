@@ -87,7 +87,7 @@ pub fn run(
                         candidates: vec![schema::OrderDiscountCandidate {
                             associated_discount_code: None,
                             conditions: None,
-                            message: Some("LoopDesk order promotion".into()),
+                            message: Some("LoopD2C order promotion".into()),
                             targets: vec![schema::OrderDiscountCandidateTarget::OrderSubtotal(
                                 schema::OrderSubtotalTarget {
                                     excluded_cart_line_ids: vec![],

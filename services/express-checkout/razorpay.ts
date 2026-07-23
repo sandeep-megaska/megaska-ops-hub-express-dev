@@ -173,7 +173,7 @@ export async function createExpressCheckoutRazorpayOrder(params: CreateParams) {
   const storeCreditReservation = await getActiveStoreCreditReservation({ shopId: shop.id, customerProfileId: String(intent.customerProfileId || ""), checkoutIntentId: intent.id });
   const storeCreditAmountPaise = Math.min(Number(storeCreditReservation?.reservedAmount || 0), Math.max(0, intent.totalAmountPaise));
   const remainingAmountPaise = Math.max(0, intent.totalAmountPaise - storeCreditAmountPaise);
-  if (remainingAmountPaise <= 0) throw new ExpressCheckoutRazorpayError(409, "No online payment is required after Megaska Store Credit.", "Store Credit covers checkout", "STORE_CREDIT_FULL_COVERAGE");
+  if (remainingAmountPaise <= 0) throw new ExpressCheckoutRazorpayError(409, "No online payment is required after Store Credit.", "Store Credit covers checkout", "STORE_CREDIT_FULL_COVERAGE");
   const { keyId } = await getRazorpayCredentials(shop.id);
 
   try {

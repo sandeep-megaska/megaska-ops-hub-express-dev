@@ -471,11 +471,11 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     shippingAddress,
     billingAddress: shippingAddress,
     note: storeCreditAmountPaise > 0
-      ? `Megaska Express Checkout intent ${intent.id} | Megaska Store Credit: ${paiseToRupeeDisplay(storeCreditAmountPaise)} | Remaining payable: ${paiseToRupeeDisplay(remainingPayablePaise)}`
+      ? `LoopD2C Express Checkout intent ${intent.id} | Store Credit: ${paiseToRupeeDisplay(storeCreditAmountPaise)} | Remaining payable: ${paiseToRupeeDisplay(remainingPayablePaise)}`
       : intent.selectedPaymentMethod === "COD" && intent.codFeeAmountPaise > 0
-        ? `Megaska Express Checkout intent ${intent.id} | COD fee: ${paiseToRupeeDisplay(intent.codFeeAmountPaise)} | COD payable total: ${paiseToRupeeDisplay(intent.totalAmountPaise)}`
-        : `Megaska Express Checkout intent ${intent.id}`,
-    tags: ["Megaska Express Checkout"],
+        ? `LoopD2C Express Checkout intent ${intent.id} | COD fee: ${paiseToRupeeDisplay(intent.codFeeAmountPaise)} | COD payable total: ${paiseToRupeeDisplay(intent.totalAmountPaise)}`
+        : `LoopD2C Express Checkout intent ${intent.id}`,
+    tags: ["LoopD2C Express Checkout"],
     customAttributes,
     shippingLine: intent.shippingAmountPaise > 0 ? { title: "Shipping", price: paiseToAmount(intent.shippingAmountPaise) } : undefined,
     appliedDiscount: discount,

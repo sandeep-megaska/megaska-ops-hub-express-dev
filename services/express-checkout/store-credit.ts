@@ -158,7 +158,7 @@ export async function applyStoreCreditToCheckout(params: Params) {
     const availablePaise = Math.max(0, wallet.currentBalance - Number(reservedRows[0]?.total || 0));
     // TODO(SC-1.11): keep full Store Credit coverage enabled because Shopify draftOrderComplete supports a fully discounted draft in DEV UAT; cap here to total-1 if DEV UAT proves a zero-payable order is unsafe.
     const applicablePaise = Math.min(availablePaise, Math.max(0, Number(intent.totalAmountPaise || 0)));
-    if (applicablePaise <= 0) throw new Error("No Megaska Store Credit available");
+    if (applicablePaise <= 0) throw new Error("No Store Credit available");
     const expiresAt = new Date(Date.now() + RESERVATION_TTL_MS);
     const existing = await getActiveStoreCreditReservation(params, tx);
     const reservationId = existing?.id || randomUUID();
@@ -217,7 +217,7 @@ export async function consumeStoreCreditReservationForOrder(params: Params & { s
     try {
       transactionRows = await tx.$queryRaw<Array<{ id: string }>>`
         INSERT INTO "WalletTransaction" ("id", "shopId", "walletAccountId", "customerProfileId", "direction", "transactionType", "amount", "currency", "sourceType", "sourceId", "sourceReference", "orderNumber", "reason", "adminNote", "createdByType", "createdById", "createdAt")
-        VALUES (${randomUUID()}, ${params.shopId}, ${wallet.id}, ${params.customerProfileId}, 'DEBIT'::"WalletDirection", 'CHECKOUT_REDEMPTION'::"WalletTransactionType", ${reservation.reservedAmount}, ${reservation.currency}, 'WALLET_RESERVATION'::"WalletSourceType", ${reservation.id}, ${params.checkoutIntentId}, ${params.orderNumber || null}, 'Megaska Store Credit redeemed at checkout', ${`Store Credit reservation ${reservation.id} consumed after Shopify order creation`}, 'SYSTEM'::"WalletActorType", 'express-checkout-store-credit', NOW())
+        VALUES (${randomUUID()}, ${params.shopId}, ${wallet.id}, ${params.customerProfileId}, 'DEBIT'::"WalletDirection", 'CHECKOUT_REDEMPTION'::"WalletTransactionType", ${reservation.reservedAmount}, ${reservation.currency}, 'WALLET_RESERVATION'::"WalletSourceType", ${reservation.id}, ${params.checkoutIntentId}, ${params.orderNumber || null}, 'Store Credit redeemed at checkout', ${`Store Credit reservation ${reservation.id} consumed after Shopify order creation`}, 'SYSTEM'::"WalletActorType", 'express-checkout-store-credit', NOW())
         ON CONFLICT ("sourceType", "sourceId", "transactionType") DO NOTHING RETURNING "id"
       `;
     } catch (error) {

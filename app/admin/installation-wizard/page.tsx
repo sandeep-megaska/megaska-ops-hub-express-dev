@@ -151,7 +151,7 @@ export default async function InstallationWizardPage({ searchParams }: PageProps
   return (
     <main className="mx-auto max-w-5xl px-6 py-8">
       <div className="mb-6 rounded-2xl bg-gray-950 p-6 text-white shadow-sm">
-        <p className="text-xs font-semibold uppercase tracking-wide text-gray-300">LoopDesk SaaS onboarding</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-gray-300">LoopD2C SaaS onboarding</p>
         <h1 className="mt-2 text-3xl font-semibold">Installation Wizard</h1>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-gray-200">
           Guide {resolved.shop.shopDomain} through install, OAuth, environment checks, theme app embed guidance, cart mode, branding, Delhivery, Razorpay, and launch readiness. This page reads existing configuration only and never exposes secrets.
@@ -163,7 +163,7 @@ export default async function InstallationWizardPage({ searchParams }: PageProps
           number={1}
           title="Welcome"
           status="Complete"
-          description="You are setting up LoopDesk for this Shopify shop. Keep this wizard URL open with the shop query parameter preserved."
+          description="You are setting up LoopD2C for this Shopify shop. Keep this wizard URL open with the shop query parameter preserved."
           details={<p>Shop context: <strong>{resolved.shop.shopDomain}</strong></p>}
         />
         <WizardStep
@@ -186,22 +186,22 @@ export default async function InstallationWizardPage({ searchParams }: PageProps
           number={4}
           title="Theme app embed guidance"
           status="Needs attention"
-          description="Open the Shopify theme editor, enable the LoopDesk app embed, save the theme, then return here. The wizard does not modify theme settings."
+          description="Open the Shopify theme editor, enable the LoopD2C app embed, save the theme, then return here. The wizard does not modify theme settings."
           actions={<LinkButton href={appEmbedDeepLink}>Open theme app embeds</LinkButton>}
         />
         <WizardStep
           number={5}
           title="Cart mode guidance"
           status={cartNeedsAttention ? "Needs attention" : "Complete"}
-          description="If you want LoopDesk Enhanced Drawer, set the Shopify theme cart type to Page, not Drawer. This prevents two drawers from competing."
-          details={<p>Current LoopDesk drawer mode: <strong>{settings.cart.drawerMode}</strong>. This wizard does not auto-modify theme settings or cart behavior.</p>}
+          description="If you want LoopD2C Enhanced Drawer, set the Shopify theme cart type to Page, not Drawer. This prevents two drawers from competing."
+          details={<p>Current LoopD2C drawer mode: <strong>{settings.cart.drawerMode}</strong>. This wizard does not auto-modify theme settings or cart behavior.</p>}
           actions={<LinkButton href={`${settingsHref}#cart`}>Review cart settings</LinkButton>}
         />
         <WizardStep
           number={6}
           title="Branding setup"
           status={brandingComplete ? "Complete" : "Incomplete"}
-          description="Review merchant name, colors, logo, labels, and customer-facing support details used by LoopDesk runtime config."
+          description="Review merchant name, colors, logo, labels, and customer-facing support details used by LoopD2C runtime config."
           details={<p>Merchant name: <strong>{settings.general.merchantName}</strong>. Primary color: <strong>{settings.branding.primaryColor}</strong>.</p>}
           actions={<LinkButton href={`${settingsHref}#branding`}>Open branding settings</LinkButton>}
         />

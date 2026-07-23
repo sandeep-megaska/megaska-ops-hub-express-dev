@@ -395,7 +395,7 @@ export default async function MerchantSettingsPage({
       <div className="mb-6 flex flex-col gap-4 rounded-2xl bg-gray-950 p-6 text-white shadow-sm md:flex-row md:items-end md:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-gray-300">
-            LoopDesk runtime settings
+            LoopD2C runtime settings
           </p>
           <h1 className="mt-2 text-3xl font-semibold">Merchant Settings</h1>
           <p className="mt-3 max-w-3xl text-sm leading-6 text-gray-200">
@@ -415,7 +415,7 @@ export default async function MerchantSettingsPage({
       </div>
       {params.saved === "1" ? (
         <div className="mb-4 rounded-xl border border-green-200 bg-green-50 p-4 text-sm font-medium text-green-800">
-          Merchant settings saved. Reload the storefront to refresh window.LoopDeskConfig.
+          Merchant settings saved. Reload the storefront to refresh the latest settings.
         </div>
       ) : null}
       {params.error ? (
@@ -429,7 +429,7 @@ export default async function MerchantSettingsPage({
         <section className={`${cardClass} grid gap-5`}>
           <SectionHeader title="General" description="Customer-facing store and support details. Keep these short and public-safe." />
           <div className="grid gap-4 md:grid-cols-2">
-            <Field label="Merchant name" name="merchantName" defaultValue={settings.general.merchantName} help="Shown in LoopDesk drawer branding." />
+            <Field label="Merchant name" name="merchantName" defaultValue={settings.general.merchantName} help="Shown in LoopD2C drawer branding." />
             <Field label="Support email" name="supportEmail" type="email" defaultValue={settings.general.supportEmail} help="Optional public support contact." />
             <Field label="Support phone" name="supportPhone" defaultValue={settings.general.supportPhone} help="Optional public support phone." />
             <Field label="Support WhatsApp" name="supportWhatsApp" defaultValue={settings.general.supportWhatsApp} help="Optional public WhatsApp contact." />
@@ -456,20 +456,20 @@ export default async function MerchantSettingsPage({
           </div>
         </section>
         <section id="cart" className={`${cardClass} grid gap-5`}>
-          <SectionHeader title="Cart behavior" description="Choose whether LoopDesk owns the drawer or allows the theme cart to continue." />
+          <SectionHeader title="Cart behavior" description="Choose whether LoopD2C owns the drawer or allows the theme cart to continue." />
           <label className="grid gap-2 text-sm font-medium text-gray-800">
             <span>Drawer mode</span>
             <select className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-950 shadow-sm outline-none transition focus:border-gray-900 focus:ring-2 focus:ring-gray-900/10" name="drawerMode" defaultValue={settings.cart.drawerMode}>
               <option value="auto">Auto</option>
-              <option value="loopdesk">LoopDesk Enhanced Drawer</option>
+              <option value="loopdesk">LoopD2C Enhanced Drawer</option>
               <option value="theme">Theme drawer</option>
             </select>
           </label>
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-medium text-amber-900">
-            To use LoopDesk Enhanced Drawer, set your Shopify theme cart type/cart style to Page.
+            To use LoopD2C Enhanced Drawer, set your Shopify theme cart type/cart style to Page.
           </div>
           <div className="grid gap-3 md:grid-cols-3">
-            <Check label="Open after add to cart" name="openAfterAddToCart" defaultChecked={settings.cart.openAfterAddToCart} help="Opens LoopDesk drawer after cart add when LoopDesk drawer is active." />
+            <Check label="Open after add to cart" name="openAfterAddToCart" defaultChecked={settings.cart.openAfterAddToCart} help="Opens LoopD2C drawer after cart add when LoopD2C drawer is active." />
             <Check label="Express checkout button" name="expressCheckoutButtonEnabled" defaultChecked={settings.cart.expressCheckoutButtonEnabled} help="Keeps Express Checkout visible in drawer." />
             <Check label="View cart button" name="viewCartButtonEnabled" defaultChecked={settings.cart.viewCartButtonEnabled} help="Keeps the standard cart link visible." />
           </div>
@@ -582,9 +582,9 @@ export default async function MerchantSettingsPage({
         </section>
 
         <section id="email-notifications" className={`${cardClass} grid gap-5`}>
-          <SectionHeader title="Email notifications" description="LoopDesk can send operational and customer notification emails using the platform-managed email service. Configure who should receive store alerts and which notification categories are enabled." />
+          <SectionHeader title="Email notifications" description="LoopD2C can send operational and customer notification emails using the platform-managed email service. Configure who should receive store alerts and which notification categories are enabled." />
           <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm font-medium text-blue-900">
-            These settings control the store-admin recipients and operational alert categories used by LoopDesk. Emails are sent through the platform-managed email service.
+            These settings control the store-admin recipients and operational alert categories used by LoopD2C. Emails are sent through the platform-managed email service.
           </div>
           <div className="grid gap-3 md:grid-cols-2">
             <NotificationCheck label="Enable email notifications" name="notificationEmailEnabled" defaultChecked={notificationSettings.emailEnabled} />
@@ -617,7 +617,7 @@ export default async function MerchantSettingsPage({
           <div className={`${cardClass} grid gap-4`}>
             <SectionHeader
               title="Cart Intelligence"
-              description="Cart Intelligence controls optional display modules in the LoopDesk cart drawer."
+              description="Cart Intelligence controls optional display modules in the LoopD2C cart drawer."
             />
             <Check
               label="Enable Cart Intelligence"

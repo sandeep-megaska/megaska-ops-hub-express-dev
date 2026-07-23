@@ -94,7 +94,7 @@ test("formatPlatformFrom normalizes sender display precedence without nested bra
   assert.equal(formatPlatformFrom("Megaska", "notifications@example.com"), "Megaska <notifications@example.com>");
   assert.equal(formatPlatformFrom("Megaska", "LoopDesk <notifications@example.com>"), "Megaska <notifications@example.com>");
   assert.equal(formatPlatformFrom(null, "LoopDesk <notifications@example.com>"), "LoopDesk <notifications@example.com>");
-  assert.equal(formatPlatformFrom(null, "notifications@example.com"), "LoopDesk <notifications@example.com>");
+  assert.equal(formatPlatformFrom(null, "notifications@example.com"), "LoopD2C <notifications@example.com>");
   assert.equal(formatPlatformFrom("Megaska", "invalid"), null);
 });
 
@@ -253,7 +253,7 @@ test("customer emails use safe defaults when settings row is missing", async () 
 });
 
 
-test("sender display falls back through shop name platform name and LoopDesk", async () => {
+test("sender display falls back through shop name platform name and LoopD2C", async () => {
   {
     const restore = withEnv({ RESEND_API_KEY: "key", OPS_NOTIFICATION_FROM_EMAIL: "LoopDesk Platform <ops@example.com>", ADMIN_ALERT_EMAIL: "legacy@example.com" });
     const calls: Array<Record<string, unknown>> = [];
@@ -278,7 +278,7 @@ test("sender display falls back through shop name platform name and LoopDesk", a
     const calls: Array<Record<string, unknown>> = [];
     await sendAdminAlert({ shopId: "shop-a", eventType: "GENERAL", subject: "S", text: "T" }, { db: client, fetchImpl: fetchOk(calls) });
     restore();
-    assert.equal(calls[0].from, "LoopDesk <ops@example.com>");
+    assert.equal(calls[0].from, "LoopD2C <ops@example.com>");
   }
 });
 

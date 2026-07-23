@@ -19,7 +19,7 @@ type LoadedSettlement = Awaited<ReturnType<typeof loadExistingSettlement>>;
 
 const REJECTED_SETTLEMENT_STATUSES = new Set(["REJECTED", "CANCELLED", "FAILED", "PAID", "NOT_REQUIRED"]);
 const ALLOWED_SETTLEMENT_STATUSES = new Set(["MANUAL_PENDING", "APPROVED", "PAYOUT_PENDING"]);
-const DEFAULT_REASON = "COD refund settled as Megaska Store Credit";
+const DEFAULT_REASON = "COD refund settled as Store Credit";
 
 function isUniqueConstraintError(error: unknown): boolean {
   return (

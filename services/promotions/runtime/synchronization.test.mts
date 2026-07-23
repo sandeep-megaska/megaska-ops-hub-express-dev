@@ -25,7 +25,7 @@ function graphql(log: any[], options: { ambiguous?: boolean; badReadback?: boole
     log.push({ query, variables });
     if (query.includes("shopifyFunctions")) return { shopifyFunctions: { nodes: [{ id: "gid://shopify/AppFunction/1", handle: "loopdesk-discount-function", title: "LoopDesk", apiType: "discounts" }] } };
     if (query.includes("discountNodes")) return { discountNodes: { nodes: options.ambiguous ? [node("gid://shopify/DiscountNode/1"), node("gid://shopify/DiscountNode/2")] : discount ? [node(discount.id)] : [] } };
-    if (query.includes("discountAutomaticAppCreate")) { discount = { id: options.createdNodeId ?? "gid://shopify/DiscountNode/1", title: "LoopDesk Universal Promotions", discountClasses: ["PRODUCT"], appDiscountType: { functionId: "gid://shopify/AppFunction/1" } }; return { discountAutomaticAppCreate: { automaticAppDiscount: { discountId: discount.id, title: discount.title, discountClasses: discount.discountClasses, appDiscountType: discount.appDiscountType }, userErrors: [] } }; }
+    if (query.includes("discountAutomaticAppCreate")) { discount = { id: options.createdNodeId ?? "gid://shopify/DiscountNode/1", title: variables.automaticAppDiscount.title, discountClasses: ["PRODUCT"], appDiscountType: { functionId: "gid://shopify/AppFunction/1" } }; return { discountAutomaticAppCreate: { automaticAppDiscount: { discountId: discount.id, title: discount.title, discountClasses: discount.discountClasses, appDiscountType: discount.appDiscountType }, userErrors: [] } }; }
     if (query.includes("discountAutomaticAppUpdate")) { discount = { ...discount, ...variables.automaticAppDiscount }; return { discountAutomaticAppUpdate: { automaticAppDiscount: { discountId: discount.id, title: discount.title, discountClasses: discount.discountClasses, combinesWith: discount.combinesWith, appDiscountType: discount.appDiscountType }, userErrors: [] } }; }
     if (query.includes("metafieldsSet")) { discount.metafield = variables.metafields[0]; return { metafieldsSet: { metafields: [{ id: "mf1" }], userErrors: [] } }; }
     if (query.includes("discountNode")) return { discountNode: discount?.id === variables.id ? node(variables.id, options.badReadback) : null };
@@ -39,7 +39,7 @@ test("sync creates discount, writes metafield by ownerId, verifies read-back, th
   assert.equal(result.ok, true);
   const createVars = log.find((c) => c.query.includes("discountAutomaticAppCreate")).variables.automaticAppDiscount;
   assert.equal(createVars.functionHandle, "loopdesk-discount-function");
-  assert.equal(createVars.title, "LoopDesk Universal Promotions");
+  assert.equal(createVars.title, "LoopD2C Universal Promotions");
   assert.deepEqual(createVars.discountClasses, ["PRODUCT"]);
   const metafield = log.find((c) => c.query.includes("metafieldsSet")).variables.metafields[0];
   assert.equal(metafield.ownerId, "gid://shopify/DiscountNode/1");

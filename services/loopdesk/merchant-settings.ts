@@ -693,7 +693,7 @@ export function normalizeLoopDeskMerchantSettings(
   const analytics = isRecord(raw.analytics) ? raw.analytics : {};
   const storeName = text(
     general.storeName ?? branding.storeName,
-    shopDefaults?.shopName || shopDefaults?.shopDomain || "LoopDesk",
+    shopDefaults?.shopName || shopDefaults?.shopDomain || "LoopD2C",
   );
   const merchantName = text(
     general.merchantName ?? branding.merchantName,
@@ -719,7 +719,7 @@ export function normalizeLoopDeskMerchantSettings(
       borderRadius: radius(branding.borderRadius, "16px"),
       fontFamily: text(branding.fontFamily, "inherit", 80),
       showPoweredBy: bool(branding.showPoweredBy, true),
-      poweredByText: text(branding.poweredByText, "Powered by LoopDesk", 80),
+      poweredByText: text(branding.poweredByText, "Powered by LoopD2C", 80),
     },
     labels: {
       expressCheckoutText: text(
@@ -753,7 +753,7 @@ export function normalizeLoopDeskMerchantSettings(
       viewCartButtonEnabled: bool(cart.viewCartButtonEnabled, true),
       nativeDrawerDisabledRequiredMessage: text(
         cart.nativeDrawerDisabledRequiredMessage,
-        "To use LoopDesk Enhanced Drawer, set your theme cart type to Page in Shopify theme settings.",
+        "To use LoopD2C Enhanced Drawer, set your theme cart type to Page in Shopify theme settings.",
         220,
       ),
       customCartTriggerSelector: text(cart.customCartTriggerSelector, "", 500),

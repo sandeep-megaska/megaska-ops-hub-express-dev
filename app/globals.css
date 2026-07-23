@@ -110,6 +110,12 @@ textarea {
   font-size: 12px;
 }
 
+.mk-brand-tagline {
+  margin: 1px 0 0;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 10px;
+}
+
 .mk-nav {
   display: flex;
   flex-direction: column;
@@ -384,6 +390,14 @@ textarea {
   font-size: 32px;
   font-weight: 800;
   letter-spacing: -0.03em;
+}
+
+.mk-hero-tagline {
+  margin: 6px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: rgba(255, 255, 255, 0.6);
 }
 
 .mk-hero-subtitle {

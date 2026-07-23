@@ -1,6 +1,6 @@
 export const DEFAULT_COD_FEE_AMOUNT_PAISE = 0;
 export const DEFAULT_COD_INFORMATION_TEXT =
-  "You need to pay to the delivery agent at the time of delivery. In case of any refund, the refund amount will be issued as Megaska store credit which you can utilize for future purchases. However, for card and UPI payments, the refund amount will be directly transferred to your original payment method.";
+  "You need to pay to the delivery agent at the time of delivery. In case of any refund, the refund amount will be issued as store credit which you can utilize for future purchases. However, for card and UPI payments, the refund amount will be directly transferred to your original payment method.";
 
 const MODULE_KEY = "express_checkout_settings";
 

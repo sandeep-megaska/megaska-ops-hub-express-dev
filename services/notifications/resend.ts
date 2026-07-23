@@ -182,14 +182,14 @@ function sanitizeDisplayName(value: string | null | undefined) {
     .replace(/["<>]/g, "")
     .replace(/\s+/g, " ")
     .trim();
-  if (!sanitized || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(sanitized)) return "LoopDesk";
+  if (!sanitized || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(sanitized)) return "LoopD2C";
   return sanitized.slice(0, 100);
 }
 
 export function formatPlatformFrom(displayName: string | null | undefined, rawPlatformSender: string) {
   const parsedSender = parsePlatformSender(rawPlatformSender);
   if (!parsedSender) return null;
-  const finalDisplayName = sanitizeDisplayName(displayName || parsedSender.configuredDisplayName || "LoopDesk");
+  const finalDisplayName = sanitizeDisplayName(displayName || parsedSender.configuredDisplayName || "LoopD2C");
   return `${finalDisplayName} <${parsedSender.email}>`;
 }
 

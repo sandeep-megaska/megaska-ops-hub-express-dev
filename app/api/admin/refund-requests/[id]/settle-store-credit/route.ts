@@ -52,11 +52,11 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
 
-    const message = error instanceof Error ? error.message : "Failed to settle COD refund as Megaska Store Credit";
+    const message = error instanceof Error ? error.message : "Failed to settle COD refund as Store Credit";
     if (message === "Refund request not found") return NextResponse.json({ error: "Refund not found" }, { status: 404 });
     if (isValidationError(error)) return NextResponse.json({ error: message }, { status: 400 });
 
     console.error("[STORE CREDIT] settlement_failed", { error: message });
-    return NextResponse.json({ error: "Failed to settle COD refund as Megaska Store Credit" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to settle COD refund as Store Credit" }, { status: 500 });
   }
 }
