@@ -1633,7 +1633,7 @@ function needsProfileCompletion() {
   ["navigate", "buy-now-submit"].includes(pendingAction.type);
 
 if (hasCheckoutPending) {
-  renderSuccessStep("🌊 Preparing your beach-ready checkout...");
+  renderSuccessStep("Preparing your checkout...");
 } else {
   renderSuccessStep(getOtpModalBranding().successMessage);
 }
