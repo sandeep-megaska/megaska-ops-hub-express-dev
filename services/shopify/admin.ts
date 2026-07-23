@@ -1238,6 +1238,55 @@ export async function setOrderMegaskaIdentityMetafields(
   };
 }
 
+const ORDER_IDENTITY_PII_METAFIELD_KEYS = [
+  "verified_phone",
+  "original_checkout_phone",
+  "corrected_order_phone",
+  "order_contact_email",
+] as const;
+
+export async function redactOrderMegaskaIdentityMetafields(
+  orderId: string,
+  options?: AdminRequestOptions
+) {
+  const ownerId = resolveOrderGid(orderId);
+
+  const data = await adminGraphql<{
+    metafieldsDelete: {
+      deletedMetafields: Array<{ key: string; namespace: string; ownerId: string }>;
+      userErrors: Array<{ message: string; field?: string[] }>;
+    };
+  }>(
+    `
+      mutation RedactMegaskaOrderIdentity($metafields: [MetafieldIdentifierInput!]!) {
+        metafieldsDelete(metafields: $metafields) {
+          deletedMetafields {
+            key
+            namespace
+            ownerId
+          }
+          userErrors {
+            field
+            message
+          }
+        }
+      }
+    `,
+    {
+      metafields: ORDER_IDENTITY_PII_METAFIELD_KEYS.map((key) => ({
+        ownerId,
+        namespace: "megaska",
+        key,
+      })),
+    },
+    options
+  );
+
+  return {
+    deletedMetafields: data.metafieldsDelete.deletedMetafields,
+    userErrors: data.metafieldsDelete.userErrors,
+  };
+}
 
 export async function createWalletReservationDiscountCode(input: {
   reservationId: string;
