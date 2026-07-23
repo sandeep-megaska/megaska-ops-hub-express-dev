@@ -92,6 +92,34 @@ test("native account interception is delegated and limited to entry routes", () 
   assert.match(clickBinding, /isUsableAccountEntryTrigger\(accountTrigger\)/);
 });
 
+// ACCOUNT-UNIVERSAL-1: merchants can supply an escape-hatch CSS selector for
+// themes whose account icon markup doesn't match any known naming
+// convention, icon glyph text counts as a positive signal for icon-only
+// triggers, and the whole feature can be disabled per merchant.
+test("account detection supports a custom selector, icon glyphs, and an enable flag", () => {
+  const clickBinding = functionSource("bindGlobalClickInterceptor", "bindSubmitDebugListener");
+
+  assert.match(clickBinding, /isAccountDashboardRedirectEnabled\(\) \? findAccountTrigger\(event\) : null/);
+  assert.match(source, /function getAccountCustomTriggerSelector\(\)[\s\S]*try \{[\s\S]*document\.querySelectorAll\(trimmed\);[\s\S]*return trimmed;[\s\S]*catch \{[\s\S]*return "";/);
+  assert.match(source, /function isAccountDashboardRedirectEnabled\(\)[\s\S]*dashboardRedirectEnabled;[\s\S]*return value !== false;/);
+  assert.match(source, /function accountIconGlyphText\(element\)[\s\S]*querySelectorAll\("use"\)[\s\S]*getAttribute\("href"\) \|\| [\s\S]*getAttribute\("xlink:href"\)/);
+  assert.match(source, /function findAccountTrigger\(event\)[\s\S]*const customSelector = getAccountCustomTriggerSelector\(\);[\s\S]*target\.closest\(customSelector\)/);
+  assert.match(source, /merchantConfigDestination = String\(window\?\.LoopDeskConfig\?\.account\?\.dashboardPath \|\| ""\)\.trim\(\)/);
+  assert.match(source, /if \(isAccountDashboardRedirectEnabled\(\)\) \{\s*observeDesktopAccountContainer\(\);\s*bindAccountFallbackObserver\(\);/);
+});
+
+// ACCOUNT-UNIVERSAL-2: themes whose header markup doesn't match any of the
+// hardcoded DESKTOP_ACCOUNT_CONTAINER_SELECTORS (e.g. custom-element header
+// architectures like <header-actions>) must still get a fallback icon, by
+// deriving the insertion container from a reliably-detected cart/search icon.
+test("desktop account fallback derives its container structurally when no known theme container matches", () => {
+  const containerResolution = functionSource("getStructuralAccountContainer", "getDesktopAccountContainer");
+  assert.match(containerResolution, /HEADER_ICON_REFERENCE_SELECTORS\[kind\]/);
+  assert.match(containerResolution, /isInMobileContext\(candidate\)/);
+  assert.match(containerResolution, /getAccountTriggerActionElement\(candidate\)/);
+  assert.match(source, /return getStructuralAccountContainer\(\);\s*\}/);
+});
+
 test("native desktop entry suppresses the delayed, idempotent fallback", () => {
   const reconciliation = functionSource("ensureAccountEntryFallbacks", "ensureDesktopAccountFallback");
   const scheduling = functionSource("scheduleAccountFallbackReconciliation", "bindAuthStateSync");

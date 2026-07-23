@@ -53,6 +53,11 @@ export type LoopDeskMerchantSettings = {
     nativeDrawerDisabledRequiredMessage: string;
     customCartTriggerSelector: string;
   };
+  account: {
+    dashboardRedirectEnabled: boolean;
+    dashboardPath: string;
+    customTriggerSelector: string;
+  };
   checkout: { showSecureBadge: boolean; showTrustCopy: boolean };
   otpModalBranding: {
     logoUrl: string | null;
@@ -142,7 +147,7 @@ export type CartIntelligencePublicRuntimeConfig = {
 
 export type LoopDeskPublicRuntimeConfig = Pick<
   LoopDeskMerchantSettings,
-  "general" | "branding" | "labels" | "cart" | "checkout" | "otpModalBranding"
+  "general" | "branding" | "labels" | "cart" | "account" | "checkout" | "otpModalBranding"
 > & {
   enabled: boolean;
   cartOwnershipMode: DrawerMode;
@@ -258,6 +263,11 @@ function httpsUrl(value: unknown) {
 function email(value: unknown) {
   const next = text(value, "", 254);
   return !next || /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(next) ? next : "";
+}
+function relativePath(value: unknown, fallback: string, max = 200) {
+  const next = typeof value === "string" ? stripHtml(value.trim()).slice(0, max) : "";
+  if (!next) return fallback;
+  return next.startsWith("/") && !next.startsWith("//") ? next : fallback;
 }
 function drawerMode(value: unknown, fallback: DrawerMode): DrawerMode {
   return value === "theme" || value === "loopdesk" || value === "auto"
@@ -579,6 +589,7 @@ export function validateLoopDeskMerchantSettingsPatch(
   const branding = isRecord(raw.branding) ? raw.branding : {};
   const labels = isRecord(raw.labels) ? raw.labels : {};
   const cart = isRecord(raw.cart) ? raw.cart : {};
+  const account = isRecord(raw.account) ? raw.account : {};
   const checkout = isRecord(raw.checkout) ? raw.checkout : {};
   const otpModalBranding = isRecord(raw.otpModalBranding) ? raw.otpModalBranding : {};
   validateText(general.merchantName, "Merchant name", 120);
@@ -625,6 +636,24 @@ export function validateLoopDeskMerchantSettingsPatch(
     "Custom cart icon selector",
     500,
   );
+  validateBool(account.dashboardRedirectEnabled, "Account dashboard redirect enabled");
+  validateText(account.customTriggerSelector, "Custom account icon selector", 500);
+  if (
+    account.dashboardPath !== undefined &&
+    account.dashboardPath !== null &&
+    account.dashboardPath !== ""
+  ) {
+    if (typeof account.dashboardPath !== "string") {
+      errors.push("Dashboard path must be text.");
+    } else {
+      const trimmed = account.dashboardPath.trim();
+      if (trimmed.length > 200) {
+        errors.push("Dashboard path must be 200 characters or fewer.");
+      } else if (!trimmed.startsWith("/") || trimmed.startsWith("//")) {
+        errors.push("Dashboard path must be a relative path starting with a single /.");
+      }
+    }
+  }
   validateBool(checkout.showSecureBadge, "Show secure badge");
   validateBool(checkout.showTrustCopy, "Show trust copy");
   validateUrl(otpModalBranding.logoUrl, "OTP modal logo URL", { httpsOnly: true });
@@ -653,6 +682,7 @@ export function normalizeLoopDeskMerchantSettings(
   const branding = section(raw, "branding");
   const labels = section(raw, "labels");
   const cart = section(raw, "cart");
+  const account = section(raw, "account");
   const checkout = section(raw, "checkout");
   const otpModalBranding = section(raw, "otpModalBranding");
   const integrations = isRecord(raw.integrations) ? raw.integrations : {};
@@ -728,6 +758,11 @@ export function normalizeLoopDeskMerchantSettings(
       ),
       customCartTriggerSelector: text(cart.customCartTriggerSelector, "", 500),
     },
+    account: {
+      dashboardRedirectEnabled: bool(account.dashboardRedirectEnabled, true),
+      dashboardPath: relativePath(account.dashboardPath, "/apps/megaska/account", 200),
+      customTriggerSelector: text(account.customTriggerSelector, "", 500),
+    },
     checkout: {
       showSecureBadge: bool(checkout.showSecureBadge, true),
       showTrustCopy: bool(checkout.showTrustCopy, true),
@@ -785,6 +820,7 @@ export function mergeLoopDeskMerchantSettings(
     },
     labels: { ...current.labels, ...(isRecord(raw.labels) ? raw.labels : {}) },
     cart: { ...current.cart, ...(isRecord(raw.cart) ? raw.cart : {}) },
+    account: { ...current.account, ...(isRecord(raw.account) ? raw.account : {}) },
     checkout: {
       ...current.checkout,
       ...(isRecord(raw.checkout) ? raw.checkout : {}),
@@ -806,6 +842,7 @@ export function toLoopDeskPublicRuntimeConfig(
     branding: settings.branding,
     labels: settings.labels,
     cart: settings.cart,
+    account: settings.account,
     checkout: settings.checkout,
     otpModalBranding: settings.otpModalBranding,
     enabled: settings.cart.drawerMode !== "theme",

@@ -59,7 +59,38 @@ test("normalizes merchant settings defaults", () => {
   assert.equal(settings.branding.primaryColor, "#111827");
   assert.equal(settings.cart.drawerMode, "auto");
   assert.equal(settings.cart.customCartTriggerSelector, "");
+  assert.equal(settings.account.dashboardRedirectEnabled, true);
+  assert.equal(settings.account.dashboardPath, "/apps/megaska/account");
+  assert.equal(settings.account.customTriggerSelector, "");
   assert.equal(settings.integrations.razorpay.status, "not_configured");
+});
+
+test("normalizes and merges account dashboard redirect settings", () => {
+  const settings = normalizeLoopDeskMerchantSettings({
+    account: {
+      dashboardRedirectEnabled: false,
+      dashboardPath: "/apps/megaska/dashboard",
+      customTriggerSelector: "#AccountIcon, .site-header__account-toggle",
+    },
+  });
+  assert.equal(settings.account.dashboardRedirectEnabled, false);
+  assert.equal(settings.account.dashboardPath, "/apps/megaska/dashboard");
+  assert.equal(
+    settings.account.customTriggerSelector,
+    "#AccountIcon, .site-header__account-toggle",
+  );
+  const merged = mergeLoopDeskMerchantSettings(settings, {
+    account: { dashboardRedirectEnabled: true },
+  });
+  assert.equal(merged.account.dashboardRedirectEnabled, true);
+  assert.equal(merged.account.dashboardPath, "/apps/megaska/dashboard");
+});
+
+test("rejects an unsafe dashboard path and falls back to the default", () => {
+  const settings = normalizeLoopDeskMerchantSettings({
+    account: { dashboardPath: "//attacker.example/phish" },
+  });
+  assert.equal(settings.account.dashboardPath, "/apps/megaska/account");
 });
 
 test("normalizes and merges a custom cart trigger selector", () => {
@@ -150,6 +181,11 @@ test("validates merchant settings admin patch fields", () => {
       openAfterAddToCart: "yes",
       customCartTriggerSelector: "x".repeat(501),
     },
+    account: {
+      dashboardRedirectEnabled: "yes",
+      dashboardPath: "//attacker.example/phish",
+      customTriggerSelector: "x".repeat(501),
+    },
     labels: { expressCheckoutText: "x".repeat(81) },
   });
   assert.match(errors.join(" "), /Primary color/);
@@ -158,6 +194,9 @@ test("validates merchant settings admin patch fields", () => {
   assert.match(errors.join(" "), /Open after add to cart/);
   assert.match(errors.join(" "), /Express checkout text/);
   assert.match(errors.join(" "), /Custom cart icon selector/);
+  assert.match(errors.join(" "), /Account dashboard redirect enabled/);
+  assert.match(errors.join(" "), /Dashboard path must be a relative path/);
+  assert.match(errors.join(" "), /Custom account icon selector/);
 });
 
 
