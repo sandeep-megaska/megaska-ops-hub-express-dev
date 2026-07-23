@@ -129,6 +129,11 @@ async function saveMerchantSettings(
         viewCartButtonEnabled: formData.get("viewCartButtonEnabled") === "on",
         customCartTriggerSelector: formData.get("customCartTriggerSelector"),
       },
+      account: {
+        dashboardRedirectEnabled: formData.get("accountDashboardRedirectEnabled") === "on",
+        dashboardPath: formData.get("accountDashboardPath"),
+        customTriggerSelector: formData.get("accountCustomTriggerSelector"),
+      },
       checkout: {
         showSecureBadge: formData.get("showSecureBadge") === "on",
         showTrustCopy: formData.get("showTrustCopy") === "on",
@@ -475,6 +480,32 @@ export default async function MerchantSettingsPage({
             placeholder="#CartIcon, .site-header__cart-toggle"
             help="Only needed if clicking your theme's cart icon still opens the theme cart. Enter a CSS selector that matches it (comma-separate multiple). Leave blank to use automatic detection."
           />
+        </section>
+
+        <section id="account" className={`${cardClass} grid gap-5`}>
+          <SectionHeader title="Account dashboard" description="Redirect the theme's account/login icon to the app-owned customer dashboard instead of the Shopify account page." />
+          <Check
+            label="Redirect account icon to app dashboard"
+            name="accountDashboardRedirectEnabled"
+            defaultChecked={settings.account.dashboardRedirectEnabled}
+            help="When off, the account icon behaves like the theme's native account link/page."
+          />
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field
+              label="Dashboard path"
+              name="accountDashboardPath"
+              defaultValue={settings.account.dashboardPath}
+              placeholder="/apps/megaska/account"
+              help="Relative app-proxy path customers are sent to instead of /account."
+            />
+            <Field
+              label="Custom account icon selector (advanced)"
+              name="accountCustomTriggerSelector"
+              defaultValue={settings.account.customTriggerSelector}
+              placeholder="#AccountIcon, .site-header__account-toggle"
+              help="Only needed if clicking your theme's account icon still opens the Shopify account page. Enter a CSS selector that matches it (comma-separate multiple). Leave blank to use automatic detection."
+            />
+          </div>
         </section>
 
         <section id="otp-modal-branding" className={`${cardClass} grid gap-5`}>

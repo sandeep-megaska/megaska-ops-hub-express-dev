@@ -416,6 +416,8 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  align-self: start;
+  justify-self: start;
   width: 100%;
   min-height: 58px;
   margin: 10px 0;

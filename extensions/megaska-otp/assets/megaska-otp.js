@@ -192,6 +192,8 @@
     "a[href*='/account/register']",
     "[data-account-link]",
     "[data-customer-login]",
+    "[data-account]",
+    "[data-account-trigger]",
     ".header__icon--account",
     ".header__account",
     ".site-nav__link--account",
@@ -202,9 +204,130 @@
     ".icon-user",
     ".site-header__account",
     ".customer-account-link",
+    "[class*='account-icon' i]",
+    "[class*='account-toggle' i]",
+    "[class*='account-trigger' i]",
+    "[class*='account-link' i]",
+    "[class*='header-account' i]",
+    "[class*='header__icon--account' i]",
+    "[class*='my-account' i]",
+    "[id*='account-icon' i]",
+    "[id*='account-trigger' i]",
+    "[aria-controls*='account' i]",
     "[aria-label*='account' i]",
+    "[aria-label*='sign in' i]",
+    "[aria-label*='signin' i]",
     "[title*='account' i]",
   ];
+  const ACCOUNT_TRIGGER_KEYWORD_REGEX =
+    /\b(account|login|signin|profile)\b|account-icon|account-toggle|account-trigger|header__icon--account|my-account/;
+  const ACCOUNT_EXCLUDED_INTENT_SELECTOR = [
+    "[href*='checkout']",
+    "[action*='checkout']",
+    "[class*='checkout' i]",
+    "[id*='checkout' i]",
+    "[aria-label*='checkout' i]",
+    "a[href*='/cart']",
+    "[class*='cart' i]",
+    "[aria-label*='cart' i]",
+    "[aria-label*='bag' i]",
+    "[class*='search' i]",
+    "[aria-label*='search' i]",
+    "[class*='logout' i]",
+    "[aria-label*='logout' i]",
+    "[aria-label*='log out' i]",
+    "[class*='hamburger' i]",
+    "[class*='nav-toggle' i]",
+    "[class*='mobile-nav' i]",
+    "[class*='wishlist' i]",
+    "[class*='compare' i]",
+    "[name='plus']",
+    "[name='minus']",
+    "[data-quantity]",
+    "[class*='quantity' i]",
+    "[aria-label*='quantity' i]",
+  ].join(",");
+
+  function getAccountCustomTriggerSelector() {
+    const raw = window.LoopDeskConfig && window.LoopDeskConfig.account && window.LoopDeskConfig.account.customTriggerSelector;
+    if (!raw || typeof raw !== "string") return "";
+    const trimmed = raw.trim();
+    if (!trimmed) return "";
+    try {
+      document.querySelectorAll(trimmed);
+      return trimmed;
+    } catch {
+      return "";
+    }
+  }
+
+  function isAccountDashboardRedirectEnabled() {
+    const value = window.LoopDeskConfig && window.LoopDeskConfig.account && window.LoopDeskConfig.account.dashboardRedirectEnabled;
+    return value !== false;
+  }
+
+  function isExcludedAccountControl(element) {
+    if (!element || typeof element.closest !== "function") return true;
+    if (element.closest(ACCOUNT_EXCLUDED_INTENT_SELECTOR)) return true;
+    const text = [
+      typeof element.getAttribute === "function" ? element.getAttribute("aria-label") : "",
+      typeof element.getAttribute === "function" ? element.getAttribute("title") : "",
+      element.className,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    return /\b(checkout|cart|search|logout|log out|quantity|wishlist|compare)\b/.test(text);
+  }
+
+  function accountIconGlyphText(element) {
+    if (!element || typeof element.querySelectorAll !== "function") return "";
+    const parts = [];
+    const useNodes = element.querySelectorAll("use");
+    for (let i = 0; i < useNodes.length; i += 1) {
+      parts.push(useNodes[i].getAttribute("href") || useNodes[i].getAttribute("xlink:href") || "");
+    }
+    const glyphNodes = element.querySelectorAll("img[alt], svg[aria-label], symbol[id], [data-icon]");
+    for (let j = 0; j < glyphNodes.length; j += 1) {
+      parts.push(
+        glyphNodes[j].getAttribute("alt") ||
+          glyphNodes[j].getAttribute("aria-label") ||
+          glyphNodes[j].getAttribute("id") ||
+          glyphNodes[j].getAttribute("data-icon") ||
+          ""
+      );
+    }
+    return parts.join(" ").toLowerCase();
+  }
+
+  function findAccountTrigger(event) {
+    const target = event.target;
+    if (!target || typeof target.closest !== "function") return null;
+
+    const customSelector = getAccountCustomTriggerSelector();
+    if (customSelector) {
+      const customTrigger = target.closest(customSelector);
+      if (customTrigger && !isExcludedAccountControl(customTrigger)) return customTrigger;
+    }
+
+    const matched = findClosestMatchingElement(event, ACCOUNT_TRIGGER_SELECTORS);
+    if (matched) return matched;
+
+    const candidate = target.closest("button,[role='button']");
+    if (!candidate || isExcludedAccountControl(candidate)) return null;
+    const text = [
+      typeof candidate.getAttribute === "function" ? candidate.getAttribute("aria-label") : "",
+      typeof candidate.getAttribute === "function" ? candidate.getAttribute("title") : "",
+      candidate.className,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    if (!/\baccount\b|account-icon|account-toggle|account-trigger/.test(text) && !/\baccount\b|account-icon/.test(accountIconGlyphText(candidate))) {
+      return null;
+    }
+    return candidate;
+  }
   const MOBILE_CONTEXT_SELECTORS = [
     ".mobile-nav",
     ".mobile-menu",
@@ -2787,9 +2910,8 @@ function consumePendingAccountRedirect() {
       actionElement.matches?.(
         "[data-megaska-open-login],[data-account-link],[data-customer-login],button,[role='button']"
       ) ||
-        element.matches?.(
-          ".header__icon--account,.header__account,.site-nav__link--account,.js__tc,.js_link_acc,.kalles-account-icon,.iccl-user,.icon-user,.site-header__account,.customer-account-link"
-        )
+        element.matches?.(ACCOUNT_TRIGGER_SELECTORS.join(",")) ||
+        (accountIconGlyphText(actionElement) + " " + accountIconGlyphText(element)).includes("account")
     );
   }
 
@@ -2808,6 +2930,7 @@ function consumePendingAccountRedirect() {
         window?.LOOPDESK_CUSTOMER_DASHBOARD_CONFIG?.dashboardPath ||
         ""
     ).trim();
+    const merchantConfigDestination = String(window?.LoopDeskConfig?.account?.dashboardPath || "").trim();
     const windowDestination = String(window?.MEGASKA_ACCOUNT_DASHBOARD_URL || "").trim();
     const htmlDestination = String(
       document?.documentElement?.getAttribute?.("data-megaska-account-destination") || ""
@@ -2819,6 +2942,7 @@ function consumePendingAccountRedirect() {
     return (
       normalizeAccountDestination(preferredDestination) ||
       normalizeAccountDestination(configDestination) ||
+      normalizeAccountDestination(merchantConfigDestination) ||
       normalizeAccountDestination(windowDestination) ||
       normalizeAccountDestination(htmlDestination) ||
       normalizeAccountDestination(bodyDestination) ||
@@ -3004,7 +3128,7 @@ function consumePendingAccountRedirect() {
           return;
         }
 
-        const accountTrigger = findClosestMatchingElement(event, ACCOUNT_TRIGGER_SELECTORS);
+        const accountTrigger = isAccountDashboardRedirectEnabled() ? findAccountTrigger(event) : null;
         if (accountTrigger && isUsableAccountEntryTrigger(accountTrigger)) {
           await handleAccountTriggerClick(event, getAccountTriggerActionElement(accountTrigger));
           return;
@@ -3825,8 +3949,10 @@ function hasVisibleNativeDesktopAccountEntry() {
     bindCartAddSubmitInterceptor();
     bindAuthStateSync();
     ensureModal();
-    observeDesktopAccountContainer();
-    bindAccountFallbackObserver();
+    if (isAccountDashboardRedirectEnabled()) {
+      observeDesktopAccountContainer();
+      bindAccountFallbackObserver();
+    }
     syncAccountUiState();
     if (document && document.readyState === "loading") {
       document.addEventListener("DOMContentLoaded", logPaymentButtonsPresence, { once: true });
