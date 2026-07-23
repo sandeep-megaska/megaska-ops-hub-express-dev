@@ -153,6 +153,7 @@ async function saveMerchantSettings(
         trustItem3: formData.get("otpTrustItem3"),
         privacyText: formData.get("otpPrivacyText"),
         inputHelperText: formData.get("otpInputHelperText"),
+        successMessage: formData.get("otpSuccessMessage"),
       },
     });
     await updateCartIntelligenceSettings(shopId, {
@@ -521,6 +522,7 @@ export default async function MerchantSettingsPage({
             <Field label="Modal description" name="otpDescription" defaultValue={settings.otpModalBranding.description} />
             <Field label="OTP input helper text" name="otpInputHelperText" defaultValue={settings.otpModalBranding.inputHelperText} />
             <Field label="Privacy/helper text" name="otpPrivacyText" defaultValue={settings.otpModalBranding.privacyText} />
+            <Field label="OTP success message" name="otpSuccessMessage" defaultValue={settings.otpModalBranding.successMessage} help="Shown on the success screen right after a shopper verifies their OTP." />
           </div>
           <div className="grid gap-3 md:grid-cols-2">
             <Check label="Show promotional banner" name="otpPromotionEnabled" defaultChecked={settings.otpModalBranding.promotionEnabled} help="Disabled by default for new merchants; preserve merchant-specific offers with saved values only." />

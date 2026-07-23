@@ -472,6 +472,7 @@ test("normalizes OTP modal branding defaults and runtime projection", () => {
   assert.deepEqual(settings.otpModalBranding.trustItems, ["Secure login", "Faster checkout", ""]);
   assert.equal(settings.otpModalBranding.inputHelperText, "Enter 10 digits to receive an OTP automatically.");
   assert.equal(settings.otpModalBranding.privacyText, "We never share your number.");
+  assert.equal(settings.otpModalBranding.successMessage, "You're in!");
   assert.deepEqual(toLoopDeskPublicRuntimeConfig(settings).otpModalBranding, settings.otpModalBranding);
 });
 
@@ -484,6 +485,7 @@ test("validates and preserves saved OTP modal promotional copy", () => {
       promotionBadgeText: "15% OFF",
       promotionMessage: "Use Code: MEGA15",
       trustItem3: "Easy order tracking",
+      successMessage: "Welcome back!",
     },
   });
   assert.equal(merged.otpModalBranding.logoUrl, "https://cdn.shopify.com/logo.png");
@@ -491,11 +493,13 @@ test("validates and preserves saved OTP modal promotional copy", () => {
   assert.equal(merged.otpModalBranding.promotionBadgeText, "15% OFF");
   assert.equal(merged.otpModalBranding.promotionMessage, "Use Code: MEGA15");
   assert.equal(merged.otpModalBranding.trustItems[2], "Easy order tracking");
+  assert.equal(merged.otpModalBranding.successMessage, "Welcome back!");
 
   const errors = validateLoopDeskMerchantSettingsPatch({
-    otpModalBranding: { logoUrl: "http://example.com/logo.png", heading: "x".repeat(121), promotionEnabled: "yes" },
+    otpModalBranding: { logoUrl: "http://example.com/logo.png", heading: "x".repeat(121), promotionEnabled: "yes", successMessage: "x".repeat(161) },
   });
   assert.match(errors.join(" "), /OTP modal logo URL must use https/);
   assert.match(errors.join(" "), /OTP modal heading/);
   assert.match(errors.join(" "), /Show promotional banner/);
+  assert.match(errors.join(" "), /OTP success message/);
 });

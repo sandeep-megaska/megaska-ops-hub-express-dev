@@ -72,6 +72,7 @@ export type LoopDeskMerchantSettings = {
     trustItems: [string, string, string];
     privacyText: string;
     inputHelperText: string;
+    successMessage: string;
   };
   integrations: {
     razorpay: { status: IntegrationStatus; displayName: string };
@@ -670,6 +671,7 @@ export function validateLoopDeskMerchantSettingsPatch(
   validateText(otpModalBranding.trustItem3, "Trust item 3", 80);
   validateText(otpModalBranding.privacyText, "Privacy/helper text", 160);
   validateText(otpModalBranding.inputHelperText, "OTP input helper text", 180);
+  validateText(otpModalBranding.successMessage, "OTP success message", 160);
   return errors;
 }
 
@@ -784,6 +786,7 @@ export function normalizeLoopDeskMerchantSettings(
       ],
       inputHelperText: text(otpModalBranding.inputHelperText, "Enter 10 digits to receive an OTP automatically.", 180),
       privacyText: text(otpModalBranding.privacyText, "We never share your number.", 160),
+      successMessage: text(otpModalBranding.successMessage, "You're in!", 160),
     },
     integrations: {
       razorpay: {

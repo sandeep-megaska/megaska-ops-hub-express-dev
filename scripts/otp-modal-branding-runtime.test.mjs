@@ -28,6 +28,11 @@ test('OTP modal separates structural creation from presentation branding updates
   mustContain(otpSource, 'textContent = branding.privacyText');
 });
 
+test('OTP success message is merchant-configurable via otpModalBranding', () => {
+  mustContain(otpSource, 'successMessage: String(config.successMessage || "You\'re in!").trim() || "You\'re in!"');
+  mustContain(otpSource, 'renderSuccessStep(getOtpModalBranding().successMessage);');
+});
+
 test('OTP modal includes stable presentation hooks and listens for runtime config readiness', () => {
   [
     'data-megaska-otp-logo-wrap',
