@@ -147,7 +147,7 @@
   resendTimerId: null,
   errorMessage: "",
   statusMessage: "",
-  successMessage: "Welcome back to Megaska",
+  successMessage: "You're in!",
   profileFirstName: "",
   profileLastName: "",
   profileEmail: "",
@@ -525,7 +525,7 @@
     state.resendSeconds = 0;
     state.errorMessage = "";
     state.statusMessage = "";
-    state.successMessage = "🌊 Welcome back. Your beach look awaits";
+    state.successMessage = "You're in!";
     state.profileFirstName = "";
     state.profileLastName = "";
     state.profileEmail = "";
@@ -580,6 +580,7 @@
       trustItems: [trustItems[0] || "Secure login", trustItems[1] || "Faster checkout", trustItems[2] || ""].map((item) => String(item || "").trim()),
       inputHelperText: String(config.inputHelperText || "Enter 10 digits to receive an OTP automatically.").trim() || "Enter 10 digits to receive an OTP automatically.",
       privacyText: String(config.privacyText || "We never share your number.").trim() || "We never share your number.",
+      successMessage: String(config.successMessage || "You're in!").trim() || "You're in!",
     };
   }
 
@@ -1409,7 +1410,7 @@ function renderSuccessStep(message) {
   state.step = "success";
   state.statusMessage = "";
   state.errorMessage = "";
-  state.successMessage = message || "Welcome back to Megaska";
+  state.successMessage = message || "You're in!";
   renderStep();
 }
 
@@ -1634,7 +1635,7 @@ function needsProfileCompletion() {
 if (hasCheckoutPending) {
   renderSuccessStep("🌊 Preparing your beach-ready checkout...");
 } else {
-  renderSuccessStep("✨ You're in! Let’s dive into Megaska");
+  renderSuccessStep(getOtpModalBranding().successMessage);
 }
 
 await resumePendingAction(sessionCustomer);
