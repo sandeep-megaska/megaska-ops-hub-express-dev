@@ -49,7 +49,7 @@ export default function RefundActions({ id, status, method, walletTransactionId,
         setMessage(data?.error || "Store credit settlement failed");
         return;
       }
-      setMessage(data?.alreadySettled ? "Settled as Store Credit" : "COD refund settled as Megaska Store Credit.");
+      setMessage(data?.alreadySettled ? "Settled as Store Credit" : "COD refund settled as Store Credit.");
       router.refresh();
     } finally {
       setSettlingStoreCredit(false);

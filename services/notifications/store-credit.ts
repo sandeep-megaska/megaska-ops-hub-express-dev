@@ -35,17 +35,17 @@ function storeCreditNotificationLog(event: StoreCreditEvent, outcome: "skipped" 
 }
 
 function subjectForEvent(event: StoreCreditEvent) {
-  if (event === "CHECKOUT_REDEMPTION") return "Megaska Store Credit used on your order";
-  return "Megaska Store Credit added to your account";
+  if (event === "CHECKOUT_REDEMPTION") return "Store Credit used on your order";
+  return "Store Credit added to your account";
 }
 
 function buildStoreCreditText(payload: StoreCreditEmailPayload) {
   const lines = [`Hi ${firstName(payload.customerName)},`, ""];
 
   if (payload.event === "CHECKOUT_REDEMPTION") {
-    lines.push(`You used ${formatAmount(payload.amount, payload.currency)} of Megaska Store Credit on your order.`);
+    lines.push(`You used ${formatAmount(payload.amount, payload.currency)} of Store Credit on your order.`);
   } else if (payload.event === "COD_REFUND_CREDIT") {
-    lines.push(`Your COD refund of ${formatAmount(payload.amount, payload.currency)} has been added as Megaska Store Credit.`);
+    lines.push(`Your COD refund of ${formatAmount(payload.amount, payload.currency)} has been added as Store Credit.`);
   } else if (payload.event === "GOODWILL_CREDIT") {
     lines.push(`We've added ${formatAmount(payload.amount, payload.currency)} of goodwill Store Credit to your account.`);
   } else {

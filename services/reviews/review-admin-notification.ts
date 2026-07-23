@@ -50,7 +50,7 @@ export function formatNewReviewAdminNotification(input: NewReviewAdminNotificati
   const sections = ["A new customer review has been submitted.", details.join("\n")];
   if (title) sections.push(`Review title:\n${title}`);
   if (body) sections.push(`Review:\n${body}`);
-  sections.push("Open the LoopDesk admin dashboard to review or moderate this submission.");
+  sections.push("Open the LoopD2C admin dashboard to review or moderate this submission.");
   return { subject, text: sections.join("\n\n") };
 }
 

@@ -368,7 +368,7 @@ function buildStyledPdf(model: GstInvoiceRenderModel): Buffer {
     drawText(commands, margin + 8, 30, model.footer || "This is a system generated GST document.", 7);
   }
   if (model.templateConfig.showFooterLogo && !drawImage(commands, footerLogo, right - 140, 24, 120, 24)) {
-    drawText(commands, right - 74, 30, "MEGASKA", 8);
+    drawText(commands, right - 140, 30, model.supplier.tradeName || model.supplier.name, 8);
   }
   if (model.signature) {
     drawText(commands, right - 180, 45, `For ${model.supplier.name}`, 7);

@@ -33,10 +33,11 @@ export default function RootLayout({
             <div className="mk-shell">
               <aside className="mk-sidebar">
                 <div className="mk-brand">
-                  <div className="mk-brand-badge">M</div>
+                  <div className="mk-brand-badge">L</div>
                   <div>
-                    <p className="mk-brand-title">Megaska Ops Hub</p>
-                    <p className="mk-brand-subtitle">Admin Panel</p>
+                    <p className="mk-brand-title">LoopD2C</p>
+                    <p className="mk-brand-subtitle">Built from real D2C operations</p>
+                    <p className="mk-brand-tagline">Shopify Commerce Experience Platform</p>
                   </div>
                 </div>
 

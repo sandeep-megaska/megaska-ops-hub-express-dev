@@ -39,7 +39,7 @@
     addressDraft: {},
     editingAddress: false,
     customerDefaultAddress: null,
-     settings: { codFeeAmountPaise: 0, codInformationText: "You need to pay to the delivery agent at the time of delivery. In case of any refund, the refund amount will be issued as Megaska store credit which you can utilize for future purchases. However, for card and UPI payments, the refund amount will be directly transferred to your original payment method." },
+     settings: { codFeeAmountPaise: 0, codInformationText: "You need to pay to the delivery agent at the time of delivery. In case of any refund, the refund amount will be issued as store credit which you can utilize for future purchases. However, for card and UPI payments, the refund amount will be directly transferred to your original payment method." },
     delivery: { serviceable: true, codAvailable: true },
     pincode: "",
     pincodeStatus: "idle",
@@ -666,7 +666,7 @@ function buildBufferedEta(rawEta) {
   function cartSubtotalPaise(cart) { return cartPricing(cart)?.merchandiseSubtotal ?? Number(cart?.original_total_price || cart?.items_subtotal_price || cart?.total_price || 0); }
   function cartDiscountPaise(cart) { return cartPricing(cart)?.totalSavings ?? Number(cart?.total_discount || 0); }
   function cartTotalPaise(cart) { return cartPricing(cart)?.finalPayableSubtotal ?? Math.max(Number(cart?.total_price || 0), 0); }
-  function shopLabel() { return "Megaska"; }
+  function shopLabel() { const cfg = window.LoopDeskConfig && window.LoopDeskConfig.general; return (cfg && (cfg.storeName || cfg.merchantName)) || "Store"; }
   function logoUrl() {
     const sources = [
       window.MEGASKA_SHOP_LOGO_URL,
@@ -683,8 +683,9 @@ function buildBufferedEta(rawEta) {
   }
   function logoMarkup() {
     const src = logoUrl();
-    if (src) return `<img class="megaska-express-logo-img" src="${escapeHtml(src)}" alt="Megaska" loading="lazy">`;
-    return `<span class="megaska-express-logo-text"><strong>MEGASKA</strong><small>Swimwear | Activewear</small></span>`;
+    const label = shopLabel();
+    if (src) return `<img class="megaska-express-logo-img" src="${escapeHtml(src)}" alt="${escapeHtml(label)}" loading="lazy">`;
+    return `<span class="megaska-express-logo-text"><strong>${escapeHtml(label.toUpperCase())}</strong></span>`;
   }
   function discountSummary(intent) { const discount = selectedDiscount(intent); if (!discount || !Number(intent?.discountAmountPaise || 0)) return ""; const raw = discount.rawShopifyPayload || {}; const code = discount.code || raw.discountCode || discount.title || "Discount"; return `<p><span>Discount<br><small>${escapeHtml(code)} applied</small></span><strong>- ${money(intent.discountAmountPaise, intent.currency)}</strong></p>`; }
   function storeCreditAppliedPaise() { return Math.round(Number(state.storeCredit?.appliedAmount || 0) * 100); }
@@ -863,7 +864,7 @@ function buildBufferedEta(rawEta) {
     if (!credit.loading && Number(credit.availableAmount || 0) <= 0 && Number(credit.appliedAmount || 0) <= 0) return "";
     const appliedPaise = storeCreditAppliedPaise();
     const remainingPaise = remainingBasePayablePaise();
-    return `<section class="megaska-express-stack megaska-express-store-credit"><h3>Megaska Store Credit</h3>${credit.loading ? `<p class="megaska-otp-step-subtitle">Loading Megaska Store Credit...</p>` : `<div class="megaska-express-store-credit-card"><label class="megaska-express-store-credit-toggle"><input type="checkbox" ${appliedPaise > 0 ? "checked" : ""} ${state.busy ? "disabled" : ""} data-express-action="${appliedPaise > 0 ? "release-store-credit" : "apply-store-credit"}"><span class="megaska-express-store-credit-check" aria-hidden="true">${appliedPaise > 0 ? "✓" : " "}</span><span class="megaska-express-store-credit-copy"><strong>${appliedPaise > 0 ? "Store Credit applied" : "Apply Megaska Store Credit "}</strong><small>Available Store Credit ${money(Math.round(Number(credit.availableAmount || 0) * 100), credit.currency || intent.currency)}</small></span></label>${appliedPaise > 0 ? `<div class="megaska-express-store-credit-breakdown"><p><span>Using</span><strong>${money(appliedPaise, credit.currency || intent.currency)}</strong></p><p><span>Remaining payment</span><strong>${priceHydrating ? "Calculating..." : money(remainingPaise, credit.currency || intent.currency)}</strong></p></div>` : ""}</div>`}${credit.error ? `<p class="megaska-otp-error">${escapeHtml(credit.error)}</p>` : ""}</section>`;
+    return `<section class="megaska-express-stack megaska-express-store-credit"><h3>Store Credit</h3>${credit.loading ? `<p class="megaska-otp-step-subtitle">Loading Store Credit...</p>` : `<div class="megaska-express-store-credit-card"><label class="megaska-express-store-credit-toggle"><input type="checkbox" ${appliedPaise > 0 ? "checked" : ""} ${state.busy ? "disabled" : ""} data-express-action="${appliedPaise > 0 ? "release-store-credit" : "apply-store-credit"}"><span class="megaska-express-store-credit-check" aria-hidden="true">${appliedPaise > 0 ? "✓" : " "}</span><span class="megaska-express-store-credit-copy"><strong>${appliedPaise > 0 ? "Store Credit applied" : "Apply Store Credit "}</strong><small>Available Store Credit ${money(Math.round(Number(credit.availableAmount || 0) * 100), credit.currency || intent.currency)}</small></span></label>${appliedPaise > 0 ? `<div class="megaska-express-store-credit-breakdown"><p><span>Using</span><strong>${money(appliedPaise, credit.currency || intent.currency)}</strong></p><p><span>Remaining payment</span><strong>${priceHydrating ? "Calculating..." : money(remainingPaise, credit.currency || intent.currency)}</strong></p></div>` : ""}</div>`}${credit.error ? `<p class="megaska-otp-error">${escapeHtml(credit.error)}</p>` : ""}</section>`;
   }
 
   async function loadStoreCredit() {
@@ -1064,7 +1065,7 @@ function buildBufferedEta(rawEta) {
   function getInlinePaymentContainer() { return ensureModal().querySelector("[data-express-payment-section]"); }
 function renderStoreCreditOrderPanel() {
   const busy = state.busy || state.orderSubmitting;
-  return `<h3>Store Credit order</h3><div class="megaska-express-inline-panel megaska-express-store-credit-order-panel"><div class="megaska-express-inline-fields"><p><strong>Store Credit applied</strong></p><p><strong>Payment required: ₹0</strong></p><p class="megaska-express-secure-note">Megaska Store Credit covers this order. No Razorpay payment or COD collection is required.</p></div><button class="megaska-otp-primary-btn" type="button" data-express-action="store-credit-order" ${busy ? "disabled" : ""}>${state.orderSubmitting ? "Placing order..." : "Place Order with Store Credit"}</button></div>`;
+  return `<h3>Store Credit order</h3><div class="megaska-express-inline-panel megaska-express-store-credit-order-panel"><div class="megaska-express-inline-fields"><p><strong>Store Credit applied</strong></p><p><strong>Payment required: ₹0</strong></p><p class="megaska-express-secure-note">Store Credit covers this order. No Razorpay payment or COD collection is required.</p></div><button class="megaska-otp-primary-btn" type="button" data-express-action="store-credit-order" ${busy ? "disabled" : ""}>${state.orderSubmitting ? "Placing order..." : "Place Order with Store Credit"}</button></div>`;
 }
   function renderPaymentMethodList() {
     const selectedMethod = selectedDisplayPaymentMethod();

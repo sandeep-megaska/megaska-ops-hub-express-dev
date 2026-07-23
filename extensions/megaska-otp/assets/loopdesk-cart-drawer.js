@@ -1,8 +1,8 @@
 (function () {
   var DEFAULT_CONFIG = {
     branding: {
-      merchantName: "LoopDesk",
-      storeName: "LoopDesk",
+      merchantName: "LoopD2C",
+      storeName: "LoopD2C",
       logoUrl: null,
       primaryColor: "#111827",
       secondaryColor: "#374151",
@@ -12,7 +12,7 @@
       borderRadius: "16px",
       fontFamily: "inherit",
       showPoweredBy: true,
-      poweredByText: "Powered by LoopDesk"
+      poweredByText: "Powered by LoopD2C"
     },
     labels: {
       expressCheckoutText: "Express Checkout",
@@ -27,7 +27,7 @@
       openAfterAddToCart: false,
       expressCheckoutButtonEnabled: true,
       viewCartButtonEnabled: true,
-      nativeDrawerDisabledRequiredMessage: "To use LoopDesk Enhanced Drawer, set your theme cart type to Page in Shopify theme settings.",
+      nativeDrawerDisabledRequiredMessage: "To use LoopD2C Enhanced Drawer, set your theme cart type to Page in Shopify theme settings.",
       customTriggerSelector: ""
     },
     checkout: {
@@ -1946,7 +1946,7 @@
     button.innerHTML = [
       '<span class="loopdesk-checkout-cta__label">' + escapeHtml(config.labels.expressCheckoutText) + '</span>',
       '<span class="loopdesk-checkout-cta__subtext">UPI • Cards • Net Banking • COD</span>',
-      '<span class="loopdesk-checkout-cta__trust">Secure checkout powered by LoopDesk</span>'
+      '<span class="loopdesk-checkout-cta__trust">Secure checkout powered by LoopD2C</span>'
     ].join('');
     button.addEventListener('click', function (event) {
       interceptCheckout(event, 'drawer');

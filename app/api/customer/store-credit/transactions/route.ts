@@ -27,6 +27,6 @@ export async function GET(req: NextRequest) {
     console.error("[STORE CREDIT] customer_transactions_failed", {
       error: error instanceof Error ? error.message : String(error),
     });
-    return withCors(req, NextResponse.json({ error: "Unable to load Megaska Store Credit history." }, { status: 500 }));
+    return withCors(req, NextResponse.json({ error: "Unable to load Store Credit history." }, { status: 500 }));
   }
 }

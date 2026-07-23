@@ -10,7 +10,7 @@ type CancellationRow = {
   id: string;
   orderNumber: string;
   eventAt: Date;
-  cancelledBy: "Customer" | "Megaska";
+  cancelledBy: "Customer" | "LoopD2C";
   customerName: string;
   phone: string;
   email: string;
@@ -84,7 +84,7 @@ function mapShopifyOrdersToCancellationRows(orders: Awaited<ReturnType<typeof ge
         id: order.id,
         orderNumber: order.name || "—",
         eventAt,
-        cancelledBy: "Megaska" as const,
+        cancelledBy: "LoopD2C" as const,
         customerName: customerName || "—",
         phone: order.customer?.phone || order.phone || "—",
         email: order.customer?.email || order.email || "—",
@@ -204,7 +204,7 @@ export default async function CancellationsPage({
     id: order.id,
     orderNumber: order.shopifyOrderName || "—",
     eventAt: order.statusUpdatedAt || order.updatedAt,
-    cancelledBy: "Megaska",
+    cancelledBy: "LoopD2C",
     customerName: [order.customerProfile.firstName, order.customerProfile.lastName].filter(Boolean).join(" ") || "—",
     phone: order.customerProfile.phoneE164 || "—",
     email: order.customerProfile.email || "—",
@@ -244,7 +244,7 @@ export default async function CancellationsPage({
 
   const stats = merged.reduce((acc, row) => {
     if (row.source === "Customer Request") acc.customerRequests += 1;
-    if (row.cancelledBy === "Megaska") acc.megaskaCancellations += 1;
+    if (row.cancelledBy === "LoopD2C") acc.megaskaCancellations += 1;
     if (APPROVED_CLOSED_STATUSES.has(row.status)) acc.approvedClosed += 1;
     if (REJECTED_LOCKED_STATUSES.has(row.status)) acc.rejectedLocked += 1;
     if (row.eventAt >= startOfToday) acc.todaysCancellations += 1;
@@ -256,7 +256,7 @@ export default async function CancellationsPage({
       <div className="mk-page-header">
         <div>
           <h1 className="mk-page-title">Cancellations</h1>
-          <p className="mk-page-subtitle">Customer requests and Megaska/Shopify cancellations (read-only).</p>
+          <p className="mk-page-subtitle">Customer requests and LoopD2C/Shopify cancellations (read-only).</p>
         </div>
       </div>
 

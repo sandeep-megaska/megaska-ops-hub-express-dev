@@ -29,13 +29,13 @@ const quickCards = [
   },
   {
     title: "Installation Wizard",
-    value: "LoopDesk Setup",
+    value: "LoopD2C Setup",
     meta: "Install, OAuth, theme embed, cart guidance, branding, and provider readiness",
     href: "/admin/installation-wizard",
   },
   {
     title: "Merchant Settings",
-    value: "LoopDesk Config",
+    value: "LoopD2C Config",
     meta: "Branding, cart drawer, labels, and checkout runtime settings",
     href: "/admin/merchant-settings",
   },
@@ -45,11 +45,14 @@ export default function DashboardPage() {
   return (
     <div className="mk-page">
       <section className="mk-hero">
-        <h1 className="mk-hero-title">Megaska Ops Hub</h1>
+        <h1 className="mk-hero-title">LoopD2C Ops Hub</h1>
+        <p className="mk-hero-tagline">
+          Built from real D2C operations. Shopify Commerce Experience Platform.
+        </p>
         <p className="mk-hero-subtitle">
           Central control for store operations. Monitor workflows, manage
           exceptions, and navigate quickly across GST, exchanges,
-          cancellations, issues, LoopDesk installation, and merchant settings.
+          cancellations, issues, LoopD2C installation, and merchant settings.
         </p>
 
         <Suspense fallback={null}>

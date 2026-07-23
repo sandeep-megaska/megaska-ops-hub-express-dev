@@ -9,7 +9,17 @@ export const LOOPDESK_FUNCTION_HANDLE = "loopdesk-discount-function" as const;
 export const LOOPDESK_FUNCTION_METAFIELD_NAMESPACE = "$app:loopdesk-promotions" as const;
 export const LOOPDESK_FUNCTION_METAFIELD_KEY = "function-config" as const;
 export const LOOPDESK_FUNCTION_METAFIELD_TYPE = "json" as const;
-export const LOOPDESK_AUTOMATIC_DISCOUNT_TITLE = "LoopDesk Universal Promotions" as const;
+export const LOOPDESK_AUTOMATIC_DISCOUNT_TITLE = "LoopD2C Universal Promotions" as const;
+// Discounts created before the LoopDesk -> LoopD2C rebrand still carry the old
+// title on Shopify. New discounts always get LOOPDESK_AUTOMATIC_DISCOUNT_TITLE;
+// ownership checks accept either so existing merchants' live discounts keep
+// being recognized as app-owned across the rename.
+export const LOOPDESK_LEGACY_AUTOMATIC_DISCOUNT_TITLES = ["LoopDesk Universal Promotions"] as const;
+export const LOOPDESK_RECOGNIZED_AUTOMATIC_DISCOUNT_TITLES = [LOOPDESK_AUTOMATIC_DISCOUNT_TITLE, ...LOOPDESK_LEGACY_AUTOMATIC_DISCOUNT_TITLES] as const;
+
+export function isRecognizedAutomaticDiscountTitle(title: string | null | undefined): boolean {
+  return typeof title === "string" && (LOOPDESK_RECOGNIZED_AUTOMATIC_DISCOUNT_TITLES as readonly string[]).includes(title);
+}
 
 export function isLoopDeskFunctionMetafieldNamespace(namespace: string | null | undefined): boolean {
   if (!namespace) return false;

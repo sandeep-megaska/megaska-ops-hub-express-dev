@@ -5,7 +5,7 @@ import { assembleFunctionConfiguration } from "./function-contract.ts";
 import { createAutomaticDiscount, ensureAutomaticDiscountClasses, findCanonicalAutomaticDiscount, readAutomaticDiscount, verifyDiscountOwnsCanonicalConfiguration, writeFunctionConfigurationMetafield } from "./shopify-discount.server.ts";
 
 const ownerId = "gid://shopify/DiscountNode/1";
-const appDiscount = { discountId: ownerId, title: "LoopDesk Universal Promotions", status: "ACTIVE", discountClasses: ["PRODUCT"], appDiscountType: { appKey: "loopdesk", functionId: "gid://shopify/AppFunction/1" } };
+const appDiscount = { discountId: ownerId, title: "LoopD2C Universal Promotions", status: "ACTIVE", discountClasses: ["PRODUCT"], appDiscountType: { appKey: "loopdesk", functionId: "gid://shopify/AppFunction/1" } };
 const metafield = { namespace: "$app:loopdesk-promotions", key: "function-config", type: "json", value: JSON.stringify(assembleFunctionConfiguration({ configurationVersion: 1, rules: [] })) };
 const expandedNamespace = "app--123456789--loopdesk-promotions";
 function node(id = ownerId, overrides: any = {}) { return { id, metafield, discount: appDiscount, ...overrides }; }
@@ -15,7 +15,7 @@ test("readAutomaticDiscount uses DiscountNode and flattens owner fields and app 
   const snapshot = await readAutomaticDiscount(async (query: string, variables: any) => { calls.push({ query, variables }); return { discountNode: node() }; }, "test.myshopify.com", ownerId);
   assert.equal(snapshot?.id, ownerId);
   assert.equal(snapshot?.metafield?.key, "function-config");
-  assert.equal(snapshot?.title, "LoopDesk Universal Promotions");
+  assert.equal(snapshot?.title, "LoopD2C Universal Promotions");
   assert.deepEqual(snapshot?.discountClasses, ["PRODUCT"]);
   assert.match(calls[0].query, /discountNode\(id: \$id\)/);
   assert.doesNotMatch(calls[0].query, /\bnode\(id: \$id\)/);
@@ -29,8 +29,15 @@ test("readAutomaticDiscount uses DiscountNode and flattens owner fields and app 
 test("findCanonicalAutomaticDiscount flattens search nodes before canonical title matching", async () => {
   const snapshot = await findCanonicalAutomaticDiscount(async () => ({ discountNodes: { nodes: [node(ownerId), node("gid://shopify/DiscountNode/2", { discount: { ...appDiscount, title: "Other" } })] } }), null);
   assert.equal(snapshot?.id, ownerId);
-  assert.equal(snapshot?.title, "LoopDesk Universal Promotions");
+  assert.equal(snapshot?.title, "LoopD2C Universal Promotions");
   assert.equal(snapshot?.metafield?.namespace, "$app:loopdesk-promotions");
+});
+
+test("findCanonicalAutomaticDiscount still recognizes a discount from before the LoopDesk -> LoopD2C rename", async () => {
+  const legacyDiscount = { ...appDiscount, title: "LoopDesk Universal Promotions" };
+  const snapshot = await findCanonicalAutomaticDiscount(async () => ({ discountNodes: { nodes: [node(ownerId, { discount: legacyDiscount })] } }), null);
+  assert.equal(snapshot?.id, ownerId);
+  assert.equal(snapshot?.title, "LoopDesk Universal Promotions");
 });
 
 test("createAutomaticDiscount uses returned discountId directly and reads canonical node", async () => {
@@ -72,6 +79,16 @@ test("writeFunctionConfigurationMetafield uses DiscountNode ownerId and verifica
   assert.equal(written.namespace, "$app:loopdesk-promotions");
   assert.equal(written.key, "function-config");
   verifyDiscountOwnsCanonicalConfiguration({ id: ownerId, ...appDiscount, metafield: { namespace: written.namespace, key: written.key, type: written.type, value: written.value } }, config);
+});
+
+test("verifyDiscountOwnsCanonicalConfiguration accepts a discount title from before the LoopDesk -> LoopD2C rename", () => {
+  const config = assembleFunctionConfiguration({ configurationVersion: 1, rules: [] });
+  verifyDiscountOwnsCanonicalConfiguration({ id: ownerId, ...appDiscount, title: "LoopDesk Universal Promotions", metafield: { ...metafield, namespace: expandedNamespace, value: JSON.stringify(config) } }, config);
+});
+
+test("verifyDiscountOwnsCanonicalConfiguration rejects a title unrelated to LoopDesk/LoopD2C", () => {
+  const config = assembleFunctionConfiguration({ configurationVersion: 1, rules: [] });
+  assert.throws(() => verifyDiscountOwnsCanonicalConfiguration({ id: ownerId, ...appDiscount, title: "Some Other Discount", metafield: { ...metafield, namespace: expandedNamespace, value: JSON.stringify(config) } }, config), /not the LoopDesk canonical title/);
 });
 
 test("verifyDiscountOwnsCanonicalConfiguration accepts Shopify-expanded app-owned namespace", () => {

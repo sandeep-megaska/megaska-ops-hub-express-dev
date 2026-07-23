@@ -61,7 +61,7 @@ pub fn candidate(
     let quantity = i32::try_from(quantity).ok()?;
     Some(schema::ProductDiscountCandidate {
         associated_discount_code: None,
-        message: Some("LoopDesk promotion".into()),
+        message: Some("LoopD2C promotion".into()),
         prerequisites: None,
         targets: vec![schema::ProductDiscountCandidateTarget::CartLine(
             schema::CartLineTarget {

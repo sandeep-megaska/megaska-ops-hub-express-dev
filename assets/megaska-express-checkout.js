@@ -236,8 +236,8 @@
 
   function shopLabel() {
     const shop = getCurrentShopDomain();
-    if (!shop) return "Megaska";
-    return shop.replace(/\.myshopify\.com$/, "").split(/[.-]/).filter(Boolean).map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ") || "Megaska";
+    if (!shop) return "Store";
+    return shop.replace(/\.myshopify\.com$/, "").split(/[.-]/).filter(Boolean).map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ") || "Store";
   }
 
   function logoMarkup() {

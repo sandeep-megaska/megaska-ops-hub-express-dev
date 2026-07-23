@@ -11,7 +11,7 @@
 
 {% if request.design_mode %}
   <div id="loopdesk-customer-dashboard-root" data-loopdesk-customer-dashboard data-design-mode="true" data-dashboard-path="{{ dashboard_path | escape }}" data-shop-domain="{{ shop.permanent_domain | escape }}" role="region" aria-label="Customer account dashboard" {{ block.shopify_attributes }}>
-    <section class="ld-account"><div class="ld-account-preview"><h1>LoopDesk Customer Dashboard</h1><p>Verified customers will see their profile, orders, Store Credit, tracking, and request statuses here.</p></div></section>
+    <section class="ld-account"><div class="ld-account-preview"><h1>LoopD2C Customer Dashboard</h1><p>Verified customers will see their profile, orders, Store Credit, tracking, and request statuses here.</p></div></section>
   </div>
 {% else %}
   <div id="loopdesk-customer-dashboard-root" data-loopdesk-customer-dashboard data-dashboard-path="{{ dashboard_path | escape }}" data-shop-domain="{{ shop.permanent_domain | escape }}" role="region" aria-label="Customer account dashboard" {{ block.shopify_attributes }}></div>
@@ -38,7 +38,7 @@
 
 {% schema %}
 {
- "name": "LoopDesk Dashboard",
+ "name": "LoopD2C Dashboard",
   "target": "section",
   "settings": [
     { "type": "url", "id": "dashboard_path", "label": "Dashboard page path" },

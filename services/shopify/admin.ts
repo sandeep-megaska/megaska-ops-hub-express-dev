@@ -1250,7 +1250,7 @@ export async function createWalletReservationDiscountCode(input: {
   const code = `MWR-${input.reservationId.slice(0, 8).toUpperCase()}`;
   const startsAt = new Date().toISOString();
   const basicCodeDiscount = {
-    title: `Megaska Wallet ${input.reservationId}`,
+    title: `LoopD2C Wallet ${input.reservationId}`,
     code,
     startsAt,
     endsAt: input.endsAt.toISOString(),

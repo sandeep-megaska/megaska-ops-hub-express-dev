@@ -1,4 +1,4 @@
-import { LOOPDESK_AUTOMATIC_DISCOUNT_TITLE, LOOPDESK_FUNCTION_HANDLE, LOOPDESK_FUNCTION_METAFIELD_KEY, LOOPDESK_FUNCTION_METAFIELD_NAMESPACE, LOOPDESK_FUNCTION_METAFIELD_TYPE, assertFunctionConfigurationEqual, isLoopDeskFunctionMetafieldNamespace, type LoopDeskFunctionConfiguration } from "./function-contract.ts";
+import { LOOPDESK_AUTOMATIC_DISCOUNT_TITLE, LOOPDESK_FUNCTION_HANDLE, LOOPDESK_FUNCTION_METAFIELD_KEY, LOOPDESK_FUNCTION_METAFIELD_NAMESPACE, LOOPDESK_FUNCTION_METAFIELD_TYPE, LOOPDESK_RECOGNIZED_AUTOMATIC_DISCOUNT_TITLES, assertFunctionConfigurationEqual, isLoopDeskFunctionMetafieldNamespace, isRecognizedAutomaticDiscountTitle, type LoopDeskFunctionConfiguration } from "./function-contract.ts";
 
 export type ShopifyGraphql = <T>(query: string, variables?: Record<string, unknown>, options?: { shopDomain?: string | null }) => Promise<T>;
 export type DiscountCombinesWithSnapshot = { orderDiscounts?: boolean | null; productDiscounts?: boolean | null; shippingDiscounts?: boolean | null };
@@ -23,8 +23,9 @@ export async function readAutomaticDiscount(graphql: ShopifyGraphql, shopDomain:
 }
 
 export async function findCanonicalAutomaticDiscount(graphql: ShopifyGraphql, shopDomain: string | null) {
-  const data = await graphql<{ discountNodes: { nodes: DiscountNodeResponse[] } }>(`query LoopDeskDiscountSearch($query: String!) { discountNodes(first: 25, query: $query) { nodes { ${nodeDiscountSelection} } } }`, { query: `title:'${LOOPDESK_AUTOMATIC_DISCOUNT_TITLE}'` }, { shopDomain });
-  const matches = data.discountNodes.nodes.map(flattenDiscountNode).filter((discount): discount is DiscountSnapshot => discount?.title === LOOPDESK_AUTOMATIC_DISCOUNT_TITLE);
+  const titleQuery = LOOPDESK_RECOGNIZED_AUTOMATIC_DISCOUNT_TITLES.map((title) => `title:'${title}'`).join(" OR ");
+  const data = await graphql<{ discountNodes: { nodes: DiscountNodeResponse[] } }>(`query LoopDeskDiscountSearch($query: String!) { discountNodes(first: 25, query: $query) { nodes { ${nodeDiscountSelection} } } }`, { query: titleQuery }, { shopDomain });
+  const matches = data.discountNodes.nodes.map(flattenDiscountNode).filter((discount): discount is DiscountSnapshot => isRecognizedAutomaticDiscountTitle(discount?.title));
   if (matches.length > 1) throw new Error("Multiple LoopDesk automatic discounts match the canonical title; ownership is ambiguous.");
   return matches[0] ?? null;
 }
@@ -67,7 +68,7 @@ export async function writeFunctionConfigurationMetafield(graphql: ShopifyGraphq
 
 export function verifyDiscountOwnsCanonicalConfiguration(discount: DiscountSnapshot | null, configuration: LoopDeskFunctionConfiguration, expectedFunctionId?: string | null, expectedCombinations?: DiscountCombinesWithSnapshot | null) {
   if (!discount?.id) throw new Error("Shopify read-back did not return the automatic discount owner.");
-  if (discount.title !== LOOPDESK_AUTOMATIC_DISCOUNT_TITLE) throw new Error("Shopify automatic discount title is not the LoopDesk canonical title.");
+  if (!isRecognizedAutomaticDiscountTitle(discount.title)) throw new Error("Shopify automatic discount title is not the LoopDesk canonical title.");
   if (discount.status !== "ACTIVE") throw new Error("Shopify automatic discount is not ACTIVE.");
   if (!discount.appDiscountType?.functionId) throw new Error("Shopify automatic discount is not linked to an app Function.");
   if (expectedFunctionId && discount.appDiscountType.functionId !== expectedFunctionId) throw new Error("Shopify automatic discount is not linked to the current LoopDesk Function.");

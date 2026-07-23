@@ -52,9 +52,9 @@ export default function StoreCreditClient() {
 
         if (!balanceResponse.ok || !transactionsResponse.ok) {
           if (balanceResponse.status === 401 || transactionsResponse.status === 401) {
-            setError("Please log in with OTP to view your Megaska Store Credit.");
+            setError("Please log in with OTP to view your Store Credit.");
           } else {
-            setError(balanceData?.error || "Unable to load Megaska Store Credit right now.");
+            setError(balanceData?.error || "Unable to load Store Credit right now.");
           }
           setLoading(false);
           return;
@@ -67,7 +67,7 @@ export default function StoreCreditClient() {
         setTransactions(Array.isArray(transactionsData) ? transactionsData : []);
         setLoading(false);
       } catch {
-        setError("Unable to load Megaska Store Credit right now.");
+        setError("Unable to load Store Credit right now.");
         setLoading(false);
       }
     })();
@@ -77,11 +77,11 @@ export default function StoreCreditClient() {
     <main style={{ padding: 24, display: "grid", gap: 18, maxWidth: 920, margin: "0 auto", fontFamily: "system-ui, sans-serif" }}>
       <Link href="/apps/megaska/account">← Back to dashboard</Link>
       <header>
-        <h1>Megaska Store Credit</h1>
-        <p>Store Credit can be used for future Megaska purchases once checkout redemption is enabled.</p>
+        <h1>Store Credit</h1>
+        <p>Store Credit can be used for future purchases once checkout redemption is enabled.</p>
       </header>
 
-      {loading ? <p>Loading Megaska Store Credit…</p> : null}
+      {loading ? <p>Loading Store Credit…</p> : null}
       {error ? <p style={{ color: "crimson" }}>{error}</p> : null}
 
       {!loading && !error ? (
@@ -120,11 +120,11 @@ export default function StoreCreditClient() {
           </section>
 
           <section style={{ border: "1px solid #d9e2ff", borderRadius: 12, padding: 20, background: "#f6f8ff" }}>
-            <h2 style={{ marginTop: 0 }}>About Megaska Store Credit</h2>
-            <p>Megaska Store Credit is issued for approved COD refund settlements and eligible admin-approved refund cases.</p>
+            <h2 style={{ marginTop: 0 }}>About Store Credit</h2>
+            <p>Store Credit is issued for approved COD refund settlements and eligible admin-approved refund cases.</p>
             <p>Store Credit:</p>
             <ul>
-              <li>Can be used for future Megaska purchases</li>
+              <li>Can be used for future purchases</li>
               <li>Cannot be withdrawn as cash</li>
               <li>Cannot be transferred</li>
               <li>Cannot be gifted</li>

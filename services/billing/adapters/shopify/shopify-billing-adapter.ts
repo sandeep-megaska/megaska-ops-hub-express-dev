@@ -63,7 +63,7 @@ export class ShopifyBillingAdapter implements BillingProviderAdapter {
     const lineItems: unknown[] = [{ plan: { appRecurringPricingDetails: { price: { amount: basePrice.toString(), currencyCode: code }, interval: "EVERY_30_DAYS" } } }];
     if (input.cappedUsageAmount !== undefined) {
       const cap = decimal(input.cappedUsageAmount, "cappedUsageAmount");
-      lineItems.push({ plan: { appUsagePricingDetails: { cappedAmount: { amount: cap.toString(), currencyCode: code }, terms: "Rated LoopDesk feature usage" } } });
+      lineItems.push({ plan: { appUsagePricingDetails: { cappedAmount: { amount: cap.toString(), currencyCode: code }, terms: "Rated LoopD2C feature usage" } } });
     }
     const shopDomain = await this.resolveShopDomain(input.shopId);
     if (!shopDomain) throw new BillingProviderValidationError("SHOP_NOT_FOUND", "Shop was not found.");
