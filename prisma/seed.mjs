@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { pathToFileURL } from "node:url";
 import { PrismaClient, Prisma } from "../generated/prisma/index.js";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
@@ -91,10 +92,6 @@ export async function seedCommercialCatalog(db = prisma) {
   }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
-  seedCommercialCatalog()
-    .finally(async () => { await prisma.$disconnect(); await pool.end(); });
-}
 const isDirectRun =
   typeof process.argv[1] === "string" &&
   import.meta.url === pathToFileURL(process.argv[1]).href;
