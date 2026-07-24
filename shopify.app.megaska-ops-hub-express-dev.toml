@@ -22,16 +22,8 @@ api_version = "2026-04"
   uri = "/api/webhooks/orders/create"
 
   [[webhooks.subscriptions]]
-  topics = ["customers/data_request"]
-  uri = "/api/webhooks/customers/data_request"
-
-  [[webhooks.subscriptions]]
-  topics = ["customers/redact"]
-  uri = "/api/webhooks/customers/redact"
-
-  [[webhooks.subscriptions]]
-  topics = ["shop/redact"]
-  uri = "/api/webhooks/shop/redact"
+  compliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]
+  uri = "https://app.loopd2c.com/api/webhooks/compliance"
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
