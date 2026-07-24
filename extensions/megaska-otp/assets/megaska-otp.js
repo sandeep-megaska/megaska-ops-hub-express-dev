@@ -1428,28 +1428,25 @@ function renderSuccessStep(message) {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
   }
 
- /* function needsProfileCompletion(customer) {
-    const firstName = normalizeText(customer?.firstName || "");
-    const lastName = normalizeText(customer?.lastName || "");
-    const email = normalizeEmail(customer?.email || "");
-    const addressLine1 = normalizeText(customer?.addressLine1 || "");
-    const city = normalizeText(customer?.city || "");
-    const stateProvince = normalizeText(customer?.stateProvince || "");
-    const postalCode = normalizeText(customer?.postalCode || "");
-    const countryRegion = normalizeText(customer?.countryRegion || "");
-    return !(
-      firstName &&
-      lastName &&
-      email &&
-      addressLine1 &&
-      city &&
-      stateProvince &&
-      postalCode &&
-      countryRegion
-    );
-  }*/
-function needsProfileCompletion() {
-  return false;
+function needsProfileCompletion(customer) {
+  const firstName = normalizeText(customer?.firstName || "");
+  const lastName = normalizeText(customer?.lastName || "");
+  const email = normalizeEmail(customer?.email || "");
+  const addressLine1 = normalizeText(customer?.addressLine1 || "");
+  const city = normalizeText(customer?.city || "");
+  const stateProvince = normalizeText(customer?.stateProvince || "");
+  const postalCode = normalizeText(customer?.postalCode || "");
+  const countryRegion = normalizeText(customer?.countryRegion || "");
+  return !(
+    firstName &&
+    lastName &&
+    email &&
+    addressLine1 &&
+    city &&
+    stateProvince &&
+    postalCode &&
+    countryRegion
+  );
 }
   function renderProfileStep(customer) {
     state.step = "profile";
@@ -1613,7 +1610,11 @@ function needsProfileCompletion() {
 
     const sessionCustomer = refreshedSession?.customer || null;
 
-    if (needsProfileCompletion(sessionCustomer)) {
+    const hasCheckoutPending =
+      pendingAction &&
+      ["navigate", "buy-now-submit"].includes(pendingAction.type);
+
+    if (!hasCheckoutPending && needsProfileCompletion(sessionCustomer)) {
       renderProfileStep(sessionCustomer);
       return;
     }
@@ -1627,10 +1628,6 @@ function needsProfileCompletion() {
       window.location.assign(accountRedirectTarget);
       return;
     }
-
-   const hasCheckoutPending =
-  pendingAction &&
-  ["navigate", "buy-now-submit"].includes(pendingAction.type);
 
 if (hasCheckoutPending) {
   renderSuccessStep("Preparing your checkout...");
