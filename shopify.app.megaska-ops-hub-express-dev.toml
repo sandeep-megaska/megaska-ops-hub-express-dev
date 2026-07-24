@@ -1,17 +1,37 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
 client_id = "91b6af8eff2be76428980364cad07a57"
-name = "megaska-ops-hub-express-dev"
-application_url = "https://megaska-ops-hub-express-dev.vercel.app"
+name = "LoopD2C"
+application_url = "https://app.loopd2c.com"
 embedded = true
 
 [app_proxy]
-url = "https://megaska-ops-hub-express-dev.vercel.app/apps/megaska"
+url = "https://app.loopd2c.com/apps/megaska"
 subpath = "megaska"
 prefix = "apps"
 
 [webhooks]
 api_version = "2026-04"
+
+  [[webhooks.subscriptions]]
+  topics = ["app/uninstalled"]
+  uri = "/api/webhooks/app/uninstalled"
+
+  [[webhooks.subscriptions]]
+  topics = ["orders/create"]
+  uri = "/api/webhooks/orders/create"
+
+  [[webhooks.subscriptions]]
+  topics = ["customers/data_request"]
+  uri = "/api/webhooks/customers/data_request"
+
+  [[webhooks.subscriptions]]
+  topics = ["customers/redact"]
+  uri = "/api/webhooks/customers/redact"
+
+  [[webhooks.subscriptions]]
+  topics = ["shop/redact"]
+  uri = "/api/webhooks/shop/redact"
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
@@ -21,5 +41,5 @@ use_legacy_install_flow = false
 
 [auth]
 redirect_urls = [
-  "https://megaska-ops-hub-express-dev.vercel.app/api/auth/callback"
+  "https://app.loopd2c.com/api/auth/callback"
 ]
