@@ -1,9 +1,8 @@
-import { headers } from "next/headers";
 import { getReviewSettings } from "../../../services/reviews/review-settings";
-import { getShopByDomain, normalizeShopDomain, resolveShopConfig } from "../../../services/shopify/shop";
+import { formatAdminShopResolutionError, resolveAdminShopFromSearchParams } from "../../../services/shopify/admin-shop-context";
 import ReviewDisplaySettingsClient from "./ReviewDisplaySettingsClient";
 import ReviewModerationClient from "./ReviewModerationClient";
-export default async function AdminReviewsPage(){const headerStore=await headers();const domain=normalizeShopDomain(headerStore.get("x-shopify-shop-domain")||"");const shop=domain?await getShopByDomain(domain):await resolveShopConfig();if(!shop?.id)return <main style={{padding:24}}>Shop context is unavailable. Open this page from embedded admin for a specific shop.</main>;const settings = await getReviewSettings(shop.id);
+export default async function AdminReviewsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }){const params=await searchParams;const resolved=await resolveAdminShopFromSearchParams(params);const shop=resolved.shop;if(!shop?.id)return <main style={{padding:24}}>{formatAdminShopResolutionError(resolved)}</main>;const settings = await getReviewSettings(shop.id);
 
 const displaySettings = {
   reviewsEnabled: settings.reviewsEnabled,

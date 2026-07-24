@@ -1,8 +1,7 @@
-import { headers } from "next/headers";
 import { prisma } from "../../../services/db/prisma";
-import { getShopByDomain, normalizeShopDomain, resolveShopConfig } from "../../../services/shopify/shop";
 import { getShopifyCancelledOrders } from "../../../services/shopify/admin";
 import { deriveCancellationOutcome } from "../../../services/exchange/cancellation";
+import { formatAdminShopResolutionError, resolveAdminShopFromSearchParams } from "../../../services/shopify/admin-shop-context";
 
 type RangeKey = "7d" | "30d" | "90d" | "custom";
 
@@ -108,12 +107,11 @@ export default async function CancellationsPage({
   const params = await searchParams;
   const { range, start, end, fromRaw, toRaw } = getDateRange(params);
 
-  const headerStore = await headers();
-  const requestedShopDomain = normalizeShopDomain(headerStore.get("x-shopify-shop-domain") || "");
-  const currentShop = requestedShopDomain ? await getShopByDomain(requestedShopDomain) : await resolveShopConfig();
+  const resolved = await resolveAdminShopFromSearchParams(params);
+  const currentShop = resolved.shop;
 
   if (!currentShop?.id) {
-    return <div className="mk-page"><section className="mk-card"><h2 className="mk-section-title">Cancellation Queue</h2><p className="mk-section-subtitle">Shop context is unavailable. Open this page from the embedded admin for a specific shop.</p></section></div>;
+    return <div className="mk-page"><section className="mk-card"><h2 className="mk-section-title">Cancellation Queue</h2><p className="mk-section-subtitle">{formatAdminShopResolutionError(resolved)}</p></section></div>;
   }
 
   const [customerRequests, omsOrders] = await Promise.all([
