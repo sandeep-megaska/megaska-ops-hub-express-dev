@@ -1,11 +1,6 @@
 import Link from "next/link";
-import { headers } from "next/headers";
 import { prisma } from "../../../services/db/prisma";
-import {
-  getShopByDomain,
-  normalizeShopDomain,
-  resolveShopConfig,
-} from "../../../services/shopify/shop";
+import { formatAdminShopResolutionError, resolveAdminShopFromSearchParams } from "../../../services/shopify/admin-shop-context";
 
 const OPEN_STATUSES = new Set(["OPEN", "PENDING", "AWAITING_CUSTOMER", "AWAITING_APPROVAL"]);
 const APPROVED_STATUSES = new Set(["APPROVED", "COMPLETED"]);
@@ -23,15 +18,14 @@ function getStatusBadge(status: string) {
   return "danger";
 }
 
-export default async function IssuesPage() {
-  const headerStore = await headers();
-  const requestedShopDomain = normalizeShopDomain(
-    headerStore.get("x-shopify-shop-domain") || ""
-  );
-
-  const currentShop = requestedShopDomain
-    ? await getShopByDomain(requestedShopDomain)
-    : await resolveShopConfig();
+export default async function IssuesPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const params = await searchParams;
+  const resolved = await resolveAdminShopFromSearchParams(params);
+  const currentShop = resolved.shop;
 
   if (!currentShop?.id) {
     return (
@@ -48,7 +42,7 @@ export default async function IssuesPage() {
         <section className="mk-card">
           <h2 className="mk-section-title">Issue Queue</h2>
           <p className="mk-section-subtitle">
-            Shop context is unavailable. Open this page from the embedded admin for a specific shop.
+            {formatAdminShopResolutionError(resolved)}
           </p>
         </section>
       </div>
@@ -111,7 +105,7 @@ export default async function IssuesPage() {
     take: 300,
   });
 
-  const shopDomain = requestedShopDomain || currentShop.shopDomain || "";
+  const shopDomain = resolved.shopDomain || currentShop.shopDomain || "";
 
   const stats = issues.reduce(
     (acc, issue) => {
