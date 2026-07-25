@@ -2,7 +2,6 @@
   const OTP_LENGTH = 4;
   const RESEND_SECONDS = 30;
   const SUCCESS_CLOSE_DELAY_MS = 1400;
-  const COUNTRY_REGION = "India";
   const INDIA_OTP_COUNTRY = Object.freeze({ iso2: "IN", name: "India", dialCode: "+91", flag: "🇮🇳" });
   const INTERNATIONAL_PHONE_MAX_LENGTH = 20;
   const OTP_POLICY_HYDRATION_TIMEOUT_MS = 400;
@@ -85,46 +84,6 @@
     const maskedCount = Math.max(4, nationalDigits.length - visible.length);
     return `${country?.flag ? `${country.flag} ` : ""}${dialCode} ${"•".repeat(maskedCount)}${visible}`.trim();
   }
-  const INDIAN_STATES_AND_UTS = [
-    "Andaman and Nicobar Islands",
-    "Andhra Pradesh",
-    "Arunachal Pradesh",
-    "Assam",
-    "Bihar",
-    "Chandigarh",
-    "Chhattisgarh",
-    "Dadra and Nagar Haveli and Daman and Diu",
-    "Delhi",
-    "Goa",
-    "Gujarat",
-    "Haryana",
-    "Himachal Pradesh",
-    "Jammu and Kashmir",
-    "Jharkhand",
-    "Karnataka",
-    "Kerala",
-    "Ladakh",
-    "Lakshadweep",
-    "Madhya Pradesh",
-    "Maharashtra",
-    "Manipur",
-    "Meghalaya",
-    "Mizoram",
-    "Nagaland",
-    "Odisha",
-    "Puducherry",
-    "Punjab",
-    "Rajasthan",
-    "Sikkim",
-    "Tamil Nadu",
-    "Telangana",
-    "Tripura",
-    "Uttar Pradesh",
-    "Uttarakhand",
-    "West Bengal",
-  ];
-	
-
   const state = {
   isOpen: false,
   step: "phone",
@@ -151,12 +110,11 @@
   profileFirstName: "",
   profileLastName: "",
   profileEmail: "",
-  profileAddressLine1: "",
-  profileAddressLine2: "",
-  profileCity: "",
-  profileStateProvince: "",
-  profilePostalCode: "",
-  profileCountryRegion: COUNTRY_REGION,
+  disambiguateEmail: "",
+  emailVerifyDestination: "",
+  emailCode: "",
+  requestingEmailCode: false,
+  verifyingEmailCode: false,
 };
 
   let globalClickBound = false;
@@ -455,7 +413,7 @@
 
 
   function isBusy() {
-    return state.requesting || state.verifying || state.savingProfile;
+    return state.requesting || state.verifying || state.savingProfile || state.requestingEmailCode || state.verifyingEmailCode;
   }
 
   function isModalOpen() {
@@ -529,12 +487,11 @@
     state.profileFirstName = "";
     state.profileLastName = "";
     state.profileEmail = "";
-    state.profileAddressLine1 = "";
-    state.profileAddressLine2 = "";
-    state.profileCity = "";
-    state.profileStateProvince = "";
-    state.profilePostalCode = "";
-    state.profileCountryRegion = COUNTRY_REGION;
+    state.disambiguateEmail = "";
+    state.emailVerifyDestination = "";
+    state.emailCode = "";
+    state.requestingEmailCode = false;
+    state.verifyingEmailCode = false;
   }
 
   function escapeHtml(value) {
@@ -872,7 +829,7 @@
 
           <div data-megaska-step-profile hidden class="megaska-otp-step-profile">
             <h2 class="megaska-otp-step-title">Complete your profile</h2>
-            <p class="megaska-otp-step-subtitle">Just a few details for smoother checkout next time</p>
+            <p class="megaska-otp-step-subtitle">Just your name and email to get started</p>
             <div class="megaska-otp-profile-grid">
               <div class="megaska-otp-form-field">
                 <label class="megaska-otp-label" for="megaska-firstname-input">First Name</label>
@@ -912,90 +869,62 @@
                   aria-label="Enter your email address"
                 />
               </div>
-
-              <div class="megaska-otp-form-field megaska-otp-col-span-2">
-                <label class="megaska-otp-label" for="megaska-address1-input">Address line 1</label>
-                <input
-                  id="megaska-address1-input"
-                  data-megaska-profile-address1
-                  class="megaska-otp-text-input"
-                  type="text"
-                  autocomplete="address-line1"
-                  placeholder="House number, street, locality"
-                  aria-label="Enter address line 1"
-                />
-              </div>
-
-              <div class="megaska-otp-form-field megaska-otp-col-span-2">
-                <label class="megaska-otp-label" for="megaska-address2-input">Address line 2 (optional)</label>
-                <input
-                  id="megaska-address2-input"
-                  data-megaska-profile-address2
-                  class="megaska-otp-text-input"
-                  type="text"
-                  autocomplete="address-line2"
-                  placeholder="Apartment, suite, landmark"
-                  aria-label="Enter address line 2"
-                />
-              </div>
-
-              <div class="megaska-otp-form-field">
-                <label class="megaska-otp-label" for="megaska-city-input">City</label>
-                <input
-                  id="megaska-city-input"
-                  data-megaska-profile-city
-                  class="megaska-otp-text-input"
-                  type="text"
-                  autocomplete="address-level2"
-                  placeholder="Enter city"
-                  aria-label="Enter city"
-                />
-              </div>
-
-              <div class="megaska-otp-form-field">
-                <label class="megaska-otp-label" for="megaska-state-input">State</label>
-                <select
-                  id="megaska-state-input"
-                  data-megaska-profile-state
-                  class="megaska-otp-text-input megaska-otp-select-input"
-                  autocomplete="address-level1"
-                  aria-label="Select state"
-                >
-                  <option value="">Select state</option>
-                  ${INDIAN_STATES_AND_UTS.map((region) => `<option value="${region}">${region}</option>`).join("")}
-                </select>
-              </div>
-
-              <div class="megaska-otp-form-field">
-                <label class="megaska-otp-label" for="megaska-postal-input">PIN Code</label>
-                <input
-                  id="megaska-postal-input"
-                  data-megaska-profile-postal
-                  class="megaska-otp-text-input"
-                  type="text"
-                  autocomplete="postal-code"
-                  placeholder="Enter PIN code"
-                  aria-label="Enter PIN code"
-                />
-              </div>
-
-              <div class="megaska-otp-form-field">
-                <label class="megaska-otp-label" for="megaska-country-input">Country</label>
-                <input
-                  id="megaska-country-input"
-                  class="megaska-otp-text-input"
-                  type="text"
-                  value="${COUNTRY_REGION}"
-                  aria-label="Country"
-                  readonly
-                  tabindex="-1"
-                />
-              </div>
             </div>
 
             <button type="button" class="megaska-otp-primary-btn" data-megaska-profile-submit>
               Save and Continue
             </button>
+          </div>
+
+          <div data-megaska-step-email-disambiguate hidden class="megaska-otp-step-profile">
+            <h2 class="megaska-otp-step-title">Find your account</h2>
+            <p class="megaska-otp-step-subtitle">We found more than one account for this number. Enter the email on your account and we'll send a verification code.</p>
+            <div class="megaska-otp-profile-grid">
+              <div class="megaska-otp-form-field megaska-otp-col-span-2">
+                <label class="megaska-otp-label" for="megaska-disambiguate-email-input">Email Address</label>
+                <input
+                  id="megaska-disambiguate-email-input"
+                  data-megaska-disambiguate-email
+                  class="megaska-otp-text-input"
+                  type="email"
+                  autocomplete="email"
+                  placeholder="name@example.com"
+                  aria-label="Enter your email address"
+                />
+              </div>
+            </div>
+
+            <button type="button" class="megaska-otp-primary-btn" data-megaska-disambiguate-submit>
+              Send verification code
+            </button>
+          </div>
+
+          <div data-megaska-step-email-code hidden class="megaska-otp-step-profile">
+            <h2 class="megaska-otp-step-title">Enter verification code</h2>
+            <p class="megaska-otp-step-subtitle">We sent a 6-digit code to <span data-megaska-email-code-destination></span></p>
+            <div class="megaska-otp-profile-grid">
+              <div class="megaska-otp-form-field megaska-otp-col-span-2">
+                <label class="megaska-otp-label" for="megaska-email-code-input">Verification code</label>
+                <input
+                  id="megaska-email-code-input"
+                  data-megaska-email-code-input
+                  class="megaska-otp-text-input"
+                  type="text"
+                  inputmode="numeric"
+                  maxlength="6"
+                  autocomplete="one-time-code"
+                  placeholder="Enter 6-digit code"
+                  aria-label="Enter 6-digit verification code"
+                />
+              </div>
+            </div>
+
+            <button type="button" class="megaska-otp-primary-btn" data-megaska-email-code-submit>
+              Verify and Continue
+            </button>
+            <p class="megaska-otp-trouble">
+              <button type="button" class="megaska-otp-link" data-megaska-email-code-resend>Resend code</button>
+            </p>
           </div>
 
           <div data-megaska-step-success hidden class="megaska-otp-success">
@@ -1078,9 +1007,9 @@
       });
 
     modal
-      .querySelector("[data-megaska-profile-address1]")
+      .querySelector("[data-megaska-disambiguate-email]")
       .addEventListener("input", (event) => {
-        state.profileAddressLine1 = String(event.target.value || "");
+        state.disambiguateEmail = String(event.target.value || "");
         if (state.errorMessage) {
           state.errorMessage = "";
           renderStep();
@@ -1088,9 +1017,14 @@
       });
 
     modal
-      .querySelector("[data-megaska-profile-address2]")
+      .querySelector("[data-megaska-disambiguate-submit]")
+      .addEventListener("click", handleEmailDisambiguateSubmit);
+
+    modal
+      .querySelector("[data-megaska-email-code-input]")
       .addEventListener("input", (event) => {
-        state.profileAddressLine2 = String(event.target.value || "");
+        state.emailCode = String(event.target.value || "").replace(/\D/g, "").slice(0, 6);
+        event.target.value = state.emailCode;
         if (state.errorMessage) {
           state.errorMessage = "";
           renderStep();
@@ -1098,34 +1032,12 @@
       });
 
     modal
-      .querySelector("[data-megaska-profile-city]")
-      .addEventListener("input", (event) => {
-        state.profileCity = String(event.target.value || "");
-        if (state.errorMessage) {
-          state.errorMessage = "";
-          renderStep();
-        }
-      });
+      .querySelector("[data-megaska-email-code-submit]")
+      .addEventListener("click", handleEmailCodeSubmit);
 
     modal
-      .querySelector("[data-megaska-profile-state]")
-      .addEventListener("change", (event) => {
-        state.profileStateProvince = String(event.target.value || "");
-        if (state.errorMessage) {
-          state.errorMessage = "";
-          renderStep();
-        }
-      });
-
-    modal
-      .querySelector("[data-megaska-profile-postal]")
-      .addEventListener("input", (event) => {
-        state.profilePostalCode = String(event.target.value || "");
-        if (state.errorMessage) {
-          state.errorMessage = "";
-          renderStep();
-        }
-      });
+      .querySelector("[data-megaska-email-code-resend]")
+      .addEventListener("click", handleEmailCodeResend);
 
     document.addEventListener("keydown", handleEscClose);
     document.addEventListener("click", (event) => {
@@ -1142,6 +1054,8 @@
     stepPhone: modal.querySelector("[data-megaska-step-phone]"),
     stepOtp: modal.querySelector("[data-megaska-step-otp]"),
     stepProfile: modal.querySelector("[data-megaska-step-profile]"),
+    stepEmailDisambiguate: modal.querySelector("[data-megaska-step-email-disambiguate]"),
+    stepEmailCode: modal.querySelector("[data-megaska-step-email-code]"),
     stepSuccess: modal.querySelector("[data-megaska-step-success]"),
     phoneInput: modal.querySelector("[data-megaska-phone-input]"),
     phoneHint: modal.querySelector("[data-megaska-phone-hint]"),
@@ -1154,12 +1068,13 @@
     profileFirstNameInput: modal.querySelector("[data-megaska-profile-firstname]"),
     profileLastNameInput: modal.querySelector("[data-megaska-profile-lastname]"),
     profileEmailInput: modal.querySelector("[data-megaska-profile-email]"),
-    profileAddress1Input: modal.querySelector("[data-megaska-profile-address1]"),
-    profileAddress2Input: modal.querySelector("[data-megaska-profile-address2]"),
-    profileCityInput: modal.querySelector("[data-megaska-profile-city]"),
-    profileStateInput: modal.querySelector("[data-megaska-profile-state]"),
-    profilePostalInput: modal.querySelector("[data-megaska-profile-postal]"),
     profileSubmitBtn: modal.querySelector("[data-megaska-profile-submit]"),
+    disambiguateEmailInput: modal.querySelector("[data-megaska-disambiguate-email]"),
+    disambiguateSubmitBtn: modal.querySelector("[data-megaska-disambiguate-submit]"),
+    emailCodeInput: modal.querySelector("[data-megaska-email-code-input]"),
+    emailCodeSubmitBtn: modal.querySelector("[data-megaska-email-code-submit]"),
+    emailCodeResendBtn: modal.querySelector("[data-megaska-email-code-resend]"),
+    emailCodeDestination: modal.querySelector("[data-megaska-email-code-destination]"),
     errorEl: modal.querySelector("[data-megaska-otp-error]"),
     statusEl: modal.querySelector("[data-megaska-otp-status]"),
     successMessage: modal.querySelector("[data-megaska-success-message]"),
@@ -1170,6 +1085,8 @@
     stepPhone,
     stepOtp,
     stepProfile,
+    stepEmailDisambiguate,
+    stepEmailCode,
     stepSuccess,
     phoneInput,
     phoneHint,
@@ -1182,12 +1099,13 @@
     profileFirstNameInput,
     profileLastNameInput,
     profileEmailInput,
-    profileAddress1Input,
-    profileAddress2Input,
-    profileCityInput,
-    profileStateInput,
-    profilePostalInput,
     profileSubmitBtn,
+    disambiguateEmailInput,
+    disambiguateSubmitBtn,
+    emailCodeInput,
+    emailCodeSubmitBtn,
+    emailCodeResendBtn,
+    emailCodeDestination,
     errorEl,
     statusEl,
     successMessage,
@@ -1196,6 +1114,8 @@
   stepPhone.hidden = state.step !== "phone";
   stepOtp.hidden = state.step !== "otp";
   stepProfile.hidden = state.step !== "profile";
+  stepEmailDisambiguate.hidden = state.step !== "email-disambiguate";
+  stepEmailCode.hidden = state.step !== "email-code";
   stepSuccess.hidden = state.step !== "success";
 
   if (lastLoggedStep !== state.step) {
@@ -1230,22 +1150,24 @@
   profileFirstNameInput.value = state.profileFirstName;
   profileLastNameInput.value = state.profileLastName;
   profileEmailInput.value = state.profileEmail;
-  profileAddress1Input.value = state.profileAddressLine1;
-  profileAddress2Input.value = state.profileAddressLine2;
-  profileCityInput.value = state.profileCity;
-  profileStateInput.value = state.profileStateProvince;
-  profilePostalInput.value = state.profilePostalCode;
 
   profileFirstNameInput.disabled = state.savingProfile;
   profileLastNameInput.disabled = state.savingProfile;
   profileEmailInput.disabled = state.savingProfile;
-  profileAddress1Input.disabled = state.savingProfile;
-  profileAddress2Input.disabled = state.savingProfile;
-  profileCityInput.disabled = state.savingProfile;
-  profileStateInput.disabled = state.savingProfile;
-  profilePostalInput.disabled = state.savingProfile;
   profileSubmitBtn.disabled = state.savingProfile;
   profileSubmitBtn.textContent = state.savingProfile ? "Saving..." : "Save and Continue";
+
+  disambiguateEmailInput.value = state.disambiguateEmail;
+  disambiguateEmailInput.disabled = state.requestingEmailCode;
+  disambiguateSubmitBtn.disabled = state.requestingEmailCode;
+  disambiguateSubmitBtn.textContent = state.requestingEmailCode ? "Sending..." : "Send verification code";
+
+  emailCodeInput.value = state.emailCode;
+  emailCodeInput.disabled = state.verifyingEmailCode;
+  emailCodeDestination.textContent = state.emailVerifyDestination;
+  emailCodeSubmitBtn.disabled = state.verifyingEmailCode;
+  emailCodeSubmitBtn.textContent = state.verifyingEmailCode ? "Verifying..." : "Verify and Continue";
+  emailCodeResendBtn.disabled = state.requestingEmailCode;
 
   otpInputs.forEach((input, index) => {
     input.value = state.otpDigits[index] || "";
@@ -1322,6 +1244,16 @@
   function focusProfileInput() {
     const { profileFirstNameInput } = getModalParts();
     setTimeout(() => profileFirstNameInput.focus(), 0);
+  }
+
+  function focusDisambiguateEmailInput() {
+    const { disambiguateEmailInput } = getModalParts();
+    setTimeout(() => disambiguateEmailInput.focus(), 0);
+  }
+
+  function focusEmailCodeInput() {
+    const { emailCodeInput } = getModalParts();
+    setTimeout(() => emailCodeInput.focus(), 0);
   }
 
   function openModal(triggerSource) {
@@ -1428,40 +1360,30 @@ function renderSuccessStep(message) {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
   }
 
-function needsProfileCompletion(customer) {
-  const firstName = normalizeText(customer?.firstName || "");
-  const lastName = normalizeText(customer?.lastName || "");
-  const email = normalizeEmail(customer?.email || "");
-  const addressLine1 = normalizeText(customer?.addressLine1 || "");
-  const city = normalizeText(customer?.city || "");
-  const stateProvince = normalizeText(customer?.stateProvince || "");
-  const postalCode = normalizeText(customer?.postalCode || "");
-  const countryRegion = normalizeText(customer?.countryRegion || "");
-  return !(
-    firstName &&
-    lastName &&
-    email &&
-    addressLine1 &&
-    city &&
-    stateProvince &&
-    postalCode &&
-    countryRegion
-  );
-}
   function renderProfileStep(customer) {
     state.step = "profile";
     state.errorMessage = "";
     state.profileFirstName = normalizeText(customer?.firstName || "");
     state.profileLastName = normalizeText(customer?.lastName || "");
     state.profileEmail = normalizeEmail(customer?.email || "");
-    state.profileAddressLine1 = normalizeText(customer?.addressLine1 || "");
-    state.profileAddressLine2 = normalizeText(customer?.addressLine2 || "");
-    state.profileCity = normalizeText(customer?.city || "");
-    state.profileStateProvince = normalizeText(customer?.stateProvince || "");
-    state.profilePostalCode = normalizeText(customer?.postalCode || "");
-    state.profileCountryRegion = COUNTRY_REGION;
     renderStep();
     focusProfileInput();
+  }
+
+  function renderEmailDisambiguateStep() {
+    state.step = "email-disambiguate";
+    state.errorMessage = "";
+    renderStep();
+    focusDisambiguateEmailInput();
+  }
+
+  function renderEmailCodeStep(email) {
+    state.step = "email-code";
+    state.errorMessage = "";
+    state.emailVerifyDestination = email;
+    state.emailCode = "";
+    renderStep();
+    focusEmailCodeInput();
   }
 
   function getOtpRequestPayload(response) {
@@ -1614,32 +1536,31 @@ function needsProfileCompletion(customer) {
       pendingAction &&
       ["navigate", "buy-now-submit"].includes(pendingAction.type);
 
-    if (!hasCheckoutPending && needsProfileCompletion(sessionCustomer)) {
+    if (hasCheckoutPending) {
+      await completeAuthenticatedLogin(sessionCustomer, { hasCheckoutPending: true });
+      return;
+    }
+
+    let linkStatus = "new";
+    try {
+      const linkStatusResponse = await window.MegaskaAuth.getProfileLinkStatus();
+      linkStatus = linkStatusResponse?.status || "new";
+    } catch (error) {
+      console.warn("[Megaska OTP] profile link status check failed", error);
+      linkStatus = "new";
+    }
+
+    if (linkStatus === "ambiguous") {
+      renderEmailDisambiguateStep();
+      return;
+    }
+
+    if (linkStatus === "new") {
       renderProfileStep(sessionCustomer);
       return;
     }
 
-    hideAccountMenu();
-    await syncAccountUiState();
-
-    const accountRedirectTarget = consumePendingAccountRedirect();
-    if (accountRedirectTarget) {
-      console.log("[Megaska OTP] account redirect after OTP", { accountRedirectTarget });
-      window.location.assign(accountRedirectTarget);
-      return;
-    }
-
-if (hasCheckoutPending) {
-  renderSuccessStep("Preparing your checkout...");
-} else {
-  renderSuccessStep(getOtpModalBranding().successMessage);
-}
-
-await resumePendingAction(sessionCustomer);
-
-if (!hasCheckoutPending) {
-  setTimeout(() => closeModal("success", { force: true }), SUCCESS_CLOSE_DELAY_MS);
-}
+    await completeAuthenticatedLogin(sessionCustomer, { hasCheckoutPending: false });
   } catch (error) {
     state.verifying = false;
     state.statusMessage = "";
@@ -1647,6 +1568,34 @@ if (!hasCheckoutPending) {
     state.otpDigits = ["", "", "", ""];
     renderStep();
     //focusOtpInput(0);
+  }
+}
+
+/** Shared tail for every path that ends in an authenticated, linked session. */
+async function completeAuthenticatedLogin(sessionCustomer, options) {
+  const opts = options || {};
+  const hasCheckoutPending = Boolean(opts.hasCheckoutPending);
+
+  hideAccountMenu();
+  await syncAccountUiState();
+
+  const accountRedirectTarget = consumePendingAccountRedirect();
+  if (accountRedirectTarget) {
+    console.log("[Megaska OTP] account redirect after login", { accountRedirectTarget });
+    window.location.assign(accountRedirectTarget);
+    return;
+  }
+
+  if (hasCheckoutPending) {
+    renderSuccessStep("Preparing your checkout...");
+  } else {
+    renderSuccessStep(opts.successMessage || getOtpModalBranding().successMessage);
+  }
+
+  await resumePendingAction(sessionCustomer);
+
+  if (!hasCheckoutPending) {
+    setTimeout(() => closeModal("success", { force: true }), SUCCESS_CLOSE_DELAY_MS);
   }
 }
   async function handleProfileSubmit() {
@@ -1657,12 +1606,6 @@ if (!hasCheckoutPending) {
     const firstName = normalizeText(state.profileFirstName);
     const lastName = normalizeText(state.profileLastName);
     const email = normalizeEmail(state.profileEmail);
-    const addressLine1 = normalizeText(state.profileAddressLine1);
-    const addressLine2 = normalizeText(state.profileAddressLine2);
-    const city = normalizeText(state.profileCity);
-    const stateProvince = normalizeText(state.profileStateProvince);
-    const postalCode = normalizeText(state.profilePostalCode);
-    const countryRegion = COUNTRY_REGION;
 
     if (!firstName) {
       state.errorMessage = "Please enter your first name.";
@@ -1687,73 +1630,108 @@ if (!hasCheckoutPending) {
       return;
     }
 
-    if (!addressLine1) {
-      state.errorMessage = "Please enter your address line 1.";
-      renderStep();
-      const { profileAddress1Input } = getModalParts();
-      setTimeout(() => profileAddress1Input.focus(), 0);
-      return;
-    }
-
-    if (!city) {
-      state.errorMessage = "Please enter your city.";
-      renderStep();
-      const { profileCityInput } = getModalParts();
-      setTimeout(() => profileCityInput.focus(), 0);
-      return;
-    }
-
-    if (!stateProvince) {
-      state.errorMessage = "Please select your state.";
-      renderStep();
-      const { profileStateInput } = getModalParts();
-      setTimeout(() => profileStateInput.focus(), 0);
-      return;
-    }
-
-    if (!postalCode) {
-      state.errorMessage = "Please enter your postal or PIN code.";
-      renderStep();
-      const { profilePostalInput } = getModalParts();
-      setTimeout(() => profilePostalInput.focus(), 0);
-      return;
-    }
-
     state.savingProfile = true;
     state.errorMessage = "";
     renderStep();
 
     try {
-      await window.MegaskaAuth.completeProfile({
-        firstName,
-        lastName,
-        email,
-        addressLine1,
-        addressLine2,
-        city,
-        stateProvince,
-        postalCode,
-        countryRegion,
-      });
+      await window.MegaskaAuth.completeProfile({ firstName, lastName, email });
       const refreshedSession = await window.MegaskaAuth.refreshAuthState();
       const sessionCustomer = refreshedSession?.customer || null;
       state.savingProfile = false;
-hideAccountMenu();
-await syncAccountUiState();
-
-const accountRedirectTarget = consumePendingAccountRedirect();
-if (accountRedirectTarget) {
-  console.log("[Megaska OTP] account redirect after profile save", { accountRedirectTarget });
-  window.location.assign(accountRedirectTarget);
-  return;
-}
-
-await resumePendingAction(sessionCustomer);
-renderSuccessStep("✨ Saved! Your next checkout will be even faster");
-setTimeout(() => closeModal("success", { force: true }), SUCCESS_CLOSE_DELAY_MS);
+      await completeAuthenticatedLogin(sessionCustomer, {
+        successMessage: "✨ Saved! Your next checkout will be even faster",
+      });
     } catch (error) {
       state.savingProfile = false;
       state.errorMessage = error.message || "Unable to save your profile right now.";
+      renderStep();
+    }
+  }
+
+  async function handleEmailDisambiguateSubmit() {
+    if (!isModalOpen()) return;
+    if (state.step !== "email-disambiguate") return;
+    if (state.requestingEmailCode) return;
+
+    const email = normalizeEmail(state.disambiguateEmail);
+
+    if (!email || !isValidEmail(email)) {
+      state.errorMessage = "Please enter a valid email address.";
+      renderStep();
+      focusDisambiguateEmailInput();
+      return;
+    }
+
+    state.requestingEmailCode = true;
+    state.errorMessage = "";
+    renderStep();
+
+    try {
+      await window.MegaskaAuth.requestEmailVerification(email);
+      state.requestingEmailCode = false;
+      renderEmailCodeStep(email);
+    } catch (error) {
+      state.requestingEmailCode = false;
+      state.errorMessage =
+        error.message === "EMAIL_NOT_FOUND"
+          ? "We couldn't find that email on your account. Please check and try again."
+          : error.message || "Unable to send a verification code right now.";
+      renderStep();
+    }
+  }
+
+  async function handleEmailCodeSubmit() {
+    if (!isModalOpen()) return;
+    if (state.step !== "email-code") return;
+    if (state.verifyingEmailCode) return;
+
+    const code = String(state.emailCode || "").trim();
+    if (code.length !== 6) {
+      state.errorMessage = "Please enter the 6-digit code.";
+      renderStep();
+      focusEmailCodeInput();
+      return;
+    }
+
+    state.verifyingEmailCode = true;
+    state.errorMessage = "";
+    renderStep();
+
+    try {
+      await window.MegaskaAuth.confirmEmailVerification(state.emailVerifyDestination, code);
+      const refreshedSession = await window.MegaskaAuth.refreshAuthState();
+      const sessionCustomer = refreshedSession?.customer || null;
+      state.verifyingEmailCode = false;
+      await completeAuthenticatedLogin(sessionCustomer, {
+        successMessage: "✨ Verified! Welcome back",
+      });
+    } catch (error) {
+      state.verifyingEmailCode = false;
+      state.errorMessage = error.message || "Incorrect code. Please try again.";
+      state.emailCode = "";
+      renderStep();
+      focusEmailCodeInput();
+    }
+  }
+
+  async function handleEmailCodeResend() {
+    if (!isModalOpen()) return;
+    if (state.step !== "email-code") return;
+    if (state.requestingEmailCode) return;
+
+    state.requestingEmailCode = true;
+    state.errorMessage = "";
+    renderStep();
+
+    try {
+      await window.MegaskaAuth.requestEmailVerification(state.emailVerifyDestination);
+      state.requestingEmailCode = false;
+      state.statusMessage = "A new code has been sent.";
+      renderStep();
+    } catch (error) {
+      state.requestingEmailCode = false;
+      state.errorMessage = error.message || "Unable to resend the code right now.";
       renderStep();
     }
   }

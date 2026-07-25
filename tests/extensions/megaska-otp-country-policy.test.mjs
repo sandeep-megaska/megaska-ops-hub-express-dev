@@ -21,7 +21,7 @@ function extractFunction(name) {
 const context = { Set };
 const helperSource = otpSource.slice(
   otpSource.indexOf('  function sanitizeOtpCountryPolicy('),
-  otpSource.indexOf('  const INDIAN_STATES_AND_UTS')
+  otpSource.indexOf('  const state = {')
 );
 vm.runInNewContext(`
   const INDIA_OTP_COUNTRY = { iso2: "IN", name: "India", dialCode: "+91", flag: "🇮🇳" };

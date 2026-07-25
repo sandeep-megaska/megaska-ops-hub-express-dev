@@ -45,6 +45,7 @@ model CustomerProfile {
   productReviews      ProductReview[]
   identityPlans       CustomerIdentityReconciliationPlan[]
   identityAudits      CustomerIdentityReconciliationAudit[]
+  emailVerificationChallenges EmailVerificationChallenge[]
 
   @@unique([shopId, shopifyCustomerId])
   @@index([shopId])
@@ -120,6 +121,26 @@ model Shop {
   identityReconciliationAudits  CustomerIdentityReconciliationAudit[]
   identityMerges                CustomerIdentityMerge[]
   checkoutPricingSnapshots      ShopifyCheckoutPricingSnapshot[]
+  emailVerificationChallenges   EmailVerificationChallenge[]
+}
+
+model EmailVerificationChallenge {
+  id                         String    @id @default(uuid())
+  shopId                     String
+  customerProfileId          String
+  email                      String
+  candidateShopifyCustomerId String
+  codeHash                   String
+  status                     String    @default("pending") // pending, verified, failed, expired
+  attemptsCount              Int       @default(0)
+  expiresAt                  DateTime
+  verifiedAt                 DateTime?
+  createdAt                  DateTime  @default(now())
+
+  shop            Shop            @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  customerProfile CustomerProfile @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+
+  @@index([shopId, customerProfileId, status, createdAt])
 }
 
 enum CustomerIdentityReconciliationStatus {
