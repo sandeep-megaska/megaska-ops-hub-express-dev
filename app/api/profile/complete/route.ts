@@ -78,20 +78,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (!addressLine1 || !city || !stateProvince || !postalCode || !countryRegion) {
-      return withCors(
-        req,
-        NextResponse.json(
-          {
-            success: false,
-            error:
-              "Address line 1, city, state/province, postal/PIN code, and country/region are required",
-          },
-          { status: 400 }
-        )
-      );
-    }
-
     const authHeader = req.headers.get("authorization");
     const bearerToken = authHeader?.startsWith("Bearer ")
       ? authHeader.slice(7).trim()
@@ -274,12 +260,7 @@ export async function POST(req: NextRequest) {
         profileComplete: Boolean(
           updatedCustomer.firstName?.trim() &&
             updatedCustomer.lastName?.trim() &&
-            updatedCustomer.email?.trim() &&
-            updatedCustomer.addressLine1?.trim() &&
-            updatedCustomer.city?.trim() &&
-            updatedCustomer.stateProvince?.trim() &&
-            updatedCustomer.postalCode?.trim() &&
-            updatedCustomer.countryRegion?.trim()
+            updatedCustomer.email?.trim()
         ),
         shopifyCustomerId: updatedCustomer.shopifyCustomerId,
         shopifySync,

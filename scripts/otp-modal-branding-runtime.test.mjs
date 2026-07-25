@@ -30,7 +30,7 @@ test('OTP modal separates structural creation from presentation branding updates
 
 test('OTP success message is merchant-configurable via otpModalBranding', () => {
   mustContain(otpSource, 'successMessage: String(config.successMessage || "You\'re in!").trim() || "You\'re in!"');
-  mustContain(otpSource, 'renderSuccessStep(getOtpModalBranding().successMessage);');
+  mustContain(otpSource, 'renderSuccessStep(opts.successMessage || getOtpModalBranding().successMessage);');
 });
 
 test('OTP modal includes stable presentation hooks and listens for runtime config readiness', () => {

@@ -377,3 +377,66 @@ export async function sendCustomerEmail(input: SendCustomerEmailInput, deps: Sen
     return { skipped: false, success: false, errorCode: "PROVIDER_FAILED" };
   }
 }
+
+export type SendEmailVerificationCodeInput = {
+  shopId: string;
+  shopName?: string | null;
+  to: string;
+  code: string;
+};
+
+/**
+ * Always-on transactional send for identity-verification codes. Deliberately bypasses
+ * getMerchantNotificationRoutingSettings — a merchant disabling customer notifications
+ * must never be able to silently break a security-critical verification step.
+ */
+export async function sendEmailVerificationCode(
+  input: SendEmailVerificationCodeInput,
+  deps: SendCustomerEmailDeps = {}
+): Promise<CustomerEmailSendResult> {
+  const shopId = String(input.shopId || "").trim();
+  const recipient = normalizeCustomerRecipient(input.to);
+
+  if (!shopId) {
+    customerLog("shop_unresolved", { shopId, eventType: "GENERAL", recipientPresent: Boolean(recipient) });
+    return { skipped: false, success: false, errorCode: "SHOP_UNRESOLVED" };
+  }
+
+  if (!recipient) {
+    customerLog("skipped_no_recipient", { shopId, eventType: "GENERAL", recipientPresent: false });
+    return { skipped: true, reason: "NO_RECIPIENT" };
+  }
+
+  const transport = getPlatformCustomerEmailTransport();
+  if (!transport.enabled) {
+    customerLog("transport_missing", { shopId, eventType: "GENERAL", hasApiKey: Boolean(transport.apiKey), hasValidFrom: Boolean(transport.parsedSender), recipientPresent: true });
+    return { skipped: true, reason: "PLATFORM_TRANSPORT_NOT_CONFIGURED" };
+  }
+
+  const from = formatPlatformFrom(input.shopName, transport.rawPlatformSender);
+  if (!from) {
+    customerLog("transport_missing", { shopId, eventType: "GENERAL", hasApiKey: Boolean(transport.apiKey), hasValidFrom: false, recipientPresent: true });
+    return { skipped: true, reason: "PLATFORM_TRANSPORT_NOT_CONFIGURED" };
+  }
+
+  const notificationAttemptId = randomUUID();
+  const subject = `Your verification code: ${input.code}`;
+  const text = `Your one-time verification code is ${input.code}. It expires in 10 minutes.\n\nIf you did not request this, you can safely ignore this email.`;
+
+  try {
+    const response = await (deps.fetchImpl || fetch)("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${transport.apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ from, to: [recipient], subject, text }),
+    });
+    const data = (await response.json().catch(() => null)) as { id?: string; message?: string } | null;
+    if (!response.ok) throw new Error(data?.message || `Resend HTTP ${response.status}`);
+    const providerMessageId = data?.id || null;
+    customerLog("provider_accepted", { shopId, eventType: "GENERAL", providerMessageId, recipientPresent: true });
+    await safelyRecordEmailUsage({ shopId, audience: "CUSTOMER", eventType: "GENERAL", providerMessageId, notificationAttemptId, recipientCount: 1 }, deps.db);
+    return { skipped: false, success: true, messageId: providerMessageId };
+  } catch (error) {
+    console.error("[CUSTOMER NOTIFY]", { operation: "provider_failed", shopId, eventType: "GENERAL", recipientPresent: true, errorName: error instanceof Error ? error.name : null, errorMessage: error instanceof Error ? error.message : String(error) });
+    return { skipped: false, success: false, errorCode: "PROVIDER_FAILED" };
+  }
+}

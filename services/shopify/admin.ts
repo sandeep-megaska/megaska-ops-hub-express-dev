@@ -995,6 +995,72 @@ export async function findOrCreateShopifyCustomer(
   };
 }
 
+export type ShopifyCustomerPhoneCandidate = {
+  shopifyCustomerId: string;
+  email: string | null;
+  firstName: string | null;
+  lastName: string | null;
+};
+
+async function findCustomersByQuery(
+  query: string,
+  limit: number,
+  options?: AdminRequestOptions
+): Promise<Array<{ id: string; email?: string | null; firstName?: string | null; lastName?: string | null }>> {
+  const data = await adminGraphql<{
+    customers: {
+      edges: Array<{ node: { id: string; email?: string | null; firstName?: string | null; lastName?: string | null } }>;
+    };
+  }>(
+    `
+      query FindCustomers($query: String!, $first: Int!) {
+        customers(first: $first, query: $query) {
+          edges {
+            node {
+              id
+              email
+              firstName
+              lastName
+            }
+          }
+        }
+      }
+    `,
+    { query, first: limit },
+    options
+  );
+
+  return data.customers.edges.map((edge) => edge.node);
+}
+
+/** At most one candidate per distinct Shopify customer, deduped across legacy phone format variants. */
+export async function findShopifyCustomersByPhone(
+  phoneE164: string,
+  options?: AdminRequestOptions
+): Promise<ShopifyCustomerPhoneCandidate[]> {
+  const variants = shopifyPhoneSearchVariants(String(phoneE164 || "").trim());
+  if (!variants.length) return [];
+
+  const byId = new Map<string, ShopifyCustomerPhoneCandidate>();
+
+  for (const variant of variants) {
+    const nodes = await findCustomersByQuery(`phone:${variant}`, 5, options);
+    for (const node of nodes) {
+      if (!node.id) continue;
+      const shopifyCustomerId = parseCustomerId(node.id);
+      if (byId.has(shopifyCustomerId)) continue;
+      byId.set(shopifyCustomerId, {
+        shopifyCustomerId,
+        email: node.email ? normalizeEmail(node.email) : null,
+        firstName: node.firstName || null,
+        lastName: node.lastName || null,
+      });
+    }
+  }
+
+  return Array.from(byId.values());
+}
+
 type GstSyncOrderNode = {
   id: string;
   name?: string | null;

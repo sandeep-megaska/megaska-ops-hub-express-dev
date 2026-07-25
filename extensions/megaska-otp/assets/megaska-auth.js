@@ -355,13 +355,27 @@ if (token) {
         firstName: payload?.firstName || "",
         lastName: payload?.lastName || "",
         email: payload?.email || "",
-        addressLine1: payload?.addressLine1 || "",
-        addressLine2: payload?.addressLine2 || "",
-        city: payload?.city || "",
-        stateProvince: payload?.stateProvince || "",
-        postalCode: payload?.postalCode || "",
-        countryRegion: payload?.countryRegion || "",
       }),
+    });
+  }
+
+  async function getProfileLinkStatus() {
+    return apiFetch("/profile/link-status", {
+      method: "POST",
+    });
+  }
+
+  async function requestEmailVerification(email) {
+    return apiFetch("/profile/email-verify/request", {
+      method: "POST",
+      body: JSON.stringify({ email: email || "" }),
+    });
+  }
+
+  async function confirmEmailVerification(email, code) {
+    return apiFetch("/profile/email-verify/confirm", {
+      method: "POST",
+      body: JSON.stringify({ email: email || "", code: code || "" }),
     });
   }
 
@@ -1224,6 +1238,9 @@ const sku = order?.firstLineItemSku || order?.sku || "";
     requestOtp,
     verifyOtp,
     completeProfile,
+    getProfileLinkStatus,
+    requestEmailVerification,
+    confirmEmailVerification,
     logout,
     buildCheckoutPrefillParams,
     applyCheckoutPrefillToUrl,
