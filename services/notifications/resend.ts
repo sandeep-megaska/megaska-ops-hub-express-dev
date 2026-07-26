@@ -20,12 +20,18 @@ export type SendAdminAlertInput = {
   usageContext?: NotificationUsageContext;
 };
 
+export type CustomerEmailAttachment = {
+  filename: string;
+  content: string; // base64-encoded
+};
+
 export type SendCustomerEmailInput = {
   shopId: string;
   to: string | null | undefined;
   eventType: CustomerEmailEventType;
   subject: string;
   text: string;
+  attachments?: CustomerEmailAttachment[];
   usageContext?: NotificationUsageContext;
 };
 
@@ -360,6 +366,7 @@ export async function sendCustomerEmail(input: SendCustomerEmailInput, deps: Sen
     };
     const replyTo = normalizeReplyTo(settings.replyToEmail);
     if (replyTo) body.reply_to = replyTo;
+    if (input.attachments?.length) body.attachments = input.attachments;
 
     const response = await (deps.fetchImpl || fetch)("https://api.resend.com/emails", {
       method: "POST",

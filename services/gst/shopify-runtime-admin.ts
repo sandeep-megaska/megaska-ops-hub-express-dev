@@ -355,6 +355,29 @@ export async function getShopifyOrdersForGstSync(input: {
   return uniqueOrders.map(normalizeGstSyncOrder);
 }
 
+export async function getSingleShopifyOrderByGid(input: { shopifyOrderGid: string; shopDomain?: string }) {
+  const shopifyOrderId = extractShopifyEntityId(input.shopifyOrderGid);
+  if (!shopifyOrderId) return null;
+
+  const gid = input.shopifyOrderGid.includes("gid://")
+    ? input.shopifyOrderGid
+    : `gid://shopify/Order/${shopifyOrderId}`;
+
+  const data = await gstRuntimeAdminGraphql<{ order: GstSyncOrderNode | null }>(
+    `
+      query GstSingleOrderById($id: ID!) {
+        order(id: $id) {
+          ${GST_ORDER_FIELDS}
+        }
+      }
+    `,
+    { id: gid },
+    { shopDomain: input.shopDomain }
+  );
+
+  return data.order ? normalizeGstSyncOrder(data.order) : null;
+}
+
 export async function getSingleShopifyOrderForGstSync(input: { orderNameOrNumber: string; shopDomain?: string }) {
   const key = String(input.orderNameOrNumber || "").trim();
   if (!key) return null;
