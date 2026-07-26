@@ -20,6 +20,7 @@ export interface GstSettingsSnapshot {
   defaultCurrency: string;
   priceIncludesTax: boolean;
   einvoiceEnabled: boolean;
+  autoGenerateOnOrderCreate: boolean;
   isActive: boolean;
 }
 
@@ -37,6 +38,7 @@ export interface GstSettingsWriteInput {
   defaultCurrency?: string;
   priceIncludesTax?: boolean;
   einvoiceEnabled?: boolean;
+  autoGenerateOnOrderCreate?: boolean;
   isActive?: boolean;
 }
 
@@ -64,6 +66,7 @@ function toSnapshot(settings: GstSettingsSnapshot | null | undefined): GstSettin
     defaultCurrency: settings.defaultCurrency,
     priceIncludesTax: Boolean(settings.priceIncludesTax),
     einvoiceEnabled: settings.einvoiceEnabled,
+    autoGenerateOnOrderCreate: Boolean(settings.autoGenerateOnOrderCreate),
     isActive: settings.isActive,
   };
 }
@@ -129,6 +132,7 @@ export function validateGstIdentityConfig(
         defaultCurrency: normalize(input.defaultCurrency || "INR").toUpperCase(),
         priceIncludesTax: input.priceIncludesTax !== false,
         einvoiceEnabled: Boolean(input.einvoiceEnabled),
+        autoGenerateOnOrderCreate: Boolean(input.autoGenerateOnOrderCreate),
         isActive: input.isActive ?? true,
       },
     },
@@ -290,6 +294,7 @@ export async function upsertGstSettings(input: GstSettingsWriteInput): Promise<G
             defaultCurrency: String(normalized.defaultCurrency || "INR"),
             priceIncludesTax: normalized.priceIncludesTax !== false,
             einvoiceEnabled: Boolean(normalized.einvoiceEnabled),
+            autoGenerateOnOrderCreate: Boolean(normalized.autoGenerateOnOrderCreate),
             isActive: normalized.isActive ?? true,
           },
         });
@@ -318,6 +323,7 @@ export async function upsertGstSettings(input: GstSettingsWriteInput): Promise<G
           defaultCurrency: String(normalized.defaultCurrency || "INR"),
           priceIncludesTax: normalized.priceIncludesTax !== false,
           einvoiceEnabled: Boolean(normalized.einvoiceEnabled),
+          autoGenerateOnOrderCreate: Boolean(normalized.autoGenerateOnOrderCreate),
           isActive: normalized.isActive ?? true,
         },
         update: {
@@ -333,6 +339,7 @@ export async function upsertGstSettings(input: GstSettingsWriteInput): Promise<G
           defaultCurrency: String(normalized.defaultCurrency || "INR"),
           priceIncludesTax: normalized.priceIncludesTax !== false,
           einvoiceEnabled: Boolean(normalized.einvoiceEnabled),
+          autoGenerateOnOrderCreate: Boolean(normalized.autoGenerateOnOrderCreate),
           isActive: normalized.isActive ?? true,
         },
       });

@@ -140,6 +140,10 @@ async function saveSettings(req: NextRequest) {
       typeof body.einvoiceEnabled === "boolean"
         ? body.einvoiceEnabled
         : (baseValues?.einvoiceEnabled ?? false),
+    autoGenerateOnOrderCreate:
+      typeof body.autoGenerateOnOrderCreate === "boolean"
+        ? body.autoGenerateOnOrderCreate
+        : (baseValues?.autoGenerateOnOrderCreate ?? false),
     isActive: typeof body.isActive === "boolean" ? body.isActive : (baseValues?.isActive ?? true),
   };
 
@@ -174,6 +178,7 @@ async function saveSettings(req: NextRequest) {
         defaultCurrency: String(normalized.defaultCurrency || "INR"),
         priceIncludesTax: normalized.priceIncludesTax !== false,
         einvoiceEnabled: Boolean(normalized.einvoiceEnabled),
+        autoGenerateOnOrderCreate: Boolean(normalized.autoGenerateOnOrderCreate),
         isActive: normalized.isActive ?? true,
       };
 

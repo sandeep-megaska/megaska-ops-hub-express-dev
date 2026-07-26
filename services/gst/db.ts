@@ -15,6 +15,7 @@ export interface GstSettingsRecord {
   defaultCurrency: string;
   priceIncludesTax: boolean;
   einvoiceEnabled: boolean;
+  autoGenerateOnOrderCreate: boolean;
   isActive: boolean;
   updatedAt?: Date;
 }
