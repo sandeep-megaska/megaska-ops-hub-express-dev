@@ -14,6 +14,7 @@ type SettingsFormState = {
   creditNotePrefix: string
   debitNotePrefix: string
   priceIncludesTax: boolean
+  autoGenerateOnOrderCreate: boolean
 }
 
 const initialState: SettingsFormState = {
@@ -26,6 +27,7 @@ const initialState: SettingsFormState = {
   creditNotePrefix: 'CN',
   debitNotePrefix: 'DN',
   priceIncludesTax: true,
+  autoGenerateOnOrderCreate: false,
 }
 
 export function GstSettingsForm() {
@@ -50,6 +52,7 @@ export function GstSettingsForm() {
         creditNotePrefix: String(data.creditNotePrefix || 'CN'),
         debitNotePrefix: String(data.debitNotePrefix || 'DN'),
         priceIncludesTax: data.priceIncludesTax !== false,
+        autoGenerateOnOrderCreate: data.autoGenerateOnOrderCreate === true,
       }))
       setResult(data)
     })()
@@ -105,6 +108,21 @@ export function GstSettingsForm() {
             onChange={(e) => setForm((p) => ({ ...p, priceIncludesTax: e.target.checked }))}
           />
           Selling price includes tax (default true)
+        </label>
+
+        <label className="flex items-start gap-2 text-sm text-gray-700">
+          <input
+            type="checkbox"
+            className="mt-0.5"
+            checked={form.autoGenerateOnOrderCreate}
+            onChange={(e) => setForm((p) => ({ ...p, autoGenerateOnOrderCreate: e.target.checked }))}
+          />
+          <span>
+            Automatically generate a GST invoice when an order is created
+            <span className="block text-xs text-gray-500">
+              Skips orders with unmapped SKUs or missing GST details — those stay available for manual generation on the Orders page.
+            </span>
+          </span>
         </label>
 
         <button type="submit" className="rounded-xl bg-gray-900 px-5 py-2.5 text-sm text-white" disabled={loading}>

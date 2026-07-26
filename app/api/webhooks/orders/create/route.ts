@@ -11,6 +11,7 @@ import {
 } from "../../../../../services/shopify/admin";
 import { normalizeShopDomain } from "../../../../../services/shopify/shop-resolver";
 import { isCanonicalE164, normalizeShopifyPhone } from "../../../../../services/shopify/shopify-phone-normalization";
+import { autoGenerateInvoiceForOrder } from "../../../../../services/gst/auto-invoice";
 
 type ShopifyOrderWebhookPayload = {
   id?: number | string;
@@ -240,6 +241,28 @@ export async function POST(req: NextRequest) {
     payload = JSON.parse(rawBody) as ShopifyOrderWebhookPayload;
   } catch {
     return NextResponse.json({ ok: false, error: "Invalid JSON body" }, { status: 400 });
+  }
+
+  // GST auto-invoicing is an independent concern from the Megaska identity/wallet
+  // reconciliation below and must run for every order regardless of OTP-verification
+  // markers, so it runs first and is fully isolated from that logic's early returns.
+  try {
+    const orderName = String(payload.name || "").trim();
+    if (orderName && shopDomain) {
+      const tenant = await prisma.shop.findFirst({ where: { shopDomain }, select: { id: true } });
+      const gstResult = await autoGenerateInvoiceForOrder({
+        shopId: tenant?.id ?? null,
+        shopDomain,
+        orderName,
+      });
+      console.log("[GST AUTO INVOICE] webhook attempt", { orderName, shopDomain, ...gstResult });
+    }
+  } catch (error) {
+    console.error("[GST AUTO INVOICE] webhook failed", {
+      orderName: String(payload.name || "").trim() || null,
+      shopDomain,
+      error: error instanceof Error ? error.message : "Unknown error",
+    });
   }
 
   const orderId = String(payload.admin_graphql_api_id || payload.id || "").trim();
