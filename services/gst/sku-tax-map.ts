@@ -223,6 +223,15 @@ export async function listUnmappedSkusFromImportedOrders(input: {
   return { ok: true, data };
 }
 
+function toMapResult(row: Record<string, unknown>, source: "SKU" | "STYLE") {
+  return {
+    hsnCode: norm(row.hsnCode),
+    taxRate: Number(row.taxRate) || 0,
+    cessRate: Number(row.cessRate) || 0,
+    source,
+  };
+}
+
 export async function resolveSkuTaxMap(input: {
   shopId?: string | null;
   sku?: string | null;
@@ -233,20 +242,27 @@ export async function resolveSkuTaxMap(input: {
   }
 
   const shopId = input.shopId || null;
+
   const exactSku = await skuMapDb.gstSkuTaxMap.findFirst({
     where: { shopId, sku, status: "ACTIVE" },
     orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
   });
   if (exactSku) {
-    return {
-      ok: true,
-      data: {
-        hsnCode: norm(exactSku.hsnCode),
-        taxRate: Number(exactSku.taxRate) || 0,
-        cessRate: Number(exactSku.cessRate) || 0,
-        source: "SKU",
-      },
-    };
+    return { ok: true, data: toMapResult(exactSku, "SKU") };
+  }
+
+  // Falls back to a shop-agnostic mapping if this shop has none of its own,
+  // mirroring getActiveGstSettings' existing shopId-null fallback. Protects
+  // against a mapping ending up shopId: null (e.g. a request that briefly
+  // lost shop context) silently blocking invoice generation forever.
+  if (shopId) {
+    const globalSku = await skuMapDb.gstSkuTaxMap.findFirst({
+      where: { shopId: null, sku, status: "ACTIVE" },
+      orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+    });
+    if (globalSku) {
+      return { ok: true, data: toMapResult(globalSku, "SKU") };
+    }
   }
 
   const styleCode = deriveStyleCodeFromSku(sku);
@@ -258,19 +274,21 @@ export async function resolveSkuTaxMap(input: {
     where: { shopId, styleCode, status: "ACTIVE" },
     orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
   });
-  if (!style) {
-    return { ok: true, data: null };
+  if (style) {
+    return { ok: true, data: toMapResult(style, "STYLE") };
   }
 
-  return {
-    ok: true,
-    data: {
-      hsnCode: norm(style.hsnCode),
-      taxRate: Number(style.taxRate) || 0,
-      cessRate: Number(style.cessRate) || 0,
-      source: "STYLE",
-    },
-  };
+  if (shopId) {
+    const globalStyle = await skuMapDb.gstSkuTaxMap.findFirst({
+      where: { shopId: null, styleCode, status: "ACTIVE" },
+      orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+    });
+    if (globalStyle) {
+      return { ok: true, data: toMapResult(globalStyle, "STYLE") };
+    }
+  }
+
+  return { ok: true, data: null };
 }
 
 export async function upsertSkuTaxMapping(input: {

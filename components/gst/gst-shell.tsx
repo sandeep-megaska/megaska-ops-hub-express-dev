@@ -2,7 +2,7 @@
 
 import type { ReactNode } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useSearchParams } from 'next/navigation'
 
 const nav = [
   { href: '/admin/gst/settings', label: 'Settings' },
@@ -22,6 +22,8 @@ export function GstShell({
   children: ReactNode
 }) {
   const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const query = searchParams?.toString() || ''
 
   return (
     <div className="min-h-screen bg-[#f6f6f7]">
@@ -44,10 +46,11 @@ export function GstShell({
           <nav className="flex flex-wrap gap-2">
             {nav.map((item) => {
               const active = pathname === item.href
+              const href = query ? `${item.href}?${query}` : item.href
               return (
                 <Link
                   key={item.href}
-                  href={item.href}
+                  href={href}
                   className={[
                     'rounded-xl px-4 py-2 text-sm font-medium transition',
                     active ? 'bg-gray-900 text-white shadow-sm' : 'text-gray-700 hover:bg-gray-100',
