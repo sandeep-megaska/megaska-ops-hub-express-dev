@@ -32,6 +32,8 @@ export async function createEmailVerificationChallenge(input: {
   customerProfileId: string;
   email: string;
   candidateShopifyCustomerId: string;
+  candidateFirstName?: string | null;
+  candidateLastName?: string | null;
 }): Promise<CreateEmailVerificationChallengeResult> {
   const email = input.email.trim().toLowerCase();
 
@@ -58,6 +60,8 @@ export async function createEmailVerificationChallenge(input: {
       customerProfileId: input.customerProfileId,
       email,
       candidateShopifyCustomerId: input.candidateShopifyCustomerId,
+      candidateFirstName: input.candidateFirstName || null,
+      candidateLastName: input.candidateLastName || null,
       codeHash: hashCode(code),
       expiresAt: new Date(Date.now() + CODE_TTL_MINUTES * 60 * 1000),
     },
@@ -67,7 +71,13 @@ export async function createEmailVerificationChallenge(input: {
 }
 
 export type VerifyEmailVerificationChallengeResult =
-  | { ok: true; candidateShopifyCustomerId: string; email: string }
+  | {
+      ok: true;
+      candidateShopifyCustomerId: string;
+      email: string;
+      candidateFirstName: string | null;
+      candidateLastName: string | null;
+    }
   | { ok: false; reason: "NOT_FOUND" | "EXPIRED" | "TOO_MANY_ATTEMPTS" | "INCORRECT_CODE" };
 
 export async function verifyEmailVerificationChallenge(input: {
@@ -123,5 +133,11 @@ export async function verifyEmailVerificationChallenge(input: {
     data: { status: "verified", verifiedAt: new Date() },
   });
 
-  return { ok: true, candidateShopifyCustomerId: challenge.candidateShopifyCustomerId, email };
+  return {
+    ok: true,
+    candidateShopifyCustomerId: challenge.candidateShopifyCustomerId,
+    email,
+    candidateFirstName: challenge.candidateFirstName,
+    candidateLastName: challenge.candidateLastName,
+  };
 }

@@ -108,6 +108,8 @@ export async function POST(req: NextRequest) {
       customerProfileId: customer.id,
       email,
       candidateShopifyCustomerId: matchedCandidate.shopifyCustomerId,
+      candidateFirstName: matchedCandidate.firstName,
+      candidateLastName: matchedCandidate.lastName,
     });
 
     if (result.created) {

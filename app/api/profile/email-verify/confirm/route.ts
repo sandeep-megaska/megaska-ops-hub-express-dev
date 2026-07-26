@@ -108,6 +108,12 @@ export async function POST(req: NextRequest) {
       phoneVerified: Boolean(customer.phoneVerifiedAt),
       email: result.email,
       emailVerified: true,
+      customerAttributes: {
+        firstName: result.candidateFirstName || undefined,
+        lastName: result.candidateLastName || undefined,
+        fullName:
+          [result.candidateFirstName, result.candidateLastName].filter(Boolean).join(" ") || undefined,
+      },
     });
 
     if (!identity.customerProfile || identity.customerProfile.id !== customer.id) {
