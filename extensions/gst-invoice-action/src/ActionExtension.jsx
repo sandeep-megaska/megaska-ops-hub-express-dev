@@ -64,8 +64,12 @@ export default async () => {
   const statusText = document.createElement("s-text");
   statusText.textContent = i18n.translate("loading");
 
-  const readinessText = document.createElement("s-text");
-  readinessText.tone = "critical";
+  // Lists the count header plus each actual readiness message, so a merchant
+  // can see exactly which check failed (e.g. the amount sanity check) instead
+  // of only a bare count.
+  const readinessStack = document.createElement("s-stack");
+  readinessStack.direction = "block";
+  readinessStack.gap = "base";
 
   const errorText = document.createElement("s-text");
   errorText.tone = "critical";
@@ -111,17 +115,32 @@ export default async () => {
 
   function renderStatus() {
     const hasInvoice = Boolean(orderStatus?.invoiceId);
-    const readinessCount = Array.isArray(orderStatus?.readinessErrors) ? orderStatus.readinessErrors.length : 0;
+    const readinessErrors = Array.isArray(orderStatus?.readinessErrors)
+      ? orderStatus.readinessErrors.map((item) => String(item || "").trim()).filter(Boolean)
+      : [];
 
     statusText.textContent = hasInvoice
       ? translateWith(i18n, "invoiced", { documentNumber: orderStatus.documentNumber || "" })
       : i18n.translate("notInvoiced");
 
-    if (readinessCount > 0) {
-      readinessText.textContent = translateWith(i18n, "readinessWarning", { count: String(readinessCount) });
-      if (!readinessText.isConnected) bodyStack.appendChild(readinessText);
-    } else if (readinessText.isConnected) {
-      readinessText.remove();
+    if (readinessErrors.length > 0) {
+      while (readinessStack.firstChild) readinessStack.removeChild(readinessStack.firstChild);
+
+      const headerText = document.createElement("s-text");
+      headerText.tone = "critical";
+      headerText.textContent = translateWith(i18n, "readinessWarning", { count: String(readinessErrors.length) });
+      readinessStack.appendChild(headerText);
+
+      for (const message of readinessErrors) {
+        const itemText = document.createElement("s-text");
+        itemText.tone = "critical";
+        itemText.textContent = `• ${message}`;
+        readinessStack.appendChild(itemText);
+      }
+
+      if (!readinessStack.isConnected) bodyStack.appendChild(readinessStack);
+    } else if (readinessStack.isConnected) {
+      readinessStack.remove();
     }
 
     generateButton.textContent = hasInvoice ? i18n.translate("refreshButton") : i18n.translate("generateButton");
