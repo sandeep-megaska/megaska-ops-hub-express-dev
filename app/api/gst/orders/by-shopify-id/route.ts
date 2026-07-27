@@ -39,12 +39,19 @@ export async function POST(req: NextRequest) {
     select: { id: true, shopifyOrderName: true, readinessErrors: true },
   });
 
-  if (!orderImport) {
+  // Re-import when the order is new OR when the caller explicitly asks to
+  // generate/refresh. Without forcing a re-import on refresh, readinessErrors
+  // stay frozen at first-import time, so a SKU/HSN mapping added afterwards
+  // never clears a stale "missing GST mapping" warning and the order looks
+  // stuck. A failed re-sync on an already-imported order is non-fatal - we fall
+  // back to the existing record.
+  if (!orderImport || generate) {
     const synced = await syncSingleOrderByShopifyGid({
       shopifyOrderGid,
       shopDomain: resolvedShop.shopDomain,
+      forceResync: true,
     });
-    if (!synced.ok) {
+    if (!synced.ok && !orderImport) {
       return withExtensionCors(
         NextResponse.json({ ok: false, error: synced.error || "Unable to sync order from Shopify" }, { status: 400 })
       );
