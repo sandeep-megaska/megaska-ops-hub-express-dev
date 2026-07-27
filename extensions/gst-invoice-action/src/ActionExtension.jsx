@@ -5,21 +5,36 @@ export default async () => {
   render(<Extension />, document.body);
 };
 
+const REQUEST_TIMEOUT_MS = 15000;
+
+function withTimeout(promise, message) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(message)), REQUEST_TIMEOUT_MS)),
+  ]);
+}
+
 async function fetchShopDomain() {
-  const res = await fetch("shopify:admin/api/graphql.json", {
-    method: "POST",
-    body: JSON.stringify({ query: "{ shop { myshopifyDomain } }" }),
-  });
+  const res = await withTimeout(
+    fetch("shopify:admin/api/graphql.json", {
+      method: "POST",
+      body: JSON.stringify({ query: "{ shop { myshopifyDomain } }" }),
+    }),
+    "Timed out reading shop details from Shopify"
+  );
   const json = await res.json().catch(() => null);
   return json?.data?.shop?.myshopifyDomain || "";
 }
 
 async function fetchOrderStatus({ shopifyOrderGid, shop, generate }) {
-  const res = await fetch("/api/gst/orders/by-shopify-id", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ shopifyOrderGid, shop, generate: Boolean(generate) }),
-  });
+  const res = await withTimeout(
+    fetch("/api/gst/orders/by-shopify-id", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ shopifyOrderGid, shop, generate: Boolean(generate) }),
+    }),
+    "Timed out reaching the GST app backend. Confirm the app is deployed and reachable."
+  );
   const json = await res.json().catch(() => null);
   if (!res.ok || !json?.ok) {
     throw new Error(json?.error || "Unable to load GST invoice status");
@@ -81,9 +96,28 @@ function Extension() {
     }
   }, [shopifyOrderGid, shopDomain]);
 
-  const handleDownload = useCallback(() => {
-    if (orderStatus?.pdfUrl) {
-      window.open(orderStatus.pdfUrl, "_blank");
+  const [downloading, setDownloading] = useState(false);
+
+  const handleDownload = useCallback(async () => {
+    if (!orderStatus?.pdfUrl) return;
+    setDownloading(true);
+    setErrorMessage(null);
+    try {
+      // window.open() with a relative path resolves against this extension's
+      // own sandboxed origin, not the app. fetch() is what Shopify resolves
+      // against the app's application_url and attaches auth to, so the PDF is
+      // fetched here and opened from a local blob URL instead.
+      const res = await fetch(orderStatus.pdfUrl);
+      if (!res.ok) {
+        throw new Error(`Failed to download PDF (HTTP ${res.status})`);
+      }
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      window.open(objectUrl, "_blank");
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setDownloading(false);
     }
   }, [orderStatus]);
 
@@ -144,7 +178,7 @@ function Extension() {
         {hasInvoice ? (
           <s-box padding-block-start="base">
             <s-stack direction="block" gap="base">
-              <s-button onClick={handleDownload}>{i18n.translate("downloadButton")}</s-button>
+              <s-button onClick={handleDownload} loading={downloading}>{i18n.translate("downloadButton")}</s-button>
 
               <s-text-field
                 label={i18n.translate("emailLabel")}
