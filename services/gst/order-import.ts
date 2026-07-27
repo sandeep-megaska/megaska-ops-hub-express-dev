@@ -171,10 +171,8 @@ function buildReadiness(
     shippingStateCode: string | null;
   },
   lines: ParsedOrderLine[],
-  options?: { priceIncludesTax?: boolean },
 ): { readinessErrors: string[]; eligibilityStatus: string; importStatus: string } {
   const readinessErrors: string[] = [];
-  const priceIncludesTax = options?.priceIncludesTax !== false;
 
   if (lines.length === 0) {
     readinessErrors.push("Order has no line items");
@@ -188,19 +186,13 @@ function buildReadiness(
     readinessErrors.push("One or more line items are missing GST product tax mappings");
   }
 
-  if (priceIncludesTax) {
-    const computedLineGrossTotal = roundCurrency(
-      lines.reduce((sum, line) => sum + Math.max(0, line.quantity * line.unitPrice - line.discount), 0),
-    );
-    if (Math.abs(computedLineGrossTotal - order.orderGrandTotal) > 0.5) {
-      readinessErrors.push("Order amount sanity check failed: computed line gross total does not match grand total");
-    }
-  } else {
-    const expectedGrandTotal = roundCurrency(order.orderSubtotal + order.orderTaxTotal);
-    if (Math.abs(expectedGrandTotal - order.orderGrandTotal) > 0.5) {
-      readinessErrors.push("Order amount sanity check failed: subtotal + tax does not match grand total");
-    }
-  }
+  // The former "order amount sanity check" (subtotal+tax vs grand total, or
+  // line-gross vs grand total) is intentionally gone: both branches ignored
+  // shipping and keyed off the app's static priceIncludesTax setting rather
+  // than the order's real tax mode, so they false-positived on any order with
+  // shipping or a differing tax display. Reconciliation against what Shopify
+  // actually charged belongs at invoice generation (tax-authority work), not
+  // as a noisy readiness warning here.
 
   const hasCritical = readinessErrors.some((error) => error.includes("no line items"));
   const hasReviewOnly = readinessErrors.length > 0 && !hasCritical;
@@ -330,9 +322,7 @@ export async function importOrderByShopifyId(
       billingStateCode: resolveGstStateCode(normalizeString(payload.billingStateCode || payload.billingState)) || null,
     };
 
-    const readiness = buildReadiness(normalizedOrder, mappedLines, {
-      priceIncludesTax: activeSettings.data.priceIncludesTax !== false,
-    });
+    const readiness = buildReadiness(normalizedOrder, mappedLines);
     const mappingCompleteness = calculateMappingCompleteness(mappedLines);
     const unmappedSkus = collectUnmappedSkus(mappedLines);
     const warnings = collectMissingMappingMessages(mappedLines);
@@ -675,10 +665,6 @@ export async function recomputeImportedOrderMappings(options?: {
           mappedCessRate: null,
           mappingStatus: line.mappingStatus === "MAPPED" ? "MAPPED" : "UNMAPPED",
         })),
-        {
-          priceIncludesTax:
-            ((order.gstSettings as { priceIncludesTax?: unknown } | null)?.priceIncludesTax ?? true) !== false,
-        },
       );
 
       await orderDb.gstOrderImport.update({
