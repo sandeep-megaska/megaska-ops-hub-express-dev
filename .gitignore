@@ -48,8 +48,10 @@ extensions/loopdesk-discount-function/Cargo.lock
 extensions/loopdesk-discount-function/dist/index.wasm
 extensions/loopdesk-discount-function/dist/function.wasm
 
-# extension dependencies
+# extension dependencies and local build/codegen output
 extensions/*/node_modules/
+extensions/*/dist/
+extensions/*/generated/
 extensions/loopdesk-discount-function/dist/function.js
 extensions/loopdesk-discount-function/dist/javy-entry.js
 .env*.local
