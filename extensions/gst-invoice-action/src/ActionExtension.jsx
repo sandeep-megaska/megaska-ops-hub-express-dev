@@ -2,25 +2,47 @@ import { render } from "preact";
 import { useCallback, useEffect, useState } from "preact/hooks";
 
 export default async () => {
+  console.log("[gst-invoice-action] module executing, calling render()");
   render(<Extension />, document.body);
 };
 
+const REQUEST_TIMEOUT_MS = 10000;
+
+function withTimeout(promise, message) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(message)), REQUEST_TIMEOUT_MS)),
+  ]);
+}
+
 async function fetchShopDomain() {
-  const res = await fetch("shopify:admin/api/graphql.json", {
-    method: "POST",
-    body: JSON.stringify({ query: "{ shop { myshopifyDomain } }" }),
-  });
+  console.log("[gst-invoice-action] fetchShopDomain: start");
+  const res = await withTimeout(
+    fetch("shopify:admin/api/graphql.json", {
+      method: "POST",
+      body: JSON.stringify({ query: "{ shop { myshopifyDomain } }" }),
+    }),
+    "Timed out reading shop details from Shopify (shopify:admin/api/graphql.json)"
+  );
+  console.log("[gst-invoice-action] fetchShopDomain: got response", res.status);
   const json = await res.json().catch(() => null);
+  console.log("[gst-invoice-action] fetchShopDomain: parsed json", json);
   return json?.data?.shop?.myshopifyDomain || "";
 }
 
 async function fetchOrderStatus({ shopifyOrderGid, shop, generate }) {
-  const res = await fetch("/api/gst/orders/by-shopify-id", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ shopifyOrderGid, shop, generate: Boolean(generate) }),
-  });
+  console.log("[gst-invoice-action] fetchOrderStatus: start", { shopifyOrderGid, shop, generate });
+  const res = await withTimeout(
+    fetch("/api/gst/orders/by-shopify-id", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ shopifyOrderGid, shop, generate: Boolean(generate) }),
+    }),
+    "Timed out reaching the GST app backend (/api/gst/orders/by-shopify-id)"
+  );
+  console.log("[gst-invoice-action] fetchOrderStatus: got response", res.status);
   const json = await res.json().catch(() => null);
+  console.log("[gst-invoice-action] fetchOrderStatus: parsed json", json);
   if (!res.ok || !json?.ok) {
     throw new Error(json?.error || "Unable to load GST invoice status");
   }
@@ -28,6 +50,7 @@ async function fetchOrderStatus({ shopifyOrderGid, shop, generate }) {
 }
 
 function Extension() {
+  console.log("[gst-invoice-action] Extension() rendering");
   const { close, data, i18n } = shopify;
 
   const [shopDomain, setShopDomain] = useState("");
@@ -40,19 +63,24 @@ function Extension() {
   const [emailAddress, setEmailAddress] = useState("");
 
   useEffect(() => {
+    console.log("[gst-invoice-action] initial useEffect firing");
     let cancelled = false;
     (async () => {
       try {
         const orderGid = data.selected[0].id;
+        console.log("[gst-invoice-action] resolved orderGid", orderGid);
         const shop = await fetchShopDomain();
         if (cancelled) return;
+        console.log("[gst-invoice-action] resolved shop domain", shop);
         setShopDomain(shop);
         const result = await fetchOrderStatus({ shopifyOrderGid: orderGid, shop, generate: false });
         if (cancelled) return;
+        console.log("[gst-invoice-action] resolved order status", result);
         setOrderStatus(result);
         setEmailAddress(result.customerEmail || "");
         setStatus("ready");
       } catch (error) {
+        console.error("[gst-invoice-action] initial load failed", error);
         if (cancelled) return;
         setErrorMessage(error instanceof Error ? error.message : String(error));
         setStatus("error");
