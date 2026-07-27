@@ -1,9 +1,23 @@
 import { render } from "preact";
 import { useCallback, useEffect, useState } from "preact/hooks";
 
+if (typeof window !== "undefined") {
+  window.addEventListener("unhandledrejection", (event) => {
+    console.error("[gst-invoice-action] unhandled promise rejection", event.reason);
+  });
+  window.addEventListener("error", (event) => {
+    console.error("[gst-invoice-action] uncaught error", event.error || event.message);
+  });
+}
+
 export default async () => {
   console.log("[gst-invoice-action] module executing, calling render()");
-  render(<Extension />, document.body);
+  try {
+    render(<Extension />, document.body);
+    console.log("[gst-invoice-action] render() call returned without throwing");
+  } catch (error) {
+    console.error("[gst-invoice-action] render() threw synchronously", error);
+  }
 };
 
 const REQUEST_TIMEOUT_MS = 10000;
