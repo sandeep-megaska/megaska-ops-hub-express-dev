@@ -354,49 +354,41 @@ export async function resolveLineTaxMapping(input: ResolveLineTaxMappingInput): 
   };
 
   try {
-    // Mirror resolveSkuTaxMap's shop-scoped-then-global fallback so the order
-    // import path resolves the same mappings the admin "Missing Mappings" view
-    // and invoice generation do. Without the shopId: null fallback, a mapping
-    // saved under the null shop (e.g. before the shop-context fix) is invisible
-    // here and the line is wrongly flagged as missing a GST mapping, even though
-    // the admin shows it as mapped. Own-shop mappings still win over global.
-    const shopIdCandidates = shopId ? [shopId, null] : [null];
-
+    // Shop-scoped only. There is no shopId: null fallback: after the
+    // multi-tenant integrity migration no GST row is null-scoped, and a
+    // cross-shop fallback would resolve one merchant's mapping for another's
+    // order. shopId is always the resolved shop here.
     if (sku) {
-      for (const candidateShopId of shopIdCandidates) {
-        const skuMap = await productTaxDb.gstSkuTaxMap.findFirst({
-          where: {
-            shopId: candidateShopId,
-            sku,
-            status: "ACTIVE",
-          },
-          orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
-        });
-        if (skuMap) {
-          return {
-            ok: true,
-            data: mapResolvedResponse("SKU", null, normalize(skuMap.id) || null, skuMap.hsnCode, skuMap.taxRate, skuMap.cessRate),
-          };
-        }
+      const skuMap = await productTaxDb.gstSkuTaxMap.findFirst({
+        where: {
+          shopId,
+          sku,
+          status: "ACTIVE",
+        },
+        orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+      });
+      if (skuMap) {
+        return {
+          ok: true,
+          data: mapResolvedResponse("SKU", null, normalize(skuMap.id) || null, skuMap.hsnCode, skuMap.taxRate, skuMap.cessRate),
+        };
       }
     }
 
     if (styleCode) {
-      for (const candidateShopId of shopIdCandidates) {
-        const styleMap = await productTaxDb.gstSkuTaxMap.findFirst({
-          where: {
-            shopId: candidateShopId,
-            styleCode,
-            status: "ACTIVE",
-          },
-          orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
-        });
-        if (styleMap) {
-          return {
-            ok: true,
-            data: mapResolvedResponse("STYLE", null, normalize(styleMap.id) || null, styleMap.hsnCode, styleMap.taxRate, styleMap.cessRate),
-          };
-        }
+      const styleMap = await productTaxDb.gstSkuTaxMap.findFirst({
+        where: {
+          shopId,
+          styleCode,
+          status: "ACTIVE",
+        },
+        orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+      });
+      if (styleMap) {
+        return {
+          ok: true,
+          data: mapResolvedResponse("STYLE", null, normalize(styleMap.id) || null, styleMap.hsnCode, styleMap.taxRate, styleMap.cessRate),
+        };
       }
     }
 

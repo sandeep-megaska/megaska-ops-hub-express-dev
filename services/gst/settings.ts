@@ -189,6 +189,9 @@ export async function getActiveGstSettings(input?: { shopId?: string | null }): 
     let fallbackUsed = false;
 
     if (requestedShopId) {
+      // Shop-scoped only. No shopId: null fallback - GST rows are never
+      // null-scoped after the multi-tenant integrity migration, and falling
+      // back to another scope would surface the wrong shop's settings.
       settings = await gstDb.gstSettings.findFirst({
         where: {
           isActive: true,
@@ -196,33 +199,15 @@ export async function getActiveGstSettings(input?: { shopId?: string | null }): 
         },
         orderBy: { updatedAt: "desc" },
       });
-
-      if (!settings) {
-        settings = await gstDb.gstSettings.findFirst({
-          where: {
-            isActive: true,
-            shopId: null,
-          },
-          orderBy: { updatedAt: "desc" },
-        });
-        fallbackUsed = Boolean(settings);
-      }
     } else {
+      // No shop context provided: fall back to any active settings. This is a
+      // single-tenant holdover for callers that don't yet resolve a shop; it is
+      // not a null-scope lookup. Callers that can resolve a shop should pass it.
       settings = await gstDb.gstSettings.findFirst({
-        where: {
-          isActive: true,
-          shopId: null,
-        },
+        where: { isActive: true },
         orderBy: { updatedAt: "desc" },
       });
-
-      if (!settings) {
-        settings = await gstDb.gstSettings.findFirst({
-          where: { isActive: true },
-          orderBy: { updatedAt: "desc" },
-        });
-        fallbackUsed = Boolean(settings);
-      }
+      fallbackUsed = Boolean(settings);
     }
 
     console.info("[GST SETTINGS RESOLVE]", {
