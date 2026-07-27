@@ -5,36 +5,21 @@ export default async () => {
   render(<Extension />, document.body);
 };
 
-const REQUEST_TIMEOUT_MS = 15000;
-
-function withTimeout(promise, message) {
-  return Promise.race([
-    promise,
-    new Promise((_, reject) => setTimeout(() => reject(new Error(message)), REQUEST_TIMEOUT_MS)),
-  ]);
-}
-
 async function fetchShopDomain() {
-  const res = await withTimeout(
-    fetch("shopify:admin/api/graphql.json", {
-      method: "POST",
-      body: JSON.stringify({ query: "{ shop { myshopifyDomain } }" }),
-    }),
-    "Timed out reading shop details from Shopify"
-  );
+  const res = await fetch("shopify:admin/api/graphql.json", {
+    method: "POST",
+    body: JSON.stringify({ query: "{ shop { myshopifyDomain } }" }),
+  });
   const json = await res.json().catch(() => null);
   return json?.data?.shop?.myshopifyDomain || "";
 }
 
 async function fetchOrderStatus({ shopifyOrderGid, shop, generate }) {
-  const res = await withTimeout(
-    fetch("/api/gst/orders/by-shopify-id", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ shopifyOrderGid, shop, generate: Boolean(generate) }),
-    }),
-    "Timed out reaching the GST app backend. Confirm the app is deployed and reachable."
-  );
+  const res = await fetch("/api/gst/orders/by-shopify-id", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ shopifyOrderGid, shop, generate: Boolean(generate) }),
+  });
   const json = await res.json().catch(() => null);
   if (!res.ok || !json?.ok) {
     throw new Error(json?.error || "Unable to load GST invoice status");
