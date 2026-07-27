@@ -1,33 +1,211 @@
-// Diagnostic build: no Preact, no JSX, no hooks - pure vanilla DOM APIs.
-// Every prior test showed render() from Preact "succeeding" with zero
-// errors while the component function itself was never invoked, and
-// the modal stayed empty. This isolates whether Preact is the actual
-// broken link by building the exact same UI with document.createElement.
-export default async () => {
-  console.log("[gst-invoice-action] vanilla module executing");
-  try {
-    const { close, i18n } = shopify;
-    console.log("[gst-invoice-action] shopify global", { hasClose: typeof close, hasI18n: typeof i18n });
+// No Preact, no JSX, no hooks - confirmed via a stripped-down diagnostic
+// build that Preact's render() was never actually mounting content in
+// this environment, even though it reported success with no errors.
+// Everything here is built and updated with plain DOM APIs instead.
 
-    const action = document.createElement("s-admin-action");
-    action.heading = i18n.translate("name");
-    console.log("[gst-invoice-action] created s-admin-action, heading set to", action.heading);
+async function fetchShopDomain() {
+  const res = await fetch("shopify:admin/api/graphql.json", {
+    method: "POST",
+    body: JSON.stringify({ query: "{ shop { myshopifyDomain } }" }),
+  });
+  const json = await res.json().catch(() => null);
+  return json?.data?.shop?.myshopifyDomain || "";
+}
 
-    const closeButton = document.createElement("s-button");
-    closeButton.setAttribute("slot", "secondary-actions");
-    closeButton.textContent = i18n.translate("close");
-    closeButton.addEventListener("click", () => close());
-    action.appendChild(closeButton);
-    console.log("[gst-invoice-action] appended secondary-action close button");
-
-    const statusText = document.createElement("s-text");
-    statusText.textContent = "Vanilla DOM build - if you can see this, Preact was the problem.";
-    action.appendChild(statusText);
-    console.log("[gst-invoice-action] appended status text");
-
-    document.body.appendChild(action);
-    console.log("[gst-invoice-action] appended s-admin-action to document.body; body now has", document.body.children.length, "children");
-  } catch (error) {
-    console.error("[gst-invoice-action] vanilla build threw", error);
+async function fetchOrderStatus({ shopifyOrderGid, shop, generate }) {
+  const res = await fetch("/api/gst/orders/by-shopify-id", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ shopifyOrderGid, shop, generate: Boolean(generate) }),
+  });
+  const json = await res.json().catch(() => null);
+  if (!res.ok || !json?.ok) {
+    throw new Error(json?.error || "Unable to load GST invoice status");
   }
+  return json.data;
+}
+
+export default async () => {
+  const { close, data, i18n } = shopify;
+
+  let orderStatus = null;
+  let shopDomain = "";
+
+  const action = document.createElement("s-admin-action");
+  action.heading = i18n.translate("name");
+
+  const generateButton = document.createElement("s-button");
+  generateButton.slot = "primary-action";
+  generateButton.disabled = true;
+  generateButton.textContent = i18n.translate("generateButton");
+
+  const closeButton = document.createElement("s-button");
+  closeButton.slot = "secondary-actions";
+  closeButton.textContent = i18n.translate("close");
+  closeButton.addEventListener("click", () => close());
+
+  const bodyStack = document.createElement("s-stack");
+  bodyStack.direction = "block";
+  bodyStack.gap = "base";
+
+  const statusText = document.createElement("s-text");
+  statusText.textContent = i18n.translate("loading");
+
+  const readinessText = document.createElement("s-text");
+  readinessText.tone = "critical";
+
+  const errorText = document.createElement("s-text");
+  errorText.tone = "critical";
+
+  const actionsBox = document.createElement("s-box");
+  actionsBox.paddingBlockStart = "base";
+  const actionsStack = document.createElement("s-stack");
+  actionsStack.direction = "block";
+  actionsStack.gap = "base";
+
+  const downloadButton = document.createElement("s-button");
+  downloadButton.textContent = i18n.translate("downloadButton");
+
+  const emailField = document.createElement("s-text-field");
+  emailField.label = i18n.translate("emailLabel");
+
+  const sendButton = document.createElement("s-button");
+  sendButton.textContent = i18n.translate("sendButton");
+  sendButton.disabled = true;
+
+  const sentText = document.createElement("s-text");
+
+  actionsStack.appendChild(downloadButton);
+  actionsStack.appendChild(emailField);
+  actionsStack.appendChild(sendButton);
+  actionsBox.appendChild(actionsStack);
+
+  bodyStack.appendChild(statusText);
+
+  action.appendChild(generateButton);
+  action.appendChild(closeButton);
+  action.appendChild(bodyStack);
+  document.body.appendChild(action);
+
+  function setError(message) {
+    if (message) {
+      errorText.textContent = message;
+      if (!errorText.isConnected) bodyStack.appendChild(errorText);
+    } else if (errorText.isConnected) {
+      errorText.remove();
+    }
+  }
+
+  function renderStatus() {
+    const hasInvoice = Boolean(orderStatus?.invoiceId);
+    const readinessCount = Array.isArray(orderStatus?.readinessErrors) ? orderStatus.readinessErrors.length : 0;
+
+    statusText.textContent = hasInvoice
+      ? i18n.translate("invoiced", { documentNumber: orderStatus.documentNumber || "" })
+      : i18n.translate("notInvoiced");
+
+    if (readinessCount > 0) {
+      readinessText.textContent = i18n.translate("readinessWarning", { count: String(readinessCount) });
+      if (!readinessText.isConnected) bodyStack.appendChild(readinessText);
+    } else if (readinessText.isConnected) {
+      readinessText.remove();
+    }
+
+    generateButton.textContent = hasInvoice ? i18n.translate("refreshButton") : i18n.translate("generateButton");
+    generateButton.disabled = false;
+
+    if (hasInvoice) {
+      if (!actionsBox.isConnected) bodyStack.appendChild(actionsBox);
+      if (!emailField.value) emailField.value = orderStatus.customerEmail || "";
+      sendButton.disabled = !emailField.value;
+    } else if (actionsBox.isConnected) {
+      actionsBox.remove();
+    }
+  }
+
+  async function loadInitialStatus() {
+    try {
+      const orderGid = data.selected[0].id;
+      shopDomain = await fetchShopDomain();
+      const result = await fetchOrderStatus({ shopifyOrderGid: orderGid, shop: shopDomain, generate: false });
+      orderStatus = result;
+      renderStatus();
+    } catch (error) {
+      statusText.textContent = "";
+      generateButton.disabled = false;
+      setError(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  generateButton.addEventListener("click", async () => {
+    generateButton.loading = true;
+    setError(null);
+    try {
+      const orderGid = data.selected[0].id;
+      const result = await fetchOrderStatus({ shopifyOrderGid: orderGid, shop: shopDomain, generate: true });
+      if (result.error) setError(result.error);
+      orderStatus = result;
+      renderStatus();
+    } catch (error) {
+      setError(error instanceof Error ? error.message : String(error));
+    } finally {
+      generateButton.loading = false;
+    }
+  });
+
+  downloadButton.addEventListener("click", async () => {
+    if (!orderStatus?.pdfUrl) return;
+    downloadButton.loading = true;
+    setError(null);
+    try {
+      // window.open() with a relative path resolves against this extension's
+      // own sandboxed origin, not the app. fetch() is what Shopify resolves
+      // against the app's application_url and attaches auth to, so the PDF is
+      // fetched here and opened from a local blob URL instead.
+      const res = await fetch(orderStatus.pdfUrl);
+      if (!res.ok) {
+        throw new Error(`Failed to download PDF (HTTP ${res.status})`);
+      }
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      window.open(objectUrl, "_blank");
+    } catch (error) {
+      setError(error instanceof Error ? error.message : String(error));
+    } finally {
+      downloadButton.loading = false;
+    }
+  });
+
+  const syncSendButtonState = (event) => {
+    sendButton.disabled = !event.currentTarget.value;
+  };
+  emailField.addEventListener("change", syncSendButtonState);
+  emailField.addEventListener("input", syncSendButtonState);
+
+  sendButton.addEventListener("click", async () => {
+    const emailAddress = emailField.value;
+    if (!orderStatus?.invoiceId || !emailAddress) return;
+    sendButton.loading = true;
+    setError(null);
+    if (sentText.isConnected) sentText.remove();
+    try {
+      const res = await fetch(`/api/gst/invoices/${orderStatus.invoiceId}/send-email`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ to: emailAddress }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.ok) {
+        throw new Error(json?.error || "Failed to send invoice email");
+      }
+      sentText.textContent = i18n.translate("sent", { email: json.data?.to || emailAddress });
+      actionsStack.appendChild(sentText);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : String(error));
+    } finally {
+      sendButton.loading = false;
+    }
+  });
+
+  await loadInitialStatus();
 };
