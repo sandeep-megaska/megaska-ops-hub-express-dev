@@ -1,7 +1,7 @@
 import { gstDb } from "./db";
 import type { GstServiceResult } from "./types";
 import { importOrderByShopifyId } from "./order-import";
-import { getShopifyOrdersForGstSync, getSingleShopifyOrderForGstSync } from "./shopify-runtime-admin";
+import { getShopifyOrdersForGstSync, getSingleShopifyOrderByGid, getSingleShopifyOrderForGstSync } from "./shopify-runtime-admin";
 import { resolveShopConfig } from "../shopify/shop";
 import { gstPerfLog, gstPerfNow } from "./perf";
 
@@ -278,6 +278,81 @@ export async function syncOrdersByDateRange(input: SyncFilters): Promise<GstServ
     return { ok: true, data: summary };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : "Failed to sync orders" };
+  }
+}
+
+export async function syncSingleOrderByShopifyGid(input: { shopifyOrderGid: string; forceResync?: boolean; shopDomain?: string }) {
+  const shopifyOrderGid = String(input.shopifyOrderGid || "").trim();
+  if (!shopifyOrderGid) {
+    return { ok: false, error: "shopifyOrderGid is required" } as const;
+  }
+
+  try {
+    const resolvedShop = await resolveShopConfig(input.shopDomain);
+    const resolvedShopId = resolvedShop.id ? String(resolvedShop.id).trim() : null;
+
+    const order = await getSingleShopifyOrderByGid({
+      shopifyOrderGid,
+      shopDomain: resolvedShop.shopDomain,
+    });
+    if (!order) {
+      return { ok: false, error: "Order not found in Shopify" } as const;
+    }
+
+    const shopifyOrderId = String(order.id || "").trim();
+    if (!shopifyOrderId) {
+      return { ok: false, error: "Shopify order id missing for selected order" } as const;
+    }
+
+    const existing = await syncDb.gstOrderImport.findUnique({
+      where: { shopId_shopifyOrderId: { shopId: resolvedShopId, shopifyOrderId } },
+      select: { id: true },
+    });
+    if (existing && !input.forceResync) {
+      return {
+        ok: true,
+        data: {
+          fetched: 1,
+          imported: 0,
+          alreadySynced: 1,
+          notReady: 0,
+          failed: 0,
+          warnings: [],
+          perOrder: [{ orderName: order.name, shopifyOrderId, status: "ALREADY_SYNCED" }],
+        } satisfies GstOrderSyncSummary,
+      } as const;
+    }
+
+    const imported = await importOrderByShopifyId(shopifyOrderId, normalizeOrderPayload(order), { shopId: resolvedShopId });
+    if (!imported.ok || !imported.data) {
+      return { ok: false, error: imported.error || "Failed to import single order" } as const;
+    }
+
+    const readiness = deriveSyncReadinessMetrics(imported.data);
+    const counters = computeSyncCountersForImportedOrder(imported.data);
+    return {
+      ok: true,
+      data: {
+        fetched: 1,
+        imported: counters.imported,
+        alreadySynced: 0,
+        notReady: counters.notReady,
+        failed: 0,
+        warnings: [],
+        perOrder: [{
+          orderName: order.name,
+          shopifyOrderId,
+          status: imported.data.importStatus,
+          eligibilityStatus: imported.data.eligibilityStatus,
+          mappingCompleteness: readiness.mappingCompleteness,
+          readinessErrors: readiness.readinessErrors,
+          unmappedSkus: readiness.unmappedSkus,
+          warnings: readiness.warnings,
+        }],
+      } satisfies GstOrderSyncSummary,
+    } as const;
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "Failed to sync single order" } as const;
   }
 }
 
