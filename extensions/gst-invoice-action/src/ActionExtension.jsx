@@ -25,6 +25,19 @@ async function fetchOrderStatus({ shopifyOrderGid, shop, generate }) {
   return json.data;
 }
 
+// i18n.translate's placeholder interpolation does not fire in this environment
+// (same class of silent framework failure that forced the vanilla-DOM rewrite:
+// translate returns the raw "{token}" string instead of substituting values).
+// We translate without options and substitute the {token} placeholders here so
+// the result is deterministic regardless of the runtime's interpolation quirks.
+function translateWith(i18n, key, replacements) {
+  const template = i18n.translate(key);
+  const text = typeof template === "string" ? template : String(template);
+  return text.replace(/\{(\w+)\}/g, (match, token) =>
+    Object.prototype.hasOwnProperty.call(replacements, token) ? String(replacements[token]) : match,
+  );
+}
+
 export default async () => {
   const { close, data, i18n } = shopify;
 
@@ -101,11 +114,11 @@ export default async () => {
     const readinessCount = Array.isArray(orderStatus?.readinessErrors) ? orderStatus.readinessErrors.length : 0;
 
     statusText.textContent = hasInvoice
-      ? i18n.translate("invoiced", { documentNumber: orderStatus.documentNumber || "" })
+      ? translateWith(i18n, "invoiced", { documentNumber: orderStatus.documentNumber || "" })
       : i18n.translate("notInvoiced");
 
     if (readinessCount > 0) {
-      readinessText.textContent = i18n.translate("readinessWarning", { count: String(readinessCount) });
+      readinessText.textContent = translateWith(i18n, "readinessWarning", { count: String(readinessCount) });
       if (!readinessText.isConnected) bodyStack.appendChild(readinessText);
     } else if (readinessText.isConnected) {
       readinessText.remove();
@@ -198,7 +211,7 @@ export default async () => {
       if (!res.ok || !json?.ok) {
         throw new Error(json?.error || "Failed to send invoice email");
       }
-      sentText.textContent = i18n.translate("sent", { email: json.data?.to || emailAddress });
+      sentText.textContent = translateWith(i18n, "sent", { email: json.data?.to || emailAddress });
       actionsStack.appendChild(sentText);
     } catch (error) {
       setError(error instanceof Error ? error.message : String(error));
