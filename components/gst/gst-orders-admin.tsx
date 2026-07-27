@@ -96,6 +96,7 @@ function downloadCsv(filename: string, csv: string) {
 export function GstOrdersAdmin() {
   const [from, setFrom] = useState(dateThreeDaysAgo)
   const [to, setTo] = useState(dateToday)
+  const [forceResync, setForceResync] = useState(false)
   const [rows, setRows] = useState<OrderRow[]>([])
   const [loading, setLoading] = useState(false)
   const [generatingId, setGeneratingId] = useState<string | null>(null)
@@ -160,7 +161,7 @@ export function GstOrdersAdmin() {
     setLoading(true)
     setError(undefined)
 
-    const res = await syncOrders({ from, to })
+    const res = await syncOrders({ from, to, forceResync })
     if (!res.ok) {
       setError(res.error)
     } else {
@@ -402,6 +403,10 @@ export function GstOrdersAdmin() {
             <input type="date" className="rounded-xl border border-gray-300 px-3 py-2.5 text-sm" value={to} onChange={(e) => setTo(e.target.value)} />
             <button type="submit" className="rounded-xl bg-gray-900 px-4 py-2.5 text-sm text-white" disabled={loading}>{loading ? 'Syncing...' : 'Sync Orders'}</button>
           </div>
+          <label className="flex items-center gap-2 text-sm text-gray-700">
+            <input type="checkbox" checked={forceResync} onChange={(e) => setForceResync(e.target.checked)} />
+            Re-import already-synced orders (refresh HSN/tax mapping &amp; readiness)
+          </label>
           <button type="button" className="rounded-xl border border-gray-300 px-4 py-2 text-sm" onClick={() => void loadOrders()}>
             Refresh Order List
           </button>
