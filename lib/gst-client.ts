@@ -6,8 +6,38 @@ type RequestResult<T> = {
   error?: string
 }
 
+// Every GST admin API route identifies the shop from the request. Historically
+// that relied solely on the Referer header carrying ?shop=..., which silently
+// breaks whenever the referrer is stripped or a page is opened without the
+// query string - the request then falls back to shopId: null, so mappings and
+// settings save under the wrong scope and "don't persist". Read the shop from
+// the current URL (GstShell keeps ?shop=... on every nav link) and send it
+// explicitly, matching how the reviews/refunds/exchanges admin clients work.
+// The server reads this query param before the Referer, so resolution becomes
+// deterministic instead of referrer-dependent.
+function withShopParam(path: string): string {
+  if (typeof window === 'undefined') return path
+
+  let shop = ''
+  try {
+    const current = new URLSearchParams(window.location.search)
+    shop = current.get('shop') || current.get('shopify_shop') || ''
+  } catch {
+    shop = ''
+  }
+  if (!shop) return path
+
+  const queryIndex = path.indexOf('?')
+  const pathname = queryIndex === -1 ? path : path.slice(0, queryIndex)
+  const search = new URLSearchParams(queryIndex === -1 ? '' : path.slice(queryIndex + 1))
+  if (!search.get('shop')) search.set('shop', shop)
+  const qs = search.toString()
+  return qs ? `${pathname}?${qs}` : pathname
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<RequestResult<T>> {
-  const url = path.startsWith('/') ? path : `/${path}`
+  const normalized = path.startsWith('/') ? path : `/${path}`
+  const url = withShopParam(normalized)
 
   try {
     const res = await fetch(url, {
@@ -132,7 +162,7 @@ type GstReportRun = {
 }
 
 export const generateB2cSalesRegisterRun = async ({ from, to }: { from: string; to: string }) => {
-  const res = await fetch('/api/gst/reports/runs', {
+  const res = await fetch(withShopParam('/api/gst/reports/runs'), {
     method: 'POST',
     cache: 'no-store',
     credentials: 'include',
