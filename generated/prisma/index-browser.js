@@ -151,7 +151,462 @@ exports.Prisma.ShopScalarFieldEnum = {
   installedAt: 'installedAt',
   uninstalledAt: 'uninstalledAt',
   createdAt: 'createdAt',
+  updatedAt: 'updatedAt',
+  myshopifyDomain: 'myshopifyDomain',
+  primaryDomain: 'primaryDomain',
+  shopName: 'shopName',
+  accessTokenEncrypted: 'accessTokenEncrypted',
+  storefrontTokenEncrypted: 'storefrontTokenEncrypted',
+  appProxyPrefix: 'appProxyPrefix',
+  appProxySubpath: 'appProxySubpath',
+  appProxyEnabled: 'appProxyEnabled',
+  installationStatus: 'installationStatus',
+  checkoutEnabled: 'checkoutEnabled',
+  tokenExpiresAt: 'tokenExpiresAt',
+  tokenRotationRequiredAt: 'tokenRotationRequiredAt'
+};
+
+exports.Prisma.EmailVerificationChallengeScalarFieldEnum = {
+  id: 'id',
+  shopId: 'shopId',
+  customerProfileId: 'customerProfileId',
+  email: 'email',
+  candidateShopifyCustomerId: 'candidateShopifyCustomerId',
+  candidateFirstName: 'candidateFirstName',
+  candidateLastName: 'candidateLastName',
+  codeHash: 'codeHash',
+  status: 'status',
+  attemptsCount: 'attemptsCount',
+  expiresAt: 'expiresAt',
+  verifiedAt: 'verifiedAt',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.CustomerIdentityReconciliationPlanScalarFieldEnum = {
+  id: 'id',
+  shopId: 'shopId',
+  canonicalCustomerProfileId: 'canonicalCustomerProfileId',
+  sourceCustomerProfileIds: 'sourceCustomerProfileIds',
+  classification: 'classification',
+  status: 'status',
+  createdBy: 'createdBy',
+  approvedBy: 'approvedBy',
+  approvedAt: 'approvedAt',
+  appliedAt: 'appliedAt',
+  checksum: 'checksum',
+  sourceStateChecksum: 'sourceStateChecksum',
+  plan: 'plan',
+  failureReason: 'failureReason',
+  createdAt: 'createdAt',
   updatedAt: 'updatedAt'
+};
+
+exports.Prisma.CustomerIdentityMergeScalarFieldEnum = {
+  id: 'id',
+  shopId: 'shopId',
+  sourceCustomerProfileId: 'sourceCustomerProfileId',
+  targetCustomerProfileId: 'targetCustomerProfileId',
+  planId: 'planId',
+  mergedAt: 'mergedAt'
+};
+
+exports.Prisma.CustomerIdentityReconciliationAuditScalarFieldEnum = {
+  id: 'id',
+  planId: 'planId',
+  shopId: 'shopId',
+  canonicalCustomerProfileId: 'canonicalCustomerProfileId',
+  sourceCustomerProfileIds: 'sourceCustomerProfileIds',
+  classification: 'classification',
+  affectedRecordCounts: 'affectedRecordCounts',
+  result: 'result',
+  failureReason: 'failureReason',
+  actor: 'actor',
+  beforeIntegrityHash: 'beforeIntegrityHash',
+  afterIntegrityHash: 'afterIntegrityHash',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.BillableFeatureScalarFieldEnum = {
+  id: 'id',
+  code: 'code',
+  name: 'name',
+  description: 'description',
+  active: 'active',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.PricingPlanScalarFieldEnum = {
+  id: 'id',
+  code: 'code',
+  name: 'name',
+  description: 'description',
+  monthlyBasePrice: 'monthlyBasePrice',
+  currency: 'currency',
+  active: 'active',
+  tierRank: 'tierRank',
+  displayOrder: 'displayOrder',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.PricingPlanFeatureScalarFieldEnum = {
+  id: 'id',
+  pricingPlanId: 'pricingPlanId',
+  billableFeatureId: 'billableFeatureId',
+  includedQuantity: 'includedQuantity',
+  overageUnitPrice: 'overageUnitPrice',
+  active: 'active',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.MerchantSubscriptionScalarFieldEnum = {
+  id: 'id',
+  shopId: 'shopId',
+  pricingPlanId: 'pricingPlanId',
+  status: 'status',
+  billingProvider: 'billingProvider',
+  externalSubscriptionReference: 'externalSubscriptionReference',
+  externalCustomerReference: 'externalCustomerReference',
+  providerStatus: 'providerStatus',
+  confirmationUrl: 'confirmationUrl',
+  providerActivatedAt: 'providerActivatedAt',
+  providerMetadata: 'providerMetadata',
+  trialStartsAt: 'trialStartsAt',
+  trialEndsAt: 'trialEndsAt',
+  currentPeriodStart: 'currentPeriodStart',
+  currentPeriodEnd: 'currentPeriodEnd',
+  renewsAutomatically: 'renewsAutomatically',
+  canceledAt: 'canceledAt',
+  cancellationEffectiveAt: 'cancellationEffectiveAt',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.MerchantPlanChangeScalarFieldEnum = {
+  id: 'id',
+  shopId: 'shopId',
+  merchantSubscriptionId: 'merchantSubscriptionId',
+  fromPricingPlanId: 'fromPricingPlanId',
+  toPricingPlanId: 'toPricingPlanId',
+  changeType: 'changeType',
+  timing: 'timing',
+  status: 'status',
+  effectiveAt: 'effectiveAt',
+  requestedAt: 'requestedAt',
+  confirmedAt: 'confirmedAt',
+  appliedAt: 'appliedAt',
+  canceledAt: 'canceledAt',
+  failedAt: 'failedAt',
+  provider: 'provider',
+  providerSubmissionId: 'providerSubmissionId',
+  externalReference: 'externalReference',
+  idempotencyKey: 'idempotencyKey',
+  failureCode: 'failureCode',
+  failureMessage: 'failureMessage',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.MerchantBillingProviderSubmissionScalarFieldEnum = {
+  id: 'id',
+  shopId: 'shopId',
+  merchantSubscriptionId: 'merchantSubscriptionId',
+  merchantBillingPeriodId: 'merchantBillingPeriodId',
+  merchantRatedUsageId: 'merchantRatedUsageId',
+  provider: 'provider',
+  operation: 'operation',
+  idempotencyKey: 'idempotencyKey',
+  status: 'status',
+  externalReference: 'externalReference',
+  externalParentReference: 'externalParentReference',
+  recurringLineItemReference: 'recurringLineItemReference',
+  usageLineItemReference: 'usageLineItemReference',
+  amount: 'amount',
+  currency: 'currency',
+  attemptCount: 'attemptCount',
+  lastAttemptAt: 'lastAttemptAt',
+  succeededAt: 'succeededAt',
+  failedAt: 'failedAt',
+  errorCode: 'errorCode',
+  errorMessage: 'errorMessage',
+  requestSnapshot: 'requestSnapshot',
+  responseSnapshot: 'responseSnapshot',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.MerchantBillingReconciliationScalarFieldEnum = {
+  id: 'id',
+  shopId: 'shopId',
+  billingPeriodId: 'billingPeriodId',
+  merchantRatedUsageId: 'merchantRatedUsageId',
+  provider: 'provider',
+  status: 'status',
+  internalAmount: 'internalAmount',
+  internalCurrency: 'internalCurrency',
+  providerAmount: 'providerAmount',
+  providerCurrency: 'providerCurrency',
+  providerSubmissionId: 'providerSubmissionId',
+  externalReference: 'externalReference',
+  errorCode: 'errorCode',
+  errorMessage: 'errorMessage',
+  checkedAt: 'checkedAt',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.MerchantBillingPeriodScalarFieldEnum = {
+  id: 'id',
+  shopId: 'shopId',
+  subscriptionId: 'subscriptionId',
+  periodStart: 'periodStart',
+  periodEnd: 'periodEnd',
+  status: 'status',
+  openedAt: 'openedAt',
+  ratedAt: 'ratedAt',
+  closedAt: 'closedAt',
+  voidedAt: 'voidedAt',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.MerchantRatedUsageScalarFieldEnum = {
+  id: 'id',
+  shopId: 'shopId',
+  billingPeriodId: 'billingPeriodId',
+  pricingPlanId: 'pricingPlanId',
+  billableFeatureId: 'billableFeatureId',
+  featureCodeSnapshot: 'featureCodeSnapshot',
+  featureNameSnapshot: 'featureNameSnapshot',
+  planCodeSnapshot: 'planCodeSnapshot',
+  planNameSnapshot: 'planNameSnapshot',
+  currency: 'currency',
+  usedQuantity: 'usedQuantity',
+  includedQuantity: 'includedQuantity',
+  billableQuantity: 'billableQuantity',
+  unitRate: 'unitRate',
+  amount: 'amount',
+  usageEventCount: 'usageEventCount',
+  ratedAt: 'ratedAt',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.MerchantUsageEventScalarFieldEnum = {
+  id: 'id',
+  shopId: 'shopId',
+  usageType: 'usageType',
+  action: 'action',
+  provider: 'provider',
+  quantity: 'quantity',
+  status: 'status',
+  billingStatus: 'billingStatus',
+  sourceType: 'sourceType',
+  sourceId: 'sourceId',
+  providerReference: 'providerReference',
+  idempotencyKey: 'idempotencyKey',
+  countryCode: 'countryCode',
+  metadata: 'metadata',
+  occurredAt: 'occurredAt',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.MerchantNotificationSettingsScalarFieldEnum = {
+  id: 'id',
+  shopId: 'shopId',
+  emailEnabled: 'emailEnabled',
+  customerEmailsEnabled: 'customerEmailsEnabled',
+  senderDisplayName: 'senderDisplayName',
+  replyToEmail: 'replyToEmail',
+  adminRecipients: 'adminRecipients',
+  cancellationAlerts: 'cancellationAlerts',
+  exchangeAlerts: 'exchangeAlerts',
+  issueAlerts: 'issueAlerts',
+  storeCreditAlerts: 'storeCreditAlerts',
+  checkoutAlerts: 'checkoutAlerts',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.MerchantOtpSettingsScalarFieldEnum = {
+  id: 'id',
+  shopId: 'shopId',
+  otpEnabled: 'otpEnabled',
+  providerMode: 'providerMode',
+  allowPlatformFallback: 'allowPlatformFallback',
+  defaultCountryCode: 'defaultCountryCode',
+  allowedCountryCodes: 'allowedCountryCodes',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.MerchantTwilioSettingsScalarFieldEnum = {
+  id: 'id',
+  merchantOtpSettingsId: 'merchantOtpSettingsId',
+  accountSidMasked: 'accountSidMasked',
+  accountSidEncrypted: 'accountSidEncrypted',
+  authTokenEncrypted: 'authTokenEncrypted',
+  verifyServiceSidMasked: 'verifyServiceSidMasked',
+  verifyServiceSidEncrypted: 'verifyServiceSidEncrypted',
+  status: 'status',
+  verifiedAt: 'verifiedAt',
+  lastVerifiedAt: 'lastVerifiedAt',
+  lastVerificationErrorCode: 'lastVerificationErrorCode',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.MerchantMsg91SettingsScalarFieldEnum = {
+  id: 'id',
+  merchantOtpSettingsId: 'merchantOtpSettingsId',
+  authKeyEncrypted: 'authKeyEncrypted',
+  templateIdMasked: 'templateIdMasked',
+  templateIdEncrypted: 'templateIdEncrypted',
+  senderId: 'senderId',
+  status: 'status',
+  kycApproved: 'kycApproved',
+  dltApproved: 'dltApproved',
+  templateApproved: 'templateApproved',
+  verifiedAt: 'verifiedAt',
+  lastVerificationErrorCode: 'lastVerificationErrorCode',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.PromotionRuleScalarFieldEnum = {
+  id: 'id',
+  shopId: 'shopId',
+  name: 'name',
+  description: 'description',
+  status: 'status',
+  priority: 'priority',
+  triggerType: 'triggerType',
+  triggerMatchMode: 'triggerMatchMode',
+  minimumTriggerQuantity: 'minimumTriggerQuantity',
+  minimumCartSubtotal: 'minimumCartSubtotal',
+  offerProductGid: 'offerProductGid',
+  offerProductHandle: 'offerProductHandle',
+  offerProductTitle: 'offerProductTitle',
+  offerProductImageUrl: 'offerProductImageUrl',
+  rewardType: 'rewardType',
+  rewardValue: 'rewardValue',
+  rewardScope: 'rewardScope',
+  rewardMethod: 'rewardMethod',
+  tierSelectionMode: 'tierSelectionMode',
+  tierContinuityMode: 'tierContinuityMode',
+  orderDiscountBasis: 'orderDiscountBasis',
+  maximumRewardQuantity: 'maximumRewardQuantity',
+  heading: 'heading',
+  badgeText: 'badgeText',
+  customerMessage: 'customerMessage',
+  ctaText: 'ctaText',
+  combinesWithProductDiscounts: 'combinesWithProductDiscounts',
+  combinesWithOrderDiscounts: 'combinesWithOrderDiscounts',
+  combinesWithShippingDiscounts: 'combinesWithShippingDiscounts',
+  startsAt: 'startsAt',
+  endsAt: 'endsAt',
+  currentCompilationId: 'currentCompilationId',
+  compiledAt: 'compiledAt',
+  createdByType: 'createdByType',
+  createdById: 'createdById',
+  updatedByType: 'updatedByType',
+  updatedById: 'updatedById',
+  archivedAt: 'archivedAt',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.PromotionOrderTierScalarFieldEnum = {
+  id: 'id',
+  publicId: 'publicId',
+  shopId: 'shopId',
+  promotionRuleId: 'promotionRuleId',
+  minimumSubtotal: 'minimumSubtotal',
+  maximumSubtotal: 'maximumSubtotal',
+  percentage: 'percentage',
+  position: 'position',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.PromotionTriggerReferenceScalarFieldEnum = {
+  id: 'id',
+  promotionRuleId: 'promotionRuleId',
+  position: 'position',
+  sourceType: 'sourceType',
+  referenceGid: 'referenceGid',
+  referenceValue: 'referenceValue',
+  normalizedValue: 'normalizedValue',
+  displayTitle: 'displayTitle',
+  displayHandle: 'displayHandle',
+  displayImageUrl: 'displayImageUrl',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.PromotionCompilationScalarFieldEnum = {
+  id: 'id',
+  promotionRuleId: 'promotionRuleId',
+  version: 'version',
+  status: 'status',
+  reason: 'reason',
+  sourceHash: 'sourceHash',
+  compiledHash: 'compiledHash',
+  triggerType: 'triggerType',
+  membershipCount: 'membershipCount',
+  storefrontPayload: 'storefrontPayload',
+  functionPayload: 'functionPayload',
+  diagnosticPayload: 'diagnosticPayload',
+  errorCode: 'errorCode',
+  errorMessage: 'errorMessage',
+  requestedAt: 'requestedAt',
+  startedAt: 'startedAt',
+  completedAt: 'completedAt',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.PromotionCompiledMembershipScalarFieldEnum = {
+  id: 'id',
+  promotionCompilationId: 'promotionCompilationId',
+  productGid: 'productGid',
+  sourceReferenceId: 'sourceReferenceId',
+  sourceType: 'sourceType',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.PromotionRuntimeSyncStateScalarFieldEnum = {
+  id: 'id',
+  shopId: 'shopId',
+  shopifyAutomaticDiscountId: 'shopifyAutomaticDiscountId',
+  lastDeployedConfigurationVersion: 'lastDeployedConfigurationVersion',
+  lastDeployedConfigurationHash: 'lastDeployedConfigurationHash',
+  lastRulesFingerprint: 'lastRulesFingerprint',
+  lastDeployedRuleCount: 'lastDeployedRuleCount',
+  lastSuccessfulSyncAt: 'lastSuccessfulSyncAt',
+  synchronizationState: 'synchronizationState',
+  lastAttemptedAt: 'lastAttemptedAt',
+  lastErrorCode: 'lastErrorCode',
+  lastErrorMessage: 'lastErrorMessage',
+  synchronizationAttemptId: 'synchronizationAttemptId',
+  synchronizationLeaseExpiresAt: 'synchronizationLeaseExpiresAt',
+  lastVerifiedConfiguration: 'lastVerifiedConfiguration',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.PromotionAuditLogScalarFieldEnum = {
+  id: 'id',
+  shopId: 'shopId',
+  promotionRuleId: 'promotionRuleId',
+  action: 'action',
+  actorType: 'actorType',
+  actorId: 'actorId',
+  previousState: 'previousState',
+  nextState: 'nextState',
+  metadata: 'metadata',
+  createdAt: 'createdAt'
 };
 
 exports.Prisma.AuthSessionScalarFieldEnum = {
@@ -167,6 +622,7 @@ exports.Prisma.AuthSessionScalarFieldEnum = {
 
 exports.Prisma.OTPChallengeScalarFieldEnum = {
   id: 'id',
+  shopId: 'shopId',
   phoneE164: 'phoneE164',
   provider: 'provider',
   providerSid: 'providerSid',
@@ -211,7 +667,8 @@ exports.Prisma.OrderActionRequestScalarFieldEnum = {
   orderAmountSnapshot: 'orderAmountSnapshot',
   deliveryDateSnapshot: 'deliveryDateSnapshot',
   eligibilityDecision: 'eligibilityDecision',
-  eligibilityReason: 'eligibilityReason'
+  eligibilityReason: 'eligibilityReason',
+  megaskaOrderId: 'megaskaOrderId'
 };
 
 exports.Prisma.OrderActionItemScalarFieldEnum = {
@@ -248,6 +705,68 @@ exports.Prisma.RequestPaymentScalarFieldEnum = {
   updatedAt: 'updatedAt'
 };
 
+exports.Prisma.CodAdvanceSettingsScalarFieldEnum = {
+  id: 'id',
+  shopId: 'shopId',
+  enabled: 'enabled',
+  advanceType: 'advanceType',
+  fixedAdvanceAmountPaise: 'fixedAdvanceAmountPaise',
+  percentageBasisPoints: 'percentageBasisPoints',
+  minimumAdvanceAmountPaise: 'minimumAdvanceAmountPaise',
+  maximumAdvanceAmountPaise: 'maximumAdvanceAmountPaise',
+  customerTitle: 'customerTitle',
+  customerMessage: 'customerMessage',
+  version: 'version',
+  currency: 'currency',
+  minOrderAmountPaise: 'minOrderAmountPaise',
+  maxOrderAmountPaise: 'maxOrderAmountPaise',
+  policyText: 'policyText',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.CodAdvanceIntentScalarFieldEnum = {
+  id: 'id',
+  shopId: 'shopId',
+  customerProfileId: 'customerProfileId',
+  cartReference: 'cartReference',
+  checkoutReference: 'checkoutReference',
+  expressCheckoutIntentId: 'expressCheckoutIntentId',
+  settingsId: 'settingsId',
+  settingsVersion: 'settingsVersion',
+  advanceType: 'advanceType',
+  advanceValueSnapshot: 'advanceValueSnapshot',
+  pricingFingerprint: 'pricingFingerprint',
+  cartFingerprint: 'cartFingerprint',
+  merchandiseAmountPaise: 'merchandiseAmountPaise',
+  shopifyDiscountAmountPaise: 'shopifyDiscountAmountPaise',
+  shippingAmountPaise: 'shippingAmountPaise',
+  codFeeAmountPaise: 'codFeeAmountPaise',
+  storeCreditAppliedPaise: 'storeCreditAppliedPaise',
+  customerCashLiabilityPaise: 'customerCashLiabilityPaise',
+  shopifyOrderId: 'shopifyOrderId',
+  shopifyOrderName: 'shopifyOrderName',
+  orderAmountPaise: 'orderAmountPaise',
+  advanceAmountPaise: 'advanceAmountPaise',
+  codBalanceAmountPaise: 'codBalanceAmountPaise',
+  currency: 'currency',
+  status: 'status',
+  razorpayPaymentLinkId: 'razorpayPaymentLinkId',
+  razorpayPaymentLinkUrl: 'razorpayPaymentLinkUrl',
+  razorpayPaymentId: 'razorpayPaymentId',
+  providerReferenceId: 'providerReferenceId',
+  paidAt: 'paidAt',
+  verifiedAt: 'verifiedAt',
+  consumedAt: 'consumedAt',
+  expiresAt: 'expiresAt',
+  shopifyDraftOrderId: 'shopifyDraftOrderId',
+  failureCode: 'failureCode',
+  failureMessage: 'failureMessage',
+  metadata: 'metadata',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
 exports.Prisma.ShipmentTrackingScalarFieldEnum = {
   id: 'id',
   requestId: 'requestId',
@@ -264,8 +783,323 @@ exports.Prisma.ShipmentTrackingScalarFieldEnum = {
   updatedAt: 'updatedAt'
 };
 
+exports.Prisma.MegaskaOrderScalarFieldEnum = {
+  id: 'id',
+  shopId: 'shopId',
+  customerProfileId: 'customerProfileId',
+  shopifyOrderId: 'shopifyOrderId',
+  shopifyOrderName: 'shopifyOrderName',
+  orderPlacedAt: 'orderPlacedAt',
+  status: 'status',
+  statusSource: 'statusSource',
+  statusUpdatedAt: 'statusUpdatedAt',
+  deliveredAt: 'deliveredAt',
+  deliverySource: 'deliverySource',
+  metadata: 'metadata',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.OrderShipmentScalarFieldEnum = {
+  id: 'id',
+  orderId: 'orderId',
+  provider: 'provider',
+  providerReference: 'providerReference',
+  awb: 'awb',
+  trackingUrl: 'trackingUrl',
+  normalizedStatus: 'normalizedStatus',
+  statusUpdatedAt: 'statusUpdatedAt',
+  rawStatus: 'rawStatus',
+  metadata: 'metadata',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.OrderShipmentEventScalarFieldEnum = {
+  id: 'id',
+  shipmentId: 'shipmentId',
+  occurredAt: 'occurredAt',
+  normalizedStatus: 'normalizedStatus',
+  rawStatus: 'rawStatus',
+  description: 'description',
+  location: 'location',
+  metadata: 'metadata',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.ReviewSettingsScalarFieldEnum = {
+  id: 'id',
+  shopId: 'shopId',
+  reviewsEnabled: 'reviewsEnabled',
+  automaticRequestsEnabled: 'automaticRequestsEnabled',
+  reviewRequestTrigger: 'reviewRequestTrigger',
+  reviewRequestSendHourLocal: 'reviewRequestSendHourLocal',
+  reviewRequestPrimaryChannel: 'reviewRequestPrimaryChannel',
+  reviewRequestEmailEnabled: 'reviewRequestEmailEnabled',
+  reviewRequestSmsEnabled: 'reviewRequestSmsEnabled',
+  reviewRequestWhatsappEnabled: 'reviewRequestWhatsappEnabled',
+  reviewRequestIncludeProductImage: 'reviewRequestIncludeProductImage',
+  reviewRequestIncludeIncentiveText: 'reviewRequestIncludeIncentiveText',
+  reviewRequestIncentiveText: 'reviewRequestIncentiveText',
+  reviewRequestSenderName: 'reviewRequestSenderName',
+  reviewRequestReplyToEmail: 'reviewRequestReplyToEmail',
+  reviewRequestSubjectTemplate: 'reviewRequestSubjectTemplate',
+  reviewRequestBodyTemplate: 'reviewRequestBodyTemplate',
+  reviewRequestReminderSubjectTemplate: 'reviewRequestReminderSubjectTemplate',
+  reviewRequestReminderBodyTemplate: 'reviewRequestReminderBodyTemplate',
+  requestDelayDays: 'requestDelayDays',
+  reminderEnabled: 'reminderEnabled',
+  reminderDelayDays: 'reminderDelayDays',
+  maxReminderCount: 'maxReminderCount',
+  minimumRating: 'minimumRating',
+  maximumRating: 'maximumRating',
+  requireVerifiedPurchase: 'requireVerifiedPurchase',
+  moderationRequired: 'moderationRequired',
+  allowReviewEditing: 'allowReviewEditing',
+  reviewEditWindowDays: 'reviewEditWindowDays',
+  allowReviewDeletion: 'allowReviewDeletion',
+  allowMedia: 'allowMedia',
+  maxMediaCount: 'maxMediaCount',
+  reviewMediaEnabled: 'reviewMediaEnabled',
+  reviewPhotoUploadsEnabled: 'reviewPhotoUploadsEnabled',
+  reviewVideoUploadsEnabled: 'reviewVideoUploadsEnabled',
+  reviewMaxMediaItems: 'reviewMaxMediaItems',
+  reviewMaxPhotoSizeBytes: 'reviewMaxPhotoSizeBytes',
+  reviewMaxVideoSizeBytes: 'reviewMaxVideoSizeBytes',
+  reviewMaxVideoDurationSeconds: 'reviewMaxVideoDurationSeconds',
+  exchangeProtectionDays: 'exchangeProtectionDays',
+  issueProtectionDays: 'issueProtectionDays',
+  cancellationBlocksReview: 'cancellationBlocksReview',
+  exchangeBlocksReview: 'exchangeBlocksReview',
+  issueBlocksReview: 'issueBlocksReview',
+  refundBlocksReview: 'refundBlocksReview',
+  storefrontReviewsEnabled: 'storefrontReviewsEnabled',
+  showReviewSummary: 'showReviewSummary',
+  showRatingDistribution: 'showRatingDistribution',
+  showVerifiedPurchaseBadge: 'showVerifiedPurchaseBadge',
+  reviewsPerPage: 'reviewsPerPage',
+  defaultReviewSort: 'defaultReviewSort',
+  showReviewDates: 'showReviewDates',
+  showVariantTitle: 'showVariantTitle',
+  reviewSectionHeading: 'reviewSectionHeading',
+  reviewEmptyStateText: 'reviewEmptyStateText',
+  reviewVerifiedPurchaseText: 'reviewVerifiedPurchaseText',
+  reviewLoadMoreText: 'reviewLoadMoreText',
+  reviewWriteReviewText: 'reviewWriteReviewText',
+  reviewCountTextTemplate: 'reviewCountTextTemplate',
+  reviewAccentColor: 'reviewAccentColor',
+  reviewStarColor: 'reviewStarColor',
+  reviewHeadingColor: 'reviewHeadingColor',
+  reviewTextColor: 'reviewTextColor',
+  reviewMutedTextColor: 'reviewMutedTextColor',
+  reviewBorderColor: 'reviewBorderColor',
+  reviewBackgroundColor: 'reviewBackgroundColor',
+  reviewButtonBackgroundColor: 'reviewButtonBackgroundColor',
+  reviewButtonTextColor: 'reviewButtonTextColor',
+  reviewAlignment: 'reviewAlignment',
+  reviewCardStyle: 'reviewCardStyle',
+  reviewCornerRadius: 'reviewCornerRadius',
+  reviewSectionSpacing: 'reviewSectionSpacing',
+  showReviewSectionHeading: 'showReviewSectionHeading',
+  showWriteReviewButton: 'showWriteReviewButton',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.ReviewRequestScalarFieldEnum = {
+  id: 'id',
+  shopId: 'shopId',
+  customerProfileId: 'customerProfileId',
+  megaskaOrderId: 'megaskaOrderId',
+  shopifyOrderId: 'shopifyOrderId',
+  shopifyOrderName: 'shopifyOrderName',
+  shopifyLineItemId: 'shopifyLineItemId',
+  shopifyProductId: 'shopifyProductId',
+  shopifyVariantId: 'shopifyVariantId',
+  productTitleSnapshot: 'productTitleSnapshot',
+  variantTitleSnapshot: 'variantTitleSnapshot',
+  productHandleSnapshot: 'productHandleSnapshot',
+  productImageUrlSnapshot: 'productImageUrlSnapshot',
+  orderCreatedAt: 'orderCreatedAt',
+  deliveredAtSnapshot: 'deliveredAtSnapshot',
+  triggerEventType: 'triggerEventType',
+  triggerAt: 'triggerAt',
+  nextAttemptAt: 'nextAttemptAt',
+  deliveredAt: 'deliveredAt',
+  openedAt: 'openedAt',
+  clickedAt: 'clickedAt',
+  submittedAt: 'submittedAt',
+  suppressedAt: 'suppressedAt',
+  lastReminderAt: 'lastReminderAt',
+  claimToken: 'claimToken',
+  claimedAt: 'claimedAt',
+  claimExpiresAt: 'claimExpiresAt',
+  workerId: 'workerId',
+  status: 'status',
+  blockReason: 'blockReason',
+  blockDetail: 'blockDetail',
+  eligibleAt: 'eligibleAt',
+  scheduledAt: 'scheduledAt',
+  sentAt: 'sentAt',
+  reminderSentAt: 'reminderSentAt',
+  completedAt: 'completedAt',
+  canceledAt: 'canceledAt',
+  expiresAt: 'expiresAt',
+  sendAttemptCount: 'sendAttemptCount',
+  reminderCount: 'reminderCount',
+  tokenHash: 'tokenHash',
+  tokenCreatedAt: 'tokenCreatedAt',
+  tokenExpiresAt: 'tokenExpiresAt',
+  tokenConsumedAt: 'tokenConsumedAt',
+  tokenRevokedAt: 'tokenRevokedAt',
+  submittedReviewId: 'submittedReviewId',
+  lastSendAttemptAt: 'lastSendAttemptAt',
+  lastSendErrorCode: 'lastSendErrorCode',
+  providerMessageId: 'providerMessageId',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.ProductReviewRequestDeliveryAttemptScalarFieldEnum = {
+  id: 'id',
+  shopId: 'shopId',
+  reviewRequestId: 'reviewRequestId',
+  channel: 'channel',
+  attemptType: 'attemptType',
+  attemptNumber: 'attemptNumber',
+  status: 'status',
+  provider: 'provider',
+  providerMessageId: 'providerMessageId',
+  idempotencyKey: 'idempotencyKey',
+  scheduledAt: 'scheduledAt',
+  startedAt: 'startedAt',
+  completedAt: 'completedAt',
+  nextRetryAt: 'nextRetryAt',
+  errorCode: 'errorCode',
+  errorMessageSafe: 'errorMessageSafe',
+  claimToken: 'claimToken',
+  claimedAt: 'claimedAt',
+  claimExpiresAt: 'claimExpiresAt',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.ProductReviewScalarFieldEnum = {
+  id: 'id',
+  shopId: 'shopId',
+  customerProfileId: 'customerProfileId',
+  reviewRequestId: 'reviewRequestId',
+  megaskaOrderId: 'megaskaOrderId',
+  shopifyOrderId: 'shopifyOrderId',
+  shopifyLineItemId: 'shopifyLineItemId',
+  shopifyProductId: 'shopifyProductId',
+  shopifyVariantId: 'shopifyVariantId',
+  source: 'source',
+  status: 'status',
+  rating: 'rating',
+  title: 'title',
+  body: 'body',
+  customerDisplayName: 'customerDisplayName',
+  verifiedPurchase: 'verifiedPurchase',
+  productTitleSnapshot: 'productTitleSnapshot',
+  variantTitleSnapshot: 'variantTitleSnapshot',
+  productHandleSnapshot: 'productHandleSnapshot',
+  submittedAt: 'submittedAt',
+  publishedAt: 'publishedAt',
+  moderatedAt: 'moderatedAt',
+  moderatedBy: 'moderatedBy',
+  rejectionReason: 'rejectionReason',
+  rejectedAt: 'rejectedAt',
+  hiddenAt: 'hiddenAt',
+  deletedAt: 'deletedAt',
+  moderationNote: 'moderationNote',
+  editedAt: 'editedAt',
+  editCount: 'editCount',
+  lastEditedAt: 'lastEditedAt',
+  editVersion: 'editVersion',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.ProductReviewMediaScalarFieldEnum = {
+  id: 'id',
+  shopId: 'shopId',
+  productReviewId: 'productReviewId',
+  mediaType: 'mediaType',
+  status: 'status',
+  storageProvider: 'storageProvider',
+  storageKey: 'storageKey',
+  publicUrl: 'publicUrl',
+  thumbnailUrl: 'thumbnailUrl',
+  mimeType: 'mimeType',
+  sizeBytes: 'sizeBytes',
+  width: 'width',
+  height: 'height',
+  durationSeconds: 'durationSeconds',
+  altText: 'altText',
+  sortOrder: 'sortOrder',
+  approved: 'approved',
+  moderationNote: 'moderationNote',
+  rejectedAt: 'rejectedAt',
+  deletedAt: 'deletedAt',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.ProductReviewMerchantReplyScalarFieldEnum = {
+  id: 'id',
+  shopId: 'shopId',
+  productReviewId: 'productReviewId',
+  body: 'body',
+  authorLabel: 'authorLabel',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.ProductReviewEditTokenScalarFieldEnum = {
+  id: 'id',
+  shopId: 'shopId',
+  productReviewId: 'productReviewId',
+  tokenHash: 'tokenHash',
+  expiresAt: 'expiresAt',
+  revokedAt: 'revokedAt',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.ProductReviewRevisionScalarFieldEnum = {
+  id: 'id',
+  shopId: 'shopId',
+  productReviewId: 'productReviewId',
+  previousRating: 'previousRating',
+  previousTitle: 'previousTitle',
+  previousBody: 'previousBody',
+  nextRating: 'nextRating',
+  nextTitle: 'nextTitle',
+  nextBody: 'nextBody',
+  mediaChanges: 'mediaChanges',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.ProductReviewAggregateScalarFieldEnum = {
+  id: 'id',
+  shopId: 'shopId',
+  shopifyProductId: 'shopifyProductId',
+  publishedCount: 'publishedCount',
+  ratingSum: 'ratingSum',
+  averageRating: 'averageRating',
+  rating1Count: 'rating1Count',
+  rating2Count: 'rating2Count',
+  rating3Count: 'rating3Count',
+  rating4Count: 'rating4Count',
+  rating5Count: 'rating5Count',
+  lastPublishedAt: 'lastPublishedAt',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
 exports.Prisma.WalletAccountScalarFieldEnum = {
   id: 'id',
+  shopId: 'shopId',
   customerProfileId: 'customerProfileId',
   currency: 'currency',
   currentBalance: 'currentBalance',
@@ -275,6 +1109,7 @@ exports.Prisma.WalletAccountScalarFieldEnum = {
 
 exports.Prisma.WalletTransactionScalarFieldEnum = {
   id: 'id',
+  shopId: 'shopId',
   walletAccountId: 'walletAccountId',
   customerProfileId: 'customerProfileId',
   direction: 'direction',
@@ -314,6 +1149,78 @@ exports.Prisma.WalletReservationScalarFieldEnum = {
   updatedAt: 'updatedAt'
 };
 
+exports.Prisma.RefundRequestScalarFieldEnum = {
+  id: 'id',
+  shopId: 'shopId',
+  source: 'source',
+  sourceId: 'sourceId',
+  method: 'method',
+  status: 'status',
+  currency: 'currency',
+  amount: 'amount',
+  customerProfileId: 'customerProfileId',
+  orderActionRequestId: 'orderActionRequestId',
+  walletTransactionId: 'walletTransactionId',
+  shopifyOrderId: 'shopifyOrderId',
+  shopifyRefundId: 'shopifyRefundId',
+  reason: 'reason',
+  customerNote: 'customerNote',
+  adminNote: 'adminNote',
+  metadata: 'metadata',
+  detailsSubmittedAt: 'detailsSubmittedAt',
+  approvedAt: 'approvedAt',
+  rejectedAt: 'rejectedAt',
+  paidAt: 'paidAt',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.RefundPayoutDetailsScalarFieldEnum = {
+  id: 'id',
+  refundRequestId: 'refundRequestId',
+  rail: 'rail',
+  accountHolderName: 'accountHolderName',
+  bankAccountMasked: 'bankAccountMasked',
+  bankAccountEnc: 'bankAccountEnc',
+  bankIfsc: 'bankIfsc',
+  upiIdMasked: 'upiIdMasked',
+  upiIdEnc: 'upiIdEnc',
+  phoneMasked: 'phoneMasked',
+  phoneEnc: 'phoneEnc',
+  verifiedAt: 'verifiedAt',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.RefundPayoutScalarFieldEnum = {
+  id: 'id',
+  refundRequestId: 'refundRequestId',
+  status: 'status',
+  provider: 'provider',
+  providerReferenceId: 'providerReferenceId',
+  amount: 'amount',
+  currency: 'currency',
+  initiatedAt: 'initiatedAt',
+  completedAt: 'completedAt',
+  failureReason: 'failureReason',
+  metadata: 'metadata',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.RefundEventScalarFieldEnum = {
+  id: 'id',
+  refundRequestId: 'refundRequestId',
+  actorType: 'actorType',
+  actorId: 'actorId',
+  eventType: 'eventType',
+  fromStatus: 'fromStatus',
+  toStatus: 'toStatus',
+  message: 'message',
+  payload: 'payload',
+  createdAt: 'createdAt'
+};
+
 exports.Prisma.GstSettingsScalarFieldEnum = {
   id: 'id',
   shopId: 'shopId',
@@ -327,7 +1234,9 @@ exports.Prisma.GstSettingsScalarFieldEnum = {
   debitNotePrefix: 'debitNotePrefix',
   invoiceNumberStrategy: 'invoiceNumberStrategy',
   defaultCurrency: 'defaultCurrency',
+  priceIncludesTax: 'priceIncludesTax',
   einvoiceEnabled: 'einvoiceEnabled',
+  autoGenerateOnOrderCreate: 'autoGenerateOnOrderCreate',
   isActive: 'isActive',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
@@ -546,6 +1455,21 @@ exports.Prisma.GstProductTaxMapScalarFieldEnum = {
   updatedAt: 'updatedAt'
 };
 
+exports.Prisma.GstSkuTaxMapScalarFieldEnum = {
+  id: 'id',
+  shopId: 'shopId',
+  sku: 'sku',
+  styleCode: 'styleCode',
+  hsnCode: 'hsnCode',
+  taxRate: 'taxRate',
+  cessRate: 'cessRate',
+  source: 'source',
+  status: 'status',
+  metadata: 'metadata',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
 exports.Prisma.GstOrderImportScalarFieldEnum = {
   id: 'id',
   shopId: 'shopId',
@@ -624,17 +1548,210 @@ exports.Prisma.GstReportRunScalarFieldEnum = {
   updatedAt: 'updatedAt'
 };
 
+exports.Prisma.ExchangePaymentInvoiceScalarFieldEnum = {
+  id: 'id',
+  requestPaymentId: 'requestPaymentId',
+  requestId: 'requestId',
+  invoiceNumber: 'invoiceNumber',
+  invoiceDate: 'invoiceDate',
+  invoiceStatus: 'invoiceStatus',
+  customerName: 'customerName',
+  customerPhone: 'customerPhone',
+  customerEmail: 'customerEmail',
+  orderNumber: 'orderNumber',
+  description: 'description',
+  amountPaise: 'amountPaise',
+  taxableAmountPaise: 'taxableAmountPaise',
+  gstRatePercent: 'gstRatePercent',
+  cgstPaise: 'cgstPaise',
+  sgstPaise: 'sgstPaise',
+  igstPaise: 'igstPaise',
+  totalPaise: 'totalPaise',
+  currency: 'currency',
+  pdfUrl: 'pdfUrl',
+  htmlSnapshot: 'htmlSnapshot',
+  textSnapshot: 'textSnapshot',
+  sentAt: 'sentAt',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.ExpressCheckoutIntentScalarFieldEnum = {
+  id: 'id',
+  shopId: 'shopId',
+  customerProfileId: 'customerProfileId',
+  sessionTokenHash: 'sessionTokenHash',
+  status: 'status',
+  phoneSnapshot: 'phoneSnapshot',
+  cartToken: 'cartToken',
+  shopifyCartId: 'shopifyCartId',
+  cartSnapshot: 'cartSnapshot',
+  subtotalAmountPaise: 'subtotalAmountPaise',
+  discountAmountPaise: 'discountAmountPaise',
+  shippingAmountPaise: 'shippingAmountPaise',
+  codFeeAmountPaise: 'codFeeAmountPaise',
+  totalAmountPaise: 'totalAmountPaise',
+  currency: 'currency',
+  selectedPaymentMethod: 'selectedPaymentMethod',
+  expiresAt: 'expiresAt',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.ShopifyCheckoutPricingSnapshotScalarFieldEnum = {
+  id: 'id',
+  publicId: 'publicId',
+  shopId: 'shopId',
+  checkoutIntentId: 'checkoutIntentId',
+  shopifyDraftOrderId: 'shopifyDraftOrderId',
+  source: 'source',
+  status: 'status',
+  currency: 'currency',
+  subtotalMinor: 'subtotalMinor',
+  discountsMinor: 'discountsMinor',
+  shippingMinor: 'shippingMinor',
+  totalTaxMinor: 'totalTaxMinor',
+  totalPayableMinor: 'totalPayableMinor',
+  taxesIncluded: 'taxesIncluded',
+  taxSummary: 'taxSummary',
+  cartFingerprint: 'cartFingerprint',
+  addressFingerprint: 'addressFingerprint',
+  shippingFingerprint: 'shippingFingerprint',
+  discountFingerprint: 'discountFingerprint',
+  storeCreditFingerprint: 'storeCreditFingerprint',
+  refreshReason: 'refreshReason',
+  invalidatedAt: 'invalidatedAt',
+  invalidationReason: 'invalidationReason',
+  authoritativeAt: 'authoritativeAt',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.CheckoutRecoveryTokenScalarFieldEnum = {
+  id: 'id',
+  shopId: 'shopId',
+  checkoutIntentId: 'checkoutIntentId',
+  customerProfileId: 'customerProfileId',
+  tokenHash: 'tokenHash',
+  recoveryType: 'recoveryType',
+  status: 'status',
+  expiresAt: 'expiresAt',
+  clickedAt: 'clickedAt',
+  usedAt: 'usedAt',
+  revokedAt: 'revokedAt',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt',
+  metadata: 'metadata'
+};
+
+exports.Prisma.ExpressCheckoutAddressSnapshotScalarFieldEnum = {
+  id: 'id',
+  shopId: 'shopId',
+  intentId: 'intentId',
+  customerProfileId: 'customerProfileId',
+  name: 'name',
+  phone: 'phone',
+  email: 'email',
+  address1: 'address1',
+  address2: 'address2',
+  city: 'city',
+  province: 'province',
+  country: 'country',
+  zip: 'zip',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.ExpressCheckoutDiscountScalarFieldEnum = {
+  id: 'id',
+  shopId: 'shopId',
+  intentId: 'intentId',
+  type: 'type',
+  code: 'code',
+  title: 'title',
+  discountAmountPaise: 'discountAmountPaise',
+  rawShopifyPayload: 'rawShopifyPayload',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.ExpressCheckoutPaymentScalarFieldEnum = {
+  id: 'id',
+  shopId: 'shopId',
+  intentId: 'intentId',
+  method: 'method',
+  purpose: 'purpose',
+  status: 'status',
+  amountPaise: 'amountPaise',
+  currency: 'currency',
+  verifiedAt: 'verifiedAt',
+  providerAmountPaise: 'providerAmountPaise',
+  providerCurrency: 'providerCurrency',
+  razorpayOrderId: 'razorpayOrderId',
+  razorpayPaymentId: 'razorpayPaymentId',
+  razorpaySignatureHash: 'razorpaySignatureHash',
+  failureReason: 'failureReason',
+  rawGatewayPayload: 'rawGatewayPayload',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.ExpressCheckoutOrderLinkScalarFieldEnum = {
+  id: 'id',
+  shopId: 'shopId',
+  intentId: 'intentId',
+  draftOrderId: 'draftOrderId',
+  draftOrderName: 'draftOrderName',
+  shopifyOrderId: 'shopifyOrderId',
+  shopifyOrderName: 'shopifyOrderName',
+  financialStatus: 'financialStatus',
+  fulfillmentStatus: 'fulfillmentStatus',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.ShopModuleConfigScalarFieldEnum = {
+  id: 'id',
+  shopId: 'shopId',
+  moduleKey: 'moduleKey',
+  enabled: 'enabled',
+  config: 'config',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.ShopProxyRouteScalarFieldEnum = {
+  id: 'id',
+  shopId: 'shopId',
+  routeKey: 'routeKey',
+  proxyPrefix: 'proxyPrefix',
+  proxySubpath: 'proxySubpath',
+  targetModule: 'targetModule',
+  isActive: 'isActive',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.ShopInstallationEventScalarFieldEnum = {
+  id: 'id',
+  shopId: 'shopId',
+  eventType: 'eventType',
+  scopes: 'scopes',
+  payload: 'payload',
+  createdAt: 'createdAt'
+};
+
 exports.Prisma.SortOrder = {
   asc: 'asc',
   desc: 'desc'
 };
 
-exports.Prisma.NullableJsonNullValueInput = {
-  DbNull: Prisma.DbNull,
+exports.Prisma.JsonNullValueInput = {
   JsonNull: Prisma.JsonNull
 };
 
-exports.Prisma.JsonNullValueInput = {
+exports.Prisma.NullableJsonNullValueInput = {
+  DbNull: Prisma.DbNull,
   JsonNull: Prisma.JsonNull
 };
 
@@ -653,6 +1770,228 @@ exports.Prisma.JsonNullValueFilter = {
   JsonNull: Prisma.JsonNull,
   AnyNull: Prisma.AnyNull
 };
+exports.CustomerIdentityReconciliationStatus = exports.$Enums.CustomerIdentityReconciliationStatus = {
+  DRAFT: 'DRAFT',
+  APPROVED: 'APPROVED',
+  APPLYING: 'APPLYING',
+  APPLIED: 'APPLIED',
+  FAILED: 'FAILED',
+  CANCELLED: 'CANCELLED'
+};
+
+exports.MerchantSubscriptionStatus = exports.$Enums.MerchantSubscriptionStatus = {
+  TRIALING: 'TRIALING',
+  ACTIVE: 'ACTIVE',
+  PAST_DUE: 'PAST_DUE',
+  PAUSED: 'PAUSED',
+  CANCELED: 'CANCELED',
+  EXPIRED: 'EXPIRED'
+};
+
+exports.BillingProvider = exports.$Enums.BillingProvider = {
+  SHOPIFY: 'SHOPIFY',
+  STRIPE: 'STRIPE',
+  RAZORPAY: 'RAZORPAY',
+  MANUAL: 'MANUAL',
+  INTERNAL: 'INTERNAL'
+};
+
+exports.MerchantPlanChangeType = exports.$Enums.MerchantPlanChangeType = {
+  INITIAL_SUBSCRIPTION: 'INITIAL_SUBSCRIPTION',
+  UPGRADE: 'UPGRADE',
+  DOWNGRADE: 'DOWNGRADE',
+  CANCEL: 'CANCEL',
+  REACTIVATE: 'REACTIVATE'
+};
+
+exports.MerchantPlanChangeTiming = exports.$Enums.MerchantPlanChangeTiming = {
+  IMMEDIATE: 'IMMEDIATE',
+  PERIOD_END: 'PERIOD_END'
+};
+
+exports.MerchantPlanChangeStatus = exports.$Enums.MerchantPlanChangeStatus = {
+  PENDING: 'PENDING',
+  PENDING_PROVIDER_CONFIRMATION: 'PENDING_PROVIDER_CONFIRMATION',
+  SCHEDULED: 'SCHEDULED',
+  PROCESSING: 'PROCESSING',
+  APPLIED: 'APPLIED',
+  CANCELED: 'CANCELED',
+  FAILED_RETRYABLE: 'FAILED_RETRYABLE',
+  FAILED_FINAL: 'FAILED_FINAL'
+};
+
+exports.BillingProviderOperation = exports.$Enums.BillingProviderOperation = {
+  CREATE_SUBSCRIPTION: 'CREATE_SUBSCRIPTION',
+  CREATE_USAGE_RECORD: 'CREATE_USAGE_RECORD'
+};
+
+exports.BillingProviderSubmissionStatus = exports.$Enums.BillingProviderSubmissionStatus = {
+  PENDING: 'PENDING',
+  PROCESSING: 'PROCESSING',
+  SUCCEEDED: 'SUCCEEDED',
+  FAILED_RETRYABLE: 'FAILED_RETRYABLE',
+  FAILED_FINAL: 'FAILED_FINAL'
+};
+
+exports.BillingReconciliationStatus = exports.$Enums.BillingReconciliationStatus = {
+  NOT_SUBMITTED: 'NOT_SUBMITTED',
+  PENDING: 'PENDING',
+  MATCHED: 'MATCHED',
+  AMOUNT_MISMATCH: 'AMOUNT_MISMATCH',
+  CURRENCY_MISMATCH: 'CURRENCY_MISMATCH',
+  MISSING_PROVIDER_REFERENCE: 'MISSING_PROVIDER_REFERENCE',
+  DUPLICATE_PROVIDER_SUBMISSION: 'DUPLICATE_PROVIDER_SUBMISSION',
+  PROVIDER_NOT_FOUND: 'PROVIDER_NOT_FOUND',
+  FAILED_RETRYABLE: 'FAILED_RETRYABLE',
+  FAILED_FINAL: 'FAILED_FINAL',
+  SKIPPED_ZERO_AMOUNT: 'SKIPPED_ZERO_AMOUNT'
+};
+
+exports.MerchantBillingPeriodStatus = exports.$Enums.MerchantBillingPeriodStatus = {
+  OPEN: 'OPEN',
+  RATING: 'RATING',
+  RATED: 'RATED',
+  CLOSED: 'CLOSED',
+  VOID: 'VOID'
+};
+
+exports.MerchantUsageType = exports.$Enums.MerchantUsageType = {
+  OTP: 'OTP',
+  EMAIL: 'EMAIL',
+  SMS: 'SMS',
+  WHATSAPP: 'WHATSAPP',
+  AI: 'AI',
+  DELIVERY_LOOKUP: 'DELIVERY_LOOKUP',
+  CHECKOUT_TRANSACTION: 'CHECKOUT_TRANSACTION'
+};
+
+exports.MerchantUsageAction = exports.$Enums.MerchantUsageAction = {
+  OTP_REQUEST: 'OTP_REQUEST',
+  EMAIL_SEND: 'EMAIL_SEND',
+  SMS_SEND: 'SMS_SEND',
+  WHATSAPP_SEND: 'WHATSAPP_SEND',
+  AI_REQUEST: 'AI_REQUEST',
+  DELIVERY_LOOKUP: 'DELIVERY_LOOKUP',
+  CHECKOUT_TRANSACTION: 'CHECKOUT_TRANSACTION'
+};
+
+exports.MerchantUsageProvider = exports.$Enums.MerchantUsageProvider = {
+  PLATFORM_TWILIO: 'PLATFORM_TWILIO',
+  PLATFORM_RESEND: 'PLATFORM_RESEND',
+  PLATFORM_MSG91: 'PLATFORM_MSG91',
+  MERCHANT_TWILIO: 'MERCHANT_TWILIO',
+  MERCHANT_RESEND: 'MERCHANT_RESEND',
+  MERCHANT_MSG91: 'MERCHANT_MSG91',
+  INTERNAL: 'INTERNAL'
+};
+
+exports.MerchantUsageStatus = exports.$Enums.MerchantUsageStatus = {
+  RECORDED: 'RECORDED',
+  REVERSED: 'REVERSED',
+  EXCLUDED: 'EXCLUDED'
+};
+
+exports.MerchantUsageBillingStatus = exports.$Enums.MerchantUsageBillingStatus = {
+  UNRATED: 'UNRATED',
+  PENDING: 'PENDING',
+  INCLUDED: 'INCLUDED',
+  BILLABLE: 'BILLABLE',
+  SUBMITTED: 'SUBMITTED',
+  BILLED: 'BILLED',
+  FAILED: 'FAILED',
+  EXCLUDED: 'EXCLUDED'
+};
+
+exports.OtpProviderMode = exports.$Enums.OtpProviderMode = {
+  PLATFORM_TWILIO: 'PLATFORM_TWILIO',
+  MERCHANT_TWILIO: 'MERCHANT_TWILIO',
+  MERCHANT_MSG91: 'MERCHANT_MSG91',
+  MOCK: 'MOCK'
+};
+
+exports.OtpProviderStatus = exports.$Enums.OtpProviderStatus = {
+  NOT_CONFIGURED: 'NOT_CONFIGURED',
+  PENDING_VERIFICATION: 'PENDING_VERIFICATION',
+  VERIFIED: 'VERIFIED',
+  ACTIVE: 'ACTIVE',
+  SUSPENDED: 'SUSPENDED',
+  ERROR: 'ERROR'
+};
+
+exports.PromotionRuleStatus = exports.$Enums.PromotionRuleStatus = {
+  DRAFT: 'DRAFT',
+  ACTIVE: 'ACTIVE',
+  PAUSED: 'PAUSED',
+  ARCHIVED: 'ARCHIVED'
+};
+
+exports.PromotionTriggerType = exports.$Enums.PromotionTriggerType = {
+  PRODUCT: 'PRODUCT',
+  COLLECTION: 'COLLECTION',
+  PRODUCT_TYPE: 'PRODUCT_TYPE'
+};
+
+exports.PromotionTriggerMatchMode = exports.$Enums.PromotionTriggerMatchMode = {
+  ANY: 'ANY',
+  ALL: 'ALL'
+};
+
+exports.PromotionRewardType = exports.$Enums.PromotionRewardType = {
+  PERCENTAGE_OFF: 'PERCENTAGE_OFF',
+  FIXED_AMOUNT_OFF: 'FIXED_AMOUNT_OFF',
+  FIXED_PRICE: 'FIXED_PRICE'
+};
+
+exports.PromotionRewardScope = exports.$Enums.PromotionRewardScope = {
+  PRODUCT: 'PRODUCT',
+  ORDER: 'ORDER'
+};
+
+exports.PromotionRewardMethod = exports.$Enums.PromotionRewardMethod = {
+  PERCENTAGE: 'PERCENTAGE',
+  FIXED_AMOUNT: 'FIXED_AMOUNT',
+  FIXED_PRICE: 'FIXED_PRICE'
+};
+
+exports.PromotionTierSelectionMode = exports.$Enums.PromotionTierSelectionMode = {
+  HIGHEST_ELIGIBLE: 'HIGHEST_ELIGIBLE'
+};
+
+exports.PromotionTierContinuityMode = exports.$Enums.PromotionTierContinuityMode = {
+  CONTINUOUS: 'CONTINUOUS',
+  ALLOW_GAPS: 'ALLOW_GAPS'
+};
+
+exports.PromotionOrderDiscountBasis = exports.$Enums.PromotionOrderDiscountBasis = {
+  ELIGIBLE_MERCHANDISE_SUBTOTAL: 'ELIGIBLE_MERCHANDISE_SUBTOTAL'
+};
+
+exports.PromotionCompilationStatus = exports.$Enums.PromotionCompilationStatus = {
+  PENDING: 'PENDING',
+  COMPILING: 'COMPILING',
+  READY: 'READY',
+  FAILED: 'FAILED',
+  SUPERSEDED: 'SUPERSEDED'
+};
+
+exports.PromotionCompilationReason = exports.$Enums.PromotionCompilationReason = {
+  RULE_CREATED: 'RULE_CREATED',
+  RULE_UPDATED: 'RULE_UPDATED',
+  MANUAL_RECOMPILE: 'MANUAL_RECOMPILE',
+  COLLECTION_CHANGED: 'COLLECTION_CHANGED',
+  PRODUCT_CHANGED: 'PRODUCT_CHANGED',
+  PRODUCT_TYPE_CHANGED: 'PRODUCT_TYPE_CHANGED',
+  SCHEDULE_RECONCILIATION: 'SCHEDULE_RECONCILIATION',
+  SYSTEM_REPAIR: 'SYSTEM_REPAIR'
+};
+
+exports.PromotionRuntimeSyncStateValue = exports.$Enums.PromotionRuntimeSyncStateValue = {
+  NEVER_SYNCED: 'NEVER_SYNCED',
+  SYNCING: 'SYNCING',
+  SYNCED: 'SYNCED',
+  FAILED: 'FAILED'
+};
+
 exports.RequestType = exports.$Enums.RequestType = {
   EXCHANGE: 'EXCHANGE',
   REFUND: 'REFUND',
@@ -669,6 +2008,7 @@ exports.ExchangeRequestStatus = exports.$Enums.ExchangeRequestStatus = {
   PICKUP_COMPLETED: 'PICKUP_COMPLETED',
   ITEM_RECEIVED: 'ITEM_RECEIVED',
   APPROVED: 'APPROVED',
+  RETURN_RECEIVED: 'RETURN_RECEIVED',
   REJECTED: 'REJECTED',
   REPLACEMENT_PROCESSING: 'REPLACEMENT_PROCESSING',
   REPLACEMENT_SHIPPED: 'REPLACEMENT_SHIPPED',
@@ -692,6 +2032,21 @@ exports.PaymentStatus = exports.$Enums.PaymentStatus = {
   CANCELLED: 'CANCELLED'
 };
 
+exports.CodAdvanceType = exports.$Enums.CodAdvanceType = {
+  FIXED: 'FIXED',
+  PERCENTAGE: 'PERCENTAGE'
+};
+
+exports.CodAdvanceStatus = exports.$Enums.CodAdvanceStatus = {
+  CREATED: 'CREATED',
+  PAYMENT_PENDING: 'PAYMENT_PENDING',
+  ADVANCE_PAID: 'ADVANCE_PAID',
+  ORDER_LINKED: 'ORDER_LINKED',
+  FAILED: 'FAILED',
+  EXPIRED: 'EXPIRED',
+  CANCELLED: 'CANCELLED'
+};
+
 exports.ShipmentDirection = exports.$Enums.ShipmentDirection = {
   REVERSE_PICKUP: 'REVERSE_PICKUP',
   FORWARD_REPLACEMENT: 'FORWARD_REPLACEMENT'
@@ -704,6 +2059,136 @@ exports.ShipmentStatus = exports.$Enums.ShipmentStatus = {
   IN_TRANSIT: 'IN_TRANSIT',
   DELIVERED: 'DELIVERED',
   FAILED: 'FAILED'
+};
+
+exports.MegaskaOrderStatus = exports.$Enums.MegaskaOrderStatus = {
+  ORDER_CONFIRMED: 'ORDER_CONFIRMED',
+  PROCESSING: 'PROCESSING',
+  PACKED: 'PACKED',
+  READY_FOR_PICKUP: 'READY_FOR_PICKUP',
+  PICKED_UP: 'PICKED_UP',
+  IN_TRANSIT: 'IN_TRANSIT',
+  OUT_FOR_DELIVERY: 'OUT_FOR_DELIVERY',
+  DELIVERED: 'DELIVERED',
+  DELIVERY_FAILED: 'DELIVERY_FAILED',
+  RTO_INITIATED: 'RTO_INITIATED',
+  RTO_DELIVERED: 'RTO_DELIVERED',
+  CANCELLED: 'CANCELLED',
+  RETURN_REQUESTED: 'RETURN_REQUESTED',
+  RETURN_IN_TRANSIT: 'RETURN_IN_TRANSIT',
+  REFUNDED: 'REFUNDED'
+};
+
+exports.MegaskaOrderDeliverySource = exports.$Enums.MegaskaOrderDeliverySource = {
+  SHOPIFY_FULFILLMENT: 'SHOPIFY_FULFILLMENT',
+  COURIER_SHIPMENT: 'COURIER_SHIPMENT',
+  INTERNAL_STATUS: 'INTERNAL_STATUS',
+  MANUAL: 'MANUAL',
+  MIGRATED: 'MIGRATED'
+};
+
+exports.CourierProvider = exports.$Enums.CourierProvider = {
+  DELHIVERY: 'DELHIVERY',
+  DTDC: 'DTDC',
+  ATS: 'ATS',
+  OTHER: 'OTHER'
+};
+
+exports.ReviewRequestTrigger = exports.$Enums.ReviewRequestTrigger = {
+  FULFILLED: 'FULFILLED',
+  DELIVERED: 'DELIVERED'
+};
+
+exports.ReviewRequestChannel = exports.$Enums.ReviewRequestChannel = {
+  EMAIL: 'EMAIL',
+  SMS: 'SMS',
+  WHATSAPP: 'WHATSAPP'
+};
+
+exports.ReviewRequestStatus = exports.$Enums.ReviewRequestStatus = {
+  PENDING_ELIGIBILITY: 'PENDING_ELIGIBILITY',
+  ELIGIBLE: 'ELIGIBLE',
+  SCHEDULED: 'SCHEDULED',
+  READY: 'READY',
+  SENDING: 'SENDING',
+  SENT: 'SENT',
+  DELIVERED: 'DELIVERED',
+  OPENED: 'OPENED',
+  CLICKED: 'CLICKED',
+  SUBMITTED: 'SUBMITTED',
+  SUPPRESSED: 'SUPPRESSED',
+  FAILED: 'FAILED',
+  REMINDER_SENT: 'REMINDER_SENT',
+  COMPLETED: 'COMPLETED',
+  BLOCKED: 'BLOCKED',
+  EXPIRED: 'EXPIRED',
+  CANCELED: 'CANCELED'
+};
+
+exports.ReviewRequestBlockReason = exports.$Enums.ReviewRequestBlockReason = {
+  ORDER_NOT_DELIVERED: 'ORDER_NOT_DELIVERED',
+  CUSTOMER_NOT_RESOLVED: 'CUSTOMER_NOT_RESOLVED',
+  PRODUCT_NOT_RESOLVED: 'PRODUCT_NOT_RESOLVED',
+  CANCELED_ORDER: 'CANCELED_ORDER',
+  REFUNDED_ORDER: 'REFUNDED_ORDER',
+  CANCELLATION_REQUEST: 'CANCELLATION_REQUEST',
+  EXCHANGE_REQUEST: 'EXCHANGE_REQUEST',
+  ISSUE_REQUEST: 'ISSUE_REQUEST',
+  REFUND_REQUEST: 'REFUND_REQUEST',
+  PROTECTION_WINDOW: 'PROTECTION_WINDOW',
+  ALREADY_REVIEWED: 'ALREADY_REVIEWED',
+  REVIEWS_DISABLED: 'REVIEWS_DISABLED',
+  CUSTOMER_UNREACHABLE: 'CUSTOMER_UNREACHABLE',
+  OTHER: 'OTHER'
+};
+
+exports.ReviewRequestAttemptType = exports.$Enums.ReviewRequestAttemptType = {
+  INITIAL: 'INITIAL',
+  REMINDER: 'REMINDER'
+};
+
+exports.ReviewRequestAttemptStatus = exports.$Enums.ReviewRequestAttemptStatus = {
+  PENDING: 'PENDING',
+  SENDING: 'SENDING',
+  ACCEPTED: 'ACCEPTED',
+  DELIVERED: 'DELIVERED',
+  FAILED_RETRYABLE: 'FAILED_RETRYABLE',
+  FAILED_PERMANENT: 'FAILED_PERMANENT',
+  CANCELLED: 'CANCELLED',
+  SUPPRESSED: 'SUPPRESSED'
+};
+
+exports.ProductReviewSource = exports.$Enums.ProductReviewSource = {
+  VERIFIED_PURCHASE: 'VERIFIED_PURCHASE',
+  CUSTOMER_DASHBOARD: 'CUSTOMER_DASHBOARD',
+  PRODUCT_PAGE: 'PRODUCT_PAGE',
+  REVIEW_REQUEST_EMAIL: 'REVIEW_REQUEST_EMAIL',
+  REVIEW_REQUEST_WHATSAPP: 'REVIEW_REQUEST_WHATSAPP',
+  MANUAL_IMPORT: 'MANUAL_IMPORT',
+  MERCHANT_CREATED: 'MERCHANT_CREATED'
+};
+
+exports.ProductReviewStatus = exports.$Enums.ProductReviewStatus = {
+  DRAFT: 'DRAFT',
+  PENDING_MODERATION: 'PENDING_MODERATION',
+  PUBLISHED: 'PUBLISHED',
+  REJECTED: 'REJECTED',
+  HIDDEN: 'HIDDEN',
+  DELETED: 'DELETED'
+};
+
+exports.ProductReviewMediaType = exports.$Enums.ProductReviewMediaType = {
+  IMAGE: 'IMAGE',
+  VIDEO: 'VIDEO'
+};
+
+exports.ProductReviewMediaStatus = exports.$Enums.ProductReviewMediaStatus = {
+  UPLOADING: 'UPLOADING',
+  READY: 'READY',
+  PROCESSING: 'PROCESSING',
+  REJECTED: 'REJECTED',
+  FAILED: 'FAILED',
+  DELETED: 'DELETED'
 };
 
 exports.WalletDirection = exports.$Enums.WalletDirection = {
@@ -723,7 +2208,10 @@ exports.WalletTransactionType = exports.$Enums.WalletTransactionType = {
 exports.WalletSourceType = exports.$Enums.WalletSourceType = {
   ISSUE_REQUEST: 'ISSUE_REQUEST',
   ADMIN_MANUAL: 'ADMIN_MANUAL',
-  WALLET_RESERVATION: 'WALLET_RESERVATION'
+  WALLET_RESERVATION: 'WALLET_RESERVATION',
+  REFUND_REQUEST: 'REFUND_REQUEST',
+  CHECKOUT_INTENT: 'CHECKOUT_INTENT',
+  SHOPIFY_ORDER: 'SHOPIFY_ORDER'
 };
 
 exports.WalletActorType = exports.$Enums.WalletActorType = {
@@ -741,6 +2229,56 @@ exports.WalletReservationStatus = exports.$Enums.WalletReservationStatus = {
 exports.WalletReservationSourceFlow = exports.$Enums.WalletReservationSourceFlow = {
   CHECKOUT: 'CHECKOUT',
   BUY_NOW: 'BUY_NOW'
+};
+
+exports.RefundSource = exports.$Enums.RefundSource = {
+  ORDER_ACTION_REQUEST: 'ORDER_ACTION_REQUEST',
+  SHOPIFY_REFUND: 'SHOPIFY_REFUND',
+  ISSUE_REQUEST: 'ISSUE_REQUEST',
+  CANCELLATION_REQUEST: 'CANCELLATION_REQUEST',
+  RTO_EVENT: 'RTO_EVENT',
+  ADMIN_EXCEPTION: 'ADMIN_EXCEPTION',
+  ORDER_ADJUSTMENT: 'ORDER_ADJUSTMENT'
+};
+
+exports.RefundMethod = exports.$Enums.RefundMethod = {
+  COD: 'COD',
+  PREPAID: 'PREPAID',
+  NO_REFUND: 'NO_REFUND'
+};
+
+exports.RefundStatus = exports.$Enums.RefundStatus = {
+  PENDING: 'PENDING',
+  MANUAL_PENDING: 'MANUAL_PENDING',
+  NOT_REQUIRED: 'NOT_REQUIRED',
+  DETAILS_PENDING: 'DETAILS_PENDING',
+  DETAILS_SUBMITTED: 'DETAILS_SUBMITTED',
+  REVIEW_PENDING: 'REVIEW_PENDING',
+  APPROVED: 'APPROVED',
+  REJECTED: 'REJECTED',
+  PAYOUT_PENDING: 'PAYOUT_PENDING',
+  PAID: 'PAID',
+  FAILED: 'FAILED',
+  CANCELLED: 'CANCELLED'
+};
+
+exports.RefundPayoutRail = exports.$Enums.RefundPayoutRail = {
+  UPI: 'UPI',
+  BANK_TRANSFER: 'BANK_TRANSFER'
+};
+
+exports.RefundPayoutStatus = exports.$Enums.RefundPayoutStatus = {
+  CREATED: 'CREATED',
+  IN_PROGRESS: 'IN_PROGRESS',
+  SUCCESS: 'SUCCESS',
+  FAILED: 'FAILED',
+  CANCELLED: 'CANCELLED'
+};
+
+exports.RefundActorType = exports.$Enums.RefundActorType = {
+  SYSTEM: 'SYSTEM',
+  ADMIN: 'ADMIN',
+  CUSTOMER: 'CUSTOMER'
 };
 
 exports.GstNumberingStrategy = exports.$Enums.GstNumberingStrategy = {
@@ -773,19 +2311,136 @@ exports.GstSupplyType = exports.$Enums.GstSupplyType = {
   DEEMED_EXPORT: 'DEEMED_EXPORT'
 };
 
+exports.ExchangePaymentInvoiceStatus = exports.$Enums.ExchangePaymentInvoiceStatus = {
+  GENERATED: 'GENERATED',
+  SENT: 'SENT',
+  CANCELLED: 'CANCELLED'
+};
+
+exports.ExpressCheckoutIntentStatus = exports.$Enums.ExpressCheckoutIntentStatus = {
+  CREATED: 'CREATED',
+  CUSTOMER_AUTHENTICATED: 'CUSTOMER_AUTHENTICATED',
+  CART_SNAPSHOT_LOCKED: 'CART_SNAPSHOT_LOCKED',
+  ADDRESS_CAPTURED: 'ADDRESS_CAPTURED',
+  DISCOUNT_APPLIED: 'DISCOUNT_APPLIED',
+  PAYMENT_METHOD_SELECTED: 'PAYMENT_METHOD_SELECTED',
+  PAYMENT_PENDING: 'PAYMENT_PENDING',
+  PAYMENT_CONFIRMED: 'PAYMENT_CONFIRMED',
+  ORDER_CREATING: 'ORDER_CREATING',
+  ORDER_CREATED: 'ORDER_CREATED',
+  FAILED: 'FAILED',
+  EXPIRED: 'EXPIRED',
+  CANCELLED: 'CANCELLED',
+  INITIATED: 'INITIATED',
+  SESSION_VERIFIED: 'SESSION_VERIFIED',
+  ADDRESS_COMPLETED: 'ADDRESS_COMPLETED',
+  DELIVERY_VALIDATED: 'DELIVERY_VALIDATED',
+  COUPON_APPLIED: 'COUPON_APPLIED',
+  PAYMENT_SELECTED: 'PAYMENT_SELECTED',
+  DRAFT_ORDER_CREATED: 'DRAFT_ORDER_CREATED',
+  PAYMENT_SUCCESS: 'PAYMENT_SUCCESS',
+  ORDER_COMPLETED: 'ORDER_COMPLETED',
+  PAYMENT_FAILED: 'PAYMENT_FAILED',
+  PAYMENT_CANCELLED: 'PAYMENT_CANCELLED',
+  ABANDONED: 'ABANDONED'
+};
+
+exports.ExpressCheckoutPaymentMethod = exports.$Enums.ExpressCheckoutPaymentMethod = {
+  PREPAID: 'PREPAID',
+  COD: 'COD'
+};
+
+exports.ShopifyCheckoutPricingSnapshotStatus = exports.$Enums.ShopifyCheckoutPricingSnapshotStatus = {
+  CURRENT: 'CURRENT',
+  INVALIDATED: 'INVALIDATED'
+};
+
+exports.CheckoutRecoveryType = exports.$Enums.CheckoutRecoveryType = {
+  CHECKOUT_ABANDONMENT: 'CHECKOUT_ABANDONMENT',
+  PAYMENT_ABANDONMENT: 'PAYMENT_ABANDONMENT'
+};
+
+exports.CheckoutRecoveryTokenStatus = exports.$Enums.CheckoutRecoveryTokenStatus = {
+  ACTIVE: 'ACTIVE',
+  USED: 'USED',
+  EXPIRED: 'EXPIRED',
+  REVOKED: 'REVOKED'
+};
+
+exports.ExpressCheckoutDiscountType = exports.$Enums.ExpressCheckoutDiscountType = {
+  MANUAL_CODE: 'MANUAL_CODE',
+  AUTOMATIC: 'AUTOMATIC'
+};
+
+exports.ExpressCheckoutPaymentPurpose = exports.$Enums.ExpressCheckoutPaymentPurpose = {
+  ORDER_PREPAID: 'ORDER_PREPAID',
+  COD_ADVANCE: 'COD_ADVANCE'
+};
+
+exports.ExpressCheckoutPaymentStatus = exports.$Enums.ExpressCheckoutPaymentStatus = {
+  NOT_REQUIRED: 'NOT_REQUIRED',
+  PENDING: 'PENDING',
+  CONFIRMED: 'CONFIRMED',
+  FAILED: 'FAILED',
+  REFUNDED: 'REFUNDED'
+};
+
 exports.Prisma.ModelName = {
   CustomerProfile: 'CustomerProfile',
   Shop: 'Shop',
+  EmailVerificationChallenge: 'EmailVerificationChallenge',
+  CustomerIdentityReconciliationPlan: 'CustomerIdentityReconciliationPlan',
+  CustomerIdentityMerge: 'CustomerIdentityMerge',
+  CustomerIdentityReconciliationAudit: 'CustomerIdentityReconciliationAudit',
+  BillableFeature: 'BillableFeature',
+  PricingPlan: 'PricingPlan',
+  PricingPlanFeature: 'PricingPlanFeature',
+  MerchantSubscription: 'MerchantSubscription',
+  MerchantPlanChange: 'MerchantPlanChange',
+  MerchantBillingProviderSubmission: 'MerchantBillingProviderSubmission',
+  MerchantBillingReconciliation: 'MerchantBillingReconciliation',
+  MerchantBillingPeriod: 'MerchantBillingPeriod',
+  MerchantRatedUsage: 'MerchantRatedUsage',
+  MerchantUsageEvent: 'MerchantUsageEvent',
+  MerchantNotificationSettings: 'MerchantNotificationSettings',
+  MerchantOtpSettings: 'MerchantOtpSettings',
+  MerchantTwilioSettings: 'MerchantTwilioSettings',
+  MerchantMsg91Settings: 'MerchantMsg91Settings',
+  PromotionRule: 'PromotionRule',
+  PromotionOrderTier: 'PromotionOrderTier',
+  PromotionTriggerReference: 'PromotionTriggerReference',
+  PromotionCompilation: 'PromotionCompilation',
+  PromotionCompiledMembership: 'PromotionCompiledMembership',
+  PromotionRuntimeSyncState: 'PromotionRuntimeSyncState',
+  PromotionAuditLog: 'PromotionAuditLog',
   AuthSession: 'AuthSession',
   OTPChallenge: 'OTPChallenge',
   AuditEvent: 'AuditEvent',
   OrderActionRequest: 'OrderActionRequest',
   OrderActionItem: 'OrderActionItem',
   RequestPayment: 'RequestPayment',
+  CodAdvanceSettings: 'CodAdvanceSettings',
+  CodAdvanceIntent: 'CodAdvanceIntent',
   ShipmentTracking: 'ShipmentTracking',
+  MegaskaOrder: 'MegaskaOrder',
+  OrderShipment: 'OrderShipment',
+  OrderShipmentEvent: 'OrderShipmentEvent',
+  ReviewSettings: 'ReviewSettings',
+  ReviewRequest: 'ReviewRequest',
+  ProductReviewRequestDeliveryAttempt: 'ProductReviewRequestDeliveryAttempt',
+  ProductReview: 'ProductReview',
+  ProductReviewMedia: 'ProductReviewMedia',
+  ProductReviewMerchantReply: 'ProductReviewMerchantReply',
+  ProductReviewEditToken: 'ProductReviewEditToken',
+  ProductReviewRevision: 'ProductReviewRevision',
+  ProductReviewAggregate: 'ProductReviewAggregate',
   WalletAccount: 'WalletAccount',
   WalletTransaction: 'WalletTransaction',
   WalletReservation: 'WalletReservation',
+  RefundRequest: 'RefundRequest',
+  RefundPayoutDetails: 'RefundPayoutDetails',
+  RefundPayout: 'RefundPayout',
+  RefundEvent: 'RefundEvent',
   GstSettings: 'GstSettings',
   GstCounter: 'GstCounter',
   GstDocument: 'GstDocument',
@@ -800,10 +2455,22 @@ exports.Prisma.ModelName = {
   GstTaxSlab: 'GstTaxSlab',
   GstHsnSlabMap: 'GstHsnSlabMap',
   GstProductTaxMap: 'GstProductTaxMap',
+  GstSkuTaxMap: 'GstSkuTaxMap',
   GstOrderImport: 'GstOrderImport',
   GstOrderImportLine: 'GstOrderImportLine',
   GstInvoiceTemplate: 'GstInvoiceTemplate',
-  GstReportRun: 'GstReportRun'
+  GstReportRun: 'GstReportRun',
+  ExchangePaymentInvoice: 'ExchangePaymentInvoice',
+  ExpressCheckoutIntent: 'ExpressCheckoutIntent',
+  ShopifyCheckoutPricingSnapshot: 'ShopifyCheckoutPricingSnapshot',
+  CheckoutRecoveryToken: 'CheckoutRecoveryToken',
+  ExpressCheckoutAddressSnapshot: 'ExpressCheckoutAddressSnapshot',
+  ExpressCheckoutDiscount: 'ExpressCheckoutDiscount',
+  ExpressCheckoutPayment: 'ExpressCheckoutPayment',
+  ExpressCheckoutOrderLink: 'ExpressCheckoutOrderLink',
+  ShopModuleConfig: 'ShopModuleConfig',
+  ShopProxyRoute: 'ShopProxyRoute',
+  ShopInstallationEvent: 'ShopInstallationEvent'
 };
 
 /**

@@ -29,14 +29,23 @@ model CustomerProfile {
 
   shop Shop? @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
-  sessions            AuthSession[]
-  otpChallenges       OTPChallenge[]
-  orderActionRequests OrderActionRequest[]
-  walletAccounts      WalletAccount[]
-  walletTransactions  WalletTransaction[]
-  walletReservations  WalletReservation[]
-  gstDocuments        GstDocument[]
-  gstParties          GstParty[]
+  sessions                    AuthSession[]
+  otpChallenges               OTPChallenge[]
+  orderActionRequests         OrderActionRequest[]
+  megaskaOrders               MegaskaOrder[]
+  walletAccounts              WalletAccount[]
+  walletTransactions          WalletTransaction[]
+  walletReservations          WalletReservation[]
+  gstDocuments                GstDocument[]
+  gstParties                  GstParty[]
+  refundRequests              RefundRequest[]
+  codAdvanceIntents           CodAdvanceIntent[]
+  recoveryTokens              CheckoutRecoveryToken[]
+  reviewRequests              ReviewRequest[]
+  productReviews              ProductReview[]
+  identityPlans               CustomerIdentityReconciliationPlan[]
+  identityAudits              CustomerIdentityReconciliationAudit[]
+  emailVerificationChallenges EmailVerificationChallenge[]
 
   @@unique([shopId, shopifyCustomerId])
   @@index([shopId])
@@ -45,23 +54,943 @@ model CustomerProfile {
 }
 
 model Shop {
-  id                    String    @id @default(uuid())
-  shopDomain            String    @unique
-  accessToken           String?
-  storefrontAccessToken String?
-  scopes                String?
-  isActive              Boolean   @default(true)
-  installedAt           DateTime?
-  uninstalledAt         DateTime?
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
+  id                       String    @id @default(uuid())
+  shopDomain               String    @unique
+  accessToken              String?
+  storefrontAccessToken    String?
+  scopes                   String?
+  isActive                 Boolean   @default(true)
+  installedAt              DateTime?
+  uninstalledAt            DateTime?
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+  myshopifyDomain          String?   @unique
+  primaryDomain            String?
+  shopName                 String?
+  accessTokenEncrypted     String?
+  storefrontTokenEncrypted String?
+  appProxyPrefix           String?
+  appProxySubpath          String?
+  appProxyEnabled          Boolean   @default(false)
+  installationStatus       String    @default("DEV")
+  checkoutEnabled          Boolean   @default(false)
+  tokenExpiresAt           DateTime?
+  tokenRotationRequiredAt  DateTime?
 
-  customers           CustomerProfile[]
-  orderActionRequests OrderActionRequest[]
-  walletReservations  WalletReservation[]
-  gstSettings         GstSettings[]
-  gstProductTaxMaps   GstProductTaxMap[]
-  gstOrderImports     GstOrderImport[]
+  customers                     CustomerProfile[]
+  otpChallenges                 OTPChallenge[]
+  orderActionRequests           OrderActionRequest[]
+  megaskaOrders                 MegaskaOrder[]
+  walletReservations            WalletReservation[]
+  walletAccounts                WalletAccount[]
+  walletTransactions            WalletTransaction[]
+  gstSettings                   GstSettings[]
+  gstProductTaxMaps             GstProductTaxMap[]
+  gstSkuTaxMaps                 GstSkuTaxMap[]
+  gstOrderImports               GstOrderImport[]
+  refundRequests                RefundRequest[]
+  codAdvanceSettings            CodAdvanceSettings[]
+  codAdvanceIntents             CodAdvanceIntent[]
+  moduleConfigs                 ShopModuleConfig[]
+  proxyRoutes                   ShopProxyRoute[]
+  installationEvents            ShopInstallationEvent[]
+  recoveryTokens                CheckoutRecoveryToken[]
+  promotionRules                PromotionRule[]
+  promotionOrderTiers           PromotionOrderTier[]
+  promotionAuditLogs            PromotionAuditLog[]
+  promotionRuntimeSyncState     PromotionRuntimeSyncState?
+  merchantNotificationSettings  MerchantNotificationSettings?
+  merchantOtpSettings           MerchantOtpSettings?
+  merchantUsageEvents           MerchantUsageEvent[]
+  merchantSubscription          MerchantSubscription?
+  merchantBillingPeriods        MerchantBillingPeriod[]
+  merchantRatedUsages           MerchantRatedUsage[]
+  billingProviderSubmissions    MerchantBillingProviderSubmission[]
+  billingReconciliations        MerchantBillingReconciliation[]
+  merchantPlanChanges           MerchantPlanChange[]
+  reviewSettings                ReviewSettings?
+  reviewRequests                ReviewRequest[]
+  productReviews                ProductReview[]
+  productReviewMedia            ProductReviewMedia[]
+  productReviewReplies          ProductReviewMerchantReply[]
+  reviewEditTokens              ProductReviewEditToken[]
+  reviewRequestDeliveryAttempts ProductReviewRequestDeliveryAttempt[]
+  productReviewRevisions        ProductReviewRevision[]
+  productReviewAggregates       ProductReviewAggregate[]
+  identityReconciliationPlans   CustomerIdentityReconciliationPlan[]
+  identityReconciliationAudits  CustomerIdentityReconciliationAudit[]
+  identityMerges                CustomerIdentityMerge[]
+  checkoutPricingSnapshots      ShopifyCheckoutPricingSnapshot[]
+  emailVerificationChallenges   EmailVerificationChallenge[]
+}
+
+model EmailVerificationChallenge {
+  id                         String    @id @default(uuid())
+  shopId                     String
+  customerProfileId          String
+  email                      String
+  candidateShopifyCustomerId String
+  candidateFirstName         String?
+  candidateLastName          String?
+  codeHash                   String
+  status                     String    @default("pending") // pending, verified, failed, expired
+  attemptsCount              Int       @default(0)
+  expiresAt                  DateTime
+  verifiedAt                 DateTime?
+  createdAt                  DateTime  @default(now())
+
+  shop            Shop            @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  customerProfile CustomerProfile @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+
+  @@index([shopId, customerProfileId, status, createdAt])
+}
+
+enum CustomerIdentityReconciliationStatus {
+  DRAFT
+  APPROVED
+  APPLYING
+  APPLIED
+  FAILED
+  CANCELLED
+}
+
+model CustomerIdentityReconciliationPlan {
+  id                         String                               @id @default(uuid())
+  shopId                     String
+  canonicalCustomerProfileId String
+  sourceCustomerProfileIds   String[]
+  classification             String
+  status                     CustomerIdentityReconciliationStatus @default(DRAFT)
+  createdBy                  String
+  approvedBy                 String?
+  approvedAt                 DateTime?
+  appliedAt                  DateTime?
+  checksum                   String                               @unique
+  sourceStateChecksum        String
+  plan                       Json
+  failureReason              String?
+  createdAt                  DateTime                             @default(now())
+  updatedAt                  DateTime                             @updatedAt
+
+  shop      Shop                                  @relation(fields: [shopId], references: [id], onDelete: Restrict)
+  canonical CustomerProfile                       @relation(fields: [canonicalCustomerProfileId], references: [id], onDelete: Restrict)
+  merges    CustomerIdentityMerge[]
+  audits    CustomerIdentityReconciliationAudit[]
+
+  @@index([shopId, status, createdAt])
+}
+
+model CustomerIdentityMerge {
+  id                      String   @id @default(uuid())
+  shopId                  String
+  sourceCustomerProfileId String   @unique
+  targetCustomerProfileId String
+  planId                  String
+  mergedAt                DateTime @default(now())
+
+  shop Shop                               @relation(fields: [shopId], references: [id], onDelete: Restrict)
+  plan CustomerIdentityReconciliationPlan @relation(fields: [planId], references: [id], onDelete: Restrict)
+
+  @@index([shopId, targetCustomerProfileId])
+  @@index([planId])
+}
+
+model CustomerIdentityReconciliationAudit {
+  id                         String   @id @default(uuid())
+  planId                     String
+  shopId                     String
+  canonicalCustomerProfileId String
+  sourceCustomerProfileIds   String[]
+  classification             String
+  affectedRecordCounts       Json
+  result                     String
+  failureReason              String?
+  actor                      String
+  beforeIntegrityHash        String
+  afterIntegrityHash         String?
+  createdAt                  DateTime @default(now())
+
+  plan      CustomerIdentityReconciliationPlan @relation(fields: [planId], references: [id], onDelete: Restrict)
+  shop      Shop                               @relation(fields: [shopId], references: [id], onDelete: Restrict)
+  canonical CustomerProfile                    @relation(fields: [canonicalCustomerProfileId], references: [id], onDelete: Restrict)
+
+  @@index([shopId, createdAt])
+  @@index([planId])
+}
+
+enum MerchantUsageType {
+  OTP
+  EMAIL
+  SMS
+  WHATSAPP
+  AI
+  DELIVERY_LOOKUP
+  CHECKOUT_TRANSACTION
+}
+
+enum MerchantUsageAction {
+  OTP_REQUEST
+  EMAIL_SEND
+  SMS_SEND
+  WHATSAPP_SEND
+  AI_REQUEST
+  DELIVERY_LOOKUP
+  CHECKOUT_TRANSACTION
+}
+
+enum MerchantUsageProvider {
+  PLATFORM_TWILIO
+  PLATFORM_RESEND
+  PLATFORM_MSG91
+  MERCHANT_TWILIO
+  MERCHANT_RESEND
+  MERCHANT_MSG91
+  INTERNAL
+}
+
+enum MerchantUsageStatus {
+  RECORDED
+  REVERSED
+  EXCLUDED
+}
+
+enum MerchantUsageBillingStatus {
+  UNRATED
+  PENDING
+  INCLUDED
+  BILLABLE
+  SUBMITTED
+  BILLED
+  FAILED
+  EXCLUDED
+}
+
+model BillableFeature {
+  id          String   @id @default(uuid())
+  code        String   @unique
+  name        String
+  description String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  pricingPlanFeatures PricingPlanFeature[]
+  merchantRatedUsages MerchantRatedUsage[]
+}
+
+model PricingPlan {
+  id               String   @id @default(uuid())
+  code             String   @unique
+  name             String
+  description      String?
+  monthlyBasePrice Decimal  @db.Decimal(18, 6)
+  currency         String   @default("INR")
+  active           Boolean  @default(true)
+  tierRank         Int      @default(0)
+  displayOrder     Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  features                PricingPlanFeature[]
+  merchantSubscriptions   MerchantSubscription[]
+  merchantRatedUsages     MerchantRatedUsage[]
+  merchantPlanChangesFrom MerchantPlanChange[]   @relation("PlanChangeFrom")
+  merchantPlanChangesTo   MerchantPlanChange[]   @relation("PlanChangeTo")
+}
+
+model PricingPlanFeature {
+  id                String   @id @default(uuid())
+  pricingPlanId     String
+  billableFeatureId String
+  includedQuantity  Decimal  @default(0) @db.Decimal(18, 6)
+  overageUnitPrice  Decimal  @default(0) @db.Decimal(18, 6)
+  active            Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  pricingPlan     PricingPlan     @relation(fields: [pricingPlanId], references: [id], onDelete: Cascade)
+  billableFeature BillableFeature @relation(fields: [billableFeatureId], references: [id], onDelete: Restrict)
+
+  @@unique([pricingPlanId, billableFeatureId])
+  @@index([billableFeatureId])
+}
+
+enum MerchantBillingPeriodStatus {
+  OPEN
+  RATING
+  RATED
+  CLOSED
+  VOID
+}
+
+enum MerchantSubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  PAUSED
+  CANCELED
+  EXPIRED
+}
+
+enum BillingProvider {
+  SHOPIFY
+  STRIPE
+  RAZORPAY
+  MANUAL
+  INTERNAL
+}
+
+model MerchantSubscription {
+  id            String @id @default(uuid())
+  shopId        String @unique
+  pricingPlanId String
+
+  status          MerchantSubscriptionStatus @default(TRIALING)
+  billingProvider BillingProvider            @default(INTERNAL)
+
+  externalSubscriptionReference String?
+  externalCustomerReference     String?
+  providerStatus                String?
+  confirmationUrl               String?
+  providerActivatedAt           DateTime?
+  providerMetadata              Json?
+
+  trialStartsAt DateTime?
+  trialEndsAt   DateTime?
+
+  currentPeriodStart DateTime?
+  currentPeriodEnd   DateTime?
+
+  renewsAutomatically     Boolean   @default(true)
+  canceledAt              DateTime?
+  cancellationEffectiveAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  shop                       Shop                                @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  pricingPlan                PricingPlan                         @relation(fields: [pricingPlanId], references: [id], onDelete: Restrict)
+  billingPeriods             MerchantBillingPeriod[]
+  billingProviderSubmissions MerchantBillingProviderSubmission[]
+  planChanges                MerchantPlanChange[]
+
+  @@index([pricingPlanId])
+  @@index([status])
+  @@index([billingProvider])
+  @@index([currentPeriodEnd])
+}
+
+enum MerchantPlanChangeType {
+  INITIAL_SUBSCRIPTION
+  UPGRADE
+  DOWNGRADE
+  CANCEL
+  REACTIVATE
+}
+
+enum MerchantPlanChangeTiming {
+  IMMEDIATE
+  PERIOD_END
+}
+
+enum MerchantPlanChangeStatus {
+  PENDING
+  PENDING_PROVIDER_CONFIRMATION
+  SCHEDULED
+  PROCESSING
+  APPLIED
+  CANCELED
+  FAILED_RETRYABLE
+  FAILED_FINAL
+}
+
+model MerchantPlanChange {
+  id                     String                   @id @default(uuid())
+  shopId                 String
+  merchantSubscriptionId String
+  fromPricingPlanId      String?
+  toPricingPlanId        String?
+  changeType             MerchantPlanChangeType
+  timing                 MerchantPlanChangeTiming
+  status                 MerchantPlanChangeStatus @default(PENDING)
+  effectiveAt            DateTime?
+  requestedAt            DateTime                 @default(now())
+  confirmedAt            DateTime?
+  appliedAt              DateTime?
+  canceledAt             DateTime?
+  failedAt               DateTime?
+  provider               BillingProvider?
+  providerSubmissionId   String?
+  externalReference      String?
+  idempotencyKey         String                   @unique
+  failureCode            String?
+  failureMessage         String?
+  createdAt              DateTime                 @default(now())
+  updatedAt              DateTime                 @updatedAt
+
+  shop                 Shop                 @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  merchantSubscription MerchantSubscription @relation(fields: [merchantSubscriptionId], references: [id], onDelete: Cascade)
+  fromPricingPlan      PricingPlan?         @relation("PlanChangeFrom", fields: [fromPricingPlanId], references: [id], onDelete: Restrict)
+  toPricingPlan        PricingPlan?         @relation("PlanChangeTo", fields: [toPricingPlanId], references: [id], onDelete: Restrict)
+
+  @@index([shopId, merchantSubscriptionId, status])
+  @@index([status, effectiveAt, id])
+}
+
+enum BillingProviderOperation {
+  CREATE_SUBSCRIPTION
+  CREATE_USAGE_RECORD
+}
+
+enum BillingProviderSubmissionStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED_RETRYABLE
+  FAILED_FINAL
+}
+
+model MerchantBillingProviderSubmission {
+  id                         String                          @id @default(uuid())
+  shopId                     String
+  merchantSubscriptionId     String
+  merchantBillingPeriodId    String?
+  merchantRatedUsageId       String?
+  provider                   BillingProvider
+  operation                  BillingProviderOperation
+  idempotencyKey             String
+  status                     BillingProviderSubmissionStatus @default(PENDING)
+  externalReference          String?
+  externalParentReference    String?
+  recurringLineItemReference String?
+  usageLineItemReference     String?
+  amount                     Decimal?                        @db.Decimal(18, 6)
+  currency                   String?
+  attemptCount               Int                             @default(0)
+  lastAttemptAt              DateTime?
+  succeededAt                DateTime?
+  failedAt                   DateTime?
+  errorCode                  String?
+  errorMessage               String?
+  requestSnapshot            Json?
+  responseSnapshot           Json?
+  createdAt                  DateTime                        @default(now())
+  updatedAt                  DateTime                        @updatedAt
+
+  shop                 Shop                 @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  merchantSubscription MerchantSubscription @relation(fields: [merchantSubscriptionId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, operation, idempotencyKey])
+  @@unique([provider, operation, merchantRatedUsageId])
+  @@index([shopId, status])
+  @@index([merchantSubscriptionId, operation])
+  @@index([merchantBillingPeriodId])
+}
+
+enum BillingReconciliationStatus {
+  NOT_SUBMITTED
+  PENDING
+  MATCHED
+  AMOUNT_MISMATCH
+  CURRENCY_MISMATCH
+  MISSING_PROVIDER_REFERENCE
+  DUPLICATE_PROVIDER_SUBMISSION
+  PROVIDER_NOT_FOUND
+  FAILED_RETRYABLE
+  FAILED_FINAL
+  SKIPPED_ZERO_AMOUNT
+}
+
+model MerchantBillingReconciliation {
+  id                   String                      @id @default(uuid())
+  shopId               String
+  billingPeriodId      String
+  merchantRatedUsageId String?
+  provider             BillingProvider
+  status               BillingReconciliationStatus
+  internalAmount       Decimal?                    @db.Decimal(18, 6)
+  internalCurrency     String?
+  providerAmount       Decimal?                    @db.Decimal(18, 6)
+  providerCurrency     String?
+  providerSubmissionId String?
+  externalReference    String?
+  errorCode            String?
+  errorMessage         String?
+  checkedAt            DateTime                    @default(now())
+  createdAt            DateTime                    @default(now())
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@index([shopId, billingPeriodId, checkedAt])
+  @@index([merchantRatedUsageId, checkedAt])
+}
+
+model MerchantBillingPeriod {
+  id             String @id @default(uuid())
+  shopId         String
+  subscriptionId String
+
+  periodStart DateTime
+  periodEnd   DateTime
+
+  status MerchantBillingPeriodStatus @default(OPEN)
+
+  openedAt DateTime  @default(now())
+  ratedAt  DateTime?
+  closedAt DateTime?
+  voidedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  shop         Shop                 @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  subscription MerchantSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  ratedUsages  MerchantRatedUsage[]
+
+  @@unique([subscriptionId, periodStart, periodEnd])
+  @@index([shopId, status])
+  @@index([subscriptionId, status])
+  @@index([shopId, periodStart, periodEnd])
+  @@index([periodEnd])
+}
+
+model MerchantRatedUsage {
+  id                String @id @default(uuid())
+  shopId            String
+  billingPeriodId   String
+  pricingPlanId     String
+  billableFeatureId String
+
+  featureCodeSnapshot String
+  featureNameSnapshot String?
+  planCodeSnapshot    String
+  planNameSnapshot    String?
+  currency            String
+
+  usedQuantity     Decimal @db.Decimal(18, 6)
+  includedQuantity Decimal @db.Decimal(18, 6)
+  billableQuantity Decimal @db.Decimal(18, 6)
+  unitRate         Decimal @db.Decimal(18, 6)
+  amount           Decimal @db.Decimal(18, 6)
+  usageEventCount  Int
+
+  ratedAt   DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  shop            Shop                  @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  billingPeriod   MerchantBillingPeriod @relation(fields: [billingPeriodId], references: [id], onDelete: Cascade)
+  pricingPlan     PricingPlan           @relation(fields: [pricingPlanId], references: [id], onDelete: Restrict)
+  billableFeature BillableFeature       @relation(fields: [billableFeatureId], references: [id], onDelete: Restrict)
+
+  @@unique([billingPeriodId, billableFeatureId])
+  @@index([shopId, billingPeriodId])
+  @@index([pricingPlanId])
+  @@index([featureCodeSnapshot])
+}
+
+model MerchantUsageEvent {
+  id     String @id @default(uuid())
+  shopId String
+
+  usageType MerchantUsageType
+  action    MerchantUsageAction
+  provider  MerchantUsageProvider
+
+  quantity      Decimal                    @db.Decimal(18, 6)
+  status        MerchantUsageStatus        @default(RECORDED)
+  billingStatus MerchantUsageBillingStatus @default(UNRATED)
+
+  sourceType        String
+  sourceId          String
+  providerReference String?
+
+  idempotencyKey String @unique
+
+  countryCode String?
+  metadata    Json?
+
+  occurredAt DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@index([shopId, occurredAt])
+  @@index([shopId, usageType, occurredAt])
+  @@index([shopId, billingStatus, occurredAt])
+  @@index([sourceType, sourceId])
+  @@index([provider, occurredAt])
+}
+
+model MerchantNotificationSettings {
+  id     String @id @default(uuid())
+  shopId String @unique
+
+  emailEnabled          Boolean @default(true)
+  customerEmailsEnabled Boolean @default(true)
+
+  senderDisplayName String?
+  replyToEmail      String?
+  adminRecipients   String[]
+
+  cancellationAlerts Boolean @default(true)
+  exchangeAlerts     Boolean @default(true)
+  issueAlerts        Boolean @default(true)
+  storeCreditAlerts  Boolean @default(true)
+  checkoutAlerts     Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@index([shopId])
+}
+
+enum OtpProviderMode {
+  PLATFORM_TWILIO
+  MERCHANT_TWILIO
+  MERCHANT_MSG91
+  MOCK
+}
+
+enum OtpProviderStatus {
+  NOT_CONFIGURED
+  PENDING_VERIFICATION
+  VERIFIED
+  ACTIVE
+  SUSPENDED
+  ERROR
+}
+
+model MerchantOtpSettings {
+  id     String @id @default(uuid())
+  shopId String @unique
+
+  otpEnabled            Boolean         @default(true)
+  providerMode          OtpProviderMode @default(PLATFORM_TWILIO)
+  allowPlatformFallback Boolean         @default(true)
+  defaultCountryCode    String          @default("IN")
+  allowedCountryCodes   String[]        @default(["IN"])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  shop           Shop                    @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  twilioSettings MerchantTwilioSettings?
+  msg91Settings  MerchantMsg91Settings?
+
+  @@index([shopId])
+}
+
+model MerchantTwilioSettings {
+  id                    String @id @default(uuid())
+  merchantOtpSettingsId String @unique
+
+  accountSidMasked          String?
+  accountSidEncrypted       String?
+  authTokenEncrypted        String?
+  verifyServiceSidMasked    String?
+  verifyServiceSidEncrypted String?
+
+  status                    OtpProviderStatus @default(NOT_CONFIGURED)
+  verifiedAt                DateTime?
+  lastVerifiedAt            DateTime?
+  lastVerificationErrorCode String?
+  createdAt                 DateTime          @default(now())
+  updatedAt                 DateTime          @updatedAt
+
+  merchantOtpSettings MerchantOtpSettings @relation(fields: [merchantOtpSettingsId], references: [id], onDelete: Cascade)
+}
+
+model MerchantMsg91Settings {
+  id                    String @id @default(uuid())
+  merchantOtpSettingsId String @unique
+
+  authKeyEncrypted    String?
+  templateIdMasked    String?
+  templateIdEncrypted String?
+  senderId            String?
+
+  status                    OtpProviderStatus @default(NOT_CONFIGURED)
+  kycApproved               Boolean           @default(false)
+  dltApproved               Boolean           @default(false)
+  templateApproved          Boolean           @default(false)
+  verifiedAt                DateTime?
+  lastVerificationErrorCode String?
+  createdAt                 DateTime          @default(now())
+  updatedAt                 DateTime          @updatedAt
+
+  merchantOtpSettings MerchantOtpSettings @relation(fields: [merchantOtpSettingsId], references: [id], onDelete: Cascade)
+}
+
+enum PromotionRuleStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  ARCHIVED
+}
+
+enum PromotionTriggerType {
+  PRODUCT
+  COLLECTION
+  PRODUCT_TYPE
+}
+
+enum PromotionTriggerMatchMode {
+  ANY
+  ALL
+}
+
+enum PromotionRewardType {
+  PERCENTAGE_OFF
+  FIXED_AMOUNT_OFF
+  FIXED_PRICE
+}
+
+enum PromotionRewardScope {
+  PRODUCT
+  ORDER
+}
+
+enum PromotionRewardMethod {
+  PERCENTAGE
+  FIXED_AMOUNT
+  FIXED_PRICE
+}
+
+enum PromotionTierSelectionMode {
+  HIGHEST_ELIGIBLE
+}
+
+enum PromotionTierContinuityMode {
+  CONTINUOUS
+  ALLOW_GAPS
+}
+
+enum PromotionOrderDiscountBasis {
+  ELIGIBLE_MERCHANDISE_SUBTOTAL
+}
+
+enum PromotionCompilationStatus {
+  PENDING
+  COMPILING
+  READY
+  FAILED
+  SUPERSEDED
+}
+
+enum PromotionRuntimeSyncStateValue {
+  NEVER_SYNCED
+  SYNCING
+  SYNCED
+  FAILED
+}
+
+enum PromotionCompilationReason {
+  RULE_CREATED
+  RULE_UPDATED
+  MANUAL_RECOMPILE
+  COLLECTION_CHANGED
+  PRODUCT_CHANGED
+  PRODUCT_TYPE_CHANGED
+  SCHEDULE_RECONCILIATION
+  SYSTEM_REPAIR
+}
+
+model PromotionRule {
+  id                            String                       @id @default(uuid())
+  shopId                        String
+  name                          String
+  description                   String?
+  status                        PromotionRuleStatus          @default(DRAFT)
+  priority                      Int                          @default(0)
+  triggerType                   PromotionTriggerType
+  triggerMatchMode              PromotionTriggerMatchMode    @default(ANY)
+  minimumTriggerQuantity        Int                          @default(1)
+  minimumCartSubtotal           Decimal?                     @db.Decimal(18, 4)
+  offerProductGid               String
+  offerProductHandle            String?
+  offerProductTitle             String?
+  offerProductImageUrl          String?
+  rewardType                    PromotionRewardType
+  rewardValue                   Decimal                      @db.Decimal(18, 4)
+  rewardScope                   PromotionRewardScope         @default(PRODUCT)
+  rewardMethod                  PromotionRewardMethod?
+  tierSelectionMode             PromotionTierSelectionMode?
+  tierContinuityMode            PromotionTierContinuityMode?
+  orderDiscountBasis            PromotionOrderDiscountBasis?
+  maximumRewardQuantity         Int                          @default(1)
+  heading                       String?
+  badgeText                     String?
+  customerMessage               String?
+  ctaText                       String?
+  combinesWithProductDiscounts  Boolean                      @default(false)
+  combinesWithOrderDiscounts    Boolean                      @default(true)
+  combinesWithShippingDiscounts Boolean                      @default(true)
+  startsAt                      DateTime?
+  endsAt                        DateTime?
+  currentCompilationId          String?                      @unique
+  compiledAt                    DateTime?
+  createdByType                 String?
+  createdById                   String?
+  updatedByType                 String?
+  updatedById                   String?
+  archivedAt                    DateTime?
+  createdAt                     DateTime                     @default(now())
+  updatedAt                     DateTime                     @updatedAt
+
+  shop               Shop                        @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  triggerReferences  PromotionTriggerReference[]
+  orderTiers         PromotionOrderTier[]
+  compilations       PromotionCompilation[]      @relation("PromotionRuleCompilations")
+  auditLogs          PromotionAuditLog[]
+  currentCompilation PromotionCompilation?       @relation("PromotionRuleCurrentCompilation", fields: [currentCompilationId], references: [id], onDelete: SetNull)
+
+  @@index([shopId, status])
+  @@index([shopId, priority])
+  @@index([shopId, startsAt, endsAt])
+  @@index([shopId, triggerType])
+  @@index([shopId, offerProductGid])
+  @@index([shopId, archivedAt])
+}
+
+model PromotionOrderTier {
+  id              String   @id @default(uuid())
+  publicId        String
+  shopId          String
+  promotionRuleId String
+  minimumSubtotal Decimal  @db.Decimal(18, 4)
+  maximumSubtotal Decimal? @db.Decimal(18, 4)
+  percentage      Decimal  @db.Decimal(8, 4)
+  position        Int
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  shop          Shop          @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  promotionRule PromotionRule @relation(fields: [promotionRuleId], references: [id], onDelete: Cascade)
+
+  @@unique([promotionRuleId, publicId])
+  @@index([shopId, promotionRuleId])
+  @@index([promotionRuleId, position])
+}
+
+model PromotionTriggerReference {
+  id              String               @id @default(uuid())
+  promotionRuleId String
+  position        Int                  @default(0)
+  sourceType      PromotionTriggerType
+  referenceGid    String?
+  referenceValue  String?
+  normalizedValue String?
+  displayTitle    String?
+  displayHandle   String?
+  displayImageUrl String?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  promotionRule PromotionRule @relation(fields: [promotionRuleId], references: [id], onDelete: Cascade)
+
+  @@unique([promotionRuleId, sourceType, referenceGid])
+  @@unique([promotionRuleId, sourceType, normalizedValue])
+  @@index([promotionRuleId, position])
+  @@index([sourceType, referenceGid])
+  @@index([sourceType, normalizedValue])
+}
+
+model PromotionCompilation {
+  id                String                     @id @default(uuid())
+  promotionRuleId   String
+  version           Int
+  status            PromotionCompilationStatus @default(PENDING)
+  reason            PromotionCompilationReason
+  sourceHash        String
+  compiledHash      String?
+  triggerType       PromotionTriggerType
+  membershipCount   Int                        @default(0)
+  storefrontPayload Json?
+  functionPayload   Json?
+  diagnosticPayload Json?
+  errorCode         String?
+  errorMessage      String?
+  requestedAt       DateTime                   @default(now())
+  startedAt         DateTime?
+  completedAt       DateTime?
+  createdAt         DateTime                   @default(now())
+  updatedAt         DateTime                   @updatedAt
+
+  promotionRule  PromotionRule                 @relation("PromotionRuleCompilations", fields: [promotionRuleId], references: [id], onDelete: Cascade)
+  currentForRule PromotionRule?                @relation("PromotionRuleCurrentCompilation")
+  memberships    PromotionCompiledMembership[]
+
+  @@unique([promotionRuleId, version])
+  @@index([promotionRuleId, status])
+  @@index([status, requestedAt])
+  @@index([sourceHash])
+  @@index([compiledHash])
+}
+
+model PromotionCompiledMembership {
+  id                     String               @id @default(uuid())
+  promotionCompilationId String
+  productGid             String
+  sourceReferenceId      String?
+  sourceType             PromotionTriggerType
+  createdAt              DateTime             @default(now())
+
+  promotionCompilation PromotionCompilation @relation(fields: [promotionCompilationId], references: [id], onDelete: Cascade)
+
+  @@unique([promotionCompilationId, productGid])
+  @@index([promotionCompilationId])
+  @@index([productGid])
+  @@index([sourceType, productGid])
+}
+
+model PromotionRuntimeSyncState {
+  id                               String                         @id @default(uuid())
+  shopId                           String                         @unique
+  shopifyAutomaticDiscountId       String?
+  lastDeployedConfigurationVersion Int?
+  lastDeployedConfigurationHash    String?
+  lastRulesFingerprint             String?
+  lastDeployedRuleCount            Int                            @default(0)
+  lastSuccessfulSyncAt             DateTime?
+  synchronizationState             PromotionRuntimeSyncStateValue @default(NEVER_SYNCED)
+  lastAttemptedAt                  DateTime?
+  lastErrorCode                    String?
+  lastErrorMessage                 String?
+  synchronizationAttemptId         String?
+  synchronizationLeaseExpiresAt    DateTime?
+  lastVerifiedConfiguration        Json?
+  createdAt                        DateTime                       @default(now())
+  updatedAt                        DateTime                       @updatedAt
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@index([synchronizationState, lastAttemptedAt])
+  @@index([synchronizationAttemptId])
+  @@index([synchronizationLeaseExpiresAt])
+  @@index([shopifyAutomaticDiscountId])
+}
+
+model PromotionAuditLog {
+  id              String   @id @default(uuid())
+  shopId          String
+  promotionRuleId String?
+  action          String
+  actorType       String
+  actorId         String?
+  previousState   Json?
+  nextState       Json?
+  metadata        Json?
+  createdAt       DateTime @default(now())
+
+  shop          Shop           @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  promotionRule PromotionRule? @relation(fields: [promotionRuleId], references: [id], onDelete: SetNull)
+
+  @@index([shopId, createdAt])
+  @@index([promotionRuleId, createdAt])
+  @@index([action, createdAt])
 }
 
 model AuthSession {
@@ -79,6 +1008,7 @@ model AuthSession {
 
 model OTPChallenge {
   id            String    @id @default(uuid())
+  shopId        String
   phoneE164     String
   provider      String // twilio, msg91, mock
   providerSid   String?
@@ -92,6 +1022,11 @@ model OTPChallenge {
 
   customerProfileId String?
   customer          CustomerProfile? @relation(fields: [customerProfileId], references: [id])
+  shop              Shop             @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@index([shopId])
+  @@index([shopId, phoneE164])
+  @@index([shopId, phoneE164, status, createdAt])
 }
 
 model AuditEvent {
@@ -121,6 +1056,7 @@ enum ExchangeRequestStatus {
   PICKUP_COMPLETED
   ITEM_RECEIVED
   APPROVED
+  RETURN_RECEIVED
   REJECTED
   REPLACEMENT_PROCESSING
   REPLACEMENT_SHIPPED
@@ -141,6 +1077,77 @@ enum PaymentStatus {
   PAID
   FAILED
   EXPIRED
+  CANCELLED
+}
+
+enum CodAdvanceType {
+  FIXED
+  PERCENTAGE
+}
+
+enum CodAdvanceStatus {
+  CREATED
+  PAYMENT_PENDING
+  ADVANCE_PAID
+  ORDER_LINKED
+  FAILED
+  EXPIRED
+  CANCELLED
+}
+
+enum RefundSource {
+  ORDER_ACTION_REQUEST
+  SHOPIFY_REFUND
+  ISSUE_REQUEST
+  CANCELLATION_REQUEST
+  RTO_EVENT
+  ADMIN_EXCEPTION
+  ORDER_ADJUSTMENT
+}
+
+enum RefundMethod {
+  COD
+  PREPAID
+  NO_REFUND
+}
+
+enum RefundStatus {
+  PENDING
+  MANUAL_PENDING
+  NOT_REQUIRED
+  DETAILS_PENDING
+  DETAILS_SUBMITTED
+  REVIEW_PENDING
+  APPROVED
+  REJECTED
+  PAYOUT_PENDING
+  PAID
+  FAILED
+  CANCELLED
+}
+
+enum RefundPayoutRail {
+  UPI
+  BANK_TRANSFER
+}
+
+enum RefundPayoutStatus {
+  CREATED
+  IN_PROGRESS
+  SUCCESS
+  FAILED
+  CANCELLED
+}
+
+enum RefundActorType {
+  SYSTEM
+  ADMIN
+  CUSTOMER
+}
+
+enum ExchangePaymentInvoiceStatus {
+  GENERATED
+  SENT
   CANCELLED
 }
 
@@ -179,17 +1186,22 @@ model OrderActionRequest {
   deliveryDateSnapshot  DateTime?
   eligibilityDecision   String?
   eligibilityReason     String?
+  megaskaOrderId        String?
 
-  customerProfile CustomerProfile    @relation(fields: [customerProfileId], references: [id])
-  shop            Shop?              @relation(fields: [shopId], references: [id], onDelete: SetNull)
+  customerProfile CustomerProfile          @relation(fields: [customerProfileId], references: [id])
+  shop            Shop?                    @relation(fields: [shopId], references: [id], onDelete: SetNull)
   items           OrderActionItem[]
   payments        RequestPayment[]
+  invoices        ExchangePaymentInvoice[]
   shipments       ShipmentTracking[]
+  refundRequests  RefundRequest[]
+  megaskaOrder    MegaskaOrder?            @relation(fields: [megaskaOrderId], references: [id], onDelete: SetNull)
 
   @@index([customerProfileId])
   @@index([status])
   @@index([orderNumber])
   @@index([shopId])
+  @@index([megaskaOrderId])
 }
 
 model OrderActionItem {
@@ -229,11 +1241,89 @@ model RequestPayment {
   createdAt           DateTime        @default(now())
   updatedAt           DateTime        @updatedAt
 
-  request OrderActionRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  request OrderActionRequest      @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  invoice ExchangePaymentInvoice?
 
   @@index([requestId])
   @@index([status])
   @@index([paymentLinkId])
+}
+
+model CodAdvanceSettings {
+  id                        String         @id @default(uuid())
+  shopId                    String
+  enabled                   Boolean        @default(false)
+  advanceType               CodAdvanceType @default(FIXED)
+  fixedAdvanceAmountPaise   Int            @default(12000)
+  percentageBasisPoints     Int?
+  minimumAdvanceAmountPaise Int?
+  maximumAdvanceAmountPaise Int?
+  customerTitle             String?
+  customerMessage           String?
+  version                   Int            @default(1)
+  currency                  String         @default("INR")
+  minOrderAmountPaise       Int?
+  maxOrderAmountPaise       Int?
+  policyText                String?
+  createdAt                 DateTime       @default(now())
+  updatedAt                 DateTime       @updatedAt
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@index([shopId])
+}
+
+model CodAdvanceIntent {
+  id                         String           @id @default(uuid())
+  shopId                     String
+  customerProfileId          String?
+  cartReference              String?
+  checkoutReference          String?
+  expressCheckoutIntentId    String?
+  settingsId                 String?
+  settingsVersion            Int?
+  advanceType                CodAdvanceType?
+  advanceValueSnapshot       Int?
+  pricingFingerprint         String?
+  cartFingerprint            String?
+  merchandiseAmountPaise     Int?
+  shopifyDiscountAmountPaise Int?
+  shippingAmountPaise        Int?
+  codFeeAmountPaise          Int?
+  storeCreditAppliedPaise    Int?
+  customerCashLiabilityPaise Int?
+  shopifyOrderId             String?
+  shopifyOrderName           String?
+  orderAmountPaise           Int
+  advanceAmountPaise         Int
+  codBalanceAmountPaise      Int
+  currency                   String           @default("INR")
+  status                     CodAdvanceStatus @default(CREATED)
+  razorpayPaymentLinkId      String?
+  razorpayPaymentLinkUrl     String?
+  razorpayPaymentId          String?
+  providerReferenceId        String?
+  paidAt                     DateTime?
+  verifiedAt                 DateTime?
+  consumedAt                 DateTime?
+  expiresAt                  DateTime?
+  shopifyDraftOrderId        String?
+  failureCode                String?
+  failureMessage             String?
+  metadata                   Json?
+  createdAt                  DateTime         @default(now())
+  updatedAt                  DateTime         @updatedAt
+
+  shop            Shop             @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  customerProfile CustomerProfile? @relation(fields: [customerProfileId], references: [id])
+
+  @@index([shopId])
+  @@index([status])
+  @@index([shopId, expressCheckoutIntentId])
+  @@index([shopId, status, expiresAt])
+  @@index([razorpayPaymentLinkId])
+  @@index([shopifyOrderId])
+  @@index([customerProfileId, createdAt])
 }
 
 model ShipmentTracking {
@@ -257,6 +1347,536 @@ model ShipmentTracking {
   @@index([requestId])
 }
 
+enum MegaskaOrderStatus {
+  ORDER_CONFIRMED
+  PROCESSING
+  PACKED
+  READY_FOR_PICKUP
+  PICKED_UP
+  IN_TRANSIT
+  OUT_FOR_DELIVERY
+  DELIVERED
+  DELIVERY_FAILED
+  RTO_INITIATED
+  RTO_DELIVERED
+  CANCELLED
+  RETURN_REQUESTED
+  RETURN_IN_TRANSIT
+  REFUNDED
+}
+
+enum MegaskaOrderDeliverySource {
+  SHOPIFY_FULFILLMENT
+  COURIER_SHIPMENT
+  INTERNAL_STATUS
+  MANUAL
+  MIGRATED
+}
+
+enum CourierProvider {
+  DELHIVERY
+  DTDC
+  ATS
+  OTHER
+}
+
+model MegaskaOrder {
+  id                String                      @id @default(uuid())
+  shopId            String
+  customerProfileId String
+  shopifyOrderId    String?
+  shopifyOrderName  String
+  orderPlacedAt     DateTime?
+  status            MegaskaOrderStatus          @default(ORDER_CONFIRMED)
+  statusSource      String?
+  statusUpdatedAt   DateTime?
+  deliveredAt       DateTime?
+  deliverySource    MegaskaOrderDeliverySource?
+  metadata          Json?
+  createdAt         DateTime                    @default(now())
+  updatedAt         DateTime                    @updatedAt
+
+  shop            Shop                 @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  customerProfile CustomerProfile      @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+  shipments       OrderShipment[]
+  actionRequests  OrderActionRequest[]
+  reviewRequests  ReviewRequest[]
+  productReviews  ProductReview[]
+
+  @@unique([shopId, shopifyOrderName])
+  @@index([customerProfileId, createdAt])
+  @@index([shopifyOrderId])
+  @@index([status])
+  @@index([shopId, deliveredAt])
+}
+
+model OrderShipment {
+  id                String             @id @default(uuid())
+  orderId           String
+  provider          CourierProvider    @default(OTHER)
+  providerReference String?
+  awb               String?
+  trackingUrl       String?
+  normalizedStatus  MegaskaOrderStatus @default(ORDER_CONFIRMED)
+  statusUpdatedAt   DateTime?
+  rawStatus         String?
+  metadata          Json?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  order  MegaskaOrder         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  events OrderShipmentEvent[]
+
+  @@index([orderId, createdAt])
+  @@index([provider, providerReference])
+  @@index([awb])
+}
+
+model OrderShipmentEvent {
+  id               String             @id @default(uuid())
+  shipmentId       String
+  occurredAt       DateTime
+  normalizedStatus MegaskaOrderStatus
+  rawStatus        String?
+  description      String?
+  location         String?
+  metadata         Json?
+  createdAt        DateTime           @default(now())
+
+  shipment OrderShipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+
+  @@index([shipmentId, occurredAt])
+}
+
+enum ReviewRequestTrigger {
+  FULFILLED
+  DELIVERED
+}
+
+enum ReviewRequestChannel {
+  EMAIL
+  SMS
+  WHATSAPP
+}
+
+enum ReviewRequestAttemptType {
+  INITIAL
+  REMINDER
+}
+
+enum ReviewRequestAttemptStatus {
+  PENDING
+  SENDING
+  ACCEPTED
+  DELIVERED
+  FAILED_RETRYABLE
+  FAILED_PERMANENT
+  CANCELLED
+  SUPPRESSED
+}
+
+enum ReviewRequestStatus {
+  PENDING_ELIGIBILITY
+  ELIGIBLE
+  SCHEDULED
+  READY
+  SENDING
+  SENT
+  DELIVERED
+  OPENED
+  CLICKED
+  SUBMITTED
+  SUPPRESSED
+  FAILED
+  REMINDER_SENT
+  COMPLETED
+  BLOCKED
+  EXPIRED
+  CANCELED
+}
+
+enum ReviewRequestBlockReason {
+  ORDER_NOT_DELIVERED
+  CUSTOMER_NOT_RESOLVED
+  PRODUCT_NOT_RESOLVED
+  CANCELED_ORDER
+  REFUNDED_ORDER
+  CANCELLATION_REQUEST
+  EXCHANGE_REQUEST
+  ISSUE_REQUEST
+  REFUND_REQUEST
+  PROTECTION_WINDOW
+  ALREADY_REVIEWED
+  REVIEWS_DISABLED
+  CUSTOMER_UNREACHABLE
+  OTHER
+}
+
+enum ProductReviewStatus {
+  DRAFT
+  PENDING_MODERATION
+  PUBLISHED
+  REJECTED
+  HIDDEN
+  DELETED
+}
+
+enum ProductReviewSource {
+  VERIFIED_PURCHASE
+  CUSTOMER_DASHBOARD
+  PRODUCT_PAGE
+  REVIEW_REQUEST_EMAIL
+  REVIEW_REQUEST_WHATSAPP
+  MANUAL_IMPORT
+  MERCHANT_CREATED
+}
+
+enum ProductReviewMediaType {
+  IMAGE
+  VIDEO
+}
+
+enum ProductReviewMediaStatus {
+  UPLOADING
+  READY
+  PROCESSING
+  REJECTED
+  FAILED
+  DELETED
+}
+
+model ReviewSettings {
+  id                                   String               @id @default(uuid())
+  shopId                               String               @unique
+  reviewsEnabled                       Boolean              @default(false)
+  automaticRequestsEnabled             Boolean              @default(false)
+  reviewRequestTrigger                 ReviewRequestTrigger @default(DELIVERED)
+  reviewRequestSendHourLocal           Int                  @default(10)
+  reviewRequestPrimaryChannel          ReviewRequestChannel @default(EMAIL)
+  reviewRequestEmailEnabled            Boolean              @default(true)
+  reviewRequestSmsEnabled              Boolean              @default(false)
+  reviewRequestWhatsappEnabled         Boolean              @default(false)
+  reviewRequestIncludeProductImage     Boolean              @default(true)
+  reviewRequestIncludeIncentiveText    Boolean              @default(false)
+  reviewRequestIncentiveText           String?
+  reviewRequestSenderName              String?
+  reviewRequestReplyToEmail            String?
+  reviewRequestSubjectTemplate         String?
+  reviewRequestBodyTemplate            String?
+  reviewRequestReminderSubjectTemplate String?
+  reviewRequestReminderBodyTemplate    String?
+  requestDelayDays                     Int                  @default(7)
+  reminderEnabled                      Boolean              @default(false)
+  reminderDelayDays                    Int                  @default(7)
+  maxReminderCount                     Int                  @default(1)
+  minimumRating                        Int                  @default(1)
+  maximumRating                        Int                  @default(5)
+  requireVerifiedPurchase              Boolean              @default(true)
+  moderationRequired                   Boolean              @default(true)
+  allowReviewEditing                   Boolean              @default(true)
+  reviewEditWindowDays                 Int                  @default(30)
+  allowReviewDeletion                  Boolean              @default(true)
+  allowMedia                           Boolean              @default(true)
+  maxMediaCount                        Int                  @default(5)
+  reviewMediaEnabled                   Boolean              @default(true)
+  reviewPhotoUploadsEnabled            Boolean              @default(true)
+  reviewVideoUploadsEnabled            Boolean              @default(true)
+  reviewMaxMediaItems                  Int                  @default(5)
+  reviewMaxPhotoSizeBytes              Int                  @default(8388608)
+  reviewMaxVideoSizeBytes              Int                  @default(41943040)
+  reviewMaxVideoDurationSeconds        Int                  @default(30)
+  exchangeProtectionDays               Int?
+  issueProtectionDays                  Int?
+  cancellationBlocksReview             Boolean              @default(true)
+  exchangeBlocksReview                 Boolean              @default(true)
+  issueBlocksReview                    Boolean              @default(true)
+  refundBlocksReview                   Boolean              @default(true)
+  storefrontReviewsEnabled             Boolean              @default(true)
+  showReviewSummary                    Boolean              @default(true)
+  showRatingDistribution               Boolean              @default(true)
+  showVerifiedPurchaseBadge            Boolean              @default(true)
+  reviewsPerPage                       Int                  @default(10)
+  defaultReviewSort                    String               @default("NEWEST")
+  showReviewDates                      Boolean              @default(true)
+  showVariantTitle                     Boolean              @default(true)
+  reviewSectionHeading                 String               @default("Customer reviews")
+  reviewEmptyStateText                 String               @default("No reviews yet.")
+  reviewVerifiedPurchaseText           String               @default("Verified purchase")
+  reviewLoadMoreText                   String               @default("Load more reviews")
+  reviewWriteReviewText                String               @default("Write a review")
+  reviewCountTextTemplate              String               @default("{count} reviews")
+  reviewAccentColor                    String               @default("#111111")
+  reviewStarColor                      String               @default("#F5A623")
+  reviewHeadingColor                   String               @default("#111111")
+  reviewTextColor                      String               @default("#333333")
+  reviewMutedTextColor                 String               @default("#6B6B6B")
+  reviewBorderColor                    String               @default("#E5E5E5")
+  reviewBackgroundColor                String               @default("#FFFFFF")
+  reviewButtonBackgroundColor          String               @default("#111111")
+  reviewButtonTextColor                String               @default("#FFFFFF")
+  reviewAlignment                      String               @default("left")
+  reviewCardStyle                      String               @default("minimal")
+  reviewCornerRadius                   Int                  @default(8)
+  reviewSectionSpacing                 String               @default("normal")
+  showReviewSectionHeading             Boolean              @default(true)
+  showWriteReviewButton                Boolean              @default(true)
+  createdAt                            DateTime             @default(now())
+  updatedAt                            DateTime             @updatedAt
+  shop                                 Shop                 @relation(fields: [shopId], references: [id], onDelete: Cascade)
+}
+
+model ReviewRequest {
+  id                      String                                @id @default(uuid())
+  shopId                  String
+  customerProfileId       String
+  megaskaOrderId          String
+  shopifyOrderId          String
+  shopifyOrderName        String?
+  shopifyLineItemId       String
+  shopifyProductId        String
+  shopifyVariantId        String?
+  productTitleSnapshot    String
+  variantTitleSnapshot    String?
+  productHandleSnapshot   String?
+  productImageUrlSnapshot String?
+  orderCreatedAt          DateTime?
+  deliveredAtSnapshot     DateTime?
+  triggerEventType        ReviewRequestTrigger?
+  triggerAt               DateTime?
+  nextAttemptAt           DateTime?
+  deliveredAt             DateTime?
+  openedAt                DateTime?
+  clickedAt               DateTime?
+  submittedAt             DateTime?
+  suppressedAt            DateTime?
+  lastReminderAt          DateTime?
+  claimToken              String?
+  claimedAt               DateTime?
+  claimExpiresAt          DateTime?
+  workerId                String?
+  status                  ReviewRequestStatus                   @default(PENDING_ELIGIBILITY)
+  blockReason             ReviewRequestBlockReason?
+  blockDetail             String?
+  eligibleAt              DateTime?
+  scheduledAt             DateTime?
+  sentAt                  DateTime?
+  reminderSentAt          DateTime?
+  completedAt             DateTime?
+  canceledAt              DateTime?
+  expiresAt               DateTime?
+  sendAttemptCount        Int                                   @default(0)
+  reminderCount           Int                                   @default(0)
+  tokenHash               String?                               @unique
+  tokenCreatedAt          DateTime?
+  tokenExpiresAt          DateTime?
+  tokenConsumedAt         DateTime?
+  tokenRevokedAt          DateTime?
+  submittedReviewId       String?
+  lastSendAttemptAt       DateTime?
+  lastSendErrorCode       String?
+  providerMessageId       String?
+  createdAt               DateTime                              @default(now())
+  updatedAt               DateTime                              @updatedAt
+  shop                    Shop                                  @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  customerProfile         CustomerProfile                       @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+  megaskaOrder            MegaskaOrder                          @relation(fields: [megaskaOrderId], references: [id], onDelete: Cascade)
+  review                  ProductReview?
+  deliveryAttempts        ProductReviewRequestDeliveryAttempt[]
+
+  @@unique([shopId, shopifyOrderId, shopifyLineItemId])
+  @@index([shopId, status, scheduledAt])
+  @@index([shopId, status, nextAttemptAt])
+  @@index([shopId, status, eligibleAt])
+  @@index([status, eligibleAt, id])
+  @@index([shopId, status, eligibleAt, id])
+  @@index([customerProfileId, status])
+  @@index([megaskaOrderId])
+  @@index([shopId, shopifyProductId])
+}
+
+model ProductReviewRequestDeliveryAttempt {
+  id                String                     @id @default(uuid())
+  shopId            String
+  reviewRequestId   String
+  channel           ReviewRequestChannel
+  attemptType       ReviewRequestAttemptType
+  attemptNumber     Int
+  status            ReviewRequestAttemptStatus @default(PENDING)
+  provider          String
+  providerMessageId String?
+  idempotencyKey    String
+  scheduledAt       DateTime
+  startedAt         DateTime?
+  completedAt       DateTime?
+  nextRetryAt       DateTime?
+  errorCode         String?
+  errorMessageSafe  String?
+  claimToken        String?
+  claimedAt         DateTime?
+  claimExpiresAt    DateTime?
+  createdAt         DateTime                   @default(now())
+  updatedAt         DateTime                   @updatedAt
+  shop              Shop                       @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  reviewRequest     ReviewRequest              @relation(fields: [reviewRequestId], references: [id], onDelete: Cascade)
+
+  @@unique([shopId, idempotencyKey])
+  @@index([shopId, reviewRequestId, createdAt])
+  @@index([shopId, status, nextRetryAt])
+}
+
+model ProductReview {
+  id                    String                      @id @default(uuid())
+  shopId                String
+  customerProfileId     String?
+  reviewRequestId       String?                     @unique
+  megaskaOrderId        String?
+  shopifyOrderId        String?
+  shopifyLineItemId     String?
+  shopifyProductId      String
+  shopifyVariantId      String?
+  source                ProductReviewSource         @default(VERIFIED_PURCHASE)
+  status                ProductReviewStatus         @default(PENDING_MODERATION)
+  rating                Int
+  title                 String?
+  body                  String?
+  customerDisplayName   String
+  verifiedPurchase      Boolean                     @default(false)
+  productTitleSnapshot  String
+  variantTitleSnapshot  String?
+  productHandleSnapshot String?
+  submittedAt           DateTime                    @default(now())
+  publishedAt           DateTime?
+  moderatedAt           DateTime?
+  moderatedBy           String?
+  rejectionReason       String?
+  rejectedAt            DateTime?
+  hiddenAt              DateTime?
+  deletedAt             DateTime?
+  moderationNote        String?
+  editedAt              DateTime?
+  editCount             Int                         @default(0)
+  lastEditedAt          DateTime?
+  editVersion           Int                         @default(0)
+  createdAt             DateTime                    @default(now())
+  updatedAt             DateTime                    @updatedAt
+  shop                  Shop                        @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  customerProfile       CustomerProfile?            @relation(fields: [customerProfileId], references: [id], onDelete: SetNull)
+  reviewRequest         ReviewRequest?              @relation(fields: [reviewRequestId], references: [id], onDelete: SetNull)
+  megaskaOrder          MegaskaOrder?               @relation(fields: [megaskaOrderId], references: [id], onDelete: SetNull)
+  media                 ProductReviewMedia[]
+  merchantReply         ProductReviewMerchantReply?
+  editTokens            ProductReviewEditToken[]
+  revisions             ProductReviewRevision[]
+
+  // One customer may submit only one review for a purchased order line within a shop; another order line for the same product remains reviewable.
+  @@unique([shopId, customerProfileId, shopifyLineItemId])
+  @@index([shopId, shopifyProductId, status, publishedAt])
+  @@index([shopId, customerProfileId, submittedAt])
+  @@index([megaskaOrderId])
+  @@index([shopId, status, submittedAt])
+}
+
+model ProductReviewMedia {
+  id              String                   @id @default(uuid())
+  shopId          String
+  productReviewId String
+  mediaType       ProductReviewMediaType
+  status          ProductReviewMediaStatus @default(UPLOADING)
+  storageProvider String
+  storageKey      String
+  publicUrl       String?
+  thumbnailUrl    String?
+  mimeType        String?
+  sizeBytes       Int?
+  width           Int?
+  height          Int?
+  durationSeconds Int?
+  altText         String?
+  sortOrder       Int                      @default(0)
+  approved        Boolean                  @default(false)
+  moderationNote  String?
+  rejectedAt      DateTime?
+  deletedAt       DateTime?
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+  shop            Shop                     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  productReview   ProductReview            @relation(fields: [productReviewId], references: [id], onDelete: Cascade)
+
+  @@unique([storageProvider, storageKey])
+  @@unique([productReviewId, sortOrder])
+  @@index([productReviewId, sortOrder])
+  @@index([shopId, approved])
+  @@index([shopId, status])
+  @@index([shopId, createdAt])
+}
+
+model ProductReviewMerchantReply {
+  id              String        @id @default(uuid())
+  shopId          String
+  productReviewId String        @unique
+  body            String
+  authorLabel     String        @default("Store team")
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  shop            Shop          @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  productReview   ProductReview @relation(fields: [productReviewId], references: [id], onDelete: Cascade)
+
+  @@index([shopId, productReviewId])
+}
+
+model ProductReviewEditToken {
+  id              String        @id @default(uuid())
+  shopId          String
+  productReviewId String
+  tokenHash       String        @unique
+  expiresAt       DateTime
+  revokedAt       DateTime?
+  createdAt       DateTime      @default(now())
+  shop            Shop          @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  productReview   ProductReview @relation(fields: [productReviewId], references: [id], onDelete: Cascade)
+
+  @@index([shopId, productReviewId, expiresAt])
+}
+
+model ProductReviewRevision {
+  id              String        @id @default(uuid())
+  shopId          String
+  productReviewId String
+  previousRating  Int
+  previousTitle   String?
+  previousBody    String?
+  nextRating      Int
+  nextTitle       String?
+  nextBody        String?
+  mediaChanges    Json?
+  createdAt       DateTime      @default(now())
+  shop            Shop          @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  productReview   ProductReview @relation(fields: [productReviewId], references: [id], onDelete: Cascade)
+
+  @@index([shopId, productReviewId, createdAt])
+}
+
+model ProductReviewAggregate {
+  id               String    @id @default(uuid())
+  shopId           String
+  shopifyProductId String
+  publishedCount   Int       @default(0)
+  ratingSum        Int       @default(0)
+  averageRating    Decimal   @default(0) @db.Decimal(4, 3)
+  rating1Count     Int       @default(0)
+  rating2Count     Int       @default(0)
+  rating3Count     Int       @default(0)
+  rating4Count     Int       @default(0)
+  rating5Count     Int       @default(0)
+  lastPublishedAt  DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  shop             Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@unique([shopId, shopifyProductId])
+  @@index([shopId, averageRating])
+}
+
 enum WalletDirection {
   CREDIT
   DEBIT
@@ -275,6 +1895,9 @@ enum WalletSourceType {
   ISSUE_REQUEST
   ADMIN_MANUAL
   WALLET_RESERVATION
+  REFUND_REQUEST
+  CHECKOUT_INTENT
+  SHOPIFY_ORDER
 }
 
 enum WalletActorType {
@@ -284,22 +1907,26 @@ enum WalletActorType {
 
 model WalletAccount {
   id                String   @id @default(uuid())
+  shopId            String
   customerProfileId String
   currency          String   @default("INR")
   currentBalance    Int      @default(0)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
+  shop         Shop                @relation(fields: [shopId], references: [id], onDelete: Cascade)
   customer     CustomerProfile     @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
   transactions WalletTransaction[]
   reservations WalletReservation[]
 
-  @@unique([customerProfileId, currency])
+  @@unique([shopId, customerProfileId, currency])
+  @@index([shopId])
   @@index([customerProfileId])
 }
 
 model WalletTransaction {
   id                String                @id @default(uuid())
+  shopId            String
   walletAccountId   String
   customerProfileId String
   direction         WalletDirection
@@ -316,13 +1943,17 @@ model WalletTransaction {
   createdById       String?
   createdAt         DateTime              @default(now())
 
-  walletAccount WalletAccount   @relation(fields: [walletAccountId], references: [id], onDelete: Cascade)
-  customer      CustomerProfile @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+  shop                  Shop            @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  walletAccount         WalletAccount   @relation(fields: [walletAccountId], references: [id], onDelete: Cascade)
+  customer              CustomerProfile @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+  settledRefundRequests RefundRequest[]
 
   @@unique([sourceType, sourceId, transactionType])
   @@index([customerProfileId, createdAt])
   @@index([walletAccountId, createdAt])
   @@index([sourceType, sourceId])
+  @@index([shopId, customerProfileId, createdAt])
+  @@index([shopId, sourceType, sourceId])
 }
 
 enum WalletReservationStatus {
@@ -369,6 +2000,103 @@ model WalletReservation {
   @@index([shopId, status, expiresAt])
 }
 
+model RefundRequest {
+  id                   String       @id @default(uuid())
+  shopId               String
+  source               RefundSource
+  sourceId             String
+  method               RefundMethod @default(COD)
+  status               RefundStatus @default(DETAILS_PENDING)
+  currency             String       @default("INR")
+  amount               Int
+  customerProfileId    String?
+  orderActionRequestId String?
+  walletTransactionId  String?
+  shopifyOrderId       String?
+  shopifyRefundId      String?
+  reason               String?
+  customerNote         String?
+  adminNote            String?
+  metadata             Json?
+  detailsSubmittedAt   DateTime?
+  approvedAt           DateTime?
+  rejectedAt           DateTime?
+  paidAt               DateTime?
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+
+  shop               Shop                 @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  customerProfile    CustomerProfile?     @relation(fields: [customerProfileId], references: [id], onDelete: SetNull)
+  orderActionRequest OrderActionRequest?  @relation(fields: [orderActionRequestId], references: [id], onDelete: SetNull)
+  walletTransaction  WalletTransaction?   @relation(fields: [walletTransactionId], references: [id], onDelete: SetNull)
+  payoutDetails      RefundPayoutDetails?
+  payouts            RefundPayout[]
+  events             RefundEvent[]
+
+  @@unique([shopId, source, sourceId])
+  @@index([shopId, status, createdAt])
+  @@index([customerProfileId, createdAt])
+  @@index([orderActionRequestId])
+  @@index([walletTransactionId])
+}
+
+model RefundPayoutDetails {
+  id                String           @id @default(uuid())
+  refundRequestId   String           @unique
+  rail              RefundPayoutRail
+  accountHolderName String?
+  bankAccountMasked String?
+  bankAccountEnc    String?
+  bankIfsc          String?
+  upiIdMasked       String?
+  upiIdEnc          String?
+  phoneMasked       String?
+  phoneEnc          String?
+  verifiedAt        DateTime?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  refundRequest RefundRequest @relation(fields: [refundRequestId], references: [id], onDelete: Cascade)
+}
+
+model RefundPayout {
+  id                  String             @id @default(uuid())
+  refundRequestId     String
+  status              RefundPayoutStatus @default(CREATED)
+  provider            String? // manual, razorpay, etc.
+  providerReferenceId String?
+  amount              Int
+  currency            String             @default("INR")
+  initiatedAt         DateTime?
+  completedAt         DateTime?
+  failureReason       String?
+  metadata            Json?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  refundRequest RefundRequest @relation(fields: [refundRequestId], references: [id], onDelete: Cascade)
+
+  @@index([refundRequestId, createdAt])
+  @@index([status, createdAt])
+}
+
+model RefundEvent {
+  id              String          @id @default(uuid())
+  refundRequestId String
+  actorType       RefundActorType
+  actorId         String?
+  eventType       String
+  fromStatus      RefundStatus?
+  toStatus        RefundStatus?
+  message         String?
+  payload         Json?
+  createdAt       DateTime        @default(now())
+
+  refundRequest RefundRequest @relation(fields: [refundRequestId], references: [id], onDelete: Cascade)
+
+  @@index([refundRequestId, createdAt])
+}
+
 enum GstDocumentType {
   TAX_INVOICE
   CREDIT_NOTE
@@ -400,22 +2128,24 @@ enum GstSupplyType {
 }
 
 model GstSettings {
-  id                    String               @id @default(uuid())
-  shopId                String?
-  legalName             String
-  tradeName             String?
-  gstin                 String               @unique
-  pan                   String?
-  stateCode             String
-  invoicePrefix         String
-  creditNotePrefix      String
-  debitNotePrefix       String
-  invoiceNumberStrategy GstNumberingStrategy
-  defaultCurrency       String               @default("INR")
-  einvoiceEnabled       Boolean              @default(false)
-  isActive              Boolean              @default(true)
-  createdAt             DateTime             @default(now())
-  updatedAt             DateTime             @updatedAt
+  id                        String               @id @default(uuid())
+  shopId                    String
+  legalName                 String
+  tradeName                 String?
+  gstin                     String               @unique
+  pan                       String?
+  stateCode                 String
+  invoicePrefix             String
+  creditNotePrefix          String
+  debitNotePrefix           String
+  invoiceNumberStrategy     GstNumberingStrategy
+  defaultCurrency           String               @default("INR")
+  priceIncludesTax          Boolean              @default(true)
+  einvoiceEnabled           Boolean              @default(false)
+  autoGenerateOnOrderCreate Boolean              @default(false)
+  isActive                  Boolean              @default(true)
+  createdAt                 DateTime             @default(now())
+  updatedAt                 DateTime             @updatedAt
 
   documents          GstDocument[]
   counters           GstCounter[]
@@ -425,7 +2155,7 @@ model GstSettings {
   orderImports       GstOrderImport[]
   invoiceTemplates   GstInvoiceTemplate[]
   reportRuns         GstReportRun[]
-  shop               Shop?                  @relation(fields: [shopId], references: [id], onDelete: SetNull)
+  shop               Shop                   @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
   @@index([shopId])
 }
@@ -721,7 +2451,7 @@ model GstHsnSlabMap {
 
 model GstProductTaxMap {
   id               String    @id @default(uuid())
-  shopId           String?
+  shopId           String
   shopifyProductId String
   shopifyVariantId String?
   hsnId            String
@@ -737,7 +2467,7 @@ model GstProductTaxMap {
 
   hsn  GstHsnCode @relation(fields: [hsnId], references: [id], onDelete: Restrict)
   slab GstTaxSlab @relation(fields: [slabId], references: [id], onDelete: Restrict)
-  shop Shop?      @relation(fields: [shopId], references: [id], onDelete: SetNull)
+  shop Shop       @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
   @@unique([shopId, shopifyProductId, shopifyVariantId])
   @@index([shopId])
@@ -746,9 +2476,30 @@ model GstProductTaxMap {
   @@index([status])
 }
 
+model GstSkuTaxMap {
+  id        String   @id @default(uuid())
+  shopId    String
+  sku       String?
+  styleCode String?
+  hsnCode   String
+  taxRate   Decimal  @db.Decimal(5, 2)
+  cessRate  Decimal  @default(0) @db.Decimal(5, 2)
+  source    String   @default("BULK_CSV")
+  status    String   @default("ACTIVE")
+  metadata  Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@index([shopId, sku])
+  @@index([shopId, styleCode])
+  @@index([status])
+}
+
 model GstOrderImport {
   id                String    @id @default(uuid())
-  shopId            String?
+  shopId            String
   gstSettingsId     String
   shopifyOrderId    String
   shopifyOrderName  String
@@ -768,7 +2519,7 @@ model GstOrderImport {
   updatedAt         DateTime  @updatedAt
 
   gstSettings GstSettings          @relation(fields: [gstSettingsId], references: [id], onDelete: Cascade)
-  shop        Shop?                @relation(fields: [shopId], references: [id], onDelete: SetNull)
+  shop        Shop                 @relation(fields: [shopId], references: [id], onDelete: Cascade)
   lines       GstOrderImportLine[]
 
   @@unique([shopId, shopifyOrderId])
@@ -851,4 +2602,343 @@ model GstReportRun {
 
   @@index([gstSettingsId, reportType, periodStart, periodEnd])
   @@index([status, createdAt])
+}
+
+model ExchangePaymentInvoice {
+  id                 String                       @id @default(uuid())
+  requestPaymentId   String                       @unique
+  requestId          String
+  invoiceNumber      String                       @unique
+  invoiceDate        DateTime
+  invoiceStatus      ExchangePaymentInvoiceStatus @default(GENERATED)
+  customerName       String
+  customerPhone      String?
+  customerEmail      String?
+  orderNumber        String
+  description        String
+  amountPaise        Int
+  taxableAmountPaise Int
+  gstRatePercent     Float
+  cgstPaise          Int                          @default(0)
+  sgstPaise          Int                          @default(0)
+  igstPaise          Int                          @default(0)
+  totalPaise         Int
+  currency           String                       @default("INR")
+  pdfUrl             String?
+  htmlSnapshot       String?
+  textSnapshot       String?
+  sentAt             DateTime?
+  createdAt          DateTime                     @default(now())
+  updatedAt          DateTime                     @updatedAt
+
+  requestPayment RequestPayment     @relation(fields: [requestPaymentId], references: [id], onDelete: Cascade)
+  request        OrderActionRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([requestId])
+}
+
+enum ExpressCheckoutIntentStatus {
+  CREATED
+  CUSTOMER_AUTHENTICATED
+  CART_SNAPSHOT_LOCKED
+  ADDRESS_CAPTURED
+  DISCOUNT_APPLIED
+  PAYMENT_METHOD_SELECTED
+  PAYMENT_PENDING
+  PAYMENT_CONFIRMED
+  ORDER_CREATING
+  ORDER_CREATED
+  FAILED
+  EXPIRED
+  CANCELLED
+  INITIATED
+  SESSION_VERIFIED
+  ADDRESS_COMPLETED
+  DELIVERY_VALIDATED
+  COUPON_APPLIED
+  PAYMENT_SELECTED
+  DRAFT_ORDER_CREATED
+  PAYMENT_SUCCESS
+  ORDER_COMPLETED
+  PAYMENT_FAILED
+  PAYMENT_CANCELLED
+  ABANDONED
+}
+
+enum ExpressCheckoutPaymentMethod {
+  PREPAID
+  COD
+}
+
+enum ExpressCheckoutPaymentStatus {
+  NOT_REQUIRED
+  PENDING
+  CONFIRMED
+  FAILED
+  REFUNDED
+}
+
+enum ExpressCheckoutPaymentPurpose {
+  ORDER_PREPAID
+  COD_ADVANCE
+}
+
+enum ExpressCheckoutDiscountType {
+  MANUAL_CODE
+  AUTOMATIC
+}
+
+enum ShopifyCheckoutPricingSnapshotStatus {
+  CURRENT
+  INVALIDATED
+}
+
+enum CheckoutRecoveryType {
+  CHECKOUT_ABANDONMENT
+  PAYMENT_ABANDONMENT
+}
+
+enum CheckoutRecoveryTokenStatus {
+  ACTIVE
+  USED
+  EXPIRED
+  REVOKED
+}
+
+model ExpressCheckoutIntent {
+  id                    String                        @id @default(uuid())
+  shopId                String
+  customerProfileId     String?
+  sessionTokenHash      String?
+  status                ExpressCheckoutIntentStatus   @default(CREATED)
+  phoneSnapshot         String?
+  cartToken             String?
+  shopifyCartId         String?
+  cartSnapshot          Json?
+  subtotalAmountPaise   Int                           @default(0)
+  discountAmountPaise   Int                           @default(0)
+  shippingAmountPaise   Int                           @default(0)
+  codFeeAmountPaise     Int                           @default(0)
+  totalAmountPaise      Int                           @default(0)
+  currency              String                        @default("INR")
+  selectedPaymentMethod ExpressCheckoutPaymentMethod?
+  expiresAt             DateTime?
+  createdAt             DateTime                      @default(now())
+  updatedAt             DateTime                      @updatedAt
+
+  addressSnapshots ExpressCheckoutAddressSnapshot[]
+  discounts        ExpressCheckoutDiscount[]
+  payments         ExpressCheckoutPayment[]
+  orderLink        ExpressCheckoutOrderLink?
+  recoveryTokens   CheckoutRecoveryToken[]
+  pricingSnapshots ShopifyCheckoutPricingSnapshot[]
+
+  @@unique([shopId, id])
+  @@index([shopId, id])
+  @@index([shopId, customerProfileId])
+  @@index([shopId, status])
+  @@index([shopId, sessionTokenHash])
+  @@index([shopId, cartToken])
+  @@index([shopId, shopifyCartId])
+}
+
+model ShopifyCheckoutPricingSnapshot {
+  id                     String                               @id @default(uuid())
+  publicId               String                               @unique @default(uuid())
+  shopId                 String
+  checkoutIntentId       String
+  shopifyDraftOrderId    String?
+  source                 String                               @default("SHOPIFY")
+  status                 ShopifyCheckoutPricingSnapshotStatus @default(CURRENT)
+  currency               String?
+  subtotalMinor          Int?
+  discountsMinor         Int?
+  shippingMinor          Int?
+  totalTaxMinor          Int?
+  totalPayableMinor      Int?
+  taxesIncluded          Boolean?
+  taxSummary             Json?
+  cartFingerprint        String?
+  addressFingerprint     String?
+  shippingFingerprint    String?
+  discountFingerprint    String?
+  storeCreditFingerprint String?
+  refreshReason          String?
+  invalidatedAt          DateTime?
+  invalidationReason     String?
+  authoritativeAt        DateTime?
+  createdAt              DateTime                             @default(now())
+  updatedAt              DateTime                             @updatedAt
+
+  shop           Shop                  @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  checkoutIntent ExpressCheckoutIntent @relation(fields: [shopId, checkoutIntentId], references: [shopId, id], onDelete: Cascade)
+
+  @@unique([shopId, checkoutIntentId])
+  @@index([shopId, status])
+  @@index([shopId, shopifyDraftOrderId])
+}
+
+model CheckoutRecoveryToken {
+  id                String                      @id @default(uuid())
+  shopId            String
+  checkoutIntentId  String
+  customerProfileId String?
+  tokenHash         String                      @unique
+  recoveryType      CheckoutRecoveryType
+  status            CheckoutRecoveryTokenStatus @default(ACTIVE)
+  expiresAt         DateTime
+  clickedAt         DateTime?
+  usedAt            DateTime?
+  revokedAt         DateTime?
+  createdAt         DateTime                    @default(now())
+  updatedAt         DateTime                    @updatedAt
+  metadata          Json?
+
+  shop            Shop                  @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  checkoutIntent  ExpressCheckoutIntent @relation(fields: [checkoutIntentId], references: [id], onDelete: Cascade)
+  customerProfile CustomerProfile?      @relation(fields: [customerProfileId], references: [id], onDelete: SetNull)
+
+  @@index([shopId, tokenHash, status])
+  @@index([shopId, checkoutIntentId])
+}
+
+model ExpressCheckoutAddressSnapshot {
+  id                String   @id @default(uuid())
+  shopId            String
+  intentId          String
+  customerProfileId String?
+  name              String
+  phone             String
+  email             String?
+  address1          String
+  address2          String?
+  city              String
+  province          String
+  country           String   @default("India")
+  zip               String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  intent ExpressCheckoutIntent @relation(fields: [intentId], references: [id], onDelete: Cascade)
+
+  @@index([shopId, id])
+  @@index([shopId, intentId])
+  @@index([shopId, customerProfileId])
+}
+
+model ExpressCheckoutDiscount {
+  id                  String                      @id @default(uuid())
+  shopId              String
+  intentId            String
+  type                ExpressCheckoutDiscountType
+  code                String?
+  title               String?
+  discountAmountPaise Int                         @default(0)
+  rawShopifyPayload   Json?
+  createdAt           DateTime                    @default(now())
+  updatedAt           DateTime                    @updatedAt
+
+  intent ExpressCheckoutIntent @relation(fields: [intentId], references: [id], onDelete: Cascade)
+
+  @@index([shopId, id])
+  @@index([shopId, intentId])
+  @@index([shopId, code])
+}
+
+model ExpressCheckoutPayment {
+  id                    String                        @id @default(uuid())
+  shopId                String
+  intentId              String
+  method                ExpressCheckoutPaymentMethod
+  purpose               ExpressCheckoutPaymentPurpose @default(ORDER_PREPAID)
+  status                ExpressCheckoutPaymentStatus  @default(PENDING)
+  amountPaise           Int                           @default(0)
+  currency              String                        @default("INR")
+  verifiedAt            DateTime?
+  providerAmountPaise   Int?
+  providerCurrency      String?
+  razorpayOrderId       String?
+  razorpayPaymentId     String?
+  razorpaySignatureHash String?
+  failureReason         String?
+  rawGatewayPayload     Json?
+  createdAt             DateTime                      @default(now())
+  updatedAt             DateTime                      @updatedAt
+
+  intent ExpressCheckoutIntent @relation(fields: [intentId], references: [id], onDelete: Cascade)
+
+  @@unique([shopId, razorpayOrderId])
+  @@unique([shopId, razorpayPaymentId])
+  @@index([shopId, id])
+  @@index([shopId, intentId])
+  @@index([shopId, status])
+}
+
+model ExpressCheckoutOrderLink {
+  id                String   @id @default(uuid())
+  shopId            String
+  intentId          String   @unique
+  draftOrderId      String?
+  draftOrderName    String?
+  shopifyOrderId    String?
+  shopifyOrderName  String?
+  financialStatus   String?
+  fulfillmentStatus String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  intent ExpressCheckoutIntent @relation(fields: [intentId], references: [id], onDelete: Cascade)
+
+  @@unique([shopId, intentId])
+  @@index([shopId, id])
+  @@index([shopId, intentId])
+  @@index([shopId, shopifyOrderId])
+}
+
+model ShopModuleConfig {
+  id        String   @id @default(uuid())
+  shopId    String
+  moduleKey String
+  enabled   Boolean  @default(false)
+  config    Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@unique([shopId, moduleKey])
+  @@index([shopId])
+  @@index([moduleKey, enabled])
+}
+
+model ShopProxyRoute {
+  id           String   @id @default(uuid())
+  shopId       String
+  routeKey     String
+  proxyPrefix  String
+  proxySubpath String
+  targetModule String
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@unique([shopId, routeKey])
+  @@index([shopId, isActive])
+  @@index([targetModule, isActive])
+}
+
+model ShopInstallationEvent {
+  id        String   @id @default(uuid())
+  shopId    String
+  eventType String
+  scopes    String?
+  payload   Json?
+  createdAt DateTime @default(now())
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@index([shopId, createdAt])
+  @@index([eventType, createdAt])
 }
