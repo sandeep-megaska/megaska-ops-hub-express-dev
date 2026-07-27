@@ -44,7 +44,6 @@ async function fetchOrderStatus({ shopifyOrderGid, shop, generate }) {
 
 function Extension() {
   const { close, data, i18n } = shopify;
-  const shopifyOrderGid = data.selected[0].id;
 
   const [shopDomain, setShopDomain] = useState("");
   const [status, setStatus] = useState("loading");
@@ -59,10 +58,11 @@ function Extension() {
     let cancelled = false;
     (async () => {
       try {
+        const orderGid = data.selected[0].id;
         const shop = await fetchShopDomain();
         if (cancelled) return;
         setShopDomain(shop);
-        const result = await fetchOrderStatus({ shopifyOrderGid, shop, generate: false });
+        const result = await fetchOrderStatus({ shopifyOrderGid: orderGid, shop, generate: false });
         if (cancelled) return;
         setOrderStatus(result);
         setEmailAddress(result.customerEmail || "");
@@ -83,7 +83,8 @@ function Extension() {
     setGenerating(true);
     setErrorMessage(null);
     try {
-      const result = await fetchOrderStatus({ shopifyOrderGid, shop: shopDomain, generate: true });
+      const orderGid = data.selected[0].id;
+      const result = await fetchOrderStatus({ shopifyOrderGid: orderGid, shop: shopDomain, generate: true });
       if (result.error) {
         setErrorMessage(result.error);
       }
@@ -94,7 +95,8 @@ function Extension() {
     } finally {
       setGenerating(false);
     }
-  }, [shopifyOrderGid, shopDomain]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shopDomain]);
 
   const [downloading, setDownloading] = useState(false);
 
