@@ -299,6 +299,12 @@ export async function importOrderByShopifyId(
       normalizeString((await resolveShopConfig(context?.shopDomain)).id) ||
       null;
 
+    // Every GST row must be shop-scoped (multi-tenant integrity); never import
+    // an order under a null shop.
+    if (!resolvedShopId) {
+      return { ok: false, error: "A resolved shop is required to import an order for GST" };
+    }
+
     const activeSettings = await getActiveGstSettings({ shopId: resolvedShopId });
     if (!activeSettings.ok || !activeSettings.data) {
       return { ok: false, error: activeSettings.error || "No active GST settings configured" };

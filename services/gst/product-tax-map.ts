@@ -354,6 +354,10 @@ export async function resolveLineTaxMapping(input: ResolveLineTaxMappingInput): 
   };
 
   try {
+    // Shop-scoped only. There is no shopId: null fallback: after the
+    // multi-tenant integrity migration no GST row is null-scoped, and a
+    // cross-shop fallback would resolve one merchant's mapping for another's
+    // order. shopId is always the resolved shop here.
     if (sku) {
       const skuMap = await productTaxDb.gstSkuTaxMap.findFirst({
         where: {

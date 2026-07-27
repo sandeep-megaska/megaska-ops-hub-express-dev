@@ -2129,7 +2129,7 @@ enum GstSupplyType {
 
 model GstSettings {
   id                    String               @id @default(uuid())
-  shopId                String?
+  shopId                String
   legalName             String
   tradeName             String?
   gstin                 String               @unique
@@ -2155,7 +2155,7 @@ model GstSettings {
   orderImports       GstOrderImport[]
   invoiceTemplates   GstInvoiceTemplate[]
   reportRuns         GstReportRun[]
-  shop               Shop?                  @relation(fields: [shopId], references: [id], onDelete: SetNull)
+  shop               Shop                   @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
   @@index([shopId])
 }
@@ -2451,7 +2451,7 @@ model GstHsnSlabMap {
 
 model GstProductTaxMap {
   id               String    @id @default(uuid())
-  shopId           String?
+  shopId           String
   shopifyProductId String
   shopifyVariantId String?
   hsnId            String
@@ -2467,7 +2467,7 @@ model GstProductTaxMap {
 
   hsn  GstHsnCode @relation(fields: [hsnId], references: [id], onDelete: Restrict)
   slab GstTaxSlab @relation(fields: [slabId], references: [id], onDelete: Restrict)
-  shop Shop?      @relation(fields: [shopId], references: [id], onDelete: SetNull)
+  shop Shop       @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
   @@unique([shopId, shopifyProductId, shopifyVariantId])
   @@index([shopId])
@@ -2478,7 +2478,7 @@ model GstProductTaxMap {
 
 model GstSkuTaxMap {
   id        String   @id @default(uuid())
-  shopId    String?
+  shopId    String
   sku       String?
   styleCode String?
   hsnCode   String
@@ -2490,7 +2490,7 @@ model GstSkuTaxMap {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  shop Shop? @relation(fields: [shopId], references: [id], onDelete: SetNull)
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
   @@index([shopId, sku])
   @@index([shopId, styleCode])
@@ -2499,7 +2499,7 @@ model GstSkuTaxMap {
 
 model GstOrderImport {
   id                String    @id @default(uuid())
-  shopId            String?
+  shopId            String
   gstSettingsId     String
   shopifyOrderId    String
   shopifyOrderName  String
@@ -2519,7 +2519,7 @@ model GstOrderImport {
   updatedAt         DateTime  @updatedAt
 
   gstSettings GstSettings          @relation(fields: [gstSettingsId], references: [id], onDelete: Cascade)
-  shop        Shop?                @relation(fields: [shopId], references: [id], onDelete: SetNull)
+  shop        Shop                 @relation(fields: [shopId], references: [id], onDelete: Cascade)
   lines       GstOrderImportLine[]
 
   @@unique([shopId, shopifyOrderId])

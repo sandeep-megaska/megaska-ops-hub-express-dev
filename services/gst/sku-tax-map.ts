@@ -251,20 +251,6 @@ export async function resolveSkuTaxMap(input: {
     return { ok: true, data: toMapResult(exactSku, "SKU") };
   }
 
-  // Falls back to a shop-agnostic mapping if this shop has none of its own,
-  // mirroring getActiveGstSettings' existing shopId-null fallback. Protects
-  // against a mapping ending up shopId: null (e.g. a request that briefly
-  // lost shop context) silently blocking invoice generation forever.
-  if (shopId) {
-    const globalSku = await skuMapDb.gstSkuTaxMap.findFirst({
-      where: { shopId: null, sku, status: "ACTIVE" },
-      orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
-    });
-    if (globalSku) {
-      return { ok: true, data: toMapResult(globalSku, "SKU") };
-    }
-  }
-
   const styleCode = deriveStyleCodeFromSku(sku);
   if (!styleCode) {
     return { ok: true, data: null };
@@ -276,16 +262,6 @@ export async function resolveSkuTaxMap(input: {
   });
   if (style) {
     return { ok: true, data: toMapResult(style, "STYLE") };
-  }
-
-  if (shopId) {
-    const globalStyle = await skuMapDb.gstSkuTaxMap.findFirst({
-      where: { shopId: null, styleCode, status: "ACTIVE" },
-      orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
-    });
-    if (globalStyle) {
-      return { ok: true, data: toMapResult(globalStyle, "STYLE") };
-    }
   }
 
   return { ok: true, data: null };
@@ -311,8 +287,13 @@ export async function upsertSkuTaxMapping(input: {
   if (!Number.isFinite(taxRate)) return { ok: false, error: "taxRate must be numeric" };
   if (!Number.isFinite(cessRate)) return { ok: false, error: "cessRate must be numeric" };
 
+  // Every GST row must be shop-scoped (multi-tenant integrity). Reject rather
+  // than persist a null-shop mapping that would leak across tenants.
+  const shopId = norm(input.shopId);
+  if (!shopId) return { ok: false, error: "A resolved shop is required to save a SKU mapping" };
+
   const existing = await skuMapDb.gstSkuTaxMap.findFirst({
-    where: sku ? { shopId: input.shopId || null, sku } : { shopId: input.shopId || null, styleCode },
+    where: sku ? { shopId, sku } : { shopId, styleCode },
     select: { id: true },
     orderBy: [{ updatedAt: "desc" }],
   });
@@ -332,7 +313,7 @@ export async function upsertSkuTaxMapping(input: {
       })
     : await skuMapDb.gstSkuTaxMap.create({
         data: {
-          shopId: input.shopId || null,
+          shopId,
           sku,
           styleCode,
           ...payload,
@@ -418,6 +399,11 @@ export async function importSkuMappingsCsv(
   csvText: string,
   shopId?: string | null,
 ): Promise<GstServiceResult<{ imported: number; skipped: number; errors: string[] }>> {
+  const resolvedShopId = norm(shopId);
+  if (!resolvedShopId) {
+    return { ok: false, error: "A resolved shop is required to import SKU mappings" };
+  }
+
   const rows = parseCsv(csvText);
   let imported = 0;
   let skipped = 0;
@@ -475,7 +461,7 @@ export async function importSkuMappingsCsv(
     }
 
     const existing = await skuMapDb.gstSkuTaxMap.findFirst({
-      where: sku ? { shopId: shopId || null, sku } : { shopId: shopId || null, styleCode },
+      where: sku ? { shopId: resolvedShopId, sku } : { shopId: resolvedShopId, styleCode },
       select: { id: true },
       orderBy: [{ updatedAt: "desc" }],
     });
@@ -496,7 +482,7 @@ export async function importSkuMappingsCsv(
     } else {
       await skuMapDb.gstSkuTaxMap.create({
         data: {
-          shopId: shopId || null,
+          shopId: resolvedShopId,
           sku,
           styleCode,
           ...payload,
