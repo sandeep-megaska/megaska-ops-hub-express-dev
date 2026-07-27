@@ -42,30 +42,14 @@ export async function GET(req: NextRequest) {
   const { requestedShopDomain, resolvedShop, usedGlobalFallback } = await resolveShopContext(req);
   const resolvedShopId = resolvedShop.id ?? null;
 
-  let settings =
-    resolvedShopId
-      ? await prisma.gstSettings.findFirst({
-          where: { isActive: true, shopId: resolvedShopId },
-          orderBy: { updatedAt: "desc" },
-        })
-      : null;
-
-  let usedFallbackGlobal = false;
-  if (!settings && resolvedShopId) {
-    settings = await prisma.gstSettings.findFirst({
-      where: { isActive: true, shopId: null },
-      orderBy: { updatedAt: "desc" },
-    });
-    usedFallbackGlobal = Boolean(settings);
-  }
-
-  if (!settings) {
-    settings = await prisma.gstSettings.findFirst({
-      where: { isActive: true, shopId: null },
-      orderBy: { updatedAt: "desc" },
-    });
-    usedFallbackGlobal = Boolean(settings);
-  }
+  // GST settings are always shop-scoped now; no shopId: null global fallback.
+  const settings = resolvedShopId
+    ? await prisma.gstSettings.findFirst({
+        where: { isActive: true, shopId: resolvedShopId },
+        orderBy: { updatedAt: "desc" },
+      })
+    : null;
+  const usedFallbackGlobal = false;
 
   if (!settings) {
     return NextResponse.json({ ok: false, error: "No active GST settings configured" }, { status: 404 });
@@ -110,14 +94,8 @@ async function saveSettings(req: NextRequest) {
     where: { shopId: resolvedShopId },
     orderBy: { updatedAt: "desc" },
   });
-  const fallbackGlobalSettings = existingShopSettings
-    ? null
-    : await prisma.gstSettings.findFirst({
-        where: { shopId: null, isActive: true },
-        orderBy: { updatedAt: "desc" },
-      });
-
-  const baseValues = existingShopSettings ?? fallbackGlobalSettings;
+  // GST settings are always shop-scoped now; no null-scoped global fallback.
+  const baseValues = existingShopSettings;
 
   const candidateInput: Partial<GstSettingsWriteInput> = {
     legalName: resolveString(body.legalName, baseValues?.legalName ?? ""),
@@ -189,13 +167,6 @@ async function saveSettings(req: NextRequest) {
         });
       }
 
-      if (fallbackGlobalSettings) {
-        return tx.gstSettings.update({
-          where: { id: fallbackGlobalSettings.id },
-          data: upsertData,
-        });
-      }
-
       return tx.gstSettings.create({ data: upsertData });
     });
 
@@ -217,9 +188,9 @@ async function saveSettings(req: NextRequest) {
         __debugVersion: DEBUG_VERSION,
         __resolvedShopDomain: resolvedShop.shopDomain || requestedShopDomain || null,
         __resolvedShopId: resolvedShopId,
-        __usedGlobalFallback: usedGlobalFallback || Boolean(fallbackGlobalSettings && !existingShopSettings),
+        __usedGlobalFallback: usedGlobalFallback,
       },
-      { status: existingShopSettings || fallbackGlobalSettings ? 200 : 201 },
+      { status: existingShopSettings ? 200 : 201 },
     );
   } catch (error) {
     const knownError = error as { message?: string; code?: string; meta?: unknown } | undefined;

@@ -33,6 +33,11 @@ export async function POST(req: NextRequest) {
 
   const resolvedShop = await resolveShopConfig(shopDomain || undefined);
   const resolvedShopId = resolvedShop.id ? String(resolvedShop.id).trim() : null;
+  if (!resolvedShopId) {
+    return withExtensionCors(
+      NextResponse.json({ ok: false, error: "Unable to resolve shop for this order." }, { status: 400 }),
+    );
+  }
 
   let orderImport = await prisma.gstOrderImport.findFirst({
     where: { shopId: resolvedShopId, shopifyOrderId },

@@ -20,7 +20,12 @@ export async function autoGenerateInvoiceForOrder(input: {
   shopDomain: string;
   orderName: string;
 }): Promise<AutoGenerateInvoiceResult> {
-  const settings = await getActiveGstSettings({ shopId: input.shopId });
+  const shopId = input.shopId;
+  if (!shopId) {
+    return { attempted: false, reason: "no-resolved-shop" };
+  }
+
+  const settings = await getActiveGstSettings({ shopId });
   if (!settings.ok || !settings.data) {
     return { attempted: false, reason: "no-active-gst-settings" };
   }
@@ -46,7 +51,7 @@ export async function autoGenerateInvoiceForOrder(input: {
   }
 
   const orderImport = await prisma.gstOrderImport.findFirst({
-    where: { shopId: input.shopId, shopifyOrderId },
+    where: { shopId, shopifyOrderId },
     select: { id: true },
   });
 
