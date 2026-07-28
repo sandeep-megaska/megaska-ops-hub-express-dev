@@ -127,7 +127,7 @@ async function mapLine(line: Record<string, unknown>, index: number, shopId?: st
   let mappingStatus: "MAPPED" | "UNMAPPED" = "UNMAPPED";
 
   if (shopifyProductId || normalizeString(line.sku)) {
-    const mapping = await resolveLineTaxMapping({ shopId, shopifyProductId, shopifyVariantId, sku: normalizeString(line.sku) || null });
+    const mapping = await resolveLineTaxMapping({ shopId, shopifyProductId, shopifyVariantId, sku: normalizeString(line.sku) || null, unitPrice });
     if (mapping.ok && mapping.data) {
       mappedHsnCode = normalizeString(mapping.data.hsnCode) || null;
       mappedTaxRate = Number.isFinite(mapping.data.taxRate) ? mapping.data.taxRate : null;
@@ -615,6 +615,7 @@ export async function recomputeImportedOrderMappings(options?: {
         shopifyProductId: normalizeString(line.shopifyProductId) || null,
         shopifyVariantId: normalizeString(line.shopifyVariantId) || null,
         sku: normalizeString(line.sku) || null,
+        unitPrice: parseNumber(line.unitPrice),
       }));
 
       const recalculated: Array<LineForReadiness> = [];
@@ -625,6 +626,7 @@ export async function recomputeImportedOrderMappings(options?: {
           shopifyProductId: line.shopifyProductId,
           shopifyVariantId: line.shopifyVariantId,
           sku: line.sku,
+          unitPrice: line.unitPrice,
         });
 
         const mapped = mapping.ok && mapping.data;

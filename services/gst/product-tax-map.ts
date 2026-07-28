@@ -1,4 +1,5 @@
 import { gstDb } from "./db";
+import { selectSkuBandRate } from "./sku-tax-map";
 import type { GstServiceResult } from "./types";
 
 export interface GstProductTaxMapRecord {
@@ -49,6 +50,7 @@ export interface ResolveLineTaxMappingInput {
   shopifyProductId?: string | null;
   shopifyVariantId?: string | null;
   sku?: string | null;
+  unitPrice?: number | null;
 }
 
 type ProductTaxDbClient = {
@@ -368,9 +370,10 @@ export async function resolveLineTaxMapping(input: ResolveLineTaxMappingInput): 
         orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
       });
       if (skuMap) {
+        const band = selectSkuBandRate(skuMap, input.unitPrice);
         return {
           ok: true,
-          data: mapResolvedResponse("SKU", null, normalize(skuMap.id) || null, skuMap.hsnCode, skuMap.taxRate, skuMap.cessRate),
+          data: mapResolvedResponse("SKU", null, normalize(skuMap.id) || null, skuMap.hsnCode, band.taxRate, band.cessRate),
         };
       }
     }
@@ -385,9 +388,10 @@ export async function resolveLineTaxMapping(input: ResolveLineTaxMappingInput): 
         orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
       });
       if (styleMap) {
+        const band = selectSkuBandRate(styleMap, input.unitPrice);
         return {
           ok: true,
-          data: mapResolvedResponse("STYLE", null, normalize(styleMap.id) || null, styleMap.hsnCode, styleMap.taxRate, styleMap.cessRate),
+          data: mapResolvedResponse("STYLE", null, normalize(styleMap.id) || null, styleMap.hsnCode, band.taxRate, band.cessRate),
         };
       }
     }

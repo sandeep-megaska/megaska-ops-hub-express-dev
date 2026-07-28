@@ -66,8 +66,13 @@ capabilities are missing (price-cap, collection rules, Shopify HS-field sync).
 
 1. **Consolidate onto the HSN master + product map**; make `GstSkuTaxMap` a
    resolution key into it, not a parallel source of truth.
-2. **Price-cap / threshold rates** — add price-band fields to the HSN→slab
-   mapping (e.g. `5% ≤ ₹2500 else 12%`).
+2. **Price-cap / threshold rates** — _(delivered)_ per-SKU price-band fields on
+   `GstSkuTaxMap` (`priceCapThreshold`, `taxRateAbove`, `cessRateAbove`): a line
+   priced above the threshold (per unit, as entered) uses the "above" rates, at
+   or below it the base rate. Threshold is per-SKU and customisable (e.g.
+   `5% ≤ ₹2500 else 12%`), not hardcoded. Applied in both resolution paths
+   (`resolveLineTaxMapping`, `resolveSkuTaxMap`) via the shared
+   `selectSkuBandRate` helper.
 3. **Collection Rules** — bulk-assign HSN by Shopify collection.
 4. **Shopify HS-field integration** — import HSN from the native HS/Tariff code
    (`source: "SHOPIFY"`); optionally write app HSN back to it.

@@ -22,6 +22,42 @@ function norm(value: unknown): string {
   return String(value || "").trim();
 }
 
+/**
+ * Normalise the optional price-cap slab trio. A slab exists only when a valid
+ * threshold is provided; then taxRateAbove is required and cessRateAbove
+ * defaults to 0. When no threshold is provided the slab is cleared (all null/0)
+ * so an edit can turn a slab back into a flat rate.
+ */
+function parseSlabInput(input: {
+  priceCapThreshold?: number | null;
+  taxRateAbove?: number | null;
+  cessRateAbove?: number | null;
+}):
+  | { ok: true; priceCapThreshold: number | null; taxRateAbove: number | null; cessRateAbove: number }
+  | { ok: false; error: string } {
+  const rawThreshold = input.priceCapThreshold;
+  const hasThreshold =
+    rawThreshold !== null && rawThreshold !== undefined && Number.isFinite(Number(rawThreshold));
+
+  if (!hasThreshold) {
+    return { ok: true, priceCapThreshold: null, taxRateAbove: null, cessRateAbove: 0 };
+  }
+
+  const threshold = Number(rawThreshold);
+  if (threshold <= 0) return { ok: false, error: "priceCapThreshold must be greater than 0" };
+
+  const aboveTax = Number(input.taxRateAbove);
+  if (input.taxRateAbove === null || input.taxRateAbove === undefined || !Number.isFinite(aboveTax)) {
+    return { ok: false, error: "taxRateAbove is required when priceCapThreshold is set" };
+  }
+
+  const aboveCess =
+    input.cessRateAbove === null || input.cessRateAbove === undefined ? 0 : Number(input.cessRateAbove);
+  if (!Number.isFinite(aboveCess)) return { ok: false, error: "cessRateAbove must be numeric" };
+
+  return { ok: true, priceCapThreshold: threshold, taxRateAbove: aboveTax, cessRateAbove: aboveCess };
+}
+
 function deriveStyleCodeFromSku(sku: string | null | undefined): string | null {
   const normalizedSku = norm(sku);
   if (!normalizedSku) {
@@ -223,11 +259,50 @@ export async function listUnmappedSkusFromImportedOrders(input: {
   return { ok: true, data };
 }
 
-function toMapResult(row: Record<string, unknown>, source: "SKU" | "STYLE") {
+/**
+ * Select the effective tax/cess for a SKU mapping row given the line's per-unit
+ * price. When the row defines a price-cap slab (priceCapThreshold + taxRateAbove)
+ * and the unit price is strictly above the threshold, the "above" rates apply;
+ * at or below the threshold - and whenever no slab is defined or no price is
+ * available - the base taxRate/cessRate apply. Kept as a pure, exported helper so
+ * both resolveSkuTaxMap and resolveLineTaxMapping select the band identically.
+ */
+export function selectSkuBandRate(
+  row: Record<string, unknown>,
+  unitPrice?: number | null,
+): { taxRate: number; cessRate: number; appliedBand: "BASE" | "ABOVE" } {
+  const baseTaxRate = Number(row.taxRate) || 0;
+  const baseCessRate = Number(row.cessRate) || 0;
+
+  const threshold = row.priceCapThreshold == null ? null : Number(row.priceCapThreshold);
+  const aboveTaxRate = row.taxRateAbove == null ? null : Number(row.taxRateAbove);
+
+  const hasSlab =
+    threshold != null &&
+    Number.isFinite(threshold) &&
+    aboveTaxRate != null &&
+    Number.isFinite(aboveTaxRate);
+  const price = unitPrice == null ? null : Number(unitPrice);
+  const hasComparablePrice = price != null && Number.isFinite(price);
+
+  if (hasSlab && hasComparablePrice && (price as number) > (threshold as number)) {
+    const aboveCessRate = row.cessRateAbove == null ? 0 : Number(row.cessRateAbove);
+    return {
+      taxRate: aboveTaxRate as number,
+      cessRate: Number.isFinite(aboveCessRate) ? aboveCessRate : 0,
+      appliedBand: "ABOVE",
+    };
+  }
+
+  return { taxRate: baseTaxRate, cessRate: baseCessRate, appliedBand: "BASE" };
+}
+
+function toMapResult(row: Record<string, unknown>, source: "SKU" | "STYLE", unitPrice?: number | null) {
+  const band = selectSkuBandRate(row, unitPrice);
   return {
     hsnCode: norm(row.hsnCode),
-    taxRate: Number(row.taxRate) || 0,
-    cessRate: Number(row.cessRate) || 0,
+    taxRate: band.taxRate,
+    cessRate: band.cessRate,
     source,
   };
 }
@@ -235,6 +310,7 @@ function toMapResult(row: Record<string, unknown>, source: "SKU" | "STYLE") {
 export async function resolveSkuTaxMap(input: {
   shopId?: string | null;
   sku?: string | null;
+  unitPrice?: number | null;
 }): Promise<GstServiceResult<{ hsnCode: string; taxRate: number; cessRate: number; source: "SKU" | "STYLE" } | null>> {
   const sku = norm(input.sku);
   if (!sku) {
@@ -248,7 +324,7 @@ export async function resolveSkuTaxMap(input: {
     orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
   });
   if (exactSku) {
-    return { ok: true, data: toMapResult(exactSku, "SKU") };
+    return { ok: true, data: toMapResult(exactSku, "SKU", input.unitPrice) };
   }
 
   const styleCode = deriveStyleCodeFromSku(sku);
@@ -261,7 +337,7 @@ export async function resolveSkuTaxMap(input: {
     orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
   });
   if (style) {
-    return { ok: true, data: toMapResult(style, "STYLE") };
+    return { ok: true, data: toMapResult(style, "STYLE", input.unitPrice) };
   }
 
   return { ok: true, data: null };
@@ -274,6 +350,9 @@ export async function upsertSkuTaxMapping(input: {
   hsnCode: string;
   taxRate: number;
   cessRate?: number;
+  priceCapThreshold?: number | null;
+  taxRateAbove?: number | null;
+  cessRateAbove?: number | null;
   source?: string;
 }): Promise<GstServiceResult<Record<string, unknown>>> {
   const sku = norm(input.sku) || null;
@@ -286,6 +365,9 @@ export async function upsertSkuTaxMapping(input: {
   if (!hsnCode) return { ok: false, error: "hsnCode is required" };
   if (!Number.isFinite(taxRate)) return { ok: false, error: "taxRate must be numeric" };
   if (!Number.isFinite(cessRate)) return { ok: false, error: "cessRate must be numeric" };
+
+  const slab = parseSlabInput(input);
+  if (!slab.ok) return { ok: false, error: slab.error };
 
   // Every GST row must be shop-scoped (multi-tenant integrity). Reject rather
   // than persist a null-shop mapping that would leak across tenants.
@@ -302,6 +384,9 @@ export async function upsertSkuTaxMapping(input: {
     hsnCode,
     taxRate,
     cessRate,
+    priceCapThreshold: slab.priceCapThreshold,
+    taxRateAbove: slab.taxRateAbove,
+    cessRateAbove: slab.cessRateAbove,
     status: "ACTIVE",
     source: norm(input.source) || "MANUAL_UI",
   };
@@ -373,7 +458,9 @@ export async function exportUnmappedSkuMappingsCsv(shopId?: string | null): Prom
     usage.set(key, existing);
   }
 
-  const lines = ["sku,styleCode,sampleTitle,orderCount,lineCount,currentStatus,hsnCode,taxRate,cessRate,notes"];
+  const lines = [
+    "sku,styleCode,sampleTitle,orderCount,lineCount,currentStatus,hsnCode,taxRate,cessRate,priceCapThreshold,taxRateAbove,cessRateAbove,notes",
+  ];
 
   for (const value of usage.values()) {
     lines.push(
@@ -384,6 +471,9 @@ export async function exportUnmappedSkuMappingsCsv(shopId?: string | null): Prom
         value.orderIds.size,
         value.lineCount,
         "UNMAPPED",
+        "",
+        "",
+        "0",
         "",
         "",
         "0",
@@ -437,6 +527,22 @@ export async function importSkuMappingsCsv(
       errors.push(`Row ${rowNum}: cessRate must be numeric`);
       continue;
     }
+
+    const slab = parseSlabInput({
+      priceCapThreshold:
+        rawRow.priceCapThreshold === undefined || rawRow.priceCapThreshold === ""
+          ? null
+          : Number(rawRow.priceCapThreshold),
+      taxRateAbove:
+        rawRow.taxRateAbove === undefined || rawRow.taxRateAbove === "" ? null : Number(rawRow.taxRateAbove),
+      cessRateAbove:
+        rawRow.cessRateAbove === undefined || rawRow.cessRateAbove === "" ? 0 : Number(rawRow.cessRateAbove),
+    });
+    if (!slab.ok) {
+      skipped += 1;
+      errors.push(`Row ${rowNum}: ${slab.error}`);
+      continue;
+    }
     let taxRate = parsedTaxRate;
     if (taxRate === null) {
       const defaultSlab = await skuMapDb.gstHsnSlabMap.findFirst({
@@ -470,6 +576,9 @@ export async function importSkuMappingsCsv(
       hsnCode,
       taxRate,
       cessRate,
+      priceCapThreshold: slab.priceCapThreshold,
+      taxRateAbove: slab.taxRateAbove,
+      cessRateAbove: slab.cessRateAbove,
       status: "ACTIVE",
       source: "BULK_CSV",
     };

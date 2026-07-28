@@ -12,6 +12,25 @@ type MappingDraft = {
   cessRate: string
 }
 
+const emptyForm = {
+  sku: '',
+  hsnCode: '',
+  taxRate: '5',
+  cessRate: '0',
+  priceCapThreshold: '',
+  taxRateAbove: '',
+  cessRateAbove: '0',
+}
+
+function formatSlab(row: Row): string {
+  const threshold = row.priceCapThreshold
+  if (threshold == null || threshold === '') return 'Flat'
+  const above = row.taxRateAbove == null ? '' : String(row.taxRateAbove)
+  const aboveCess = Number(row.cessRateAbove || 0)
+  const cessSuffix = aboveCess > 0 ? ` + ${aboveCess}% cess` : ''
+  return `> ₹${String(threshold)} → ${above}%${cessSuffix}`
+}
+
 function deriveStyleCode(sku: string): string {
   const normalized = String(sku || '').trim()
   if (!normalized) return ''
@@ -23,7 +42,7 @@ export function GstProductsAdmin() {
   const [rows, setRows] = useState<Row[]>([])
   const [unmappedRows, setUnmappedRows] = useState<Row[]>([])
   const [mappingDrafts, setMappingDrafts] = useState<Record<string, MappingDraft>>({})
-  const [mappingForm, setMappingForm] = useState({ sku: '', hsnCode: '', taxRate: '5', cessRate: '0' })
+  const [mappingForm, setMappingForm] = useState(emptyForm)
   const [bulkText, setBulkText] = useState('')
   const [search, setSearch] = useState('')
   const [activeView, setActiveView] = useState<'all' | 'unmapped'>('all')
@@ -73,6 +92,9 @@ export function GstProductsAdmin() {
       hsnCode: mappingForm.hsnCode,
       taxRate: Number(mappingForm.taxRate),
       cessRate: Number(mappingForm.cessRate),
+      priceCapThreshold: mappingForm.priceCapThreshold === '' ? null : Number(mappingForm.priceCapThreshold),
+      taxRateAbove: mappingForm.taxRateAbove === '' ? null : Number(mappingForm.taxRateAbove),
+      cessRateAbove: mappingForm.cessRateAbove === '' ? 0 : Number(mappingForm.cessRateAbove),
       source: 'MANUAL_UI',
     })
 
@@ -80,7 +102,7 @@ export function GstProductsAdmin() {
       setError(res.error)
     } else {
       setResult(res.data)
-      setMappingForm({ sku: '', hsnCode: '', taxRate: '5', cessRate: '0' })
+      setMappingForm(emptyForm)
       await refreshMappings('all')
       await refreshMappings('unmapped')
     }
@@ -133,7 +155,7 @@ export function GstProductsAdmin() {
       return
     }
 
-    const csvText = ['sku,hsnCode,taxRate,cessRate', ...rowsToImport].join('\n')
+    const csvText = ['sku,hsnCode,taxRate,cessRate,priceCapThreshold,taxRateAbove,cessRateAbove', ...rowsToImport].join('\n')
     const res = await importSkuMappingsCsv({ csvText })
 
     if (!res.ok) {
@@ -153,12 +175,25 @@ export function GstProductsAdmin() {
         <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm space-y-3">
           <h2 className="text-base font-semibold text-gray-900">SKU Tax Mapping (Source of Truth)</h2>
           <p className="text-xs text-gray-600">Use SKU as the operational key. styleCode is derived automatically. No productId/variantId in UI.</p>
-          <form onSubmit={onSaveSingle} className="grid gap-3 md:grid-cols-5">
-            <input className="rounded-xl border border-gray-300 px-3 py-2.5 text-sm" placeholder="SKU" value={mappingForm.sku} onChange={(e) => setMappingForm((p) => ({ ...p, sku: e.target.value }))} />
-            <input className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-500" value={stylePreview ? `Style: ${stylePreview}` : 'Style: -'} readOnly />
-            <input className="rounded-xl border border-gray-300 px-3 py-2.5 text-sm" placeholder="HSN Code" value={mappingForm.hsnCode} onChange={(e) => setMappingForm((p) => ({ ...p, hsnCode: e.target.value }))} />
-            <input type="number" className="rounded-xl border border-gray-300 px-3 py-2.5 text-sm" placeholder="Tax Rate" value={mappingForm.taxRate} onChange={(e) => setMappingForm((p) => ({ ...p, taxRate: e.target.value }))} />
-            <input type="number" className="rounded-xl border border-gray-300 px-3 py-2.5 text-sm" placeholder="Cess Rate" value={mappingForm.cessRate} onChange={(e) => setMappingForm((p) => ({ ...p, cessRate: e.target.value }))} />
+          <form onSubmit={onSaveSingle} className="space-y-3">
+            <div className="grid gap-3 md:grid-cols-5">
+              <input className="rounded-xl border border-gray-300 px-3 py-2.5 text-sm" placeholder="SKU" value={mappingForm.sku} onChange={(e) => setMappingForm((p) => ({ ...p, sku: e.target.value }))} />
+              <input className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-500" value={stylePreview ? `Style: ${stylePreview}` : 'Style: -'} readOnly />
+              <input className="rounded-xl border border-gray-300 px-3 py-2.5 text-sm" placeholder="HSN Code" value={mappingForm.hsnCode} onChange={(e) => setMappingForm((p) => ({ ...p, hsnCode: e.target.value }))} />
+              <input type="number" className="rounded-xl border border-gray-300 px-3 py-2.5 text-sm" placeholder="Tax Rate (≤ cap)" value={mappingForm.taxRate} onChange={(e) => setMappingForm((p) => ({ ...p, taxRate: e.target.value }))} />
+              <input type="number" className="rounded-xl border border-gray-300 px-3 py-2.5 text-sm" placeholder="Cess Rate (≤ cap)" value={mappingForm.cessRate} onChange={(e) => setMappingForm((p) => ({ ...p, cessRate: e.target.value }))} />
+            </div>
+            <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50/60 p-3">
+              <p className="mb-2 text-xs font-medium text-gray-700">
+                Optional price-cap slab — leave blank for a flat rate. When a threshold is set, a line priced
+                <em> above</em> it (per unit) uses the rates below; at or below it, the base Tax/Cess above apply.
+              </p>
+              <div className="grid gap-3 md:grid-cols-3">
+                <input type="number" className="rounded-xl border border-gray-300 px-3 py-2.5 text-sm" placeholder="Price cap ≤ (per unit ₹)" value={mappingForm.priceCapThreshold} onChange={(e) => setMappingForm((p) => ({ ...p, priceCapThreshold: e.target.value }))} />
+                <input type="number" className="rounded-xl border border-gray-300 px-3 py-2.5 text-sm" placeholder="Tax Rate above cap" value={mappingForm.taxRateAbove} onChange={(e) => setMappingForm((p) => ({ ...p, taxRateAbove: e.target.value }))} />
+                <input type="number" className="rounded-xl border border-gray-300 px-3 py-2.5 text-sm" placeholder="Cess Rate above cap" value={mappingForm.cessRateAbove} onChange={(e) => setMappingForm((p) => ({ ...p, cessRateAbove: e.target.value }))} />
+              </div>
+            </div>
             <button className="rounded-xl bg-gray-900 px-4 py-2.5 text-sm text-white w-fit" disabled={loading}>{loading ? 'Saving...' : 'Save Mapping'}</button>
           </form>
         </div>
@@ -194,7 +229,7 @@ export function GstProductsAdmin() {
           </div>
 
           {activeView === 'all' ? (
-            <div className="overflow-x-auto rounded-xl border border-gray-200"><table className="min-w-full text-sm"><thead className="bg-gray-50 text-left text-gray-600"><tr><th className="px-3 py-2">SKU</th><th className="px-3 py-2">Style</th><th className="px-3 py-2">HSN</th><th className="px-3 py-2">Tax</th><th className="px-3 py-2">Cess</th><th className="px-3 py-2">Source</th></tr></thead><tbody>{rows.map((row) => <tr key={String(row.id)} className="border-t border-gray-100"><td className="px-3 py-2">{String(row.sku || '')}</td><td className="px-3 py-2">{String(row.styleCode || '')}</td><td className="px-3 py-2">{String(row.hsnCode || '')}</td><td className="px-3 py-2">{String(row.taxRate || '')}</td><td className="px-3 py-2">{String(row.cessRate || '')}</td><td className="px-3 py-2">{String(row.source || '')}</td></tr>)}</tbody></table></div>
+            <div className="overflow-x-auto rounded-xl border border-gray-200"><table className="min-w-full text-sm"><thead className="bg-gray-50 text-left text-gray-600"><tr><th className="px-3 py-2">SKU</th><th className="px-3 py-2">Style</th><th className="px-3 py-2">HSN</th><th className="px-3 py-2">Tax</th><th className="px-3 py-2">Cess</th><th className="px-3 py-2">Price-cap slab</th><th className="px-3 py-2">Source</th></tr></thead><tbody>{rows.map((row) => <tr key={String(row.id)} className="border-t border-gray-100"><td className="px-3 py-2">{String(row.sku || '')}</td><td className="px-3 py-2">{String(row.styleCode || '')}</td><td className="px-3 py-2">{String(row.hsnCode || '')}</td><td className="px-3 py-2">{String(row.taxRate || '')}</td><td className="px-3 py-2">{String(row.cessRate || '')}</td><td className="px-3 py-2 text-xs">{formatSlab(row)}</td><td className="px-3 py-2">{String(row.source || '')}</td></tr>)}</tbody></table></div>
           ) : (
             <div className="overflow-x-auto rounded-xl border border-gray-200">
               <table className="min-w-full text-sm">
@@ -266,8 +301,11 @@ export function GstProductsAdmin() {
 
         <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm space-y-3">
           <h2 className="text-base font-semibold text-gray-900">Bulk Paste</h2>
-          <p className="text-xs text-gray-600">Paste rows in: <code>sku,hsnCode,taxRate,cessRate</code></p>
-          <textarea className="min-h-40 w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm" placeholder="MWSW05-Black-S,61124990,5,0" value={bulkText} onChange={(e) => setBulkText(e.target.value)} />
+          <p className="text-xs text-gray-600">
+            Paste rows in: <code>sku,hsnCode,taxRate,cessRate,priceCapThreshold,taxRateAbove,cessRateAbove</code>. The last
+            three are optional — omit them (or leave blank) for a flat rate.
+          </p>
+          <textarea className="min-h-40 w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm" placeholder={'MWSW05-Black-S,61124990,5,0\nFOOTWEAR-01,64039990,5,0,2500,18,0'} value={bulkText} onChange={(e) => setBulkText(e.target.value)} />
           <button className="rounded-xl bg-gray-900 px-4 py-2.5 text-sm text-white" onClick={() => void onBulkSave()} disabled={loading}>{loading ? 'Importing...' : 'Import Bulk Mappings'}</button>
         </div>
       </div>
