@@ -256,3 +256,7 @@ export async function createGstNote(payload: {
   }
   return { ok: true as const, data: data.note }
 }
+
+export function gstDocumentViewUrl(id: string, format: 'html' | 'pdf' = 'html'): string {
+  return withShopParam(`/api/gst/documents/${encodeURIComponent(id)}/pdf?format=${format}`)
+}
