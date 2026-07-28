@@ -49,7 +49,13 @@ export default async () => {
       return;
     }
 
+    // s-admin-print-action renders the document at `src` in its own preview and
+    // takes no children. Set the attribute (the observed one) as well as the
+    // property, and remove the "Preparing..." placeholder - otherwise it lingers
+    // beside the loaded preview and the action looks like it never finished.
+    printAction.setAttribute("src", json.url);
     printAction.src = json.url;
+    preparingText.remove();
   } catch (error) {
     preparingText.textContent =
       error instanceof Error ? error.message : "Unable to prepare GST invoice for printing.";
