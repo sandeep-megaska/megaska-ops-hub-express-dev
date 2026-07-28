@@ -663,9 +663,17 @@ export async function renderGstPdf(gstDocumentId: string): Promise<GstServiceRes
       .footer-logo{ margin-top:8px; display:flex; justify-content:flex-end; min-height:22px; font-size:12px; font-weight:700; }
       .footer-logo img{ max-height:20px; max-width:140px; object-fit:contain; }
       .print-btn{ margin-bottom:8px; }
-      @media print { .print-btn { display:none; } }
-    </style></head><body>
-    <button class="print-btn" onclick="window.print()">Print Invoice</button>
+      .page{ background:#fff; }
+      /* On screen, render like a centered A4-landscape page with margins so it
+         does not stretch edge-to-edge (and crop) on wide monitors. */
+      @media screen {
+        body{ background:#e9e9ee; padding:16px; }
+        .page{ max-width:1120px; margin:0 auto; padding:28px 32px; box-shadow:0 1px 6px rgba(0,0,0,0.18); }
+      }
+      /* Print is unchanged: @page controls the sheet, the wrapper adds nothing. */
+      @media print { .print-btn { display:none; } .page{ max-width:none; margin:0; padding:0; box-shadow:none; } }
+    </style></head><body><div class="page">
+    <button class="print-btn" onclick="window.print()">Print ${escapeHtml(model.title)}</button>
     ${model.templateConfig.showHeaderLogo ? `<div class="header-logo">${model.branding.headerLogoSrc ? `<img src="${escapeHtml(model.branding.headerLogoSrc)}" alt="Header logo" />` : "bigonbuy"}</div>` : ""}
     <div class="topline"><div><div><strong>GSTIN: ${escapeHtml(model.supplier.gstin)}</strong></div><div>${escapeHtml(model.title)}</div><div>Original for Recipient</div></div>
     <div class="meta"><div><strong>${escapeHtml(model.supplier.tradeName || model.supplier.name)}</strong></div><div>${escapeHtml(model.supplier.name)}</div></div></div>
@@ -686,7 +694,7 @@ export async function renderGstPdf(gstDocumentId: string): Promise<GstServiceRes
     ${model.templateConfig.showFooterNote ? `<p>${escapeHtml(model.footer)}</p>` : ""}
     ${model.templateConfig.showFooterLogo ? `<div class="footer-logo">${model.branding.footerLogoSrc ? `<img src="${escapeHtml(model.branding.footerLogoSrc)}" alt="Footer logo" />` : escapeHtml(model.supplier.tradeName || model.supplier.name)}</div>` : ""}
     ${model.signature ? `<p style="text-align:right; margin-top:18px;">For ${escapeHtml(model.supplier.name)}<br/><br/>${escapeHtml(model.signature)}</p>` : ""}
-  </body></html>`;
+  </div></body></html>`;
 
   gstPerfLog("gst.pdf.htmlRender", htmlStartedAtMs, { gstDocumentId, rowCount: model.rows.length });
   return {
