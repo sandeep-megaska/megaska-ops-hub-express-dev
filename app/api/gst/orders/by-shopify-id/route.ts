@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
 
   let orderImport = await prisma.gstOrderImport.findFirst({
     where: { shopId: resolvedShopId, shopifyOrderId },
-    select: { id: true, shopifyOrderName: true, readinessErrors: true },
+    select: { id: true, shopifyOrderName: true, readinessErrors: true, orderTaxTotal: true },
   });
 
   // Re-import when the order is new OR when the caller explicitly asks to
@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
     }
     orderImport = await prisma.gstOrderImport.findFirst({
       where: { shopId: resolvedShopId, shopifyOrderId },
-      select: { id: true, shopifyOrderName: true, readinessErrors: true },
+      select: { id: true, shopifyOrderName: true, readinessErrors: true, orderTaxTotal: true },
     });
   }
 
@@ -103,6 +103,25 @@ export async function POST(req: NextRequest) {
     : null;
   const buyer = snapshot?.buyer && typeof snapshot.buyer === "object" ? (snapshot.buyer as Record<string, unknown>) : null;
 
+  // Reconciliation: the invoice's GST (from the app's HSN mapping) must equal the
+  // tax actually charged at checkout (Shopify). A divergence means the product's
+  // app GST rate and the Shopify tax setting disagree - surface it so a wrong
+  // rate is caught before the invoice ships. Tolerance covers rounding only.
+  const toNum = (value: unknown) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+  const round2 = (value: number) => Math.round(value * 100) / 100;
+  const taxReconciliation = invoice
+    ? (() => {
+        const invoiceTax = round2(
+          toNum(invoice.cgstAmount) + toNum(invoice.sgstAmount) + toNum(invoice.igstAmount) + toNum(invoice.cessAmount),
+        );
+        const shopifyTax = round2(toNum(orderImport.orderTaxTotal));
+        return { invoiceTax, shopifyTax, matches: Math.abs(invoiceTax - shopifyTax) <= 1 };
+      })()
+    : null;
+
   return withExtensionCors(
     NextResponse.json({
       ok: true,
@@ -115,6 +134,7 @@ export async function POST(req: NextRequest) {
         status: invoice ? invoice.status : "NOT_INVOICED",
         customerEmail: buyer?.email ? String(buyer.email) : null,
         pdfUrl: invoice ? `/api/gst/invoices/${invoice.id}/pdf` : null,
+        taxReconciliation,
         error: generationError,
       },
     })
