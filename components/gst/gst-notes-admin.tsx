@@ -1,7 +1,12 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { createGstNote, listGstDocuments, type GstDocumentListItem } from '../../lib/gst-client'
+import {
+  createGstNote,
+  gstDocumentViewUrl,
+  listGstDocuments,
+  type GstDocumentListItem,
+} from '../../lib/gst-client'
 
 function formatDate(value: string): string {
   const parsed = new Date(value)
@@ -167,12 +172,13 @@ export function GstNotesAdmin() {
                 <th className="py-2 pr-4">Order</th>
                 <th className="py-2 pr-4">Total</th>
                 <th className="py-2 pr-4">Status</th>
+                <th className="py-2 pr-4">View</th>
               </tr>
             </thead>
             <tbody>
               {notes.length === 0 ? (
                 <tr>
-                  <td className="py-3 text-gray-500" colSpan={6}>
+                  <td className="py-3 text-gray-500" colSpan={7}>
                     No credit or debit notes yet.
                   </td>
                 </tr>
@@ -187,6 +193,26 @@ export function GstNotesAdmin() {
                     <td className="py-2 pr-4 text-gray-700">{note.sourceOrderNumber || '—'}</td>
                     <td className="py-2 pr-4 text-gray-700">{formatAmount(note.totalAmount)}</td>
                     <td className="py-2 pr-4 text-gray-700">{note.status}</td>
+                    <td className="py-2 pr-4">
+                      <div className="flex gap-3">
+                        <a
+                          className="text-blue-600 hover:underline"
+                          href={gstDocumentViewUrl(note.id, 'html')}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          View
+                        </a>
+                        <a
+                          className="text-blue-600 hover:underline"
+                          href={gstDocumentViewUrl(note.id, 'pdf')}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          PDF
+                        </a>
+                      </div>
+                    </td>
                   </tr>
                 ))
               )}
