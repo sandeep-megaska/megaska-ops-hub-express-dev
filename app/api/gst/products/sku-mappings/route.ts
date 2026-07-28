@@ -41,6 +41,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "Invalid JSON payload" }, { status: 400 });
   }
 
+  const emptyToNull = (value: unknown) => (value == null || value === "" ? null : Number(value));
   const result = await upsertSkuTaxMapping({
     shopId: shop.id,
     sku: body.sku ? String(body.sku) : null,
@@ -48,6 +49,9 @@ export async function POST(req: NextRequest) {
     hsnCode: String(body.hsnCode || ""),
     taxRate: Number(body.taxRate),
     cessRate: body.cessRate == null || body.cessRate === "" ? 0 : Number(body.cessRate),
+    priceCapThreshold: emptyToNull(body.priceCapThreshold),
+    taxRateAbove: emptyToNull(body.taxRateAbove),
+    cessRateAbove: emptyToNull(body.cessRateAbove),
     source: body.source ? String(body.source) : "MANUAL_UI",
   });
 

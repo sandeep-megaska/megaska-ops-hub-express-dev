@@ -219,7 +219,7 @@ export async function listDispatchReadyOrders(filters: DispatchFilters): Promise
           } else {
             skuTaxMapCacheMisses += 1;
             const mappingStartedAtMs = gstPerfNow();
-            resolvedMap = await resolveSkuTaxMap({ shopId: String(row.shopId || "") || null, sku });
+            resolvedMap = await resolveSkuTaxMap({ shopId: String(row.shopId || "") || null, sku, unitPrice });
             mappingDurationMs += gstPerfNow() - mappingStartedAtMs;
             skuTaxMapCache.set(cacheKey, resolvedMap);
           }
@@ -384,7 +384,11 @@ export async function generateInvoiceBatch(input: BatchGenerateInput) {
     for (const line of Array.isArray(order.lines) ? order.lines : []) {
       const row = line as Record<string, unknown>;
       const sku = String(row.sku || "").trim();
-      const mapping = await resolveSkuTaxMap({ shopId: String(order.shopId || "") || null, sku });
+      const mapping = await resolveSkuTaxMap({
+        shopId: String(order.shopId || "") || null,
+        sku,
+        unitPrice: parseNum(row.unitPrice ?? row.price),
+      });
       if (!mapping.ok) {
         lineErrors.push({
           lineNumber: parseNum(row.lineNumber),

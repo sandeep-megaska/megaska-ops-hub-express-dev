@@ -100620,11 +100620,17 @@ export namespace Prisma {
   export type GstSkuTaxMapAvgAggregateOutputType = {
     taxRate: Decimal | null
     cessRate: Decimal | null
+    priceCapThreshold: Decimal | null
+    taxRateAbove: Decimal | null
+    cessRateAbove: Decimal | null
   }
 
   export type GstSkuTaxMapSumAggregateOutputType = {
     taxRate: Decimal | null
     cessRate: Decimal | null
+    priceCapThreshold: Decimal | null
+    taxRateAbove: Decimal | null
+    cessRateAbove: Decimal | null
   }
 
   export type GstSkuTaxMapMinAggregateOutputType = {
@@ -100635,6 +100641,9 @@ export namespace Prisma {
     hsnCode: string | null
     taxRate: Decimal | null
     cessRate: Decimal | null
+    priceCapThreshold: Decimal | null
+    taxRateAbove: Decimal | null
+    cessRateAbove: Decimal | null
     source: string | null
     status: string | null
     createdAt: Date | null
@@ -100649,6 +100658,9 @@ export namespace Prisma {
     hsnCode: string | null
     taxRate: Decimal | null
     cessRate: Decimal | null
+    priceCapThreshold: Decimal | null
+    taxRateAbove: Decimal | null
+    cessRateAbove: Decimal | null
     source: string | null
     status: string | null
     createdAt: Date | null
@@ -100663,6 +100675,9 @@ export namespace Prisma {
     hsnCode: number
     taxRate: number
     cessRate: number
+    priceCapThreshold: number
+    taxRateAbove: number
+    cessRateAbove: number
     source: number
     status: number
     metadata: number
@@ -100675,11 +100690,17 @@ export namespace Prisma {
   export type GstSkuTaxMapAvgAggregateInputType = {
     taxRate?: true
     cessRate?: true
+    priceCapThreshold?: true
+    taxRateAbove?: true
+    cessRateAbove?: true
   }
 
   export type GstSkuTaxMapSumAggregateInputType = {
     taxRate?: true
     cessRate?: true
+    priceCapThreshold?: true
+    taxRateAbove?: true
+    cessRateAbove?: true
   }
 
   export type GstSkuTaxMapMinAggregateInputType = {
@@ -100690,6 +100711,9 @@ export namespace Prisma {
     hsnCode?: true
     taxRate?: true
     cessRate?: true
+    priceCapThreshold?: true
+    taxRateAbove?: true
+    cessRateAbove?: true
     source?: true
     status?: true
     createdAt?: true
@@ -100704,6 +100728,9 @@ export namespace Prisma {
     hsnCode?: true
     taxRate?: true
     cessRate?: true
+    priceCapThreshold?: true
+    taxRateAbove?: true
+    cessRateAbove?: true
     source?: true
     status?: true
     createdAt?: true
@@ -100718,6 +100745,9 @@ export namespace Prisma {
     hsnCode?: true
     taxRate?: true
     cessRate?: true
+    priceCapThreshold?: true
+    taxRateAbove?: true
+    cessRateAbove?: true
     source?: true
     status?: true
     metadata?: true
@@ -100820,6 +100850,9 @@ export namespace Prisma {
     hsnCode: string
     taxRate: Decimal
     cessRate: Decimal
+    priceCapThreshold: Decimal | null
+    taxRateAbove: Decimal | null
+    cessRateAbove: Decimal
     source: string
     status: string
     metadata: JsonValue | null
@@ -100854,6 +100887,9 @@ export namespace Prisma {
     hsnCode?: boolean
     taxRate?: boolean
     cessRate?: boolean
+    priceCapThreshold?: boolean
+    taxRateAbove?: boolean
+    cessRateAbove?: boolean
     source?: boolean
     status?: boolean
     metadata?: boolean
@@ -100870,6 +100906,9 @@ export namespace Prisma {
     hsnCode?: boolean
     taxRate?: boolean
     cessRate?: boolean
+    priceCapThreshold?: boolean
+    taxRateAbove?: boolean
+    cessRateAbove?: boolean
     source?: boolean
     status?: boolean
     metadata?: boolean
@@ -100886,6 +100925,9 @@ export namespace Prisma {
     hsnCode?: boolean
     taxRate?: boolean
     cessRate?: boolean
+    priceCapThreshold?: boolean
+    taxRateAbove?: boolean
+    cessRateAbove?: boolean
     source?: boolean
     status?: boolean
     metadata?: boolean
@@ -100902,6 +100944,9 @@ export namespace Prisma {
     hsnCode?: boolean
     taxRate?: boolean
     cessRate?: boolean
+    priceCapThreshold?: boolean
+    taxRateAbove?: boolean
+    cessRateAbove?: boolean
     source?: boolean
     status?: boolean
     metadata?: boolean
@@ -100909,7 +100954,7 @@ export namespace Prisma {
     updatedAt?: boolean
   }
 
-  export type GstSkuTaxMapOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "shopId" | "sku" | "styleCode" | "hsnCode" | "taxRate" | "cessRate" | "source" | "status" | "metadata" | "createdAt" | "updatedAt", ExtArgs["result"]["gstSkuTaxMap"]>
+  export type GstSkuTaxMapOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "shopId" | "sku" | "styleCode" | "hsnCode" | "taxRate" | "cessRate" | "priceCapThreshold" | "taxRateAbove" | "cessRateAbove" | "source" | "status" | "metadata" | "createdAt" | "updatedAt", ExtArgs["result"]["gstSkuTaxMap"]>
   export type GstSkuTaxMapInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     shop?: boolean | ShopDefaultArgs<ExtArgs>
   }
@@ -100933,6 +100978,9 @@ export namespace Prisma {
       hsnCode: string
       taxRate: Prisma.Decimal
       cessRate: Prisma.Decimal
+      priceCapThreshold: Prisma.Decimal | null
+      taxRateAbove: Prisma.Decimal | null
+      cessRateAbove: Prisma.Decimal
       source: string
       status: string
       metadata: Prisma.JsonValue | null
@@ -101369,6 +101417,9 @@ export namespace Prisma {
     readonly hsnCode: FieldRef<"GstSkuTaxMap", 'String'>
     readonly taxRate: FieldRef<"GstSkuTaxMap", 'Decimal'>
     readonly cessRate: FieldRef<"GstSkuTaxMap", 'Decimal'>
+    readonly priceCapThreshold: FieldRef<"GstSkuTaxMap", 'Decimal'>
+    readonly taxRateAbove: FieldRef<"GstSkuTaxMap", 'Decimal'>
+    readonly cessRateAbove: FieldRef<"GstSkuTaxMap", 'Decimal'>
     readonly source: FieldRef<"GstSkuTaxMap", 'String'>
     readonly status: FieldRef<"GstSkuTaxMap", 'String'>
     readonly metadata: FieldRef<"GstSkuTaxMap", 'Json'>
@@ -121855,6 +121906,9 @@ export namespace Prisma {
     hsnCode: 'hsnCode',
     taxRate: 'taxRate',
     cessRate: 'cessRate',
+    priceCapThreshold: 'priceCapThreshold',
+    taxRateAbove: 'taxRateAbove',
+    cessRateAbove: 'cessRateAbove',
     source: 'source',
     status: 'status',
     metadata: 'metadata',
@@ -131736,6 +131790,9 @@ export namespace Prisma {
     hsnCode?: StringFilter<"GstSkuTaxMap"> | string
     taxRate?: DecimalFilter<"GstSkuTaxMap"> | Decimal | DecimalJsLike | number | string
     cessRate?: DecimalFilter<"GstSkuTaxMap"> | Decimal | DecimalJsLike | number | string
+    priceCapThreshold?: DecimalNullableFilter<"GstSkuTaxMap"> | Decimal | DecimalJsLike | number | string | null
+    taxRateAbove?: DecimalNullableFilter<"GstSkuTaxMap"> | Decimal | DecimalJsLike | number | string | null
+    cessRateAbove?: DecimalFilter<"GstSkuTaxMap"> | Decimal | DecimalJsLike | number | string
     source?: StringFilter<"GstSkuTaxMap"> | string
     status?: StringFilter<"GstSkuTaxMap"> | string
     metadata?: JsonNullableFilter<"GstSkuTaxMap">
@@ -131752,6 +131809,9 @@ export namespace Prisma {
     hsnCode?: SortOrder
     taxRate?: SortOrder
     cessRate?: SortOrder
+    priceCapThreshold?: SortOrderInput | SortOrder
+    taxRateAbove?: SortOrderInput | SortOrder
+    cessRateAbove?: SortOrder
     source?: SortOrder
     status?: SortOrder
     metadata?: SortOrderInput | SortOrder
@@ -131771,6 +131831,9 @@ export namespace Prisma {
     hsnCode?: StringFilter<"GstSkuTaxMap"> | string
     taxRate?: DecimalFilter<"GstSkuTaxMap"> | Decimal | DecimalJsLike | number | string
     cessRate?: DecimalFilter<"GstSkuTaxMap"> | Decimal | DecimalJsLike | number | string
+    priceCapThreshold?: DecimalNullableFilter<"GstSkuTaxMap"> | Decimal | DecimalJsLike | number | string | null
+    taxRateAbove?: DecimalNullableFilter<"GstSkuTaxMap"> | Decimal | DecimalJsLike | number | string | null
+    cessRateAbove?: DecimalFilter<"GstSkuTaxMap"> | Decimal | DecimalJsLike | number | string
     source?: StringFilter<"GstSkuTaxMap"> | string
     status?: StringFilter<"GstSkuTaxMap"> | string
     metadata?: JsonNullableFilter<"GstSkuTaxMap">
@@ -131787,6 +131850,9 @@ export namespace Prisma {
     hsnCode?: SortOrder
     taxRate?: SortOrder
     cessRate?: SortOrder
+    priceCapThreshold?: SortOrderInput | SortOrder
+    taxRateAbove?: SortOrderInput | SortOrder
+    cessRateAbove?: SortOrder
     source?: SortOrder
     status?: SortOrder
     metadata?: SortOrderInput | SortOrder
@@ -131810,6 +131876,9 @@ export namespace Prisma {
     hsnCode?: StringWithAggregatesFilter<"GstSkuTaxMap"> | string
     taxRate?: DecimalWithAggregatesFilter<"GstSkuTaxMap"> | Decimal | DecimalJsLike | number | string
     cessRate?: DecimalWithAggregatesFilter<"GstSkuTaxMap"> | Decimal | DecimalJsLike | number | string
+    priceCapThreshold?: DecimalNullableWithAggregatesFilter<"GstSkuTaxMap"> | Decimal | DecimalJsLike | number | string | null
+    taxRateAbove?: DecimalNullableWithAggregatesFilter<"GstSkuTaxMap"> | Decimal | DecimalJsLike | number | string | null
+    cessRateAbove?: DecimalWithAggregatesFilter<"GstSkuTaxMap"> | Decimal | DecimalJsLike | number | string
     source?: StringWithAggregatesFilter<"GstSkuTaxMap"> | string
     status?: StringWithAggregatesFilter<"GstSkuTaxMap"> | string
     metadata?: JsonNullableWithAggregatesFilter<"GstSkuTaxMap">
@@ -143206,6 +143275,9 @@ export namespace Prisma {
     hsnCode: string
     taxRate: Decimal | DecimalJsLike | number | string
     cessRate?: Decimal | DecimalJsLike | number | string
+    priceCapThreshold?: Decimal | DecimalJsLike | number | string | null
+    taxRateAbove?: Decimal | DecimalJsLike | number | string | null
+    cessRateAbove?: Decimal | DecimalJsLike | number | string
     source?: string
     status?: string
     metadata?: NullableJsonNullValueInput | InputJsonValue
@@ -143222,6 +143294,9 @@ export namespace Prisma {
     hsnCode: string
     taxRate: Decimal | DecimalJsLike | number | string
     cessRate?: Decimal | DecimalJsLike | number | string
+    priceCapThreshold?: Decimal | DecimalJsLike | number | string | null
+    taxRateAbove?: Decimal | DecimalJsLike | number | string | null
+    cessRateAbove?: Decimal | DecimalJsLike | number | string
     source?: string
     status?: string
     metadata?: NullableJsonNullValueInput | InputJsonValue
@@ -143236,6 +143311,9 @@ export namespace Prisma {
     hsnCode?: StringFieldUpdateOperationsInput | string
     taxRate?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     cessRate?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
+    priceCapThreshold?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    taxRateAbove?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    cessRateAbove?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     source?: StringFieldUpdateOperationsInput | string
     status?: StringFieldUpdateOperationsInput | string
     metadata?: NullableJsonNullValueInput | InputJsonValue
@@ -143252,6 +143330,9 @@ export namespace Prisma {
     hsnCode?: StringFieldUpdateOperationsInput | string
     taxRate?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     cessRate?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
+    priceCapThreshold?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    taxRateAbove?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    cessRateAbove?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     source?: StringFieldUpdateOperationsInput | string
     status?: StringFieldUpdateOperationsInput | string
     metadata?: NullableJsonNullValueInput | InputJsonValue
@@ -143267,6 +143348,9 @@ export namespace Prisma {
     hsnCode: string
     taxRate: Decimal | DecimalJsLike | number | string
     cessRate?: Decimal | DecimalJsLike | number | string
+    priceCapThreshold?: Decimal | DecimalJsLike | number | string | null
+    taxRateAbove?: Decimal | DecimalJsLike | number | string | null
+    cessRateAbove?: Decimal | DecimalJsLike | number | string
     source?: string
     status?: string
     metadata?: NullableJsonNullValueInput | InputJsonValue
@@ -143281,6 +143365,9 @@ export namespace Prisma {
     hsnCode?: StringFieldUpdateOperationsInput | string
     taxRate?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     cessRate?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
+    priceCapThreshold?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    taxRateAbove?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    cessRateAbove?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     source?: StringFieldUpdateOperationsInput | string
     status?: StringFieldUpdateOperationsInput | string
     metadata?: NullableJsonNullValueInput | InputJsonValue
@@ -143296,6 +143383,9 @@ export namespace Prisma {
     hsnCode?: StringFieldUpdateOperationsInput | string
     taxRate?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     cessRate?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
+    priceCapThreshold?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    taxRateAbove?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    cessRateAbove?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     source?: StringFieldUpdateOperationsInput | string
     status?: StringFieldUpdateOperationsInput | string
     metadata?: NullableJsonNullValueInput | InputJsonValue
@@ -152243,6 +152333,9 @@ export namespace Prisma {
     hsnCode?: SortOrder
     taxRate?: SortOrder
     cessRate?: SortOrder
+    priceCapThreshold?: SortOrder
+    taxRateAbove?: SortOrder
+    cessRateAbove?: SortOrder
     source?: SortOrder
     status?: SortOrder
     metadata?: SortOrder
@@ -152253,6 +152346,9 @@ export namespace Prisma {
   export type GstSkuTaxMapAvgOrderByAggregateInput = {
     taxRate?: SortOrder
     cessRate?: SortOrder
+    priceCapThreshold?: SortOrder
+    taxRateAbove?: SortOrder
+    cessRateAbove?: SortOrder
   }
 
   export type GstSkuTaxMapMaxOrderByAggregateInput = {
@@ -152263,6 +152359,9 @@ export namespace Prisma {
     hsnCode?: SortOrder
     taxRate?: SortOrder
     cessRate?: SortOrder
+    priceCapThreshold?: SortOrder
+    taxRateAbove?: SortOrder
+    cessRateAbove?: SortOrder
     source?: SortOrder
     status?: SortOrder
     createdAt?: SortOrder
@@ -152277,6 +152376,9 @@ export namespace Prisma {
     hsnCode?: SortOrder
     taxRate?: SortOrder
     cessRate?: SortOrder
+    priceCapThreshold?: SortOrder
+    taxRateAbove?: SortOrder
+    cessRateAbove?: SortOrder
     source?: SortOrder
     status?: SortOrder
     createdAt?: SortOrder
@@ -152286,6 +152388,9 @@ export namespace Prisma {
   export type GstSkuTaxMapSumOrderByAggregateInput = {
     taxRate?: SortOrder
     cessRate?: SortOrder
+    priceCapThreshold?: SortOrder
+    taxRateAbove?: SortOrder
+    cessRateAbove?: SortOrder
   }
 
   export type GstOrderImportLineListRelationFilter = {
@@ -165653,6 +165758,9 @@ export namespace Prisma {
     hsnCode: string
     taxRate: Decimal | DecimalJsLike | number | string
     cessRate?: Decimal | DecimalJsLike | number | string
+    priceCapThreshold?: Decimal | DecimalJsLike | number | string | null
+    taxRateAbove?: Decimal | DecimalJsLike | number | string | null
+    cessRateAbove?: Decimal | DecimalJsLike | number | string
     source?: string
     status?: string
     metadata?: NullableJsonNullValueInput | InputJsonValue
@@ -165667,6 +165775,9 @@ export namespace Prisma {
     hsnCode: string
     taxRate: Decimal | DecimalJsLike | number | string
     cessRate?: Decimal | DecimalJsLike | number | string
+    priceCapThreshold?: Decimal | DecimalJsLike | number | string | null
+    taxRateAbove?: Decimal | DecimalJsLike | number | string | null
+    cessRateAbove?: Decimal | DecimalJsLike | number | string
     source?: string
     status?: string
     metadata?: NullableJsonNullValueInput | InputJsonValue
@@ -167794,6 +167905,9 @@ export namespace Prisma {
     hsnCode?: StringFilter<"GstSkuTaxMap"> | string
     taxRate?: DecimalFilter<"GstSkuTaxMap"> | Decimal | DecimalJsLike | number | string
     cessRate?: DecimalFilter<"GstSkuTaxMap"> | Decimal | DecimalJsLike | number | string
+    priceCapThreshold?: DecimalNullableFilter<"GstSkuTaxMap"> | Decimal | DecimalJsLike | number | string | null
+    taxRateAbove?: DecimalNullableFilter<"GstSkuTaxMap"> | Decimal | DecimalJsLike | number | string | null
+    cessRateAbove?: DecimalFilter<"GstSkuTaxMap"> | Decimal | DecimalJsLike | number | string
     source?: StringFilter<"GstSkuTaxMap"> | string
     status?: StringFilter<"GstSkuTaxMap"> | string
     metadata?: JsonNullableFilter<"GstSkuTaxMap">
@@ -200658,6 +200772,9 @@ export namespace Prisma {
     hsnCode: string
     taxRate: Decimal | DecimalJsLike | number | string
     cessRate?: Decimal | DecimalJsLike | number | string
+    priceCapThreshold?: Decimal | DecimalJsLike | number | string | null
+    taxRateAbove?: Decimal | DecimalJsLike | number | string | null
+    cessRateAbove?: Decimal | DecimalJsLike | number | string
     source?: string
     status?: string
     metadata?: NullableJsonNullValueInput | InputJsonValue
@@ -201828,6 +201945,9 @@ export namespace Prisma {
     hsnCode?: StringFieldUpdateOperationsInput | string
     taxRate?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     cessRate?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
+    priceCapThreshold?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    taxRateAbove?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    cessRateAbove?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     source?: StringFieldUpdateOperationsInput | string
     status?: StringFieldUpdateOperationsInput | string
     metadata?: NullableJsonNullValueInput | InputJsonValue
@@ -201842,6 +201962,9 @@ export namespace Prisma {
     hsnCode?: StringFieldUpdateOperationsInput | string
     taxRate?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     cessRate?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
+    priceCapThreshold?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    taxRateAbove?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    cessRateAbove?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     source?: StringFieldUpdateOperationsInput | string
     status?: StringFieldUpdateOperationsInput | string
     metadata?: NullableJsonNullValueInput | InputJsonValue
@@ -201856,6 +201979,9 @@ export namespace Prisma {
     hsnCode?: StringFieldUpdateOperationsInput | string
     taxRate?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     cessRate?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
+    priceCapThreshold?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    taxRateAbove?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    cessRateAbove?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     source?: StringFieldUpdateOperationsInput | string
     status?: StringFieldUpdateOperationsInput | string
     metadata?: NullableJsonNullValueInput | InputJsonValue

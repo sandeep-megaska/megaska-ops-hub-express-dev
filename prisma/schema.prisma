@@ -2484,6 +2484,14 @@ model GstSkuTaxMap {
   hsnCode   String
   taxRate   Decimal  @db.Decimal(5, 2)
   cessRate  Decimal  @default(0) @db.Decimal(5, 2)
+  // Optional per-SKU price-cap slab. When priceCapThreshold is set, a line whose
+  // per-unit price exceeds it uses taxRateAbove/cessRateAbove; at or below the
+  // threshold (and whenever the threshold is null) taxRate/cessRate apply. This
+  // models GST slabs that switch on per-piece sale value (e.g. apparel/footwear)
+  // without hardcoding the threshold.
+  priceCapThreshold Decimal? @db.Decimal(14, 2)
+  taxRateAbove      Decimal? @db.Decimal(5, 2)
+  cessRateAbove     Decimal  @default(0) @db.Decimal(5, 2)
   source    String   @default("BULK_CSV")
   status    String   @default("ACTIVE")
   metadata  Json?
