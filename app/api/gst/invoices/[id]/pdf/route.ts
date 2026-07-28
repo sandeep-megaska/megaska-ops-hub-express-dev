@@ -5,8 +5,8 @@ import { extensionCorsPreflight, withExtensionCors } from "../../../../../../ser
 
 export const runtime = "nodejs";
 
-export async function OPTIONS() {
-  return extensionCorsPreflight();
+export async function OPTIONS(req: NextRequest) {
+  return extensionCorsPreflight(req);
 }
 
 export async function GET(req: NextRequest, context: { params: Promise<{ id: string }> }) {
@@ -17,7 +17,8 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
     const htmlResult = await renderGstPdf(id);
     if (!htmlResult.ok || !htmlResult.data) {
       return withExtensionCors(
-        NextResponse.json({ ok: false, error: htmlResult.error || "Unable to render invoice HTML" }, { status: 404 })
+        NextResponse.json({ ok: false, error: htmlResult.error || "Unable to render invoice HTML" }, { status: 404 }),
+        req,
       );
     }
 
@@ -28,14 +29,16 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
           "Content-Type": "text/html; charset=utf-8",
           "Cache-Control": "no-store",
         },
-      })
+      }),
+      req,
     );
   }
 
   const result = await renderGstInvoicePdfBuffer(id);
   if (!result.ok || !result.data) {
     return withExtensionCors(
-      NextResponse.json({ ok: false, error: result.error || "Unable to generate invoice PDF" }, { status: 404 })
+      NextResponse.json({ ok: false, error: result.error || "Unable to generate invoice PDF" }, { status: 404 }),
+      req,
     );
   }
 
@@ -48,6 +51,7 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
         "Content-Disposition": `attachment; filename="${filename}"`,
         "Cache-Control": "no-store",
       },
-    })
+    }),
+    req,
   );
 }
