@@ -195,3 +195,64 @@ export const generateB2cSalesRegisterRun = async ({ from, to }: { from: string; 
 
 export const downloadReportRunFile = (id: string) =>
   request<{ fileUrl?: string | null; csv?: string }>(`/api/gst/reports/runs/${encodeURIComponent(id)}/download`)
+
+export type GstDocumentListItem = {
+  id: string
+  documentType: string
+  documentNumber: string
+  status: string
+  documentDate: string
+  sourceOrderNumber?: string | null
+  totalAmount?: unknown
+}
+
+export async function listGstDocuments(params: { documentType?: string; limit?: number; search?: string }) {
+  const search = new URLSearchParams()
+  if (params.documentType) search.set('documentType', params.documentType)
+  if (params.limit) search.set('limit', String(params.limit))
+  if (params.search) search.set('search', params.search)
+  const qs = search.toString()
+  const res = await fetch(withShopParam(`/api/gst/documents${qs ? `?${qs}` : ''}`), {
+    cache: 'no-store',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+  })
+  const payload = (await res.json().catch(() => ({}))) as {
+    ok?: boolean
+    error?: string
+    documents?: GstDocumentListItem[]
+  }
+  if (!res.ok || !payload.ok) {
+    return { ok: false as const, error: payload.error || `Request failed with status ${res.status}` }
+  }
+  return { ok: true as const, data: payload.documents || [] }
+}
+
+export async function createGstNote(payload: {
+  noteType: 'CREDIT_NOTE' | 'DEBIT_NOTE'
+  originalDocumentId: string
+  reason?: string
+  sourceOrderNumber?: string
+}) {
+  const res = await fetch(withShopParam('/api/gst/notes/draft'), {
+    method: 'POST',
+    cache: 'no-store',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      noteType: payload.noteType,
+      originalDocumentId: payload.originalDocumentId,
+      sourceOrderNumber: payload.sourceOrderNumber,
+      metadata: payload.reason ? { reason: payload.reason } : {},
+    }),
+  })
+  const data = (await res.json().catch(() => ({}))) as {
+    ok?: boolean
+    error?: string
+    note?: { id: string; documentNumber: string; documentType: string }
+  }
+  if (!res.ok || !data.ok) {
+    return { ok: false as const, error: data.error || `Request failed with status ${res.status}` }
+  }
+  return { ok: true as const, data: data.note }
+}

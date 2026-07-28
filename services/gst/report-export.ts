@@ -368,6 +368,7 @@ export async function prepareB2cSalesRegisterReport(input: PrepareB2cReportInput
 
   const result = await buildB2cSalesRegisterExport({
     gstSettingsId: input.gstSettingsId,
+    shopId: input.shopId || undefined,
     periodStart,
     periodEnd,
   });

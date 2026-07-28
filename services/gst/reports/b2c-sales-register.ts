@@ -5,6 +5,7 @@ import type { B2cSalesRegisterExport, B2cSalesRegisterRow, ReportWarning } from 
 type GstDocumentForReport = {
   id: string;
   documentNumber: string;
+  documentType: string;
   documentDate: Date;
   sourceOrderNumber: string | null;
   shopifyOrderName: string | null;
@@ -48,6 +49,7 @@ type SnapshotLine = {
 export const B2C_SALES_REGISTER_HEADERS = [
   "Invoice Date",
   "Invoice Number",
+  "Document Type",
   "Order Number",
   "Customer",
   "Place of Supply",
@@ -175,23 +177,28 @@ function buildRow(input: {
   paymentGateway?: string;
   fulfillmentStatus?: string;
 }): B2cSalesRegisterRow {
+  // Credit notes reduce GST liability; net them out so the register totals match
+  // the GSTR-1 figures. Debit notes and invoices stay positive.
+  const sign = input.document.documentType === "CREDIT_NOTE" ? -1 : 1;
+
   return {
     invoiceDate: formatDateYyyyMmDd(input.document.documentDate),
     invoiceNumber: input.document.documentNumber,
+    documentType: input.document.documentType,
     orderNumber: input.orderNumber,
     customer: input.customer,
     placeOfSupply: input.document.placeOfSupplyStateCode,
     product: input.product || "",
     variant: input.variant || "",
     hsn: input.hsn || "",
-    quantity: asFiniteNumber(input.quantity),
+    quantity: sign * asFiniteNumber(input.quantity),
     price: asFiniteNumber(input.price),
     gstPercent: asFiniteNumber(input.gstRate),
-    igst: asFiniteNumber(input.igst),
-    cgst: asFiniteNumber(input.cgst),
-    sgst: asFiniteNumber(input.sgst),
-    cess: asFiniteNumber(input.cess),
-    total: asFiniteNumber(input.total),
+    igst: sign * asFiniteNumber(input.igst),
+    cgst: sign * asFiniteNumber(input.cgst),
+    sgst: sign * asFiniteNumber(input.sgst),
+    cess: sign * asFiniteNumber(input.cess),
+    total: sign * asFiniteNumber(input.total),
     itemType: input.itemType || "",
     paymentStatus: input.paymentStatus || "",
     paymentGateway: input.paymentGateway || "",
@@ -203,6 +210,7 @@ function serializeRows(rows: B2cSalesRegisterRow[]): string {
   const csvRows = rows.map((row) => [
     row.invoiceDate,
     row.invoiceNumber,
+    row.documentType,
     row.orderNumber,
     row.customer,
     row.placeOfSupply,
@@ -242,24 +250,20 @@ function extractOrderStatusFields(snapshot: Record<string, unknown>): {
 
 export async function buildB2cSalesRegisterExport(input: {
   gstSettingsId: string;
+  shopId?: string | null;
   periodStart: Date;
   periodEnd: Date;
 }): Promise<B2cSalesRegisterExport> {
-  const invoiceTypeWhere = {
-    gstSettingsId: input.gstSettingsId,
-    documentType: "TAX_INVOICE" as const,
-  };
-  const invoiceTypeInRangeWhere = {
-    ...invoiceTypeWhere,
-    documentDate: { gte: input.periodStart, lte: input.periodEnd },
-  };
-  const invoiceTypeInRangeB2cWhere = {
-    ...invoiceTypeInRangeWhere,
-    supplyType: "B2C" as const,
-  };
-
   const where = {
-    ...invoiceTypeInRangeB2cWhere,
+    gstSettingsId: input.gstSettingsId,
+    // Multi-tenant safety: scope by shopId as well when supplied (gstSettingsId is
+    // already shop-specific, but shopId is now a first-class column on every row).
+    ...(input.shopId ? { shopId: input.shopId } : {}),
+    // A GSTR-1-consistent B2C register nets sales against adjustments: include tax
+    // invoices AND credit/debit notes. Credit notes are negated at row build time.
+    documentType: { in: ["TAX_INVOICE", "CREDIT_NOTE", "DEBIT_NOTE"] as const },
+    supplyType: "B2C" as const,
+    documentDate: { gte: input.periodStart, lte: input.periodEnd },
     // Report preparation creates draft GST documents; B2C export includes DRAFT and ISSUED GstDocument records because GstDocument is the finalized tax snapshot for export.
     status: { in: ["DRAFT", "ISSUED"] as const },
   };
@@ -271,6 +275,7 @@ export async function buildB2cSalesRegisterExport(input: {
       select: {
         id: true,
         documentNumber: true,
+        documentType: true,
         documentDate: true,
         sourceOrderNumber: true,
         shopifyOrderName: true,

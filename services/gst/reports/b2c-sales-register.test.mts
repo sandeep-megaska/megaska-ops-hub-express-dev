@@ -101,3 +101,59 @@ test("buildB2cSalesRegisterExport exposes stable B2C data shape", async () => {
   assert.equal(result.csv, B2C_SALES_REGISTER_HEADERS.join(","));
   assert.equal(result.warnings.some((warning) => warning.code === "NO_INVOICES_IN_RANGE"), true);
 });
+
+test("credit notes are netted negative and carry a Document Type", async () => {
+  gstDb.gstDocument.count = async () => 1 as never;
+  gstDb.gstDocument.findFirst = async () => ({ id: "sample" }) as never;
+  gstDb.gstDocument.findMany = async () =>
+    [
+      {
+        id: "cn-1",
+        documentNumber: "CN-001",
+        documentType: "CREDIT_NOTE",
+        documentDate: new Date("2026-04-12T00:00:00.000Z"),
+        sourceOrderNumber: "#1001",
+        shopifyOrderName: "#1001",
+        placeOfSupplyStateCode: "27",
+        taxableAmount: "100.00",
+        cgstAmount: "9.00",
+        sgstAmount: "9.00",
+        igstAmount: "0.00",
+        cessAmount: "0.00",
+        totalAmount: "118.00",
+        jsonSnapshot: {
+          buyer: { legalName: "John Doe" },
+          lines: [
+            {
+              productName: "T-Shirt",
+              hsnOrSac: "6109",
+              quantity: "1",
+              unitPrice: "100",
+              taxRate: "18",
+              cgstAmount: "9",
+              sgstAmount: "9",
+              igstAmount: "0",
+              cessAmount: "0",
+              lineTotal: "118",
+            },
+          ],
+        },
+        lines: [],
+      },
+    ] as never;
+
+  const result = await buildB2cSalesRegisterExport({
+    gstSettingsId: "gst-settings-1",
+    periodStart: new Date("2026-04-01T00:00:00.000Z"),
+    periodEnd: new Date("2026-04-30T23:59:59.999Z"),
+  });
+
+  assert.equal(result.rowCount, 1);
+  const row = result.rows[0];
+  assert.equal(row.documentType, "CREDIT_NOTE");
+  assert.equal(row.cgst, -9);
+  assert.equal(row.sgst, -9);
+  assert.equal(row.total, -118);
+  assert.equal(row.quantity, -1);
+  assert.match(result.csv, /CN-001/);
+});

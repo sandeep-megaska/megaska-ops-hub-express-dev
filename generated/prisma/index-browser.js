@@ -1259,6 +1259,7 @@ exports.Prisma.GstDocumentScalarFieldEnum = {
   documentNumber: 'documentNumber',
   documentDate: 'documentDate',
   gstSettingsId: 'gstSettingsId',
+  shopId: 'shopId',
   shopifyOrderId: 'shopifyOrderId',
   shopifyOrderName: 'shopifyOrderName',
   sourceOrderId: 'sourceOrderId',
@@ -1287,6 +1288,7 @@ exports.Prisma.GstDocumentScalarFieldEnum = {
 exports.Prisma.GstDocumentLineScalarFieldEnum = {
   id: 'id',
   gstDocumentId: 'gstDocumentId',
+  shopId: 'shopId',
   lineNumber: 'lineNumber',
   description: 'description',
   hsnOrSac: 'hsnOrSac',

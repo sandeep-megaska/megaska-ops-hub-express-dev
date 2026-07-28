@@ -9,6 +9,11 @@ import { computeTotals } from "./tax-engine";
 import type { GstInvoiceDraftInput, GstServiceResult } from "./types";
 import { validateDocumentDraftPayload } from "./validation";
 import { gstPerfLog, gstPerfNow } from "./perf";
+import {
+  generateUuid,
+  persistGstDocumentWithLines,
+  type NormalizedGstDocument,
+} from "./document-persistence";
 
 export interface GstInvoiceDraftResult {
   id: string;
@@ -17,128 +22,6 @@ export interface GstInvoiceDraftResult {
   placeOfSupplyStateCode: string;
   isInterstate: boolean;
   warnings: string[];
-}
-
-const GST_DOCUMENT_REQUIRED_FIELDS = [
-  "documentType",
-  "status",
-  "documentNumber",
-  "documentDate",
-  "gstSettingsId",
-  "supplyType",
-  "placeOfSupplyStateCode",
-  "isInterstate",
-  "currency",
-  "taxableAmount",
-  "cgstAmount",
-  "sgstAmount",
-  "igstAmount",
-  "cessAmount",
-  "totalAmount",
-  "jsonSnapshot",
-] as const;
-
-type GstColumnInfo = {
-  column_name: string;
-  is_nullable: "YES" | "NO";
-  data_type: string;
-  column_default: string | null;
-};
-
-type GstDocumentLineInsertRow = {
-  [key: string]: string | number | boolean | Date | Prisma.Decimal | null;
-};
-
-const GST_DOCUMENT_LINE_PRISMA_COLUMNS = new Set([
-  "id",
-  "gstDocumentId",
-  "lineNumber",
-  "description",
-  "hsnOrSac",
-  "quantity",
-  "unit",
-  "unitPrice",
-  "discount",
-  "taxableAmount",
-  "taxRate",
-  "cgstAmount",
-  "sgstAmount",
-  "igstAmount",
-  "cessAmount",
-  "lineTotal",
-  "createdAt",
-  "updatedAt",
-]);
-
-function isValidDateValue(value: unknown): boolean {
-  return value instanceof Date && !Number.isNaN(value.getTime());
-}
-
-function isValidDecimalValue(value: unknown): boolean {
-  if (value === null || value === undefined) return false;
-  if (value instanceof Prisma.Decimal) return value.isFinite();
-  const numeric = Number(value);
-  return Number.isFinite(numeric);
-}
-
-function validateGstDocumentCreatePayload(createPayload: Record<string, unknown>): string[] {
-  const errors: string[] = [];
-
-  for (const field of GST_DOCUMENT_REQUIRED_FIELDS) {
-    const value = createPayload[field];
-
-    if (value === null || value === undefined) {
-      errors.push(`${field}: value is ${value === null ? "null" : "undefined"}`);
-      continue;
-    }
-
-    if (
-      (
-        field === "documentType" ||
-        field === "status" ||
-        field === "documentNumber" ||
-        field === "gstSettingsId" ||
-        field === "supplyType" ||
-        field === "placeOfSupplyStateCode" ||
-        field === "currency"
-      ) &&
-      String(value).trim().length === 0
-    ) {
-      errors.push(`${field}: value is empty`);
-      continue;
-    }
-
-    if (field === "documentDate" && !isValidDateValue(value)) {
-      errors.push(`${field}: invalid Date value`);
-      continue;
-    }
-
-    if (field === "isInterstate" && typeof value !== "boolean") {
-      errors.push(`${field}: expected boolean, got ${typeof value}`);
-      continue;
-    }
-
-    if (
-      (
-        field === "taxableAmount" ||
-        field === "cgstAmount" ||
-        field === "sgstAmount" ||
-        field === "igstAmount" ||
-        field === "cessAmount" ||
-        field === "totalAmount"
-      ) &&
-      !isValidDecimalValue(value)
-    ) {
-      errors.push(`${field}: invalid decimal value`);
-      continue;
-    }
-
-    if (field === "jsonSnapshot" && (typeof value !== "object" || value === null)) {
-      errors.push(`${field}: expected JSON object`);
-    }
-  }
-
-  return errors;
 }
 
 function toInvoiceDraftError(reason: unknown): string {
@@ -291,121 +174,6 @@ function extractCustomerDetailsForInvoice(input: GstInvoiceDraftInput) {
     shippingAddress: resolvedShipping,
   };
 }
-function generateUuid(): string {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return crypto.randomUUID();
-  }
-
-  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (char) => {
-    const random = Math.floor(Math.random() * 16);
-    const value = char === "x" ? random : (random & 0x3) | 0x8;
-    return value.toString(16);
-  });
-}
-
-function toNullableTrimmedString(value: unknown): string | null {
-  const normalized = String(value ?? "").trim();
-  return normalized.length > 0 ? normalized : null;
-}
-
-function toGstTaxRateType(rateValue: unknown): string {
-  const rate = Number(rateValue);
-  if (!Number.isFinite(rate) || rate <= 0) return "ZERO";
-
-  const rounded = Math.round(rate * 100) / 100;
-  if (rounded === 3) return "GST_003";
-  if (rounded === 5) return "GST_005";
-  if (rounded === 12) return "GST_012";
-  if (rounded === 18) return "GST_018";
-  if (rounded === 28) return "GST_028";
-
-  // Production legacy enum only supports standard GST slabs. If a future
-  // non-standard rate appears, fail clearly instead of inserting invalid enum.
-  throw new Error(`Unsupported GST taxRateType for tax rate ${rate}`);
-}
-
-function pickLineSku(taxLine: Record<string, unknown>, sourceLine: Record<string, unknown>): string | null {
-  return toNullableTrimmedString(
-    taxLine.sku ??
-      taxLine.productSku ??
-      taxLine.variantSku ??
-      sourceLine.sku ??
-      sourceLine.productSku ??
-      sourceLine.variantSku
-  );
-}
-
-function getRequiredColumnsWithoutDefault(columns: GstColumnInfo[]): string[] {
-  return columns
-    .filter((col) => col.is_nullable === "NO" && col.column_default === null)
-    .map((col) => col.column_name);
-}
-
-function buildGstDocumentLineInsertRows(args: {
-  documentId: string;
-  taxLines: Array<Record<string, unknown>>;
-  sourceLines: Array<Record<string, unknown>>;
-  dbColumns: GstColumnInfo[];
-}): { rows: GstDocumentLineInsertRow[]; missingRequiredColumns: string[] } {
-  const { documentId, taxLines, sourceLines, dbColumns } = args;
-  const now = new Date();
-  const columnNames = new Set(dbColumns.map((col) => col.column_name));
-
-  const rows = taxLines.map((rawLine, index) => {
-    const line = rawLine as Record<string, unknown>;
-    const sourceLine = (sourceLines[index] || {}) as Record<string, unknown>;
-    const lineSku = pickLineSku(line, sourceLine);
-
-    const row: GstDocumentLineInsertRow = {
-      id: generateUuid(),
-      gstDocumentId: documentId,
-      lineNumber: Number(line.lineNumber || index + 1),
-      description: String(line.description ?? sourceLine.description ?? sourceLine.title ?? `Line ${index + 1}`),
-      hsnOrSac: toNullableTrimmedString(line.hsnOrSac ?? line.hsnCode ?? sourceLine.hsnOrSac ?? sourceLine.hsnCode),
-      quantity: new Prisma.Decimal(Number(line.quantity ?? sourceLine.quantity ?? 0)),
-      unit: toNullableTrimmedString(line.unit ?? sourceLine.unit),
-      unitPrice: new Prisma.Decimal(Number(line.unitPrice ?? sourceLine.unitPrice ?? sourceLine.price ?? 0)),
-      discount: new Prisma.Decimal(Number(line.discount ?? sourceLine.discount ?? 0)),
-      taxableAmount: new Prisma.Decimal(Number(line.taxableAmount ?? 0)),
-      taxRate: new Prisma.Decimal(Number(line.taxRate ?? sourceLine.taxRate ?? 0)),
-      cgstAmount: new Prisma.Decimal(Number(line.cgstAmount ?? 0)),
-      sgstAmount: new Prisma.Decimal(Number(line.sgstAmount ?? 0)),
-      igstAmount: new Prisma.Decimal(Number(line.igstAmount ?? 0)),
-      cessAmount: new Prisma.Decimal(Number(line.cessAmount ?? 0)),
-      lineTotal: new Prisma.Decimal(Number(line.lineTotal ?? 0)),
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    /*
-      Production DB has a legacy enum column taxRateType that is not present in
-      the generated Prisma schema. Valid enum values are NIL, ZERO, GST_003,
-      GST_005, GST_012, GST_018, and GST_028.
-    */
-    row.taxRateType = toGstTaxRateType(row.taxRate);
-
-    if (columnNames.has("documentId")) row.documentId = documentId;
-    if (columnNames.has("itemName")) row.itemName = row.description;
-    if (columnNames.has("productName")) row.productName = row.description;
-    if (columnNames.has("title")) row.title = row.description;
-    if (columnNames.has("sku")) row.sku = lineSku;
-    if (columnNames.has("hsnCode")) row.hsnCode = row.hsnOrSac;
-    if (columnNames.has("taxRatePercent")) row.taxRatePercent = row.taxRate;
-    if (columnNames.has("discountAmount")) row.discountAmount = row.discount;
-    if (columnNames.has("totalAmount")) row.totalAmount = row.lineTotal;
-    if (columnNames.has("grossAmount")) row.grossAmount = row.lineTotal;
-
-    return row;
-  });
-
-  const requiredDbColumns = getRequiredColumnsWithoutDefault(dbColumns);
-  const missingRequiredColumns = requiredDbColumns.filter((columnName) =>
-    rows.some((row) => row[columnName] === undefined || row[columnName] === null)
-  );
-
-  return { rows, missingRequiredColumns };
-}
-
 async function ensureBuyerParty(input: GstInvoiceDraftInput) {
   return {
     ...(input.buyer || {}),
@@ -582,26 +350,21 @@ export async function buildInvoiceDraft(input: GstInvoiceDraftInput): Promise<Gs
 
     const gstDocumentId = generateUuid();
     const gstSubtotalAmount = new Prisma.Decimal(taxData.totals.taxableAmount);
-    const gstUpdatedAt = new Date();
 
-    const createPayload = {
+    const documentToPersist: NormalizedGstDocument = {
       id: gstDocumentId,
       documentType: "TAX_INVOICE",
       status: GST_DEFAULT_DOCUMENT_STATUS,
       documentNumber: numberingData.documentNumber,
       documentDate,
       gstSettingsId: settings.id,
-
-      // Legacy production DB compatibility fields.
-      settingsId: settings.id,
-      issueDate: documentDate,
-      subtotalAmount: gstSubtotalAmount,
-
+      shopId: String(settings.shopId),
       shopifyOrderId: input.shopifyOrderId || null,
       shopifyOrderName: input.shopifyOrderName || null,
       sourceOrderId: input.sourceOrderId || null,
       sourceOrderNumber: input.sourceOrderNumber || null,
       sourceReference: input.sourceReference || null,
+      originalDocumentId: null,
       supplyType: classificationData.supplyType,
       placeOfSupplyStateCode: classificationData.placeOfSupplyStateCode,
       isInterstate: classificationData.isInterstate,
@@ -614,265 +377,32 @@ export async function buildInvoiceDraft(input: GstInvoiceDraftInput): Promise<Gs
       totalAmount: new Prisma.Decimal(taxData.totals.totalAmount),
       jsonSnapshot: snapshot,
       metadata: input.metadata || {},
-      updatedAt: gstUpdatedAt,
+      updatedAt: new Date(),
     };
 
     console.info("[GST DEBUG][INVOICE][CREATE]", {
       resolvedShopId: requestedShopId,
       selectedGstSettingsId: settings.id,
       selectedGstSettingsShopId: settings.shopId ?? null,
-      requiredGstDocumentFields: GST_DOCUMENT_REQUIRED_FIELDS,
-      createPayloadKeys: Object.keys(createPayload).sort(),
+      documentShopId: documentToPersist.shopId,
     });
 
     diagnosticState.phase = "PERSIST_GST_DOCUMENT";
+    diagnosticState.gstDocumentCreateAttempted = true;
     const documentCreationStartedAtMs = gstPerfNow();
-    let lineCreationDurationMs = 0;
-    const created = await gstDb.$transaction(async (tx) => {
-      const txWithRaw = tx as typeof tx & {
-        $queryRaw: <T = unknown>(query: TemplateStringsArray | Prisma.Sql, ...values: unknown[]) => Promise<T>;
-        $executeRaw: (query: TemplateStringsArray | Prisma.Sql, ...values: unknown[]) => Promise<number>;
-      };
-
-      const documentColumns = await txWithRaw.$queryRaw<GstColumnInfo[]>(Prisma.sql`
-        SELECT column_name, is_nullable, data_type, column_default
-        FROM information_schema.columns
-        WHERE table_schema = 'public' AND table_name = 'GstDocument'
-        ORDER BY ordinal_position
-      `);
-
-      const requiredDocumentColumns = getRequiredColumnsWithoutDefault(documentColumns);
-      const payloadValidationErrors = validateGstDocumentCreatePayload(createPayload as Record<string, unknown>);
-
-      console.info("[GST DEBUG][INVOICE][DB_SCHEMA][GstDocument]", {
-        columns: documentColumns,
-        requiredColumnsWithoutDefault: requiredDocumentColumns,
-      });
-
-      if (payloadValidationErrors.length > 0) {
-        console.error("[GST INVOICE] pre-create payload validation failed", {
-          payloadValidationErrors,
-        });
-        throw new Error(`GST document payload validation failed: ${payloadValidationErrors.join("; ")}`);
-      }
-
-      const createPayloadKeys = new Set(Object.keys(createPayload));
-      const requiredColumnsMissingFromPayload = requiredDocumentColumns.filter(
-        (columnName) => !createPayloadKeys.has(columnName)
-      );
-
-      if (requiredColumnsMissingFromPayload.length > 0) {
-        console.error("[GST INVOICE] DB requires columns missing from createPayload", {
-          requiredColumnsMissingFromPayload,
-          requiredDocumentColumns,
-          createPayloadKeys: [...createPayloadKeys].sort(),
-        });
-        throw new Error(
-          `GstDocument createPayload missing required DB column(s): ${requiredColumnsMissingFromPayload.join(", ")}`
-        );
-      }
-
-      const requiresLegacyDocumentInsert = requiredDocumentColumns.some(
-        (columnName) =>
-          columnName === "settingsId" || columnName === "issueDate" || columnName === "subtotalAmount"
-      );
-
-      let resolvedDocument: { id: string; documentNumber: string } | null = null;
-
-      if (requiresLegacyDocumentInsert) {
-        diagnosticState.gstDocumentCreateAttempted = true;
-        const metadataJson = createPayload.metadata ?? {};
-        let insertedDocuments: Array<{ id: string; documentNumber: string }>;
-        try {
-          insertedDocuments = await txWithRaw.$queryRaw<Array<{ id: string; documentNumber: string }>>(Prisma.sql`
-            INSERT INTO "GstDocument" (
-            "id",
-            "documentType",
-            "status",
-            "documentNumber",
-            "documentDate",
-            "gstSettingsId",
-            "settingsId",
-            "issueDate",
-            "shopifyOrderId",
-            "shopifyOrderName",
-            "sourceOrderId",
-            "sourceOrderNumber",
-            "sourceReference",
-            "supplyType",
-            "placeOfSupplyStateCode",
-            "isInterstate",
-            "currency",
-            "taxableAmount",
-            "subtotalAmount",
-            "cgstAmount",
-            "sgstAmount",
-            "igstAmount",
-            "cessAmount",
-            "totalAmount",
-            "jsonSnapshot",
-            "metadata",
-            "updatedAt"
-          ) VALUES (
-            ${createPayload.id},
-            ${createPayload.documentType},
-            ${createPayload.status},
-            ${createPayload.documentNumber},
-            ${createPayload.documentDate},
-            ${createPayload.gstSettingsId},
-            ${createPayload.settingsId},
-            ${createPayload.issueDate},
-            ${createPayload.shopifyOrderId},
-            ${createPayload.shopifyOrderName},
-            ${createPayload.sourceOrderId},
-            ${createPayload.sourceOrderNumber},
-            ${createPayload.sourceReference},
-            ${createPayload.supplyType},
-            ${createPayload.placeOfSupplyStateCode},
-            ${createPayload.isInterstate},
-            ${createPayload.currency},
-            ${createPayload.taxableAmount},
-            ${createPayload.subtotalAmount},
-            ${createPayload.cgstAmount},
-            ${createPayload.sgstAmount},
-            ${createPayload.igstAmount},
-            ${createPayload.cessAmount},
-            ${createPayload.totalAmount},
-            ${JSON.stringify(createPayload.jsonSnapshot)}::jsonb,
-            ${JSON.stringify(metadataJson)}::jsonb,
-            ${createPayload.updatedAt}
-          )
-            RETURNING "id", "documentNumber"
-          `);
-        } catch (error) {
-          diagnosticState.gstDocumentCreateFailedReason = error instanceof Error ? error.message : String(error);
-          throw error;
-        }
-
-        resolvedDocument = insertedDocuments[0] ?? null;
-      } else {
-        diagnosticState.gstDocumentCreateAttempted = true;
-        let createdDocument;
-        try {
-          createdDocument = await tx.gstDocument.create({
-            data: {
-              id: createPayload.id,
-              documentType: createPayload.documentType,
-              status: createPayload.status,
-              documentNumber: createPayload.documentNumber,
-              documentDate: createPayload.documentDate,
-              gstSettingsId: createPayload.gstSettingsId,
-              shopifyOrderId: createPayload.shopifyOrderId,
-              shopifyOrderName: createPayload.shopifyOrderName,
-              sourceOrderId: createPayload.sourceOrderId,
-              sourceOrderNumber: createPayload.sourceOrderNumber,
-              sourceReference: createPayload.sourceReference,
-              supplyType: createPayload.supplyType,
-              placeOfSupplyStateCode: createPayload.placeOfSupplyStateCode,
-              isInterstate: createPayload.isInterstate,
-              currency: createPayload.currency,
-              taxableAmount: createPayload.taxableAmount,
-              cgstAmount: createPayload.cgstAmount,
-              sgstAmount: createPayload.sgstAmount,
-              igstAmount: createPayload.igstAmount,
-              cessAmount: createPayload.cessAmount,
-              totalAmount: createPayload.totalAmount,
-              jsonSnapshot: createPayload.jsonSnapshot,
-              metadata: createPayload.metadata,
-              updatedAt: createPayload.updatedAt,
-            },
-          });
-        } catch (error) {
-          diagnosticState.gstDocumentCreateFailedReason = error instanceof Error ? error.message : String(error);
-          throw error;
-        }
-
-        resolvedDocument = {
-          id: createdDocument.id,
-          documentNumber: createdDocument.documentNumber,
-        };
-      }
-
-      if (!resolvedDocument) {
-        throw new Error("Failed to persist GstDocument");
-      }
-      gstPerfLog("gst.buildInvoiceDraft.documentCreation", documentCreationStartedAtMs, { sourceOrderId: input.sourceOrderId || null, gstDocumentId: resolvedDocument.id });
-
-      const lineCreationStartedAtMs = gstPerfNow();
-      const lineColumns = await txWithRaw.$queryRaw<GstColumnInfo[]>(Prisma.sql`
-        SELECT column_name, is_nullable, data_type, column_default
-        FROM information_schema.columns
-        WHERE table_schema = 'public' AND table_name = 'GstDocumentLine'
-        ORDER BY ordinal_position
-      `);
-
-      const { rows: lineRows, missingRequiredColumns } = buildGstDocumentLineInsertRows({
-        documentId: resolvedDocument.id,
-        taxLines: taxData.lines as unknown as Array<Record<string, unknown>>,
+    let created: { id: string; documentNumber: string };
+    try {
+      created = await persistGstDocumentWithLines({
+        document: documentToPersist,
+        taxLines: taxData.lines,
         sourceLines: input.lines as unknown as Array<Record<string, unknown>>,
-        dbColumns: lineColumns,
       });
+    } catch (error) {
+      diagnosticState.gstDocumentCreateFailedReason = error instanceof Error ? error.message : String(error);
+      throw error;
+    }
 
-      console.info("[GST DEBUG][INVOICE][DB_SCHEMA][GstDocumentLine]", {
-        columns: lineColumns,
-        firstLinePayloadKeys: Object.keys(lineRows[0] || {}).sort(),
-      });
-
-      if (missingRequiredColumns.length > 0) {
-        throw new Error(
-          `GstDocumentLine createPayload missing required DB column(s): ${missingRequiredColumns.join(", ")}`
-        );
-      }
-
-      const requiresLegacyLineInsert = lineColumns.some(
-        (column) => !GST_DOCUMENT_LINE_PRISMA_COLUMNS.has(column.column_name)
-      );
-
-      if (requiresLegacyLineInsert) {
-        const dbColumnSet = new Set(lineColumns.map((column) => column.column_name));
-
-        for (const row of lineRows) {
-          const insertColumns = Object.keys(row).filter((columnName) => dbColumnSet.has(columnName));
-          const insertValues = insertColumns.map((columnName) => row[columnName]);
-
-          await txWithRaw.$executeRaw(Prisma.sql`
-            INSERT INTO "GstDocumentLine" (
-              ${Prisma.join(insertColumns.map((columnName) => Prisma.raw(`"${columnName}"`)), ", ")}
-            ) VALUES (
-              ${Prisma.join(insertValues)}
-            )
-          `);
-        }
-      } else {
-        await tx.gstDocumentLine.createMany({
-          data: lineRows.map((row) => ({
-            id: String(row.id),
-            gstDocumentId: String(row.gstDocumentId),
-            lineNumber: Number(row.lineNumber),
-            description: String(row.description || ""),
-            hsnOrSac: row.hsnOrSac ? String(row.hsnOrSac) : null,
-            quantity: row.quantity,
-            unit: row.unit ? String(row.unit) : null,
-            unitPrice: row.unitPrice,
-            discount: row.discount,
-            taxableAmount: row.taxableAmount,
-            taxRate: row.taxRate,
-            cgstAmount: row.cgstAmount,
-            sgstAmount: row.sgstAmount,
-            igstAmount: row.igstAmount,
-            cessAmount: row.cessAmount,
-            lineTotal: row.lineTotal,
-            createdAt: row.createdAt,
-            updatedAt: row.updatedAt,
-          })),
-        });
-      }
-
-      lineCreationDurationMs = gstPerfNow() - lineCreationStartedAtMs;
-      return resolvedDocument;
-    });
-
-    console.info("[GST PERF]", { phase: "gst.buildInvoiceDraft.lineCreation", durationMs: lineCreationDurationMs, sourceOrderId: input.sourceOrderId || null, gstDocumentId: created.id, lineCount: input.lines.length });
+    gstPerfLog("gst.buildInvoiceDraft.persistDocument", documentCreationStartedAtMs, { sourceOrderId: input.sourceOrderId || null, gstDocumentId: created.id, lineCount: input.lines.length });
 
     await writeGstAuditLog(
       {

@@ -1,15 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isGstNoteDocumentType, isGstSupplyType } from "../../../../../services/gst/constants";
 import { buildNoteDraft } from "../../../../../services/gst/notes";
+import { getActiveGstSettings } from "../../../../../services/gst/settings";
 import type { GstNoteDraftInput } from "../../../../../services/gst/types";
 
 export const runtime = "nodejs";
 
-function parseDraftPayload(body: Record<string, unknown>): GstNoteDraftInput {
+function parseDraftPayload(
+  body: Record<string, unknown>,
+  settings: { id: string; shopId: string | null },
+): GstNoteDraftInput {
   return {
     noteType: isGstNoteDocumentType(body.noteType) ? body.noteType : "CREDIT_NOTE",
     originalDocumentId: body.originalDocumentId ? String(body.originalDocumentId) : undefined,
-    gstSettingsId: body.gstSettingsId ? String(body.gstSettingsId) : undefined,
+    // Shop scope is resolved server-side, never trusted from the client body.
+    gstSettingsId: settings.id,
+    shopId: settings.shopId ? String(settings.shopId) : undefined,
     sourceOrderId: body.sourceOrderId ? String(body.sourceOrderId) : undefined,
     sourceOrderNumber: body.sourceOrderNumber ? String(body.sourceOrderNumber) : undefined,
     sourceReference: body.sourceReference ? String(body.sourceReference) : undefined,
@@ -24,11 +30,11 @@ function parseDraftPayload(body: Record<string, unknown>): GstNoteDraftInput {
       stateCode: body.buyer && typeof body.buyer === "object" ? String((body.buyer as Record<string, unknown>).stateCode || "") : null,
     },
     supplyType: isGstSupplyType(body.supplyType) ? body.supplyType : undefined,
-    placeOfSupplyStateCode: body.placeOfSupplyStateCode
-      ? String(body.placeOfSupplyStateCode)
-      : undefined,
+    placeOfSupplyStateCode: body.placeOfSupplyStateCode ? String(body.placeOfSupplyStateCode) : undefined,
     isInterstate: typeof body.isInterstate === "boolean" ? body.isInterstate : undefined,
     currency: body.currency ? String(body.currency) : undefined,
+    // Lines are optional: when omitted and originalDocumentId is set, the note is
+    // a full reversal derived server-side from the original document's lines.
     lines: Array.isArray(body.lines)
       ? body.lines.map((line) => {
           const safeLine = (line || {}) as Record<string, unknown>;
@@ -53,12 +59,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "Invalid JSON payload" }, { status: 400 });
   }
 
-  const result = await buildNoteDraft(parseDraftPayload(body));
+  const settings = await getActiveGstSettings();
+  if (!settings.ok || !settings.data) {
+    return NextResponse.json(
+      { ok: false, error: settings.error || "Active GST settings not found" },
+      { status: 404 },
+    );
+  }
+
+  const result = await buildNoteDraft(
+    parseDraftPayload(body, { id: settings.data.id, shopId: settings.data.shopId ? String(settings.data.shopId) : null }),
+  );
 
   if (!result.ok || !result.data) {
     return NextResponse.json({ ok: false, error: result.error }, { status: 400 });
   }
 
-  const note = result.data;
-  return NextResponse.json({ ok: true, note }, { status: 201 });
+  return NextResponse.json({ ok: true, note: result.data }, { status: 201 });
 }
