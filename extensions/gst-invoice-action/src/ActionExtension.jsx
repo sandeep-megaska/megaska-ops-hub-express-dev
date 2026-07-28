@@ -71,6 +71,11 @@ export default async () => {
   readinessStack.direction = "block";
   readinessStack.gap = "base";
 
+  // Warns when the invoice's GST (from the app's HSN mapping) doesn't match the
+  // tax Shopify actually charged at checkout.
+  const reconWarn = document.createElement("s-text");
+  reconWarn.tone = "critical";
+
   const errorText = document.createElement("s-text");
   errorText.tone = "critical";
 
@@ -141,6 +146,17 @@ export default async () => {
       if (!readinessStack.isConnected) bodyStack.appendChild(readinessStack);
     } else if (readinessStack.isConnected) {
       readinessStack.remove();
+    }
+
+    const recon = orderStatus?.taxReconciliation;
+    if (recon && recon.matches === false) {
+      reconWarn.textContent = translateWith(i18n, "taxMismatch", {
+        invoiceTax: String(recon.invoiceTax),
+        shopifyTax: String(recon.shopifyTax),
+      });
+      if (!reconWarn.isConnected) bodyStack.appendChild(reconWarn);
+    } else if (reconWarn.isConnected) {
+      reconWarn.remove();
     }
 
     generateButton.textContent = hasInvoice ? i18n.translate("refreshButton") : i18n.translate("generateButton");
