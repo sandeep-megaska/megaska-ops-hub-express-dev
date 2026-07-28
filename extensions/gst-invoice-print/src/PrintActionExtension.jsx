@@ -29,22 +29,26 @@ export default async () => {
       shop: shopDomain,
     });
 
-    // Setting printAction.src to a relative path resolves it against this
-    // extension's sandboxed origin (extensions.shopifycdn.com), not our app -
-    // the same relative-URL trap documented in gst-invoice-action - so the
-    // preview requests a URL that doesn't exist and shows "Preview unable to
-    // load". fetch() is what Shopify resolves against the app's application_url
-    // (and authenticates), so we fetch the printable document here and hand the
-    // print action a self-contained blob URL instead of a relative path.
+    // A relative src resolves against this extension's sandbox origin
+    // (extensions.shopifycdn.com), not our app, and a blob: URL does not render
+    // in the print-action preview either (both showed "Preview unable to
+    // load"). fetch() IS resolved against the app's application_url, so we fetch
+    // the printable document first (to validate it and to learn the absolute
+    // app URL Shopify resolved it to), then hand the print action that absolute
+    // URL. Shopify loads it directly; the route already sends CORS for the
+    // extension sandbox origin.
     const res = await fetch(`/api/gst/print/order?${params.toString()}`);
     if (!res.ok) {
       preparingText.textContent = `Unable to prepare GST invoice for printing (HTTP ${res.status}). Open the GST app to resolve any outstanding issues, then try again.`;
       return;
     }
 
-    const html = await res.text();
-    const blob = new Blob([html], { type: "text/html" });
-    printAction.src = URL.createObjectURL(blob);
+    if (!res.url || !/^https?:\/\//i.test(res.url)) {
+      preparingText.textContent = "Unable to prepare GST invoice for printing (could not resolve a printable document URL).";
+      return;
+    }
+
+    printAction.src = res.url;
   } catch (error) {
     preparingText.textContent =
       error instanceof Error ? error.message : "Unable to prepare GST invoice for printing.";
