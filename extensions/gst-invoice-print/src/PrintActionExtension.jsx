@@ -30,25 +30,26 @@ export default async () => {
     });
 
     // A relative src resolves against this extension's sandbox origin
-    // (extensions.shopifycdn.com), not our app, and a blob: URL does not render
-    // in the print-action preview either (both showed "Preview unable to
-    // load"). fetch() IS resolved against the app's application_url, so we fetch
-    // the printable document first (to validate it and to learn the absolute
-    // app URL Shopify resolved it to), then hand the print action that absolute
-    // URL. Shopify loads it directly; the route already sends CORS for the
-    // extension sandbox origin.
-    const res = await fetch(`/api/gst/print/order?${params.toString()}`);
-    if (!res.ok) {
-      preparingText.textContent = `Unable to prepare GST invoice for printing (HTTP ${res.status}). Open the GST app to resolve any outstanding issues, then try again.`;
+    // (extensions.shopifycdn.com), not our app. fetch() IS resolved against the
+    // app's application_url, but Response.url comes back empty in this runtime,
+    // so we cannot learn the absolute URL from the response itself. Instead the
+    // prepare step (format=json) validates/generates the invoice and returns the
+    // absolute app URL that Shopify's print preview should load as src.
+    const res = await fetch(`/api/gst/print/order?${params.toString()}&format=json`);
+    const json = await res.json().catch(() => null);
+    if (!res.ok || !json || !json.ok || !json.url) {
+      preparingText.textContent =
+        (json && json.error) ||
+        `Unable to prepare GST invoice for printing (HTTP ${res.status}). Open the GST app to resolve any outstanding issues, then try again.`;
       return;
     }
 
-    if (!res.url || !/^https?:\/\//i.test(res.url)) {
+    if (!/^https?:\/\//i.test(json.url)) {
       preparingText.textContent = "Unable to prepare GST invoice for printing (could not resolve a printable document URL).";
       return;
     }
 
-    printAction.src = res.url;
+    printAction.src = json.url;
   } catch (error) {
     preparingText.textContent =
       error instanceof Error ? error.message : "Unable to prepare GST invoice for printing.";

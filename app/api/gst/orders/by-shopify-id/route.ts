@@ -14,6 +14,16 @@ function extractShopifyEntityId(gid: string) {
   return raw.includes("/") ? raw.split("/").pop() || raw : raw;
 }
 
+/**
+ * Absolute origin of this app. The action extension runs in a sandbox whose
+ * relative URLs resolve against extensions.shopifycdn.com, so the PDF link must
+ * be absolute for the merchant's click to reach the app (and download the file).
+ */
+function absoluteBase(req: NextRequest) {
+  const configured = String(process.env.SHOPIFY_APP_URL || "").trim().replace(/\/$/, "");
+  return configured || req.nextUrl.origin;
+}
+
 export async function OPTIONS() {
   return extensionCorsPreflight();
 }
@@ -133,7 +143,7 @@ export async function POST(req: NextRequest) {
         documentNumber: invoice ? invoice.documentNumber : null,
         status: invoice ? invoice.status : "NOT_INVOICED",
         customerEmail: buyer?.email ? String(buyer.email) : null,
-        pdfUrl: invoice ? `/api/gst/invoices/${invoice.id}/pdf` : null,
+        pdfUrl: invoice ? `${absoluteBase(req)}/api/gst/invoices/${invoice.id}/pdf` : null,
         taxReconciliation,
         error: generationError,
       },
