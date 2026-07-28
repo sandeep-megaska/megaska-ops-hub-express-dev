@@ -201,27 +201,15 @@ export default async () => {
     }
   });
 
-  downloadButton.addEventListener("click", async () => {
+  downloadButton.addEventListener("click", () => {
     if (!orderStatus?.pdfUrl) return;
-    downloadButton.loading = true;
     setError(null);
-    try {
-      // window.open() with a relative path resolves against this extension's
-      // own sandboxed origin, not the app. fetch() is what Shopify resolves
-      // against the app's application_url and attaches auth to, so the PDF is
-      // fetched here and opened from a local blob URL instead.
-      const res = await fetch(orderStatus.pdfUrl);
-      if (!res.ok) {
-        throw new Error(`Failed to download PDF (HTTP ${res.status})`);
-      }
-      const blob = await res.blob();
-      const objectUrl = URL.createObjectURL(blob);
-      window.open(objectUrl, "_blank");
-    } catch (error) {
-      setError(error instanceof Error ? error.message : String(error));
-    } finally {
-      downloadButton.loading = false;
-    }
+    // orderStatus.pdfUrl is an ABSOLUTE app URL and the route responds with
+    // Content-Disposition: attachment. Open it synchronously in this click
+    // handler so the browser keeps the user-activation: the earlier
+    // fetch()->blob()->window.open() approach lost activation on the await and
+    // the sandbox-origin blob URL would not open, so nothing happened.
+    window.open(orderStatus.pdfUrl, "_blank");
   });
 
   const syncSendButtonState = (event) => {
