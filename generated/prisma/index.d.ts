@@ -9848,6 +9848,8 @@ export namespace Prisma {
     gstProductTaxMaps: number
     gstSkuTaxMaps: number
     gstOrderImports: number
+    gstDocuments: number
+    gstDocumentLines: number
     refundRequests: number
     codAdvanceSettings: number
     codAdvanceIntents: number
@@ -9891,6 +9893,8 @@ export namespace Prisma {
     gstProductTaxMaps?: boolean | ShopCountOutputTypeCountGstProductTaxMapsArgs
     gstSkuTaxMaps?: boolean | ShopCountOutputTypeCountGstSkuTaxMapsArgs
     gstOrderImports?: boolean | ShopCountOutputTypeCountGstOrderImportsArgs
+    gstDocuments?: boolean | ShopCountOutputTypeCountGstDocumentsArgs
+    gstDocumentLines?: boolean | ShopCountOutputTypeCountGstDocumentLinesArgs
     refundRequests?: boolean | ShopCountOutputTypeCountRefundRequestsArgs
     codAdvanceSettings?: boolean | ShopCountOutputTypeCountCodAdvanceSettingsArgs
     codAdvanceIntents?: boolean | ShopCountOutputTypeCountCodAdvanceIntentsArgs
@@ -10008,6 +10012,20 @@ export namespace Prisma {
    */
   export type ShopCountOutputTypeCountGstOrderImportsArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     where?: GstOrderImportWhereInput
+  }
+
+  /**
+   * ShopCountOutputType without action
+   */
+  export type ShopCountOutputTypeCountGstDocumentsArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    where?: GstDocumentWhereInput
+  }
+
+  /**
+   * ShopCountOutputType without action
+   */
+  export type ShopCountOutputTypeCountGstDocumentLinesArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    where?: GstDocumentLineWhereInput
   }
 
   /**
@@ -13371,6 +13389,8 @@ export namespace Prisma {
     gstProductTaxMaps?: boolean | Shop$gstProductTaxMapsArgs<ExtArgs>
     gstSkuTaxMaps?: boolean | Shop$gstSkuTaxMapsArgs<ExtArgs>
     gstOrderImports?: boolean | Shop$gstOrderImportsArgs<ExtArgs>
+    gstDocuments?: boolean | Shop$gstDocumentsArgs<ExtArgs>
+    gstDocumentLines?: boolean | Shop$gstDocumentLinesArgs<ExtArgs>
     refundRequests?: boolean | Shop$refundRequestsArgs<ExtArgs>
     codAdvanceSettings?: boolean | Shop$codAdvanceSettingsArgs<ExtArgs>
     codAdvanceIntents?: boolean | Shop$codAdvanceIntentsArgs<ExtArgs>
@@ -13496,6 +13516,8 @@ export namespace Prisma {
     gstProductTaxMaps?: boolean | Shop$gstProductTaxMapsArgs<ExtArgs>
     gstSkuTaxMaps?: boolean | Shop$gstSkuTaxMapsArgs<ExtArgs>
     gstOrderImports?: boolean | Shop$gstOrderImportsArgs<ExtArgs>
+    gstDocuments?: boolean | Shop$gstDocumentsArgs<ExtArgs>
+    gstDocumentLines?: boolean | Shop$gstDocumentLinesArgs<ExtArgs>
     refundRequests?: boolean | Shop$refundRequestsArgs<ExtArgs>
     codAdvanceSettings?: boolean | Shop$codAdvanceSettingsArgs<ExtArgs>
     codAdvanceIntents?: boolean | Shop$codAdvanceIntentsArgs<ExtArgs>
@@ -13549,6 +13571,8 @@ export namespace Prisma {
       gstProductTaxMaps: Prisma.$GstProductTaxMapPayload<ExtArgs>[]
       gstSkuTaxMaps: Prisma.$GstSkuTaxMapPayload<ExtArgs>[]
       gstOrderImports: Prisma.$GstOrderImportPayload<ExtArgs>[]
+      gstDocuments: Prisma.$GstDocumentPayload<ExtArgs>[]
+      gstDocumentLines: Prisma.$GstDocumentLinePayload<ExtArgs>[]
       refundRequests: Prisma.$RefundRequestPayload<ExtArgs>[]
       codAdvanceSettings: Prisma.$CodAdvanceSettingsPayload<ExtArgs>[]
       codAdvanceIntents: Prisma.$CodAdvanceIntentPayload<ExtArgs>[]
@@ -14012,6 +14036,8 @@ export namespace Prisma {
     gstProductTaxMaps<T extends Shop$gstProductTaxMapsArgs<ExtArgs> = {}>(args?: Subset<T, Shop$gstProductTaxMapsArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$GstProductTaxMapPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
     gstSkuTaxMaps<T extends Shop$gstSkuTaxMapsArgs<ExtArgs> = {}>(args?: Subset<T, Shop$gstSkuTaxMapsArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$GstSkuTaxMapPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
     gstOrderImports<T extends Shop$gstOrderImportsArgs<ExtArgs> = {}>(args?: Subset<T, Shop$gstOrderImportsArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$GstOrderImportPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+    gstDocuments<T extends Shop$gstDocumentsArgs<ExtArgs> = {}>(args?: Subset<T, Shop$gstDocumentsArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$GstDocumentPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+    gstDocumentLines<T extends Shop$gstDocumentLinesArgs<ExtArgs> = {}>(args?: Subset<T, Shop$gstDocumentLinesArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$GstDocumentLinePayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
     refundRequests<T extends Shop$refundRequestsArgs<ExtArgs> = {}>(args?: Subset<T, Shop$refundRequestsArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$RefundRequestPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
     codAdvanceSettings<T extends Shop$codAdvanceSettingsArgs<ExtArgs> = {}>(args?: Subset<T, Shop$codAdvanceSettingsArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$CodAdvanceSettingsPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
     codAdvanceIntents<T extends Shop$codAdvanceIntentsArgs<ExtArgs> = {}>(args?: Subset<T, Shop$codAdvanceIntentsArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$CodAdvanceIntentPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
@@ -14751,6 +14777,54 @@ export namespace Prisma {
     take?: number
     skip?: number
     distinct?: GstOrderImportScalarFieldEnum | GstOrderImportScalarFieldEnum[]
+  }
+
+  /**
+   * Shop.gstDocuments
+   */
+  export type Shop$gstDocumentsArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the GstDocument
+     */
+    select?: GstDocumentSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the GstDocument
+     */
+    omit?: GstDocumentOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: GstDocumentInclude<ExtArgs> | null
+    where?: GstDocumentWhereInput
+    orderBy?: GstDocumentOrderByWithRelationInput | GstDocumentOrderByWithRelationInput[]
+    cursor?: GstDocumentWhereUniqueInput
+    take?: number
+    skip?: number
+    distinct?: GstDocumentScalarFieldEnum | GstDocumentScalarFieldEnum[]
+  }
+
+  /**
+   * Shop.gstDocumentLines
+   */
+  export type Shop$gstDocumentLinesArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the GstDocumentLine
+     */
+    select?: GstDocumentLineSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the GstDocumentLine
+     */
+    omit?: GstDocumentLineOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: GstDocumentLineInclude<ExtArgs> | null
+    where?: GstDocumentLineWhereInput
+    orderBy?: GstDocumentLineOrderByWithRelationInput | GstDocumentLineOrderByWithRelationInput[]
+    cursor?: GstDocumentLineWhereUniqueInput
+    take?: number
+    skip?: number
+    distinct?: GstDocumentLineScalarFieldEnum | GstDocumentLineScalarFieldEnum[]
   }
 
   /**
@@ -85598,6 +85672,7 @@ export namespace Prisma {
     documentNumber: string | null
     documentDate: Date | null
     gstSettingsId: string | null
+    shopId: string | null
     shopifyOrderId: string | null
     shopifyOrderName: string | null
     sourceOrderId: string | null
@@ -85628,6 +85703,7 @@ export namespace Prisma {
     documentNumber: string | null
     documentDate: Date | null
     gstSettingsId: string | null
+    shopId: string | null
     shopifyOrderId: string | null
     shopifyOrderName: string | null
     sourceOrderId: string | null
@@ -85658,6 +85734,7 @@ export namespace Prisma {
     documentNumber: number
     documentDate: number
     gstSettingsId: number
+    shopId: number
     shopifyOrderId: number
     shopifyOrderName: number
     sourceOrderId: number
@@ -85710,6 +85787,7 @@ export namespace Prisma {
     documentNumber?: true
     documentDate?: true
     gstSettingsId?: true
+    shopId?: true
     shopifyOrderId?: true
     shopifyOrderName?: true
     sourceOrderId?: true
@@ -85740,6 +85818,7 @@ export namespace Prisma {
     documentNumber?: true
     documentDate?: true
     gstSettingsId?: true
+    shopId?: true
     shopifyOrderId?: true
     shopifyOrderName?: true
     sourceOrderId?: true
@@ -85770,6 +85849,7 @@ export namespace Prisma {
     documentNumber?: true
     documentDate?: true
     gstSettingsId?: true
+    shopId?: true
     shopifyOrderId?: true
     shopifyOrderName?: true
     sourceOrderId?: true
@@ -85889,6 +85969,7 @@ export namespace Prisma {
     documentNumber: string
     documentDate: Date
     gstSettingsId: string
+    shopId: string
     shopifyOrderId: string | null
     shopifyOrderName: string | null
     sourceOrderId: string | null
@@ -85940,6 +86021,7 @@ export namespace Prisma {
     documentNumber?: boolean
     documentDate?: boolean
     gstSettingsId?: boolean
+    shopId?: boolean
     shopifyOrderId?: boolean
     shopifyOrderName?: boolean
     sourceOrderId?: boolean
@@ -85964,6 +86046,7 @@ export namespace Prisma {
     createdAt?: boolean
     updatedAt?: boolean
     gstSettings?: boolean | GstSettingsDefaultArgs<ExtArgs>
+    shop?: boolean | ShopDefaultArgs<ExtArgs>
     customer?: boolean | GstDocument$customerArgs<ExtArgs>
     originalDocument?: boolean | GstDocument$originalDocumentArgs<ExtArgs>
     derivedNotes?: boolean | GstDocument$derivedNotesArgs<ExtArgs>
@@ -85981,6 +86064,7 @@ export namespace Prisma {
     documentNumber?: boolean
     documentDate?: boolean
     gstSettingsId?: boolean
+    shopId?: boolean
     shopifyOrderId?: boolean
     shopifyOrderName?: boolean
     sourceOrderId?: boolean
@@ -86005,6 +86089,7 @@ export namespace Prisma {
     createdAt?: boolean
     updatedAt?: boolean
     gstSettings?: boolean | GstSettingsDefaultArgs<ExtArgs>
+    shop?: boolean | ShopDefaultArgs<ExtArgs>
     customer?: boolean | GstDocument$customerArgs<ExtArgs>
     originalDocument?: boolean | GstDocument$originalDocumentArgs<ExtArgs>
   }, ExtArgs["result"]["gstDocument"]>
@@ -86016,6 +86101,7 @@ export namespace Prisma {
     documentNumber?: boolean
     documentDate?: boolean
     gstSettingsId?: boolean
+    shopId?: boolean
     shopifyOrderId?: boolean
     shopifyOrderName?: boolean
     sourceOrderId?: boolean
@@ -86040,6 +86126,7 @@ export namespace Prisma {
     createdAt?: boolean
     updatedAt?: boolean
     gstSettings?: boolean | GstSettingsDefaultArgs<ExtArgs>
+    shop?: boolean | ShopDefaultArgs<ExtArgs>
     customer?: boolean | GstDocument$customerArgs<ExtArgs>
     originalDocument?: boolean | GstDocument$originalDocumentArgs<ExtArgs>
   }, ExtArgs["result"]["gstDocument"]>
@@ -86051,6 +86138,7 @@ export namespace Prisma {
     documentNumber?: boolean
     documentDate?: boolean
     gstSettingsId?: boolean
+    shopId?: boolean
     shopifyOrderId?: boolean
     shopifyOrderName?: boolean
     sourceOrderId?: boolean
@@ -86076,9 +86164,10 @@ export namespace Prisma {
     updatedAt?: boolean
   }
 
-  export type GstDocumentOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "documentType" | "status" | "documentNumber" | "documentDate" | "gstSettingsId" | "shopifyOrderId" | "shopifyOrderName" | "sourceOrderId" | "sourceOrderNumber" | "sourceReference" | "customerProfileId" | "originalDocumentId" | "supplyType" | "placeOfSupplyStateCode" | "isInterstate" | "currency" | "taxableAmount" | "cgstAmount" | "sgstAmount" | "igstAmount" | "cessAmount" | "totalAmount" | "pdfFileUrl" | "jsonSnapshot" | "metadata" | "issuedAt" | "createdAt" | "updatedAt", ExtArgs["result"]["gstDocument"]>
+  export type GstDocumentOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "documentType" | "status" | "documentNumber" | "documentDate" | "gstSettingsId" | "shopId" | "shopifyOrderId" | "shopifyOrderName" | "sourceOrderId" | "sourceOrderNumber" | "sourceReference" | "customerProfileId" | "originalDocumentId" | "supplyType" | "placeOfSupplyStateCode" | "isInterstate" | "currency" | "taxableAmount" | "cgstAmount" | "sgstAmount" | "igstAmount" | "cessAmount" | "totalAmount" | "pdfFileUrl" | "jsonSnapshot" | "metadata" | "issuedAt" | "createdAt" | "updatedAt", ExtArgs["result"]["gstDocument"]>
   export type GstDocumentInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     gstSettings?: boolean | GstSettingsDefaultArgs<ExtArgs>
+    shop?: boolean | ShopDefaultArgs<ExtArgs>
     customer?: boolean | GstDocument$customerArgs<ExtArgs>
     originalDocument?: boolean | GstDocument$originalDocumentArgs<ExtArgs>
     derivedNotes?: boolean | GstDocument$derivedNotesArgs<ExtArgs>
@@ -86090,11 +86179,13 @@ export namespace Prisma {
   }
   export type GstDocumentIncludeCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     gstSettings?: boolean | GstSettingsDefaultArgs<ExtArgs>
+    shop?: boolean | ShopDefaultArgs<ExtArgs>
     customer?: boolean | GstDocument$customerArgs<ExtArgs>
     originalDocument?: boolean | GstDocument$originalDocumentArgs<ExtArgs>
   }
   export type GstDocumentIncludeUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     gstSettings?: boolean | GstSettingsDefaultArgs<ExtArgs>
+    shop?: boolean | ShopDefaultArgs<ExtArgs>
     customer?: boolean | GstDocument$customerArgs<ExtArgs>
     originalDocument?: boolean | GstDocument$originalDocumentArgs<ExtArgs>
   }
@@ -86103,6 +86194,7 @@ export namespace Prisma {
     name: "GstDocument"
     objects: {
       gstSettings: Prisma.$GstSettingsPayload<ExtArgs>
+      shop: Prisma.$ShopPayload<ExtArgs>
       customer: Prisma.$CustomerProfilePayload<ExtArgs> | null
       originalDocument: Prisma.$GstDocumentPayload<ExtArgs> | null
       derivedNotes: Prisma.$GstDocumentPayload<ExtArgs>[]
@@ -86118,6 +86210,7 @@ export namespace Prisma {
       documentNumber: string
       documentDate: Date
       gstSettingsId: string
+      shopId: string
       shopifyOrderId: string | null
       shopifyOrderName: string | null
       sourceOrderId: string | null
@@ -86536,6 +86629,7 @@ export namespace Prisma {
   export interface Prisma__GstDocumentClient<T, Null = never, ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs, GlobalOmitOptions = {}> extends Prisma.PrismaPromise<T> {
     readonly [Symbol.toStringTag]: "PrismaPromise"
     gstSettings<T extends GstSettingsDefaultArgs<ExtArgs> = {}>(args?: Subset<T, GstSettingsDefaultArgs<ExtArgs>>): Prisma__GstSettingsClient<$Result.GetResult<Prisma.$GstSettingsPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>
+    shop<T extends ShopDefaultArgs<ExtArgs> = {}>(args?: Subset<T, ShopDefaultArgs<ExtArgs>>): Prisma__ShopClient<$Result.GetResult<Prisma.$ShopPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>
     customer<T extends GstDocument$customerArgs<ExtArgs> = {}>(args?: Subset<T, GstDocument$customerArgs<ExtArgs>>): Prisma__CustomerProfileClient<$Result.GetResult<Prisma.$CustomerProfilePayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
     originalDocument<T extends GstDocument$originalDocumentArgs<ExtArgs> = {}>(args?: Subset<T, GstDocument$originalDocumentArgs<ExtArgs>>): Prisma__GstDocumentClient<$Result.GetResult<Prisma.$GstDocumentPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
     derivedNotes<T extends GstDocument$derivedNotesArgs<ExtArgs> = {}>(args?: Subset<T, GstDocument$derivedNotesArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$GstDocumentPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
@@ -86578,6 +86672,7 @@ export namespace Prisma {
     readonly documentNumber: FieldRef<"GstDocument", 'String'>
     readonly documentDate: FieldRef<"GstDocument", 'DateTime'>
     readonly gstSettingsId: FieldRef<"GstDocument", 'String'>
+    readonly shopId: FieldRef<"GstDocument", 'String'>
     readonly shopifyOrderId: FieldRef<"GstDocument", 'String'>
     readonly shopifyOrderName: FieldRef<"GstDocument", 'String'>
     readonly sourceOrderId: FieldRef<"GstDocument", 'String'>
@@ -87221,6 +87316,7 @@ export namespace Prisma {
   export type GstDocumentLineMinAggregateOutputType = {
     id: string | null
     gstDocumentId: string | null
+    shopId: string | null
     lineNumber: number | null
     description: string | null
     hsnOrSac: string | null
@@ -87242,6 +87338,7 @@ export namespace Prisma {
   export type GstDocumentLineMaxAggregateOutputType = {
     id: string | null
     gstDocumentId: string | null
+    shopId: string | null
     lineNumber: number | null
     description: string | null
     hsnOrSac: string | null
@@ -87263,6 +87360,7 @@ export namespace Prisma {
   export type GstDocumentLineCountAggregateOutputType = {
     id: number
     gstDocumentId: number
+    shopId: number
     lineNumber: number
     description: number
     hsnOrSac: number
@@ -87314,6 +87412,7 @@ export namespace Prisma {
   export type GstDocumentLineMinAggregateInputType = {
     id?: true
     gstDocumentId?: true
+    shopId?: true
     lineNumber?: true
     description?: true
     hsnOrSac?: true
@@ -87335,6 +87434,7 @@ export namespace Prisma {
   export type GstDocumentLineMaxAggregateInputType = {
     id?: true
     gstDocumentId?: true
+    shopId?: true
     lineNumber?: true
     description?: true
     hsnOrSac?: true
@@ -87356,6 +87456,7 @@ export namespace Prisma {
   export type GstDocumentLineCountAggregateInputType = {
     id?: true
     gstDocumentId?: true
+    shopId?: true
     lineNumber?: true
     description?: true
     hsnOrSac?: true
@@ -87464,6 +87565,7 @@ export namespace Prisma {
   export type GstDocumentLineGroupByOutputType = {
     id: string
     gstDocumentId: string
+    shopId: string
     lineNumber: number
     description: string
     hsnOrSac: string | null
@@ -87504,6 +87606,7 @@ export namespace Prisma {
   export type GstDocumentLineSelect<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
     id?: boolean
     gstDocumentId?: boolean
+    shopId?: boolean
     lineNumber?: boolean
     description?: boolean
     hsnOrSac?: boolean
@@ -87521,11 +87624,13 @@ export namespace Prisma {
     createdAt?: boolean
     updatedAt?: boolean
     document?: boolean | GstDocumentDefaultArgs<ExtArgs>
+    shop?: boolean | ShopDefaultArgs<ExtArgs>
   }, ExtArgs["result"]["gstDocumentLine"]>
 
   export type GstDocumentLineSelectCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
     id?: boolean
     gstDocumentId?: boolean
+    shopId?: boolean
     lineNumber?: boolean
     description?: boolean
     hsnOrSac?: boolean
@@ -87543,11 +87648,13 @@ export namespace Prisma {
     createdAt?: boolean
     updatedAt?: boolean
     document?: boolean | GstDocumentDefaultArgs<ExtArgs>
+    shop?: boolean | ShopDefaultArgs<ExtArgs>
   }, ExtArgs["result"]["gstDocumentLine"]>
 
   export type GstDocumentLineSelectUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
     id?: boolean
     gstDocumentId?: boolean
+    shopId?: boolean
     lineNumber?: boolean
     description?: boolean
     hsnOrSac?: boolean
@@ -87565,11 +87672,13 @@ export namespace Prisma {
     createdAt?: boolean
     updatedAt?: boolean
     document?: boolean | GstDocumentDefaultArgs<ExtArgs>
+    shop?: boolean | ShopDefaultArgs<ExtArgs>
   }, ExtArgs["result"]["gstDocumentLine"]>
 
   export type GstDocumentLineSelectScalar = {
     id?: boolean
     gstDocumentId?: boolean
+    shopId?: boolean
     lineNumber?: boolean
     description?: boolean
     hsnOrSac?: boolean
@@ -87588,25 +87697,30 @@ export namespace Prisma {
     updatedAt?: boolean
   }
 
-  export type GstDocumentLineOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "gstDocumentId" | "lineNumber" | "description" | "hsnOrSac" | "quantity" | "unit" | "unitPrice" | "discount" | "taxableAmount" | "taxRate" | "cgstAmount" | "sgstAmount" | "igstAmount" | "cessAmount" | "lineTotal" | "createdAt" | "updatedAt", ExtArgs["result"]["gstDocumentLine"]>
+  export type GstDocumentLineOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "gstDocumentId" | "shopId" | "lineNumber" | "description" | "hsnOrSac" | "quantity" | "unit" | "unitPrice" | "discount" | "taxableAmount" | "taxRate" | "cgstAmount" | "sgstAmount" | "igstAmount" | "cessAmount" | "lineTotal" | "createdAt" | "updatedAt", ExtArgs["result"]["gstDocumentLine"]>
   export type GstDocumentLineInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     document?: boolean | GstDocumentDefaultArgs<ExtArgs>
+    shop?: boolean | ShopDefaultArgs<ExtArgs>
   }
   export type GstDocumentLineIncludeCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     document?: boolean | GstDocumentDefaultArgs<ExtArgs>
+    shop?: boolean | ShopDefaultArgs<ExtArgs>
   }
   export type GstDocumentLineIncludeUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     document?: boolean | GstDocumentDefaultArgs<ExtArgs>
+    shop?: boolean | ShopDefaultArgs<ExtArgs>
   }
 
   export type $GstDocumentLinePayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     name: "GstDocumentLine"
     objects: {
       document: Prisma.$GstDocumentPayload<ExtArgs>
+      shop: Prisma.$ShopPayload<ExtArgs>
     }
     scalars: $Extensions.GetPayloadResult<{
       id: string
       gstDocumentId: string
+      shopId: string
       lineNumber: number
       description: string
       hsnOrSac: string | null
@@ -88018,6 +88132,7 @@ export namespace Prisma {
   export interface Prisma__GstDocumentLineClient<T, Null = never, ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs, GlobalOmitOptions = {}> extends Prisma.PrismaPromise<T> {
     readonly [Symbol.toStringTag]: "PrismaPromise"
     document<T extends GstDocumentDefaultArgs<ExtArgs> = {}>(args?: Subset<T, GstDocumentDefaultArgs<ExtArgs>>): Prisma__GstDocumentClient<$Result.GetResult<Prisma.$GstDocumentPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>
+    shop<T extends ShopDefaultArgs<ExtArgs> = {}>(args?: Subset<T, ShopDefaultArgs<ExtArgs>>): Prisma__ShopClient<$Result.GetResult<Prisma.$ShopPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>
     /**
      * Attaches callbacks for the resolution and/or rejection of the Promise.
      * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -88049,6 +88164,7 @@ export namespace Prisma {
   interface GstDocumentLineFieldRefs {
     readonly id: FieldRef<"GstDocumentLine", 'String'>
     readonly gstDocumentId: FieldRef<"GstDocumentLine", 'String'>
+    readonly shopId: FieldRef<"GstDocumentLine", 'String'>
     readonly lineNumber: FieldRef<"GstDocumentLine", 'Int'>
     readonly description: FieldRef<"GstDocumentLine", 'String'>
     readonly hsnOrSac: FieldRef<"GstDocumentLine", 'String'>
@@ -121666,6 +121782,7 @@ export namespace Prisma {
     documentNumber: 'documentNumber',
     documentDate: 'documentDate',
     gstSettingsId: 'gstSettingsId',
+    shopId: 'shopId',
     shopifyOrderId: 'shopifyOrderId',
     shopifyOrderName: 'shopifyOrderName',
     sourceOrderId: 'sourceOrderId',
@@ -121697,6 +121814,7 @@ export namespace Prisma {
   export const GstDocumentLineScalarFieldEnum: {
     id: 'id',
     gstDocumentId: 'gstDocumentId',
+    shopId: 'shopId',
     lineNumber: 'lineNumber',
     description: 'description',
     hsnOrSac: 'hsnOrSac',
@@ -123655,6 +123773,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapListRelationFilter
     gstSkuTaxMaps?: GstSkuTaxMapListRelationFilter
     gstOrderImports?: GstOrderImportListRelationFilter
+    gstDocuments?: GstDocumentListRelationFilter
+    gstDocumentLines?: GstDocumentLineListRelationFilter
     refundRequests?: RefundRequestListRelationFilter
     codAdvanceSettings?: CodAdvanceSettingsListRelationFilter
     codAdvanceIntents?: CodAdvanceIntentListRelationFilter
@@ -123725,6 +123845,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapOrderByRelationAggregateInput
     gstSkuTaxMaps?: GstSkuTaxMapOrderByRelationAggregateInput
     gstOrderImports?: GstOrderImportOrderByRelationAggregateInput
+    gstDocuments?: GstDocumentOrderByRelationAggregateInput
+    gstDocumentLines?: GstDocumentLineOrderByRelationAggregateInput
     refundRequests?: RefundRequestOrderByRelationAggregateInput
     codAdvanceSettings?: CodAdvanceSettingsOrderByRelationAggregateInput
     codAdvanceIntents?: CodAdvanceIntentOrderByRelationAggregateInput
@@ -123798,6 +123920,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapListRelationFilter
     gstSkuTaxMaps?: GstSkuTaxMapListRelationFilter
     gstOrderImports?: GstOrderImportListRelationFilter
+    gstDocuments?: GstDocumentListRelationFilter
+    gstDocumentLines?: GstDocumentLineListRelationFilter
     refundRequests?: RefundRequestListRelationFilter
     codAdvanceSettings?: CodAdvanceSettingsListRelationFilter
     codAdvanceIntents?: CodAdvanceIntentListRelationFilter
@@ -130507,6 +130631,7 @@ export namespace Prisma {
     documentNumber?: StringFilter<"GstDocument"> | string
     documentDate?: DateTimeFilter<"GstDocument"> | Date | string
     gstSettingsId?: StringFilter<"GstDocument"> | string
+    shopId?: StringFilter<"GstDocument"> | string
     shopifyOrderId?: StringNullableFilter<"GstDocument"> | string | null
     shopifyOrderName?: StringNullableFilter<"GstDocument"> | string | null
     sourceOrderId?: StringNullableFilter<"GstDocument"> | string | null
@@ -130531,6 +130656,7 @@ export namespace Prisma {
     createdAt?: DateTimeFilter<"GstDocument"> | Date | string
     updatedAt?: DateTimeFilter<"GstDocument"> | Date | string
     gstSettings?: XOR<GstSettingsScalarRelationFilter, GstSettingsWhereInput>
+    shop?: XOR<ShopScalarRelationFilter, ShopWhereInput>
     customer?: XOR<CustomerProfileNullableScalarRelationFilter, CustomerProfileWhereInput> | null
     originalDocument?: XOR<GstDocumentNullableScalarRelationFilter, GstDocumentWhereInput> | null
     derivedNotes?: GstDocumentListRelationFilter
@@ -130547,6 +130673,7 @@ export namespace Prisma {
     documentNumber?: SortOrder
     documentDate?: SortOrder
     gstSettingsId?: SortOrder
+    shopId?: SortOrder
     shopifyOrderId?: SortOrderInput | SortOrder
     shopifyOrderName?: SortOrderInput | SortOrder
     sourceOrderId?: SortOrderInput | SortOrder
@@ -130571,6 +130698,7 @@ export namespace Prisma {
     createdAt?: SortOrder
     updatedAt?: SortOrder
     gstSettings?: GstSettingsOrderByWithRelationInput
+    shop?: ShopOrderByWithRelationInput
     customer?: CustomerProfileOrderByWithRelationInput
     originalDocument?: GstDocumentOrderByWithRelationInput
     derivedNotes?: GstDocumentOrderByRelationAggregateInput
@@ -130590,6 +130718,7 @@ export namespace Prisma {
     status?: EnumGstDocumentStatusFilter<"GstDocument"> | $Enums.GstDocumentStatus
     documentDate?: DateTimeFilter<"GstDocument"> | Date | string
     gstSettingsId?: StringFilter<"GstDocument"> | string
+    shopId?: StringFilter<"GstDocument"> | string
     shopifyOrderId?: StringNullableFilter<"GstDocument"> | string | null
     shopifyOrderName?: StringNullableFilter<"GstDocument"> | string | null
     sourceOrderId?: StringNullableFilter<"GstDocument"> | string | null
@@ -130614,6 +130743,7 @@ export namespace Prisma {
     createdAt?: DateTimeFilter<"GstDocument"> | Date | string
     updatedAt?: DateTimeFilter<"GstDocument"> | Date | string
     gstSettings?: XOR<GstSettingsScalarRelationFilter, GstSettingsWhereInput>
+    shop?: XOR<ShopScalarRelationFilter, ShopWhereInput>
     customer?: XOR<CustomerProfileNullableScalarRelationFilter, CustomerProfileWhereInput> | null
     originalDocument?: XOR<GstDocumentNullableScalarRelationFilter, GstDocumentWhereInput> | null
     derivedNotes?: GstDocumentListRelationFilter
@@ -130630,6 +130760,7 @@ export namespace Prisma {
     documentNumber?: SortOrder
     documentDate?: SortOrder
     gstSettingsId?: SortOrder
+    shopId?: SortOrder
     shopifyOrderId?: SortOrderInput | SortOrder
     shopifyOrderName?: SortOrderInput | SortOrder
     sourceOrderId?: SortOrderInput | SortOrder
@@ -130670,6 +130801,7 @@ export namespace Prisma {
     documentNumber?: StringWithAggregatesFilter<"GstDocument"> | string
     documentDate?: DateTimeWithAggregatesFilter<"GstDocument"> | Date | string
     gstSettingsId?: StringWithAggregatesFilter<"GstDocument"> | string
+    shopId?: StringWithAggregatesFilter<"GstDocument"> | string
     shopifyOrderId?: StringNullableWithAggregatesFilter<"GstDocument"> | string | null
     shopifyOrderName?: StringNullableWithAggregatesFilter<"GstDocument"> | string | null
     sourceOrderId?: StringNullableWithAggregatesFilter<"GstDocument"> | string | null
@@ -130701,6 +130833,7 @@ export namespace Prisma {
     NOT?: GstDocumentLineWhereInput | GstDocumentLineWhereInput[]
     id?: StringFilter<"GstDocumentLine"> | string
     gstDocumentId?: StringFilter<"GstDocumentLine"> | string
+    shopId?: StringFilter<"GstDocumentLine"> | string
     lineNumber?: IntFilter<"GstDocumentLine"> | number
     description?: StringFilter<"GstDocumentLine"> | string
     hsnOrSac?: StringNullableFilter<"GstDocumentLine"> | string | null
@@ -130718,11 +130851,13 @@ export namespace Prisma {
     createdAt?: DateTimeFilter<"GstDocumentLine"> | Date | string
     updatedAt?: DateTimeFilter<"GstDocumentLine"> | Date | string
     document?: XOR<GstDocumentScalarRelationFilter, GstDocumentWhereInput>
+    shop?: XOR<ShopScalarRelationFilter, ShopWhereInput>
   }
 
   export type GstDocumentLineOrderByWithRelationInput = {
     id?: SortOrder
     gstDocumentId?: SortOrder
+    shopId?: SortOrder
     lineNumber?: SortOrder
     description?: SortOrder
     hsnOrSac?: SortOrderInput | SortOrder
@@ -130740,6 +130875,7 @@ export namespace Prisma {
     createdAt?: SortOrder
     updatedAt?: SortOrder
     document?: GstDocumentOrderByWithRelationInput
+    shop?: ShopOrderByWithRelationInput
   }
 
   export type GstDocumentLineWhereUniqueInput = Prisma.AtLeast<{
@@ -130749,6 +130885,7 @@ export namespace Prisma {
     OR?: GstDocumentLineWhereInput[]
     NOT?: GstDocumentLineWhereInput | GstDocumentLineWhereInput[]
     gstDocumentId?: StringFilter<"GstDocumentLine"> | string
+    shopId?: StringFilter<"GstDocumentLine"> | string
     lineNumber?: IntFilter<"GstDocumentLine"> | number
     description?: StringFilter<"GstDocumentLine"> | string
     hsnOrSac?: StringNullableFilter<"GstDocumentLine"> | string | null
@@ -130766,11 +130903,13 @@ export namespace Prisma {
     createdAt?: DateTimeFilter<"GstDocumentLine"> | Date | string
     updatedAt?: DateTimeFilter<"GstDocumentLine"> | Date | string
     document?: XOR<GstDocumentScalarRelationFilter, GstDocumentWhereInput>
+    shop?: XOR<ShopScalarRelationFilter, ShopWhereInput>
   }, "id" | "gstDocumentId_lineNumber">
 
   export type GstDocumentLineOrderByWithAggregationInput = {
     id?: SortOrder
     gstDocumentId?: SortOrder
+    shopId?: SortOrder
     lineNumber?: SortOrder
     description?: SortOrder
     hsnOrSac?: SortOrderInput | SortOrder
@@ -130800,6 +130939,7 @@ export namespace Prisma {
     NOT?: GstDocumentLineScalarWhereWithAggregatesInput | GstDocumentLineScalarWhereWithAggregatesInput[]
     id?: StringWithAggregatesFilter<"GstDocumentLine"> | string
     gstDocumentId?: StringWithAggregatesFilter<"GstDocumentLine"> | string
+    shopId?: StringWithAggregatesFilter<"GstDocumentLine"> | string
     lineNumber?: IntWithAggregatesFilter<"GstDocumentLine"> | number
     description?: StringWithAggregatesFilter<"GstDocumentLine"> | string
     hsnOrSac?: StringNullableWithAggregatesFilter<"GstDocumentLine"> | string | null
@@ -133774,6 +133914,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentCreateNestedManyWithoutShopInput
@@ -133844,6 +133986,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportUncheckedCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentUncheckedCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineUncheckedCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestUncheckedCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedCreateNestedManyWithoutShopInput
@@ -133914,6 +134058,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUpdateManyWithoutShopNestedInput
@@ -133984,6 +134130,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUncheckedUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUncheckedUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUncheckedUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedUpdateManyWithoutShopNestedInput
@@ -141840,6 +141988,7 @@ export namespace Prisma {
     createdAt?: Date | string
     updatedAt?: Date | string
     gstSettings: GstSettingsCreateNestedOneWithoutDocumentsInput
+    shop: ShopCreateNestedOneWithoutGstDocumentsInput
     customer?: CustomerProfileCreateNestedOneWithoutGstDocumentsInput
     originalDocument?: GstDocumentCreateNestedOneWithoutDerivedNotesInput
     derivedNotes?: GstDocumentCreateNestedManyWithoutOriginalDocumentInput
@@ -141856,6 +142005,7 @@ export namespace Prisma {
     documentNumber: string
     documentDate: Date | string
     gstSettingsId: string
+    shopId: string
     shopifyOrderId?: string | null
     shopifyOrderName?: string | null
     sourceOrderId?: string | null
@@ -141914,6 +142064,7 @@ export namespace Prisma {
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     gstSettings?: GstSettingsUpdateOneRequiredWithoutDocumentsNestedInput
+    shop?: ShopUpdateOneRequiredWithoutGstDocumentsNestedInput
     customer?: CustomerProfileUpdateOneWithoutGstDocumentsNestedInput
     originalDocument?: GstDocumentUpdateOneWithoutDerivedNotesNestedInput
     derivedNotes?: GstDocumentUpdateManyWithoutOriginalDocumentNestedInput
@@ -141930,6 +142081,7 @@ export namespace Prisma {
     documentNumber?: StringFieldUpdateOperationsInput | string
     documentDate?: DateTimeFieldUpdateOperationsInput | Date | string
     gstSettingsId?: StringFieldUpdateOperationsInput | string
+    shopId?: StringFieldUpdateOperationsInput | string
     shopifyOrderId?: NullableStringFieldUpdateOperationsInput | string | null
     shopifyOrderName?: NullableStringFieldUpdateOperationsInput | string | null
     sourceOrderId?: NullableStringFieldUpdateOperationsInput | string | null
@@ -141967,6 +142119,7 @@ export namespace Prisma {
     documentNumber: string
     documentDate: Date | string
     gstSettingsId: string
+    shopId: string
     shopifyOrderId?: string | null
     shopifyOrderName?: string | null
     sourceOrderId?: string | null
@@ -142028,6 +142181,7 @@ export namespace Prisma {
     documentNumber?: StringFieldUpdateOperationsInput | string
     documentDate?: DateTimeFieldUpdateOperationsInput | Date | string
     gstSettingsId?: StringFieldUpdateOperationsInput | string
+    shopId?: StringFieldUpdateOperationsInput | string
     shopifyOrderId?: NullableStringFieldUpdateOperationsInput | string | null
     shopifyOrderName?: NullableStringFieldUpdateOperationsInput | string | null
     sourceOrderId?: NullableStringFieldUpdateOperationsInput | string | null
@@ -142072,11 +142226,13 @@ export namespace Prisma {
     createdAt?: Date | string
     updatedAt?: Date | string
     document: GstDocumentCreateNestedOneWithoutLinesInput
+    shop: ShopCreateNestedOneWithoutGstDocumentLinesInput
   }
 
   export type GstDocumentLineUncheckedCreateInput = {
     id?: string
     gstDocumentId: string
+    shopId: string
     lineNumber: number
     description: string
     hsnOrSac?: string | null
@@ -142114,11 +142270,13 @@ export namespace Prisma {
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     document?: GstDocumentUpdateOneRequiredWithoutLinesNestedInput
+    shop?: ShopUpdateOneRequiredWithoutGstDocumentLinesNestedInput
   }
 
   export type GstDocumentLineUncheckedUpdateInput = {
     id?: StringFieldUpdateOperationsInput | string
     gstDocumentId?: StringFieldUpdateOperationsInput | string
+    shopId?: StringFieldUpdateOperationsInput | string
     lineNumber?: IntFieldUpdateOperationsInput | number
     description?: StringFieldUpdateOperationsInput | string
     hsnOrSac?: NullableStringFieldUpdateOperationsInput | string | null
@@ -142140,6 +142298,7 @@ export namespace Prisma {
   export type GstDocumentLineCreateManyInput = {
     id?: string
     gstDocumentId: string
+    shopId: string
     lineNumber: number
     description: string
     hsnOrSac?: string | null
@@ -142181,6 +142340,7 @@ export namespace Prisma {
   export type GstDocumentLineUncheckedUpdateManyInput = {
     id?: StringFieldUpdateOperationsInput | string
     gstDocumentId?: StringFieldUpdateOperationsInput | string
+    shopId?: StringFieldUpdateOperationsInput | string
     lineNumber?: IntFieldUpdateOperationsInput | number
     description?: StringFieldUpdateOperationsInput | string
     hsnOrSac?: NullableStringFieldUpdateOperationsInput | string | null
@@ -145698,6 +145858,12 @@ export namespace Prisma {
     none?: GstOrderImportWhereInput
   }
 
+  export type GstDocumentLineListRelationFilter = {
+    every?: GstDocumentLineWhereInput
+    some?: GstDocumentLineWhereInput
+    none?: GstDocumentLineWhereInput
+  }
+
   export type CodAdvanceSettingsListRelationFilter = {
     every?: CodAdvanceSettingsWhereInput
     some?: CodAdvanceSettingsWhereInput
@@ -145866,6 +146032,10 @@ export namespace Prisma {
   }
 
   export type GstOrderImportOrderByRelationAggregateInput = {
+    _count?: SortOrder
+  }
+
+  export type GstDocumentLineOrderByRelationAggregateInput = {
     _count?: SortOrder
   }
 
@@ -151485,12 +151655,6 @@ export namespace Prisma {
     isNot?: GstDocumentWhereInput | null
   }
 
-  export type GstDocumentLineListRelationFilter = {
-    every?: GstDocumentLineWhereInput
-    some?: GstDocumentLineWhereInput
-    none?: GstDocumentLineWhereInput
-  }
-
   export type GstExportItemListRelationFilter = {
     every?: GstExportItemWhereInput
     some?: GstExportItemWhereInput
@@ -151501,10 +151665,6 @@ export namespace Prisma {
     every?: GstLegacyDocumentWhereInput
     some?: GstLegacyDocumentWhereInput
     none?: GstLegacyDocumentWhereInput
-  }
-
-  export type GstDocumentLineOrderByRelationAggregateInput = {
-    _count?: SortOrder
   }
 
   export type GstExportItemOrderByRelationAggregateInput = {
@@ -151522,6 +151682,7 @@ export namespace Prisma {
     documentNumber?: SortOrder
     documentDate?: SortOrder
     gstSettingsId?: SortOrder
+    shopId?: SortOrder
     shopifyOrderId?: SortOrder
     shopifyOrderName?: SortOrder
     sourceOrderId?: SortOrder
@@ -151563,6 +151724,7 @@ export namespace Prisma {
     documentNumber?: SortOrder
     documentDate?: SortOrder
     gstSettingsId?: SortOrder
+    shopId?: SortOrder
     shopifyOrderId?: SortOrder
     shopifyOrderName?: SortOrder
     sourceOrderId?: SortOrder
@@ -151593,6 +151755,7 @@ export namespace Prisma {
     documentNumber?: SortOrder
     documentDate?: SortOrder
     gstSettingsId?: SortOrder
+    shopId?: SortOrder
     shopifyOrderId?: SortOrder
     shopifyOrderName?: SortOrder
     sourceOrderId?: SortOrder
@@ -151658,6 +151821,7 @@ export namespace Prisma {
   export type GstDocumentLineCountOrderByAggregateInput = {
     id?: SortOrder
     gstDocumentId?: SortOrder
+    shopId?: SortOrder
     lineNumber?: SortOrder
     description?: SortOrder
     hsnOrSac?: SortOrder
@@ -151693,6 +151857,7 @@ export namespace Prisma {
   export type GstDocumentLineMaxOrderByAggregateInput = {
     id?: SortOrder
     gstDocumentId?: SortOrder
+    shopId?: SortOrder
     lineNumber?: SortOrder
     description?: SortOrder
     hsnOrSac?: SortOrder
@@ -151714,6 +151879,7 @@ export namespace Prisma {
   export type GstDocumentLineMinOrderByAggregateInput = {
     id?: SortOrder
     gstDocumentId?: SortOrder
+    shopId?: SortOrder
     lineNumber?: SortOrder
     description?: SortOrder
     hsnOrSac?: SortOrder
@@ -154440,6 +154606,20 @@ export namespace Prisma {
     connect?: GstOrderImportWhereUniqueInput | GstOrderImportWhereUniqueInput[]
   }
 
+  export type GstDocumentCreateNestedManyWithoutShopInput = {
+    create?: XOR<GstDocumentCreateWithoutShopInput, GstDocumentUncheckedCreateWithoutShopInput> | GstDocumentCreateWithoutShopInput[] | GstDocumentUncheckedCreateWithoutShopInput[]
+    connectOrCreate?: GstDocumentCreateOrConnectWithoutShopInput | GstDocumentCreateOrConnectWithoutShopInput[]
+    createMany?: GstDocumentCreateManyShopInputEnvelope
+    connect?: GstDocumentWhereUniqueInput | GstDocumentWhereUniqueInput[]
+  }
+
+  export type GstDocumentLineCreateNestedManyWithoutShopInput = {
+    create?: XOR<GstDocumentLineCreateWithoutShopInput, GstDocumentLineUncheckedCreateWithoutShopInput> | GstDocumentLineCreateWithoutShopInput[] | GstDocumentLineUncheckedCreateWithoutShopInput[]
+    connectOrCreate?: GstDocumentLineCreateOrConnectWithoutShopInput | GstDocumentLineCreateOrConnectWithoutShopInput[]
+    createMany?: GstDocumentLineCreateManyShopInputEnvelope
+    connect?: GstDocumentLineWhereUniqueInput | GstDocumentLineWhereUniqueInput[]
+  }
+
   export type RefundRequestCreateNestedManyWithoutShopInput = {
     create?: XOR<RefundRequestCreateWithoutShopInput, RefundRequestUncheckedCreateWithoutShopInput> | RefundRequestCreateWithoutShopInput[] | RefundRequestUncheckedCreateWithoutShopInput[]
     connectOrCreate?: RefundRequestCreateOrConnectWithoutShopInput | RefundRequestCreateOrConnectWithoutShopInput[]
@@ -154748,6 +154928,20 @@ export namespace Prisma {
     connectOrCreate?: GstOrderImportCreateOrConnectWithoutShopInput | GstOrderImportCreateOrConnectWithoutShopInput[]
     createMany?: GstOrderImportCreateManyShopInputEnvelope
     connect?: GstOrderImportWhereUniqueInput | GstOrderImportWhereUniqueInput[]
+  }
+
+  export type GstDocumentUncheckedCreateNestedManyWithoutShopInput = {
+    create?: XOR<GstDocumentCreateWithoutShopInput, GstDocumentUncheckedCreateWithoutShopInput> | GstDocumentCreateWithoutShopInput[] | GstDocumentUncheckedCreateWithoutShopInput[]
+    connectOrCreate?: GstDocumentCreateOrConnectWithoutShopInput | GstDocumentCreateOrConnectWithoutShopInput[]
+    createMany?: GstDocumentCreateManyShopInputEnvelope
+    connect?: GstDocumentWhereUniqueInput | GstDocumentWhereUniqueInput[]
+  }
+
+  export type GstDocumentLineUncheckedCreateNestedManyWithoutShopInput = {
+    create?: XOR<GstDocumentLineCreateWithoutShopInput, GstDocumentLineUncheckedCreateWithoutShopInput> | GstDocumentLineCreateWithoutShopInput[] | GstDocumentLineUncheckedCreateWithoutShopInput[]
+    connectOrCreate?: GstDocumentLineCreateOrConnectWithoutShopInput | GstDocumentLineCreateOrConnectWithoutShopInput[]
+    createMany?: GstDocumentLineCreateManyShopInputEnvelope
+    connect?: GstDocumentLineWhereUniqueInput | GstDocumentLineWhereUniqueInput[]
   }
 
   export type RefundRequestUncheckedCreateNestedManyWithoutShopInput = {
@@ -155139,6 +155333,34 @@ export namespace Prisma {
     update?: GstOrderImportUpdateWithWhereUniqueWithoutShopInput | GstOrderImportUpdateWithWhereUniqueWithoutShopInput[]
     updateMany?: GstOrderImportUpdateManyWithWhereWithoutShopInput | GstOrderImportUpdateManyWithWhereWithoutShopInput[]
     deleteMany?: GstOrderImportScalarWhereInput | GstOrderImportScalarWhereInput[]
+  }
+
+  export type GstDocumentUpdateManyWithoutShopNestedInput = {
+    create?: XOR<GstDocumentCreateWithoutShopInput, GstDocumentUncheckedCreateWithoutShopInput> | GstDocumentCreateWithoutShopInput[] | GstDocumentUncheckedCreateWithoutShopInput[]
+    connectOrCreate?: GstDocumentCreateOrConnectWithoutShopInput | GstDocumentCreateOrConnectWithoutShopInput[]
+    upsert?: GstDocumentUpsertWithWhereUniqueWithoutShopInput | GstDocumentUpsertWithWhereUniqueWithoutShopInput[]
+    createMany?: GstDocumentCreateManyShopInputEnvelope
+    set?: GstDocumentWhereUniqueInput | GstDocumentWhereUniqueInput[]
+    disconnect?: GstDocumentWhereUniqueInput | GstDocumentWhereUniqueInput[]
+    delete?: GstDocumentWhereUniqueInput | GstDocumentWhereUniqueInput[]
+    connect?: GstDocumentWhereUniqueInput | GstDocumentWhereUniqueInput[]
+    update?: GstDocumentUpdateWithWhereUniqueWithoutShopInput | GstDocumentUpdateWithWhereUniqueWithoutShopInput[]
+    updateMany?: GstDocumentUpdateManyWithWhereWithoutShopInput | GstDocumentUpdateManyWithWhereWithoutShopInput[]
+    deleteMany?: GstDocumentScalarWhereInput | GstDocumentScalarWhereInput[]
+  }
+
+  export type GstDocumentLineUpdateManyWithoutShopNestedInput = {
+    create?: XOR<GstDocumentLineCreateWithoutShopInput, GstDocumentLineUncheckedCreateWithoutShopInput> | GstDocumentLineCreateWithoutShopInput[] | GstDocumentLineUncheckedCreateWithoutShopInput[]
+    connectOrCreate?: GstDocumentLineCreateOrConnectWithoutShopInput | GstDocumentLineCreateOrConnectWithoutShopInput[]
+    upsert?: GstDocumentLineUpsertWithWhereUniqueWithoutShopInput | GstDocumentLineUpsertWithWhereUniqueWithoutShopInput[]
+    createMany?: GstDocumentLineCreateManyShopInputEnvelope
+    set?: GstDocumentLineWhereUniqueInput | GstDocumentLineWhereUniqueInput[]
+    disconnect?: GstDocumentLineWhereUniqueInput | GstDocumentLineWhereUniqueInput[]
+    delete?: GstDocumentLineWhereUniqueInput | GstDocumentLineWhereUniqueInput[]
+    connect?: GstDocumentLineWhereUniqueInput | GstDocumentLineWhereUniqueInput[]
+    update?: GstDocumentLineUpdateWithWhereUniqueWithoutShopInput | GstDocumentLineUpdateWithWhereUniqueWithoutShopInput[]
+    updateMany?: GstDocumentLineUpdateManyWithWhereWithoutShopInput | GstDocumentLineUpdateManyWithWhereWithoutShopInput[]
+    deleteMany?: GstDocumentLineScalarWhereInput | GstDocumentLineScalarWhereInput[]
   }
 
   export type RefundRequestUpdateManyWithoutShopNestedInput = {
@@ -155749,6 +155971,34 @@ export namespace Prisma {
     update?: GstOrderImportUpdateWithWhereUniqueWithoutShopInput | GstOrderImportUpdateWithWhereUniqueWithoutShopInput[]
     updateMany?: GstOrderImportUpdateManyWithWhereWithoutShopInput | GstOrderImportUpdateManyWithWhereWithoutShopInput[]
     deleteMany?: GstOrderImportScalarWhereInput | GstOrderImportScalarWhereInput[]
+  }
+
+  export type GstDocumentUncheckedUpdateManyWithoutShopNestedInput = {
+    create?: XOR<GstDocumentCreateWithoutShopInput, GstDocumentUncheckedCreateWithoutShopInput> | GstDocumentCreateWithoutShopInput[] | GstDocumentUncheckedCreateWithoutShopInput[]
+    connectOrCreate?: GstDocumentCreateOrConnectWithoutShopInput | GstDocumentCreateOrConnectWithoutShopInput[]
+    upsert?: GstDocumentUpsertWithWhereUniqueWithoutShopInput | GstDocumentUpsertWithWhereUniqueWithoutShopInput[]
+    createMany?: GstDocumentCreateManyShopInputEnvelope
+    set?: GstDocumentWhereUniqueInput | GstDocumentWhereUniqueInput[]
+    disconnect?: GstDocumentWhereUniqueInput | GstDocumentWhereUniqueInput[]
+    delete?: GstDocumentWhereUniqueInput | GstDocumentWhereUniqueInput[]
+    connect?: GstDocumentWhereUniqueInput | GstDocumentWhereUniqueInput[]
+    update?: GstDocumentUpdateWithWhereUniqueWithoutShopInput | GstDocumentUpdateWithWhereUniqueWithoutShopInput[]
+    updateMany?: GstDocumentUpdateManyWithWhereWithoutShopInput | GstDocumentUpdateManyWithWhereWithoutShopInput[]
+    deleteMany?: GstDocumentScalarWhereInput | GstDocumentScalarWhereInput[]
+  }
+
+  export type GstDocumentLineUncheckedUpdateManyWithoutShopNestedInput = {
+    create?: XOR<GstDocumentLineCreateWithoutShopInput, GstDocumentLineUncheckedCreateWithoutShopInput> | GstDocumentLineCreateWithoutShopInput[] | GstDocumentLineUncheckedCreateWithoutShopInput[]
+    connectOrCreate?: GstDocumentLineCreateOrConnectWithoutShopInput | GstDocumentLineCreateOrConnectWithoutShopInput[]
+    upsert?: GstDocumentLineUpsertWithWhereUniqueWithoutShopInput | GstDocumentLineUpsertWithWhereUniqueWithoutShopInput[]
+    createMany?: GstDocumentLineCreateManyShopInputEnvelope
+    set?: GstDocumentLineWhereUniqueInput | GstDocumentLineWhereUniqueInput[]
+    disconnect?: GstDocumentLineWhereUniqueInput | GstDocumentLineWhereUniqueInput[]
+    delete?: GstDocumentLineWhereUniqueInput | GstDocumentLineWhereUniqueInput[]
+    connect?: GstDocumentLineWhereUniqueInput | GstDocumentLineWhereUniqueInput[]
+    update?: GstDocumentLineUpdateWithWhereUniqueWithoutShopInput | GstDocumentLineUpdateWithWhereUniqueWithoutShopInput[]
+    updateMany?: GstDocumentLineUpdateManyWithWhereWithoutShopInput | GstDocumentLineUpdateManyWithWhereWithoutShopInput[]
+    deleteMany?: GstDocumentLineScalarWhereInput | GstDocumentLineScalarWhereInput[]
   }
 
   export type RefundRequestUncheckedUpdateManyWithoutShopNestedInput = {
@@ -160003,6 +160253,12 @@ export namespace Prisma {
     connect?: GstSettingsWhereUniqueInput
   }
 
+  export type ShopCreateNestedOneWithoutGstDocumentsInput = {
+    create?: XOR<ShopCreateWithoutGstDocumentsInput, ShopUncheckedCreateWithoutGstDocumentsInput>
+    connectOrCreate?: ShopCreateOrConnectWithoutGstDocumentsInput
+    connect?: ShopWhereUniqueInput
+  }
+
   export type CustomerProfileCreateNestedOneWithoutGstDocumentsInput = {
     create?: XOR<CustomerProfileCreateWithoutGstDocumentsInput, CustomerProfileUncheckedCreateWithoutGstDocumentsInput>
     connectOrCreate?: CustomerProfileCreateOrConnectWithoutGstDocumentsInput
@@ -160099,6 +160355,14 @@ export namespace Prisma {
     upsert?: GstSettingsUpsertWithoutDocumentsInput
     connect?: GstSettingsWhereUniqueInput
     update?: XOR<XOR<GstSettingsUpdateToOneWithWhereWithoutDocumentsInput, GstSettingsUpdateWithoutDocumentsInput>, GstSettingsUncheckedUpdateWithoutDocumentsInput>
+  }
+
+  export type ShopUpdateOneRequiredWithoutGstDocumentsNestedInput = {
+    create?: XOR<ShopCreateWithoutGstDocumentsInput, ShopUncheckedCreateWithoutGstDocumentsInput>
+    connectOrCreate?: ShopCreateOrConnectWithoutGstDocumentsInput
+    upsert?: ShopUpsertWithoutGstDocumentsInput
+    connect?: ShopWhereUniqueInput
+    update?: XOR<XOR<ShopUpdateToOneWithWhereWithoutGstDocumentsInput, ShopUpdateWithoutGstDocumentsInput>, ShopUncheckedUpdateWithoutGstDocumentsInput>
   }
 
   export type CustomerProfileUpdateOneWithoutGstDocumentsNestedInput = {
@@ -160267,12 +160531,26 @@ export namespace Prisma {
     connect?: GstDocumentWhereUniqueInput
   }
 
+  export type ShopCreateNestedOneWithoutGstDocumentLinesInput = {
+    create?: XOR<ShopCreateWithoutGstDocumentLinesInput, ShopUncheckedCreateWithoutGstDocumentLinesInput>
+    connectOrCreate?: ShopCreateOrConnectWithoutGstDocumentLinesInput
+    connect?: ShopWhereUniqueInput
+  }
+
   export type GstDocumentUpdateOneRequiredWithoutLinesNestedInput = {
     create?: XOR<GstDocumentCreateWithoutLinesInput, GstDocumentUncheckedCreateWithoutLinesInput>
     connectOrCreate?: GstDocumentCreateOrConnectWithoutLinesInput
     upsert?: GstDocumentUpsertWithoutLinesInput
     connect?: GstDocumentWhereUniqueInput
     update?: XOR<XOR<GstDocumentUpdateToOneWithWhereWithoutLinesInput, GstDocumentUpdateWithoutLinesInput>, GstDocumentUncheckedUpdateWithoutLinesInput>
+  }
+
+  export type ShopUpdateOneRequiredWithoutGstDocumentLinesNestedInput = {
+    create?: XOR<ShopCreateWithoutGstDocumentLinesInput, ShopUncheckedCreateWithoutGstDocumentLinesInput>
+    connectOrCreate?: ShopCreateOrConnectWithoutGstDocumentLinesInput
+    upsert?: ShopUpsertWithoutGstDocumentLinesInput
+    connect?: ShopWhereUniqueInput
+    update?: XOR<XOR<ShopUpdateToOneWithWhereWithoutGstDocumentLinesInput, ShopUpdateWithoutGstDocumentLinesInput>, ShopUncheckedUpdateWithoutGstDocumentLinesInput>
   }
 
   export type CustomerProfileCreateNestedOneWithoutGstPartiesInput = {
@@ -163309,6 +163587,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentCreateNestedManyWithoutShopInput
@@ -163378,6 +163658,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportUncheckedCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentUncheckedCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineUncheckedCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestUncheckedCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedCreateNestedManyWithoutShopInput
@@ -163767,6 +164049,7 @@ export namespace Prisma {
     createdAt?: Date | string
     updatedAt?: Date | string
     gstSettings: GstSettingsCreateNestedOneWithoutDocumentsInput
+    shop: ShopCreateNestedOneWithoutGstDocumentsInput
     originalDocument?: GstDocumentCreateNestedOneWithoutDerivedNotesInput
     derivedNotes?: GstDocumentCreateNestedManyWithoutOriginalDocumentInput
     lines?: GstDocumentLineCreateNestedManyWithoutDocumentInput
@@ -163782,6 +164065,7 @@ export namespace Prisma {
     documentNumber: string
     documentDate: Date | string
     gstSettingsId: string
+    shopId: string
     shopifyOrderId?: string | null
     shopifyOrderName?: string | null
     sourceOrderId?: string | null
@@ -164447,6 +164731,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUpdateManyWithoutShopNestedInput
@@ -164516,6 +164802,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUncheckedUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUncheckedUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUncheckedUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedUpdateManyWithoutShopNestedInput
@@ -164831,6 +165119,7 @@ export namespace Prisma {
     documentNumber?: StringFilter<"GstDocument"> | string
     documentDate?: DateTimeFilter<"GstDocument"> | Date | string
     gstSettingsId?: StringFilter<"GstDocument"> | string
+    shopId?: StringFilter<"GstDocument"> | string
     shopifyOrderId?: StringNullableFilter<"GstDocument"> | string | null
     shopifyOrderName?: StringNullableFilter<"GstDocument"> | string | null
     sourceOrderId?: StringNullableFilter<"GstDocument"> | string | null
@@ -165846,6 +166135,142 @@ export namespace Prisma {
 
   export type GstOrderImportCreateManyShopInputEnvelope = {
     data: GstOrderImportCreateManyShopInput | GstOrderImportCreateManyShopInput[]
+    skipDuplicates?: boolean
+  }
+
+  export type GstDocumentCreateWithoutShopInput = {
+    id?: string
+    documentType: $Enums.GstDocumentType
+    status: $Enums.GstDocumentStatus
+    documentNumber: string
+    documentDate: Date | string
+    shopifyOrderId?: string | null
+    shopifyOrderName?: string | null
+    sourceOrderId?: string | null
+    sourceOrderNumber?: string | null
+    sourceReference?: string | null
+    supplyType: $Enums.GstSupplyType
+    placeOfSupplyStateCode: string
+    isInterstate: boolean
+    currency?: string
+    taxableAmount: Decimal | DecimalJsLike | number | string
+    cgstAmount: Decimal | DecimalJsLike | number | string
+    sgstAmount: Decimal | DecimalJsLike | number | string
+    igstAmount: Decimal | DecimalJsLike | number | string
+    cessAmount: Decimal | DecimalJsLike | number | string
+    totalAmount: Decimal | DecimalJsLike | number | string
+    pdfFileUrl?: string | null
+    jsonSnapshot: JsonNullValueInput | InputJsonValue
+    metadata?: NullableJsonNullValueInput | InputJsonValue
+    issuedAt?: Date | string | null
+    createdAt?: Date | string
+    updatedAt?: Date | string
+    gstSettings: GstSettingsCreateNestedOneWithoutDocumentsInput
+    customer?: CustomerProfileCreateNestedOneWithoutGstDocumentsInput
+    originalDocument?: GstDocumentCreateNestedOneWithoutDerivedNotesInput
+    derivedNotes?: GstDocumentCreateNestedManyWithoutOriginalDocumentInput
+    lines?: GstDocumentLineCreateNestedManyWithoutDocumentInput
+    exportItems?: GstExportItemCreateNestedManyWithoutGstDocumentInput
+    auditLogs?: GstAuditLogCreateNestedManyWithoutGstDocumentInput
+    legacyLinks?: GstLegacyDocumentCreateNestedManyWithoutGstDocumentInput
+  }
+
+  export type GstDocumentUncheckedCreateWithoutShopInput = {
+    id?: string
+    documentType: $Enums.GstDocumentType
+    status: $Enums.GstDocumentStatus
+    documentNumber: string
+    documentDate: Date | string
+    gstSettingsId: string
+    shopifyOrderId?: string | null
+    shopifyOrderName?: string | null
+    sourceOrderId?: string | null
+    sourceOrderNumber?: string | null
+    sourceReference?: string | null
+    customerProfileId?: string | null
+    originalDocumentId?: string | null
+    supplyType: $Enums.GstSupplyType
+    placeOfSupplyStateCode: string
+    isInterstate: boolean
+    currency?: string
+    taxableAmount: Decimal | DecimalJsLike | number | string
+    cgstAmount: Decimal | DecimalJsLike | number | string
+    sgstAmount: Decimal | DecimalJsLike | number | string
+    igstAmount: Decimal | DecimalJsLike | number | string
+    cessAmount: Decimal | DecimalJsLike | number | string
+    totalAmount: Decimal | DecimalJsLike | number | string
+    pdfFileUrl?: string | null
+    jsonSnapshot: JsonNullValueInput | InputJsonValue
+    metadata?: NullableJsonNullValueInput | InputJsonValue
+    issuedAt?: Date | string | null
+    createdAt?: Date | string
+    updatedAt?: Date | string
+    derivedNotes?: GstDocumentUncheckedCreateNestedManyWithoutOriginalDocumentInput
+    lines?: GstDocumentLineUncheckedCreateNestedManyWithoutDocumentInput
+    exportItems?: GstExportItemUncheckedCreateNestedManyWithoutGstDocumentInput
+    auditLogs?: GstAuditLogUncheckedCreateNestedManyWithoutGstDocumentInput
+    legacyLinks?: GstLegacyDocumentUncheckedCreateNestedManyWithoutGstDocumentInput
+  }
+
+  export type GstDocumentCreateOrConnectWithoutShopInput = {
+    where: GstDocumentWhereUniqueInput
+    create: XOR<GstDocumentCreateWithoutShopInput, GstDocumentUncheckedCreateWithoutShopInput>
+  }
+
+  export type GstDocumentCreateManyShopInputEnvelope = {
+    data: GstDocumentCreateManyShopInput | GstDocumentCreateManyShopInput[]
+    skipDuplicates?: boolean
+  }
+
+  export type GstDocumentLineCreateWithoutShopInput = {
+    id?: string
+    lineNumber: number
+    description: string
+    hsnOrSac?: string | null
+    quantity: Decimal | DecimalJsLike | number | string
+    unit?: string | null
+    unitPrice: Decimal | DecimalJsLike | number | string
+    discount?: Decimal | DecimalJsLike | number | string
+    taxableAmount: Decimal | DecimalJsLike | number | string
+    taxRate: Decimal | DecimalJsLike | number | string
+    cgstAmount: Decimal | DecimalJsLike | number | string
+    sgstAmount: Decimal | DecimalJsLike | number | string
+    igstAmount: Decimal | DecimalJsLike | number | string
+    cessAmount: Decimal | DecimalJsLike | number | string
+    lineTotal: Decimal | DecimalJsLike | number | string
+    createdAt?: Date | string
+    updatedAt?: Date | string
+    document: GstDocumentCreateNestedOneWithoutLinesInput
+  }
+
+  export type GstDocumentLineUncheckedCreateWithoutShopInput = {
+    id?: string
+    gstDocumentId: string
+    lineNumber: number
+    description: string
+    hsnOrSac?: string | null
+    quantity: Decimal | DecimalJsLike | number | string
+    unit?: string | null
+    unitPrice: Decimal | DecimalJsLike | number | string
+    discount?: Decimal | DecimalJsLike | number | string
+    taxableAmount: Decimal | DecimalJsLike | number | string
+    taxRate: Decimal | DecimalJsLike | number | string
+    cgstAmount: Decimal | DecimalJsLike | number | string
+    sgstAmount: Decimal | DecimalJsLike | number | string
+    igstAmount: Decimal | DecimalJsLike | number | string
+    cessAmount: Decimal | DecimalJsLike | number | string
+    lineTotal: Decimal | DecimalJsLike | number | string
+    createdAt?: Date | string
+    updatedAt?: Date | string
+  }
+
+  export type GstDocumentLineCreateOrConnectWithoutShopInput = {
+    where: GstDocumentLineWhereUniqueInput
+    create: XOR<GstDocumentLineCreateWithoutShopInput, GstDocumentLineUncheckedCreateWithoutShopInput>
+  }
+
+  export type GstDocumentLineCreateManyShopInputEnvelope = {
+    data: GstDocumentLineCreateManyShopInput | GstDocumentLineCreateManyShopInput[]
     skipDuplicates?: boolean
   }
 
@@ -167956,6 +168381,63 @@ export namespace Prisma {
     updatedAt?: DateTimeFilter<"GstOrderImport"> | Date | string
   }
 
+  export type GstDocumentUpsertWithWhereUniqueWithoutShopInput = {
+    where: GstDocumentWhereUniqueInput
+    update: XOR<GstDocumentUpdateWithoutShopInput, GstDocumentUncheckedUpdateWithoutShopInput>
+    create: XOR<GstDocumentCreateWithoutShopInput, GstDocumentUncheckedCreateWithoutShopInput>
+  }
+
+  export type GstDocumentUpdateWithWhereUniqueWithoutShopInput = {
+    where: GstDocumentWhereUniqueInput
+    data: XOR<GstDocumentUpdateWithoutShopInput, GstDocumentUncheckedUpdateWithoutShopInput>
+  }
+
+  export type GstDocumentUpdateManyWithWhereWithoutShopInput = {
+    where: GstDocumentScalarWhereInput
+    data: XOR<GstDocumentUpdateManyMutationInput, GstDocumentUncheckedUpdateManyWithoutShopInput>
+  }
+
+  export type GstDocumentLineUpsertWithWhereUniqueWithoutShopInput = {
+    where: GstDocumentLineWhereUniqueInput
+    update: XOR<GstDocumentLineUpdateWithoutShopInput, GstDocumentLineUncheckedUpdateWithoutShopInput>
+    create: XOR<GstDocumentLineCreateWithoutShopInput, GstDocumentLineUncheckedCreateWithoutShopInput>
+  }
+
+  export type GstDocumentLineUpdateWithWhereUniqueWithoutShopInput = {
+    where: GstDocumentLineWhereUniqueInput
+    data: XOR<GstDocumentLineUpdateWithoutShopInput, GstDocumentLineUncheckedUpdateWithoutShopInput>
+  }
+
+  export type GstDocumentLineUpdateManyWithWhereWithoutShopInput = {
+    where: GstDocumentLineScalarWhereInput
+    data: XOR<GstDocumentLineUpdateManyMutationInput, GstDocumentLineUncheckedUpdateManyWithoutShopInput>
+  }
+
+  export type GstDocumentLineScalarWhereInput = {
+    AND?: GstDocumentLineScalarWhereInput | GstDocumentLineScalarWhereInput[]
+    OR?: GstDocumentLineScalarWhereInput[]
+    NOT?: GstDocumentLineScalarWhereInput | GstDocumentLineScalarWhereInput[]
+    id?: StringFilter<"GstDocumentLine"> | string
+    gstDocumentId?: StringFilter<"GstDocumentLine"> | string
+    shopId?: StringFilter<"GstDocumentLine"> | string
+    lineNumber?: IntFilter<"GstDocumentLine"> | number
+    description?: StringFilter<"GstDocumentLine"> | string
+    hsnOrSac?: StringNullableFilter<"GstDocumentLine"> | string | null
+    quantity?: DecimalFilter<"GstDocumentLine"> | Decimal | DecimalJsLike | number | string
+    unit?: StringNullableFilter<"GstDocumentLine"> | string | null
+    unitPrice?: DecimalFilter<"GstDocumentLine"> | Decimal | DecimalJsLike | number | string
+    discount?: DecimalFilter<"GstDocumentLine"> | Decimal | DecimalJsLike | number | string
+    taxableAmount?: DecimalFilter<"GstDocumentLine"> | Decimal | DecimalJsLike | number | string
+    taxRate?: DecimalFilter<"GstDocumentLine"> | Decimal | DecimalJsLike | number | string
+    cgstAmount?: DecimalFilter<"GstDocumentLine"> | Decimal | DecimalJsLike | number | string
+    sgstAmount?: DecimalFilter<"GstDocumentLine"> | Decimal | DecimalJsLike | number | string
+    igstAmount?: DecimalFilter<"GstDocumentLine"> | Decimal | DecimalJsLike | number | string
+    cessAmount?: DecimalFilter<"GstDocumentLine"> | Decimal | DecimalJsLike | number | string
+    lineTotal?: DecimalFilter<"GstDocumentLine"> | Decimal | DecimalJsLike | number | string
+    createdAt?: DateTimeFilter<"GstDocumentLine"> | Date | string
+    updatedAt?: DateTimeFilter<"GstDocumentLine"> | Date | string
+  }
+
   export type RefundRequestUpsertWithWhereUniqueWithoutShopInput = {
     where: RefundRequestWhereUniqueInput
     update: XOR<RefundRequestUpdateWithoutShopInput, RefundRequestUncheckedUpdateWithoutShopInput>
@@ -169260,6 +169742,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentCreateNestedManyWithoutShopInput
@@ -169329,6 +169813,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportUncheckedCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentUncheckedCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineUncheckedCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestUncheckedCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedCreateNestedManyWithoutShopInput
@@ -169493,6 +169979,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUpdateManyWithoutShopNestedInput
@@ -169562,6 +170050,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUncheckedUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUncheckedUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUncheckedUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedUpdateManyWithoutShopNestedInput
@@ -169716,6 +170206,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentCreateNestedManyWithoutShopInput
@@ -169785,6 +170277,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportUncheckedCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentUncheckedCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineUncheckedCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestUncheckedCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedCreateNestedManyWithoutShopInput
@@ -170015,6 +170509,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUpdateManyWithoutShopNestedInput
@@ -170084,6 +170580,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUncheckedUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUncheckedUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUncheckedUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedUpdateManyWithoutShopNestedInput
@@ -170270,6 +170768,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentCreateNestedManyWithoutShopInput
@@ -170339,6 +170839,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportUncheckedCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentUncheckedCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineUncheckedCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestUncheckedCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedCreateNestedManyWithoutShopInput
@@ -170469,6 +170971,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUpdateManyWithoutShopNestedInput
@@ -170538,6 +171042,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUncheckedUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUncheckedUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUncheckedUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedUpdateManyWithoutShopNestedInput
@@ -170703,6 +171209,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentCreateNestedManyWithoutShopInput
@@ -170772,6 +171280,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportUncheckedCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentUncheckedCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineUncheckedCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestUncheckedCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedCreateNestedManyWithoutShopInput
@@ -170987,6 +171497,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUpdateManyWithoutShopNestedInput
@@ -171056,6 +171568,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUncheckedUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUncheckedUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUncheckedUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedUpdateManyWithoutShopNestedInput
@@ -171846,6 +172360,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentCreateNestedManyWithoutShopInput
@@ -171915,6 +172431,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportUncheckedCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentUncheckedCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineUncheckedCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestUncheckedCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedCreateNestedManyWithoutShopInput
@@ -172203,6 +172721,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUpdateManyWithoutShopNestedInput
@@ -172272,6 +172792,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUncheckedUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUncheckedUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUncheckedUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedUpdateManyWithoutShopNestedInput
@@ -172436,6 +172958,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentCreateNestedManyWithoutShopInput
@@ -172505,6 +173029,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportUncheckedCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentUncheckedCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineUncheckedCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestUncheckedCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedCreateNestedManyWithoutShopInput
@@ -172727,6 +173253,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUpdateManyWithoutShopNestedInput
@@ -172796,6 +173324,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUncheckedUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUncheckedUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUncheckedUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedUpdateManyWithoutShopNestedInput
@@ -173020,6 +173550,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentCreateNestedManyWithoutShopInput
@@ -173089,6 +173621,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportUncheckedCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentUncheckedCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineUncheckedCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestUncheckedCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedCreateNestedManyWithoutShopInput
@@ -173229,6 +173763,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUpdateManyWithoutShopNestedInput
@@ -173298,6 +173834,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUncheckedUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUncheckedUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUncheckedUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedUpdateManyWithoutShopNestedInput
@@ -173428,6 +173966,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentCreateNestedManyWithoutShopInput
@@ -173497,6 +174037,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportUncheckedCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentUncheckedCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineUncheckedCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestUncheckedCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedCreateNestedManyWithoutShopInput
@@ -173582,6 +174124,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUpdateManyWithoutShopNestedInput
@@ -173651,6 +174195,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUncheckedUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUncheckedUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUncheckedUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedUpdateManyWithoutShopNestedInput
@@ -173720,6 +174266,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentCreateNestedManyWithoutShopInput
@@ -173789,6 +174337,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportUncheckedCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentUncheckedCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineUncheckedCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestUncheckedCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedCreateNestedManyWithoutShopInput
@@ -173979,6 +174529,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUpdateManyWithoutShopNestedInput
@@ -174048,6 +174600,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUncheckedUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUncheckedUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUncheckedUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedUpdateManyWithoutShopNestedInput
@@ -174194,6 +174748,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentCreateNestedManyWithoutShopInput
@@ -174263,6 +174819,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportUncheckedCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentUncheckedCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineUncheckedCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestUncheckedCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedCreateNestedManyWithoutShopInput
@@ -174451,6 +175009,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUpdateManyWithoutShopNestedInput
@@ -174520,6 +175080,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUncheckedUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUncheckedUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUncheckedUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedUpdateManyWithoutShopNestedInput
@@ -174710,6 +175272,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentCreateNestedManyWithoutShopInput
@@ -174779,6 +175343,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportUncheckedCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentUncheckedCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineUncheckedCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestUncheckedCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedCreateNestedManyWithoutShopInput
@@ -174864,6 +175430,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUpdateManyWithoutShopNestedInput
@@ -174933,6 +175501,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUncheckedUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUncheckedUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUncheckedUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedUpdateManyWithoutShopNestedInput
@@ -175002,6 +175572,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentCreateNestedManyWithoutShopInput
@@ -175071,6 +175643,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportUncheckedCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentUncheckedCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineUncheckedCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestUncheckedCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedCreateNestedManyWithoutShopInput
@@ -175156,6 +175730,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUpdateManyWithoutShopNestedInput
@@ -175225,6 +175801,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUncheckedUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUncheckedUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUncheckedUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedUpdateManyWithoutShopNestedInput
@@ -175294,6 +175872,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentCreateNestedManyWithoutShopInput
@@ -175363,6 +175943,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportUncheckedCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentUncheckedCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineUncheckedCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestUncheckedCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedCreateNestedManyWithoutShopInput
@@ -175520,6 +176102,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUpdateManyWithoutShopNestedInput
@@ -175589,6 +176173,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUncheckedUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUncheckedUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUncheckedUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedUpdateManyWithoutShopNestedInput
@@ -175878,6 +176464,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentCreateNestedManyWithoutShopInput
@@ -175947,6 +176535,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportUncheckedCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentUncheckedCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineUncheckedCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestUncheckedCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedCreateNestedManyWithoutShopInput
@@ -176245,6 +176835,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUpdateManyWithoutShopNestedInput
@@ -176314,6 +176906,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUncheckedUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUncheckedUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUncheckedUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedUpdateManyWithoutShopNestedInput
@@ -176547,6 +177141,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentCreateNestedManyWithoutShopInput
@@ -176616,6 +177212,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportUncheckedCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentUncheckedCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineUncheckedCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestUncheckedCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedCreateNestedManyWithoutShopInput
@@ -176798,6 +177396,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUpdateManyWithoutShopNestedInput
@@ -176867,6 +177467,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUncheckedUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUncheckedUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUncheckedUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedUpdateManyWithoutShopNestedInput
@@ -177801,6 +178403,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentCreateNestedManyWithoutShopInput
@@ -177870,6 +178474,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportUncheckedCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentUncheckedCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineUncheckedCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestUncheckedCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedCreateNestedManyWithoutShopInput
@@ -177955,6 +178561,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUpdateManyWithoutShopNestedInput
@@ -178024,6 +178632,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUncheckedUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUncheckedUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUncheckedUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedUpdateManyWithoutShopNestedInput
@@ -178093,6 +178703,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentCreateNestedManyWithoutShopInput
@@ -178162,6 +178774,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportUncheckedCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentUncheckedCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineUncheckedCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestUncheckedCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedCreateNestedManyWithoutShopInput
@@ -178344,6 +178958,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUpdateManyWithoutShopNestedInput
@@ -178413,6 +179029,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUncheckedUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUncheckedUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUncheckedUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedUpdateManyWithoutShopNestedInput
@@ -178827,6 +179445,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentCreateNestedManyWithoutShopInput
@@ -178896,6 +179516,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportUncheckedCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentUncheckedCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineUncheckedCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestUncheckedCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedCreateNestedManyWithoutShopInput
@@ -179066,6 +179688,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUpdateManyWithoutShopNestedInput
@@ -179135,6 +179759,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUncheckedUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUncheckedUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUncheckedUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedUpdateManyWithoutShopNestedInput
@@ -179283,6 +179909,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentCreateNestedManyWithoutShopInput
@@ -179352,6 +179980,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportUncheckedCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentUncheckedCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineUncheckedCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestUncheckedCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedCreateNestedManyWithoutShopInput
@@ -179823,6 +180453,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUpdateManyWithoutShopNestedInput
@@ -179892,6 +180524,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUncheckedUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUncheckedUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUncheckedUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedUpdateManyWithoutShopNestedInput
@@ -180563,6 +181197,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentCreateNestedManyWithoutShopInput
     moduleConfigs?: ShopModuleConfigCreateNestedManyWithoutShopInput
@@ -180632,6 +181268,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportUncheckedCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentUncheckedCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineUncheckedCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestUncheckedCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedCreateNestedManyWithoutShopInput
     moduleConfigs?: ShopModuleConfigUncheckedCreateNestedManyWithoutShopInput
@@ -180717,6 +181355,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUpdateManyWithoutShopNestedInput
     moduleConfigs?: ShopModuleConfigUpdateManyWithoutShopNestedInput
@@ -180786,6 +181426,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUncheckedUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUncheckedUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUncheckedUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedUpdateManyWithoutShopNestedInput
     moduleConfigs?: ShopModuleConfigUncheckedUpdateManyWithoutShopNestedInput
@@ -180855,6 +181497,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsCreateNestedManyWithoutShopInput
     moduleConfigs?: ShopModuleConfigCreateNestedManyWithoutShopInput
@@ -180924,6 +181568,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportUncheckedCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentUncheckedCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineUncheckedCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestUncheckedCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedCreateNestedManyWithoutShopInput
     moduleConfigs?: ShopModuleConfigUncheckedCreateNestedManyWithoutShopInput
@@ -181088,6 +181734,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUpdateManyWithoutShopNestedInput
     moduleConfigs?: ShopModuleConfigUpdateManyWithoutShopNestedInput
@@ -181157,6 +181805,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUncheckedUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUncheckedUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUncheckedUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedUpdateManyWithoutShopNestedInput
     moduleConfigs?: ShopModuleConfigUncheckedUpdateManyWithoutShopNestedInput
@@ -181438,6 +182088,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentCreateNestedManyWithoutShopInput
@@ -181507,6 +182159,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportUncheckedCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentUncheckedCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineUncheckedCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestUncheckedCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedCreateNestedManyWithoutShopInput
@@ -181987,6 +182641,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUpdateManyWithoutShopNestedInput
@@ -182056,6 +182712,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUncheckedUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUncheckedUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUncheckedUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedUpdateManyWithoutShopNestedInput
@@ -182528,6 +183186,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentCreateNestedManyWithoutShopInput
@@ -182597,6 +183257,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportUncheckedCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentUncheckedCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineUncheckedCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestUncheckedCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedCreateNestedManyWithoutShopInput
@@ -182682,6 +183344,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUpdateManyWithoutShopNestedInput
@@ -182751,6 +183415,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUncheckedUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUncheckedUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUncheckedUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedUpdateManyWithoutShopNestedInput
@@ -182820,6 +183486,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentCreateNestedManyWithoutShopInput
@@ -182889,6 +183557,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportUncheckedCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentUncheckedCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineUncheckedCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestUncheckedCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedCreateNestedManyWithoutShopInput
@@ -183239,6 +183909,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUpdateManyWithoutShopNestedInput
@@ -183308,6 +183980,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUncheckedUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUncheckedUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUncheckedUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedUpdateManyWithoutShopNestedInput
@@ -183620,6 +184294,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentCreateNestedManyWithoutShopInput
@@ -183689,6 +184365,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportUncheckedCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentUncheckedCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineUncheckedCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestUncheckedCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedCreateNestedManyWithoutShopInput
@@ -183889,6 +184567,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUpdateManyWithoutShopNestedInput
@@ -183958,6 +184638,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUncheckedUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUncheckedUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUncheckedUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedUpdateManyWithoutShopNestedInput
@@ -184148,6 +184830,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentCreateNestedManyWithoutShopInput
@@ -184217,6 +184901,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportUncheckedCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentUncheckedCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineUncheckedCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestUncheckedCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedCreateNestedManyWithoutShopInput
@@ -184686,6 +185372,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUpdateManyWithoutShopNestedInput
@@ -184755,6 +185443,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUncheckedUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUncheckedUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUncheckedUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedUpdateManyWithoutShopNestedInput
@@ -185158,6 +185848,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentCreateNestedManyWithoutShopInput
@@ -185227,6 +185919,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportUncheckedCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentUncheckedCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineUncheckedCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestUncheckedCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedCreateNestedManyWithoutShopInput
@@ -185397,6 +186091,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUpdateManyWithoutShopNestedInput
@@ -185466,6 +186162,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUncheckedUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUncheckedUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUncheckedUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedUpdateManyWithoutShopNestedInput
@@ -185626,6 +186324,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentCreateNestedManyWithoutShopInput
@@ -185695,6 +186395,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportUncheckedCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentUncheckedCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineUncheckedCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestUncheckedCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedCreateNestedManyWithoutShopInput
@@ -185865,6 +186567,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUpdateManyWithoutShopNestedInput
@@ -185934,6 +186638,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUncheckedUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUncheckedUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUncheckedUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedUpdateManyWithoutShopNestedInput
@@ -186094,6 +186800,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentCreateNestedManyWithoutShopInput
@@ -186163,6 +186871,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportUncheckedCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentUncheckedCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineUncheckedCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestUncheckedCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedCreateNestedManyWithoutShopInput
@@ -186333,6 +187043,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUpdateManyWithoutShopNestedInput
@@ -186402,6 +187114,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUncheckedUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUncheckedUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUncheckedUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedUpdateManyWithoutShopNestedInput
@@ -186562,6 +187276,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentCreateNestedManyWithoutShopInput
@@ -186631,6 +187347,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportUncheckedCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentUncheckedCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineUncheckedCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestUncheckedCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedCreateNestedManyWithoutShopInput
@@ -186801,6 +187519,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUpdateManyWithoutShopNestedInput
@@ -186870,6 +187590,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUncheckedUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUncheckedUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUncheckedUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedUpdateManyWithoutShopNestedInput
@@ -187030,6 +187752,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentCreateNestedManyWithoutShopInput
@@ -187099,6 +187823,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportUncheckedCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentUncheckedCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineUncheckedCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestUncheckedCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedCreateNestedManyWithoutShopInput
@@ -187184,6 +187910,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUpdateManyWithoutShopNestedInput
@@ -187253,6 +187981,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUncheckedUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUncheckedUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUncheckedUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedUpdateManyWithoutShopNestedInput
@@ -187321,6 +188051,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentCreateNestedManyWithoutShopInput
@@ -187390,6 +188122,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportUncheckedCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentUncheckedCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineUncheckedCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestUncheckedCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedCreateNestedManyWithoutShopInput
@@ -187656,6 +188390,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUpdateManyWithoutShopNestedInput
@@ -187725,6 +188461,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUncheckedUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUncheckedUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUncheckedUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedUpdateManyWithoutShopNestedInput
@@ -187911,6 +188649,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentCreateNestedManyWithoutShopInput
@@ -187980,6 +188720,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportUncheckedCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentUncheckedCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineUncheckedCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestUncheckedCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedCreateNestedManyWithoutShopInput
@@ -188237,6 +188979,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUpdateManyWithoutShopNestedInput
@@ -188306,6 +189050,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUncheckedUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUncheckedUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUncheckedUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedUpdateManyWithoutShopNestedInput
@@ -188615,6 +189361,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentCreateNestedManyWithoutShopInput
@@ -188684,6 +189432,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportUncheckedCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentUncheckedCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineUncheckedCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestUncheckedCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedCreateNestedManyWithoutShopInput
@@ -188887,6 +189637,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUpdateManyWithoutShopNestedInput
@@ -188956,6 +189708,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUncheckedUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUncheckedUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUncheckedUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedUpdateManyWithoutShopNestedInput
@@ -189026,6 +189780,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentCreateNestedManyWithoutShopInput
     moduleConfigs?: ShopModuleConfigCreateNestedManyWithoutShopInput
@@ -189095,6 +189851,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportUncheckedCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentUncheckedCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineUncheckedCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedCreateNestedManyWithoutShopInput
     moduleConfigs?: ShopModuleConfigUncheckedCreateNestedManyWithoutShopInput
@@ -189476,6 +190234,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUpdateManyWithoutShopNestedInput
     moduleConfigs?: ShopModuleConfigUpdateManyWithoutShopNestedInput
@@ -189545,6 +190305,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUncheckedUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUncheckedUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedUpdateManyWithoutShopNestedInput
     moduleConfigs?: ShopModuleConfigUncheckedUpdateManyWithoutShopNestedInput
@@ -190304,6 +191066,7 @@ export namespace Prisma {
     issuedAt?: Date | string | null
     createdAt?: Date | string
     updatedAt?: Date | string
+    shop: ShopCreateNestedOneWithoutGstDocumentsInput
     customer?: CustomerProfileCreateNestedOneWithoutGstDocumentsInput
     originalDocument?: GstDocumentCreateNestedOneWithoutDerivedNotesInput
     derivedNotes?: GstDocumentCreateNestedManyWithoutOriginalDocumentInput
@@ -190319,6 +191082,7 @@ export namespace Prisma {
     status: $Enums.GstDocumentStatus
     documentNumber: string
     documentDate: Date | string
+    shopId: string
     shopifyOrderId?: string | null
     shopifyOrderName?: string | null
     sourceOrderId?: string | null
@@ -190692,6 +191456,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentCreateNestedManyWithoutShopInput
@@ -190761,6 +191527,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportUncheckedCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentUncheckedCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineUncheckedCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestUncheckedCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedCreateNestedManyWithoutShopInput
@@ -191088,6 +191856,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUpdateManyWithoutShopNestedInput
@@ -191157,6 +191927,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUncheckedUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUncheckedUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUncheckedUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedUpdateManyWithoutShopNestedInput
@@ -191382,6 +192154,153 @@ export namespace Prisma {
     create: XOR<GstSettingsCreateWithoutDocumentsInput, GstSettingsUncheckedCreateWithoutDocumentsInput>
   }
 
+  export type ShopCreateWithoutGstDocumentsInput = {
+    id?: string
+    shopDomain: string
+    accessToken?: string | null
+    storefrontAccessToken?: string | null
+    scopes?: string | null
+    isActive?: boolean
+    installedAt?: Date | string | null
+    uninstalledAt?: Date | string | null
+    createdAt?: Date | string
+    updatedAt?: Date | string
+    myshopifyDomain?: string | null
+    primaryDomain?: string | null
+    shopName?: string | null
+    accessTokenEncrypted?: string | null
+    storefrontTokenEncrypted?: string | null
+    appProxyPrefix?: string | null
+    appProxySubpath?: string | null
+    appProxyEnabled?: boolean
+    installationStatus?: string
+    checkoutEnabled?: boolean
+    tokenExpiresAt?: Date | string | null
+    tokenRotationRequiredAt?: Date | string | null
+    customers?: CustomerProfileCreateNestedManyWithoutShopInput
+    otpChallenges?: OTPChallengeCreateNestedManyWithoutShopInput
+    orderActionRequests?: OrderActionRequestCreateNestedManyWithoutShopInput
+    megaskaOrders?: MegaskaOrderCreateNestedManyWithoutShopInput
+    walletReservations?: WalletReservationCreateNestedManyWithoutShopInput
+    walletAccounts?: WalletAccountCreateNestedManyWithoutShopInput
+    walletTransactions?: WalletTransactionCreateNestedManyWithoutShopInput
+    gstSettings?: GstSettingsCreateNestedManyWithoutShopInput
+    gstProductTaxMaps?: GstProductTaxMapCreateNestedManyWithoutShopInput
+    gstSkuTaxMaps?: GstSkuTaxMapCreateNestedManyWithoutShopInput
+    gstOrderImports?: GstOrderImportCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineCreateNestedManyWithoutShopInput
+    refundRequests?: RefundRequestCreateNestedManyWithoutShopInput
+    codAdvanceSettings?: CodAdvanceSettingsCreateNestedManyWithoutShopInput
+    codAdvanceIntents?: CodAdvanceIntentCreateNestedManyWithoutShopInput
+    moduleConfigs?: ShopModuleConfigCreateNestedManyWithoutShopInput
+    proxyRoutes?: ShopProxyRouteCreateNestedManyWithoutShopInput
+    installationEvents?: ShopInstallationEventCreateNestedManyWithoutShopInput
+    recoveryTokens?: CheckoutRecoveryTokenCreateNestedManyWithoutShopInput
+    promotionRules?: PromotionRuleCreateNestedManyWithoutShopInput
+    promotionOrderTiers?: PromotionOrderTierCreateNestedManyWithoutShopInput
+    promotionAuditLogs?: PromotionAuditLogCreateNestedManyWithoutShopInput
+    promotionRuntimeSyncState?: PromotionRuntimeSyncStateCreateNestedOneWithoutShopInput
+    merchantNotificationSettings?: MerchantNotificationSettingsCreateNestedOneWithoutShopInput
+    merchantOtpSettings?: MerchantOtpSettingsCreateNestedOneWithoutShopInput
+    merchantUsageEvents?: MerchantUsageEventCreateNestedManyWithoutShopInput
+    merchantSubscription?: MerchantSubscriptionCreateNestedOneWithoutShopInput
+    merchantBillingPeriods?: MerchantBillingPeriodCreateNestedManyWithoutShopInput
+    merchantRatedUsages?: MerchantRatedUsageCreateNestedManyWithoutShopInput
+    billingProviderSubmissions?: MerchantBillingProviderSubmissionCreateNestedManyWithoutShopInput
+    billingReconciliations?: MerchantBillingReconciliationCreateNestedManyWithoutShopInput
+    merchantPlanChanges?: MerchantPlanChangeCreateNestedManyWithoutShopInput
+    reviewSettings?: ReviewSettingsCreateNestedOneWithoutShopInput
+    reviewRequests?: ReviewRequestCreateNestedManyWithoutShopInput
+    productReviews?: ProductReviewCreateNestedManyWithoutShopInput
+    productReviewMedia?: ProductReviewMediaCreateNestedManyWithoutShopInput
+    productReviewReplies?: ProductReviewMerchantReplyCreateNestedManyWithoutShopInput
+    reviewEditTokens?: ProductReviewEditTokenCreateNestedManyWithoutShopInput
+    reviewRequestDeliveryAttempts?: ProductReviewRequestDeliveryAttemptCreateNestedManyWithoutShopInput
+    productReviewRevisions?: ProductReviewRevisionCreateNestedManyWithoutShopInput
+    productReviewAggregates?: ProductReviewAggregateCreateNestedManyWithoutShopInput
+    identityReconciliationPlans?: CustomerIdentityReconciliationPlanCreateNestedManyWithoutShopInput
+    identityReconciliationAudits?: CustomerIdentityReconciliationAuditCreateNestedManyWithoutShopInput
+    identityMerges?: CustomerIdentityMergeCreateNestedManyWithoutShopInput
+    checkoutPricingSnapshots?: ShopifyCheckoutPricingSnapshotCreateNestedManyWithoutShopInput
+    emailVerificationChallenges?: EmailVerificationChallengeCreateNestedManyWithoutShopInput
+  }
+
+  export type ShopUncheckedCreateWithoutGstDocumentsInput = {
+    id?: string
+    shopDomain: string
+    accessToken?: string | null
+    storefrontAccessToken?: string | null
+    scopes?: string | null
+    isActive?: boolean
+    installedAt?: Date | string | null
+    uninstalledAt?: Date | string | null
+    createdAt?: Date | string
+    updatedAt?: Date | string
+    myshopifyDomain?: string | null
+    primaryDomain?: string | null
+    shopName?: string | null
+    accessTokenEncrypted?: string | null
+    storefrontTokenEncrypted?: string | null
+    appProxyPrefix?: string | null
+    appProxySubpath?: string | null
+    appProxyEnabled?: boolean
+    installationStatus?: string
+    checkoutEnabled?: boolean
+    tokenExpiresAt?: Date | string | null
+    tokenRotationRequiredAt?: Date | string | null
+    customers?: CustomerProfileUncheckedCreateNestedManyWithoutShopInput
+    otpChallenges?: OTPChallengeUncheckedCreateNestedManyWithoutShopInput
+    orderActionRequests?: OrderActionRequestUncheckedCreateNestedManyWithoutShopInput
+    megaskaOrders?: MegaskaOrderUncheckedCreateNestedManyWithoutShopInput
+    walletReservations?: WalletReservationUncheckedCreateNestedManyWithoutShopInput
+    walletAccounts?: WalletAccountUncheckedCreateNestedManyWithoutShopInput
+    walletTransactions?: WalletTransactionUncheckedCreateNestedManyWithoutShopInput
+    gstSettings?: GstSettingsUncheckedCreateNestedManyWithoutShopInput
+    gstProductTaxMaps?: GstProductTaxMapUncheckedCreateNestedManyWithoutShopInput
+    gstSkuTaxMaps?: GstSkuTaxMapUncheckedCreateNestedManyWithoutShopInput
+    gstOrderImports?: GstOrderImportUncheckedCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineUncheckedCreateNestedManyWithoutShopInput
+    refundRequests?: RefundRequestUncheckedCreateNestedManyWithoutShopInput
+    codAdvanceSettings?: CodAdvanceSettingsUncheckedCreateNestedManyWithoutShopInput
+    codAdvanceIntents?: CodAdvanceIntentUncheckedCreateNestedManyWithoutShopInput
+    moduleConfigs?: ShopModuleConfigUncheckedCreateNestedManyWithoutShopInput
+    proxyRoutes?: ShopProxyRouteUncheckedCreateNestedManyWithoutShopInput
+    installationEvents?: ShopInstallationEventUncheckedCreateNestedManyWithoutShopInput
+    recoveryTokens?: CheckoutRecoveryTokenUncheckedCreateNestedManyWithoutShopInput
+    promotionRules?: PromotionRuleUncheckedCreateNestedManyWithoutShopInput
+    promotionOrderTiers?: PromotionOrderTierUncheckedCreateNestedManyWithoutShopInput
+    promotionAuditLogs?: PromotionAuditLogUncheckedCreateNestedManyWithoutShopInput
+    promotionRuntimeSyncState?: PromotionRuntimeSyncStateUncheckedCreateNestedOneWithoutShopInput
+    merchantNotificationSettings?: MerchantNotificationSettingsUncheckedCreateNestedOneWithoutShopInput
+    merchantOtpSettings?: MerchantOtpSettingsUncheckedCreateNestedOneWithoutShopInput
+    merchantUsageEvents?: MerchantUsageEventUncheckedCreateNestedManyWithoutShopInput
+    merchantSubscription?: MerchantSubscriptionUncheckedCreateNestedOneWithoutShopInput
+    merchantBillingPeriods?: MerchantBillingPeriodUncheckedCreateNestedManyWithoutShopInput
+    merchantRatedUsages?: MerchantRatedUsageUncheckedCreateNestedManyWithoutShopInput
+    billingProviderSubmissions?: MerchantBillingProviderSubmissionUncheckedCreateNestedManyWithoutShopInput
+    billingReconciliations?: MerchantBillingReconciliationUncheckedCreateNestedManyWithoutShopInput
+    merchantPlanChanges?: MerchantPlanChangeUncheckedCreateNestedManyWithoutShopInput
+    reviewSettings?: ReviewSettingsUncheckedCreateNestedOneWithoutShopInput
+    reviewRequests?: ReviewRequestUncheckedCreateNestedManyWithoutShopInput
+    productReviews?: ProductReviewUncheckedCreateNestedManyWithoutShopInput
+    productReviewMedia?: ProductReviewMediaUncheckedCreateNestedManyWithoutShopInput
+    productReviewReplies?: ProductReviewMerchantReplyUncheckedCreateNestedManyWithoutShopInput
+    reviewEditTokens?: ProductReviewEditTokenUncheckedCreateNestedManyWithoutShopInput
+    reviewRequestDeliveryAttempts?: ProductReviewRequestDeliveryAttemptUncheckedCreateNestedManyWithoutShopInput
+    productReviewRevisions?: ProductReviewRevisionUncheckedCreateNestedManyWithoutShopInput
+    productReviewAggregates?: ProductReviewAggregateUncheckedCreateNestedManyWithoutShopInput
+    identityReconciliationPlans?: CustomerIdentityReconciliationPlanUncheckedCreateNestedManyWithoutShopInput
+    identityReconciliationAudits?: CustomerIdentityReconciliationAuditUncheckedCreateNestedManyWithoutShopInput
+    identityMerges?: CustomerIdentityMergeUncheckedCreateNestedManyWithoutShopInput
+    checkoutPricingSnapshots?: ShopifyCheckoutPricingSnapshotUncheckedCreateNestedManyWithoutShopInput
+    emailVerificationChallenges?: EmailVerificationChallengeUncheckedCreateNestedManyWithoutShopInput
+  }
+
+  export type ShopCreateOrConnectWithoutGstDocumentsInput = {
+    where: ShopWhereUniqueInput
+    create: XOR<ShopCreateWithoutGstDocumentsInput, ShopUncheckedCreateWithoutGstDocumentsInput>
+  }
+
   export type CustomerProfileCreateWithoutGstDocumentsInput = {
     id?: string
     phoneE164?: string | null
@@ -191489,6 +192408,7 @@ export namespace Prisma {
     createdAt?: Date | string
     updatedAt?: Date | string
     gstSettings: GstSettingsCreateNestedOneWithoutDocumentsInput
+    shop: ShopCreateNestedOneWithoutGstDocumentsInput
     customer?: CustomerProfileCreateNestedOneWithoutGstDocumentsInput
     originalDocument?: GstDocumentCreateNestedOneWithoutDerivedNotesInput
     lines?: GstDocumentLineCreateNestedManyWithoutDocumentInput
@@ -191504,6 +192424,7 @@ export namespace Prisma {
     documentNumber: string
     documentDate: Date | string
     gstSettingsId: string
+    shopId: string
     shopifyOrderId?: string | null
     shopifyOrderName?: string | null
     sourceOrderId?: string | null
@@ -191566,6 +192487,7 @@ export namespace Prisma {
     createdAt?: Date | string
     updatedAt?: Date | string
     gstSettings: GstSettingsCreateNestedOneWithoutDocumentsInput
+    shop: ShopCreateNestedOneWithoutGstDocumentsInput
     customer?: CustomerProfileCreateNestedOneWithoutGstDocumentsInput
     derivedNotes?: GstDocumentCreateNestedManyWithoutOriginalDocumentInput
     lines?: GstDocumentLineCreateNestedManyWithoutDocumentInput
@@ -191581,6 +192503,7 @@ export namespace Prisma {
     documentNumber: string
     documentDate: Date | string
     gstSettingsId: string
+    shopId: string
     shopifyOrderId?: string | null
     shopifyOrderName?: string | null
     sourceOrderId?: string | null
@@ -191638,10 +192561,12 @@ export namespace Prisma {
     lineTotal: Decimal | DecimalJsLike | number | string
     createdAt?: Date | string
     updatedAt?: Date | string
+    shop: ShopCreateNestedOneWithoutGstDocumentLinesInput
   }
 
   export type GstDocumentLineUncheckedCreateWithoutDocumentInput = {
     id?: string
+    shopId: string
     lineNumber: number
     description: string
     hsnOrSac?: string | null
@@ -191855,6 +192780,159 @@ export namespace Prisma {
     reportRuns?: GstReportRunUncheckedUpdateManyWithoutGstSettingsNestedInput
   }
 
+  export type ShopUpsertWithoutGstDocumentsInput = {
+    update: XOR<ShopUpdateWithoutGstDocumentsInput, ShopUncheckedUpdateWithoutGstDocumentsInput>
+    create: XOR<ShopCreateWithoutGstDocumentsInput, ShopUncheckedCreateWithoutGstDocumentsInput>
+    where?: ShopWhereInput
+  }
+
+  export type ShopUpdateToOneWithWhereWithoutGstDocumentsInput = {
+    where?: ShopWhereInput
+    data: XOR<ShopUpdateWithoutGstDocumentsInput, ShopUncheckedUpdateWithoutGstDocumentsInput>
+  }
+
+  export type ShopUpdateWithoutGstDocumentsInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    shopDomain?: StringFieldUpdateOperationsInput | string
+    accessToken?: NullableStringFieldUpdateOperationsInput | string | null
+    storefrontAccessToken?: NullableStringFieldUpdateOperationsInput | string | null
+    scopes?: NullableStringFieldUpdateOperationsInput | string | null
+    isActive?: BoolFieldUpdateOperationsInput | boolean
+    installedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    uninstalledAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    myshopifyDomain?: NullableStringFieldUpdateOperationsInput | string | null
+    primaryDomain?: NullableStringFieldUpdateOperationsInput | string | null
+    shopName?: NullableStringFieldUpdateOperationsInput | string | null
+    accessTokenEncrypted?: NullableStringFieldUpdateOperationsInput | string | null
+    storefrontTokenEncrypted?: NullableStringFieldUpdateOperationsInput | string | null
+    appProxyPrefix?: NullableStringFieldUpdateOperationsInput | string | null
+    appProxySubpath?: NullableStringFieldUpdateOperationsInput | string | null
+    appProxyEnabled?: BoolFieldUpdateOperationsInput | boolean
+    installationStatus?: StringFieldUpdateOperationsInput | string
+    checkoutEnabled?: BoolFieldUpdateOperationsInput | boolean
+    tokenExpiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    tokenRotationRequiredAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    customers?: CustomerProfileUpdateManyWithoutShopNestedInput
+    otpChallenges?: OTPChallengeUpdateManyWithoutShopNestedInput
+    orderActionRequests?: OrderActionRequestUpdateManyWithoutShopNestedInput
+    megaskaOrders?: MegaskaOrderUpdateManyWithoutShopNestedInput
+    walletReservations?: WalletReservationUpdateManyWithoutShopNestedInput
+    walletAccounts?: WalletAccountUpdateManyWithoutShopNestedInput
+    walletTransactions?: WalletTransactionUpdateManyWithoutShopNestedInput
+    gstSettings?: GstSettingsUpdateManyWithoutShopNestedInput
+    gstProductTaxMaps?: GstProductTaxMapUpdateManyWithoutShopNestedInput
+    gstSkuTaxMaps?: GstSkuTaxMapUpdateManyWithoutShopNestedInput
+    gstOrderImports?: GstOrderImportUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUpdateManyWithoutShopNestedInput
+    refundRequests?: RefundRequestUpdateManyWithoutShopNestedInput
+    codAdvanceSettings?: CodAdvanceSettingsUpdateManyWithoutShopNestedInput
+    codAdvanceIntents?: CodAdvanceIntentUpdateManyWithoutShopNestedInput
+    moduleConfigs?: ShopModuleConfigUpdateManyWithoutShopNestedInput
+    proxyRoutes?: ShopProxyRouteUpdateManyWithoutShopNestedInput
+    installationEvents?: ShopInstallationEventUpdateManyWithoutShopNestedInput
+    recoveryTokens?: CheckoutRecoveryTokenUpdateManyWithoutShopNestedInput
+    promotionRules?: PromotionRuleUpdateManyWithoutShopNestedInput
+    promotionOrderTiers?: PromotionOrderTierUpdateManyWithoutShopNestedInput
+    promotionAuditLogs?: PromotionAuditLogUpdateManyWithoutShopNestedInput
+    promotionRuntimeSyncState?: PromotionRuntimeSyncStateUpdateOneWithoutShopNestedInput
+    merchantNotificationSettings?: MerchantNotificationSettingsUpdateOneWithoutShopNestedInput
+    merchantOtpSettings?: MerchantOtpSettingsUpdateOneWithoutShopNestedInput
+    merchantUsageEvents?: MerchantUsageEventUpdateManyWithoutShopNestedInput
+    merchantSubscription?: MerchantSubscriptionUpdateOneWithoutShopNestedInput
+    merchantBillingPeriods?: MerchantBillingPeriodUpdateManyWithoutShopNestedInput
+    merchantRatedUsages?: MerchantRatedUsageUpdateManyWithoutShopNestedInput
+    billingProviderSubmissions?: MerchantBillingProviderSubmissionUpdateManyWithoutShopNestedInput
+    billingReconciliations?: MerchantBillingReconciliationUpdateManyWithoutShopNestedInput
+    merchantPlanChanges?: MerchantPlanChangeUpdateManyWithoutShopNestedInput
+    reviewSettings?: ReviewSettingsUpdateOneWithoutShopNestedInput
+    reviewRequests?: ReviewRequestUpdateManyWithoutShopNestedInput
+    productReviews?: ProductReviewUpdateManyWithoutShopNestedInput
+    productReviewMedia?: ProductReviewMediaUpdateManyWithoutShopNestedInput
+    productReviewReplies?: ProductReviewMerchantReplyUpdateManyWithoutShopNestedInput
+    reviewEditTokens?: ProductReviewEditTokenUpdateManyWithoutShopNestedInput
+    reviewRequestDeliveryAttempts?: ProductReviewRequestDeliveryAttemptUpdateManyWithoutShopNestedInput
+    productReviewRevisions?: ProductReviewRevisionUpdateManyWithoutShopNestedInput
+    productReviewAggregates?: ProductReviewAggregateUpdateManyWithoutShopNestedInput
+    identityReconciliationPlans?: CustomerIdentityReconciliationPlanUpdateManyWithoutShopNestedInput
+    identityReconciliationAudits?: CustomerIdentityReconciliationAuditUpdateManyWithoutShopNestedInput
+    identityMerges?: CustomerIdentityMergeUpdateManyWithoutShopNestedInput
+    checkoutPricingSnapshots?: ShopifyCheckoutPricingSnapshotUpdateManyWithoutShopNestedInput
+    emailVerificationChallenges?: EmailVerificationChallengeUpdateManyWithoutShopNestedInput
+  }
+
+  export type ShopUncheckedUpdateWithoutGstDocumentsInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    shopDomain?: StringFieldUpdateOperationsInput | string
+    accessToken?: NullableStringFieldUpdateOperationsInput | string | null
+    storefrontAccessToken?: NullableStringFieldUpdateOperationsInput | string | null
+    scopes?: NullableStringFieldUpdateOperationsInput | string | null
+    isActive?: BoolFieldUpdateOperationsInput | boolean
+    installedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    uninstalledAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    myshopifyDomain?: NullableStringFieldUpdateOperationsInput | string | null
+    primaryDomain?: NullableStringFieldUpdateOperationsInput | string | null
+    shopName?: NullableStringFieldUpdateOperationsInput | string | null
+    accessTokenEncrypted?: NullableStringFieldUpdateOperationsInput | string | null
+    storefrontTokenEncrypted?: NullableStringFieldUpdateOperationsInput | string | null
+    appProxyPrefix?: NullableStringFieldUpdateOperationsInput | string | null
+    appProxySubpath?: NullableStringFieldUpdateOperationsInput | string | null
+    appProxyEnabled?: BoolFieldUpdateOperationsInput | boolean
+    installationStatus?: StringFieldUpdateOperationsInput | string
+    checkoutEnabled?: BoolFieldUpdateOperationsInput | boolean
+    tokenExpiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    tokenRotationRequiredAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    customers?: CustomerProfileUncheckedUpdateManyWithoutShopNestedInput
+    otpChallenges?: OTPChallengeUncheckedUpdateManyWithoutShopNestedInput
+    orderActionRequests?: OrderActionRequestUncheckedUpdateManyWithoutShopNestedInput
+    megaskaOrders?: MegaskaOrderUncheckedUpdateManyWithoutShopNestedInput
+    walletReservations?: WalletReservationUncheckedUpdateManyWithoutShopNestedInput
+    walletAccounts?: WalletAccountUncheckedUpdateManyWithoutShopNestedInput
+    walletTransactions?: WalletTransactionUncheckedUpdateManyWithoutShopNestedInput
+    gstSettings?: GstSettingsUncheckedUpdateManyWithoutShopNestedInput
+    gstProductTaxMaps?: GstProductTaxMapUncheckedUpdateManyWithoutShopNestedInput
+    gstSkuTaxMaps?: GstSkuTaxMapUncheckedUpdateManyWithoutShopNestedInput
+    gstOrderImports?: GstOrderImportUncheckedUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUncheckedUpdateManyWithoutShopNestedInput
+    refundRequests?: RefundRequestUncheckedUpdateManyWithoutShopNestedInput
+    codAdvanceSettings?: CodAdvanceSettingsUncheckedUpdateManyWithoutShopNestedInput
+    codAdvanceIntents?: CodAdvanceIntentUncheckedUpdateManyWithoutShopNestedInput
+    moduleConfigs?: ShopModuleConfigUncheckedUpdateManyWithoutShopNestedInput
+    proxyRoutes?: ShopProxyRouteUncheckedUpdateManyWithoutShopNestedInput
+    installationEvents?: ShopInstallationEventUncheckedUpdateManyWithoutShopNestedInput
+    recoveryTokens?: CheckoutRecoveryTokenUncheckedUpdateManyWithoutShopNestedInput
+    promotionRules?: PromotionRuleUncheckedUpdateManyWithoutShopNestedInput
+    promotionOrderTiers?: PromotionOrderTierUncheckedUpdateManyWithoutShopNestedInput
+    promotionAuditLogs?: PromotionAuditLogUncheckedUpdateManyWithoutShopNestedInput
+    promotionRuntimeSyncState?: PromotionRuntimeSyncStateUncheckedUpdateOneWithoutShopNestedInput
+    merchantNotificationSettings?: MerchantNotificationSettingsUncheckedUpdateOneWithoutShopNestedInput
+    merchantOtpSettings?: MerchantOtpSettingsUncheckedUpdateOneWithoutShopNestedInput
+    merchantUsageEvents?: MerchantUsageEventUncheckedUpdateManyWithoutShopNestedInput
+    merchantSubscription?: MerchantSubscriptionUncheckedUpdateOneWithoutShopNestedInput
+    merchantBillingPeriods?: MerchantBillingPeriodUncheckedUpdateManyWithoutShopNestedInput
+    merchantRatedUsages?: MerchantRatedUsageUncheckedUpdateManyWithoutShopNestedInput
+    billingProviderSubmissions?: MerchantBillingProviderSubmissionUncheckedUpdateManyWithoutShopNestedInput
+    billingReconciliations?: MerchantBillingReconciliationUncheckedUpdateManyWithoutShopNestedInput
+    merchantPlanChanges?: MerchantPlanChangeUncheckedUpdateManyWithoutShopNestedInput
+    reviewSettings?: ReviewSettingsUncheckedUpdateOneWithoutShopNestedInput
+    reviewRequests?: ReviewRequestUncheckedUpdateManyWithoutShopNestedInput
+    productReviews?: ProductReviewUncheckedUpdateManyWithoutShopNestedInput
+    productReviewMedia?: ProductReviewMediaUncheckedUpdateManyWithoutShopNestedInput
+    productReviewReplies?: ProductReviewMerchantReplyUncheckedUpdateManyWithoutShopNestedInput
+    reviewEditTokens?: ProductReviewEditTokenUncheckedUpdateManyWithoutShopNestedInput
+    reviewRequestDeliveryAttempts?: ProductReviewRequestDeliveryAttemptUncheckedUpdateManyWithoutShopNestedInput
+    productReviewRevisions?: ProductReviewRevisionUncheckedUpdateManyWithoutShopNestedInput
+    productReviewAggregates?: ProductReviewAggregateUncheckedUpdateManyWithoutShopNestedInput
+    identityReconciliationPlans?: CustomerIdentityReconciliationPlanUncheckedUpdateManyWithoutShopNestedInput
+    identityReconciliationAudits?: CustomerIdentityReconciliationAuditUncheckedUpdateManyWithoutShopNestedInput
+    identityMerges?: CustomerIdentityMergeUncheckedUpdateManyWithoutShopNestedInput
+    checkoutPricingSnapshots?: ShopifyCheckoutPricingSnapshotUncheckedUpdateManyWithoutShopNestedInput
+    emailVerificationChallenges?: EmailVerificationChallengeUncheckedUpdateManyWithoutShopNestedInput
+  }
+
   export type CustomerProfileUpsertWithoutGstDocumentsInput = {
     update: XOR<CustomerProfileUpdateWithoutGstDocumentsInput, CustomerProfileUncheckedUpdateWithoutGstDocumentsInput>
     create: XOR<CustomerProfileCreateWithoutGstDocumentsInput, CustomerProfileUncheckedCreateWithoutGstDocumentsInput>
@@ -191979,6 +193057,7 @@ export namespace Prisma {
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     gstSettings?: GstSettingsUpdateOneRequiredWithoutDocumentsNestedInput
+    shop?: ShopUpdateOneRequiredWithoutGstDocumentsNestedInput
     customer?: CustomerProfileUpdateOneWithoutGstDocumentsNestedInput
     originalDocument?: GstDocumentUpdateOneWithoutDerivedNotesNestedInput
     lines?: GstDocumentLineUpdateManyWithoutDocumentNestedInput
@@ -191994,6 +193073,7 @@ export namespace Prisma {
     documentNumber?: StringFieldUpdateOperationsInput | string
     documentDate?: DateTimeFieldUpdateOperationsInput | Date | string
     gstSettingsId?: StringFieldUpdateOperationsInput | string
+    shopId?: StringFieldUpdateOperationsInput | string
     shopifyOrderId?: NullableStringFieldUpdateOperationsInput | string | null
     shopifyOrderName?: NullableStringFieldUpdateOperationsInput | string | null
     sourceOrderId?: NullableStringFieldUpdateOperationsInput | string | null
@@ -192053,30 +193133,6 @@ export namespace Prisma {
   export type GstDocumentLineUpdateManyWithWhereWithoutDocumentInput = {
     where: GstDocumentLineScalarWhereInput
     data: XOR<GstDocumentLineUpdateManyMutationInput, GstDocumentLineUncheckedUpdateManyWithoutDocumentInput>
-  }
-
-  export type GstDocumentLineScalarWhereInput = {
-    AND?: GstDocumentLineScalarWhereInput | GstDocumentLineScalarWhereInput[]
-    OR?: GstDocumentLineScalarWhereInput[]
-    NOT?: GstDocumentLineScalarWhereInput | GstDocumentLineScalarWhereInput[]
-    id?: StringFilter<"GstDocumentLine"> | string
-    gstDocumentId?: StringFilter<"GstDocumentLine"> | string
-    lineNumber?: IntFilter<"GstDocumentLine"> | number
-    description?: StringFilter<"GstDocumentLine"> | string
-    hsnOrSac?: StringNullableFilter<"GstDocumentLine"> | string | null
-    quantity?: DecimalFilter<"GstDocumentLine"> | Decimal | DecimalJsLike | number | string
-    unit?: StringNullableFilter<"GstDocumentLine"> | string | null
-    unitPrice?: DecimalFilter<"GstDocumentLine"> | Decimal | DecimalJsLike | number | string
-    discount?: DecimalFilter<"GstDocumentLine"> | Decimal | DecimalJsLike | number | string
-    taxableAmount?: DecimalFilter<"GstDocumentLine"> | Decimal | DecimalJsLike | number | string
-    taxRate?: DecimalFilter<"GstDocumentLine"> | Decimal | DecimalJsLike | number | string
-    cgstAmount?: DecimalFilter<"GstDocumentLine"> | Decimal | DecimalJsLike | number | string
-    sgstAmount?: DecimalFilter<"GstDocumentLine"> | Decimal | DecimalJsLike | number | string
-    igstAmount?: DecimalFilter<"GstDocumentLine"> | Decimal | DecimalJsLike | number | string
-    cessAmount?: DecimalFilter<"GstDocumentLine"> | Decimal | DecimalJsLike | number | string
-    lineTotal?: DecimalFilter<"GstDocumentLine"> | Decimal | DecimalJsLike | number | string
-    createdAt?: DateTimeFilter<"GstDocumentLine"> | Date | string
-    updatedAt?: DateTimeFilter<"GstDocumentLine"> | Date | string
   }
 
   export type GstExportItemUpsertWithWhereUniqueWithoutGstDocumentInput = {
@@ -192192,6 +193248,7 @@ export namespace Prisma {
     createdAt?: Date | string
     updatedAt?: Date | string
     gstSettings: GstSettingsCreateNestedOneWithoutDocumentsInput
+    shop: ShopCreateNestedOneWithoutGstDocumentsInput
     customer?: CustomerProfileCreateNestedOneWithoutGstDocumentsInput
     originalDocument?: GstDocumentCreateNestedOneWithoutDerivedNotesInput
     derivedNotes?: GstDocumentCreateNestedManyWithoutOriginalDocumentInput
@@ -192207,6 +193264,7 @@ export namespace Prisma {
     documentNumber: string
     documentDate: Date | string
     gstSettingsId: string
+    shopId: string
     shopifyOrderId?: string | null
     shopifyOrderName?: string | null
     sourceOrderId?: string | null
@@ -192239,6 +193297,153 @@ export namespace Prisma {
   export type GstDocumentCreateOrConnectWithoutLinesInput = {
     where: GstDocumentWhereUniqueInput
     create: XOR<GstDocumentCreateWithoutLinesInput, GstDocumentUncheckedCreateWithoutLinesInput>
+  }
+
+  export type ShopCreateWithoutGstDocumentLinesInput = {
+    id?: string
+    shopDomain: string
+    accessToken?: string | null
+    storefrontAccessToken?: string | null
+    scopes?: string | null
+    isActive?: boolean
+    installedAt?: Date | string | null
+    uninstalledAt?: Date | string | null
+    createdAt?: Date | string
+    updatedAt?: Date | string
+    myshopifyDomain?: string | null
+    primaryDomain?: string | null
+    shopName?: string | null
+    accessTokenEncrypted?: string | null
+    storefrontTokenEncrypted?: string | null
+    appProxyPrefix?: string | null
+    appProxySubpath?: string | null
+    appProxyEnabled?: boolean
+    installationStatus?: string
+    checkoutEnabled?: boolean
+    tokenExpiresAt?: Date | string | null
+    tokenRotationRequiredAt?: Date | string | null
+    customers?: CustomerProfileCreateNestedManyWithoutShopInput
+    otpChallenges?: OTPChallengeCreateNestedManyWithoutShopInput
+    orderActionRequests?: OrderActionRequestCreateNestedManyWithoutShopInput
+    megaskaOrders?: MegaskaOrderCreateNestedManyWithoutShopInput
+    walletReservations?: WalletReservationCreateNestedManyWithoutShopInput
+    walletAccounts?: WalletAccountCreateNestedManyWithoutShopInput
+    walletTransactions?: WalletTransactionCreateNestedManyWithoutShopInput
+    gstSettings?: GstSettingsCreateNestedManyWithoutShopInput
+    gstProductTaxMaps?: GstProductTaxMapCreateNestedManyWithoutShopInput
+    gstSkuTaxMaps?: GstSkuTaxMapCreateNestedManyWithoutShopInput
+    gstOrderImports?: GstOrderImportCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentCreateNestedManyWithoutShopInput
+    refundRequests?: RefundRequestCreateNestedManyWithoutShopInput
+    codAdvanceSettings?: CodAdvanceSettingsCreateNestedManyWithoutShopInput
+    codAdvanceIntents?: CodAdvanceIntentCreateNestedManyWithoutShopInput
+    moduleConfigs?: ShopModuleConfigCreateNestedManyWithoutShopInput
+    proxyRoutes?: ShopProxyRouteCreateNestedManyWithoutShopInput
+    installationEvents?: ShopInstallationEventCreateNestedManyWithoutShopInput
+    recoveryTokens?: CheckoutRecoveryTokenCreateNestedManyWithoutShopInput
+    promotionRules?: PromotionRuleCreateNestedManyWithoutShopInput
+    promotionOrderTiers?: PromotionOrderTierCreateNestedManyWithoutShopInput
+    promotionAuditLogs?: PromotionAuditLogCreateNestedManyWithoutShopInput
+    promotionRuntimeSyncState?: PromotionRuntimeSyncStateCreateNestedOneWithoutShopInput
+    merchantNotificationSettings?: MerchantNotificationSettingsCreateNestedOneWithoutShopInput
+    merchantOtpSettings?: MerchantOtpSettingsCreateNestedOneWithoutShopInput
+    merchantUsageEvents?: MerchantUsageEventCreateNestedManyWithoutShopInput
+    merchantSubscription?: MerchantSubscriptionCreateNestedOneWithoutShopInput
+    merchantBillingPeriods?: MerchantBillingPeriodCreateNestedManyWithoutShopInput
+    merchantRatedUsages?: MerchantRatedUsageCreateNestedManyWithoutShopInput
+    billingProviderSubmissions?: MerchantBillingProviderSubmissionCreateNestedManyWithoutShopInput
+    billingReconciliations?: MerchantBillingReconciliationCreateNestedManyWithoutShopInput
+    merchantPlanChanges?: MerchantPlanChangeCreateNestedManyWithoutShopInput
+    reviewSettings?: ReviewSettingsCreateNestedOneWithoutShopInput
+    reviewRequests?: ReviewRequestCreateNestedManyWithoutShopInput
+    productReviews?: ProductReviewCreateNestedManyWithoutShopInput
+    productReviewMedia?: ProductReviewMediaCreateNestedManyWithoutShopInput
+    productReviewReplies?: ProductReviewMerchantReplyCreateNestedManyWithoutShopInput
+    reviewEditTokens?: ProductReviewEditTokenCreateNestedManyWithoutShopInput
+    reviewRequestDeliveryAttempts?: ProductReviewRequestDeliveryAttemptCreateNestedManyWithoutShopInput
+    productReviewRevisions?: ProductReviewRevisionCreateNestedManyWithoutShopInput
+    productReviewAggregates?: ProductReviewAggregateCreateNestedManyWithoutShopInput
+    identityReconciliationPlans?: CustomerIdentityReconciliationPlanCreateNestedManyWithoutShopInput
+    identityReconciliationAudits?: CustomerIdentityReconciliationAuditCreateNestedManyWithoutShopInput
+    identityMerges?: CustomerIdentityMergeCreateNestedManyWithoutShopInput
+    checkoutPricingSnapshots?: ShopifyCheckoutPricingSnapshotCreateNestedManyWithoutShopInput
+    emailVerificationChallenges?: EmailVerificationChallengeCreateNestedManyWithoutShopInput
+  }
+
+  export type ShopUncheckedCreateWithoutGstDocumentLinesInput = {
+    id?: string
+    shopDomain: string
+    accessToken?: string | null
+    storefrontAccessToken?: string | null
+    scopes?: string | null
+    isActive?: boolean
+    installedAt?: Date | string | null
+    uninstalledAt?: Date | string | null
+    createdAt?: Date | string
+    updatedAt?: Date | string
+    myshopifyDomain?: string | null
+    primaryDomain?: string | null
+    shopName?: string | null
+    accessTokenEncrypted?: string | null
+    storefrontTokenEncrypted?: string | null
+    appProxyPrefix?: string | null
+    appProxySubpath?: string | null
+    appProxyEnabled?: boolean
+    installationStatus?: string
+    checkoutEnabled?: boolean
+    tokenExpiresAt?: Date | string | null
+    tokenRotationRequiredAt?: Date | string | null
+    customers?: CustomerProfileUncheckedCreateNestedManyWithoutShopInput
+    otpChallenges?: OTPChallengeUncheckedCreateNestedManyWithoutShopInput
+    orderActionRequests?: OrderActionRequestUncheckedCreateNestedManyWithoutShopInput
+    megaskaOrders?: MegaskaOrderUncheckedCreateNestedManyWithoutShopInput
+    walletReservations?: WalletReservationUncheckedCreateNestedManyWithoutShopInput
+    walletAccounts?: WalletAccountUncheckedCreateNestedManyWithoutShopInput
+    walletTransactions?: WalletTransactionUncheckedCreateNestedManyWithoutShopInput
+    gstSettings?: GstSettingsUncheckedCreateNestedManyWithoutShopInput
+    gstProductTaxMaps?: GstProductTaxMapUncheckedCreateNestedManyWithoutShopInput
+    gstSkuTaxMaps?: GstSkuTaxMapUncheckedCreateNestedManyWithoutShopInput
+    gstOrderImports?: GstOrderImportUncheckedCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentUncheckedCreateNestedManyWithoutShopInput
+    refundRequests?: RefundRequestUncheckedCreateNestedManyWithoutShopInput
+    codAdvanceSettings?: CodAdvanceSettingsUncheckedCreateNestedManyWithoutShopInput
+    codAdvanceIntents?: CodAdvanceIntentUncheckedCreateNestedManyWithoutShopInput
+    moduleConfigs?: ShopModuleConfigUncheckedCreateNestedManyWithoutShopInput
+    proxyRoutes?: ShopProxyRouteUncheckedCreateNestedManyWithoutShopInput
+    installationEvents?: ShopInstallationEventUncheckedCreateNestedManyWithoutShopInput
+    recoveryTokens?: CheckoutRecoveryTokenUncheckedCreateNestedManyWithoutShopInput
+    promotionRules?: PromotionRuleUncheckedCreateNestedManyWithoutShopInput
+    promotionOrderTiers?: PromotionOrderTierUncheckedCreateNestedManyWithoutShopInput
+    promotionAuditLogs?: PromotionAuditLogUncheckedCreateNestedManyWithoutShopInput
+    promotionRuntimeSyncState?: PromotionRuntimeSyncStateUncheckedCreateNestedOneWithoutShopInput
+    merchantNotificationSettings?: MerchantNotificationSettingsUncheckedCreateNestedOneWithoutShopInput
+    merchantOtpSettings?: MerchantOtpSettingsUncheckedCreateNestedOneWithoutShopInput
+    merchantUsageEvents?: MerchantUsageEventUncheckedCreateNestedManyWithoutShopInput
+    merchantSubscription?: MerchantSubscriptionUncheckedCreateNestedOneWithoutShopInput
+    merchantBillingPeriods?: MerchantBillingPeriodUncheckedCreateNestedManyWithoutShopInput
+    merchantRatedUsages?: MerchantRatedUsageUncheckedCreateNestedManyWithoutShopInput
+    billingProviderSubmissions?: MerchantBillingProviderSubmissionUncheckedCreateNestedManyWithoutShopInput
+    billingReconciliations?: MerchantBillingReconciliationUncheckedCreateNestedManyWithoutShopInput
+    merchantPlanChanges?: MerchantPlanChangeUncheckedCreateNestedManyWithoutShopInput
+    reviewSettings?: ReviewSettingsUncheckedCreateNestedOneWithoutShopInput
+    reviewRequests?: ReviewRequestUncheckedCreateNestedManyWithoutShopInput
+    productReviews?: ProductReviewUncheckedCreateNestedManyWithoutShopInput
+    productReviewMedia?: ProductReviewMediaUncheckedCreateNestedManyWithoutShopInput
+    productReviewReplies?: ProductReviewMerchantReplyUncheckedCreateNestedManyWithoutShopInput
+    reviewEditTokens?: ProductReviewEditTokenUncheckedCreateNestedManyWithoutShopInput
+    reviewRequestDeliveryAttempts?: ProductReviewRequestDeliveryAttemptUncheckedCreateNestedManyWithoutShopInput
+    productReviewRevisions?: ProductReviewRevisionUncheckedCreateNestedManyWithoutShopInput
+    productReviewAggregates?: ProductReviewAggregateUncheckedCreateNestedManyWithoutShopInput
+    identityReconciliationPlans?: CustomerIdentityReconciliationPlanUncheckedCreateNestedManyWithoutShopInput
+    identityReconciliationAudits?: CustomerIdentityReconciliationAuditUncheckedCreateNestedManyWithoutShopInput
+    identityMerges?: CustomerIdentityMergeUncheckedCreateNestedManyWithoutShopInput
+    checkoutPricingSnapshots?: ShopifyCheckoutPricingSnapshotUncheckedCreateNestedManyWithoutShopInput
+    emailVerificationChallenges?: EmailVerificationChallengeUncheckedCreateNestedManyWithoutShopInput
+  }
+
+  export type ShopCreateOrConnectWithoutGstDocumentLinesInput = {
+    where: ShopWhereUniqueInput
+    create: XOR<ShopCreateWithoutGstDocumentLinesInput, ShopUncheckedCreateWithoutGstDocumentLinesInput>
   }
 
   export type GstDocumentUpsertWithoutLinesInput = {
@@ -192280,6 +193485,7 @@ export namespace Prisma {
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     gstSettings?: GstSettingsUpdateOneRequiredWithoutDocumentsNestedInput
+    shop?: ShopUpdateOneRequiredWithoutGstDocumentsNestedInput
     customer?: CustomerProfileUpdateOneWithoutGstDocumentsNestedInput
     originalDocument?: GstDocumentUpdateOneWithoutDerivedNotesNestedInput
     derivedNotes?: GstDocumentUpdateManyWithoutOriginalDocumentNestedInput
@@ -192295,6 +193501,7 @@ export namespace Prisma {
     documentNumber?: StringFieldUpdateOperationsInput | string
     documentDate?: DateTimeFieldUpdateOperationsInput | Date | string
     gstSettingsId?: StringFieldUpdateOperationsInput | string
+    shopId?: StringFieldUpdateOperationsInput | string
     shopifyOrderId?: NullableStringFieldUpdateOperationsInput | string | null
     shopifyOrderName?: NullableStringFieldUpdateOperationsInput | string | null
     sourceOrderId?: NullableStringFieldUpdateOperationsInput | string | null
@@ -192322,6 +193529,159 @@ export namespace Prisma {
     exportItems?: GstExportItemUncheckedUpdateManyWithoutGstDocumentNestedInput
     auditLogs?: GstAuditLogUncheckedUpdateManyWithoutGstDocumentNestedInput
     legacyLinks?: GstLegacyDocumentUncheckedUpdateManyWithoutGstDocumentNestedInput
+  }
+
+  export type ShopUpsertWithoutGstDocumentLinesInput = {
+    update: XOR<ShopUpdateWithoutGstDocumentLinesInput, ShopUncheckedUpdateWithoutGstDocumentLinesInput>
+    create: XOR<ShopCreateWithoutGstDocumentLinesInput, ShopUncheckedCreateWithoutGstDocumentLinesInput>
+    where?: ShopWhereInput
+  }
+
+  export type ShopUpdateToOneWithWhereWithoutGstDocumentLinesInput = {
+    where?: ShopWhereInput
+    data: XOR<ShopUpdateWithoutGstDocumentLinesInput, ShopUncheckedUpdateWithoutGstDocumentLinesInput>
+  }
+
+  export type ShopUpdateWithoutGstDocumentLinesInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    shopDomain?: StringFieldUpdateOperationsInput | string
+    accessToken?: NullableStringFieldUpdateOperationsInput | string | null
+    storefrontAccessToken?: NullableStringFieldUpdateOperationsInput | string | null
+    scopes?: NullableStringFieldUpdateOperationsInput | string | null
+    isActive?: BoolFieldUpdateOperationsInput | boolean
+    installedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    uninstalledAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    myshopifyDomain?: NullableStringFieldUpdateOperationsInput | string | null
+    primaryDomain?: NullableStringFieldUpdateOperationsInput | string | null
+    shopName?: NullableStringFieldUpdateOperationsInput | string | null
+    accessTokenEncrypted?: NullableStringFieldUpdateOperationsInput | string | null
+    storefrontTokenEncrypted?: NullableStringFieldUpdateOperationsInput | string | null
+    appProxyPrefix?: NullableStringFieldUpdateOperationsInput | string | null
+    appProxySubpath?: NullableStringFieldUpdateOperationsInput | string | null
+    appProxyEnabled?: BoolFieldUpdateOperationsInput | boolean
+    installationStatus?: StringFieldUpdateOperationsInput | string
+    checkoutEnabled?: BoolFieldUpdateOperationsInput | boolean
+    tokenExpiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    tokenRotationRequiredAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    customers?: CustomerProfileUpdateManyWithoutShopNestedInput
+    otpChallenges?: OTPChallengeUpdateManyWithoutShopNestedInput
+    orderActionRequests?: OrderActionRequestUpdateManyWithoutShopNestedInput
+    megaskaOrders?: MegaskaOrderUpdateManyWithoutShopNestedInput
+    walletReservations?: WalletReservationUpdateManyWithoutShopNestedInput
+    walletAccounts?: WalletAccountUpdateManyWithoutShopNestedInput
+    walletTransactions?: WalletTransactionUpdateManyWithoutShopNestedInput
+    gstSettings?: GstSettingsUpdateManyWithoutShopNestedInput
+    gstProductTaxMaps?: GstProductTaxMapUpdateManyWithoutShopNestedInput
+    gstSkuTaxMaps?: GstSkuTaxMapUpdateManyWithoutShopNestedInput
+    gstOrderImports?: GstOrderImportUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUpdateManyWithoutShopNestedInput
+    refundRequests?: RefundRequestUpdateManyWithoutShopNestedInput
+    codAdvanceSettings?: CodAdvanceSettingsUpdateManyWithoutShopNestedInput
+    codAdvanceIntents?: CodAdvanceIntentUpdateManyWithoutShopNestedInput
+    moduleConfigs?: ShopModuleConfigUpdateManyWithoutShopNestedInput
+    proxyRoutes?: ShopProxyRouteUpdateManyWithoutShopNestedInput
+    installationEvents?: ShopInstallationEventUpdateManyWithoutShopNestedInput
+    recoveryTokens?: CheckoutRecoveryTokenUpdateManyWithoutShopNestedInput
+    promotionRules?: PromotionRuleUpdateManyWithoutShopNestedInput
+    promotionOrderTiers?: PromotionOrderTierUpdateManyWithoutShopNestedInput
+    promotionAuditLogs?: PromotionAuditLogUpdateManyWithoutShopNestedInput
+    promotionRuntimeSyncState?: PromotionRuntimeSyncStateUpdateOneWithoutShopNestedInput
+    merchantNotificationSettings?: MerchantNotificationSettingsUpdateOneWithoutShopNestedInput
+    merchantOtpSettings?: MerchantOtpSettingsUpdateOneWithoutShopNestedInput
+    merchantUsageEvents?: MerchantUsageEventUpdateManyWithoutShopNestedInput
+    merchantSubscription?: MerchantSubscriptionUpdateOneWithoutShopNestedInput
+    merchantBillingPeriods?: MerchantBillingPeriodUpdateManyWithoutShopNestedInput
+    merchantRatedUsages?: MerchantRatedUsageUpdateManyWithoutShopNestedInput
+    billingProviderSubmissions?: MerchantBillingProviderSubmissionUpdateManyWithoutShopNestedInput
+    billingReconciliations?: MerchantBillingReconciliationUpdateManyWithoutShopNestedInput
+    merchantPlanChanges?: MerchantPlanChangeUpdateManyWithoutShopNestedInput
+    reviewSettings?: ReviewSettingsUpdateOneWithoutShopNestedInput
+    reviewRequests?: ReviewRequestUpdateManyWithoutShopNestedInput
+    productReviews?: ProductReviewUpdateManyWithoutShopNestedInput
+    productReviewMedia?: ProductReviewMediaUpdateManyWithoutShopNestedInput
+    productReviewReplies?: ProductReviewMerchantReplyUpdateManyWithoutShopNestedInput
+    reviewEditTokens?: ProductReviewEditTokenUpdateManyWithoutShopNestedInput
+    reviewRequestDeliveryAttempts?: ProductReviewRequestDeliveryAttemptUpdateManyWithoutShopNestedInput
+    productReviewRevisions?: ProductReviewRevisionUpdateManyWithoutShopNestedInput
+    productReviewAggregates?: ProductReviewAggregateUpdateManyWithoutShopNestedInput
+    identityReconciliationPlans?: CustomerIdentityReconciliationPlanUpdateManyWithoutShopNestedInput
+    identityReconciliationAudits?: CustomerIdentityReconciliationAuditUpdateManyWithoutShopNestedInput
+    identityMerges?: CustomerIdentityMergeUpdateManyWithoutShopNestedInput
+    checkoutPricingSnapshots?: ShopifyCheckoutPricingSnapshotUpdateManyWithoutShopNestedInput
+    emailVerificationChallenges?: EmailVerificationChallengeUpdateManyWithoutShopNestedInput
+  }
+
+  export type ShopUncheckedUpdateWithoutGstDocumentLinesInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    shopDomain?: StringFieldUpdateOperationsInput | string
+    accessToken?: NullableStringFieldUpdateOperationsInput | string | null
+    storefrontAccessToken?: NullableStringFieldUpdateOperationsInput | string | null
+    scopes?: NullableStringFieldUpdateOperationsInput | string | null
+    isActive?: BoolFieldUpdateOperationsInput | boolean
+    installedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    uninstalledAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    myshopifyDomain?: NullableStringFieldUpdateOperationsInput | string | null
+    primaryDomain?: NullableStringFieldUpdateOperationsInput | string | null
+    shopName?: NullableStringFieldUpdateOperationsInput | string | null
+    accessTokenEncrypted?: NullableStringFieldUpdateOperationsInput | string | null
+    storefrontTokenEncrypted?: NullableStringFieldUpdateOperationsInput | string | null
+    appProxyPrefix?: NullableStringFieldUpdateOperationsInput | string | null
+    appProxySubpath?: NullableStringFieldUpdateOperationsInput | string | null
+    appProxyEnabled?: BoolFieldUpdateOperationsInput | boolean
+    installationStatus?: StringFieldUpdateOperationsInput | string
+    checkoutEnabled?: BoolFieldUpdateOperationsInput | boolean
+    tokenExpiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    tokenRotationRequiredAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    customers?: CustomerProfileUncheckedUpdateManyWithoutShopNestedInput
+    otpChallenges?: OTPChallengeUncheckedUpdateManyWithoutShopNestedInput
+    orderActionRequests?: OrderActionRequestUncheckedUpdateManyWithoutShopNestedInput
+    megaskaOrders?: MegaskaOrderUncheckedUpdateManyWithoutShopNestedInput
+    walletReservations?: WalletReservationUncheckedUpdateManyWithoutShopNestedInput
+    walletAccounts?: WalletAccountUncheckedUpdateManyWithoutShopNestedInput
+    walletTransactions?: WalletTransactionUncheckedUpdateManyWithoutShopNestedInput
+    gstSettings?: GstSettingsUncheckedUpdateManyWithoutShopNestedInput
+    gstProductTaxMaps?: GstProductTaxMapUncheckedUpdateManyWithoutShopNestedInput
+    gstSkuTaxMaps?: GstSkuTaxMapUncheckedUpdateManyWithoutShopNestedInput
+    gstOrderImports?: GstOrderImportUncheckedUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUncheckedUpdateManyWithoutShopNestedInput
+    refundRequests?: RefundRequestUncheckedUpdateManyWithoutShopNestedInput
+    codAdvanceSettings?: CodAdvanceSettingsUncheckedUpdateManyWithoutShopNestedInput
+    codAdvanceIntents?: CodAdvanceIntentUncheckedUpdateManyWithoutShopNestedInput
+    moduleConfigs?: ShopModuleConfigUncheckedUpdateManyWithoutShopNestedInput
+    proxyRoutes?: ShopProxyRouteUncheckedUpdateManyWithoutShopNestedInput
+    installationEvents?: ShopInstallationEventUncheckedUpdateManyWithoutShopNestedInput
+    recoveryTokens?: CheckoutRecoveryTokenUncheckedUpdateManyWithoutShopNestedInput
+    promotionRules?: PromotionRuleUncheckedUpdateManyWithoutShopNestedInput
+    promotionOrderTiers?: PromotionOrderTierUncheckedUpdateManyWithoutShopNestedInput
+    promotionAuditLogs?: PromotionAuditLogUncheckedUpdateManyWithoutShopNestedInput
+    promotionRuntimeSyncState?: PromotionRuntimeSyncStateUncheckedUpdateOneWithoutShopNestedInput
+    merchantNotificationSettings?: MerchantNotificationSettingsUncheckedUpdateOneWithoutShopNestedInput
+    merchantOtpSettings?: MerchantOtpSettingsUncheckedUpdateOneWithoutShopNestedInput
+    merchantUsageEvents?: MerchantUsageEventUncheckedUpdateManyWithoutShopNestedInput
+    merchantSubscription?: MerchantSubscriptionUncheckedUpdateOneWithoutShopNestedInput
+    merchantBillingPeriods?: MerchantBillingPeriodUncheckedUpdateManyWithoutShopNestedInput
+    merchantRatedUsages?: MerchantRatedUsageUncheckedUpdateManyWithoutShopNestedInput
+    billingProviderSubmissions?: MerchantBillingProviderSubmissionUncheckedUpdateManyWithoutShopNestedInput
+    billingReconciliations?: MerchantBillingReconciliationUncheckedUpdateManyWithoutShopNestedInput
+    merchantPlanChanges?: MerchantPlanChangeUncheckedUpdateManyWithoutShopNestedInput
+    reviewSettings?: ReviewSettingsUncheckedUpdateOneWithoutShopNestedInput
+    reviewRequests?: ReviewRequestUncheckedUpdateManyWithoutShopNestedInput
+    productReviews?: ProductReviewUncheckedUpdateManyWithoutShopNestedInput
+    productReviewMedia?: ProductReviewMediaUncheckedUpdateManyWithoutShopNestedInput
+    productReviewReplies?: ProductReviewMerchantReplyUncheckedUpdateManyWithoutShopNestedInput
+    reviewEditTokens?: ProductReviewEditTokenUncheckedUpdateManyWithoutShopNestedInput
+    reviewRequestDeliveryAttempts?: ProductReviewRequestDeliveryAttemptUncheckedUpdateManyWithoutShopNestedInput
+    productReviewRevisions?: ProductReviewRevisionUncheckedUpdateManyWithoutShopNestedInput
+    productReviewAggregates?: ProductReviewAggregateUncheckedUpdateManyWithoutShopNestedInput
+    identityReconciliationPlans?: CustomerIdentityReconciliationPlanUncheckedUpdateManyWithoutShopNestedInput
+    identityReconciliationAudits?: CustomerIdentityReconciliationAuditUncheckedUpdateManyWithoutShopNestedInput
+    identityMerges?: CustomerIdentityMergeUncheckedUpdateManyWithoutShopNestedInput
+    checkoutPricingSnapshots?: ShopifyCheckoutPricingSnapshotUncheckedUpdateManyWithoutShopNestedInput
+    emailVerificationChallenges?: EmailVerificationChallengeUncheckedUpdateManyWithoutShopNestedInput
   }
 
   export type CustomerProfileCreateWithoutGstPartiesInput = {
@@ -192907,6 +194267,7 @@ export namespace Prisma {
     createdAt?: Date | string
     updatedAt?: Date | string
     gstSettings: GstSettingsCreateNestedOneWithoutDocumentsInput
+    shop: ShopCreateNestedOneWithoutGstDocumentsInput
     customer?: CustomerProfileCreateNestedOneWithoutGstDocumentsInput
     originalDocument?: GstDocumentCreateNestedOneWithoutDerivedNotesInput
     derivedNotes?: GstDocumentCreateNestedManyWithoutOriginalDocumentInput
@@ -192922,6 +194283,7 @@ export namespace Prisma {
     documentNumber: string
     documentDate: Date | string
     gstSettingsId: string
+    shopId: string
     shopifyOrderId?: string | null
     shopifyOrderName?: string | null
     sourceOrderId?: string | null
@@ -193042,6 +194404,7 @@ export namespace Prisma {
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     gstSettings?: GstSettingsUpdateOneRequiredWithoutDocumentsNestedInput
+    shop?: ShopUpdateOneRequiredWithoutGstDocumentsNestedInput
     customer?: CustomerProfileUpdateOneWithoutGstDocumentsNestedInput
     originalDocument?: GstDocumentUpdateOneWithoutDerivedNotesNestedInput
     derivedNotes?: GstDocumentUpdateManyWithoutOriginalDocumentNestedInput
@@ -193057,6 +194420,7 @@ export namespace Prisma {
     documentNumber?: StringFieldUpdateOperationsInput | string
     documentDate?: DateTimeFieldUpdateOperationsInput | Date | string
     gstSettingsId?: StringFieldUpdateOperationsInput | string
+    shopId?: StringFieldUpdateOperationsInput | string
     shopifyOrderId?: NullableStringFieldUpdateOperationsInput | string | null
     shopifyOrderName?: NullableStringFieldUpdateOperationsInput | string | null
     sourceOrderId?: NullableStringFieldUpdateOperationsInput | string | null
@@ -193359,6 +194723,7 @@ export namespace Prisma {
     createdAt?: Date | string
     updatedAt?: Date | string
     gstSettings: GstSettingsCreateNestedOneWithoutDocumentsInput
+    shop: ShopCreateNestedOneWithoutGstDocumentsInput
     customer?: CustomerProfileCreateNestedOneWithoutGstDocumentsInput
     originalDocument?: GstDocumentCreateNestedOneWithoutDerivedNotesInput
     derivedNotes?: GstDocumentCreateNestedManyWithoutOriginalDocumentInput
@@ -193374,6 +194739,7 @@ export namespace Prisma {
     documentNumber: string
     documentDate: Date | string
     gstSettingsId: string
+    shopId: string
     shopifyOrderId?: string | null
     shopifyOrderName?: string | null
     sourceOrderId?: string | null
@@ -193633,6 +194999,7 @@ export namespace Prisma {
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     gstSettings?: GstSettingsUpdateOneRequiredWithoutDocumentsNestedInput
+    shop?: ShopUpdateOneRequiredWithoutGstDocumentsNestedInput
     customer?: CustomerProfileUpdateOneWithoutGstDocumentsNestedInput
     originalDocument?: GstDocumentUpdateOneWithoutDerivedNotesNestedInput
     derivedNotes?: GstDocumentUpdateManyWithoutOriginalDocumentNestedInput
@@ -193648,6 +195015,7 @@ export namespace Prisma {
     documentNumber?: StringFieldUpdateOperationsInput | string
     documentDate?: DateTimeFieldUpdateOperationsInput | Date | string
     gstSettingsId?: StringFieldUpdateOperationsInput | string
+    shopId?: StringFieldUpdateOperationsInput | string
     shopifyOrderId?: NullableStringFieldUpdateOperationsInput | string | null
     shopifyOrderName?: NullableStringFieldUpdateOperationsInput | string | null
     sourceOrderId?: NullableStringFieldUpdateOperationsInput | string | null
@@ -193842,6 +195210,7 @@ export namespace Prisma {
     createdAt?: Date | string
     updatedAt?: Date | string
     gstSettings: GstSettingsCreateNestedOneWithoutDocumentsInput
+    shop: ShopCreateNestedOneWithoutGstDocumentsInput
     customer?: CustomerProfileCreateNestedOneWithoutGstDocumentsInput
     originalDocument?: GstDocumentCreateNestedOneWithoutDerivedNotesInput
     derivedNotes?: GstDocumentCreateNestedManyWithoutOriginalDocumentInput
@@ -193857,6 +195226,7 @@ export namespace Prisma {
     documentNumber: string
     documentDate: Date | string
     gstSettingsId: string
+    shopId: string
     shopifyOrderId?: string | null
     shopifyOrderName?: string | null
     sourceOrderId?: string | null
@@ -193967,6 +195337,7 @@ export namespace Prisma {
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     gstSettings?: GstSettingsUpdateOneRequiredWithoutDocumentsNestedInput
+    shop?: ShopUpdateOneRequiredWithoutGstDocumentsNestedInput
     customer?: CustomerProfileUpdateOneWithoutGstDocumentsNestedInput
     originalDocument?: GstDocumentUpdateOneWithoutDerivedNotesNestedInput
     derivedNotes?: GstDocumentUpdateManyWithoutOriginalDocumentNestedInput
@@ -193982,6 +195353,7 @@ export namespace Prisma {
     documentNumber?: StringFieldUpdateOperationsInput | string
     documentDate?: DateTimeFieldUpdateOperationsInput | Date | string
     gstSettingsId?: StringFieldUpdateOperationsInput | string
+    shopId?: StringFieldUpdateOperationsInput | string
     shopifyOrderId?: NullableStringFieldUpdateOperationsInput | string | null
     shopifyOrderName?: NullableStringFieldUpdateOperationsInput | string | null
     sourceOrderId?: NullableStringFieldUpdateOperationsInput | string | null
@@ -194513,6 +195885,8 @@ export namespace Prisma {
     gstSettings?: GstSettingsCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentCreateNestedManyWithoutShopInput
@@ -194582,6 +195956,8 @@ export namespace Prisma {
     gstSettings?: GstSettingsUncheckedCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportUncheckedCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentUncheckedCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineUncheckedCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestUncheckedCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedCreateNestedManyWithoutShopInput
@@ -194743,6 +196119,8 @@ export namespace Prisma {
     gstSettings?: GstSettingsUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUpdateManyWithoutShopNestedInput
@@ -194812,6 +196190,8 @@ export namespace Prisma {
     gstSettings?: GstSettingsUncheckedUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUncheckedUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUncheckedUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUncheckedUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedUpdateManyWithoutShopNestedInput
@@ -194881,6 +196261,8 @@ export namespace Prisma {
     gstSettings?: GstSettingsCreateNestedManyWithoutShopInput
     gstProductTaxMaps?: GstProductTaxMapCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentCreateNestedManyWithoutShopInput
@@ -194950,6 +196332,8 @@ export namespace Prisma {
     gstSettings?: GstSettingsUncheckedCreateNestedManyWithoutShopInput
     gstProductTaxMaps?: GstProductTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportUncheckedCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentUncheckedCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineUncheckedCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestUncheckedCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedCreateNestedManyWithoutShopInput
@@ -195035,6 +196419,8 @@ export namespace Prisma {
     gstSettings?: GstSettingsUpdateManyWithoutShopNestedInput
     gstProductTaxMaps?: GstProductTaxMapUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUpdateManyWithoutShopNestedInput
@@ -195104,6 +196490,8 @@ export namespace Prisma {
     gstSettings?: GstSettingsUncheckedUpdateManyWithoutShopNestedInput
     gstProductTaxMaps?: GstProductTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUncheckedUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUncheckedUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUncheckedUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedUpdateManyWithoutShopNestedInput
@@ -195234,6 +196622,8 @@ export namespace Prisma {
     gstSettings?: GstSettingsCreateNestedManyWithoutShopInput
     gstProductTaxMaps?: GstProductTaxMapCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentCreateNestedManyWithoutShopInput
@@ -195303,6 +196693,8 @@ export namespace Prisma {
     gstSettings?: GstSettingsUncheckedCreateNestedManyWithoutShopInput
     gstProductTaxMaps?: GstProductTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentUncheckedCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineUncheckedCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestUncheckedCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedCreateNestedManyWithoutShopInput
@@ -195505,6 +196897,8 @@ export namespace Prisma {
     gstSettings?: GstSettingsUpdateManyWithoutShopNestedInput
     gstProductTaxMaps?: GstProductTaxMapUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUpdateManyWithoutShopNestedInput
@@ -195574,6 +196968,8 @@ export namespace Prisma {
     gstSettings?: GstSettingsUncheckedUpdateManyWithoutShopNestedInput
     gstProductTaxMaps?: GstProductTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUncheckedUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUncheckedUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedUpdateManyWithoutShopNestedInput
@@ -196704,6 +198100,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentCreateNestedManyWithoutShopInput
@@ -196773,6 +198171,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportUncheckedCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentUncheckedCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineUncheckedCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestUncheckedCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedCreateNestedManyWithoutShopInput
@@ -196917,6 +198317,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUpdateManyWithoutShopNestedInput
@@ -196986,6 +198388,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUncheckedUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUncheckedUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUncheckedUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedUpdateManyWithoutShopNestedInput
@@ -197120,6 +198524,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentCreateNestedManyWithoutShopInput
@@ -197189,6 +198595,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportUncheckedCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentUncheckedCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineUncheckedCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestUncheckedCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedCreateNestedManyWithoutShopInput
@@ -197412,6 +198820,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUpdateManyWithoutShopNestedInput
@@ -197481,6 +198891,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUncheckedUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUncheckedUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUncheckedUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedUpdateManyWithoutShopNestedInput
@@ -198196,6 +199608,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentCreateNestedManyWithoutShopInput
@@ -198265,6 +199679,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportUncheckedCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentUncheckedCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineUncheckedCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestUncheckedCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedCreateNestedManyWithoutShopInput
@@ -198350,6 +199766,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUpdateManyWithoutShopNestedInput
@@ -198419,6 +199837,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUncheckedUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUncheckedUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUncheckedUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedUpdateManyWithoutShopNestedInput
@@ -198488,6 +199908,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentCreateNestedManyWithoutShopInput
@@ -198557,6 +199979,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportUncheckedCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentUncheckedCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineUncheckedCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestUncheckedCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedCreateNestedManyWithoutShopInput
@@ -198642,6 +200066,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUpdateManyWithoutShopNestedInput
@@ -198711,6 +200137,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUncheckedUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUncheckedUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUncheckedUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedUpdateManyWithoutShopNestedInput
@@ -198780,6 +200208,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentCreateNestedManyWithoutShopInput
@@ -198849,6 +200279,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedCreateNestedManyWithoutShopInput
     gstOrderImports?: GstOrderImportUncheckedCreateNestedManyWithoutShopInput
+    gstDocuments?: GstDocumentUncheckedCreateNestedManyWithoutShopInput
+    gstDocumentLines?: GstDocumentLineUncheckedCreateNestedManyWithoutShopInput
     refundRequests?: RefundRequestUncheckedCreateNestedManyWithoutShopInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedCreateNestedManyWithoutShopInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedCreateNestedManyWithoutShopInput
@@ -198934,6 +200366,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUpdateManyWithoutShopNestedInput
@@ -199003,6 +200437,8 @@ export namespace Prisma {
     gstProductTaxMaps?: GstProductTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstSkuTaxMaps?: GstSkuTaxMapUncheckedUpdateManyWithoutShopNestedInput
     gstOrderImports?: GstOrderImportUncheckedUpdateManyWithoutShopNestedInput
+    gstDocuments?: GstDocumentUncheckedUpdateManyWithoutShopNestedInput
+    gstDocumentLines?: GstDocumentLineUncheckedUpdateManyWithoutShopNestedInput
     refundRequests?: RefundRequestUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceSettings?: CodAdvanceSettingsUncheckedUpdateManyWithoutShopNestedInput
     codAdvanceIntents?: CodAdvanceIntentUncheckedUpdateManyWithoutShopNestedInput
@@ -199158,6 +200594,7 @@ export namespace Prisma {
     documentNumber: string
     documentDate: Date | string
     gstSettingsId: string
+    shopId: string
     shopifyOrderId?: string | null
     shopifyOrderName?: string | null
     sourceOrderId?: string | null
@@ -199806,6 +201243,7 @@ export namespace Prisma {
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     gstSettings?: GstSettingsUpdateOneRequiredWithoutDocumentsNestedInput
+    shop?: ShopUpdateOneRequiredWithoutGstDocumentsNestedInput
     originalDocument?: GstDocumentUpdateOneWithoutDerivedNotesNestedInput
     derivedNotes?: GstDocumentUpdateManyWithoutOriginalDocumentNestedInput
     lines?: GstDocumentLineUpdateManyWithoutDocumentNestedInput
@@ -199821,6 +201259,7 @@ export namespace Prisma {
     documentNumber?: StringFieldUpdateOperationsInput | string
     documentDate?: DateTimeFieldUpdateOperationsInput | Date | string
     gstSettingsId?: StringFieldUpdateOperationsInput | string
+    shopId?: StringFieldUpdateOperationsInput | string
     shopifyOrderId?: NullableStringFieldUpdateOperationsInput | string | null
     shopifyOrderName?: NullableStringFieldUpdateOperationsInput | string | null
     sourceOrderId?: NullableStringFieldUpdateOperationsInput | string | null
@@ -199857,6 +201296,7 @@ export namespace Prisma {
     documentNumber?: StringFieldUpdateOperationsInput | string
     documentDate?: DateTimeFieldUpdateOperationsInput | Date | string
     gstSettingsId?: StringFieldUpdateOperationsInput | string
+    shopId?: StringFieldUpdateOperationsInput | string
     shopifyOrderId?: NullableStringFieldUpdateOperationsInput | string | null
     shopifyOrderName?: NullableStringFieldUpdateOperationsInput | string | null
     sourceOrderId?: NullableStringFieldUpdateOperationsInput | string | null
@@ -200799,6 +202239,59 @@ export namespace Prisma {
     readinessErrors?: JsonNullValueInput | InputJsonValue
     snapshot: JsonNullValueInput | InputJsonValue
     lastSyncedAt?: Date | string | null
+    createdAt?: Date | string
+    updatedAt?: Date | string
+  }
+
+  export type GstDocumentCreateManyShopInput = {
+    id?: string
+    documentType: $Enums.GstDocumentType
+    status: $Enums.GstDocumentStatus
+    documentNumber: string
+    documentDate: Date | string
+    gstSettingsId: string
+    shopifyOrderId?: string | null
+    shopifyOrderName?: string | null
+    sourceOrderId?: string | null
+    sourceOrderNumber?: string | null
+    sourceReference?: string | null
+    customerProfileId?: string | null
+    originalDocumentId?: string | null
+    supplyType: $Enums.GstSupplyType
+    placeOfSupplyStateCode: string
+    isInterstate: boolean
+    currency?: string
+    taxableAmount: Decimal | DecimalJsLike | number | string
+    cgstAmount: Decimal | DecimalJsLike | number | string
+    sgstAmount: Decimal | DecimalJsLike | number | string
+    igstAmount: Decimal | DecimalJsLike | number | string
+    cessAmount: Decimal | DecimalJsLike | number | string
+    totalAmount: Decimal | DecimalJsLike | number | string
+    pdfFileUrl?: string | null
+    jsonSnapshot: JsonNullValueInput | InputJsonValue
+    metadata?: NullableJsonNullValueInput | InputJsonValue
+    issuedAt?: Date | string | null
+    createdAt?: Date | string
+    updatedAt?: Date | string
+  }
+
+  export type GstDocumentLineCreateManyShopInput = {
+    id?: string
+    gstDocumentId: string
+    lineNumber: number
+    description: string
+    hsnOrSac?: string | null
+    quantity: Decimal | DecimalJsLike | number | string
+    unit?: string | null
+    unitPrice: Decimal | DecimalJsLike | number | string
+    discount?: Decimal | DecimalJsLike | number | string
+    taxableAmount: Decimal | DecimalJsLike | number | string
+    taxRate: Decimal | DecimalJsLike | number | string
+    cgstAmount: Decimal | DecimalJsLike | number | string
+    sgstAmount: Decimal | DecimalJsLike | number | string
+    igstAmount: Decimal | DecimalJsLike | number | string
+    cessAmount: Decimal | DecimalJsLike | number | string
+    lineTotal: Decimal | DecimalJsLike | number | string
     createdAt?: Date | string
     updatedAt?: Date | string
   }
@@ -202050,6 +203543,175 @@ export namespace Prisma {
     readinessErrors?: JsonNullValueInput | InputJsonValue
     snapshot?: JsonNullValueInput | InputJsonValue
     lastSyncedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type GstDocumentUpdateWithoutShopInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    documentType?: EnumGstDocumentTypeFieldUpdateOperationsInput | $Enums.GstDocumentType
+    status?: EnumGstDocumentStatusFieldUpdateOperationsInput | $Enums.GstDocumentStatus
+    documentNumber?: StringFieldUpdateOperationsInput | string
+    documentDate?: DateTimeFieldUpdateOperationsInput | Date | string
+    shopifyOrderId?: NullableStringFieldUpdateOperationsInput | string | null
+    shopifyOrderName?: NullableStringFieldUpdateOperationsInput | string | null
+    sourceOrderId?: NullableStringFieldUpdateOperationsInput | string | null
+    sourceOrderNumber?: NullableStringFieldUpdateOperationsInput | string | null
+    sourceReference?: NullableStringFieldUpdateOperationsInput | string | null
+    supplyType?: EnumGstSupplyTypeFieldUpdateOperationsInput | $Enums.GstSupplyType
+    placeOfSupplyStateCode?: StringFieldUpdateOperationsInput | string
+    isInterstate?: BoolFieldUpdateOperationsInput | boolean
+    currency?: StringFieldUpdateOperationsInput | string
+    taxableAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
+    cgstAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
+    sgstAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
+    igstAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
+    cessAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
+    totalAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
+    pdfFileUrl?: NullableStringFieldUpdateOperationsInput | string | null
+    jsonSnapshot?: JsonNullValueInput | InputJsonValue
+    metadata?: NullableJsonNullValueInput | InputJsonValue
+    issuedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    gstSettings?: GstSettingsUpdateOneRequiredWithoutDocumentsNestedInput
+    customer?: CustomerProfileUpdateOneWithoutGstDocumentsNestedInput
+    originalDocument?: GstDocumentUpdateOneWithoutDerivedNotesNestedInput
+    derivedNotes?: GstDocumentUpdateManyWithoutOriginalDocumentNestedInput
+    lines?: GstDocumentLineUpdateManyWithoutDocumentNestedInput
+    exportItems?: GstExportItemUpdateManyWithoutGstDocumentNestedInput
+    auditLogs?: GstAuditLogUpdateManyWithoutGstDocumentNestedInput
+    legacyLinks?: GstLegacyDocumentUpdateManyWithoutGstDocumentNestedInput
+  }
+
+  export type GstDocumentUncheckedUpdateWithoutShopInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    documentType?: EnumGstDocumentTypeFieldUpdateOperationsInput | $Enums.GstDocumentType
+    status?: EnumGstDocumentStatusFieldUpdateOperationsInput | $Enums.GstDocumentStatus
+    documentNumber?: StringFieldUpdateOperationsInput | string
+    documentDate?: DateTimeFieldUpdateOperationsInput | Date | string
+    gstSettingsId?: StringFieldUpdateOperationsInput | string
+    shopifyOrderId?: NullableStringFieldUpdateOperationsInput | string | null
+    shopifyOrderName?: NullableStringFieldUpdateOperationsInput | string | null
+    sourceOrderId?: NullableStringFieldUpdateOperationsInput | string | null
+    sourceOrderNumber?: NullableStringFieldUpdateOperationsInput | string | null
+    sourceReference?: NullableStringFieldUpdateOperationsInput | string | null
+    customerProfileId?: NullableStringFieldUpdateOperationsInput | string | null
+    originalDocumentId?: NullableStringFieldUpdateOperationsInput | string | null
+    supplyType?: EnumGstSupplyTypeFieldUpdateOperationsInput | $Enums.GstSupplyType
+    placeOfSupplyStateCode?: StringFieldUpdateOperationsInput | string
+    isInterstate?: BoolFieldUpdateOperationsInput | boolean
+    currency?: StringFieldUpdateOperationsInput | string
+    taxableAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
+    cgstAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
+    sgstAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
+    igstAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
+    cessAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
+    totalAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
+    pdfFileUrl?: NullableStringFieldUpdateOperationsInput | string | null
+    jsonSnapshot?: JsonNullValueInput | InputJsonValue
+    metadata?: NullableJsonNullValueInput | InputJsonValue
+    issuedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    derivedNotes?: GstDocumentUncheckedUpdateManyWithoutOriginalDocumentNestedInput
+    lines?: GstDocumentLineUncheckedUpdateManyWithoutDocumentNestedInput
+    exportItems?: GstExportItemUncheckedUpdateManyWithoutGstDocumentNestedInput
+    auditLogs?: GstAuditLogUncheckedUpdateManyWithoutGstDocumentNestedInput
+    legacyLinks?: GstLegacyDocumentUncheckedUpdateManyWithoutGstDocumentNestedInput
+  }
+
+  export type GstDocumentUncheckedUpdateManyWithoutShopInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    documentType?: EnumGstDocumentTypeFieldUpdateOperationsInput | $Enums.GstDocumentType
+    status?: EnumGstDocumentStatusFieldUpdateOperationsInput | $Enums.GstDocumentStatus
+    documentNumber?: StringFieldUpdateOperationsInput | string
+    documentDate?: DateTimeFieldUpdateOperationsInput | Date | string
+    gstSettingsId?: StringFieldUpdateOperationsInput | string
+    shopifyOrderId?: NullableStringFieldUpdateOperationsInput | string | null
+    shopifyOrderName?: NullableStringFieldUpdateOperationsInput | string | null
+    sourceOrderId?: NullableStringFieldUpdateOperationsInput | string | null
+    sourceOrderNumber?: NullableStringFieldUpdateOperationsInput | string | null
+    sourceReference?: NullableStringFieldUpdateOperationsInput | string | null
+    customerProfileId?: NullableStringFieldUpdateOperationsInput | string | null
+    originalDocumentId?: NullableStringFieldUpdateOperationsInput | string | null
+    supplyType?: EnumGstSupplyTypeFieldUpdateOperationsInput | $Enums.GstSupplyType
+    placeOfSupplyStateCode?: StringFieldUpdateOperationsInput | string
+    isInterstate?: BoolFieldUpdateOperationsInput | boolean
+    currency?: StringFieldUpdateOperationsInput | string
+    taxableAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
+    cgstAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
+    sgstAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
+    igstAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
+    cessAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
+    totalAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
+    pdfFileUrl?: NullableStringFieldUpdateOperationsInput | string | null
+    jsonSnapshot?: JsonNullValueInput | InputJsonValue
+    metadata?: NullableJsonNullValueInput | InputJsonValue
+    issuedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type GstDocumentLineUpdateWithoutShopInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    lineNumber?: IntFieldUpdateOperationsInput | number
+    description?: StringFieldUpdateOperationsInput | string
+    hsnOrSac?: NullableStringFieldUpdateOperationsInput | string | null
+    quantity?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
+    unit?: NullableStringFieldUpdateOperationsInput | string | null
+    unitPrice?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
+    discount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
+    taxableAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
+    taxRate?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
+    cgstAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
+    sgstAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
+    igstAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
+    cessAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
+    lineTotal?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    document?: GstDocumentUpdateOneRequiredWithoutLinesNestedInput
+  }
+
+  export type GstDocumentLineUncheckedUpdateWithoutShopInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    gstDocumentId?: StringFieldUpdateOperationsInput | string
+    lineNumber?: IntFieldUpdateOperationsInput | number
+    description?: StringFieldUpdateOperationsInput | string
+    hsnOrSac?: NullableStringFieldUpdateOperationsInput | string | null
+    quantity?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
+    unit?: NullableStringFieldUpdateOperationsInput | string | null
+    unitPrice?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
+    discount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
+    taxableAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
+    taxRate?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
+    cgstAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
+    sgstAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
+    igstAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
+    cessAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
+    lineTotal?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type GstDocumentLineUncheckedUpdateManyWithoutShopInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    gstDocumentId?: StringFieldUpdateOperationsInput | string
+    lineNumber?: IntFieldUpdateOperationsInput | number
+    description?: StringFieldUpdateOperationsInput | string
+    hsnOrSac?: NullableStringFieldUpdateOperationsInput | string | null
+    quantity?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
+    unit?: NullableStringFieldUpdateOperationsInput | string | null
+    unitPrice?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
+    discount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
+    taxableAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
+    taxRate?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
+    cgstAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
+    sgstAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
+    igstAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
+    cessAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
+    lineTotal?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
@@ -206704,6 +208366,7 @@ export namespace Prisma {
     status: $Enums.GstDocumentStatus
     documentNumber: string
     documentDate: Date | string
+    shopId: string
     shopifyOrderId?: string | null
     shopifyOrderName?: string | null
     sourceOrderId?: string | null
@@ -206867,6 +208530,7 @@ export namespace Prisma {
     issuedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    shop?: ShopUpdateOneRequiredWithoutGstDocumentsNestedInput
     customer?: CustomerProfileUpdateOneWithoutGstDocumentsNestedInput
     originalDocument?: GstDocumentUpdateOneWithoutDerivedNotesNestedInput
     derivedNotes?: GstDocumentUpdateManyWithoutOriginalDocumentNestedInput
@@ -206882,6 +208546,7 @@ export namespace Prisma {
     status?: EnumGstDocumentStatusFieldUpdateOperationsInput | $Enums.GstDocumentStatus
     documentNumber?: StringFieldUpdateOperationsInput | string
     documentDate?: DateTimeFieldUpdateOperationsInput | Date | string
+    shopId?: StringFieldUpdateOperationsInput | string
     shopifyOrderId?: NullableStringFieldUpdateOperationsInput | string | null
     shopifyOrderName?: NullableStringFieldUpdateOperationsInput | string | null
     sourceOrderId?: NullableStringFieldUpdateOperationsInput | string | null
@@ -206918,6 +208583,7 @@ export namespace Prisma {
     status?: EnumGstDocumentStatusFieldUpdateOperationsInput | $Enums.GstDocumentStatus
     documentNumber?: StringFieldUpdateOperationsInput | string
     documentDate?: DateTimeFieldUpdateOperationsInput | Date | string
+    shopId?: StringFieldUpdateOperationsInput | string
     shopifyOrderId?: NullableStringFieldUpdateOperationsInput | string | null
     shopifyOrderName?: NullableStringFieldUpdateOperationsInput | string | null
     sourceOrderId?: NullableStringFieldUpdateOperationsInput | string | null
@@ -207291,6 +208957,7 @@ export namespace Prisma {
     documentNumber: string
     documentDate: Date | string
     gstSettingsId: string
+    shopId: string
     shopifyOrderId?: string | null
     shopifyOrderName?: string | null
     sourceOrderId?: string | null
@@ -207317,6 +208984,7 @@ export namespace Prisma {
 
   export type GstDocumentLineCreateManyDocumentInput = {
     id?: string
+    shopId: string
     lineNumber: number
     description: string
     hsnOrSac?: string | null
@@ -207407,6 +209075,7 @@ export namespace Prisma {
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     gstSettings?: GstSettingsUpdateOneRequiredWithoutDocumentsNestedInput
+    shop?: ShopUpdateOneRequiredWithoutGstDocumentsNestedInput
     customer?: CustomerProfileUpdateOneWithoutGstDocumentsNestedInput
     derivedNotes?: GstDocumentUpdateManyWithoutOriginalDocumentNestedInput
     lines?: GstDocumentLineUpdateManyWithoutDocumentNestedInput
@@ -207422,6 +209091,7 @@ export namespace Prisma {
     documentNumber?: StringFieldUpdateOperationsInput | string
     documentDate?: DateTimeFieldUpdateOperationsInput | Date | string
     gstSettingsId?: StringFieldUpdateOperationsInput | string
+    shopId?: StringFieldUpdateOperationsInput | string
     shopifyOrderId?: NullableStringFieldUpdateOperationsInput | string | null
     shopifyOrderName?: NullableStringFieldUpdateOperationsInput | string | null
     sourceOrderId?: NullableStringFieldUpdateOperationsInput | string | null
@@ -207458,6 +209128,7 @@ export namespace Prisma {
     documentNumber?: StringFieldUpdateOperationsInput | string
     documentDate?: DateTimeFieldUpdateOperationsInput | Date | string
     gstSettingsId?: StringFieldUpdateOperationsInput | string
+    shopId?: StringFieldUpdateOperationsInput | string
     shopifyOrderId?: NullableStringFieldUpdateOperationsInput | string | null
     shopifyOrderName?: NullableStringFieldUpdateOperationsInput | string | null
     sourceOrderId?: NullableStringFieldUpdateOperationsInput | string | null
@@ -207500,10 +209171,12 @@ export namespace Prisma {
     lineTotal?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    shop?: ShopUpdateOneRequiredWithoutGstDocumentLinesNestedInput
   }
 
   export type GstDocumentLineUncheckedUpdateWithoutDocumentInput = {
     id?: StringFieldUpdateOperationsInput | string
+    shopId?: StringFieldUpdateOperationsInput | string
     lineNumber?: IntFieldUpdateOperationsInput | number
     description?: StringFieldUpdateOperationsInput | string
     hsnOrSac?: NullableStringFieldUpdateOperationsInput | string | null
@@ -207524,6 +209197,7 @@ export namespace Prisma {
 
   export type GstDocumentLineUncheckedUpdateManyWithoutDocumentInput = {
     id?: StringFieldUpdateOperationsInput | string
+    shopId?: StringFieldUpdateOperationsInput | string
     lineNumber?: IntFieldUpdateOperationsInput | number
     description?: StringFieldUpdateOperationsInput | string
     hsnOrSac?: NullableStringFieldUpdateOperationsInput | string | null

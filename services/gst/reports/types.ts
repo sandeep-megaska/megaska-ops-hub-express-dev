@@ -22,6 +22,7 @@ export type ReportWarning = {
 export type B2cSalesRegisterRow = {
   invoiceDate: string;
   invoiceNumber: string;
+  documentType: string;
   orderNumber: string;
   customer: string;
   placeOfSupply: string;

@@ -88,6 +88,8 @@ model Shop {
   gstProductTaxMaps             GstProductTaxMap[]
   gstSkuTaxMaps                 GstSkuTaxMap[]
   gstOrderImports               GstOrderImport[]
+  gstDocuments                  GstDocument[]
+  gstDocumentLines              GstDocumentLine[]
   refundRequests                RefundRequest[]
   codAdvanceSettings            CodAdvanceSettings[]
   codAdvanceIntents             CodAdvanceIntent[]
@@ -2184,6 +2186,9 @@ model GstDocument {
   gstSettingsId  String
   gstSettings    GstSettings       @relation(fields: [gstSettingsId], references: [id])
 
+  shopId String
+  shop   Shop   @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
   shopifyOrderId     String?
   shopifyOrderName   String?
   sourceOrderId      String?
@@ -2220,6 +2225,7 @@ model GstDocument {
   legacyLinks GstLegacyDocument[]
 
   @@index([gstSettingsId])
+  @@index([shopId])
   @@index([customerProfileId])
   @@index([sourceOrderId])
   @@index([sourceOrderNumber])
@@ -2230,6 +2236,7 @@ model GstDocument {
 model GstDocumentLine {
   id            String   @id @default(uuid())
   gstDocumentId String
+  shopId        String
   lineNumber    Int
   description   String
   hsnOrSac      String?
@@ -2248,9 +2255,11 @@ model GstDocumentLine {
   updatedAt     DateTime @updatedAt
 
   document GstDocument @relation(fields: [gstDocumentId], references: [id], onDelete: Cascade)
+  shop     Shop        @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
   @@unique([gstDocumentId, lineNumber])
   @@index([gstDocumentId])
+  @@index([shopId])
 }
 
 model GstParty {

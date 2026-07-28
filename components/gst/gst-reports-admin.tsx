@@ -82,7 +82,10 @@ export function GstReportsAdmin() {
   return (
     <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
       <h2 className="text-base font-semibold text-gray-900">B2C Sales Register</h2>
-      <p className="mt-1 text-sm text-gray-600">Create B2C GST CSV for a selected date range.</p>
+      <p className="mt-1 text-sm text-gray-600">
+        Create a B2C GST CSV for a selected date range. Includes tax invoices and nets credit / debit
+        notes (credit notes appear as negative rows) so the totals match GSTR-1.
+      </p>
 
       <div className="mt-4 grid gap-3 md:grid-cols-3">
         <label className="text-sm text-gray-700">
@@ -128,7 +131,7 @@ export function GstReportsAdmin() {
       {result ? (
         <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
           <p className="font-medium text-gray-900">Report ready</p>
-          <p className="mt-2">Invoice rows included: {result.rowCount}</p>
+          <p className="mt-2">Rows included: {result.rowCount}</p>
 
           {result.warnings.length > 0 ? (
             <div className="mt-3 text-amber-700">
