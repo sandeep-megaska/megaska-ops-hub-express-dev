@@ -155,7 +155,17 @@ export async function listDispatchReadyOrders(filters: DispatchFilters): Promise
             ],
           },
           orderBy: [{ createdAt: "desc" }],
-          select: { id: true, documentNumber: true, status: true, sourceOrderId: true, shopifyOrderId: true },
+          select: {
+            id: true,
+            documentNumber: true,
+            status: true,
+            sourceOrderId: true,
+            shopifyOrderId: true,
+            cgstAmount: true,
+            sgstAmount: true,
+            igstAmount: true,
+            cessAmount: true,
+          },
         })
       : [];
     const invoiceByOrderImportId = new Map<string, Record<string, unknown>>();
@@ -234,6 +244,24 @@ export async function listDispatchReadyOrders(filters: DispatchFilters): Promise
 
       const invoice = invoiceByOrderImportId.get(orderImportId) || invoiceByShopifyOrderId.get(String(row.shopifyOrderId || "").trim()) || null;
 
+      // Reconciliation: the invoice GST (app HSN mapping) vs the tax actually
+      // charged at checkout (Shopify orderTaxTotal). A divergence means the
+      // product's app GST rate and the Shopify tax setting disagree - flag it on
+      // the dashboard so a wrong rate is caught before the invoice ships.
+      // Tolerance of Re. 1 covers rounding only. Null until an invoice exists.
+      const taxReconciliation = invoice
+        ? (() => {
+            const invoiceTax = round2(
+              parseNum(invoice.cgstAmount) +
+                parseNum(invoice.sgstAmount) +
+                parseNum(invoice.igstAmount) +
+                parseNum(invoice.cessAmount),
+            );
+            const shopifyTax = round2(parseNum(row.orderTaxTotal));
+            return { invoiceTax, shopifyTax, matches: Math.abs(invoiceTax - shopifyTax) <= 1 };
+          })()
+        : null;
+
       const readinessErrors = Array.isArray(row.readinessErrors) ? row.readinessErrors : [];
       const readiness = readinessErrors.length === 0 ? "READY" : "NOT_READY";
       const warnings = unmappedSkus.length > 0 ? ["Missing GST mapping for one or more SKU(s)"] : [];
@@ -259,6 +287,7 @@ export async function listDispatchReadyOrders(filters: DispatchFilters): Promise
         invoiceStatus: invoice ? String(invoice.status || "") : "NOT_INVOICED",
         invoiceDocumentId: invoice ? String(invoice.id) : null,
         invoiceDocumentNumber: invoice ? String(invoice.documentNumber || "") : null,
+        taxReconciliation,
       });
     }
 

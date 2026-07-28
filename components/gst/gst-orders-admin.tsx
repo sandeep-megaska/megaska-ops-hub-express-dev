@@ -28,7 +28,14 @@ type OrderRow = {
   unmappedSkus: string[]
   invoiceStatus: string
   invoiceDocumentId: string | null
+  taxReconciliation: TaxReconciliation | null
   lineItems: OrderLineRow[]
+}
+
+type TaxReconciliation = {
+  invoiceTax: number
+  shopifyTax: number
+  matches: boolean
 }
 
 type ReportWarning = {
@@ -79,6 +86,41 @@ function extractGeneratedDocumentId(data: unknown): string | null {
   }
 
   return null
+}
+
+function formatInr(amount: number): string {
+  return `₹${amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
+
+function TaxCheckBadge({ recon }: { recon: TaxReconciliation | null }) {
+  if (!recon) {
+    return <span className="text-xs text-gray-400" title="Generate the invoice to reconcile against checkout tax">—</span>
+  }
+  if (recon.matches) {
+    return (
+      <span
+        className="inline-flex items-center rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700"
+        title={`Invoice GST ${formatInr(recon.invoiceTax)} matches checkout tax ${formatInr(recon.shopifyTax)}`}
+      >
+        ✓ Matches
+      </span>
+    )
+  }
+  return (
+    <span
+      className="inline-flex flex-col items-start gap-0.5"
+      title={`Invoice GST ${formatInr(recon.invoiceTax)} does not match the tax charged at checkout ${formatInr(
+        recon.shopifyTax,
+      )}. Check that this product's GST rate matches your Shopify tax settings.`}
+    >
+      <span className="inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700">
+        ⚠ Mismatch
+      </span>
+      <span className="text-[11px] leading-tight text-red-600">
+        Inv {formatInr(recon.invoiceTax)} vs Checkout {formatInr(recon.shopifyTax)}
+      </span>
+    </span>
+  )
 }
 
 function downloadCsv(filename: string, csv: string) {
@@ -136,6 +178,16 @@ export function GstOrdersAdmin() {
           })
         : []
 
+      const recon = asObject(row.taxReconciliation)
+      const taxReconciliation: TaxReconciliation | null =
+        row.taxReconciliation && typeof recon.matches === 'boolean'
+          ? {
+              invoiceTax: Number(recon.invoiceTax || 0),
+              shopifyTax: Number(recon.shopifyTax || 0),
+              matches: Boolean(recon.matches),
+            }
+          : null
+
       return {
         id: String(row.id || ''),
         orderName: String(row.orderName || ''),
@@ -144,6 +196,7 @@ export function GstOrdersAdmin() {
         unmappedSkus: Array.isArray(row.unmappedSkus) ? row.unmappedSkus.map((sku) => String(sku)) : [],
         invoiceStatus: String(row.invoiceStatus || 'NOT_INVOICED'),
         invoiceDocumentId: row.invoiceDocumentId ? String(row.invoiceDocumentId) : null,
+        taxReconciliation,
         lineItems,
       } satisfies OrderRow
     })
@@ -392,6 +445,10 @@ export function GstOrdersAdmin() {
   }
 
   const hasOrders = useMemo(() => rows.length > 0, [rows])
+  const mismatchCount = useMemo(
+    () => rows.filter((row) => row.taxReconciliation && !row.taxReconciliation.matches).length,
+    [rows],
+  )
 
   return (
     <div className="grid gap-6 xl:grid-cols-[1.25fr_0.75fr]">
@@ -434,9 +491,18 @@ export function GstOrdersAdmin() {
 
         <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
           <h2 className="mb-3 text-base font-semibold text-gray-900">GST Orders</h2>
+          {mismatchCount > 0 ? (
+            <div className="mb-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              <span className="font-medium">
+                {mismatchCount} order{mismatchCount === 1 ? '' : 's'} with a tax mismatch.
+              </span>{' '}
+              The invoice GST (from the app&apos;s HSN mapping) does not match the tax charged at checkout. Fix the
+              product&apos;s GST rate or the Shopify tax setting so they agree — see the &ldquo;Tax check&rdquo; column.
+            </div>
+          ) : null}
           <div className="overflow-x-auto rounded-xl border border-gray-200">
             <table className="min-w-full text-sm">
-              <thead className="bg-gray-50 text-left text-gray-600"><tr><th className="px-3 py-2">Order</th><th className="px-3 py-2">Date</th><th className="px-3 py-2">Mapping</th><th className="px-3 py-2">Missing SKU</th><th className="px-3 py-2">Invoice</th><th className="px-3 py-2">Actions</th></tr></thead>
+              <thead className="bg-gray-50 text-left text-gray-600"><tr><th className="px-3 py-2">Order</th><th className="px-3 py-2">Date</th><th className="px-3 py-2">Mapping</th><th className="px-3 py-2">Missing SKU</th><th className="px-3 py-2">Invoice</th><th className="px-3 py-2">Tax check</th><th className="px-3 py-2">Actions</th></tr></thead>
               <tbody>
                 {rows.map((row) => {
                   const id = row.id
@@ -455,6 +521,7 @@ export function GstOrdersAdmin() {
                       <td className="px-3 py-2">{row.mappingCompleteness}%</td>
                       <td className="px-3 py-2 text-xs text-amber-700">{unmappedSkus.length > 0 ? unmappedSkus.join(', ') : 'None'}</td>
                       <td className="px-3 py-2">{row.invoiceStatus}</td>
+                      <td className="px-3 py-2"><TaxCheckBadge recon={row.taxReconciliation} /></td>
                       <td className="space-x-2 whitespace-nowrap px-3 py-2">
                         <button className="rounded-lg border border-gray-300 px-3 py-1.5" onClick={() => void onGenerate(id)} disabled={generatingId === id}>
                           {generatingId === id ? 'Generating...' : 'Generate Invoice'}
@@ -471,7 +538,7 @@ export function GstOrdersAdmin() {
                     </tr>
                     {expanded ? (
                       <tr className="border-t border-gray-100 bg-gray-50/50">
-                        <td className="px-3 py-3" colSpan={6}>
+                        <td className="px-3 py-3" colSpan={7}>
                           <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
                             <table className="min-w-full text-xs">
                               <thead className="bg-gray-100 text-gray-600">
