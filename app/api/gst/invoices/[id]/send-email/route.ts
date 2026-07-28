@@ -11,8 +11,8 @@ function normalizeEmail(value: unknown) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : null;
 }
 
-export async function OPTIONS() {
-  return extensionCorsPreflight();
+export async function OPTIONS(req: NextRequest) {
+  return extensionCorsPreflight(req);
 }
 
 export async function POST(req: NextRequest, context: { params: Promise<{ id: string }> }) {
@@ -22,7 +22,8 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
   const invoiceResult = await getGstInvoiceById(id);
   if (!invoiceResult.ok || !invoiceResult.data) {
     return withExtensionCors(
-      NextResponse.json({ ok: false, error: invoiceResult.error || "GST invoice not found" }, { status: 404 })
+      NextResponse.json({ ok: false, error: invoiceResult.error || "GST invoice not found" }, { status: 404 }),
+      req,
     );
   }
 
@@ -31,7 +32,8 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
   const shopId = gstSettings?.shopId ? String(gstSettings.shopId) : null;
   if (!shopId) {
     return withExtensionCors(
-      NextResponse.json({ ok: false, error: "Unable to resolve shop for this invoice" }, { status: 400 })
+      NextResponse.json({ ok: false, error: "Unable to resolve shop for this invoice" }, { status: 400 }),
+      req,
     );
   }
 
@@ -43,14 +45,16 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
   const recipient = normalizeEmail(body?.to) || normalizeEmail(buyer.email);
   if (!recipient) {
     return withExtensionCors(
-      NextResponse.json({ ok: false, error: "No customer email address available for this order" }, { status: 400 })
+      NextResponse.json({ ok: false, error: "No customer email address available for this order" }, { status: 400 }),
+      req,
     );
   }
 
   const pdfResult = await renderGstInvoicePdfBuffer(id);
   if (!pdfResult.ok || !pdfResult.data) {
     return withExtensionCors(
-      NextResponse.json({ ok: false, error: pdfResult.error || "Unable to generate invoice PDF" }, { status: 500 })
+      NextResponse.json({ ok: false, error: pdfResult.error || "Unable to generate invoice PDF" }, { status: 500 }),
+      req,
     );
   }
 
@@ -69,14 +73,19 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
 
   if (result.skipped) {
     return withExtensionCors(
-      NextResponse.json({ ok: false, error: `Email not sent: ${result.reason}` }, { status: 422 })
+      NextResponse.json({ ok: false, error: `Email not sent: ${result.reason}` }, { status: 422 }),
+      req,
     );
   }
   if (!result.success) {
     return withExtensionCors(
-      NextResponse.json({ ok: false, error: "Failed to send invoice email" }, { status: 502 })
+      NextResponse.json({ ok: false, error: "Failed to send invoice email" }, { status: 502 }),
+      req,
     );
   }
 
-  return withExtensionCors(NextResponse.json({ ok: true, data: { messageId: result.messageId, to: recipient } }));
+  return withExtensionCors(
+    NextResponse.json({ ok: true, data: { messageId: result.messageId, to: recipient } }),
+    req,
+  );
 }

@@ -31,8 +31,8 @@ function absoluteBase(req: NextRequest) {
   return configured || req.nextUrl.origin;
 }
 
-export async function OPTIONS() {
-  return extensionCorsPreflight();
+export async function OPTIONS(req: NextRequest) {
+  return extensionCorsPreflight(req);
 }
 
 export async function GET(req: NextRequest) {
@@ -53,6 +53,7 @@ export async function GET(req: NextRequest) {
             status,
             headers: { "Content-Type": "text/html; charset=utf-8" },
           }),
+      req,
     );
 
   if (!shopifyOrderId) {
@@ -125,7 +126,7 @@ export async function GET(req: NextRequest) {
       `?orderId=${encodeURIComponent(orderId)}` +
       `&shop=${encodeURIComponent(shopDomain)}` +
       `&format=html`;
-    return withExtensionCors(NextResponse.json({ ok: true, url }));
+    return withExtensionCors(NextResponse.json({ ok: true, url }), req);
   }
 
   const rendered = await renderGstPdf(invoice.id);
@@ -137,6 +138,7 @@ export async function GET(req: NextRequest) {
     new NextResponse(rendered.data.html, {
       status: 200,
       headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
-    })
+    }),
+    req,
   );
 }

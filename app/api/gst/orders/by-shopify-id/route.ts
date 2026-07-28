@@ -24,15 +24,16 @@ function absoluteBase(req: NextRequest) {
   return configured || req.nextUrl.origin;
 }
 
-export async function OPTIONS() {
-  return extensionCorsPreflight();
+export async function OPTIONS(req: NextRequest) {
+  return extensionCorsPreflight(req);
 }
 
 export async function POST(req: NextRequest) {
   const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
   if (!body || !body.shopifyOrderGid) {
     return withExtensionCors(
-      NextResponse.json({ ok: false, error: "shopifyOrderGid is required" }, { status: 400 })
+      NextResponse.json({ ok: false, error: "shopifyOrderGid is required" }, { status: 400 }),
+      req,
     );
   }
 
@@ -46,6 +47,7 @@ export async function POST(req: NextRequest) {
   if (!resolvedShopId) {
     return withExtensionCors(
       NextResponse.json({ ok: false, error: "Unable to resolve shop for this order." }, { status: 400 }),
+      req,
     );
   }
 
@@ -68,7 +70,8 @@ export async function POST(req: NextRequest) {
     });
     if (!synced.ok && !orderImport) {
       return withExtensionCors(
-        NextResponse.json({ ok: false, error: synced.error || "Unable to sync order from Shopify" }, { status: 400 })
+        NextResponse.json({ ok: false, error: synced.error || "Unable to sync order from Shopify" }, { status: 400 }),
+        req,
       );
     }
     orderImport = await prisma.gstOrderImport.findFirst({
@@ -79,7 +82,8 @@ export async function POST(req: NextRequest) {
 
   if (!orderImport) {
     return withExtensionCors(
-      NextResponse.json({ ok: false, error: "Order could not be imported for GST" }, { status: 404 })
+      NextResponse.json({ ok: false, error: "Order could not be imported for GST" }, { status: 404 }),
+      req,
     );
   }
 
@@ -147,6 +151,7 @@ export async function POST(req: NextRequest) {
         taxReconciliation,
         error: generationError,
       },
-    })
+    }),
+    req,
   );
 }
