@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { GST_DEFAULT_SOURCE_SYSTEM } from "../../../../../services/gst/constants";
 import { createGstReconciliationRun } from "../../../../../services/gst/reconcile";
 import { getActiveGstSettings } from "../../../../../services/gst/settings";
+import { resolveGstAdminShopId } from "../../../../../services/gst/request-shop";
 import { gstDb } from "../../../../../services/gst/db";
 
 export const runtime = "nodejs";
@@ -12,7 +13,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "Invalid JSON payload" }, { status: 400 });
   }
 
-  const settings = await getActiveGstSettings();
+  const shopId = await resolveGstAdminShopId(req);
+  if (!shopId) {
+    return NextResponse.json({ ok: false, error: "Unable to resolve shop for this request" }, { status: 400 });
+  }
+
+  const settings = await getActiveGstSettings({ shopId });
   if (!settings.ok || !settings.data) {
     return NextResponse.json({ ok: false, error: settings.error || "Active GST settings not found" }, { status: 404 });
   }
@@ -53,8 +59,13 @@ export async function POST(req: NextRequest) {
 }
 
 
-export async function GET() {
-  const settings = await getActiveGstSettings();
+export async function GET(req: NextRequest) {
+  const shopId = await resolveGstAdminShopId(req);
+  if (!shopId) {
+    return NextResponse.json({ ok: false, error: "Unable to resolve shop for this request" }, { status: 400 });
+  }
+
+  const settings = await getActiveGstSettings({ shopId });
   if (!settings.ok || !settings.data) {
     return NextResponse.json({ ok: false, error: settings.error || "Active GST settings not found" }, { status: 404 });
   }

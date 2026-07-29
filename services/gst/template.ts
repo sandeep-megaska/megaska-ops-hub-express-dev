@@ -499,8 +499,8 @@ export async function getTemplateById(
   }
 }
 
-export async function listActiveSettingsTemplates(): Promise<GstServiceResult<GstInvoiceTemplateRecord[]>> {
-  const settings = await getActiveGstSettings();
+export async function listActiveSettingsTemplates(shopId: string): Promise<GstServiceResult<GstInvoiceTemplateRecord[]>> {
+  const settings = await getActiveGstSettings({ shopId });
   if (!settings.ok || !settings.data) {
     return { ok: false, error: settings.error || "No active GST settings configured" };
   }

@@ -185,36 +185,28 @@ export async function getGstSettingsById(id: string): Promise<GstServiceResult<G
 export async function getActiveGstSettings(input?: { shopId?: string | null }): Promise<GstServiceResult<GstSettingsSnapshot>> {
   try {
     const requestedShopId = normalize(input?.shopId) || null;
-    let settings: GstSettingsSnapshot | null = null;
-    let fallbackUsed = false;
 
-    if (requestedShopId) {
-      // Shop-scoped only. No shopId: null fallback - GST rows are never
-      // null-scoped after the multi-tenant integrity migration, and falling
-      // back to another scope would surface the wrong shop's settings.
-      settings = await gstDb.gstSettings.findFirst({
-        where: {
-          isActive: true,
-          shopId: requestedShopId,
-        },
-        orderBy: { updatedAt: "desc" },
-      });
-    } else {
-      // No shop context provided: fall back to any active settings. This is a
-      // single-tenant holdover for callers that don't yet resolve a shop; it is
-      // not a null-scope lookup. Callers that can resolve a shop should pass it.
-      settings = await gstDb.gstSettings.findFirst({
-        where: { isActive: true },
-        orderBy: { updatedAt: "desc" },
-      });
-      fallbackUsed = Boolean(settings);
+    // Tenant isolation: a shopId is mandatory. The former "no shopId -> first
+    // active settings across all shops" fallback would surface another tenant's
+    // GST identity (GSTIN, legal name, state) whenever a caller failed to
+    // resolve a shop. Callers must resolve and pass the acting shop; fail closed
+    // rather than guessing a scope.
+    if (!requestedShopId) {
+      return { ok: false, error: "shopId is required to resolve GST settings" };
     }
+
+    const settings: GstSettingsSnapshot | null = await gstDb.gstSettings.findFirst({
+      where: {
+        isActive: true,
+        shopId: requestedShopId,
+      },
+      orderBy: { updatedAt: "desc" },
+    });
 
     console.info("[GST SETTINGS RESOLVE]", {
       requestedShopId,
       resolvedSettingsId: settings?.id ?? null,
       resolvedSettingsShopId: settings?.shopId ?? null,
-      fallbackUsed,
     });
 
     if (!settings) {

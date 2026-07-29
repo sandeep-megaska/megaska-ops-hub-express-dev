@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { isGstNoteDocumentType, isGstSupplyType } from "../../../../../services/gst/constants";
 import { buildNoteDraft } from "../../../../../services/gst/notes";
 import { getActiveGstSettings } from "../../../../../services/gst/settings";
+import { resolveGstAdminShopId } from "../../../../../services/gst/request-shop";
 import type { GstNoteDraftInput } from "../../../../../services/gst/types";
 
 export const runtime = "nodejs";
@@ -59,7 +60,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "Invalid JSON payload" }, { status: 400 });
   }
 
-  const settings = await getActiveGstSettings();
+  const shopId = await resolveGstAdminShopId(req);
+  if (!shopId) {
+    return NextResponse.json({ ok: false, error: "Unable to resolve shop for this request" }, { status: 400 });
+  }
+
+  const settings = await getActiveGstSettings({ shopId });
   if (!settings.ok || !settings.data) {
     return NextResponse.json(
       { ok: false, error: settings.error || "Active GST settings not found" },
