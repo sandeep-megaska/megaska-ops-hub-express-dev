@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { adminAuthHeaders } from "../../../../lib/admin-fetch";
 
 type RequestItem = {
   id: string;
@@ -189,7 +190,7 @@ export default function ExchangeLifecycleControls({
     setMessage({ type: "success", text });
   }
 
-  function getHeaders() {
+  async function getHeaders() {
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
     };
@@ -198,7 +199,7 @@ export default function ExchangeLifecycleControls({
       headers["x-shopify-shop-domain"] = shopDomain;
     }
 
-    return headers;
+    return { ...headers, ...(await adminAuthHeaders()) };
   }
 
   function ensureAdminContext() {
@@ -218,7 +219,7 @@ export default function ExchangeLifecycleControls({
     try {
       const response = await fetch(`/api/admin/exchange-requests/${requestId}/status`, {
         method: "PATCH",
-        headers: getHeaders(),
+        headers: await getHeaders(),
         body: JSON.stringify({
           nextStatus,
           adminNote,
@@ -249,7 +250,7 @@ export default function ExchangeLifecycleControls({
     try {
       const response = await fetch(`/api/admin/exchange-requests/${requestId}`, {
         method: "PATCH",
-        headers: getHeaders(),
+        headers: await getHeaders(),
         body: JSON.stringify({ adminNote }),
       });
 
@@ -274,7 +275,7 @@ export default function ExchangeLifecycleControls({
     try {
       const response = await fetch(`/api/admin/exchange-requests/${requestId}/shipment`, {
         method: "PATCH",
-        headers: getHeaders(),
+        headers: await getHeaders(),
         body: JSON.stringify({
           direction: "REVERSE_PICKUP",
           status: reverseShipmentStatus,
@@ -308,7 +309,7 @@ export default function ExchangeLifecycleControls({
     try {
       const response = await fetch(`/api/admin/exchange-requests/${requestId}/shipment`, {
         method: "PATCH",
-        headers: getHeaders(),
+        headers: await getHeaders(),
         body: JSON.stringify({
           direction: "FORWARD_REPLACEMENT",
           status: forwardShipmentStatus,
@@ -341,7 +342,7 @@ export default function ExchangeLifecycleControls({
     try {
       const response = await fetch(`/api/admin/exchange-requests/${requestId}/delhivery/reverse-pickup`, {
         method: "POST",
-        headers: getHeaders(),
+        headers: await getHeaders(),
       });
 
       const data = await response.json().catch(() => ({}));
@@ -376,7 +377,7 @@ export default function ExchangeLifecycleControls({
     try {
       const response = await fetch(`/api/admin/exchange-requests/${requestId}/delhivery/reverse-pickup/sync`, {
         method: "POST",
-        headers: getHeaders(),
+        headers: await getHeaders(),
       });
 
       const data = await response.json().catch(() => ({}));
@@ -411,7 +412,7 @@ export default function ExchangeLifecycleControls({
     try {
       const response = await fetch(`/api/admin/exchange-requests/${requestId}/delhivery/forward-shipment`, {
         method: "POST",
-        headers: getHeaders(),
+        headers: await getHeaders(),
       });
 
       const data = await response.json().catch(() => ({}));
@@ -448,7 +449,7 @@ export default function ExchangeLifecycleControls({
     try {
       const response = await fetch(`/api/admin/exchange-requests/${requestId}/delhivery/forward-shipment/sync`, {
         method: "POST",
-        headers: getHeaders(),
+        headers: await getHeaders(),
       });
 
       const data = await response.json().catch(() => ({}));
@@ -654,8 +655,8 @@ export default function ExchangeLifecycleControls({
             )}
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
-            <button type="button" onClick={async()=>{ if(!ensureAdminContext()) return; setInvoiceLoadingId("generate"); const r=await fetch(`/api/admin/exchange-requests/${requestId}/invoice`,{method:"POST",headers:getHeaders(),body:JSON.stringify({action:"generate"})}); setInvoiceLoadingId(null); if(r.ok){setSuccess("Invoice generated. Refresh to view latest values.")} else {const d=await r.json().catch(()=>({})); setError(d?.error||"Failed");}}} disabled={latestPayment?.status!=="PAID" || Boolean(latestPayment?.invoice) || invoiceLoadingId!==null} className="rounded-lg border px-3 py-2 text-xs">{invoiceLoadingId==="generate"?"Generating...":"Generate GST Invoice"}</button>
-            <button type="button" onClick={async()=>{ if(!ensureAdminContext()) return; setInvoiceLoadingId("send"); const r=await fetch(`/api/admin/exchange-requests/${requestId}/invoice`,{method:"POST",headers:getHeaders(),body:JSON.stringify({action:"send"})}); setInvoiceLoadingId(null); if(r.ok){setSuccess("Invoice email sent.")} else {const d=await r.json().catch(()=>({})); setError(d?.error||"Failed");}}} disabled={latestPayment?.status!=="PAID" || invoiceLoadingId!==null} className="rounded-lg border px-3 py-2 text-xs">{invoiceLoadingId==="send"?"Sending...":"Send Invoice Email"}</button>
+            <button type="button" onClick={async()=>{ if(!ensureAdminContext()) return; setInvoiceLoadingId("generate"); const r=await fetch(`/api/admin/exchange-requests/${requestId}/invoice`,{method:"POST",headers:await getHeaders(),body:JSON.stringify({action:"generate"})}); setInvoiceLoadingId(null); if(r.ok){setSuccess("Invoice generated. Refresh to view latest values.")} else {const d=await r.json().catch(()=>({})); setError(d?.error||"Failed");}}} disabled={latestPayment?.status!=="PAID" || Boolean(latestPayment?.invoice) || invoiceLoadingId!==null} className="rounded-lg border px-3 py-2 text-xs">{invoiceLoadingId==="generate"?"Generating...":"Generate GST Invoice"}</button>
+            <button type="button" onClick={async()=>{ if(!ensureAdminContext()) return; setInvoiceLoadingId("send"); const r=await fetch(`/api/admin/exchange-requests/${requestId}/invoice`,{method:"POST",headers:await getHeaders(),body:JSON.stringify({action:"send"})}); setInvoiceLoadingId(null); if(r.ok){setSuccess("Invoice email sent.")} else {const d=await r.json().catch(()=>({})); setError(d?.error||"Failed");}}} disabled={latestPayment?.status!=="PAID" || invoiceLoadingId!==null} className="rounded-lg border px-3 py-2 text-xs">{invoiceLoadingId==="send"?"Sending...":"Send Invoice Email"}</button>
           </div>
         </div>
       </section>

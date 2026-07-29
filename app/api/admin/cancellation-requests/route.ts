@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "../../../../services/db/prisma";
 import { deriveCancellationOutcome } from "../../../../services/exchange/cancellation";
-import { requireShopFromRequest, ShopResolutionError } from "../../../../services/shopify/shop";
+import { ShopResolutionError } from "../../../../services/shopify/shop";
+import { requireAdminShopFromRequest } from "../../../../services/shopify/admin-auth";
 
 function parseDateStart(value: string | null) {
   if (!value) return null;
@@ -21,7 +22,7 @@ function parseDateEnd(value: string | null) {
 
 export async function GET(req: NextRequest) {
   try {
-    const shop = await requireShopFromRequest(req);
+    const shop = await requireAdminShopFromRequest(req);
 
     const status = req.nextUrl.searchParams.get("status")?.trim();
     const orderNumber = req.nextUrl.searchParams.get("orderNumber")?.trim();

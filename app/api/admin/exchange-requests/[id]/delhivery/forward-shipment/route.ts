@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "../../../../../../../services/db/prisma";
 import { canTransitionExchangeStatus } from "../../../../../../../services/exchange/lifecycle";
 import { createDelhiveryForwardShipment, DelhiveryForwardShipmentError } from "../../../../../../../services/logistics/delhivery-forward-shipment";
-import { requireShopFromRequest, ShopResolutionError } from "../../../../../../../services/shopify/shop";
+import { ShopResolutionError } from "../../../../../../../services/shopify/shop";
+import { requireAdminShopFromRequest } from "../../../../../../../services/shopify/admin-auth";
 
 const ELIGIBLE_STATUSES = ["ITEM_RECEIVED", "REPLACEMENT_PROCESSING"];
 
@@ -25,7 +26,7 @@ function resolveNextStatus(currentStatus: string, hasAwb: boolean) {
 
 export async function POST(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
-    const shop = await requireShopFromRequest(req);
+    const shop = await requireAdminShopFromRequest(req);
     const { id } = await context.params;
     const request = await prisma.orderActionRequest.findFirst({
       where: { id, shopId: shop.id, requestType: "EXCHANGE" },

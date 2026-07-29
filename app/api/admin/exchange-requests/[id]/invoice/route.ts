@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "../../../../../../services/db/prisma";
-import { requireShopFromRequest, ShopResolutionError } from "../../../../../../services/shopify/shop";
+import { ShopResolutionError } from "../../../../../../services/shopify/shop";
+import { requireAdminShopFromRequest } from "../../../../../../services/shopify/admin-auth";
 import { ensureReversePickupInvoice, sendReversePickupInvoiceEmail } from "../../../../../../services/exchange/invoice";
 
 export async function POST(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
-    const shop = await requireShopFromRequest(req);
+    const shop = await requireAdminShopFromRequest(req);
     const { id } = await context.params;
     const body = await req.json().catch(() => ({}));
     const action = String(body?.action || "generate");

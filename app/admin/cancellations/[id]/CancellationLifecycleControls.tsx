@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { adminAuthHeaders } from "../../../../lib/admin-fetch";
 
 type Props = {
   requestId: string;
@@ -21,16 +22,16 @@ export default function CancellationLifecycleControls({
   const [adminNote, setAdminNote] = useState(currentAdminNote);
   const [message, setMessage] = useState("");
 
-  function getHeaders() {
+  async function getHeaders() {
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (shopDomain) headers["x-shopify-shop-domain"] = shopDomain;
-    return headers;
+    return { ...headers, ...(await adminAuthHeaders()) };
   }
 
   async function updateStatus() {
     const response = await fetch(`/api/admin/cancellation-requests/${requestId}/status`, {
       method: "PATCH",
-      headers: getHeaders(),
+      headers: await getHeaders(),
       body: JSON.stringify({ nextStatus, adminNote }),
     });
 
@@ -46,7 +47,7 @@ export default function CancellationLifecycleControls({
   async function saveNote() {
     const response = await fetch(`/api/admin/cancellation-requests/${requestId}`, {
       method: "PATCH",
-      headers: getHeaders(),
+      headers: await getHeaders(),
       body: JSON.stringify({ adminNote }),
     });
 
