@@ -68,6 +68,13 @@ export async function POST(req: NextRequest) {
     }
     customerProfileId = session.customer.id;
 
+    // Tenant scope: the wallet always belongs to the customer's own shop.
+    const shopId = String(session.customer.shopId || "").trim();
+    if (!shopId) {
+      console.error("[WALLET APPLY] failed", { customerProfileId, error: "Customer has no shop context" });
+      return withCors(req, NextResponse.json({ ok: false, error: "Customer shop context not found" }, { status: 400 }));
+    }
+
     if (!cartId) {
       console.error("[WALLET APPLY] failed", {
         customerProfileId,
@@ -84,7 +91,7 @@ export async function POST(req: NextRequest) {
       return withCors(req, NextResponse.json({ ok: false, error: "walletAmount must be greater than 0" }, { status: 400 }));
     }
 
-    const walletAccount = await getOrCreateWalletAccount(customerProfileId, "INR");
+    const walletAccount = await getOrCreateWalletAccount(customerProfileId, "INR", { shopId });
     const activeReservations = await prisma.$queryRaw<Array<{ activeCount: number; total: number }>>`
       SELECT COUNT(*)::int AS "activeCount", COALESCE(SUM("reservedAmount"), 0)::int AS total
       FROM "WalletReservation"
@@ -124,6 +131,7 @@ export async function POST(req: NextRequest) {
     });
 
     const reservation = await createWalletReservation({
+      shopId,
       customerProfileId,
       cartId,
       amountMinor: approvedAmountMinor,

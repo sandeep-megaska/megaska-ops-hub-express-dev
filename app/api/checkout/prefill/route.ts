@@ -225,6 +225,7 @@ console.log("[Megaska Checkout Prefill] email debug", {
 
     if (requestedWalletAmount > 0) {
       walletReservation = await createWalletReservation({
+        shopId: shop.id,
         customerProfileId,
         cartId: resolvedCartId,
         amountMinor: requestedWalletAmount,
