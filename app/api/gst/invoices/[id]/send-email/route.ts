@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getGstInvoiceById } from "../../../../../../services/gst/invoice";
 import { renderGstInvoicePdfBuffer } from "../../../../../../services/gst/pdf-binary";
 import { sendCustomerEmail } from "../../../../../../services/notifications/email";
+import { requireAdminShopFromRequest } from "../../../../../../services/shopify/admin-auth";
+import { ShopResolutionError } from "../../../../../../services/shopify/shop";
 import { extensionCorsPreflight, withExtensionCors } from "../../../../../../services/shopify/extension-cors";
 
 export const runtime = "nodejs";
@@ -17,9 +19,25 @@ export async function OPTIONS(req: NextRequest) {
 
 export async function POST(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;
+
+  // Require a verified session token and derive the shop from it — never trust a
+  // client-supplied shop for a route that renders customer PII and sends email.
+  let shopId: string;
+  try {
+    const shop = await requireAdminShopFromRequest(req);
+    shopId = shop.id;
+  } catch (error) {
+    const status = error instanceof ShopResolutionError ? error.status : 401;
+    return withExtensionCors(
+      NextResponse.json({ ok: false, error: error instanceof Error ? error.message : "Unauthorized" }, { status }),
+      req,
+    );
+  }
+
   const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
 
-  const invoiceResult = await getGstInvoiceById(id);
+  // Tenant isolation: the invoice must belong to the acting shop.
+  const invoiceResult = await getGstInvoiceById(id, { shopId });
   if (!invoiceResult.ok || !invoiceResult.data) {
     return withExtensionCors(
       NextResponse.json({ ok: false, error: invoiceResult.error || "GST invoice not found" }, { status: 404 }),
@@ -28,14 +46,6 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
   }
 
   const invoice = invoiceResult.data;
-  const gstSettings = invoice.gstSettings as { shopId?: string | null } | undefined;
-  const shopId = gstSettings?.shopId ? String(gstSettings.shopId) : null;
-  if (!shopId) {
-    return withExtensionCors(
-      NextResponse.json({ ok: false, error: "Unable to resolve shop for this invoice" }, { status: 400 }),
-      req,
-    );
-  }
 
   const snapshot = invoice.jsonSnapshot && typeof invoice.jsonSnapshot === "object"
     ? (invoice.jsonSnapshot as Record<string, unknown>)
