@@ -1233,6 +1233,7 @@ exports.Prisma.GstSettingsScalarFieldEnum = {
   creditNotePrefix: 'creditNotePrefix',
   debitNotePrefix: 'debitNotePrefix',
   invoiceNumberStrategy: 'invoiceNumberStrategy',
+  numberingConfig: 'numberingConfig',
   defaultCurrency: 'defaultCurrency',
   priceIncludesTax: 'priceIncludesTax',
   einvoiceEnabled: 'einvoiceEnabled',

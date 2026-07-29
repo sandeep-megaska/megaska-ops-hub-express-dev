@@ -6,6 +6,7 @@ import {
 import { writeGstAuditLog } from "../../../../services/gst/audit";
 import type { GstSettingsWriteInput } from "../../../../services/gst/settings";
 import { validateGstIdentityConfig } from "../../../../services/gst/settings";
+import { isGstModuleEnabled, setGstModuleEnabled } from "../../../../services/gst/module-toggle";
 import { prisma } from "../../../../services/db/prisma";
 import { getShopDomainFromRequest, resolveShopConfig } from "../../../../services/shopify/shop";
 
@@ -55,10 +56,14 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "No active GST settings configured" }, { status: 404 });
   }
 
+  // settings is non-null here only when resolvedShopId is non-null (see query above).
+  const gstModuleEnabled = resolvedShopId ? await isGstModuleEnabled(resolvedShopId) : true;
+
   return NextResponse.json({
     ok: true,
-    data: { settings },
+    data: { settings, gstModuleEnabled },
     settings,
+    gstModuleEnabled,
     __debugVersion: DEBUG_VERSION,
     __resolvedShopDomain: resolvedShop.shopDomain || requestedShopDomain || null,
     __resolvedShopId: resolvedShopId,
@@ -123,6 +128,7 @@ async function saveSettings(req: NextRequest) {
         ? body.autoGenerateOnOrderCreate
         : (baseValues?.autoGenerateOnOrderCreate ?? false),
     isActive: typeof body.isActive === "boolean" ? body.isActive : (baseValues?.isActive ?? true),
+    numberingConfig: body.numberingConfig !== undefined ? body.numberingConfig : baseValues?.numberingConfig,
   };
 
   const validation = validateGstIdentityConfig(candidateInput);
@@ -153,6 +159,7 @@ async function saveSettings(req: NextRequest) {
         creditNotePrefix: String(normalized.creditNotePrefix),
         debitNotePrefix: String(normalized.debitNotePrefix),
         invoiceNumberStrategy,
+        numberingConfig: normalized.numberingConfig ?? undefined,
         defaultCurrency: String(normalized.defaultCurrency || "INR"),
         priceIncludesTax: normalized.priceIncludesTax !== false,
         einvoiceEnabled: Boolean(normalized.einvoiceEnabled),
@@ -170,6 +177,13 @@ async function saveSettings(req: NextRequest) {
       return tx.gstSettings.create({ data: upsertData });
     });
 
+    // Per-shop GST engine on/off (stored in ShopModuleConfig, separate from the
+    // settings row) — set when the client sends it, then echo the effective value.
+    if (typeof body.gstModuleEnabled === "boolean") {
+      await setGstModuleEnabled(resolvedShopId, body.gstModuleEnabled);
+    }
+    const gstModuleEnabled = await isGstModuleEnabled(resolvedShopId);
+
     await writeGstAuditLog(
       {
         action: "GST_SETTINGS_UPSERT",
@@ -183,8 +197,9 @@ async function saveSettings(req: NextRequest) {
     return NextResponse.json(
       {
         ok: true,
-        data: { settings },
+        data: { settings, gstModuleEnabled },
         settings,
+        gstModuleEnabled,
         __debugVersion: DEBUG_VERSION,
         __resolvedShopDomain: resolvedShop.shopDomain || requestedShopDomain || null,
         __resolvedShopId: resolvedShopId,

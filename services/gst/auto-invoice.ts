@@ -1,5 +1,6 @@
 import { prisma } from "../db/prisma";
 import { getActiveGstSettings } from "./settings";
+import { isGstModuleEnabled } from "./module-toggle";
 import { syncSingleOrder } from "./order-sync";
 import { generateInvoiceBatch } from "./dispatch-batch";
 
@@ -23,6 +24,12 @@ export async function autoGenerateInvoiceForOrder(input: {
   const shopId = input.shopId;
   if (!shopId) {
     return { attempted: false, reason: "no-resolved-shop" };
+  }
+
+  // Respect the per-shop GST on/off switch: a merchant using another GST app
+  // turns ours off so we never double-number their orders.
+  if (!(await isGstModuleEnabled(shopId))) {
+    return { attempted: false, reason: "gst-module-disabled" };
   }
 
   const settings = await getActiveGstSettings({ shopId });

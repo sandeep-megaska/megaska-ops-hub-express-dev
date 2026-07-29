@@ -91,18 +91,22 @@ async function request<T>(path: string, init?: RequestInit): Promise<RequestResu
 }
 
 export const getGstSettings = async () => {
-  const res = await request<Record<string, unknown> & { settings?: Record<string, unknown> }>('/api/gst/settings')
+  const res = await request<{ settings?: Record<string, unknown>; gstModuleEnabled?: boolean }>('/api/gst/settings')
   if (!res.ok) return res
-  return { ok: true, data: (res.data as { settings?: Record<string, unknown> })?.settings || {} } as const
+  const settings = (res.data as { settings?: Record<string, unknown> })?.settings || {}
+  const gstModuleEnabled = (res.data as { gstModuleEnabled?: boolean })?.gstModuleEnabled
+  return { ok: true, data: { ...settings, gstModuleEnabled } } as const
 }
 
 export const createOrUpdateGstSettings = async (payload: Record<string, unknown>) => {
-  const res = await request<Record<string, unknown> & { settings?: Record<string, unknown> }>('/api/gst/settings', {
+  const res = await request<{ settings?: Record<string, unknown>; gstModuleEnabled?: boolean }>('/api/gst/settings', {
     method: 'POST',
     body: JSON.stringify(payload),
   })
   if (!res.ok) return res
-  return { ok: true, data: (res.data as { settings?: Record<string, unknown> })?.settings || {} } as const
+  const settings = (res.data as { settings?: Record<string, unknown> })?.settings || {}
+  const gstModuleEnabled = (res.data as { gstModuleEnabled?: boolean })?.gstModuleEnabled
+  return { ok: true, data: { ...settings, gstModuleEnabled } } as const
 }
 
 export const getDefaultGstTemplate = async () => {
