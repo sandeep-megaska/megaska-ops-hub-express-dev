@@ -77001,7 +77001,7 @@ export namespace Prisma {
 
   export type WalletReservationGroupByOutputType = {
     id: string
-    shopId: string | null
+    shopId: string
     walletAccountId: string
     customerProfileId: string
     reservedAmount: number
@@ -77062,7 +77062,7 @@ export namespace Prisma {
     updatedAt?: boolean
     walletAccount?: boolean | WalletAccountDefaultArgs<ExtArgs>
     customer?: boolean | CustomerProfileDefaultArgs<ExtArgs>
-    shop?: boolean | WalletReservation$shopArgs<ExtArgs>
+    shop?: boolean | ShopDefaultArgs<ExtArgs>
   }, ExtArgs["result"]["walletReservation"]>
 
   export type WalletReservationSelectCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
@@ -77087,7 +77087,7 @@ export namespace Prisma {
     updatedAt?: boolean
     walletAccount?: boolean | WalletAccountDefaultArgs<ExtArgs>
     customer?: boolean | CustomerProfileDefaultArgs<ExtArgs>
-    shop?: boolean | WalletReservation$shopArgs<ExtArgs>
+    shop?: boolean | ShopDefaultArgs<ExtArgs>
   }, ExtArgs["result"]["walletReservation"]>
 
   export type WalletReservationSelectUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
@@ -77112,7 +77112,7 @@ export namespace Prisma {
     updatedAt?: boolean
     walletAccount?: boolean | WalletAccountDefaultArgs<ExtArgs>
     customer?: boolean | CustomerProfileDefaultArgs<ExtArgs>
-    shop?: boolean | WalletReservation$shopArgs<ExtArgs>
+    shop?: boolean | ShopDefaultArgs<ExtArgs>
   }, ExtArgs["result"]["walletReservation"]>
 
   export type WalletReservationSelectScalar = {
@@ -77141,17 +77141,17 @@ export namespace Prisma {
   export type WalletReservationInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     walletAccount?: boolean | WalletAccountDefaultArgs<ExtArgs>
     customer?: boolean | CustomerProfileDefaultArgs<ExtArgs>
-    shop?: boolean | WalletReservation$shopArgs<ExtArgs>
+    shop?: boolean | ShopDefaultArgs<ExtArgs>
   }
   export type WalletReservationIncludeCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     walletAccount?: boolean | WalletAccountDefaultArgs<ExtArgs>
     customer?: boolean | CustomerProfileDefaultArgs<ExtArgs>
-    shop?: boolean | WalletReservation$shopArgs<ExtArgs>
+    shop?: boolean | ShopDefaultArgs<ExtArgs>
   }
   export type WalletReservationIncludeUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     walletAccount?: boolean | WalletAccountDefaultArgs<ExtArgs>
     customer?: boolean | CustomerProfileDefaultArgs<ExtArgs>
-    shop?: boolean | WalletReservation$shopArgs<ExtArgs>
+    shop?: boolean | ShopDefaultArgs<ExtArgs>
   }
 
   export type $WalletReservationPayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
@@ -77159,11 +77159,11 @@ export namespace Prisma {
     objects: {
       walletAccount: Prisma.$WalletAccountPayload<ExtArgs>
       customer: Prisma.$CustomerProfilePayload<ExtArgs>
-      shop: Prisma.$ShopPayload<ExtArgs> | null
+      shop: Prisma.$ShopPayload<ExtArgs>
     }
     scalars: $Extensions.GetPayloadResult<{
       id: string
-      shopId: string | null
+      shopId: string
       walletAccountId: string
       customerProfileId: string
       reservedAmount: number
@@ -77577,7 +77577,7 @@ export namespace Prisma {
     readonly [Symbol.toStringTag]: "PrismaPromise"
     walletAccount<T extends WalletAccountDefaultArgs<ExtArgs> = {}>(args?: Subset<T, WalletAccountDefaultArgs<ExtArgs>>): Prisma__WalletAccountClient<$Result.GetResult<Prisma.$WalletAccountPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>
     customer<T extends CustomerProfileDefaultArgs<ExtArgs> = {}>(args?: Subset<T, CustomerProfileDefaultArgs<ExtArgs>>): Prisma__CustomerProfileClient<$Result.GetResult<Prisma.$CustomerProfilePayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>
-    shop<T extends WalletReservation$shopArgs<ExtArgs> = {}>(args?: Subset<T, WalletReservation$shopArgs<ExtArgs>>): Prisma__ShopClient<$Result.GetResult<Prisma.$ShopPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
+    shop<T extends ShopDefaultArgs<ExtArgs> = {}>(args?: Subset<T, ShopDefaultArgs<ExtArgs>>): Prisma__ShopClient<$Result.GetResult<Prisma.$ShopPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>
     /**
      * Attaches callbacks for the resolution and/or rejection of the Promise.
      * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -78024,25 +78024,6 @@ export namespace Prisma {
      * Limit how many WalletReservations to delete.
      */
     limit?: number
-  }
-
-  /**
-   * WalletReservation.shop
-   */
-  export type WalletReservation$shopArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
-    /**
-     * Select specific fields to fetch from the Shop
-     */
-    select?: ShopSelect<ExtArgs> | null
-    /**
-     * Omit specific fields from the Shop
-     */
-    omit?: ShopOmit<ExtArgs> | null
-    /**
-     * Choose, which related nodes to fetch as well
-     */
-    include?: ShopInclude<ExtArgs> | null
-    where?: ShopWhereInput
   }
 
   /**
@@ -129838,7 +129819,7 @@ export namespace Prisma {
     OR?: WalletReservationWhereInput[]
     NOT?: WalletReservationWhereInput | WalletReservationWhereInput[]
     id?: StringFilter<"WalletReservation"> | string
-    shopId?: StringNullableFilter<"WalletReservation"> | string | null
+    shopId?: StringFilter<"WalletReservation"> | string
     walletAccountId?: StringFilter<"WalletReservation"> | string
     customerProfileId?: StringFilter<"WalletReservation"> | string
     reservedAmount?: IntFilter<"WalletReservation"> | number
@@ -129858,12 +129839,12 @@ export namespace Prisma {
     updatedAt?: DateTimeFilter<"WalletReservation"> | Date | string
     walletAccount?: XOR<WalletAccountScalarRelationFilter, WalletAccountWhereInput>
     customer?: XOR<CustomerProfileScalarRelationFilter, CustomerProfileWhereInput>
-    shop?: XOR<ShopNullableScalarRelationFilter, ShopWhereInput> | null
+    shop?: XOR<ShopScalarRelationFilter, ShopWhereInput>
   }
 
   export type WalletReservationOrderByWithRelationInput = {
     id?: SortOrder
-    shopId?: SortOrderInput | SortOrder
+    shopId?: SortOrder
     walletAccountId?: SortOrder
     customerProfileId?: SortOrder
     reservedAmount?: SortOrder
@@ -129891,7 +129872,7 @@ export namespace Prisma {
     AND?: WalletReservationWhereInput | WalletReservationWhereInput[]
     OR?: WalletReservationWhereInput[]
     NOT?: WalletReservationWhereInput | WalletReservationWhereInput[]
-    shopId?: StringNullableFilter<"WalletReservation"> | string | null
+    shopId?: StringFilter<"WalletReservation"> | string
     walletAccountId?: StringFilter<"WalletReservation"> | string
     customerProfileId?: StringFilter<"WalletReservation"> | string
     reservedAmount?: IntFilter<"WalletReservation"> | number
@@ -129911,12 +129892,12 @@ export namespace Prisma {
     updatedAt?: DateTimeFilter<"WalletReservation"> | Date | string
     walletAccount?: XOR<WalletAccountScalarRelationFilter, WalletAccountWhereInput>
     customer?: XOR<CustomerProfileScalarRelationFilter, CustomerProfileWhereInput>
-    shop?: XOR<ShopNullableScalarRelationFilter, ShopWhereInput> | null
+    shop?: XOR<ShopScalarRelationFilter, ShopWhereInput>
   }, "id">
 
   export type WalletReservationOrderByWithAggregationInput = {
     id?: SortOrder
-    shopId?: SortOrderInput | SortOrder
+    shopId?: SortOrder
     walletAccountId?: SortOrder
     customerProfileId?: SortOrder
     reservedAmount?: SortOrder
@@ -129946,7 +129927,7 @@ export namespace Prisma {
     OR?: WalletReservationScalarWhereWithAggregatesInput[]
     NOT?: WalletReservationScalarWhereWithAggregatesInput | WalletReservationScalarWhereWithAggregatesInput[]
     id?: StringWithAggregatesFilter<"WalletReservation"> | string
-    shopId?: StringNullableWithAggregatesFilter<"WalletReservation"> | string | null
+    shopId?: StringWithAggregatesFilter<"WalletReservation"> | string
     walletAccountId?: StringWithAggregatesFilter<"WalletReservation"> | string
     customerProfileId?: StringWithAggregatesFilter<"WalletReservation"> | string
     reservedAmount?: IntWithAggregatesFilter<"WalletReservation"> | number
@@ -141072,12 +141053,12 @@ export namespace Prisma {
     updatedAt?: Date | string
     walletAccount: WalletAccountCreateNestedOneWithoutReservationsInput
     customer: CustomerProfileCreateNestedOneWithoutWalletReservationsInput
-    shop?: ShopCreateNestedOneWithoutWalletReservationsInput
+    shop: ShopCreateNestedOneWithoutWalletReservationsInput
   }
 
   export type WalletReservationUncheckedCreateInput = {
     id?: string
-    shopId?: string | null
+    shopId: string
     walletAccountId: string
     customerProfileId: string
     reservedAmount: number
@@ -141116,12 +141097,12 @@ export namespace Prisma {
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     walletAccount?: WalletAccountUpdateOneRequiredWithoutReservationsNestedInput
     customer?: CustomerProfileUpdateOneRequiredWithoutWalletReservationsNestedInput
-    shop?: ShopUpdateOneWithoutWalletReservationsNestedInput
+    shop?: ShopUpdateOneRequiredWithoutWalletReservationsNestedInput
   }
 
   export type WalletReservationUncheckedUpdateInput = {
     id?: StringFieldUpdateOperationsInput | string
-    shopId?: NullableStringFieldUpdateOperationsInput | string | null
+    shopId?: StringFieldUpdateOperationsInput | string
     walletAccountId?: StringFieldUpdateOperationsInput | string
     customerProfileId?: StringFieldUpdateOperationsInput | string
     reservedAmount?: IntFieldUpdateOperationsInput | number
@@ -141143,7 +141124,7 @@ export namespace Prisma {
 
   export type WalletReservationCreateManyInput = {
     id?: string
-    shopId?: string | null
+    shopId: string
     walletAccountId: string
     customerProfileId: string
     reservedAmount: number
@@ -141184,7 +141165,7 @@ export namespace Prisma {
 
   export type WalletReservationUncheckedUpdateManyInput = {
     id?: StringFieldUpdateOperationsInput | string
-    shopId?: NullableStringFieldUpdateOperationsInput | string | null
+    shopId?: StringFieldUpdateOperationsInput | string
     walletAccountId?: StringFieldUpdateOperationsInput | string
     customerProfileId?: StringFieldUpdateOperationsInput | string
     reservedAmount?: IntFieldUpdateOperationsInput | number
@@ -159617,12 +159598,10 @@ export namespace Prisma {
     update?: XOR<XOR<CustomerProfileUpdateToOneWithWhereWithoutWalletReservationsInput, CustomerProfileUpdateWithoutWalletReservationsInput>, CustomerProfileUncheckedUpdateWithoutWalletReservationsInput>
   }
 
-  export type ShopUpdateOneWithoutWalletReservationsNestedInput = {
+  export type ShopUpdateOneRequiredWithoutWalletReservationsNestedInput = {
     create?: XOR<ShopCreateWithoutWalletReservationsInput, ShopUncheckedCreateWithoutWalletReservationsInput>
     connectOrCreate?: ShopCreateOrConnectWithoutWalletReservationsInput
     upsert?: ShopUpsertWithoutWalletReservationsInput
-    disconnect?: ShopWhereInput | boolean
-    delete?: ShopWhereInput | boolean
     connect?: ShopWhereUniqueInput
     update?: XOR<XOR<ShopUpdateToOneWithWhereWithoutWalletReservationsInput, ShopUpdateWithoutWalletReservationsInput>, ShopUncheckedUpdateWithoutWalletReservationsInput>
   }
@@ -163987,12 +163966,12 @@ export namespace Prisma {
     createdAt?: Date | string
     updatedAt?: Date | string
     walletAccount: WalletAccountCreateNestedOneWithoutReservationsInput
-    shop?: ShopCreateNestedOneWithoutWalletReservationsInput
+    shop: ShopCreateNestedOneWithoutWalletReservationsInput
   }
 
   export type WalletReservationUncheckedCreateWithoutCustomerInput = {
     id?: string
-    shopId?: string | null
+    shopId: string
     walletAccountId: string
     reservedAmount: number
     currency?: string
@@ -165073,7 +165052,7 @@ export namespace Prisma {
     OR?: WalletReservationScalarWhereInput[]
     NOT?: WalletReservationScalarWhereInput | WalletReservationScalarWhereInput[]
     id?: StringFilter<"WalletReservation"> | string
-    shopId?: StringNullableFilter<"WalletReservation"> | string | null
+    shopId?: StringFilter<"WalletReservation"> | string
     walletAccountId?: StringFilter<"WalletReservation"> | string
     customerProfileId?: StringFilter<"WalletReservation"> | string
     reservedAmount?: IntFilter<"WalletReservation"> | number
@@ -188312,12 +188291,12 @@ export namespace Prisma {
     createdAt?: Date | string
     updatedAt?: Date | string
     customer: CustomerProfileCreateNestedOneWithoutWalletReservationsInput
-    shop?: ShopCreateNestedOneWithoutWalletReservationsInput
+    shop: ShopCreateNestedOneWithoutWalletReservationsInput
   }
 
   export type WalletReservationUncheckedCreateWithoutWalletAccountInput = {
     id?: string
-    shopId?: string | null
+    shopId: string
     customerProfileId: string
     reservedAmount: number
     currency?: string
@@ -200568,7 +200547,7 @@ export namespace Prisma {
 
   export type WalletReservationCreateManyCustomerInput = {
     id?: string
-    shopId?: string | null
+    shopId: string
     walletAccountId: string
     reservedAmount: number
     currency?: string
@@ -201170,12 +201149,12 @@ export namespace Prisma {
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     walletAccount?: WalletAccountUpdateOneRequiredWithoutReservationsNestedInput
-    shop?: ShopUpdateOneWithoutWalletReservationsNestedInput
+    shop?: ShopUpdateOneRequiredWithoutWalletReservationsNestedInput
   }
 
   export type WalletReservationUncheckedUpdateWithoutCustomerInput = {
     id?: StringFieldUpdateOperationsInput | string
-    shopId?: NullableStringFieldUpdateOperationsInput | string | null
+    shopId?: StringFieldUpdateOperationsInput | string
     walletAccountId?: StringFieldUpdateOperationsInput | string
     reservedAmount?: IntFieldUpdateOperationsInput | number
     currency?: StringFieldUpdateOperationsInput | string
@@ -201196,7 +201175,7 @@ export namespace Prisma {
 
   export type WalletReservationUncheckedUpdateManyWithoutCustomerInput = {
     id?: StringFieldUpdateOperationsInput | string
-    shopId?: NullableStringFieldUpdateOperationsInput | string | null
+    shopId?: StringFieldUpdateOperationsInput | string
     walletAccountId?: StringFieldUpdateOperationsInput | string
     reservedAmount?: IntFieldUpdateOperationsInput | number
     currency?: StringFieldUpdateOperationsInput | string
@@ -208005,7 +207984,7 @@ export namespace Prisma {
 
   export type WalletReservationCreateManyWalletAccountInput = {
     id?: string
-    shopId?: string | null
+    shopId: string
     customerProfileId: string
     reservedAmount: number
     currency?: string
@@ -208101,12 +208080,12 @@ export namespace Prisma {
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     customer?: CustomerProfileUpdateOneRequiredWithoutWalletReservationsNestedInput
-    shop?: ShopUpdateOneWithoutWalletReservationsNestedInput
+    shop?: ShopUpdateOneRequiredWithoutWalletReservationsNestedInput
   }
 
   export type WalletReservationUncheckedUpdateWithoutWalletAccountInput = {
     id?: StringFieldUpdateOperationsInput | string
-    shopId?: NullableStringFieldUpdateOperationsInput | string | null
+    shopId?: StringFieldUpdateOperationsInput | string
     customerProfileId?: StringFieldUpdateOperationsInput | string
     reservedAmount?: IntFieldUpdateOperationsInput | number
     currency?: StringFieldUpdateOperationsInput | string
@@ -208127,7 +208106,7 @@ export namespace Prisma {
 
   export type WalletReservationUncheckedUpdateManyWithoutWalletAccountInput = {
     id?: StringFieldUpdateOperationsInput | string
-    shopId?: NullableStringFieldUpdateOperationsInput | string | null
+    shopId?: StringFieldUpdateOperationsInput | string
     customerProfileId?: StringFieldUpdateOperationsInput | string
     reservedAmount?: IntFieldUpdateOperationsInput | number
     currency?: StringFieldUpdateOperationsInput | string
