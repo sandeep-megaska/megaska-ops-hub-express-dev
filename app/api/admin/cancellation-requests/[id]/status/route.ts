@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "../../../../../../services/db/prisma";
-import { requireShopFromRequest, ShopResolutionError } from "../../../../../../services/shopify/shop";
+import { ShopResolutionError } from "../../../../../../services/shopify/shop";
+import { requireAdminShopFromRequest } from "../../../../../../services/shopify/admin-auth";
 import {
   CANCELLATION_ALLOWED_STATUS_TRANSITIONS,
   deriveCancellationOutcome,
@@ -35,7 +36,7 @@ function shouldForceCodRefund(body: Record<string, unknown> | null): boolean {
 
 export async function PATCH(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
-    const shop = await requireShopFromRequest(req);
+    const shop = await requireAdminShopFromRequest(req);
     const { id } = await context.params;
     const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
     const nextStatus = String(body?.nextStatus || "").trim();
