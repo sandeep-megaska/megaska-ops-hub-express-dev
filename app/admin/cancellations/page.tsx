@@ -288,7 +288,7 @@ export default async function CancellationsPage({
 
       <section className="mk-grid-4">
         <div className="mk-card mk-stat-card"><p className="mk-stat-label">Customer cancellation requests</p><p className="mk-stat-value">{stats.customerRequests}</p></div>
-        <div className="mk-card mk-stat-card"><p className="mk-stat-label">Megaska cancellations</p><p className="mk-stat-value">{stats.megaskaCancellations}</p></div>
+        <div className="mk-card mk-stat-card"><p className="mk-stat-label">LoopD2C cancellations</p><p className="mk-stat-value">{stats.megaskaCancellations}</p></div>
         <div className="mk-card mk-stat-card"><p className="mk-stat-label">Approved / Closed</p><p className="mk-stat-value">{stats.approvedClosed}</p></div>
         <div className="mk-card mk-stat-card"><p className="mk-stat-label">Rejected / Locked</p><p className="mk-stat-value">{stats.rejectedLocked}</p></div>
       </section>

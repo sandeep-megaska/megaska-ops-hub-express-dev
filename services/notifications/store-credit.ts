@@ -58,7 +58,7 @@ function buildStoreCreditText(payload: StoreCreditEmailPayload) {
     lines.push(`Available Store Credit balance: ${formatAmount(payload.balanceAfter, payload.currency)}`);
   }
 
-  lines.push("", "You can use available Store Credit during checkout.", "", "Megaska Team");
+  lines.push("", "You can use available Store Credit during checkout.", "", "Store Credit Team");
   return lines.join("\n");
 }
 

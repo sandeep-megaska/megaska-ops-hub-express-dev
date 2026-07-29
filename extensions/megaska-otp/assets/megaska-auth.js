@@ -1037,7 +1037,7 @@ if (token) {
   function renderDashboardSummary(container, summary) {
     const profileName =
       [summary?.customer?.firstName, summary?.customer?.lastName].filter(Boolean).join(" ") ||
-      "Megaska Customer";
+      "Customer";
     const verifiedPhone = summary?.customer?.phone || "-";
     const email = summary?.customer?.email || "-";
     const verified = Boolean(summary?.customer?.verified);

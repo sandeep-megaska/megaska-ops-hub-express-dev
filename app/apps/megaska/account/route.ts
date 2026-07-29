@@ -22,14 +22,14 @@ export async function GET(request: NextRequest) {
       logoutRedirectUrl: "/",
       shopDomain: shop.shopDomain,
       accountLabel: "My Account",
-      brandLabel: "Megaska Account",
+      brandLabel: "Account",
     };
     const html = `<!doctype html>
 <html lang="en" data-shop-domain="${shop.shopDomain}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Megaska Account</title>
+  <title>Account</title>
   <link rel="stylesheet" href="${ASSET_BASE}/megaska-otp.css">
   <link rel="stylesheet" href="${ASSET_BASE}/loopdesk-customer-dashboard.css">
 </head>

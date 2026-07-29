@@ -217,7 +217,7 @@ export async function requireShopFromAppProxy(request: NextRequest): Promise<App
 
 export async function requireEnabledModule(shopId: string, moduleKey: string) {
   if (!ACTIVE_MODULE_KEYS.has(moduleKey)) {
-    throw new AppProxyError("Module is not available through the Megaska app proxy", 404);
+    throw new AppProxyError("Module is not available through the app proxy", 404);
   }
 
   const config = await prisma.shopModuleConfig.findUnique({
@@ -241,7 +241,7 @@ export function appProxyJsonError(error: unknown) {
 export function appProxyHtmlError(error: unknown) {
   const status = error instanceof AppProxyError ? error.status : 500;
   const message = error instanceof Error ? error.message : "App proxy request failed";
-  return new NextResponse(`<!doctype html><html><body><h1>Megaska is unavailable</h1><p>${message}</p></body></html>`, {
+  return new NextResponse(`<!doctype html><html><body><h1>This service is unavailable</h1><p>${message}</p></body></html>`, {
     status,
     headers: { "Content-Type": "text/html; charset=utf-8" },
   });
