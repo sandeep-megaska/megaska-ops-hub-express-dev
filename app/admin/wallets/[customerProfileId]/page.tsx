@@ -1,6 +1,7 @@
 import { prisma } from "../../../../services/db/prisma";
 import { getOrCreateWalletAccount, listWalletTransactions } from "../../../../services/wallet";
 import { listWalletReservationsForAdmin } from "../../../../services/wallet-reservation";
+import { formatAdminShopResolutionError, resolveAdminShopFromSearchParams } from "../../../../services/shopify/admin-shop-context";
 import WalletOpsControls from "./WalletOpsControls";
 
 export const dynamic = "force-dynamic";
@@ -10,8 +11,20 @@ function displayName(customer: { firstName: string | null; lastName: string | nu
   return joined || customer.fullName || "-";
 }
 
-export default async function AdminWalletDetailPage({ params }: { params: Promise<{ customerProfileId: string }> }) {
+export default async function AdminWalletDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ customerProfileId: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const { customerProfileId } = await params;
+  const resolved = await resolveAdminShopFromSearchParams(await searchParams);
+  const shop = resolved.shop;
+
+  if (!shop?.id) {
+    return <main style={{ padding: 24 }}>{formatAdminShopResolutionError(resolved)}</main>;
+  }
 
   const customer = await prisma.customerProfile.findUnique({
   where: { id: customerProfileId },
@@ -26,19 +39,16 @@ export default async function AdminWalletDetailPage({ params }: { params: Promis
   },
 });
 
- if (!customer) {
+ // Tenant isolation: only render a customer that belongs to the acting shop.
+ if (!customer || customer.shopId !== shop.id) {
   return <main style={{ padding: 24 }}>Customer not found.</main>;
 }
-
-if (!customer.shopId) {
-  return <main style={{ padding: 24 }}>Customer shop context not found.</main>;
-}
   const wallet = await getOrCreateWalletAccount(customer.id, "INR", {
-  shopId: customer.shopId,
+  shopId: shop.id,
 });
 
 const transactions = await listWalletTransactions(customer.id, "INR", 200, {
-  shopId: customer.shopId,
+  shopId: shop.id,
 });
   const reservations = await listWalletReservationsForAdmin(customer.id);
 

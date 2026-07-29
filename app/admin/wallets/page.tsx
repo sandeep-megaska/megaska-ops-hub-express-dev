@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { prisma } from "../../../services/db/prisma";
+import { formatAdminShopResolutionError, resolveAdminShopFromSearchParams } from "../../../services/shopify/admin-shop-context";
 
 type Props = {
-  searchParams: Promise<{ q?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
 function getName(row: { firstName: string | null; lastName: string | null; fullName: string | null }) {
@@ -12,7 +13,14 @@ function getName(row: { firstName: string | null; lastName: string | null; fullN
 
 export default async function AdminWalletsPage({ searchParams }: Props) {
   const filters = await searchParams;
-  const q = String(filters.q || "").trim();
+  const resolved = await resolveAdminShopFromSearchParams(filters);
+  const shop = resolved.shop;
+
+  if (!shop?.id) {
+    return <main style={{ padding: 24 }}>{formatAdminShopResolutionError(resolved)}</main>;
+  }
+
+  const q = String(Array.isArray(filters.q) ? filters.q[0] : filters.q || "").trim();
 
   const wallets = await prisma.$queryRaw<
     Array<{
@@ -33,6 +41,7 @@ export default async function AdminWalletsPage({ searchParams }: Props) {
     FROM "WalletAccount" wa
     JOIN "CustomerProfile" cp ON cp."id" = wa."customerProfileId"
     WHERE wa."currency" = 'INR'
+      AND wa."shopId" = ${shop.id}
       AND (
         ${q} = ''
         OR cp."phoneE164" ILIKE ${`%${q}%`}

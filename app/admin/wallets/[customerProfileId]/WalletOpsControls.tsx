@@ -1,13 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { adminAuthHeaders } from "../../../../lib/admin-fetch";
 
 type Props = {
   customerProfileId: string;
 };
 
 export default function WalletOpsControls({ customerProfileId }: Props) {
-  const [adminKey, setAdminKey] = useState("");
   const [adminId, setAdminId] = useState("");
   const [creditAmount, setCreditAmount] = useState("");
   const [creditReason, setCreditReason] = useState("MANUAL_CREDIT");
@@ -18,16 +18,11 @@ export default function WalletOpsControls({ customerProfileId }: Props) {
   const [message, setMessage] = useState("");
 
   async function submitAction(path: string, payload: Record<string, unknown>) {
-    if (!adminKey) {
-      setMessage("Admin key is required");
-      return;
-    }
-
     const response = await fetch(path, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-admin-key": adminKey,
+        ...(await adminAuthHeaders()),
       },
       body: JSON.stringify({ ...payload, adminId }),
     });
@@ -45,10 +40,6 @@ export default function WalletOpsControls({ customerProfileId }: Props) {
     <section style={{ border: "1px solid #ddd", borderRadius: 8, padding: 12 }}>
       <h3>Wallet Operations</h3>
       <div style={{ display: "grid", gap: 8, maxWidth: 560 }}>
-        <label>
-          Admin Key
-          <input value={adminKey} onChange={(event) => setAdminKey(event.target.value)} style={{ display: "block", width: "100%" }} />
-        </label>
         <label>
           Admin ID (optional)
           <input value={adminId} onChange={(event) => setAdminId(event.target.value)} style={{ display: "block", width: "100%" }} />
