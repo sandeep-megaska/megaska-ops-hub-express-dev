@@ -94,15 +94,21 @@ export async function listGstDocuments(
   }
 }
 
-export async function getGstDocumentById(documentId: string): Promise<GstServiceResult<Record<string, unknown>>> {
+export async function getGstDocumentById(
+  documentId: string,
+  options: { shopId?: string } = {},
+): Promise<GstServiceResult<Record<string, unknown>>> {
   try {
     const cleanedId = normalize(documentId);
     if (!cleanedId) {
       return { ok: false, error: "document id is required" };
     }
 
-    const document = await gstDb.gstDocument.findUnique({
-      where: { id: cleanedId },
+    // Tenant isolation: when a shopId is supplied the row only resolves if it
+    // belongs to that shop, so a foreign document id returns "not found".
+    const scopedShopId = normalize(options.shopId);
+    const document = await gstDb.gstDocument.findFirst({
+      where: { id: cleanedId, ...(scopedShopId ? { shopId: scopedShopId } : {}) },
       include: {
         lines: { orderBy: { lineNumber: "asc" } },
         gstSettings: true,

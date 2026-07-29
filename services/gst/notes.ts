@@ -273,10 +273,16 @@ export async function buildNoteDraft(input: GstNoteDraftInput): Promise<GstServi
   }
 }
 
-export async function getGstNoteById(gstDocumentId: string): Promise<GstServiceResult<Record<string, unknown>>> {
+export async function getGstNoteById(
+  gstDocumentId: string,
+  options: { shopId?: string } = {},
+): Promise<GstServiceResult<Record<string, unknown>>> {
   try {
-    const document = await gstDb.gstDocument.findUnique({
-      where: { id: String(gstDocumentId).trim() },
+    // Tenant isolation: scope by shopId when provided so a foreign note id
+    // resolves to "not found" instead of leaking another shop's note.
+    const scopedShopId = String(options.shopId || "").trim();
+    const document = await gstDb.gstDocument.findFirst({
+      where: { id: String(gstDocumentId).trim(), ...(scopedShopId ? { shopId: scopedShopId } : {}) },
       include: { lines: { orderBy: { lineNumber: "asc" } }, gstSettings: true, originalDocument: true },
     });
 

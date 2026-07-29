@@ -6,6 +6,7 @@ import {
   listDispatchReadyOrders,
   syncOrders,
 } from '../../lib/gst-client'
+import { adminAuthHeaders } from '../../lib/admin-fetch'
 import { GstResponseViewer } from './gst-response-viewer'
 
 type OrderLineRow = {
@@ -405,6 +406,7 @@ export function GstOrdersAdmin() {
 
       const fileRes = await fetch(`/api/gst/reports/runs/${encodeURIComponent(runPayload.run.id)}/download`, {
         credentials: 'include',
+        headers: await adminAuthHeaders(),
       })
       const filePayload = (await fileRes.json().catch(() => ({}))) as {
         ok?: boolean

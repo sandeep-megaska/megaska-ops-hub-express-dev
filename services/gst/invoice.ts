@@ -459,11 +459,15 @@ export async function buildInvoiceDraft(input: GstInvoiceDraftInput): Promise<Gs
 }
 
 export async function getGstInvoiceById(
-  gstDocumentId: string
+  gstDocumentId: string,
+  options: { shopId?: string } = {},
 ): Promise<GstServiceResult<Record<string, unknown>>> {
   try {
-    const document = await gstDb.gstDocument.findUnique({
-      where: { id: String(gstDocumentId).trim() },
+    // Tenant isolation: scope by shopId when provided so a foreign invoice id
+    // resolves to "not found" instead of leaking another shop's invoice.
+    const scopedShopId = String(options.shopId || "").trim();
+    const document = await gstDb.gstDocument.findFirst({
+      where: { id: String(gstDocumentId).trim(), ...(scopedShopId ? { shopId: scopedShopId } : {}) },
       include: {
         lines: { orderBy: { lineNumber: "asc" } },
         gstSettings: true,
