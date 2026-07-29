@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { buildShadowInvoiceDraft } from "../../../../../services/gst/shadow";
 import { getActiveGstSettings, getGstSettingsById } from "../../../../../services/gst/settings";
+import { resolveGstAdminShopId } from "../../../../../services/gst/request-shop";
 import type { GstDocumentLineInput } from "../../../../../services/gst/types";
 
 export const runtime = "nodejs";
@@ -30,9 +31,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "Invalid JSON payload" }, { status: 400 });
   }
 
-  const settingsResult = body.gstSettingsId
+  const shopId = await resolveGstAdminShopId(req);
+  if (!shopId) {
+    return NextResponse.json({ ok: false, error: "Unable to resolve shop for this request" }, { status: 400 });
+  }
+
+  let settingsResult = body.gstSettingsId
     ? await getGstSettingsById(String(body.gstSettingsId))
-    : await getActiveGstSettings();
+    : await getActiveGstSettings({ shopId });
+  // Tenant isolation: an explicit gstSettingsId must belong to the acting shop.
+  if (body.gstSettingsId && settingsResult.ok && settingsResult.data && String(settingsResult.data.shopId || "") !== shopId) {
+    settingsResult = { ok: false, error: "GST settings not found" };
+  }
   if (!settingsResult.ok || !settingsResult.data) {
     return NextResponse.json(
       { ok: false, error: settingsResult.error || "Unable to resolve GST settings" },

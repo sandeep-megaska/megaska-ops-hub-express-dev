@@ -1,15 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createTemplate, listTemplates } from "../../../../services/gst/template";
-import { getActiveGstSettings } from "../../../../services/gst/settings";
+import { getActiveGstSettings, getGstSettingsById } from "../../../../services/gst/settings";
+import { resolveGstAdminShopId } from "../../../../services/gst/request-shop";
 
 export const runtime = "nodejs";
 
-async function resolveSettingsId(explicitId?: string | null): Promise<{ id?: string; error?: string }> {
+// Resolve the gstSettings id to operate on, always bound to the acting shop.
+// An explicit gstSettingsId is honoured only if it belongs to this shop, so a
+// client cannot target another tenant's settings by supplying its id.
+async function resolveSettingsId(explicitId: string | null | undefined, shopId: string): Promise<{ id?: string; error?: string }> {
   if (explicitId && explicitId.trim()) {
-    return { id: explicitId.trim() };
+    const byId = await getGstSettingsById(explicitId.trim());
+    if (!byId.ok || !byId.data || String(byId.data.shopId || "") !== shopId) {
+      return { error: "GST settings not found" };
+    }
+    return { id: byId.data.id };
   }
 
-  const active = await getActiveGstSettings();
+  const active = await getActiveGstSettings({ shopId });
   if (!active.ok || !active.data) {
     return { error: active.error || "No active GST settings configured" };
   }
@@ -18,7 +26,12 @@ async function resolveSettingsId(explicitId?: string | null): Promise<{ id?: str
 }
 
 export async function GET(req: NextRequest) {
-  const settings = await resolveSettingsId(req.nextUrl.searchParams.get("gstSettingsId"));
+  const shopId = await resolveGstAdminShopId(req);
+  if (!shopId) {
+    return NextResponse.json({ ok: false, error: "Unable to resolve shop for this request" }, { status: 400 });
+  }
+
+  const settings = await resolveSettingsId(req.nextUrl.searchParams.get("gstSettingsId"), shopId);
   if (!settings.id) {
     return NextResponse.json({ ok: false, error: settings.error }, { status: 400 });
   }
@@ -37,8 +50,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "Invalid JSON payload" }, { status: 400 });
   }
 
+  const shopId = await resolveGstAdminShopId(req);
+  if (!shopId) {
+    return NextResponse.json({ ok: false, error: "Unable to resolve shop for this request" }, { status: 400 });
+  }
+
   const settings = await resolveSettingsId(
     body.gstSettingsId ? String(body.gstSettingsId) : req.nextUrl.searchParams.get("gstSettingsId"),
+    shopId,
   );
   if (!settings.id) {
     return NextResponse.json({ ok: false, error: settings.error }, { status: 400 });

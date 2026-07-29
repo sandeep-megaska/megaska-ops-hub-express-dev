@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getActiveGstSettings } from "../../../../../services/gst/settings";
+import { resolveGstAdminShopId } from "../../../../../services/gst/request-shop";
 import { createTemplate, listTemplates, resolveGstInvoiceTemplateConfig, updateTemplate } from "../../../../../services/gst/template";
 
 export const runtime = "nodejs";
 
 const DEFAULT_TEMPLATE_NAME = "Default GST Template";
 
-async function getOrCreateDefaultTemplate() {
-  const settings = await getActiveGstSettings();
+async function getOrCreateDefaultTemplate(shopId: string) {
+  const settings = await getActiveGstSettings({ shopId });
   if (!settings.ok || !settings.data) {
     return { ok: false as const, error: settings.error || "No active GST settings configured" };
   }
@@ -28,8 +29,11 @@ async function getOrCreateDefaultTemplate() {
   return { ok: true as const, template: created.data };
 }
 
-export async function GET() {
-  const resolved = await getOrCreateDefaultTemplate();
+export async function GET(req: NextRequest) {
+  const shopId = await resolveGstAdminShopId(req);
+  if (!shopId) return NextResponse.json({ ok: false, error: "Unable to resolve shop for this request" }, { status: 400 });
+
+  const resolved = await getOrCreateDefaultTemplate(shopId);
   if (!resolved.ok) return NextResponse.json({ ok: false, error: resolved.error }, { status: 400 });
   return NextResponse.json({ ok: true, template: resolved.template }, { status: 200 });
 }
@@ -38,7 +42,10 @@ export async function PATCH(req: NextRequest) {
   const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
   if (!body) return NextResponse.json({ ok: false, error: "Invalid JSON payload" }, { status: 400 });
 
-  const resolved = await getOrCreateDefaultTemplate();
+  const shopId = await resolveGstAdminShopId(req);
+  if (!shopId) return NextResponse.json({ ok: false, error: "Unable to resolve shop for this request" }, { status: 400 });
+
+  const resolved = await getOrCreateDefaultTemplate(shopId);
   if (!resolved.ok) return NextResponse.json({ ok: false, error: resolved.error }, { status: 400 });
 
   const existingThemeConfig = resolved.template.themeConfig || {};

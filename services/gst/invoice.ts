@@ -216,21 +216,22 @@ export async function buildInvoiceDraft(input: GstInvoiceDraftInput): Promise<Gs
     const settingsStartedAtMs = gstPerfNow();
     const requestedShopId = normalizeText(input.shopId) || null;
 
+    // Tenant isolation: resolve settings by the acting shop, or by an explicit
+    // server-resolved gstSettingsId. The former cross-tenant global fallback
+    // (getActiveGstSettings({ shopId: null })) is gone — it could stamp another
+    // shop's GST identity onto this invoice.
     const scopedSettingsResult = requestedShopId
       ? await getActiveGstSettings({ shopId: requestedShopId })
       : { ok: false, data: null, error: "missing shopId" };
 
-    const globalSettingsResult = await getActiveGstSettings({ shopId: null });
     const byIdSettingsResult = input.gstSettingsId ? await getGstSettingsById(input.gstSettingsId) : null;
 
     const settings =
       scopedSettingsResult.ok && scopedSettingsResult.data
         ? scopedSettingsResult.data
-        : globalSettingsResult.ok && globalSettingsResult.data
-          ? globalSettingsResult.data
-          : byIdSettingsResult?.ok && byIdSettingsResult.data
-            ? byIdSettingsResult.data
-            : null;
+        : byIdSettingsResult?.ok && byIdSettingsResult.data
+          ? byIdSettingsResult.data
+          : null;
 
     gstPerfLog("gst.buildInvoiceDraft.settingsResolution", settingsStartedAtMs, { sourceOrderId: input.sourceOrderId || null, requestedShopId, resolved: Boolean(settings) });
 
@@ -239,7 +240,6 @@ export async function buildInvoiceDraft(input: GstInvoiceDraftInput): Promise<Gs
         ok: false,
         error: toInvoiceDraftError(
           scopedSettingsResult.error ||
-            globalSettingsResult.error ||
             byIdSettingsResult?.error ||
             "Unable to resolve GST settings"
         ),
