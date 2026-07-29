@@ -1,11 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "../../../../services/db/prisma";
-
-function isAdmin(req: NextRequest) {
-  const key = req.headers.get("x-admin-key") || "";
-  const expected = String(process.env.ADMIN_OPS_KEY || "").trim();
-  return Boolean(expected && key === expected);
-}
+import { ShopResolutionError } from "../../../../services/shopify/shop";
+import { requireAdminShopFromRequest } from "../../../../services/shopify/admin-auth";
 
 function parseDateStart(value: string | null) {
   if (!value) return null;
@@ -25,9 +21,7 @@ function parseDateEnd(value: string | null) {
 
 export async function GET(req: NextRequest) {
   try {
-    if (!isAdmin(req)) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const shop = await requireAdminShopFromRequest(req);
 
     const status = req.nextUrl.searchParams.get("status")?.trim();
     const orderNumber = req.nextUrl.searchParams.get("orderNumber")?.trim();
@@ -39,6 +33,7 @@ export async function GET(req: NextRequest) {
 
     const requests = await prisma.orderActionRequest.findMany({
       where: {
+        shopId: shop.id,
         requestType: "ISSUE",
         ...(status ? { status: status as never } : {}),
         ...(orderNumber ? { orderNumber: { contains: orderNumber, mode: "insensitive" } } : {}),
@@ -63,6 +58,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ requests });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Failed" }, { status: 500 });
+    const status = error instanceof ShopResolutionError ? error.status : 500;
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Failed" }, { status });
   }
 }
