@@ -267,6 +267,7 @@ export function GstOrdersAdmin() {
     const response = await fetch(`/api/gst/invoices/${encodeURIComponent(invoiceDocumentId)}/pdf?format=html`, {
       credentials: 'include',
       cache: 'no-store',
+      headers: await adminAuthHeaders(),
     })
     const html = await response.text().catch(() => '')
     if (!response.ok || !html) {
@@ -289,6 +290,7 @@ export function GstOrdersAdmin() {
       const response = await fetch(`/api/gst/invoices/${encodeURIComponent(invoiceDocumentId)}/pdf`, {
         credentials: 'include',
         cache: 'no-store',
+        headers: await adminAuthHeaders(),
       })
 
       if (!response.ok) {
