@@ -7,6 +7,7 @@ import { createWalletReservationDiscountCode, disableWalletReservationDiscountCo
 export type WalletReservationStatus = "ACTIVE" | "CONSUMED" | "RELEASED" | "EXPIRED";
 
 export type CreateWalletReservationInput = {
+  shopId: string;
   customerProfileId: string;
   cartId: string;
   sourceFlow?: "CHECKOUT" | "BUY_NOW";
@@ -152,6 +153,12 @@ export async function createWalletReservation(input: CreateWalletReservationInpu
     throw new Error("Wallet amount must be a positive amount");
   }
 
+  // Tenant isolation: every reservation is bound to the acting shop.
+  const shopId = String(input.shopId || "").trim();
+  if (!shopId) {
+    throw new Error("shopId is required to create a wallet reservation");
+  }
+
   const currency = String(input.currency || "INR").trim() || "INR";
   const sourceFlow = input.sourceFlow || "CHECKOUT";
   let reservationId: string | null = null;
@@ -189,7 +196,7 @@ export async function createWalletReservation(input: CreateWalletReservationInpu
 
     await sanitizeStaleActiveWalletReservations(input.customerProfileId, tx);
 
-    const wallet = await getOrCreateWalletAccount(input.customerProfileId, currency);
+    const wallet = await getOrCreateWalletAccount(input.customerProfileId, currency, { shopId });
 
     const wallets = await tx.$queryRaw<Array<{ currentBalance: number }>>`
       SELECT "currentBalance"
@@ -280,10 +287,10 @@ export async function createWalletReservation(input: CreateWalletReservationInpu
 
     const rows = await tx.$queryRaw<Array<{ id: string; expiresAt: Date; walletAccountId: string }>>`
       INSERT INTO "WalletReservation" (
-        "id", "walletAccountId", "customerProfileId", "reservedAmount", "currency", "status",
+        "id", "shopId", "walletAccountId", "customerProfileId", "reservedAmount", "currency", "status",
         "sourceFlow", "cartReference", "sessionReference", "expiresAt", "createdAt", "updatedAt"
       ) VALUES (
-        ${rowId}, ${wallet.id}, ${input.customerProfileId}, ${input.amountMinor}, ${currency}, 'ACTIVE'::"WalletReservationStatus",
+        ${rowId}, ${shopId}, ${wallet.id}, ${input.customerProfileId}, ${input.amountMinor}, ${currency}, 'ACTIVE'::"WalletReservationStatus",
         ${sourceFlow}::"WalletReservationSourceFlow", ${input.cartId}, ${input.sessionReference || null}, ${expiresAt}, NOW(), NOW()
       )
       RETURNING "id", "expiresAt", "walletAccountId"
