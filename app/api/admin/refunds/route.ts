@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireShopFromRequest, ShopResolutionError } from "../../../../services/shopify/shop";
+import { ShopResolutionError } from "../../../../services/shopify/shop";
+import { requireAdminShopFromRequest } from "../../../../services/shopify/admin-auth";
 import { listAdminRefunds } from "../../../../services/refund/admin-refunds";
 
 export async function GET(req: NextRequest) {
   try {
-    const shop = await requireShopFromRequest(req);
+    const shop = await requireAdminShopFromRequest(req);
     const data = await listAdminRefunds(shop.id);
     return NextResponse.json({ refunds: data });
   } catch (error) {
