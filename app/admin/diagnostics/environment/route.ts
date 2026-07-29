@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "../../../../services/db/prisma";
 import {
@@ -41,13 +42,20 @@ function providedSecret(req: NextRequest) {
   ).trim();
 }
 
-function isAuthorized(req: NextRequest) {
-  if (process.env.NODE_ENV !== "production") return true;
+function timingSafeEqualStr(a: string, b: string): boolean {
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  return bufA.length === bufB.length && crypto.timingSafeEqual(bufA, bufB);
+}
 
+function isAuthorized(req: NextRequest) {
+  // Fail closed in every environment: always require the diagnostic secret.
+  // Previously any non-production build (including anything reachable by a bot,
+  // since middleware only redirects browser document navigations) was open.
   const expected = diagnosticSecret();
   if (!expected) return false;
 
-  return providedSecret(req) === expected;
+  return timingSafeEqualStr(providedSecret(req), expected);
 }
 
 function collectSearchParams(req: NextRequest) {
