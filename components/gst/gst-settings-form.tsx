@@ -101,6 +101,11 @@ function coerceDocFormat(raw: unknown, fallback: DocNumberFormat): DocNumberForm
   )
     ? (value.yearDisplay as DocNumberFormat['yearDisplay'])
     : fallback.yearDisplay
+  const migrationRaw = value.migration as Record<string, unknown> | null | undefined
+  const migration =
+    migrationRaw && typeof migrationRaw === 'object' && String(migrationRaw.periodLabel ?? '').trim() && Number(migrationRaw.nextNumber) >= 1
+      ? { periodLabel: String(migrationRaw.periodLabel).trim(), nextNumber: Math.floor(Number(migrationRaw.nextNumber)) }
+      : null
   return {
     prefix: typeof value.prefix === 'string' ? value.prefix : fallback.prefix,
     suffix: typeof value.suffix === 'string' ? value.suffix : fallback.suffix,
@@ -109,6 +114,7 @@ function coerceDocFormat(raw: unknown, fallback: DocNumberFormat): DocNumberForm
     startNumber: Number.isFinite(Number(value.startNumber)) ? Number(value.startNumber) : fallback.startNumber,
     resetPeriod,
     yearDisplay,
+    migration,
   }
 }
 
@@ -139,11 +145,27 @@ function DocFormatEditor({
   onChange: (next: DocNumberFormat) => void
 }) {
   const now = new Date()
-  const first = buildFormattedDocumentNumber(format, now, Math.max(1, Math.floor(format.startNumber) || 1))
+  const currentPeriod = counterPeriodLabel(format.resetPeriod, now)
+  const migrationActive = !!format.migration && format.migration.periodLabel === currentPeriod
+  const firstSeq = migrationActive
+    ? Math.max(1, Math.floor(format.migration!.nextNumber))
+    : Math.max(1, Math.floor(format.startNumber) || 1)
+  const first = buildFormattedDocumentNumber(format, now, firstSeq)
   const overLimit = first.length > 16
-  const periodLabel = counterPeriodLabel(format.resetPeriod, now)
+  const periodLabel = currentPeriod
 
   const set = (patch: Partial<DocNumberFormat>) => onChange({ ...format, ...patch })
+
+  // "Continue from" is a one-time seed anchored to the current period, so it
+  // stays anchored to whatever period the chosen reset rule produces today.
+  const setContinueFrom = (raw: string) => {
+    const n = Math.floor(Number(raw))
+    if (!raw.trim() || !Number.isFinite(n) || n < 1) {
+      set({ migration: null })
+      return
+    }
+    set({ migration: { periodLabel: currentPeriod, nextNumber: n } })
+  }
 
   return (
     <div className="rounded-xl border border-gray-200 p-4 space-y-3">
@@ -220,12 +242,20 @@ function DocFormatEditor({
             ))}
           </select>
         </label>
-        <label className="text-xs text-gray-600 md:col-span-2">
+        <label className="text-xs text-gray-600">
           Restart sequence
           <select
             className="mt-1 w-full rounded-lg border border-gray-300 px-2.5 py-2 text-sm"
             value={format.resetPeriod}
-            onChange={(e) => set({ resetPeriod: e.target.value as GstResetPeriod })}
+            onChange={(e) => {
+              const resetPeriod = e.target.value as GstResetPeriod
+              // Re-anchor a pending "continue from" seed to the period this
+              // reset rule produces today, so the seed lands on the right bucket.
+              const migration = format.migration
+                ? { ...format.migration, periodLabel: counterPeriodLabel(resetPeriod, now) }
+                : format.migration
+              onChange({ ...format, resetPeriod, migration })
+            }}
           >
             {RESET_PERIOD_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
@@ -233,6 +263,17 @@ function DocFormatEditor({
               </option>
             ))}
           </select>
+        </label>
+        <label className="text-xs text-gray-600">
+          Continue from (one-time)
+          <input
+            type="number"
+            min={1}
+            placeholder="next number"
+            className="mt-1 w-full rounded-lg border border-gray-300 px-2.5 py-2 text-sm"
+            value={format.migration ? format.migration.nextNumber : ''}
+            onChange={(e) => setContinueFrom(e.target.value)}
+          />
         </label>
       </div>
 
@@ -243,8 +284,17 @@ function DocFormatEditor({
             {' '}· current bucket <span className="font-mono text-gray-700">{periodLabel}</span>
           </>
         )}
+        {migrationActive && (
+          <span className="ml-1 text-emerald-700">· continuing from your last number (one-time)</span>
+        )}
         {overLimit && <span className="ml-2 text-red-600">Exceeds the 16-character GST limit</span>}
       </p>
+      {format.migration && !migrationActive && (
+        <p className="text-xs text-amber-600">
+          The “continue from” value is anchored to period {format.migration.periodLabel}, which isn’t the current
+          period ({currentPeriod}). It will only apply when that period is first numbered.
+        </p>
+      )}
     </div>
   )
 }
@@ -348,9 +398,11 @@ export function GstSettingsForm() {
           <div>
             <h3 className="text-sm font-semibold text-gray-900">Document Numbering</h3>
             <p className="text-xs text-gray-500">
-              Set the format, starting number and reset cycle for each document type. The starting number
-              applies the first time a new period is numbered, so migrating from another app keeps your
-              sequence continuous.
+              Set the format, start number and reset cycle for each document type. <span className="font-medium text-gray-700">Start number</span> is
+              what each new period resets to. To migrate from another GST app without a gap, put the
+              <span className="font-medium text-gray-700"> next</span> number to issue in <span className="font-medium text-gray-700">Continue from</span> —
+              that applies once, to the current period only, and later periods still reset to the start number.
+              Keep the composed number ≤ 16 characters (GST limit).
             </p>
           </div>
           <DocFormatEditor docKey="invoice" format={form.numbering.invoice} onChange={(next) => updateDoc('invoice', next)} />
