@@ -83099,6 +83099,7 @@ export namespace Prisma {
     creditNotePrefix: number
     debitNotePrefix: number
     invoiceNumberStrategy: number
+    numberingConfig: number
     defaultCurrency: number
     priceIncludesTax: number
     einvoiceEnabled: number
@@ -83164,6 +83165,7 @@ export namespace Prisma {
     creditNotePrefix?: true
     debitNotePrefix?: true
     invoiceNumberStrategy?: true
+    numberingConfig?: true
     defaultCurrency?: true
     priceIncludesTax?: true
     einvoiceEnabled?: true
@@ -83258,6 +83260,7 @@ export namespace Prisma {
     creditNotePrefix: string
     debitNotePrefix: string
     invoiceNumberStrategy: $Enums.GstNumberingStrategy
+    numberingConfig: JsonValue | null
     defaultCurrency: string
     priceIncludesTax: boolean
     einvoiceEnabled: boolean
@@ -83296,6 +83299,7 @@ export namespace Prisma {
     creditNotePrefix?: boolean
     debitNotePrefix?: boolean
     invoiceNumberStrategy?: boolean
+    numberingConfig?: boolean
     defaultCurrency?: boolean
     priceIncludesTax?: boolean
     einvoiceEnabled?: boolean
@@ -83327,6 +83331,7 @@ export namespace Prisma {
     creditNotePrefix?: boolean
     debitNotePrefix?: boolean
     invoiceNumberStrategy?: boolean
+    numberingConfig?: boolean
     defaultCurrency?: boolean
     priceIncludesTax?: boolean
     einvoiceEnabled?: boolean
@@ -83349,6 +83354,7 @@ export namespace Prisma {
     creditNotePrefix?: boolean
     debitNotePrefix?: boolean
     invoiceNumberStrategy?: boolean
+    numberingConfig?: boolean
     defaultCurrency?: boolean
     priceIncludesTax?: boolean
     einvoiceEnabled?: boolean
@@ -83371,6 +83377,7 @@ export namespace Prisma {
     creditNotePrefix?: boolean
     debitNotePrefix?: boolean
     invoiceNumberStrategy?: boolean
+    numberingConfig?: boolean
     defaultCurrency?: boolean
     priceIncludesTax?: boolean
     einvoiceEnabled?: boolean
@@ -83380,7 +83387,7 @@ export namespace Prisma {
     updatedAt?: boolean
   }
 
-  export type GstSettingsOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "shopId" | "legalName" | "tradeName" | "gstin" | "pan" | "stateCode" | "invoicePrefix" | "creditNotePrefix" | "debitNotePrefix" | "invoiceNumberStrategy" | "defaultCurrency" | "priceIncludesTax" | "einvoiceEnabled" | "autoGenerateOnOrderCreate" | "isActive" | "createdAt" | "updatedAt", ExtArgs["result"]["gstSettings"]>
+  export type GstSettingsOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "shopId" | "legalName" | "tradeName" | "gstin" | "pan" | "stateCode" | "invoicePrefix" | "creditNotePrefix" | "debitNotePrefix" | "invoiceNumberStrategy" | "numberingConfig" | "defaultCurrency" | "priceIncludesTax" | "einvoiceEnabled" | "autoGenerateOnOrderCreate" | "isActive" | "createdAt" | "updatedAt", ExtArgs["result"]["gstSettings"]>
   export type GstSettingsInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     documents?: boolean | GstSettings$documentsArgs<ExtArgs>
     counters?: boolean | GstSettings$countersArgs<ExtArgs>
@@ -83425,6 +83432,7 @@ export namespace Prisma {
       creditNotePrefix: string
       debitNotePrefix: string
       invoiceNumberStrategy: $Enums.GstNumberingStrategy
+      numberingConfig: Prisma.JsonValue | null
       defaultCurrency: string
       priceIncludesTax: boolean
       einvoiceEnabled: boolean
@@ -83875,6 +83883,7 @@ export namespace Prisma {
     readonly creditNotePrefix: FieldRef<"GstSettings", 'String'>
     readonly debitNotePrefix: FieldRef<"GstSettings", 'String'>
     readonly invoiceNumberStrategy: FieldRef<"GstSettings", 'GstNumberingStrategy'>
+    readonly numberingConfig: FieldRef<"GstSettings", 'Json'>
     readonly defaultCurrency: FieldRef<"GstSettings", 'String'>
     readonly priceIncludesTax: FieldRef<"GstSettings", 'Boolean'>
     readonly einvoiceEnabled: FieldRef<"GstSettings", 'Boolean'>
@@ -121731,6 +121740,7 @@ export namespace Prisma {
     creditNotePrefix: 'creditNotePrefix',
     debitNotePrefix: 'debitNotePrefix',
     invoiceNumberStrategy: 'invoiceNumberStrategy',
+    numberingConfig: 'numberingConfig',
     defaultCurrency: 'defaultCurrency',
     priceIncludesTax: 'priceIncludesTax',
     einvoiceEnabled: 'einvoiceEnabled',
@@ -130405,6 +130415,7 @@ export namespace Prisma {
     creditNotePrefix?: StringFilter<"GstSettings"> | string
     debitNotePrefix?: StringFilter<"GstSettings"> | string
     invoiceNumberStrategy?: EnumGstNumberingStrategyFilter<"GstSettings"> | $Enums.GstNumberingStrategy
+    numberingConfig?: JsonNullableFilter<"GstSettings">
     defaultCurrency?: StringFilter<"GstSettings"> | string
     priceIncludesTax?: BoolFilter<"GstSettings"> | boolean
     einvoiceEnabled?: BoolFilter<"GstSettings"> | boolean
@@ -130435,6 +130446,7 @@ export namespace Prisma {
     creditNotePrefix?: SortOrder
     debitNotePrefix?: SortOrder
     invoiceNumberStrategy?: SortOrder
+    numberingConfig?: SortOrderInput | SortOrder
     defaultCurrency?: SortOrder
     priceIncludesTax?: SortOrder
     einvoiceEnabled?: SortOrder
@@ -130468,6 +130480,7 @@ export namespace Prisma {
     creditNotePrefix?: StringFilter<"GstSettings"> | string
     debitNotePrefix?: StringFilter<"GstSettings"> | string
     invoiceNumberStrategy?: EnumGstNumberingStrategyFilter<"GstSettings"> | $Enums.GstNumberingStrategy
+    numberingConfig?: JsonNullableFilter<"GstSettings">
     defaultCurrency?: StringFilter<"GstSettings"> | string
     priceIncludesTax?: BoolFilter<"GstSettings"> | boolean
     einvoiceEnabled?: BoolFilter<"GstSettings"> | boolean
@@ -130498,6 +130511,7 @@ export namespace Prisma {
     creditNotePrefix?: SortOrder
     debitNotePrefix?: SortOrder
     invoiceNumberStrategy?: SortOrder
+    numberingConfig?: SortOrderInput | SortOrder
     defaultCurrency?: SortOrder
     priceIncludesTax?: SortOrder
     einvoiceEnabled?: SortOrder
@@ -130525,6 +130539,7 @@ export namespace Prisma {
     creditNotePrefix?: StringWithAggregatesFilter<"GstSettings"> | string
     debitNotePrefix?: StringWithAggregatesFilter<"GstSettings"> | string
     invoiceNumberStrategy?: EnumGstNumberingStrategyWithAggregatesFilter<"GstSettings"> | $Enums.GstNumberingStrategy
+    numberingConfig?: JsonNullableWithAggregatesFilter<"GstSettings">
     defaultCurrency?: StringWithAggregatesFilter<"GstSettings"> | string
     priceIncludesTax?: BoolWithAggregatesFilter<"GstSettings"> | boolean
     einvoiceEnabled?: BoolWithAggregatesFilter<"GstSettings"> | boolean
@@ -141705,6 +141720,7 @@ export namespace Prisma {
     creditNotePrefix: string
     debitNotePrefix: string
     invoiceNumberStrategy: $Enums.GstNumberingStrategy
+    numberingConfig?: NullableJsonNullValueInput | InputJsonValue
     defaultCurrency?: string
     priceIncludesTax?: boolean
     einvoiceEnabled?: boolean
@@ -141735,6 +141751,7 @@ export namespace Prisma {
     creditNotePrefix: string
     debitNotePrefix: string
     invoiceNumberStrategy: $Enums.GstNumberingStrategy
+    numberingConfig?: NullableJsonNullValueInput | InputJsonValue
     defaultCurrency?: string
     priceIncludesTax?: boolean
     einvoiceEnabled?: boolean
@@ -141763,6 +141780,7 @@ export namespace Prisma {
     creditNotePrefix?: StringFieldUpdateOperationsInput | string
     debitNotePrefix?: StringFieldUpdateOperationsInput | string
     invoiceNumberStrategy?: EnumGstNumberingStrategyFieldUpdateOperationsInput | $Enums.GstNumberingStrategy
+    numberingConfig?: NullableJsonNullValueInput | InputJsonValue
     defaultCurrency?: StringFieldUpdateOperationsInput | string
     priceIncludesTax?: BoolFieldUpdateOperationsInput | boolean
     einvoiceEnabled?: BoolFieldUpdateOperationsInput | boolean
@@ -141793,6 +141811,7 @@ export namespace Prisma {
     creditNotePrefix?: StringFieldUpdateOperationsInput | string
     debitNotePrefix?: StringFieldUpdateOperationsInput | string
     invoiceNumberStrategy?: EnumGstNumberingStrategyFieldUpdateOperationsInput | $Enums.GstNumberingStrategy
+    numberingConfig?: NullableJsonNullValueInput | InputJsonValue
     defaultCurrency?: StringFieldUpdateOperationsInput | string
     priceIncludesTax?: BoolFieldUpdateOperationsInput | boolean
     einvoiceEnabled?: BoolFieldUpdateOperationsInput | boolean
@@ -141822,6 +141841,7 @@ export namespace Prisma {
     creditNotePrefix: string
     debitNotePrefix: string
     invoiceNumberStrategy: $Enums.GstNumberingStrategy
+    numberingConfig?: NullableJsonNullValueInput | InputJsonValue
     defaultCurrency?: string
     priceIncludesTax?: boolean
     einvoiceEnabled?: boolean
@@ -141842,6 +141862,7 @@ export namespace Prisma {
     creditNotePrefix?: StringFieldUpdateOperationsInput | string
     debitNotePrefix?: StringFieldUpdateOperationsInput | string
     invoiceNumberStrategy?: EnumGstNumberingStrategyFieldUpdateOperationsInput | $Enums.GstNumberingStrategy
+    numberingConfig?: NullableJsonNullValueInput | InputJsonValue
     defaultCurrency?: StringFieldUpdateOperationsInput | string
     priceIncludesTax?: BoolFieldUpdateOperationsInput | boolean
     einvoiceEnabled?: BoolFieldUpdateOperationsInput | boolean
@@ -141863,6 +141884,7 @@ export namespace Prisma {
     creditNotePrefix?: StringFieldUpdateOperationsInput | string
     debitNotePrefix?: StringFieldUpdateOperationsInput | string
     invoiceNumberStrategy?: EnumGstNumberingStrategyFieldUpdateOperationsInput | $Enums.GstNumberingStrategy
+    numberingConfig?: NullableJsonNullValueInput | InputJsonValue
     defaultCurrency?: StringFieldUpdateOperationsInput | string
     priceIncludesTax?: BoolFieldUpdateOperationsInput | boolean
     einvoiceEnabled?: BoolFieldUpdateOperationsInput | boolean
@@ -151490,6 +151512,7 @@ export namespace Prisma {
     creditNotePrefix?: SortOrder
     debitNotePrefix?: SortOrder
     invoiceNumberStrategy?: SortOrder
+    numberingConfig?: SortOrder
     defaultCurrency?: SortOrder
     priceIncludesTax?: SortOrder
     einvoiceEnabled?: SortOrder
@@ -165922,6 +165945,7 @@ export namespace Prisma {
     creditNotePrefix: string
     debitNotePrefix: string
     invoiceNumberStrategy: $Enums.GstNumberingStrategy
+    numberingConfig?: NullableJsonNullValueInput | InputJsonValue
     defaultCurrency?: string
     priceIncludesTax?: boolean
     einvoiceEnabled?: boolean
@@ -165950,6 +165974,7 @@ export namespace Prisma {
     creditNotePrefix: string
     debitNotePrefix: string
     invoiceNumberStrategy: $Enums.GstNumberingStrategy
+    numberingConfig?: NullableJsonNullValueInput | InputJsonValue
     defaultCurrency?: string
     priceIncludesTax?: boolean
     einvoiceEnabled?: boolean
@@ -168237,6 +168262,7 @@ export namespace Prisma {
     creditNotePrefix?: StringFilter<"GstSettings"> | string
     debitNotePrefix?: StringFilter<"GstSettings"> | string
     invoiceNumberStrategy?: EnumGstNumberingStrategyFilter<"GstSettings"> | $Enums.GstNumberingStrategy
+    numberingConfig?: JsonNullableFilter<"GstSettings">
     defaultCurrency?: StringFilter<"GstSettings"> | string
     priceIncludesTax?: BoolFilter<"GstSettings"> | boolean
     einvoiceEnabled?: BoolFilter<"GstSettings"> | boolean
@@ -191955,6 +191981,7 @@ export namespace Prisma {
     creditNotePrefix: string
     debitNotePrefix: string
     invoiceNumberStrategy: $Enums.GstNumberingStrategy
+    numberingConfig?: NullableJsonNullValueInput | InputJsonValue
     defaultCurrency?: string
     priceIncludesTax?: boolean
     einvoiceEnabled?: boolean
@@ -191984,6 +192011,7 @@ export namespace Prisma {
     creditNotePrefix: string
     debitNotePrefix: string
     invoiceNumberStrategy: $Enums.GstNumberingStrategy
+    numberingConfig?: NullableJsonNullValueInput | InputJsonValue
     defaultCurrency?: string
     priceIncludesTax?: boolean
     einvoiceEnabled?: boolean
@@ -192027,6 +192055,7 @@ export namespace Prisma {
     creditNotePrefix?: StringFieldUpdateOperationsInput | string
     debitNotePrefix?: StringFieldUpdateOperationsInput | string
     invoiceNumberStrategy?: EnumGstNumberingStrategyFieldUpdateOperationsInput | $Enums.GstNumberingStrategy
+    numberingConfig?: NullableJsonNullValueInput | InputJsonValue
     defaultCurrency?: StringFieldUpdateOperationsInput | string
     priceIncludesTax?: BoolFieldUpdateOperationsInput | boolean
     einvoiceEnabled?: BoolFieldUpdateOperationsInput | boolean
@@ -192056,6 +192085,7 @@ export namespace Prisma {
     creditNotePrefix?: StringFieldUpdateOperationsInput | string
     debitNotePrefix?: StringFieldUpdateOperationsInput | string
     invoiceNumberStrategy?: EnumGstNumberingStrategyFieldUpdateOperationsInput | $Enums.GstNumberingStrategy
+    numberingConfig?: NullableJsonNullValueInput | InputJsonValue
     defaultCurrency?: StringFieldUpdateOperationsInput | string
     priceIncludesTax?: BoolFieldUpdateOperationsInput | boolean
     einvoiceEnabled?: BoolFieldUpdateOperationsInput | boolean
@@ -192083,6 +192113,7 @@ export namespace Prisma {
     creditNotePrefix: string
     debitNotePrefix: string
     invoiceNumberStrategy: $Enums.GstNumberingStrategy
+    numberingConfig?: NullableJsonNullValueInput | InputJsonValue
     defaultCurrency?: string
     priceIncludesTax?: boolean
     einvoiceEnabled?: boolean
@@ -192112,6 +192143,7 @@ export namespace Prisma {
     creditNotePrefix: string
     debitNotePrefix: string
     invoiceNumberStrategy: $Enums.GstNumberingStrategy
+    numberingConfig?: NullableJsonNullValueInput | InputJsonValue
     defaultCurrency?: string
     priceIncludesTax?: boolean
     einvoiceEnabled?: boolean
@@ -192714,6 +192746,7 @@ export namespace Prisma {
     creditNotePrefix?: StringFieldUpdateOperationsInput | string
     debitNotePrefix?: StringFieldUpdateOperationsInput | string
     invoiceNumberStrategy?: EnumGstNumberingStrategyFieldUpdateOperationsInput | $Enums.GstNumberingStrategy
+    numberingConfig?: NullableJsonNullValueInput | InputJsonValue
     defaultCurrency?: StringFieldUpdateOperationsInput | string
     priceIncludesTax?: BoolFieldUpdateOperationsInput | boolean
     einvoiceEnabled?: BoolFieldUpdateOperationsInput | boolean
@@ -192743,6 +192776,7 @@ export namespace Prisma {
     creditNotePrefix?: StringFieldUpdateOperationsInput | string
     debitNotePrefix?: StringFieldUpdateOperationsInput | string
     invoiceNumberStrategy?: EnumGstNumberingStrategyFieldUpdateOperationsInput | $Enums.GstNumberingStrategy
+    numberingConfig?: NullableJsonNullValueInput | InputJsonValue
     defaultCurrency?: StringFieldUpdateOperationsInput | string
     priceIncludesTax?: BoolFieldUpdateOperationsInput | boolean
     einvoiceEnabled?: BoolFieldUpdateOperationsInput | boolean
@@ -193948,6 +193982,7 @@ export namespace Prisma {
     creditNotePrefix: string
     debitNotePrefix: string
     invoiceNumberStrategy: $Enums.GstNumberingStrategy
+    numberingConfig?: NullableJsonNullValueInput | InputJsonValue
     defaultCurrency?: string
     priceIncludesTax?: boolean
     einvoiceEnabled?: boolean
@@ -193977,6 +194012,7 @@ export namespace Prisma {
     creditNotePrefix: string
     debitNotePrefix: string
     invoiceNumberStrategy: $Enums.GstNumberingStrategy
+    numberingConfig?: NullableJsonNullValueInput | InputJsonValue
     defaultCurrency?: string
     priceIncludesTax?: boolean
     einvoiceEnabled?: boolean
@@ -194100,6 +194136,7 @@ export namespace Prisma {
     creditNotePrefix?: StringFieldUpdateOperationsInput | string
     debitNotePrefix?: StringFieldUpdateOperationsInput | string
     invoiceNumberStrategy?: EnumGstNumberingStrategyFieldUpdateOperationsInput | $Enums.GstNumberingStrategy
+    numberingConfig?: NullableJsonNullValueInput | InputJsonValue
     defaultCurrency?: StringFieldUpdateOperationsInput | string
     priceIncludesTax?: BoolFieldUpdateOperationsInput | boolean
     einvoiceEnabled?: BoolFieldUpdateOperationsInput | boolean
@@ -194129,6 +194166,7 @@ export namespace Prisma {
     creditNotePrefix?: StringFieldUpdateOperationsInput | string
     debitNotePrefix?: StringFieldUpdateOperationsInput | string
     invoiceNumberStrategy?: EnumGstNumberingStrategyFieldUpdateOperationsInput | $Enums.GstNumberingStrategy
+    numberingConfig?: NullableJsonNullValueInput | InputJsonValue
     defaultCurrency?: StringFieldUpdateOperationsInput | string
     priceIncludesTax?: BoolFieldUpdateOperationsInput | boolean
     einvoiceEnabled?: BoolFieldUpdateOperationsInput | boolean
@@ -194440,6 +194478,7 @@ export namespace Prisma {
     creditNotePrefix: string
     debitNotePrefix: string
     invoiceNumberStrategy: $Enums.GstNumberingStrategy
+    numberingConfig?: NullableJsonNullValueInput | InputJsonValue
     defaultCurrency?: string
     priceIncludesTax?: boolean
     einvoiceEnabled?: boolean
@@ -194469,6 +194508,7 @@ export namespace Prisma {
     creditNotePrefix: string
     debitNotePrefix: string
     invoiceNumberStrategy: $Enums.GstNumberingStrategy
+    numberingConfig?: NullableJsonNullValueInput | InputJsonValue
     defaultCurrency?: string
     priceIncludesTax?: boolean
     einvoiceEnabled?: boolean
@@ -194552,6 +194592,7 @@ export namespace Prisma {
     creditNotePrefix?: StringFieldUpdateOperationsInput | string
     debitNotePrefix?: StringFieldUpdateOperationsInput | string
     invoiceNumberStrategy?: EnumGstNumberingStrategyFieldUpdateOperationsInput | $Enums.GstNumberingStrategy
+    numberingConfig?: NullableJsonNullValueInput | InputJsonValue
     defaultCurrency?: StringFieldUpdateOperationsInput | string
     priceIncludesTax?: BoolFieldUpdateOperationsInput | boolean
     einvoiceEnabled?: BoolFieldUpdateOperationsInput | boolean
@@ -194581,6 +194622,7 @@ export namespace Prisma {
     creditNotePrefix?: StringFieldUpdateOperationsInput | string
     debitNotePrefix?: StringFieldUpdateOperationsInput | string
     invoiceNumberStrategy?: EnumGstNumberingStrategyFieldUpdateOperationsInput | $Enums.GstNumberingStrategy
+    numberingConfig?: NullableJsonNullValueInput | InputJsonValue
     defaultCurrency?: StringFieldUpdateOperationsInput | string
     priceIncludesTax?: BoolFieldUpdateOperationsInput | boolean
     einvoiceEnabled?: BoolFieldUpdateOperationsInput | boolean
@@ -194624,6 +194666,7 @@ export namespace Prisma {
     creditNotePrefix: string
     debitNotePrefix: string
     invoiceNumberStrategy: $Enums.GstNumberingStrategy
+    numberingConfig?: NullableJsonNullValueInput | InputJsonValue
     defaultCurrency?: string
     priceIncludesTax?: boolean
     einvoiceEnabled?: boolean
@@ -194653,6 +194696,7 @@ export namespace Prisma {
     creditNotePrefix: string
     debitNotePrefix: string
     invoiceNumberStrategy: $Enums.GstNumberingStrategy
+    numberingConfig?: NullableJsonNullValueInput | InputJsonValue
     defaultCurrency?: string
     priceIncludesTax?: boolean
     einvoiceEnabled?: boolean
@@ -194894,6 +194938,7 @@ export namespace Prisma {
     creditNotePrefix?: StringFieldUpdateOperationsInput | string
     debitNotePrefix?: StringFieldUpdateOperationsInput | string
     invoiceNumberStrategy?: EnumGstNumberingStrategyFieldUpdateOperationsInput | $Enums.GstNumberingStrategy
+    numberingConfig?: NullableJsonNullValueInput | InputJsonValue
     defaultCurrency?: StringFieldUpdateOperationsInput | string
     priceIncludesTax?: BoolFieldUpdateOperationsInput | boolean
     einvoiceEnabled?: BoolFieldUpdateOperationsInput | boolean
@@ -194923,6 +194968,7 @@ export namespace Prisma {
     creditNotePrefix?: StringFieldUpdateOperationsInput | string
     debitNotePrefix?: StringFieldUpdateOperationsInput | string
     invoiceNumberStrategy?: EnumGstNumberingStrategyFieldUpdateOperationsInput | $Enums.GstNumberingStrategy
+    numberingConfig?: NullableJsonNullValueInput | InputJsonValue
     defaultCurrency?: StringFieldUpdateOperationsInput | string
     priceIncludesTax?: BoolFieldUpdateOperationsInput | boolean
     einvoiceEnabled?: BoolFieldUpdateOperationsInput | boolean
@@ -196518,6 +196564,7 @@ export namespace Prisma {
     creditNotePrefix: string
     debitNotePrefix: string
     invoiceNumberStrategy: $Enums.GstNumberingStrategy
+    numberingConfig?: NullableJsonNullValueInput | InputJsonValue
     defaultCurrency?: string
     priceIncludesTax?: boolean
     einvoiceEnabled?: boolean
@@ -196547,6 +196594,7 @@ export namespace Prisma {
     creditNotePrefix: string
     debitNotePrefix: string
     invoiceNumberStrategy: $Enums.GstNumberingStrategy
+    numberingConfig?: NullableJsonNullValueInput | InputJsonValue
     defaultCurrency?: string
     priceIncludesTax?: boolean
     einvoiceEnabled?: boolean
@@ -196787,6 +196835,7 @@ export namespace Prisma {
     creditNotePrefix?: StringFieldUpdateOperationsInput | string
     debitNotePrefix?: StringFieldUpdateOperationsInput | string
     invoiceNumberStrategy?: EnumGstNumberingStrategyFieldUpdateOperationsInput | $Enums.GstNumberingStrategy
+    numberingConfig?: NullableJsonNullValueInput | InputJsonValue
     defaultCurrency?: StringFieldUpdateOperationsInput | string
     priceIncludesTax?: BoolFieldUpdateOperationsInput | boolean
     einvoiceEnabled?: BoolFieldUpdateOperationsInput | boolean
@@ -196816,6 +196865,7 @@ export namespace Prisma {
     creditNotePrefix?: StringFieldUpdateOperationsInput | string
     debitNotePrefix?: StringFieldUpdateOperationsInput | string
     invoiceNumberStrategy?: EnumGstNumberingStrategyFieldUpdateOperationsInput | $Enums.GstNumberingStrategy
+    numberingConfig?: NullableJsonNullValueInput | InputJsonValue
     defaultCurrency?: StringFieldUpdateOperationsInput | string
     priceIncludesTax?: BoolFieldUpdateOperationsInput | boolean
     einvoiceEnabled?: BoolFieldUpdateOperationsInput | boolean
@@ -197140,6 +197190,7 @@ export namespace Prisma {
     creditNotePrefix: string
     debitNotePrefix: string
     invoiceNumberStrategy: $Enums.GstNumberingStrategy
+    numberingConfig?: NullableJsonNullValueInput | InputJsonValue
     defaultCurrency?: string
     priceIncludesTax?: boolean
     einvoiceEnabled?: boolean
@@ -197169,6 +197220,7 @@ export namespace Prisma {
     creditNotePrefix: string
     debitNotePrefix: string
     invoiceNumberStrategy: $Enums.GstNumberingStrategy
+    numberingConfig?: NullableJsonNullValueInput | InputJsonValue
     defaultCurrency?: string
     priceIncludesTax?: boolean
     einvoiceEnabled?: boolean
@@ -197212,6 +197264,7 @@ export namespace Prisma {
     creditNotePrefix?: StringFieldUpdateOperationsInput | string
     debitNotePrefix?: StringFieldUpdateOperationsInput | string
     invoiceNumberStrategy?: EnumGstNumberingStrategyFieldUpdateOperationsInput | $Enums.GstNumberingStrategy
+    numberingConfig?: NullableJsonNullValueInput | InputJsonValue
     defaultCurrency?: StringFieldUpdateOperationsInput | string
     priceIncludesTax?: BoolFieldUpdateOperationsInput | boolean
     einvoiceEnabled?: BoolFieldUpdateOperationsInput | boolean
@@ -197241,6 +197294,7 @@ export namespace Prisma {
     creditNotePrefix?: StringFieldUpdateOperationsInput | string
     debitNotePrefix?: StringFieldUpdateOperationsInput | string
     invoiceNumberStrategy?: EnumGstNumberingStrategyFieldUpdateOperationsInput | $Enums.GstNumberingStrategy
+    numberingConfig?: NullableJsonNullValueInput | InputJsonValue
     defaultCurrency?: StringFieldUpdateOperationsInput | string
     priceIncludesTax?: BoolFieldUpdateOperationsInput | boolean
     einvoiceEnabled?: BoolFieldUpdateOperationsInput | boolean
@@ -197268,6 +197322,7 @@ export namespace Prisma {
     creditNotePrefix: string
     debitNotePrefix: string
     invoiceNumberStrategy: $Enums.GstNumberingStrategy
+    numberingConfig?: NullableJsonNullValueInput | InputJsonValue
     defaultCurrency?: string
     priceIncludesTax?: boolean
     einvoiceEnabled?: boolean
@@ -197297,6 +197352,7 @@ export namespace Prisma {
     creditNotePrefix: string
     debitNotePrefix: string
     invoiceNumberStrategy: $Enums.GstNumberingStrategy
+    numberingConfig?: NullableJsonNullValueInput | InputJsonValue
     defaultCurrency?: string
     priceIncludesTax?: boolean
     einvoiceEnabled?: boolean
@@ -197340,6 +197396,7 @@ export namespace Prisma {
     creditNotePrefix?: StringFieldUpdateOperationsInput | string
     debitNotePrefix?: StringFieldUpdateOperationsInput | string
     invoiceNumberStrategy?: EnumGstNumberingStrategyFieldUpdateOperationsInput | $Enums.GstNumberingStrategy
+    numberingConfig?: NullableJsonNullValueInput | InputJsonValue
     defaultCurrency?: StringFieldUpdateOperationsInput | string
     priceIncludesTax?: BoolFieldUpdateOperationsInput | boolean
     einvoiceEnabled?: BoolFieldUpdateOperationsInput | boolean
@@ -197369,6 +197426,7 @@ export namespace Prisma {
     creditNotePrefix?: StringFieldUpdateOperationsInput | string
     debitNotePrefix?: StringFieldUpdateOperationsInput | string
     invoiceNumberStrategy?: EnumGstNumberingStrategyFieldUpdateOperationsInput | $Enums.GstNumberingStrategy
+    numberingConfig?: NullableJsonNullValueInput | InputJsonValue
     defaultCurrency?: StringFieldUpdateOperationsInput | string
     priceIncludesTax?: BoolFieldUpdateOperationsInput | boolean
     einvoiceEnabled?: BoolFieldUpdateOperationsInput | boolean
@@ -202159,6 +202217,7 @@ export namespace Prisma {
     creditNotePrefix: string
     debitNotePrefix: string
     invoiceNumberStrategy: $Enums.GstNumberingStrategy
+    numberingConfig?: NullableJsonNullValueInput | InputJsonValue
     defaultCurrency?: string
     priceIncludesTax?: boolean
     einvoiceEnabled?: boolean
@@ -203297,6 +203356,7 @@ export namespace Prisma {
     creditNotePrefix?: StringFieldUpdateOperationsInput | string
     debitNotePrefix?: StringFieldUpdateOperationsInput | string
     invoiceNumberStrategy?: EnumGstNumberingStrategyFieldUpdateOperationsInput | $Enums.GstNumberingStrategy
+    numberingConfig?: NullableJsonNullValueInput | InputJsonValue
     defaultCurrency?: StringFieldUpdateOperationsInput | string
     priceIncludesTax?: BoolFieldUpdateOperationsInput | boolean
     einvoiceEnabled?: BoolFieldUpdateOperationsInput | boolean
@@ -203325,6 +203385,7 @@ export namespace Prisma {
     creditNotePrefix?: StringFieldUpdateOperationsInput | string
     debitNotePrefix?: StringFieldUpdateOperationsInput | string
     invoiceNumberStrategy?: EnumGstNumberingStrategyFieldUpdateOperationsInput | $Enums.GstNumberingStrategy
+    numberingConfig?: NullableJsonNullValueInput | InputJsonValue
     defaultCurrency?: StringFieldUpdateOperationsInput | string
     priceIncludesTax?: BoolFieldUpdateOperationsInput | boolean
     einvoiceEnabled?: BoolFieldUpdateOperationsInput | boolean
@@ -203353,6 +203414,7 @@ export namespace Prisma {
     creditNotePrefix?: StringFieldUpdateOperationsInput | string
     debitNotePrefix?: StringFieldUpdateOperationsInput | string
     invoiceNumberStrategy?: EnumGstNumberingStrategyFieldUpdateOperationsInput | $Enums.GstNumberingStrategy
+    numberingConfig?: NullableJsonNullValueInput | InputJsonValue
     defaultCurrency?: StringFieldUpdateOperationsInput | string
     priceIncludesTax?: BoolFieldUpdateOperationsInput | boolean
     einvoiceEnabled?: BoolFieldUpdateOperationsInput | boolean

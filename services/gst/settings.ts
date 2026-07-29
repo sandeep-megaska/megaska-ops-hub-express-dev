@@ -4,6 +4,7 @@ import { GST_DEFAULT_NUMBERING_STRATEGY } from "./constants";
 import type { GstNumberingStrategy } from "./constants";
 import type { GstServiceResult } from "./types";
 import { GSTIN_REGEX, PAN_REGEX, PREFIX_REGEX, isValidStateCode } from "./validation";
+import { normalizeNumberingConfig, type GstNumberingConfig } from "./numbering-config";
 
 export interface GstSettingsSnapshot {
   id: string;
@@ -17,6 +18,7 @@ export interface GstSettingsSnapshot {
   creditNotePrefix: string;
   debitNotePrefix: string;
   invoiceNumberStrategy: GstNumberingStrategy;
+  numberingConfig?: GstNumberingConfig | null;
   defaultCurrency: string;
   priceIncludesTax: boolean;
   einvoiceEnabled: boolean;
@@ -35,6 +37,7 @@ export interface GstSettingsWriteInput {
   creditNotePrefix: string;
   debitNotePrefix: string;
   invoiceNumberStrategy?: GstSettingsSnapshot["invoiceNumberStrategy"];
+  numberingConfig?: unknown;
   defaultCurrency?: string;
   priceIncludesTax?: boolean;
   einvoiceEnabled?: boolean;
@@ -63,6 +66,7 @@ function toSnapshot(settings: GstSettingsSnapshot | null | undefined): GstSettin
     creditNotePrefix: settings.creditNotePrefix,
     debitNotePrefix: settings.debitNotePrefix,
     invoiceNumberStrategy: settings.invoiceNumberStrategy,
+    numberingConfig: (settings.numberingConfig as GstNumberingConfig | null | undefined) ?? null,
     defaultCurrency: settings.defaultCurrency,
     priceIncludesTax: Boolean(settings.priceIncludesTax),
     einvoiceEnabled: settings.einvoiceEnabled,
@@ -112,6 +116,11 @@ export function validateGstIdentityConfig(
     errors.push("gstin PAN segment and pan must match");
   }
 
+  const numberingResult = normalizeNumberingConfig(input.numberingConfig);
+  if (!numberingResult.ok) {
+    errors.push(numberingResult.error || "Invalid GST numbering configuration");
+  }
+
   if (errors.length > 0) {
     return { ok: false, error: errors.join("; "), data: { messages: errors } };
   }
@@ -129,6 +138,7 @@ export function validateGstIdentityConfig(
         creditNotePrefix,
         debitNotePrefix,
         invoiceNumberStrategy: input.invoiceNumberStrategy ?? GST_DEFAULT_NUMBERING_STRATEGY,
+        numberingConfig: numberingResult.data,
         defaultCurrency: normalize(input.defaultCurrency || "INR").toUpperCase(),
         priceIncludesTax: input.priceIncludesTax !== false,
         einvoiceEnabled: Boolean(input.einvoiceEnabled),
@@ -268,6 +278,7 @@ export async function upsertGstSettings(input: GstSettingsWriteInput): Promise<G
             creditNotePrefix: String(normalized.creditNotePrefix),
             debitNotePrefix: String(normalized.debitNotePrefix),
             invoiceNumberStrategy: normalized.invoiceNumberStrategy,
+            numberingConfig: normalized.numberingConfig,
             defaultCurrency: String(normalized.defaultCurrency || "INR"),
             priceIncludesTax: normalized.priceIncludesTax !== false,
             einvoiceEnabled: Boolean(normalized.einvoiceEnabled),
@@ -297,6 +308,7 @@ export async function upsertGstSettings(input: GstSettingsWriteInput): Promise<G
           creditNotePrefix: String(normalized.creditNotePrefix),
           debitNotePrefix: String(normalized.debitNotePrefix),
           invoiceNumberStrategy: normalized.invoiceNumberStrategy,
+          numberingConfig: normalized.numberingConfig,
           defaultCurrency: String(normalized.defaultCurrency || "INR"),
           priceIncludesTax: normalized.priceIncludesTax !== false,
           einvoiceEnabled: Boolean(normalized.einvoiceEnabled),
@@ -313,6 +325,7 @@ export async function upsertGstSettings(input: GstSettingsWriteInput): Promise<G
           creditNotePrefix: String(normalized.creditNotePrefix),
           debitNotePrefix: String(normalized.debitNotePrefix),
           invoiceNumberStrategy: normalized.invoiceNumberStrategy,
+          numberingConfig: normalized.numberingConfig,
           defaultCurrency: String(normalized.defaultCurrency || "INR"),
           priceIncludesTax: normalized.priceIncludesTax !== false,
           einvoiceEnabled: Boolean(normalized.einvoiceEnabled),
