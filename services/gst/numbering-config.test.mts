@@ -5,7 +5,9 @@ import {
   buildFormattedDocumentNumber,
   counterPeriodLabel,
   legacyDocFormat,
+  normalizeNumberingConfig,
   resolveDocFormat,
+  seedForPeriod,
   validateDocNumberFormat,
   type DocNumberFormat,
 } from "./numbering-config.ts";
@@ -74,6 +76,50 @@ test("resolveDocFormat prefers numberingConfig over legacy", () => {
   });
   assert.equal(resolved.startNumber, 11205);
   assert.equal(buildFormattedDocumentNumber(resolved, APR_2026, 11205), "11205");
+});
+
+test("migration seed applies to its period only; other periods use startNumber", () => {
+  // Compliant ≤16-char series that resets to 1 each FY, but continues this FY
+  // (26-27) from the last number issued by the old app (649 → next is 650).
+  const f = fmt({
+    prefix: "MEG",
+    separator: "/",
+    minDigits: 5,
+    yearDisplay: "FINANCIAL_YEAR",
+    resetPeriod: "FINANCIAL_YEAR",
+    startNumber: 1,
+    migration: { periodLabel: "26-27", nextNumber: 650 },
+  });
+
+  // Composed sample stays within the GST 16-char limit.
+  assert.equal(validateDocNumberFormat(f).ok, true);
+  assert.equal(buildFormattedDocumentNumber(f, APR_2026, 650), "MEG/26-27/00650");
+  assert.equal("MEG/26-27/00650".length <= 16, true);
+
+  // This FY: seed the new counter to 649 so the first document is 650.
+  assert.equal(seedForPeriod(f, "26-27"), 649);
+  // Next FY: migration does not apply — reset to startNumber (1), seed 0.
+  assert.equal(seedForPeriod(f, "27-28"), 0);
+});
+
+test("migration survives normalizeNumberingConfig round-trip", () => {
+  const result = normalizeNumberingConfig({
+    invoice: {
+      prefix: "MEG",
+      separator: "/",
+      minDigits: 5,
+      yearDisplay: "FINANCIAL_YEAR",
+      resetPeriod: "FINANCIAL_YEAR",
+      startNumber: 1,
+      migration: { periodLabel: "26-27", nextNumber: 650 },
+    },
+    creditNote: { prefix: "MEGCN", separator: "/", minDigits: 5 },
+    debitNote: { prefix: "MEGDN", separator: "/", minDigits: 5 },
+  });
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.data?.invoice.migration, { periodLabel: "26-27", nextNumber: 650 });
+  // A malformed migration is dropped, not fatal.
+  assert.equal(result.data?.creditNote.migration ?? null, null);
 });
 
 test("validation: 16-char GST limit and charset", () => {

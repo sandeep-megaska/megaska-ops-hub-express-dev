@@ -12,14 +12,27 @@ export type GstResetPeriod = "CONTINUOUS" | "FINANCIAL_YEAR" | "CALENDAR_YEAR" |
 export type GstYearDisplay = "NONE" | "FINANCIAL_YEAR" | "CALENDAR_YEAR" | "MONTHLY";
 export type GstNumberingDocKey = "invoice" | "creditNote" | "debitNote";
 
+/**
+ * One-time migration seed for a single period. When a shop moves from another
+ * GST app mid-sequence, the *current* period must continue from the last number
+ * that app issued, while every *future* period still resets to `startNumber`.
+ * `periodLabel` anchors the seed to one counter bucket (e.g. "26-27"); once that
+ * period's counter exists the seed never reapplies, and other periods ignore it.
+ */
+export interface DocNumberMigration {
+  periodLabel: string; // counter bucket this seed applies to (see counterPeriodLabel)
+  nextNumber: number; // the first number to issue in that period (>= 1)
+}
+
 export interface DocNumberFormat {
   prefix: string;
   suffix: string;
   separator: string;
   minDigits: number; // leading-zero padding; 0 = none
-  startNumber: number; // first number in a period (>= 1)
+  startNumber: number; // first number of a fresh period (>= 1)
   resetPeriod: GstResetPeriod; // when the counter restarts
   yearDisplay: GstYearDisplay; // period label shown inside the number
+  migration?: DocNumberMigration | null; // one-time continue-from seed for one period
 }
 
 export type GstNumberingConfig = Record<GstNumberingDocKey, DocNumberFormat>;
@@ -93,6 +106,19 @@ export function buildFormattedDocumentNumber(format: DocNumberFormat, date: Date
   return `${segments.join(separator)}${suffix}`;
 }
 
+/**
+ * Counter seed (its `lastNumber` at creation) for a period's first document.
+ * The one-time migration seed wins for its own period; every other period uses
+ * `startNumber`. Seeding only ever happens when a counter is created, so an
+ * advanced sequence is never reset and the migration value applies exactly once.
+ */
+export function seedForPeriod(format: DocNumberFormat, periodLabel: string): number {
+  if (format.migration && format.migration.periodLabel === periodLabel) {
+    return Math.max(0, Math.floor(format.migration.nextNumber) - 1);
+  }
+  return Math.max(0, Math.floor(format.startNumber) - 1);
+}
+
 export interface DocNumberFormatValidation {
   ok: boolean;
   error?: string;
@@ -110,7 +136,11 @@ export function validateDocNumberFormat(format: DocNumberFormat): DocNumberForma
   }
   // Longest realistic value governs the 16-char GST limit: a large sequence in
   // a leap-ish month, padded. Sample with a wide sequence to be safe.
-  const sample = buildFormattedDocumentNumber(format, new Date(Date.UTC(2026, 3, 1)), Math.max(format.startNumber, 999999));
+  const sample = buildFormattedDocumentNumber(
+    format,
+    new Date(Date.UTC(2026, 3, 1)),
+    Math.max(format.startNumber, format.migration?.nextNumber ?? 0, 999999),
+  );
   if (sample.length > GST_MAX_NUMBER_LENGTH) {
     return { ok: false, error: `Composed number "${sample}" exceeds the ${GST_MAX_NUMBER_LENGTH}-character GST limit` };
   }
@@ -134,7 +164,17 @@ export function normalizeDocNumberFormat(raw: unknown): DocNumberFormat | null {
     startNumber: Math.max(1, Math.floor(Number(value.startNumber) || 1)),
     resetPeriod,
     yearDisplay,
+    migration: normalizeMigration(value.migration),
   };
+}
+
+function normalizeMigration(raw: unknown): DocNumberMigration | null {
+  if (!raw || typeof raw !== "object") return null;
+  const value = raw as Record<string, unknown>;
+  const periodLabel = String(value.periodLabel ?? "").trim();
+  const nextNumber = Math.floor(Number(value.nextNumber) || 0);
+  if (!periodLabel || nextNumber < 1) return null;
+  return { periodLabel, nextNumber };
 }
 
 /**

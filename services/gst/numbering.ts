@@ -5,6 +5,7 @@ import {
   buildFormattedDocumentNumber,
   counterPeriodLabel,
   resolveDocFormat,
+  seedForPeriod,
   type DocNumberFormat,
 } from "./numbering-config";
 
@@ -183,10 +184,11 @@ export async function reserveGstNumber(
     const format: DocNumberFormat = resolveDocFormat(request.documentType, settings);
     const prefix = format.prefix;
     const financialYear = counterPeriodLabel(format.resetPeriod, request.documentDate);
-    // Seed a brand-new counter to startNumber-1 so the first document lands on
-    // the merchant's chosen starting number (GST continuity when migrating from
-    // another app). Existing counters are never reseeded.
-    const seed = Math.max(0, Math.floor(format.startNumber) - 1);
+    // Seed a brand-new counter so the first document lands on the merchant's
+    // chosen start: the one-time migration seed for its own period (continuity
+    // when moving from another GST app), otherwise startNumber-1. Existing
+    // counters are never reseeded, and future periods reset to startNumber.
+    const seed = seedForPeriod(format, financialYear);
     const counterSchemaProfile = await detectCounterSchemaProfile();
 
     const result = await gstDb.$transaction(async (tx) => {
