@@ -26,6 +26,8 @@ export interface GstOrderImportRecord {
 }
 
 export interface GstOrderImportFilters {
+  /** Required tenant scope — every listing must be bound to one shop. */
+  shopId?: string;
   gstSettingsId?: string;
   importStatus?: string;
   eligibilityStatus?: string;
@@ -471,7 +473,14 @@ export async function syncOrderRange(_input: SyncOrderRangeInput): Promise<GstSe
 
 export async function listImportedOrders(filters: GstOrderImportFilters): Promise<GstServiceResult<GstOrderImportRecord[]>> {
   try {
-    const where: Record<string, unknown> = {};
+    // Tenant isolation: refuse to list orders without a shop scope. Without this
+    // guard the query returns every merchant's imported orders + customer data.
+    const shopId = String(filters.shopId || "").trim();
+    if (!shopId) {
+      return { ok: false, error: "shopId is required to list imported orders" };
+    }
+
+    const where: Record<string, unknown> = { shopId };
     if (filters.gstSettingsId) {
       where.gstSettingsId = String(filters.gstSettingsId);
     }
