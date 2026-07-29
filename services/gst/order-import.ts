@@ -71,6 +71,7 @@ interface LineForReadiness {
 type OrderImportDbClient = {
   gstOrderImport: {
     findUnique: (args: unknown) => Promise<Record<string, unknown> | null>;
+    findFirst: (args: unknown) => Promise<Record<string, unknown> | null>;
     create: (args: unknown) => Promise<Record<string, unknown>>;
     findMany: (args: unknown) => Promise<Array<Record<string, unknown>>>;
     update: (args: unknown) => Promise<Record<string, unknown>>;
@@ -547,15 +548,21 @@ export async function listImportedOrders(filters: GstOrderImportFilters): Promis
   }
 }
 
-export async function getImportedOrderDetail(id: string): Promise<GstServiceResult<Record<string, unknown> | null>> {
+export async function getImportedOrderDetail(
+  id: string,
+  options: { shopId?: string } = {},
+): Promise<GstServiceResult<Record<string, unknown> | null>> {
   const orderImportId = normalizeString(id);
   if (!orderImportId) {
     return { ok: false, error: "Order import id is required" };
   }
 
   try {
-    const row = await orderDb.gstOrderImport.findUnique({
-      where: { id: orderImportId },
+    // Tenant isolation: scope by shopId when provided so a foreign order id
+    // resolves to null rather than exposing another shop's imported order.
+    const scopedShopId = normalizeString(options.shopId);
+    const row = await orderDb.gstOrderImport.findFirst({
+      where: { id: orderImportId, ...(scopedShopId ? { shopId: scopedShopId } : {}) },
       include: {
         lines: {
           orderBy: { lineNumber: "asc" },
