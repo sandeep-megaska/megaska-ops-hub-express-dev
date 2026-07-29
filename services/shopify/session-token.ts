@@ -18,7 +18,7 @@ export class SessionTokenError extends Error {
 }
 
 export interface VerifiedSessionToken {
-  /** Shop myshopify domain derived from the token's `dest` claim, e.g. "store.myshopify.com". */
+  /** Shop's myshopify.com host, derived from the token's `dest` claim. */
   shopDomain: string;
   dest: string;
   aud: string;
