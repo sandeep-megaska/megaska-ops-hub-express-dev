@@ -1,19 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { applyWalletTransaction, parseAmountToMinorUnits } from "../../../../../../services/wallet";
-
-function isAdmin(req: NextRequest) {
-  const key = req.headers.get("x-admin-key") || "";
-  const expected = String(process.env.ADMIN_OPS_KEY || "").trim();
-  return Boolean(expected && key === expected);
-}
+import { prisma } from "../../../../../../services/db/prisma";
+import { ShopResolutionError } from "../../../../../../services/shopify/shop";
+import { requireAdminShopFromRequest } from "../../../../../../services/shopify/admin-auth";
 
 export async function POST(req: NextRequest, context: { params: Promise<{ customerProfileId: string }> }) {
   try {
-    if (!isAdmin(req)) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const shop = await requireAdminShopFromRequest(req);
+    const { customerProfileId } = await context.params;
+
+    // Tenant isolation: the customer must belong to the acting shop.
+    const customer = await prisma.customerProfile.findUnique({
+      where: { id: customerProfileId },
+      select: { id: true, shopId: true },
+    });
+    if (!customer || customer.shopId !== shop.id) {
+      return NextResponse.json({ error: "Customer not found" }, { status: 404 });
     }
 
-    const { customerProfileId } = await context.params;
     const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
     const reason = String(body?.reason || "").trim();
     const adminNote = String(body?.adminNote || "").trim();
@@ -25,6 +29,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ custom
     }
 
     const result = await applyWalletTransaction({
+      shopId: shop.id,
       customerProfileId,
       amount,
       direction: "DEBIT",
@@ -40,6 +45,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ custom
 
     return NextResponse.json({ wallet: result.account, transaction: result.transaction });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Failed" }, { status: 500 });
+    const status = error instanceof ShopResolutionError ? error.status : 500;
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Failed" }, { status });
   }
 }
