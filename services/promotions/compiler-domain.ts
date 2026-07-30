@@ -12,6 +12,10 @@ export type PromotionCompilerTriggerReference = {
   referenceGid?: string | null;
   referenceValue?: string | null;
   normalizedValue?: string | null;
+  // Member product GIDs from a resolved catalogue expansion (COLLECTION /
+  // PRODUCT_TYPE). Populated by the compile pass; absent on the source-identity
+  // pass so the source hash stays membership-independent.
+  resolvedProductGids?: string[] | null;
 };
 
 export type PromotionCompilerRuleInput = {
