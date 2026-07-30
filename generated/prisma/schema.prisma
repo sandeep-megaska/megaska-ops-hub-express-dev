@@ -2134,7 +2134,7 @@ model GstSettings {
   shopId                    String
   legalName                 String
   tradeName                 String?
-  gstin                     String               @unique
+  gstin                     String
   pan                       String?
   stateCode                 String
   invoicePrefix             String
@@ -2160,6 +2160,10 @@ model GstSettings {
   reportRuns         GstReportRun[]
   shop               Shop                   @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
+  // GSTIN is unique per shop, not globally: a business migrating from another
+  // GST app (or running multiple stores) legitimately reuses one GSTIN, and the
+  // legacy shared DB already carries rows under other shops.
+  @@unique([shopId, gstin])
   @@index([shopId])
 }
 
