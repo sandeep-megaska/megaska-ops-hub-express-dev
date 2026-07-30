@@ -6,6 +6,15 @@ const css = readFileSync(new URL("../extensions/megaska-otp/assets/loopdesk-cart
 
 const embed = readFileSync(new URL("../extensions/megaska-otp/blocks/loopdesk-cart-drawer-embed.liquid", import.meta.url), "utf8");
 
+// MONEY-FMT: prices in the drawer must honour the store's Shopify money format
+// (including a "no decimals" format, e.g. ₹630 not ₹629.95) rather than forcing
+// the currency's default fraction digits.
+const moneyFn = source.match(/function money\(cents, currency\) \{[\s\S]*?\n {2}\}/);
+assert.ok(moneyFn, "money() formatter should exist");
+assert.match(moneyFn[0], /shopify\.money_format/, "money() must read the store's Shopify money_format");
+assert.match(moneyFn[0], /shopify\.formatMoney/, "money() should prefer Shopify.formatMoney so it matches the theme exactly");
+assert.match(source, /function moneyFractionDigits\([\s\S]*?no_decimals/, "fraction digits must derive from the money format (no_decimals => 0)");
+
 const immediateAssetLoad = embed.match(/var drawerAssetRequested = false;[\s\S]*?function loadDrawerAsset\(\) \{[\s\S]*?fetch\(runtimeUrl,/);
 assert.ok(immediateAssetLoad, "drawer asset loading should be declared and requested before the runtime config fetch");
 assert.match(immediateAssetLoad[0], /var drawerAssetRequested = false;[\s\S]*function loadDrawerAsset\(\) \{[\s\S]*if \(drawerAssetRequested\) return;[\s\S]*drawerAssetRequested = true;/, "drawer asset loading should use one idempotent insertion guard");
