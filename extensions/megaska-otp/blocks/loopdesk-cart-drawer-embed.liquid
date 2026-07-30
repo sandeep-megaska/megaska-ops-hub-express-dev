@@ -37,7 +37,6 @@
     })();
   </script>
   {{ 'loopdesk-cart-drawer.css' | asset_url | stylesheet_tag }}
-  <script src="{{ 'loopdesk-tier-progress.js' | asset_url }}" defer></script>
 
   <style>
     [data-megaska-express-modal] form[data-express-form="discount"],
@@ -81,6 +80,7 @@
   <script>
     (function () {
       var pricingAssetUrl = {{ 'loopdesk-promotion-pricing.js' | asset_url | json }};
+      var tierProgressAssetUrl = {{ 'loopdesk-tier-progress.js' | asset_url | json }};
       var drawerAssetUrl = {{ 'loopdesk-cart-drawer.js' | asset_url | json }};
       var shopDomain = {{ shop.permanent_domain | json }};
       var runtimeUrl = "/apps/megaska/api/runtime/config?shop=" + encodeURIComponent(shopDomain) + "&_loopdesk_runtime=" + Date.now();
@@ -333,6 +333,21 @@
         if (drawerAssetRequested) return;
         drawerAssetRequested = true;
 
+        // Load every drawer dependency through this dynamic injector (not a
+        // static <script src> tag): it is the one mechanism proven to run in
+        // this app-embed context. The tier-progress evaluator in particular must
+        // be defined before loopdesk-cart-drawer.js first renders, otherwise
+        // renderTierProgress() has no window.LoopDeskTierProgress and silently
+        // omits the tier bar. Each step falls through on error so a single
+        // failed dependency never blocks the drawer itself.
+        function ensureAsset(url, isReady, next) {
+          if (isReady()) return next();
+          var script = document.createElement('script');
+          script.src = url;
+          script.addEventListener('load', next, { once:true });
+          script.addEventListener('error', next, { once:true });
+          document.head.appendChild(script);
+        }
         function appendDrawer() {
           var script = document.createElement('script');
           script.src = drawerAssetUrl;
@@ -340,13 +355,9 @@
           script.addEventListener('load', observeDrawer, { once:true });
           document.head.appendChild(script);
         }
-        if (window.LoopDeskPromotionPricing) appendDrawer();
-        else {
-          var pricingScript = document.createElement('script');
-          pricingScript.src = pricingAssetUrl;
-          pricingScript.addEventListener('load', appendDrawer, { once:true });
-          document.head.appendChild(pricingScript);
-        }
+        ensureAsset(pricingAssetUrl, function () { return Boolean(window.LoopDeskPromotionPricing); }, function () {
+          ensureAsset(tierProgressAssetUrl, function () { return Boolean(window.LoopDeskTierProgress && window.LoopDeskTierProgress.buildTierProgressViewModel); }, appendDrawer);
+        });
       }
 
       loadDrawerAsset();
