@@ -170,7 +170,10 @@ function fnv1a(value: string): string {
   return (hash >>> 0).toString(36);
 }
 
-function buildDedupeKey(row: {
+// Exported so the DB writer can compute the identical key for already-persisted
+// reviews and skip re-importing them (cross-import dedup). productRef must be the
+// same reference used at import time (normalized Shopify product id).
+export function reviewImportDedupeKey(row: {
   productRef: string;
   customerDisplayName: string;
   rating: number;
@@ -242,7 +245,7 @@ export function normalizeImportRows(
       TITLE_MAX,
     );
 
-    const dedupeKey = buildDedupeKey({ productRef, customerDisplayName, rating, body, submittedAt });
+    const dedupeKey = reviewImportDedupeKey({ productRef, customerDisplayName, rating, body, submittedAt });
     if (seen.has(dedupeKey)) {
       duplicatesSkipped += 1;
       return;
