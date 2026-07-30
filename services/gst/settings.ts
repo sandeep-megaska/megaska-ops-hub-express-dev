@@ -239,6 +239,12 @@ export async function upsertGstSettings(input: GstSettingsWriteInput): Promise<G
   const normalized = validation.data.normalized;
   const shopId = normalize(input.shopId) || null;
 
+  // GST settings are shop-scoped (GSTIN is unique per shop, not globally), so a
+  // shopId is mandatory to resolve the row to write.
+  if (!shopId) {
+    return { ok: false, error: "shopId is required to save GST settings" };
+  }
+
   try {
     const created = await gstDb.$transaction(async (tx) => {
       const existingForShop = shopId
@@ -296,7 +302,7 @@ export async function upsertGstSettings(input: GstSettingsWriteInput): Promise<G
       }
 
       return tx.gstSettings.upsert({
-        where: { gstin: String(normalized.gstin) },
+        where: { shopId_gstin: { shopId, gstin: String(normalized.gstin) } },
         create: {
           shopId,
           legalName: String(normalized.legalName),

@@ -130467,13 +130467,14 @@ export namespace Prisma {
 
   export type GstSettingsWhereUniqueInput = Prisma.AtLeast<{
     id?: string
-    gstin?: string
+    shopId_gstin?: GstSettingsShopIdGstinCompoundUniqueInput
     AND?: GstSettingsWhereInput | GstSettingsWhereInput[]
     OR?: GstSettingsWhereInput[]
     NOT?: GstSettingsWhereInput | GstSettingsWhereInput[]
     shopId?: StringFilter<"GstSettings"> | string
     legalName?: StringFilter<"GstSettings"> | string
     tradeName?: StringNullableFilter<"GstSettings"> | string | null
+    gstin?: StringFilter<"GstSettings"> | string
     pan?: StringNullableFilter<"GstSettings"> | string | null
     stateCode?: StringFilter<"GstSettings"> | string
     invoicePrefix?: StringFilter<"GstSettings"> | string
@@ -130497,7 +130498,7 @@ export namespace Prisma {
     invoiceTemplates?: GstInvoiceTemplateListRelationFilter
     reportRuns?: GstReportRunListRelationFilter
     shop?: XOR<ShopScalarRelationFilter, ShopWhereInput>
-  }, "id" | "gstin">
+  }, "id" | "shopId_gstin">
 
   export type GstSettingsOrderByWithAggregationInput = {
     id?: SortOrder
@@ -151498,6 +151499,11 @@ export namespace Prisma {
 
   export type GstReportRunOrderByRelationAggregateInput = {
     _count?: SortOrder
+  }
+
+  export type GstSettingsShopIdGstinCompoundUniqueInput = {
+    shopId: string
+    gstin: string
   }
 
   export type GstSettingsCountOrderByAggregateInput = {
