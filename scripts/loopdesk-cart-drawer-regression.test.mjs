@@ -15,6 +15,13 @@ assert.match(moneyFn[0], /shopify\.money_format/, "money() must read the store's
 assert.match(moneyFn[0], /shopify\.formatMoney/, "money() should prefer Shopify.formatMoney so it matches the theme exactly");
 assert.match(source, /function moneyFractionDigits\([\s\S]*?no_decimals/, "fraction digits must derive from the money format (no_decimals => 0)");
 
+// TIER-LABEL: the order (tier) discount must read as a self-explanatory line,
+// not a bare "Tier discount" lump — it derives the effective percentage from the
+// classified order savings so the shopper sees "Order discount (5% off)".
+assert.match(source, /orderLabel = orderPct > 0 \? "Order discount \(" \+ displayPercentage\(orderPct\)/, "the order savings row must show a self-explanatory 'Order discount (X% off)' label");
+assert.match(source, /label: orderLabel,/, "the order savings row must use the dynamic order label");
+assert.doesNotMatch(source, /label: "Tier discount"/, "the bare 'Tier discount' label must be replaced");
+
 const immediateAssetLoad = embed.match(/var drawerAssetRequested = false;[\s\S]*?function loadDrawerAsset\(\) \{[\s\S]*?fetch\(runtimeUrl,/);
 assert.ok(immediateAssetLoad, "drawer asset loading should be declared and requested before the runtime config fetch");
 assert.match(immediateAssetLoad[0], /var drawerAssetRequested = false;[\s\S]*function loadDrawerAsset\(\) \{[\s\S]*if \(drawerAssetRequested\) return;[\s\S]*drawerAssetRequested = true;/, "drawer asset loading should use one idempotent insertion guard");

@@ -394,9 +394,18 @@
       if (!module || module.enabled !== true || !items.length || Number(cart.item_count || 0) <= 0) return "";
       var values = buildCartSavingsSummary(context);
       if (!values.totalSavingsMinor) return "";
+      // Make the order (tier) discount self-explanatory so the shopper sees e.g.
+      // "Order discount (5% off)" rather than an unexplained lump. The effective
+      // percentage is derived from the classified order savings, and only shown
+      // when the order discount is the sole discount so its basis is unambiguous.
+      var pricing = context && context.pricing || promotionPricing(cart);
+      var orderBasis = pricing && (pricing.qualifyingSubtotal || pricing.merchandiseSubtotal) || 0;
+      var soleOrderDiscount = values.offerSavingsMinor === 0 && values.couponSavingsMinor === 0;
+      var orderPct = soleOrderDiscount && values.orderSavingsMinor > 0 && orderBasis > 0 ? (values.orderSavingsMinor / orderBasis) * 100 : 0;
+      var orderLabel = orderPct > 0 ? "Order discount (" + displayPercentage(orderPct) + "% off)" : "Order discount";
       var rows = [
         { shown: values.breakdownComplete && settings.showOfferSavings !== false, label: "Product savings", value: values.offerSavingsMinor },
-        { shown: values.breakdownComplete, label: "Tier discount", value: values.orderSavingsMinor },
+        { shown: values.breakdownComplete, label: orderLabel, value: values.orderSavingsMinor },
         { shown: values.breakdownComplete && settings.showCouponSavings !== false, label: "Coupon discount", value: values.couponSavingsMinor },
         { shown: !values.breakdownComplete, label: "Total discount", value: values.totalSavingsMinor }
       ].filter(function (row) { return row.shown && (settings.hideZeroRows !== true || row.value > 0); });
@@ -406,7 +415,7 @@
       var currency = cart.currency;
       var title = typeof settings.title === "string" && settings.title.trim() ? settings.title.trim().slice(0, 80) : "You Saved";
       var header = showTotal ? '<div class="loopdesk-cart-savings__header"><h3 class="loopdesk-cart-savings__title">' + escapeHtml(title) + '</h3><strong class="loopdesk-cart-savings__total">' + escapeHtml(formatter(values.totalSavingsMinor, currency)) + '</strong></div>' : '<h3 class="loopdesk-cart-savings__title">' + escapeHtml(title) + '</h3>';
-      var detail = rows.length ? '<dl class="loopdesk-cart-savings__rows">' + rows.map(function (row) { return '<div class="loopdesk-cart-savings__row"><dt class="loopdesk-cart-savings__label">' + row.label + '</dt><dd class="loopdesk-cart-savings__amount">' + escapeHtml(formatter(row.value, currency)) + '</dd></div>'; }).join("") + '</dl>' : "";
+      var detail = rows.length ? '<dl class="loopdesk-cart-savings__rows">' + rows.map(function (row) { return '<div class="loopdesk-cart-savings__row"><dt class="loopdesk-cart-savings__label">' + escapeHtml(row.label) + '</dt><dd class="loopdesk-cart-savings__amount">' + escapeHtml(formatter(row.value, currency)) + '</dd></div>'; }).join("") + '</dl>' : "";
       return '<section class="loopdesk-cart-savings" aria-label="' + escapeHtml(title) + '">' + header + detail + '</section>';
     } catch (error) { debugLog("savings summary renderer failed", { error: error && error.message }); return ""; }
   }
