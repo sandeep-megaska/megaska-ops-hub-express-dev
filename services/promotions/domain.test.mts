@@ -35,7 +35,9 @@ test("validates trigger reference shape by trigger type", () => {
   assert.equal(validatePromotionTriggerReference({ sourceType: "PRODUCT", referenceGid: "gid://shopify/Product/123" }).valid, true);
   assert.equal(validatePromotionTriggerReference({ sourceType: "PRODUCT", referenceGid: "gid://shopify/ProductVariant/123" }).valid, false);
   assert.equal(validatePromotionTriggerReference({ sourceType: "COLLECTION", referenceGid: "gid://shopify/Collection/123" }).valid, true);
-  assert.equal(validatePromotionTriggerReference({ sourceType: "PRODUCT_TYPE", referenceValue: "Swimwear", normalizedValue: "swimwear" }).valid, true);
+  // Product-type triggers are rejected: the discount Function runtime is GID-based
+  // and cannot fulfil them, so they must never reach the compile/publish path.
+  assert.equal(validatePromotionTriggerReference({ sourceType: "PRODUCT_TYPE", referenceValue: "Swimwear", normalizedValue: "swimwear" }).valid, false);
   assert.equal(validatePromotionTriggerReference({ sourceType: "PRODUCT_TYPE", referenceValue: " ", normalizedValue: "" }).valid, false);
 });
 
