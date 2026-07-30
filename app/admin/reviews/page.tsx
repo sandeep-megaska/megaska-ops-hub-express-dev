@@ -2,6 +2,7 @@ import { getReviewSettings } from "../../../services/reviews/review-settings";
 import { formatAdminShopResolutionError, resolveAdminShopFromSearchParams } from "../../../services/shopify/admin-shop-context";
 import ReviewDisplaySettingsClient from "./ReviewDisplaySettingsClient";
 import ReviewModerationClient from "./ReviewModerationClient";
+import ReviewImportExportClient from "./ReviewImportExportClient";
 export default async function AdminReviewsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }){const params=await searchParams;const resolved=await resolveAdminShopFromSearchParams(params);const shop=resolved.shop;if(!shop?.id)return <main style={{padding:24}}>{formatAdminShopResolutionError(resolved)}</main>;const settings = await getReviewSettings(shop.id);
 
 const displaySettings = {
@@ -38,6 +39,7 @@ return (
       )}
     </>
 
+    <ReviewImportExportClient shop={shop.shopDomain} />
     <ReviewDisplaySettingsClient initial={displaySettings} />
     <ReviewModerationClient shop={shop.shopDomain} />
   </>
