@@ -41,6 +41,76 @@ test("unknown allocations remain in Shopify total and suppress an unreliable spl
   assert.equal(model.breakdownComplete, false);
 });
 
+test("an order-wide automatic discount is classified as an order (tier) discount", () => {
+  const model = api().build(cart({ original_total_price: 62995, items_subtotal_price: 62995, total_discount: 3149, total_price: 59846,
+    items: [{ discounts: [{ amount: 3149, title: "LoopD2C tier", discount_application: { type: "automatic", target_selection: "all", allocation_method: "across", value_type: "percentage", value: "5.0" } }] }] }));
+  assert.equal(model.appliedDiscounts[0].type, "ORDER_PROMOTION");
+  assert.equal(model.orderPromotionSavings, 3149);
+  assert.equal(model.productPromotionSavings, 0);
+  assert.equal(model.totalSavings, 3149);
+  assert.equal(model.breakdownComplete, true);
+  assert.ok(!model.warnings.includes("pricing_unclassified_discount"));
+});
+
+test("the order-tier share allocated onto a product-offer line is attributed to the order, not the product", () => {
+  const model = api().build(cart({ original_total_price: 122995, items_subtotal_price: 122995, total_discount: 33149, total_price: 89846,
+    items: [
+      { properties: { _loopdesk_promotion_rule_id: "reward" }, discounts: [
+        { amount: 30000, title: "LoopD2C offer", discount_application: { type: "automatic", target_selection: "explicit", allocation_method: "each" } },
+        { amount: 1500, title: "LoopD2C tier", discount_application: { type: "automatic", target_selection: "all", allocation_method: "across" } },
+      ] },
+      { discounts: [{ amount: 1649, title: "LoopD2C tier", discount_application: { type: "automatic", target_selection: "all", allocation_method: "across" } }] },
+    ] }));
+  assert.equal(model.productPromotionSavings, 30000);
+  assert.equal(model.orderPromotionSavings, 3149); // 1500 + 1649, not folded into product
+  assert.equal(model.totalSavings, 33149);
+  assert.equal(model.breakdownComplete, true);
+  assert.ok(!model.warnings.includes("pricing_unclassified_discount"));
+});
+
+test("legacy item.discounts order tier is classified by title when discount_application is absent", () => {
+  // Shopify's real cart delivers the tier via the legacy item.discounts shape
+  // ({ amount, title } only, no discount_application). The only order signal is
+  // the title "LoopD2C order promotion".
+  const model = api().build(cart({ original_total_price: 62995, items_subtotal_price: 62995, total_discount: 3149, total_price: 59846,
+    items: [{ discounts: [{ amount: 3149, title: "LoopD2C order promotion" }] }] }));
+  assert.equal(model.appliedDiscounts[0].type, "ORDER_PROMOTION");
+  assert.equal(model.orderPromotionSavings, 3149);
+  assert.equal(model.productPromotionSavings, 0);
+  assert.equal(model.totalSavings, 3149);
+  assert.equal(model.breakdownComplete, true);
+  assert.ok(!model.warnings.includes("pricing_unclassified_discount"));
+});
+
+test("legacy format: order tier share on a product-offer line is not double-counted as product", () => {
+  // Mirrors the real megaska.com cart: the Hydrogen line carries the promotion
+  // rule property and BOTH a product offer ("LoopD2C promotion") and the order
+  // tier's allocated share ("LoopD2C order promotion"); a second line carries
+  // only the order tier's share. Neither line exposes discount_application.
+  const model = api().build(cart({ original_total_price: 363000, items_subtotal_price: 363000, total_discount: 39299, total_price: 323701,
+    items: [
+      { properties: { _loopdesk_promotion_rule_id: "94bb2bb5-8f8e-4fbd-b807-8e64fe60b76c", _loopdesk_promotion_compilation_version: "23" }, discounts: [
+        { amount: 30000, title: "LoopD2C promotion" },
+        { amount: 2999, title: "LoopD2C order promotion" },
+      ] },
+      { properties: {}, discounts: [{ amount: 6300, title: "LoopD2C order promotion" }] },
+    ] }));
+  assert.equal(model.productPromotionSavings, 30000);
+  assert.equal(model.orderPromotionSavings, 9299); // 2999 + 6300, not folded into product
+  assert.equal(model.totalSavings, 39299);
+  assert.equal(model.breakdownComplete, true);
+  assert.ok(!model.warnings.includes("pricing_unclassified_discount"));
+});
+
+test("legacy format: a plain product offer (no order title) stays a product promotion", () => {
+  const model = api().build(cart({ original_total_price: 100000, items_subtotal_price: 100000, total_discount: 30000, total_price: 70000,
+    items: [{ properties: { _loopdesk_promotion_rule_id: "reward" }, discounts: [{ amount: 30000, title: "LoopD2C promotion" }] }] }));
+  assert.equal(model.appliedDiscounts[0].type, "PRODUCT_PROMOTION");
+  assert.equal(model.productPromotionSavings, 30000);
+  assert.equal(model.orderPromotionSavings, 0);
+  assert.equal(model.breakdownComplete, true);
+});
+
 test("combination policy reports Shopify settings and blocks multiple order discounts", () => {
   const { TYPES, combinationStatus } = api();
   assert.equal(combinationStatus({ productDiscounts: true }, TYPES.PRODUCT, TYPES.ORDER), "CAN_COMBINE");

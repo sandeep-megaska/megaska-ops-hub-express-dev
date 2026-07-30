@@ -18,9 +18,14 @@ export function compilePromotionRule(input: PromotionCompilerRuleInput): Promoti
   if (normalizedReward && (!normalizedReward.ok || !normalizedReward.validation.executable)) throw new PromotionCompilerNormalizationError(`Reward is not executable: ${normalizedReward.ok ? "unsupported reward" : normalizedReward.issues.map((entry) => entry.code).join(", ")}.`);
   const groups = sortedGroups(input.triggerReferences.map((ref, index): PromotionSourceMembershipGroup => {
     const sourceReferenceId = refId(ref, index);
+    // A resolved catalogue expansion supplies member product GIDs for COLLECTION
+    // / PRODUCT_TYPE triggers; when present the group is populated + resolved so
+    // both the storefront drawer and the checkout Function can match. When
+    // absent (e.g. the source-identity hash pass) it stays empty + unresolved.
+    const resolvedProductGids = Array.isArray(ref.resolvedProductGids) ? ref.resolvedProductGids.map((gid) => canonicalProductGid(gid)) : null;
     if (ref.sourceType === "PRODUCT") { const gid = canonicalProductGid(ref.referenceGid); return { sourceReferenceId, sourceType: "PRODUCT", sourceGid: gid, productGids: [gid], unresolved: false }; }
-    if (ref.sourceType === "COLLECTION") return { sourceReferenceId, sourceType: "COLLECTION", sourceGid: canonicalCollectionGid(ref.referenceGid), productGids: [], unresolved: true };
-    if (ref.sourceType === "PRODUCT_TYPE") return { sourceReferenceId, sourceType: "PRODUCT_TYPE", sourceValue: canonicalProductType(ref.normalizedValue ?? ref.referenceValue), productGids: [], unresolved: true };
+    if (ref.sourceType === "COLLECTION") return { sourceReferenceId, sourceType: "COLLECTION", sourceGid: canonicalCollectionGid(ref.referenceGid), productGids: resolvedProductGids ?? [], unresolved: resolvedProductGids === null };
+    if (ref.sourceType === "PRODUCT_TYPE") return { sourceReferenceId, sourceType: "PRODUCT_TYPE", sourceValue: canonicalProductType(ref.normalizedValue ?? ref.referenceValue), productGids: resolvedProductGids ?? [], unresolved: resolvedProductGids === null };
     throw new PromotionCompilerNormalizationError("Unsupported trigger source type.");
   }));
   const base = {

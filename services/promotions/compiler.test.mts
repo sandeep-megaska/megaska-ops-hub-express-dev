@@ -30,14 +30,35 @@ class FakeDb {
 }
 async function rejectsCode(fn: () => Promise<unknown>, code: string) { await assert.rejects(fn, (e) => e instanceof PromotionCompilationError && e.code === code); }
 
+// PRODUCT_TYPE triggers are rejected upstream by validatePromotionRule (disabled
+// feature), so only PRODUCT and COLLECTION reach a successful compilation. The
+// payload code still resolves PRODUCT_TYPE symmetrically if it is ever re-enabled.
 for (const [type, ref, groups] of [
   ["PRODUCT", { id: "pr", sourceType: "PRODUCT", referenceGid: p("1") }, undefined],
   ["COLLECTION", { id: "co", sourceType: "COLLECTION", referenceGid: c("1") }, [{ sourceReferenceId: "co", sourceType: "COLLECTION", sourceGid: c("1"), productGids: [p("2"), p("1")], unresolved: false }]],
-  ["PRODUCT_TYPE", { id: "pt", sourceType: "PRODUCT_TYPE", referenceValue: "Shoes", normalizedValue: "shoes" }, [{ sourceReferenceId: "pt", sourceType: "PRODUCT_TYPE", sourceValue: "shoes", productGids: [p("3")], unresolved: false }]],
 ] as const) test(`successful ${type} compilation persists payloads, memberships, count, pointer, compiledAt`, async () => {
   const db = new FakeDb(); const rule = base({ triggerType: type as any, triggerReferences: [ref as any], triggerMatchMode: type === "PRODUCT" ? "ALL" : "ANY" }); db.rules.push(rule);
   const result = await compilePromotionRule({ shopId: "shop-a", shopDomain: "a.myshopify.com", promotionRuleId: rule.id, reason: "MANUAL_RECOMPILE" }, { database: db as any, catalogueResolver: async () => ({ sourceGroups: (groups as unknown as PromotionSourceMembershipGroup[] | undefined) ?? [{ sourceReferenceId: "pr", sourceType: "PRODUCT", sourceGid: p("1"), productGids: [p("1")], unresolved: false }], pagination: [] }) });
   assert.equal(result.status, "READY"); assert.equal(db.compilations[0].version, 1); assert.equal(db.compilations[0].status, "READY"); assert.ok(db.compilations[0].storefrontPayload); assert.ok(db.compilations[0].functionPayload); assert.equal(db.compilations[0].membershipCount, db.memberships.length); assert.equal(db.rules[0].currentCompilationId, db.compilations[0].id); assert.ok(db.rules[0].compiledAt); assert.ok(db.audits.some((a) => a.action === "PROMOTION_COMPILATION_READY"));
+  // The resolved membership must land in BOTH delivered payloads (drawer + Function),
+  // and every group must be marked resolved — not just in membershipCount.
+  const expectedGids = ((groups as unknown as PromotionSourceMembershipGroup[] | undefined) ?? [{ productGids: [p("1")] } as any]).flatMap((g: any) => g.productGids).map(String).sort();
+  const sfGids = db.compilations[0].storefrontPayload.trigger.sourceGroups.flatMap((g: any) => g.productGids).map(String).sort();
+  const fnGids = db.compilations[0].functionPayload.trigger.sourceGroups.flatMap((g: any) => g.productGids).map(String).sort();
+  assert.deepEqual(sfGids, expectedGids, `${type} storefront payload productGids`);
+  assert.deepEqual(fnGids, expectedGids, `${type} function payload productGids`);
+  assert.ok(db.compilations[0].storefrontPayload.trigger.sourceGroups.every((g: any) => g.unresolved === false), `${type} storefront groups resolved`);
+  assert.ok(db.compilations[0].functionPayload.trigger.sourceGroups.every((g: any) => g.unresolved === false), `${type} function groups resolved`);
+});
+
+test("large collection membership is persisted to both payloads without truncation", async () => {
+  const db = new FakeDb(); const rule = base({ id: "big", triggerType: "COLLECTION", triggerReferences: [{ id: "co", sourceType: "COLLECTION", referenceGid: c("1") }], triggerMatchMode: "ANY" }); db.rules.push(rule);
+  const many = Array.from({ length: 60 }, (_, i) => p(String(1000 + i)));
+  await compilePromotionRule({ shopId: "shop-a", shopDomain: "a.myshopify.com", promotionRuleId: "big", reason: "MANUAL_RECOMPILE" }, { database: db as any, catalogueResolver: async () => ({ sourceGroups: [{ sourceReferenceId: "co", sourceType: "COLLECTION", sourceGid: c("1"), productGids: many, unresolved: false }], pagination: [] }) });
+  // Before the fix, `safe()` truncated the payload arrays to 50; assert all 60 survive.
+  assert.equal(db.compilations[0].storefrontPayload.trigger.sourceGroups.flatMap((g: any) => g.productGids).length, 60);
+  assert.equal(db.compilations[0].functionPayload.trigger.sourceGroups.flatMap((g: any) => g.productGids).length, 60);
+  assert.equal(db.memberships.length, 60);
 });
 
 test("versioning is per-rule and unique conflicts retry then exhaust", async () => {

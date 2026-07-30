@@ -19,14 +19,34 @@
     var title = String(allocation && (allocation.title || allocation.discount_application && allocation.discount_application.title) || "").toUpperCase();
     return knownCodes.indexOf(title) >= 0 ? title : null;
   }
+  function application(allocation) { return allocation && (allocation.discount_application || allocation.discountApplication) || {}; }
   function classify(allocation, item, knownCodes) {
-    var raw = String(allocation && (allocation.type || allocation.discount_application && allocation.discount_application.type) || "").toLowerCase();
+    var app = application(allocation);
+    var raw = String(allocation && (allocation.type || app.type) || "").toLowerCase();
     var code = allocationCode(allocation, knownCodes);
     if (code || raw === "discount_code") return TYPES.COUPON;
-    if (raw.indexOf("shipping") >= 0) return TYPES.SHIPPING;
+    var targetType = String(app.target_type || app.targetType || "").toLowerCase();
+    if (raw.indexOf("shipping") >= 0 || targetType.indexOf("shipping") >= 0) return TYPES.SHIPPING;
     if (raw.indexOf("manual") >= 0) return TYPES.MANUAL;
+    // An order-wide automatic discount (e.g. a tiered % off the whole order) is
+    // spread across every line: target_selection "all" or allocation_method
+    // "across". Detect it BEFORE the product-line marker so the order tier's
+    // share that Shopify allocates onto a product-offer line is attributed to the
+    // order discount instead of being double-counted as a product saving.
+    //
+    // Shopify's legacy cart shape (item.discounts) carries only { amount, title }
+    // with no discount_application, so target/method are empty. The order tier is
+    // then only distinguishable by its title ("… order promotion"). This title
+    // check must also run before the product-line marker: on a product-offer line
+    // the order tier's allocated share shares the line's _loopdesk_promotion_rule_id
+    // property and would otherwise be mis-attributed to the product.
+    var target = String(app.target_selection || app.targetSelection || "").toLowerCase();
+    var method = String(app.allocation_method || app.allocationMethod || "").toLowerCase();
+    var title = String(allocation && (allocation.title || app.title) || "").toLowerCase();
+    if (target === "all" || method === "across" || /\border\b/.test(title)) return TYPES.ORDER;
     var properties = item && item.properties || {};
     if (properties._loopdesk_promotion_rule_id || properties._loopdesk_promotion_compilation_version) return TYPES.PRODUCT;
+    if (target === "explicit" || target === "entitled") return TYPES.PRODUCT;
     return TYPES.UNKNOWN;
   }
   function appliedDiscounts(cart) {
