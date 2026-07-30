@@ -3,7 +3,9 @@ import { prisma } from "../../../../../services/db/prisma";
 import { gstDb } from "../../../../../services/gst/db";
 import { syncSingleOrderByShopifyGid } from "../../../../../services/gst/order-sync";
 import { generateInvoiceBatch } from "../../../../../services/gst/dispatch-batch";
-import { resolveShopConfig } from "../../../../../services/shopify/shop";
+import { requireAdminShopFromRequest } from "../../../../../services/shopify/admin-auth";
+import { ShopResolutionError } from "../../../../../services/shopify/shop";
+import { signInvoiceDocumentAccess } from "../../../../../services/gst/invoice-url-signing";
 import { extensionCorsPreflight, withExtensionCors } from "../../../../../services/shopify/extension-cors";
 
 export const runtime = "nodejs";
@@ -39,17 +41,22 @@ export async function POST(req: NextRequest) {
 
   const shopifyOrderGid = String(body.shopifyOrderGid);
   const shopifyOrderId = extractShopifyEntityId(shopifyOrderGid);
-  const shopDomain = String(body.shop || "").trim();
   const generate = Boolean(body.generate);
 
-  const resolvedShop = await resolveShopConfig(shopDomain || undefined);
-  const resolvedShopId = resolvedShop.id ? String(resolvedShop.id).trim() : null;
-  if (!resolvedShopId) {
+  // Require a verified session token from the admin action extension; derive the
+  // shop from it. The client-supplied `body.shop` is no longer trusted (it would
+  // let any caller read another tenant's order/invoice by passing its domain).
+  let shop;
+  try {
+    shop = await requireAdminShopFromRequest(req);
+  } catch (error) {
+    const status = error instanceof ShopResolutionError ? error.status : 401;
     return withExtensionCors(
-      NextResponse.json({ ok: false, error: "Unable to resolve shop for this order." }, { status: 400 }),
+      NextResponse.json({ ok: false, error: error instanceof Error ? error.message : "Unauthorized" }, { status }),
       req,
     );
   }
+  const resolvedShopId = shop.id;
 
   let orderImport = await prisma.gstOrderImport.findFirst({
     where: { shopId: resolvedShopId, shopifyOrderId },
@@ -65,7 +72,7 @@ export async function POST(req: NextRequest) {
   if (!orderImport || generate) {
     const synced = await syncSingleOrderByShopifyGid({
       shopifyOrderGid,
-      shopDomain: resolvedShop.shopDomain,
+      shopDomain: shop.shopDomain,
       forceResync: true,
     });
     if (!synced.ok && !orderImport) {
@@ -147,7 +154,17 @@ export async function POST(req: NextRequest) {
         documentNumber: invoice ? invoice.documentNumber : null,
         status: invoice ? invoice.status : "NOT_INVOICED",
         customerEmail: buyer?.email ? String(buyer.email) : null,
-        pdfUrl: invoice ? `${absoluteBase(req)}/api/gst/invoices/${invoice.id}/pdf` : null,
+        // window.open() in the action extension carries no Authorization header,
+        // so hand back a short-lived signed URL scoped to this shop + document.
+        pdfUrl: invoice
+          ? (() => {
+              const signed = signInvoiceDocumentAccess(String(invoice.id), resolvedShopId);
+              const base = `${absoluteBase(req)}/api/gst/invoices/${invoice.id}/pdf`;
+              return signed
+                ? `${base}?shopId=${encodeURIComponent(resolvedShopId)}&exp=${signed.exp}&sig=${encodeURIComponent(signed.sig)}`
+                : base;
+            })()
+          : null,
         taxReconciliation,
         error: generationError,
       },

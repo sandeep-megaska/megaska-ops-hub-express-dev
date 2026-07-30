@@ -2,7 +2,7 @@ api_version = "2026-01"
 uid = "7a4cab44-e5bb-287c-8797-5d682be7234ea2047e73"
 
 [[extensions]]
-name = "Megaska checkout phone validation"
+name = "LoopD2C checkout phone validation"
 handle = "megaska-phone-checkout-validation"
 type = "function"
 description = "Validates delivery phone numbers against the checkout address country"

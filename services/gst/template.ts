@@ -8,6 +8,7 @@ type TemplateDbClient = {
   };
   gstOrderImport: {
     findUnique: (args: unknown) => Promise<Record<string, unknown> | null>;
+    findFirst: (args: unknown) => Promise<Record<string, unknown> | null>;
   };
   gstInvoiceTemplate: {
     create: (args: unknown) => Promise<Record<string, unknown>>;
@@ -160,6 +161,7 @@ export interface BuildTemplatePreviewPayloadInput {
   templateId: string;
   orderImportId?: string;
   payloadOverrides?: Record<string, unknown>;
+  shopId?: string;
 }
 
 function normalize(value: unknown): string {
@@ -263,15 +265,23 @@ export async function createTemplate(input: CreateTemplateInput): Promise<GstSer
   }
 }
 
-export async function updateTemplate(id: string, patch: UpdateTemplateInput): Promise<GstServiceResult<GstInvoiceTemplateRecord>> {
+export async function updateTemplate(
+  id: string,
+  patch: UpdateTemplateInput,
+  options: { shopId?: string } = {},
+): Promise<GstServiceResult<GstInvoiceTemplateRecord>> {
   const templateId = normalize(id);
   if (!templateId) {
     return { ok: false, error: "templateId is required" };
   }
 
   try {
+    const scopedShopId = normalize(options.shopId);
     const updated = await templateDb.$transaction(async (tx) => {
-      const existing = await tx.gstInvoiceTemplate.findUnique({ where: { id: templateId } });
+      // Tenant isolation: only mutate a template owned by the acting shop.
+      const existing = await tx.gstInvoiceTemplate.findFirst({
+        where: { id: templateId, ...(scopedShopId ? { gstSettings: { shopId: scopedShopId } } : {}) },
+      });
       if (!existing) {
         return null;
       }
@@ -333,16 +343,21 @@ export async function listTemplates(gstSettingsId: string): Promise<GstServiceRe
   }
 }
 
-export async function setDefaultTemplate(id: string): Promise<GstServiceResult<{ updated: boolean }>> {
+export async function setDefaultTemplate(
+  id: string,
+  options: { shopId?: string } = {},
+): Promise<GstServiceResult<{ updated: boolean }>> {
   const templateId = normalize(id);
   if (!templateId) {
     return { ok: false, error: "templateId is required" };
   }
 
   try {
+    const scopedShopId = normalize(options.shopId);
     const result = await templateDb.$transaction(async (tx) => {
-      const template = await tx.gstInvoiceTemplate.findUnique({
-        where: { id: templateId },
+      // Tenant isolation: only promote a template owned by the acting shop.
+      const template = await tx.gstInvoiceTemplate.findFirst({
+        where: { id: templateId, ...(scopedShopId ? { gstSettings: { shopId: scopedShopId } } : {}) },
         select: { id: true, gstSettingsId: true },
       });
       if (!template) {
@@ -415,15 +430,19 @@ export async function buildTemplatePreviewPayload(input: BuildTemplatePreviewPay
   }
 
   try {
-    const template = await templateDb.gstInvoiceTemplate.findUnique({ where: { id: templateId } });
+    // Tenant isolation: scope the template (and any preview order) to the shop.
+    const scopedShopId = normalize(input.shopId);
+    const template = await templateDb.gstInvoiceTemplate.findFirst({
+      where: { id: templateId, ...(scopedShopId ? { gstSettings: { shopId: scopedShopId } } : {}) },
+    });
     if (!template) {
       return { ok: false, error: "Template not found" };
     }
 
     let orderImport: Record<string, unknown> | null = null;
     if (input.orderImportId) {
-      orderImport = await templateDb.gstOrderImport.findUnique({
-        where: { id: normalize(input.orderImportId) },
+      orderImport = await templateDb.gstOrderImport.findFirst({
+        where: { id: normalize(input.orderImportId), ...(scopedShopId ? { shopId: scopedShopId } : {}) },
         include: { lines: true },
       });
       if (!orderImport) {
@@ -454,14 +473,22 @@ export async function buildTemplatePreviewPayload(input: BuildTemplatePreviewPay
   }
 }
 
-export async function getTemplateById(id: string): Promise<GstServiceResult<GstInvoiceTemplateRecord>> {
+export async function getTemplateById(
+  id: string,
+  options: { shopId?: string } = {},
+): Promise<GstServiceResult<GstInvoiceTemplateRecord>> {
   const templateId = normalize(id);
   if (!templateId) {
     return { ok: false, error: "templateId is required" };
   }
 
   try {
-    const row = await templateDb.gstInvoiceTemplate.findUnique({ where: { id: templateId } });
+    // Tenant isolation: scope through the gstSettings relation when a shopId is
+    // supplied so a foreign template id resolves to "not found".
+    const scopedShopId = normalize(options.shopId);
+    const row = await templateDb.gstInvoiceTemplate.findFirst({
+      where: { id: templateId, ...(scopedShopId ? { gstSettings: { shopId: scopedShopId } } : {}) },
+    });
     if (!row) {
       return { ok: false, error: "Template not found" };
     }
@@ -472,8 +499,8 @@ export async function getTemplateById(id: string): Promise<GstServiceResult<GstI
   }
 }
 
-export async function listActiveSettingsTemplates(): Promise<GstServiceResult<GstInvoiceTemplateRecord[]>> {
-  const settings = await getActiveGstSettings();
+export async function listActiveSettingsTemplates(shopId: string): Promise<GstServiceResult<GstInvoiceTemplateRecord[]>> {
+  const settings = await getActiveGstSettings({ shopId });
   if (!settings.ok || !settings.data) {
     return { ok: false, error: settings.error || "No active GST settings configured" };
   }

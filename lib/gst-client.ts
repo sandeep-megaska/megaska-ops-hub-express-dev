@@ -35,19 +35,39 @@ function withShopParam(path: string): string {
   return qs ? `${pathname}?${qs}` : pathname
 }
 
+// Attach the Shopify App Bridge session token so the backend can verify which
+// merchant this request belongs to (App Bridge v4 exposes `shopify.idToken()`).
+// Returns {} outside the embedded context; the route then answers 401.
+async function sessionTokenHeader(): Promise<Record<string, string>> {
+  if (typeof window === 'undefined') return {}
+  try {
+    const bridge = (window as unknown as { shopify?: { idToken?: () => Promise<string> } }).shopify
+    if (bridge && typeof bridge.idToken === 'function') {
+      const token = await bridge.idToken()
+      if (token) return { Authorization: `Bearer ${token}` }
+    }
+  } catch {
+    // Fall through: the request proceeds tokenless and the route returns 401.
+  }
+  return {}
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<RequestResult<T>> {
   const normalized = path.startsWith('/') ? path : `/${path}`
   const url = withShopParam(normalized)
+  const auth = await sessionTokenHeader()
+  const { headers: initHeaders, ...restInit } = init || {}
 
   try {
     const res = await fetch(url, {
       cache: 'no-store',
       credentials: 'include',
+      ...restInit,
       headers: {
         'Content-Type': 'application/json',
-        ...(init?.headers || {}),
+        ...auth,
+        ...((initHeaders as Record<string, string>) || {}),
       },
-      ...init,
     })
 
     const data = (await res.json().catch(() => ({}))) as RequestResult<T>
@@ -71,18 +91,22 @@ async function request<T>(path: string, init?: RequestInit): Promise<RequestResu
 }
 
 export const getGstSettings = async () => {
-  const res = await request<Record<string, unknown> & { settings?: Record<string, unknown> }>('/api/gst/settings')
+  const res = await request<{ settings?: Record<string, unknown>; gstModuleEnabled?: boolean }>('/api/gst/settings')
   if (!res.ok) return res
-  return { ok: true, data: (res.data as { settings?: Record<string, unknown> })?.settings || {} } as const
+  const settings = (res.data as { settings?: Record<string, unknown> })?.settings || {}
+  const gstModuleEnabled = (res.data as { gstModuleEnabled?: boolean })?.gstModuleEnabled
+  return { ok: true, data: { ...settings, gstModuleEnabled } } as const
 }
 
 export const createOrUpdateGstSettings = async (payload: Record<string, unknown>) => {
-  const res = await request<Record<string, unknown> & { settings?: Record<string, unknown> }>('/api/gst/settings', {
+  const res = await request<{ settings?: Record<string, unknown>; gstModuleEnabled?: boolean }>('/api/gst/settings', {
     method: 'POST',
     body: JSON.stringify(payload),
   })
   if (!res.ok) return res
-  return { ok: true, data: (res.data as { settings?: Record<string, unknown> })?.settings || {} } as const
+  const settings = (res.data as { settings?: Record<string, unknown> })?.settings || {}
+  const gstModuleEnabled = (res.data as { gstModuleEnabled?: boolean })?.gstModuleEnabled
+  return { ok: true, data: { ...settings, gstModuleEnabled } } as const
 }
 
 export const getDefaultGstTemplate = async () => {

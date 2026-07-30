@@ -6,6 +6,7 @@ import {
   listDispatchReadyOrders,
   syncOrders,
 } from '../../lib/gst-client'
+import { adminAuthHeaders } from '../../lib/admin-fetch'
 import { GstResponseViewer } from './gst-response-viewer'
 
 type OrderLineRow = {
@@ -266,6 +267,7 @@ export function GstOrdersAdmin() {
     const response = await fetch(`/api/gst/invoices/${encodeURIComponent(invoiceDocumentId)}/pdf?format=html`, {
       credentials: 'include',
       cache: 'no-store',
+      headers: await adminAuthHeaders(),
     })
     const html = await response.text().catch(() => '')
     if (!response.ok || !html) {
@@ -288,6 +290,7 @@ export function GstOrdersAdmin() {
       const response = await fetch(`/api/gst/invoices/${encodeURIComponent(invoiceDocumentId)}/pdf`, {
         credentials: 'include',
         cache: 'no-store',
+        headers: await adminAuthHeaders(),
       })
 
       if (!response.ok) {
@@ -405,6 +408,7 @@ export function GstOrdersAdmin() {
 
       const fileRes = await fetch(`/api/gst/reports/runs/${encodeURIComponent(runPayload.run.id)}/download`, {
         credentials: 'include',
+        headers: await adminAuthHeaders(),
       })
       const filePayload = (await fileRes.json().catch(() => ({}))) as {
         ok?: boolean

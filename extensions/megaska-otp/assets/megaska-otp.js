@@ -930,7 +930,7 @@
           <div data-megaska-step-success hidden class="megaska-otp-success">
             <div class="megaska-otp-success-icon" aria-hidden="true">✓</div>
             <h2>You’re in</h2>
-            <p data-megaska-success-message>Welcome back to Megaska</p>
+            <p data-megaska-success-message>Welcome back</p>
           </div>
 
           <p class="megaska-otp-error" data-megaska-otp-error role="alert" aria-live="polite"></p>

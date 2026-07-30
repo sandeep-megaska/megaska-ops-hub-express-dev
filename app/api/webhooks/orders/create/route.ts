@@ -63,14 +63,8 @@ function verifyWebhookHmac(rawBuffer: Buffer, hmacHeader: string) {
     .update(rawBuffer)
     .digest("base64");
 
-  console.log("[Megaska Order Identity] webhook hmac compare", {
-    computedPrefix: digest.slice(0, 8),
-    headerPrefix: hmacHeader.slice(0, 8),
-    computedLength: digest.length,
-    headerLength: hmacHeader.length,
-    rawBodyLength: rawBuffer.length,
-  });
-
+  // Do not log HMAC digests/prefixes or secret-derived lengths — they are a
+  // side channel for confirming the webhook signing secret.
   return safeEqual(digest, hmacHeader);
 }
 function toAttributeMap(noteAttributes: ShopifyOrderWebhookPayload["note_attributes"]) {
@@ -216,11 +210,8 @@ export async function POST(req: NextRequest) {
   const rawBody = rawBuffer.toString("utf8");
   const hmacHeader = String(req.headers.get("x-shopify-hmac-sha256") || "").trim();
 
-  console.log("[Megaska Order Identity] webhook hmac debug", {
-    hasShopifyApiSecret: Boolean(String(process.env.SHOPIFY_API_SECRET || "").trim()),
-    secretLength: String(process.env.SHOPIFY_API_SECRET || "").trim().length,
+  console.log("[Megaska Order Identity] webhook received", {
     hasHmacHeader: Boolean(hmacHeader),
-    hmacHeaderLength: hmacHeader.length,
     topic: String(req.headers.get("x-shopify-topic") || "").trim() || null,
     shopDomain: String(req.headers.get("x-shopify-shop-domain") || "").trim() || null,
   });

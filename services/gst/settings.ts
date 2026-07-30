@@ -4,6 +4,7 @@ import { GST_DEFAULT_NUMBERING_STRATEGY } from "./constants";
 import type { GstNumberingStrategy } from "./constants";
 import type { GstServiceResult } from "./types";
 import { GSTIN_REGEX, PAN_REGEX, PREFIX_REGEX, isValidStateCode } from "./validation";
+import { normalizeNumberingConfig, type GstNumberingConfig } from "./numbering-config";
 
 export interface GstSettingsSnapshot {
   id: string;
@@ -17,6 +18,7 @@ export interface GstSettingsSnapshot {
   creditNotePrefix: string;
   debitNotePrefix: string;
   invoiceNumberStrategy: GstNumberingStrategy;
+  numberingConfig?: GstNumberingConfig | null;
   defaultCurrency: string;
   priceIncludesTax: boolean;
   einvoiceEnabled: boolean;
@@ -35,6 +37,7 @@ export interface GstSettingsWriteInput {
   creditNotePrefix: string;
   debitNotePrefix: string;
   invoiceNumberStrategy?: GstSettingsSnapshot["invoiceNumberStrategy"];
+  numberingConfig?: unknown;
   defaultCurrency?: string;
   priceIncludesTax?: boolean;
   einvoiceEnabled?: boolean;
@@ -63,6 +66,7 @@ function toSnapshot(settings: GstSettingsSnapshot | null | undefined): GstSettin
     creditNotePrefix: settings.creditNotePrefix,
     debitNotePrefix: settings.debitNotePrefix,
     invoiceNumberStrategy: settings.invoiceNumberStrategy,
+    numberingConfig: (settings.numberingConfig as GstNumberingConfig | null | undefined) ?? null,
     defaultCurrency: settings.defaultCurrency,
     priceIncludesTax: Boolean(settings.priceIncludesTax),
     einvoiceEnabled: settings.einvoiceEnabled,
@@ -112,6 +116,11 @@ export function validateGstIdentityConfig(
     errors.push("gstin PAN segment and pan must match");
   }
 
+  const numberingResult = normalizeNumberingConfig(input.numberingConfig);
+  if (!numberingResult.ok) {
+    errors.push(numberingResult.error || "Invalid GST numbering configuration");
+  }
+
   if (errors.length > 0) {
     return { ok: false, error: errors.join("; "), data: { messages: errors } };
   }
@@ -129,6 +138,7 @@ export function validateGstIdentityConfig(
         creditNotePrefix,
         debitNotePrefix,
         invoiceNumberStrategy: input.invoiceNumberStrategy ?? GST_DEFAULT_NUMBERING_STRATEGY,
+        numberingConfig: numberingResult.data,
         defaultCurrency: normalize(input.defaultCurrency || "INR").toUpperCase(),
         priceIncludesTax: input.priceIncludesTax !== false,
         einvoiceEnabled: Boolean(input.einvoiceEnabled),
@@ -185,36 +195,28 @@ export async function getGstSettingsById(id: string): Promise<GstServiceResult<G
 export async function getActiveGstSettings(input?: { shopId?: string | null }): Promise<GstServiceResult<GstSettingsSnapshot>> {
   try {
     const requestedShopId = normalize(input?.shopId) || null;
-    let settings: GstSettingsSnapshot | null = null;
-    let fallbackUsed = false;
 
-    if (requestedShopId) {
-      // Shop-scoped only. No shopId: null fallback - GST rows are never
-      // null-scoped after the multi-tenant integrity migration, and falling
-      // back to another scope would surface the wrong shop's settings.
-      settings = await gstDb.gstSettings.findFirst({
-        where: {
-          isActive: true,
-          shopId: requestedShopId,
-        },
-        orderBy: { updatedAt: "desc" },
-      });
-    } else {
-      // No shop context provided: fall back to any active settings. This is a
-      // single-tenant holdover for callers that don't yet resolve a shop; it is
-      // not a null-scope lookup. Callers that can resolve a shop should pass it.
-      settings = await gstDb.gstSettings.findFirst({
-        where: { isActive: true },
-        orderBy: { updatedAt: "desc" },
-      });
-      fallbackUsed = Boolean(settings);
+    // Tenant isolation: a shopId is mandatory. The former "no shopId -> first
+    // active settings across all shops" fallback would surface another tenant's
+    // GST identity (GSTIN, legal name, state) whenever a caller failed to
+    // resolve a shop. Callers must resolve and pass the acting shop; fail closed
+    // rather than guessing a scope.
+    if (!requestedShopId) {
+      return { ok: false, error: "shopId is required to resolve GST settings" };
     }
+
+    const settings: GstSettingsSnapshot | null = await gstDb.gstSettings.findFirst({
+      where: {
+        isActive: true,
+        shopId: requestedShopId,
+      },
+      orderBy: { updatedAt: "desc" },
+    });
 
     console.info("[GST SETTINGS RESOLVE]", {
       requestedShopId,
       resolvedSettingsId: settings?.id ?? null,
       resolvedSettingsShopId: settings?.shopId ?? null,
-      fallbackUsed,
     });
 
     if (!settings) {
@@ -276,6 +278,7 @@ export async function upsertGstSettings(input: GstSettingsWriteInput): Promise<G
             creditNotePrefix: String(normalized.creditNotePrefix),
             debitNotePrefix: String(normalized.debitNotePrefix),
             invoiceNumberStrategy: normalized.invoiceNumberStrategy,
+            numberingConfig: normalized.numberingConfig,
             defaultCurrency: String(normalized.defaultCurrency || "INR"),
             priceIncludesTax: normalized.priceIncludesTax !== false,
             einvoiceEnabled: Boolean(normalized.einvoiceEnabled),
@@ -305,6 +308,7 @@ export async function upsertGstSettings(input: GstSettingsWriteInput): Promise<G
           creditNotePrefix: String(normalized.creditNotePrefix),
           debitNotePrefix: String(normalized.debitNotePrefix),
           invoiceNumberStrategy: normalized.invoiceNumberStrategy,
+          numberingConfig: normalized.numberingConfig,
           defaultCurrency: String(normalized.defaultCurrency || "INR"),
           priceIncludesTax: normalized.priceIncludesTax !== false,
           einvoiceEnabled: Boolean(normalized.einvoiceEnabled),
@@ -321,6 +325,7 @@ export async function upsertGstSettings(input: GstSettingsWriteInput): Promise<G
           creditNotePrefix: String(normalized.creditNotePrefix),
           debitNotePrefix: String(normalized.debitNotePrefix),
           invoiceNumberStrategy: normalized.invoiceNumberStrategy,
+          numberingConfig: normalized.numberingConfig,
           defaultCurrency: String(normalized.defaultCurrency || "INR"),
           priceIncludesTax: normalized.priceIncludesTax !== false,
           einvoiceEnabled: Boolean(normalized.einvoiceEnabled),

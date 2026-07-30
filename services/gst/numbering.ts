@@ -1,6 +1,13 @@
 import { GST_DOCUMENT_TYPES } from "./constants";
 import { gstDb } from "./db";
 import type { GstDocumentType, GstNumberingStrategy, GstServiceResult } from "./types";
+import {
+  buildFormattedDocumentNumber,
+  counterPeriodLabel,
+  resolveDocFormat,
+  seedForPeriod,
+  type DocNumberFormat,
+} from "./numbering-config";
 
 export interface GstNumberRequest {
   gstSettingsId: string;
@@ -147,6 +154,7 @@ export async function reserveGstNumber(
         creditNotePrefix: true,
         debitNotePrefix: true,
         invoiceNumberStrategy: true,
+        numberingConfig: true,
       },
     });
 
@@ -161,19 +169,26 @@ export async function reserveGstNumber(
       };
     }
 
-    const prefix = pickPrefix(request.documentType, settings);
-    if (!prefix) {
+    // MANUAL strategy still blocks automatic numbering, but only for shops that
+    // have not configured explicit numbering (a numberingConfig supersedes the
+    // legacy strategy field entirely).
+    if (!settings.numberingConfig && settings.invoiceNumberStrategy === "MANUAL") {
       return {
         ok: false,
-        error: `Numbering prefix not configured for ${request.documentType}. Update GST settings and try again.`,
+        error: "GST numbering strategy is MANUAL. Configure numbering before creating draft documents.",
       };
     }
 
-    const periodLabelResult = getCounterPeriodLabel(settings.invoiceNumberStrategy, request.documentDate);
-    if (!periodLabelResult.ok || !periodLabelResult.data) {
-      return { ok: false, error: periodLabelResult.error || "Unable to resolve GST numbering period" };
-    }
-    const financialYear = periodLabelResult.data;
+    // Effective, per-document-type format: the merchant's numberingConfig when
+    // present, else the legacy PREFIX/FY/00001 behaviour (unchanged output).
+    const format: DocNumberFormat = resolveDocFormat(request.documentType, settings);
+    const prefix = format.prefix;
+    const financialYear = counterPeriodLabel(format.resetPeriod, request.documentDate);
+    // Seed a brand-new counter so the first document lands on the merchant's
+    // chosen start: the one-time migration seed for its own period (continuity
+    // when moving from another GST app), otherwise startNumber-1. Existing
+    // counters are never reseeded, and future periods reset to startNumber.
+    const seed = seedForPeriod(format, financialYear);
     const counterSchemaProfile = await detectCounterSchemaProfile();
 
     const result = await gstDb.$transaction(async (tx) => {
@@ -185,7 +200,7 @@ export async function reserveGstNumber(
           `INSERT INTO "GstCounter"
             ("id","settingsId","scope","financialYear","currentValue","prefix","padding","gstSettingsId","documentType","lastNumber","createdAt","updatedAt")
           VALUES
-            (concat('gstc-', md5(random()::text || clock_timestamp()::text)), $1, $2, $3, 1, $4, 5, $1, $5::"GstDocumentType", 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            (concat('gstc-', md5(random()::text || clock_timestamp()::text)), $1, $2, $3, $6, $4, 5, $1, $5::"GstDocumentType", $6, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
           ON CONFLICT ("settingsId","scope","financialYear")
           DO UPDATE SET
             "currentValue" = "GstCounter"."currentValue" + 1,
@@ -201,6 +216,7 @@ export async function reserveGstNumber(
           financialYear,
           prefix,
           request.documentType,
+          seed + 1,
         )) as Array<{ lastNumber: number }>;
 
         const legacySequence = Number(rows?.[0]?.lastNumber || 0);
@@ -209,7 +225,7 @@ export async function reserveGstNumber(
         }
 
         return {
-          documentNumber: buildDocumentNumber(prefix, financialYear, legacySequence),
+          documentNumber: buildFormattedDocumentNumber(format, request.documentDate, legacySequence),
           sequence: legacySequence,
           financialYear,
         };
@@ -227,7 +243,7 @@ export async function reserveGstNumber(
           gstSettingsId: request.gstSettingsId,
           documentType: request.documentType,
           financialYear,
-          lastNumber: 0,
+          lastNumber: seed,
         },
         update: {},
       });
@@ -248,7 +264,7 @@ export async function reserveGstNumber(
       });
 
       return {
-        documentNumber: buildDocumentNumber(prefix, financialYear, counter.lastNumber),
+        documentNumber: buildFormattedDocumentNumber(format, request.documentDate, counter.lastNumber),
         sequence: counter.lastNumber,
         financialYear,
       };

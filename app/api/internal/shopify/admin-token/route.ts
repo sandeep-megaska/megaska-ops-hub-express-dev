@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { validateShopifyAdminToken } from "../../../../../services/express-checkout/shopify-admin";
 import { normalizeShopDomain } from "../../../../../services/shopify/shop";
@@ -8,11 +9,20 @@ function getDiagnosticSecret() {
   return String(process.env.SHOPIFY_ADMIN_DIAGNOSTIC_SECRET || process.env.INTERNAL_DIAGNOSTIC_SECRET || "").trim();
 }
 
+function timingSafeEqualStr(a: string, b: string): boolean {
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  return bufA.length === bufB.length && crypto.timingSafeEqual(bufA, bufB);
+}
+
 function isAuthorized(req: NextRequest) {
   const requiredSecret = getDiagnosticSecret();
-  if (!requiredSecret) return true;
+  // Fail closed: a missing diagnostic secret must NOT open the route. Previously
+  // this returned true when unset, so a prod deploy that forgot the secret
+  // exposed the internal Shopify-admin-token probe to anyone.
+  if (!requiredSecret) return false;
 
-  return req.headers.get("x-diagnostic-secret") === requiredSecret;
+  return timingSafeEqualStr(String(req.headers.get("x-diagnostic-secret") || ""), requiredSecret);
 }
 
 export async function GET(req: NextRequest) {

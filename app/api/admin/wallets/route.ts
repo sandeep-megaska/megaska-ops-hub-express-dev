@@ -1,17 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "../../../../services/db/prisma";
-
-function isAdmin(req: NextRequest) {
-  const key = req.headers.get("x-admin-key") || "";
-  const expected = String(process.env.ADMIN_OPS_KEY || "").trim();
-  return Boolean(expected && key === expected);
-}
+import { ShopResolutionError } from "../../../../services/shopify/shop";
+import { requireAdminShopFromRequest } from "../../../../services/shopify/admin-auth";
 
 export async function GET(req: NextRequest) {
   try {
-    if (!isAdmin(req)) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const shop = await requireAdminShopFromRequest(req);
 
     const q = String(req.nextUrl.searchParams.get("q") || "").trim();
 
@@ -34,6 +28,7 @@ export async function GET(req: NextRequest) {
       FROM "WalletAccount" wa
       JOIN "CustomerProfile" cp ON cp."id" = wa."customerProfileId"
       WHERE wa."currency" = 'INR'
+        AND wa."shopId" = ${shop.id}
         AND (
           ${q} = ''
           OR cp."phoneE164" ILIKE ${`%${q}%`}
@@ -48,6 +43,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ wallets });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Failed" }, { status: 500 });
+    const status = error instanceof ShopResolutionError ? error.status : 500;
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Failed" }, { status });
   }
 }

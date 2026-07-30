@@ -385,9 +385,17 @@ export async function prepareB2cSalesRegisterReport(input: PrepareB2cReportInput
   };
 }
 
-export async function getReportRun(id: string): Promise<GstServiceResult<GstReportRunRecord | null>> {
+export async function getReportRun(
+  id: string,
+  options: { shopId?: string } = {},
+): Promise<GstServiceResult<GstReportRunRecord | null>> {
   try {
-    const run = await gstDb.gstReportRun.findUnique({ where: { id: String(id).trim() } });
+    // Tenant isolation: scope through gstSettings when a shopId is supplied so a
+    // foreign report-run id resolves to null instead of leaking its file URL.
+    const scopedShopId = String(options.shopId || "").trim();
+    const run = await gstDb.gstReportRun.findFirst({
+      where: { id: String(id).trim(), ...(scopedShopId ? { gstSettings: { shopId: scopedShopId } } : {}) },
+    });
     return { ok: true, data: run ? pickRun(run as Record<string, unknown>) : null };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : "Failed to load report run" };
@@ -454,8 +462,12 @@ export async function listReportRuns(filters: ReportRunFilters): Promise<GstServ
   }
 }
 
-export async function downloadReportFile(id: string): Promise<GstServiceResult<{ fileUrl: string | null }>> {
-  const run = await getReportRun(id);
+export async function downloadReportFile(
+  id: string,
+  options: { shopId?: string } = {},
+): Promise<GstServiceResult<{ fileUrl: string | null }>> {
+  const run = await getReportRun(id, options);
   if (!run.ok) return { ok: false, error: run.error };
-  return { ok: true, data: { fileUrl: run.data?.fileUrl || null } };
+  if (!run.data) return { ok: false, error: "Report run not found" };
+  return { ok: true, data: { fileUrl: run.data.fileUrl || null } };
 }

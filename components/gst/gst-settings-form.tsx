@@ -3,6 +3,15 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { createOrUpdateGstSettings, getGstSettings } from '../../lib/gst-client'
 import { GstResponseViewer } from './gst-response-viewer'
+import {
+  buildFormattedDocumentNumber,
+  counterPeriodLabel,
+  type DocNumberFormat,
+  type GstNumberingConfig,
+  type GstNumberingDocKey,
+  type GstResetPeriod,
+} from '../../services/gst/numbering-config'
+import type { GstNumberingStrategy } from '../../services/gst/constants'
 
 type SettingsFormState = {
   legalName: string
@@ -10,11 +19,22 @@ type SettingsFormState = {
   gstin: string
   pan: string
   stateCode: string
-  invoicePrefix: string
-  creditNotePrefix: string
-  debitNotePrefix: string
   priceIncludesTax: boolean
   autoGenerateOnOrderCreate: boolean
+  gstModuleEnabled: boolean
+  numbering: GstNumberingConfig
+}
+
+function defaultDocFormat(prefix: string): DocNumberFormat {
+  return {
+    prefix,
+    suffix: '',
+    separator: '/',
+    minDigits: 5,
+    startNumber: 1,
+    resetPeriod: 'FINANCIAL_YEAR',
+    yearDisplay: 'FINANCIAL_YEAR',
+  }
 }
 
 const initialState: SettingsFormState = {
@@ -23,11 +43,260 @@ const initialState: SettingsFormState = {
   gstin: '',
   pan: '',
   stateCode: '',
-  invoicePrefix: 'INV',
-  creditNotePrefix: 'CN',
-  debitNotePrefix: 'DN',
   priceIncludesTax: true,
   autoGenerateOnOrderCreate: false,
+  gstModuleEnabled: true,
+  numbering: {
+    invoice: defaultDocFormat('INV'),
+    creditNote: defaultDocFormat('CN'),
+    debitNote: defaultDocFormat('DN'),
+  },
+}
+
+const RESET_PERIOD_OPTIONS: Array<{ value: GstResetPeriod; label: string }> = [
+  { value: 'FINANCIAL_YEAR', label: 'Every financial year (Apr–Mar)' },
+  { value: 'CALENDAR_YEAR', label: 'Every calendar year (Jan–Dec)' },
+  { value: 'MONTHLY', label: 'Every month' },
+  { value: 'CONTINUOUS', label: 'Never reset (continuous)' },
+]
+
+const YEAR_DISPLAY_OPTIONS: Array<{ value: DocNumberFormat['yearDisplay']; label: string }> = [
+  { value: 'NONE', label: 'No date segment' },
+  { value: 'FINANCIAL_YEAR', label: 'Financial year (e.g. 26-27)' },
+  { value: 'CALENDAR_YEAR', label: 'Calendar year (e.g. 2026)' },
+  { value: 'MONTHLY', label: 'Year-month (e.g. 2026-07)' },
+]
+
+const DOC_LABELS: Record<GstNumberingDocKey, string> = {
+  invoice: 'Tax Invoice',
+  creditNote: 'Credit Note',
+  debitNote: 'Debit Note',
+}
+
+// numberingConfig supersedes the legacy strategy field, but keep the stored
+// strategy in sync with the invoice reset period so any legacy reader stays sane.
+function resetPeriodToStrategy(resetPeriod: GstResetPeriod): GstNumberingStrategy {
+  switch (resetPeriod) {
+    case 'CALENDAR_YEAR':
+      return 'CALENDAR_YEAR_SEQUENCE'
+    case 'MONTHLY':
+      return 'MONTHLY_SEQUENCE'
+    case 'FINANCIAL_YEAR':
+    case 'CONTINUOUS':
+    default:
+      return 'FINANCIAL_YEAR_SEQUENCE'
+  }
+}
+
+function coerceDocFormat(raw: unknown, fallback: DocNumberFormat): DocNumberFormat {
+  if (!raw || typeof raw !== 'object') return fallback
+  const value = raw as Record<string, unknown>
+  const resetPeriod = (['CONTINUOUS', 'FINANCIAL_YEAR', 'CALENDAR_YEAR', 'MONTHLY'] as const).includes(
+    value.resetPeriod as GstResetPeriod,
+  )
+    ? (value.resetPeriod as GstResetPeriod)
+    : fallback.resetPeriod
+  const yearDisplay = (['NONE', 'FINANCIAL_YEAR', 'CALENDAR_YEAR', 'MONTHLY'] as const).includes(
+    value.yearDisplay as DocNumberFormat['yearDisplay'],
+  )
+    ? (value.yearDisplay as DocNumberFormat['yearDisplay'])
+    : fallback.yearDisplay
+  const migrationRaw = value.migration as Record<string, unknown> | null | undefined
+  const migration =
+    migrationRaw && typeof migrationRaw === 'object' && String(migrationRaw.periodLabel ?? '').trim() && Number(migrationRaw.nextNumber) >= 1
+      ? { periodLabel: String(migrationRaw.periodLabel).trim(), nextNumber: Math.floor(Number(migrationRaw.nextNumber)) }
+      : null
+  return {
+    prefix: typeof value.prefix === 'string' ? value.prefix : fallback.prefix,
+    suffix: typeof value.suffix === 'string' ? value.suffix : fallback.suffix,
+    separator: typeof value.separator === 'string' ? value.separator : fallback.separator,
+    minDigits: Number.isFinite(Number(value.minDigits)) ? Number(value.minDigits) : fallback.minDigits,
+    startNumber: Number.isFinite(Number(value.startNumber)) ? Number(value.startNumber) : fallback.startNumber,
+    resetPeriod,
+    yearDisplay,
+    migration,
+  }
+}
+
+// Build the numbering config from a loaded settings row: prefer a stored
+// numberingConfig, otherwise derive sensible defaults from the legacy prefixes.
+function numberingFromLoaded(data: Record<string, unknown>): GstNumberingConfig {
+  const stored = data.numberingConfig as Record<string, unknown> | null | undefined
+  const invoiceDefault = defaultDocFormat(String(data.invoicePrefix || 'INV'))
+  const creditDefault = defaultDocFormat(String(data.creditNotePrefix || 'CN'))
+  const debitDefault = defaultDocFormat(String(data.debitNotePrefix || 'DN'))
+  if (!stored || typeof stored !== 'object') {
+    return { invoice: invoiceDefault, creditNote: creditDefault, debitNote: debitDefault }
+  }
+  return {
+    invoice: coerceDocFormat(stored.invoice, invoiceDefault),
+    creditNote: coerceDocFormat(stored.creditNote, creditDefault),
+    debitNote: coerceDocFormat(stored.debitNote, debitDefault),
+  }
+}
+
+function DocFormatEditor({
+  docKey,
+  format,
+  onChange,
+}: {
+  docKey: GstNumberingDocKey
+  format: DocNumberFormat
+  onChange: (next: DocNumberFormat) => void
+}) {
+  const now = new Date()
+  const currentPeriod = counterPeriodLabel(format.resetPeriod, now)
+  const migrationActive = !!format.migration && format.migration.periodLabel === currentPeriod
+  const firstSeq = migrationActive
+    ? Math.max(1, Math.floor(format.migration!.nextNumber))
+    : Math.max(1, Math.floor(format.startNumber) || 1)
+  const first = buildFormattedDocumentNumber(format, now, firstSeq)
+  const overLimit = first.length > 16
+  const periodLabel = currentPeriod
+
+  const set = (patch: Partial<DocNumberFormat>) => onChange({ ...format, ...patch })
+
+  // "Continue from" is a one-time seed anchored to the current period, so it
+  // stays anchored to whatever period the chosen reset rule produces today.
+  const setContinueFrom = (raw: string) => {
+    const n = Math.floor(Number(raw))
+    if (!raw.trim() || !Number.isFinite(n) || n < 1) {
+      set({ migration: null })
+      return
+    }
+    set({ migration: { periodLabel: currentPeriod, nextNumber: n } })
+  }
+
+  return (
+    <div className="rounded-xl border border-gray-200 p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <h4 className="text-sm font-semibold text-gray-900">{DOC_LABELS[docKey]}</h4>
+        <span
+          className={`rounded-md px-2 py-1 font-mono text-xs ${
+            overLimit ? 'bg-red-50 text-red-700' : 'bg-gray-100 text-gray-700'
+          }`}
+          title="First number for the current period"
+        >
+          {first || '—'}
+        </span>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-3">
+        <label className="text-xs text-gray-600">
+          Prefix
+          <input
+            className="mt-1 w-full rounded-lg border border-gray-300 px-2.5 py-2 text-sm uppercase"
+            value={format.prefix}
+            onChange={(e) => set({ prefix: e.target.value.toUpperCase() })}
+          />
+        </label>
+        <label className="text-xs text-gray-600">
+          Separator
+          <input
+            className="mt-1 w-full rounded-lg border border-gray-300 px-2.5 py-2 text-sm"
+            value={format.separator}
+            maxLength={1}
+            onChange={(e) => set({ separator: e.target.value })}
+          />
+        </label>
+        <label className="text-xs text-gray-600">
+          Suffix
+          <input
+            className="mt-1 w-full rounded-lg border border-gray-300 px-2.5 py-2 text-sm uppercase"
+            value={format.suffix}
+            onChange={(e) => set({ suffix: e.target.value.toUpperCase() })}
+          />
+        </label>
+        <label className="text-xs text-gray-600">
+          Start number
+          <input
+            type="number"
+            min={1}
+            className="mt-1 w-full rounded-lg border border-gray-300 px-2.5 py-2 text-sm"
+            value={format.startNumber}
+            onChange={(e) => set({ startNumber: Math.max(1, Math.floor(Number(e.target.value) || 1)) })}
+          />
+        </label>
+        <label className="text-xs text-gray-600">
+          Min digits (padding)
+          <input
+            type="number"
+            min={0}
+            max={12}
+            className="mt-1 w-full rounded-lg border border-gray-300 px-2.5 py-2 text-sm"
+            value={format.minDigits}
+            onChange={(e) => set({ minDigits: Math.max(0, Math.min(12, Math.floor(Number(e.target.value) || 0))) })}
+          />
+        </label>
+        <label className="text-xs text-gray-600">
+          Date segment
+          <select
+            className="mt-1 w-full rounded-lg border border-gray-300 px-2.5 py-2 text-sm"
+            value={format.yearDisplay}
+            onChange={(e) => set({ yearDisplay: e.target.value as DocNumberFormat['yearDisplay'] })}
+          >
+            {YEAR_DISPLAY_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-xs text-gray-600">
+          Restart sequence
+          <select
+            className="mt-1 w-full rounded-lg border border-gray-300 px-2.5 py-2 text-sm"
+            value={format.resetPeriod}
+            onChange={(e) => {
+              const resetPeriod = e.target.value as GstResetPeriod
+              // Re-anchor a pending "continue from" seed to the period this
+              // reset rule produces today, so the seed lands on the right bucket.
+              const migration = format.migration
+                ? { ...format.migration, periodLabel: counterPeriodLabel(resetPeriod, now) }
+                : format.migration
+              onChange({ ...format, resetPeriod, migration })
+            }}
+          >
+            {RESET_PERIOD_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-xs text-gray-600">
+          Continue from (one-time)
+          <input
+            type="number"
+            min={1}
+            placeholder="next number"
+            className="mt-1 w-full rounded-lg border border-gray-300 px-2.5 py-2 text-sm"
+            value={format.migration ? format.migration.nextNumber : ''}
+            onChange={(e) => setContinueFrom(e.target.value)}
+          />
+        </label>
+      </div>
+
+      <p className="text-xs text-gray-500">
+        First number this period: <span className="font-mono text-gray-700">{first || '—'}</span>
+        {format.resetPeriod !== 'CONTINUOUS' && (
+          <>
+            {' '}· current bucket <span className="font-mono text-gray-700">{periodLabel}</span>
+          </>
+        )}
+        {migrationActive && (
+          <span className="ml-1 text-emerald-700">· continuing from your last number (one-time)</span>
+        )}
+        {overLimit && <span className="ml-2 text-red-600">Exceeds the 16-character GST limit</span>}
+      </p>
+      {format.migration && !migrationActive && (
+        <p className="text-xs text-amber-600">
+          The “continue from” value is anchored to period {format.migration.periodLabel}, which isn’t the current
+          period ({currentPeriod}). It will only apply when that period is first numbered.
+        </p>
+      )}
+    </div>
+  )
 }
 
 export function GstSettingsForm() {
@@ -40,7 +309,7 @@ export function GstSettingsForm() {
     void (async () => {
       const res = await getGstSettings()
       if (!res.ok) return
-      const data = res.data ?? {}
+      const data = (res.data ?? {}) as Record<string, unknown>
       setForm((prev) => ({
         ...prev,
         legalName: String(data.legalName || ''),
@@ -48,15 +317,18 @@ export function GstSettingsForm() {
         gstin: String(data.gstin || ''),
         pan: String(data.pan || ''),
         stateCode: String(data.stateCode || ''),
-        invoicePrefix: String(data.invoicePrefix || 'INV'),
-        creditNotePrefix: String(data.creditNotePrefix || 'CN'),
-        debitNotePrefix: String(data.debitNotePrefix || 'DN'),
         priceIncludesTax: data.priceIncludesTax !== false,
         autoGenerateOnOrderCreate: data.autoGenerateOnOrderCreate === true,
+        gstModuleEnabled: data.gstModuleEnabled !== false,
+        numbering: numberingFromLoaded(data),
       }))
       setResult(data)
     })()
   }, [])
+
+  function updateDoc(docKey: GstNumberingDocKey, next: DocNumberFormat) {
+    setForm((p) => ({ ...p, numbering: { ...p.numbering, [docKey]: next } }))
+  }
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -64,11 +336,22 @@ export function GstSettingsForm() {
     setError(undefined)
 
     const res = await createOrUpdateGstSettings({
-      ...form,
+      legalName: form.legalName,
       tradeName: form.tradeName || null,
+      gstin: form.gstin,
       pan: form.pan || null,
+      stateCode: form.stateCode,
+      priceIncludesTax: form.priceIncludesTax,
+      autoGenerateOnOrderCreate: form.autoGenerateOnOrderCreate,
+      // Keep the legacy prefix + strategy fields aligned with the invoice format
+      // so any code still reading them stays consistent with numberingConfig.
+      invoicePrefix: form.numbering.invoice.prefix,
+      creditNotePrefix: form.numbering.creditNote.prefix,
+      debitNotePrefix: form.numbering.debitNote.prefix,
+      invoiceNumberStrategy: resetPeriodToStrategy(form.numbering.invoice.resetPeriod),
+      numberingConfig: form.numbering,
+      gstModuleEnabled: form.gstModuleEnabled,
       defaultCurrency: 'INR',
-      invoiceNumberStrategy: 'FINANCIAL_YEAR_SEQUENCE',
       isActive: true,
       einvoiceEnabled: false,
     })
@@ -84,8 +367,25 @@ export function GstSettingsForm() {
 
   return (
     <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-      <form onSubmit={onSubmit} className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm space-y-4">
+      <form onSubmit={onSubmit} className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm space-y-5">
         <h2 className="text-base font-semibold text-gray-900">GST Settings</h2>
+
+        <label className="flex items-start gap-3 rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
+          <input
+            type="checkbox"
+            className="mt-0.5"
+            checked={form.gstModuleEnabled}
+            onChange={(e) => setForm((p) => ({ ...p, gstModuleEnabled: e.target.checked }))}
+          />
+          <span>
+            <span className="font-medium text-gray-900">Enable GST invoicing in this app</span>
+            <span className="block text-xs text-gray-500">
+              Turn this off if another GST app already numbers your invoices — this app will then stop
+              auto-generating GST documents so your invoice sequence stays with the other tool.
+            </span>
+          </span>
+        </label>
+
         <div className="grid gap-3 md:grid-cols-2">
           <input className="rounded-xl border border-gray-300 px-3 py-2.5 text-sm" placeholder="Legal Name" value={form.legalName} onChange={(e) => setForm((p) => ({ ...p, legalName: e.target.value }))} />
           <input className="rounded-xl border border-gray-300 px-3 py-2.5 text-sm" placeholder="Trade Name" value={form.tradeName} onChange={(e) => setForm((p) => ({ ...p, tradeName: e.target.value }))} />
@@ -94,11 +394,20 @@ export function GstSettingsForm() {
           <input className="rounded-xl border border-gray-300 px-3 py-2.5 text-sm" placeholder="State Code" value={form.stateCode} onChange={(e) => setForm((p) => ({ ...p, stateCode: e.target.value }))} />
         </div>
 
-        <h3 className="text-sm font-semibold text-gray-900">Numbering Prefixes</h3>
-        <div className="grid gap-3 md:grid-cols-3">
-          <input className="rounded-xl border border-gray-300 px-3 py-2.5 text-sm uppercase" placeholder="Invoice Prefix" value={form.invoicePrefix} onChange={(e) => setForm((p) => ({ ...p, invoicePrefix: e.target.value.toUpperCase() }))} />
-          <input className="rounded-xl border border-gray-300 px-3 py-2.5 text-sm uppercase" placeholder="Credit Note Prefix" value={form.creditNotePrefix} onChange={(e) => setForm((p) => ({ ...p, creditNotePrefix: e.target.value.toUpperCase() }))} />
-          <input className="rounded-xl border border-gray-300 px-3 py-2.5 text-sm uppercase" placeholder="Debit Note Prefix" value={form.debitNotePrefix} onChange={(e) => setForm((p) => ({ ...p, debitNotePrefix: e.target.value.toUpperCase() }))} />
+        <div className="space-y-3">
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900">Document Numbering</h3>
+            <p className="text-xs text-gray-500">
+              Set the format, start number and reset cycle for each document type. <span className="font-medium text-gray-700">Start number</span> is
+              what each new period resets to. To migrate from another GST app without a gap, put the
+              <span className="font-medium text-gray-700"> next</span> number to issue in <span className="font-medium text-gray-700">Continue from</span> —
+              that applies once, to the current period only, and later periods still reset to the start number.
+              Keep the composed number ≤ 16 characters (GST limit).
+            </p>
+          </div>
+          <DocFormatEditor docKey="invoice" format={form.numbering.invoice} onChange={(next) => updateDoc('invoice', next)} />
+          <DocFormatEditor docKey="creditNote" format={form.numbering.creditNote} onChange={(next) => updateDoc('creditNote', next)} />
+          <DocFormatEditor docKey="debitNote" format={form.numbering.debitNote} onChange={(next) => updateDoc('debitNote', next)} />
         </div>
 
         <label className="inline-flex items-center gap-2 text-sm text-gray-700">

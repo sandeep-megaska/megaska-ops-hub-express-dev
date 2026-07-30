@@ -1,6 +1,7 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { adminAuthHeaders } from "../../../../lib/admin-fetch";
 
 const STORE_CREDIT_ELIGIBLE_STATUSES = new Set(["APPROVED", "PAYOUT_PENDING", "MANUAL_PENDING"]);
 
@@ -28,7 +29,7 @@ export default function RefundActions({ id, status, method, walletTransactionId,
   const act = async (path: string, body?: Record<string, string>) => {
     const response = await fetch(`/api/admin/refunds/${id}/${path}`, {
       method: "POST",
-      headers: requestHeaders,
+      headers: { ...requestHeaders, ...(await adminAuthHeaders()) },
       body: body ? JSON.stringify(body) : undefined,
     });
     const data = await response.json().catch(() => ({}));
@@ -42,7 +43,7 @@ export default function RefundActions({ id, status, method, walletTransactionId,
     try {
       const response = await fetch(`/api/admin/refund-requests/${id}/settle-store-credit`, {
         method: "POST",
-        headers: requestHeaders,
+        headers: { ...requestHeaders, ...(await adminAuthHeaders()) },
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {

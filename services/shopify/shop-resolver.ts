@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { prisma } from "../db/prisma";
-import { decryptShopifyToken } from "./token-crypto";
+import { decryptShopifyToken, encryptShopifyToken } from "./token-crypto";
 
 type StorefrontCredentialSource =
   | "shop_row_plain"
@@ -164,20 +164,23 @@ export async function getDefaultShopFromConfig() {
 
   const envAdminToken = trimEnv("SHOPIFY_ADMIN_ACCESS_TOKEN") || null;
   const envStorefrontToken = trimEnv("SHOPIFY_STOREFRONT_ACCESS_TOKEN") || null;
+  // Persist encrypted-at-rest only; never write the plaintext token columns.
+  const envAdminTokenEncrypted = envAdminToken ? encryptShopifyToken(envAdminToken) : null;
+  const envStorefrontTokenEncrypted = envStorefrontToken ? encryptShopifyToken(envStorefrontToken) : null;
 
   const rows = await prisma.$queryRawUnsafe<ShopRow[]>(
-    `INSERT INTO "Shop" ("id", "shopDomain", "accessToken", "storefrontAccessToken", "isActive", "installedAt", "createdAt", "updatedAt")
+    `INSERT INTO "Shop" ("id", "shopDomain", "accessTokenEncrypted", "storefrontTokenEncrypted", "isActive", "installedAt", "createdAt", "updatedAt")
      VALUES (gen_random_uuid()::text, $1, $2, $3, true, NOW(), NOW(), NOW())
      ON CONFLICT ("shopDomain")
      DO UPDATE SET
-       "accessToken" = COALESCE(EXCLUDED."accessToken", "Shop"."accessToken"),
-       "storefrontAccessToken" = COALESCE(EXCLUDED."storefrontAccessToken", "Shop"."storefrontAccessToken"),
+       "accessTokenEncrypted" = COALESCE(EXCLUDED."accessTokenEncrypted", "Shop"."accessTokenEncrypted"),
+       "storefrontTokenEncrypted" = COALESCE(EXCLUDED."storefrontTokenEncrypted", "Shop"."storefrontTokenEncrypted"),
        "isActive" = true,
        "updatedAt" = NOW()
      RETURNING "id", "shopDomain", "accessToken", "accessTokenEncrypted", "storefrontAccessToken", "storefrontTokenEncrypted", "scopes", "isActive", "installedAt", "uninstalledAt", "myshopifyDomain", "installationStatus"`,
     envDomain,
-    envAdminToken,
-    envStorefrontToken
+    envAdminTokenEncrypted,
+    envStorefrontTokenEncrypted
   );
 
   return rows[0] || null;

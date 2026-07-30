@@ -93,6 +93,14 @@ export async function GET(request: NextRequest) {
 
   const metadata = await fetchShopMetadata(shop, accessToken);
   const encryptedAccessToken = encryptShopifyToken(accessToken);
+  // The admin token is persisted encrypted-at-rest only; we never write the
+  // plaintext column. The encryption key derives from SHOPIFY_API_SECRET (used
+  // for the token exchange just above), so a null here means a misconfigured
+  // key — fail the install rather than fall back to storing plaintext.
+  if (!encryptedAccessToken) {
+    console.error("[SHOPIFY OAUTH CALLBACK] token encryption unavailable; refusing to persist plaintext", { requestShop: shop });
+    return NextResponse.json({ error: "Token encryption is not configured" }, { status: 500 });
+  }
   const appProxyEnabled = Boolean(process.env.SHOPIFY_APP_PROXY_PREFIX || process.env.SHOPIFY_APP_PROXY_SUBPATH || process.env.SHOPIFY_APP_URL);
   // Installation never depends on a deployment allowlist. Tenant module settings and
   // Razorpay readiness are the runtime authorities for Express Checkout.
@@ -115,11 +123,11 @@ export async function GET(request: NextRequest) {
       "createdAt", "updatedAt", "myshopifyDomain", "primaryDomain", "shopName", "appProxyEnabled", "checkoutEnabled", "installationStatus"
     )
     VALUES (
-      ${shopId}, ${shop}, ${accessToken}, ${encryptedAccessToken}, ${scopes}, true, NOW(), NULL,
+      ${shopId}, ${shop}, NULL, ${encryptedAccessToken}, ${scopes}, true, NOW(), NULL,
       NOW(), NOW(), ${metadata.myshopifyDomain}, ${metadata.primaryDomain}, ${metadata.shopName}, ${appProxyEnabled}, ${checkoutEnabled}, 'ACTIVE'
     )
     ON CONFLICT ("shopDomain") DO UPDATE SET
-      "accessToken" = EXCLUDED."accessToken",
+      "accessToken" = NULL,
       "accessTokenEncrypted" = EXCLUDED."accessTokenEncrypted",
       "scopes" = EXCLUDED."scopes",
       "isActive" = true,

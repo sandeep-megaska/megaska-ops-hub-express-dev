@@ -1,5 +1,6 @@
 import { prisma } from "../db/prisma";
 import type { GstDocumentStatus, GstDocumentType, GstNumberingStrategy } from "./constants";
+import type { GstNumberingConfig } from "./numbering-config";
 
 export interface GstSettingsRecord {
   id: string;
@@ -12,6 +13,7 @@ export interface GstSettingsRecord {
   creditNotePrefix: string;
   debitNotePrefix: string;
   invoiceNumberStrategy: GstNumberingStrategy;
+  numberingConfig?: GstNumberingConfig | null;
   defaultCurrency: string;
   priceIncludesTax: boolean;
   einvoiceEnabled: boolean;
@@ -107,6 +109,7 @@ export interface GstPrismaClient {
     create: (args: unknown) => Promise<Record<string, unknown>>;
     update: (args: unknown) => Promise<Record<string, unknown>>;
     findUnique: (args: unknown) => Promise<Record<string, unknown> | null>;
+    findFirst: (args: unknown) => Promise<Record<string, unknown> | null>;
     findMany: (args: unknown) => Promise<Array<Record<string, unknown>>>;
   };
   gstAuditLog: {

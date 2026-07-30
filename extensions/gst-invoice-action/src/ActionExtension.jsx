@@ -12,10 +12,34 @@ async function fetchShopDomain() {
   return json?.data?.shop?.myshopifyDomain || "";
 }
 
+// The app backend now verifies a Shopify session token and derives the shop
+// from it (it no longer trusts the client-supplied `shop`). Admin UI extensions
+// expose the session token via the global `shopify.idToken()`. Kept defensive so
+// a missing API degrades to a clear 401 from the backend rather than a crash.
+async function getIdToken() {
+  try {
+    if (typeof shopify !== "undefined" && shopify && typeof shopify.idToken === "function") {
+      return (await shopify.idToken()) || "";
+    }
+  } catch (error) {
+    // fall through — request goes out tokenless and the backend answers 401
+  }
+  return "";
+}
+
+async function authHeaders(extra) {
+  const token = await getIdToken();
+  return Object.assign(
+    { "Content-Type": "application/json" },
+    token ? { Authorization: `Bearer ${token}` } : {},
+    extra || {},
+  );
+}
+
 async function fetchOrderStatus({ shopifyOrderGid, shop, generate }) {
   const res = await fetch("/api/gst/orders/by-shopify-id", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: await authHeaders(),
     body: JSON.stringify({ shopifyOrderGid, shop, generate: Boolean(generate) }),
   });
   const json = await res.json().catch(() => null);
@@ -227,7 +251,7 @@ export default async () => {
     try {
       const res = await fetch(`/api/gst/invoices/${orderStatus.invoiceId}/send-email`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: await authHeaders(),
         body: JSON.stringify({ to: emailAddress }),
       });
       const json = await res.json().catch(() => null);

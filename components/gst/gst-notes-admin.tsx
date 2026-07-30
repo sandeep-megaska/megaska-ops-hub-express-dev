@@ -7,6 +7,7 @@ import {
   listGstDocuments,
   type GstDocumentListItem,
 } from '../../lib/gst-client'
+import { adminAuthHeaders } from '../../lib/admin-fetch'
 
 function formatDate(value: string): string {
   const parsed = new Date(value)
@@ -26,6 +27,51 @@ export function GstNotesAdmin() {
   const [reason, setReason] = useState('')
   const [error, setError] = useState<string>()
   const [success, setSuccess] = useState<string>()
+
+  // The document HTML/PDF route now requires a verified session token, so it can
+  // no longer be a plain <a href> (a top-level navigation can't carry the
+  // Authorization header). Fetch it with the token and open the result as a blob.
+  const openNoteDocument = useCallback(async (noteId: string, format: 'html' | 'pdf') => {
+    setError(undefined)
+    // Open the tab synchronously to keep the user activation; fill it after fetch.
+    const win = format === 'html' ? window.open('about:blank', '_blank') : null
+    try {
+      const res = await fetch(gstDocumentViewUrl(noteId, format), {
+        cache: 'no-store',
+        credentials: 'include',
+        headers: await adminAuthHeaders(),
+      })
+      if (!res.ok) {
+        win?.close()
+        const payload = (await res.json().catch(() => ({}))) as { error?: string }
+        setError(payload.error || `Unable to open ${format.toUpperCase()} (status ${res.status})`)
+        return
+      }
+
+      if (format === 'html') {
+        const html = await res.text()
+        if (win) {
+          win.document.open()
+          win.document.write(html)
+          win.document.close()
+        }
+        return
+      }
+
+      const blob = await res.blob()
+      const fileUrl = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = fileUrl
+      anchor.download = `gst-note-${noteId}.pdf`
+      document.body.appendChild(anchor)
+      anchor.click()
+      anchor.remove()
+      URL.revokeObjectURL(fileUrl)
+    } catch (fetchError) {
+      win?.close()
+      setError(fetchError instanceof Error ? fetchError.message : 'Unable to open the document')
+    }
+  }, [])
 
   const refresh = useCallback(async () => {
     setLoading(true)
@@ -195,22 +241,20 @@ export function GstNotesAdmin() {
                     <td className="py-2 pr-4 text-gray-700">{note.status}</td>
                     <td className="py-2 pr-4">
                       <div className="flex gap-3">
-                        <a
+                        <button
+                          type="button"
                           className="text-blue-600 hover:underline"
-                          href={gstDocumentViewUrl(note.id, 'html')}
-                          target="_blank"
-                          rel="noreferrer"
+                          onClick={() => openNoteDocument(note.id, 'html')}
                         >
                           View
-                        </a>
-                        <a
+                        </button>
+                        <button
+                          type="button"
                           className="text-blue-600 hover:underline"
-                          href={gstDocumentViewUrl(note.id, 'pdf')}
-                          target="_blank"
-                          rel="noreferrer"
+                          onClick={() => openNoteDocument(note.id, 'pdf')}
                         >
                           PDF
-                        </a>
+                        </button>
                       </div>
                     </td>
                   </tr>

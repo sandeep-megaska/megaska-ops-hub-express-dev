@@ -3,7 +3,8 @@ import type { ShipmentStatus } from "../../../../../../../../generated/prisma";
 import { prisma } from "../../../../../../../../services/db/prisma";
 import { canTransitionExchangeStatus } from "../../../../../../../../services/exchange/lifecycle";
 import { DelhiveryAdapter, DelhiveryTrackingError } from "../../../../../../../../services/logistics/delhivery-adapter";
-import { requireShopFromRequest, ShopResolutionError } from "../../../../../../../../services/shopify/shop";
+import { ShopResolutionError } from "../../../../../../../../services/shopify/shop";
+import { requireAdminShopFromRequest } from "../../../../../../../../services/shopify/admin-auth";
 
 function toShipmentStatus(rawStatus: string | null | undefined, normalizedStatus: string): ShipmentStatus {
   const haystack = `${rawStatus || ""} ${normalizedStatus}`.toLowerCase();
@@ -35,7 +36,7 @@ function usefulRemarks(rawStatus?: string | null, eventsCount = 0) {
 
 export async function POST(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
-    const shop = await requireShopFromRequest(req);
+    const shop = await requireAdminShopFromRequest(req);
     const { id } = await context.params;
     const request = await prisma.orderActionRequest.findFirst({
       where: { id, shopId: shop.id, requestType: "EXCHANGE" },

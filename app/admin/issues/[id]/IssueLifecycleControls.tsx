@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { adminAuthHeaders } from "../../../../lib/admin-fetch";
 
 type Props = {
   requestId: string;
@@ -45,10 +46,10 @@ export default function IssueLifecycleControls({
     return { refundAmountPaise: Math.round(numeric * 100), error: null };
   }
 
-  function getHeaders() {
+  async function getHeaders() {
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (shopDomain) headers["x-shopify-shop-domain"] = shopDomain;
-    return headers;
+    return { ...headers, ...(await adminAuthHeaders()) };
   }
 
   async function updateStatus() {
@@ -67,7 +68,7 @@ export default function IssueLifecycleControls({
 
     const response = await fetch(`/api/admin/issue-requests/${requestId}/status`, {
       method: "PATCH",
-      headers: getHeaders(),
+      headers: await getHeaders(),
       body: JSON.stringify(payload),
     });
 
@@ -93,7 +94,7 @@ export default function IssueLifecycleControls({
   async function saveNote() {
     const response = await fetch(`/api/admin/issue-requests/${requestId}`, {
       method: "PATCH",
-      headers: getHeaders(),
+      headers: await getHeaders(),
       body: JSON.stringify({ adminNote }),
     });
 

@@ -26,6 +26,8 @@ export interface GstOrderImportRecord {
 }
 
 export interface GstOrderImportFilters {
+  /** Required tenant scope — every listing must be bound to one shop. */
+  shopId?: string;
   gstSettingsId?: string;
   importStatus?: string;
   eligibilityStatus?: string;
@@ -69,6 +71,7 @@ interface LineForReadiness {
 type OrderImportDbClient = {
   gstOrderImport: {
     findUnique: (args: unknown) => Promise<Record<string, unknown> | null>;
+    findFirst: (args: unknown) => Promise<Record<string, unknown> | null>;
     create: (args: unknown) => Promise<Record<string, unknown>>;
     findMany: (args: unknown) => Promise<Array<Record<string, unknown>>>;
     update: (args: unknown) => Promise<Record<string, unknown>>;
@@ -471,7 +474,14 @@ export async function syncOrderRange(_input: SyncOrderRangeInput): Promise<GstSe
 
 export async function listImportedOrders(filters: GstOrderImportFilters): Promise<GstServiceResult<GstOrderImportRecord[]>> {
   try {
-    const where: Record<string, unknown> = {};
+    // Tenant isolation: refuse to list orders without a shop scope. Without this
+    // guard the query returns every merchant's imported orders + customer data.
+    const shopId = String(filters.shopId || "").trim();
+    if (!shopId) {
+      return { ok: false, error: "shopId is required to list imported orders" };
+    }
+
+    const where: Record<string, unknown> = { shopId };
     if (filters.gstSettingsId) {
       where.gstSettingsId = String(filters.gstSettingsId);
     }
@@ -538,15 +548,21 @@ export async function listImportedOrders(filters: GstOrderImportFilters): Promis
   }
 }
 
-export async function getImportedOrderDetail(id: string): Promise<GstServiceResult<Record<string, unknown> | null>> {
+export async function getImportedOrderDetail(
+  id: string,
+  options: { shopId?: string } = {},
+): Promise<GstServiceResult<Record<string, unknown> | null>> {
   const orderImportId = normalizeString(id);
   if (!orderImportId) {
     return { ok: false, error: "Order import id is required" };
   }
 
   try {
-    const row = await orderDb.gstOrderImport.findUnique({
-      where: { id: orderImportId },
+    // Tenant isolation: scope by shopId when provided so a foreign order id
+    // resolves to null rather than exposing another shop's imported order.
+    const scopedShopId = normalizeString(options.shopId);
+    const row = await orderDb.gstOrderImport.findFirst({
+      where: { id: orderImportId, ...(scopedShopId ? { shopId: scopedShopId } : {}) },
       include: {
         lines: {
           orderBy: { lineNumber: "asc" },
