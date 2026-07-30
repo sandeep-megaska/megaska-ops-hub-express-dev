@@ -84,6 +84,12 @@ assert.ok(excludedCartControl, "isExcludedCartControl helper should exist");
 assert.match(excludedCartControl[0], /"\[class\*='add-to' i\]"/, "add-to-* controls outside a /cart/add form must be excluded from cart-open triggers");
 assert.match(excludedCartControl[0], /"\[data-add-to-cart\]"/, "data-add-to-cart controls must be excluded from cart-open triggers");
 assert.match(excludedCartControl[0], /"\[class\*='product-form__submit' i\]"/, "product-form submit controls must be excluded from cart-open triggers");
+// Theme-exact hooks: the mobile floating sticky bar and its size sheet must be
+// fully hands-off, including the transient "SELECT SIZE" label state that the
+// text guard alone would not catch.
+assert.match(excludedCartControl[0], /"\[data-product-sticky\]"/, "the theme's mobile sticky bar subtree must be excluded from cart-open triggers");
+assert.match(excludedCartControl[0], /"\[data-sticky-add\]"/, "the theme's sticky ADD TO BAG button must be excluded from cart-open triggers");
+assert.match(excludedCartControl[0], /"\[data-size-sheet\]"/, "the theme's size-selection sheet must be excluded from cart-open triggers");
 assert.match(excludedCartControl[0], /add\(\?:ed\)\?\(\?:\\s\|-\|_\)\+to\(\?:\\s\|-\|_\)\+\(\?:\(\?:my\|your\)\(\?:\\s\|-\|_\)\+\)\?\(\?:cart\|bag\|basket\|trolley\)/, "the add-to-X text guard must cover all cart synonyms (cart/bag/basket/trolley), not just 'cart'");
 
 const controllerOpen = source.match(/window\.LoopDeskCartController = \{[\s\S]*?open: function \(\) \{[\s\S]*?\n    \},/);
