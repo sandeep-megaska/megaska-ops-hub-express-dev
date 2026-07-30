@@ -71,6 +71,27 @@ assert.match(source, /document\.querySelectorAll\(COMBINED_CART_TRIGGER_SELECTOR
 assert.match(source, /runtimeConfig\.cart\.customTriggerSelector !== config\.cart\.customTriggerSelector\)[\s\S]*CUSTOM_CART_TRIGGER_SELECTOR = getCustomCartTriggerSelector\(\);/, "Case I: a late-arriving runtime config should refresh the custom selector without a page reload");
 assert.doesNotMatch(source.match(/function ownCartTriggerEvent\(event, trigger, action\)[\s\S]*?\n  \}/)[0], /fallbackToCartPage/, "an owned interaction must never fall through to /cart after interception");
 
+// CART-ATC-1: an "add to bag/basket/trolley" control (e.g. a custom mobile
+// sticky/floating ATC bar that opens a size selector before adding) is an ADD
+// action, never a cart-OPEN trigger. It must be excluded from findCartTrigger /
+// the clone takeover even when it lives OUTSIDE a /cart/add form and its label
+// does not literally say "cart". Misclassifying it strips the theme's native
+// size-popup + ATC handlers (via cloneNode) and hijacks the tap to open an
+// empty drawer instead of adding the product. Regression for the mobile
+// "Add to bag" coexistence bug.
+const excludedCartControl = source.match(/function isExcludedCartControl\(element\) \{[\s\S]*?\n  \}/);
+assert.ok(excludedCartControl, "isExcludedCartControl helper should exist");
+assert.match(excludedCartControl[0], /"\[class\*='add-to' i\]"/, "add-to-* controls outside a /cart/add form must be excluded from cart-open triggers");
+assert.match(excludedCartControl[0], /"\[data-add-to-cart\]"/, "data-add-to-cart controls must be excluded from cart-open triggers");
+assert.match(excludedCartControl[0], /"\[class\*='product-form__submit' i\]"/, "product-form submit controls must be excluded from cart-open triggers");
+// Theme-exact hooks: the mobile floating sticky bar and its size sheet must be
+// fully hands-off, including the transient "SELECT SIZE" label state that the
+// text guard alone would not catch.
+assert.match(excludedCartControl[0], /"\[data-product-sticky\]"/, "the theme's mobile sticky bar subtree must be excluded from cart-open triggers");
+assert.match(excludedCartControl[0], /"\[data-sticky-add\]"/, "the theme's sticky ADD TO BAG button must be excluded from cart-open triggers");
+assert.match(excludedCartControl[0], /"\[data-size-sheet\]"/, "the theme's size-selection sheet must be excluded from cart-open triggers");
+assert.match(excludedCartControl[0], /add\(\?:ed\)\?\(\?:\\s\|-\|_\)\+to\(\?:\\s\|-\|_\)\+\(\?:\(\?:my\|your\)\(\?:\\s\|-\|_\)\+\)\?\(\?:cart\|bag\|basket\|trolley\)/, "the add-to-X text guard must cover all cart synonyms (cart/bag/basket/trolley), not just 'cart'");
+
 const controllerOpen = source.match(/window\.LoopDeskCartController = \{[\s\S]*?open: function \(\) \{[\s\S]*?\n    \},/);
 assert.ok(controllerOpen, "manual controller open helper should exist");
 assert.match(controllerOpen[0], /return refreshAndMaybeOpen\(true\);/, "manual open helper should open the drawer for debugging");

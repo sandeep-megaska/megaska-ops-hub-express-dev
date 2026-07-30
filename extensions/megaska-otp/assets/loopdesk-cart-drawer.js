@@ -953,10 +953,33 @@
       "form[action*='/cart/add'] [role='button']",
       "[name='add']",
       "[type='submit'][formaction*='/cart/add']",
+      // Add-to-cart / buy controls that live OUTSIDE a /cart/add form — e.g. a
+      // custom mobile sticky/floating bar and its size-selection sheet that add
+      // via their own fetch and then dispatch `loopdesk:cart-drawer:open` for
+      // us. These are ADD actions, never cart-OPEN triggers, so we must never
+      // clone/hijack them: doing so strips the theme's own size-sheet + ATC
+      // handlers and steals the tap (the bug that broke mobile add-to-cart).
+      // Theme-native hooks (megaska custom theme):
+      "[data-product-sticky]",
+      "[data-sticky-add]",
+      "[data-sticky-buy]",
+      "[data-sticky-offer]",
+      "[data-size-sheet]",
+      "[data-add-to-cart]",
+      "[data-buy-now]",
+      // Generic add-to-cart hooks for portability across other themes:
+      "[data-add-to-bag]",
+      "[data-atc-button]",
+      "[data-sticky-atc]",
+      "[class*='add-to' i]",
+      "[class*='add_to' i]",
+      "[class*='addtocart' i]",
+      "[class*='addtobag' i]",
+      "[class*='product-form__submit' i]",
     ].join(","));
     if (excluded) return true;
     var text = elementText(element);
-    return /\b(checkout|quantity|qty|increase|decrease|remove|discount|coupon|promo)\b/.test(text) || /\badd(?:\s|-|_)to(?:\s|-|_)cart\b/.test(text);
+    return /\b(checkout|quantity|qty|increase|decrease|remove|discount|coupon|promo)\b/.test(text) || /\badd(?:ed)?(?:\s|-|_)+to(?:\s|-|_)+(?:(?:my|your)(?:\s|-|_)+)?(?:cart|bag|basket|trolley)\b/.test(text);
   }
 
   function iconGlyphText(element) {
