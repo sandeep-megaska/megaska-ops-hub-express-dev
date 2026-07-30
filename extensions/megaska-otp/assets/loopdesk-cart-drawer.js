@@ -953,10 +953,24 @@
       "form[action*='/cart/add'] [role='button']",
       "[name='add']",
       "[type='submit'][formaction*='/cart/add']",
+      // Add-to-cart controls that live OUTSIDE a /cart/add form — e.g. a
+      // custom sticky/floating "Add to bag" bar that opens a size selector
+      // before adding. These are ADD actions, never cart-OPEN triggers, so we
+      // must never clone/hijack them (doing so strips the theme's own size
+      // popup + ATC handlers).
+      "[data-add-to-cart]",
+      "[data-add-to-bag]",
+      "[data-atc-button]",
+      "[data-sticky-atc]",
+      "[class*='add-to' i]",
+      "[class*='add_to' i]",
+      "[class*='addtocart' i]",
+      "[class*='addtobag' i]",
+      "[class*='product-form__submit' i]",
     ].join(","));
     if (excluded) return true;
     var text = elementText(element);
-    return /\b(checkout|quantity|qty|increase|decrease|remove|discount|coupon|promo)\b/.test(text) || /\badd(?:\s|-|_)to(?:\s|-|_)cart\b/.test(text);
+    return /\b(checkout|quantity|qty|increase|decrease|remove|discount|coupon|promo)\b/.test(text) || /\badd(?:ed)?(?:\s|-|_)+to(?:\s|-|_)+(?:(?:my|your)(?:\s|-|_)+)?(?:cart|bag|basket|trolley)\b/.test(text);
   }
 
   function iconGlyphText(element) {
