@@ -17,6 +17,7 @@ type ImportResult = {
   unmatched: number;
   failed: number;
   affectedProducts: number;
+  productsResolvedByHandle: number;
   errors: { csvLine: number; message: string }[];
   errorsTruncated: boolean;
 };
@@ -129,9 +130,10 @@ export default function ReviewImportExportClient({ shop }: { shop: string }) {
         <h3 style={{ marginBottom: 4 }}>Import</h3>
         <p style={{ marginTop: 0, color: "#4b5563" }}>
           Migrate existing reviews in from Judge.me, the Shopify Product Reviews
-          app, or a Megaska export. Rows need a <code>product_id</code> (numeric
-          Shopify id) to attach to a storefront product. Run a preview first — it
-          validates and counts without saving anything.
+          app, or a Megaska export. Each row needs a <code>product_id</code>
+          (numeric Shopify id) or a <code>product_handle</code> — handles are
+          resolved to products automatically. Run a preview first — it validates
+          and counts without saving anything.
         </p>
 
         <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", marginTop: 12 }}>
@@ -182,9 +184,10 @@ export default function ReviewImportExportClient({ shop }: { shop: string }) {
             <ul style={{ margin: "8px 0 0", paddingLeft: 18 }}>
               <li>{result.dryRun ? "Would create" : "Created"}: {result.created} review(s) across {result.affectedProducts} product(s)</li>
               <li>Rows read: {result.totalDataRows}</li>
+              {result.productsResolvedByHandle > 0 && <li>Matched to products by handle: {result.productsResolvedByHandle}</li>}
               {result.duplicatesSkippedInFile > 0 && <li>Duplicate rows in file skipped: {result.duplicatesSkippedInFile}</li>}
               {result.duplicatesSkippedExisting > 0 && <li>Already-imported reviews skipped: {result.duplicatesSkippedExisting}</li>}
-              {result.unmatched > 0 && <li>Rows without a Shopify product id (skipped): {result.unmatched}</li>}
+              {result.unmatched > 0 && <li>Rows whose product could not be matched (skipped): {result.unmatched}</li>}
               {result.failed > 0 && <li style={{ color: "#b91c1c" }}>Failed to save: {result.failed}</li>}
             </ul>
             {result.errors.length > 0 && (

@@ -103,14 +103,57 @@ test("importReviews skips reviews that already exist (natural-key dedup)", async
   assert.equal(reviews.length, 0);
 });
 
-test("importReviews reports handle-only rows as unmatched and writes nothing for them", async () => {
+test("handle-only rows are unmatched when no shop domain is available to resolve them", async () => {
   const csv = "product_handle,rating,author\nblue-shirt,5,Asha";
   const { db, reviews } = fakeDb();
+  // No shopDomain -> no Admin API resolution possible.
   const result = await importReviews({ shopId: "shop_1", csv, now: NOW }, { db, recalculate: async () => undefined });
   assert.equal(result.unmatched, 1);
   assert.equal(result.created, 0);
   assert.equal(reviews.length, 0);
-  assert.match(result.errors[0].message, /numeric Shopify product id/i);
+  assert.match(result.errors[0].message, /could not resolve product_handle/i);
+});
+
+test("handle-only rows are resolved to a product id via the injected resolver", async () => {
+  const csv = "product_handle,rating,author,body\nblue-shirt,5,Asha,Loved it";
+  const { db, reviews } = fakeDb();
+  const result = await importReviews(
+    { shopId: "shop_1", shopDomain: "megaskastore.myshopify.com", csv, now: NOW },
+    {
+      db,
+      recalculate: async () => undefined,
+      resolveHandles: async (handles) => {
+        assert.deepEqual(handles, ["blue-shirt"]);
+        return new Map([["blue-shirt", "555"]]);
+      },
+    },
+  );
+  assert.equal(result.created, 1);
+  assert.equal(result.unmatched, 0);
+  assert.equal(result.productsResolvedByHandle, 1);
+  assert.equal((reviews[0] as { shopifyProductId?: string }).shopifyProductId, "555");
+});
+
+test("unresolvable handles are reported unmatched while resolvable ones import", async () => {
+  const csv = [
+    "product_handle,rating,author",
+    "known-product,5,Asha",
+    "ghost-product,4,Ravi",
+  ].join("\n");
+  const { db, reviews } = fakeDb();
+  const result = await importReviews(
+    { shopId: "shop_1", shopDomain: "megaskastore.myshopify.com", csv, now: NOW },
+    {
+      db,
+      recalculate: async () => undefined,
+      resolveHandles: async () => new Map([["known-product", "777"]]),
+    },
+  );
+  assert.equal(result.created, 1);
+  assert.equal(result.productsResolvedByHandle, 1);
+  assert.equal(result.unmatched, 1);
+  assert.equal(reviews.length, 1);
+  assert.match(result.errors.find((e) => e.csvLine === 3)?.message ?? "", /ghost-product/);
 });
 
 test("dry run counts would-create rows without writing", async () => {

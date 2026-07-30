@@ -43,7 +43,15 @@ export async function POST(req: NextRequest) {
   const defaultVerified = body.defaultVerified === true;
 
   try {
-    const data = await importReviews({ shopId: context.shop.id, csv, platform, dryRun, defaultStatus, defaultVerified });
+    const data = await importReviews({
+      shopId: context.shop.id,
+      shopDomain: context.shop.shopDomain,
+      csv,
+      platform,
+      dryRun,
+      defaultStatus,
+      defaultVerified,
+    });
     return NextResponse.json({ ok: true, data }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return NextResponse.json(

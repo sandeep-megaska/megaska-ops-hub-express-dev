@@ -25,6 +25,10 @@ export interface ImportReviewsInput {
   defaultStatus?: string;
   defaultVerified?: boolean;
   now?: Date;
+  // Storefront domain used to resolve product handles to Shopify product ids via
+  // the Admin API. When absent, handle-only rows can't be resolved and are
+  // reported as unmatched.
+  shopDomain?: string;
 }
 
 export interface ImportRowError {
@@ -42,6 +46,7 @@ export interface ImportReviewsResult {
   unmatched: number;
   failed: number;
   affectedProducts: number;
+  productsResolvedByHandle: number;
   errors: ImportRowError[];
   errorsTruncated: boolean;
 }
@@ -115,6 +120,9 @@ export interface ImportReviewsDeps {
   db?: ReviewImportDb;
   // Aggregate recompute; injectable so integration tests avoid booting Prisma.
   recalculate?: (shopId: string, shopifyProductId: string, db: unknown) => Promise<unknown>;
+  // Product-handle -> numeric id resolver; injectable so tests avoid the Shopify
+  // Admin API. Defaults to the real Admin GraphQL resolver.
+  resolveHandles?: (handles: string[], shopDomain: string) => Promise<Map<string, string>>;
 }
 
 export async function importReviews(input: ImportReviewsInput, deps: ImportReviewsDeps = {}): Promise<ImportReviewsResult> {
@@ -140,23 +148,47 @@ export async function importReviews(input: ImportReviewsInput, deps: ImportRevie
     unmatched: 0,
     failed: 0,
     affectedProducts: 0,
+    productsResolvedByHandle: 0,
     errors,
     errorsTruncated: false,
   };
 
-  // Keep only rows with a resolvable numeric Shopify product id; handle-only
-  // rows can't be attached to a storefront product and are reported.
+  // Resolve product references: prefer a numeric Shopify product id on the row;
+  // otherwise resolve the product_handle to an id via the Admin API (batched).
+  const rowsNeedingHandle = preview.rows.filter(
+    (row) => !normalizeShopifyProductId(row.shopifyProductId) && row.productHandle,
+  );
+  let handleMap = new Map<string, string>();
+  if (rowsNeedingHandle.length > 0 && String(input.shopDomain || "").trim()) {
+    const resolveHandles =
+      deps.resolveHandles ?? (await import("../shopify/product-handle-resolver.ts")).resolveProductIdsByHandle;
+    try {
+      handleMap = await resolveHandles(
+        rowsNeedingHandle.map((row) => row.productHandle as string),
+        String(input.shopDomain),
+      );
+    } catch {
+      handleMap = new Map();
+    }
+  }
+
+  // Partition into importable rows (a resolvable product id) and unmatched rows.
   const importable: { row: NormalizedReviewImport; productId: string; dedupeKey: string }[] = [];
   for (const row of preview.rows) {
-    const productId = normalizeShopifyProductId(row.shopifyProductId);
+    const directId = normalizeShopifyProductId(row.shopifyProductId);
+    const handleId = !directId && row.productHandle ? handleMap.get(row.productHandle.trim().toLowerCase()) ?? null : null;
+    const productId = directId || handleId;
     if (!productId) {
       result.unmatched += 1;
       pushError(errors, {
         csvLine: row.csvLine,
-        message: "No numeric Shopify product id; a product_id column is required to attach the review to a storefront product.",
+        message: row.productHandle
+          ? `Could not resolve product_handle "${row.productHandle}" to a Shopify product; row skipped.`
+          : "No product reference; a product_id or product_handle is required.",
       });
       continue;
     }
+    if (handleId) result.productsResolvedByHandle += 1;
     importable.push({
       row,
       productId,
