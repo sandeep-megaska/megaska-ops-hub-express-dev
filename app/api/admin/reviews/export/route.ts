@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 // GET /api/admin/reviews/export?shop=<domain>[&status=published,pending][&includeDeleted=true]
-// Streams the shop's reviews as the canonical Megaska review CSV. Tenant-scoped
+// Streams the shop's reviews as the canonical LoopD2C review CSV. Tenant-scoped
 // via resolveAdminShopFromRequest; a foreign/unresolved shop fails closed (401).
 export async function GET(req: NextRequest) {
   const context = await resolveAdminShopFromRequest(req);
@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
     return new NextResponse(csv, {
       headers: {
         "Content-Type": "text/csv; charset=utf-8",
-        "Content-Disposition": `attachment; filename="megaska-reviews-${stamp}.csv"`,
+        "Content-Disposition": `attachment; filename="loopd2c-reviews-${stamp}.csv"`,
         "X-Review-Export-Row-Count": String(rowCount),
         "Cache-Control": "no-store",
       },

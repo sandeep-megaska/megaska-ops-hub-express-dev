@@ -1,4 +1,4 @@
-// Canonical Megaska review CSV contract. Export emits exactly these columns, in
+// Canonical LoopD2C review CSV contract. Export emits exactly these columns, in
 // this order; the Judge.me / Shopify-native importers map their columns INTO
 // this same shape so an exported file round-trips cleanly back through import.
 export const REVIEW_EXPORT_HEADERS = [

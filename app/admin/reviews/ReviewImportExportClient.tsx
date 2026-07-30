@@ -5,7 +5,7 @@ import { useState, type CSSProperties } from "react";
 // Import/export home for the Review module.
 // Export: a CSV backup / migration-out of every review.
 // Import: migrate reviews in from Judge.me, the Shopify Product Reviews app, or
-// a Megaska export, with a dry-run preview before committing.
+// a LoopD2C export, with a dry-run preview before committing.
 
 type ImportResult = {
   platform: string;
@@ -25,7 +25,7 @@ type ImportResult = {
 const PLATFORMS: { value: string; label: string }[] = [
   { value: "judge_me", label: "Judge.me" },
   { value: "shopify_native", label: "Shopify Product Reviews" },
-  { value: "megaska", label: "Megaska export" },
+  { value: "loopd2c", label: "LoopD2C export" },
   { value: "generic", label: "Other / generic CSV" },
 ];
 
@@ -130,7 +130,7 @@ export default function ReviewImportExportClient({ shop }: { shop: string }) {
         <h3 style={{ marginBottom: 4 }}>Import</h3>
         <p style={{ marginTop: 0, color: "#4b5563" }}>
           Migrate existing reviews in from Judge.me, the Shopify Product Reviews
-          app, or a Megaska export. Each row needs a <code>product_id</code>
+          app, or a LoopD2C export. Each row needs a <code>product_id</code>
           (numeric Shopify id) or a <code>product_handle</code> — handles are
           resolved to products automatically. Run a preview first — it validates
           and counts without saving anything.
