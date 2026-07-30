@@ -204,6 +204,12 @@
     "[data-quantity]",
     "[class*='quantity' i]",
     "[aria-label*='quantity' i]",
+    // The LoopD2C customer dashboard owns its own buttons (Order details, order
+    // actions, its own sign-in trigger). Its "Order details" button carries the
+    // class `ld-account-link-button`, which otherwise matches [class*='account-link'],
+    // so the account-trigger scanner would hijack the click and navigate away.
+    "[data-loopdesk-customer-dashboard]",
+    "[data-loopdesk-customer-dashboard] *",
   ].join(",");
 
   function getAccountCustomTriggerSelector() {
@@ -261,6 +267,10 @@
   function findAccountTrigger(event) {
     const target = event.target;
     if (!target || typeof target.closest !== "function") return null;
+
+    // Never treat a control inside the LoopD2C customer dashboard as a native
+    // account trigger — it manages its own clicks (drawer, actions, sign-in).
+    if (target.closest("[data-loopdesk-customer-dashboard]")) return null;
 
     const customSelector = getAccountCustomTriggerSelector();
     if (customSelector) {
@@ -2862,8 +2872,14 @@ function consumePendingAccountRedirect() {
   }
 
   function isUsableAccountEntryTrigger(element) {
+    // The LoopD2C dashboard's own buttons must never be tagged as account
+    // entries (its "Order details" button matches [class*='account-link']).
+    if (element && typeof element.closest === "function" && element.closest("[data-loopdesk-customer-dashboard]")) {
+      return false;
+    }
     const actionElement = getAccountTriggerActionElement(element);
     if (!actionElement || typeof actionElement.getAttribute !== "function") return false;
+    if (actionElement.closest && actionElement.closest("[data-loopdesk-customer-dashboard]")) return false;
     if (actionElement.hasAttribute("disabled") || actionElement.getAttribute("aria-disabled") === "true") {
       return false;
     }
