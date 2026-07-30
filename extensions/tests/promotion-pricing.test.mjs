@@ -41,6 +41,33 @@ test("unknown allocations remain in Shopify total and suppress an unreliable spl
   assert.equal(model.breakdownComplete, false);
 });
 
+test("an order-wide automatic discount is classified as an order (tier) discount", () => {
+  const model = api().build(cart({ original_total_price: 62995, items_subtotal_price: 62995, total_discount: 3149, total_price: 59846,
+    items: [{ discounts: [{ amount: 3149, title: "LoopD2C tier", discount_application: { type: "automatic", target_selection: "all", allocation_method: "across", value_type: "percentage", value: "5.0" } }] }] }));
+  assert.equal(model.appliedDiscounts[0].type, "ORDER_PROMOTION");
+  assert.equal(model.orderPromotionSavings, 3149);
+  assert.equal(model.productPromotionSavings, 0);
+  assert.equal(model.totalSavings, 3149);
+  assert.equal(model.breakdownComplete, true);
+  assert.ok(!model.warnings.includes("pricing_unclassified_discount"));
+});
+
+test("the order-tier share allocated onto a product-offer line is attributed to the order, not the product", () => {
+  const model = api().build(cart({ original_total_price: 122995, items_subtotal_price: 122995, total_discount: 33149, total_price: 89846,
+    items: [
+      { properties: { _loopdesk_promotion_rule_id: "reward" }, discounts: [
+        { amount: 30000, title: "LoopD2C offer", discount_application: { type: "automatic", target_selection: "explicit", allocation_method: "each" } },
+        { amount: 1500, title: "LoopD2C tier", discount_application: { type: "automatic", target_selection: "all", allocation_method: "across" } },
+      ] },
+      { discounts: [{ amount: 1649, title: "LoopD2C tier", discount_application: { type: "automatic", target_selection: "all", allocation_method: "across" } }] },
+    ] }));
+  assert.equal(model.productPromotionSavings, 30000);
+  assert.equal(model.orderPromotionSavings, 3149); // 1500 + 1649, not folded into product
+  assert.equal(model.totalSavings, 33149);
+  assert.equal(model.breakdownComplete, true);
+  assert.ok(!model.warnings.includes("pricing_unclassified_discount"));
+});
+
 test("combination policy reports Shopify settings and blocks multiple order discounts", () => {
   const { TYPES, combinationStatus } = api();
   assert.equal(combinationStatus({ productDiscounts: true }, TYPES.PRODUCT, TYPES.ORDER), "CAN_COMBINE");
