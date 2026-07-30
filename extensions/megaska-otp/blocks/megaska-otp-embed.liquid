@@ -1,3 +1,35 @@
+{% if block.settings.cart_drawer_enabled %}
+  <script>
+    (function () {
+      // Fast-path duplicate of loopdesk-cart-drawer.js's bounce-back check,
+      // run inline (no asset fetch, no defer) so a theme-driven redirect to
+      // /cart after add-to-cart is corrected as early as physically
+      // possible, minimizing the visible flash of the native cart page.
+      // loopdesk-cart-drawer.js repeats this same check once it loads, as a
+      // fallback in case this inline copy doesn't run for any reason.
+      var RETURN_KEY = "loopdeskCartAddReturnTo";
+      var REOPEN_KEY = "loopdeskCartAddReopenDrawer";
+      var MAX_AGE_MS = 8000;
+      function hasCartPath(pathname) {
+        return /(?:^|\/)cart\/?$/.test(String(pathname || ""));
+      }
+      if (!hasCartPath(window.location.pathname)) return;
+      var raw;
+      try { raw = sessionStorage.getItem(RETURN_KEY); } catch (_error) { return; }
+      if (!raw) return;
+      try { sessionStorage.removeItem(RETURN_KEY); } catch (_error) {}
+      var parsed;
+      try { parsed = JSON.parse(raw); } catch (_error) { return; }
+      if (!parsed || !parsed.url || !parsed.ts || Date.now() - parsed.ts > MAX_AGE_MS) return;
+      var returnUrl;
+      try { returnUrl = new URL(parsed.url, window.location.origin); } catch (_error) { return; }
+      if (returnUrl.origin !== window.location.origin || hasCartPath(returnUrl.pathname)) return;
+      try { sessionStorage.setItem(REOPEN_KEY, "1"); } catch (_error) {}
+      window.location.replace(parsed.url);
+    })();
+  </script>
+{% endif %}
+
 {{ 'megaska-otp.css' | asset_url | stylesheet_tag }}
 {% if block.settings.cart_drawer_enabled %}
   {{ 'loopdesk-cart-drawer.css' | asset_url | stylesheet_tag }}

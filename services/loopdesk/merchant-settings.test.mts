@@ -431,8 +431,8 @@ test("compiled promotion runtime does not expose admin tokens or raw Shopify res
 });
 
 test("bootstrap keeps runtime promotions before cart drawer normalization", () => {
-  const block = readFileSync(resolve("extensions/megaska-otp/blocks/loopdesk-cart-drawer-embed.liquid"), "utf8");
-  assert.match(block, /promotions:\s*payload\.config\.promotions/);
+  const block = readFileSync(resolve("extensions/megaska-otp/blocks/megaska-otp-embed.liquid"), "utf8");
+  assert.match(block, /Object\.assign\(\{\}, window\.LoopDeskConfig \|\| \{\}, payload\.config,/);
   const source = readFileSync(resolve("extensions/megaska-otp/assets/loopdesk-cart-drawer.js"), "utf8");
   const document = {
     readyState: "loading",

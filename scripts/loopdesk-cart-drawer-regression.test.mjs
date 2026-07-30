@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 const source = readFileSync(new URL("../extensions/megaska-otp/assets/loopdesk-cart-drawer.js", import.meta.url), "utf8");
 const css = readFileSync(new URL("../extensions/megaska-otp/assets/loopdesk-cart-drawer.css", import.meta.url), "utf8");
 
-const embed = readFileSync(new URL("../extensions/megaska-otp/blocks/loopdesk-cart-drawer-embed.liquid", import.meta.url), "utf8");
+const embed = readFileSync(new URL("../extensions/megaska-otp/blocks/megaska-otp-embed.liquid", import.meta.url), "utf8");
 
 // MONEY-FMT: prices in the drawer must honour the store's Shopify money format
 // (including a "no decimals" format, e.g. ₹630 not ₹629.95) rather than forcing
@@ -22,13 +22,14 @@ assert.match(source, /orderLabel = orderPct > 0 \? "Order discount \(" \+ displa
 assert.match(source, /label: orderLabel,/, "the order savings row must use the dynamic order label");
 assert.doesNotMatch(source, /label: "Tier discount"/, "the bare 'Tier discount' label must be replaced");
 
-const immediateAssetLoad = embed.match(/var drawerAssetRequested = false;[\s\S]*?function loadDrawerAsset\(\) \{[\s\S]*?fetch\(runtimeUrl,/);
-assert.ok(immediateAssetLoad, "drawer asset loading should be declared and requested before the runtime config fetch");
-assert.match(immediateAssetLoad[0], /var drawerAssetRequested = false;[\s\S]*function loadDrawerAsset\(\) \{[\s\S]*if \(drawerAssetRequested\) return;[\s\S]*drawerAssetRequested = true;/, "drawer asset loading should use one idempotent insertion guard");
-assert.match(immediateAssetLoad[0], /loadDrawerAsset\(\);[\s\S]*if \(typeof fetch === 'function'\) \{[\s\S]*fetch\(runtimeUrl,/, "drawer asset loading should start independently before runtime config fetching");
-assert.doesNotMatch(embed, /\.then\(loadDrawerAsset\)/, "runtime config completion must not trigger drawer asset loading");
+// DRAWER-ASSETS: the active OTP embed block loads the drawer's runtime
+// dependencies as deferred assets, with the tier-progress evaluator ordered
+// before the drawer itself so window.LoopDeskTierProgress is defined on first
+// render. (The former loopdesk-cart-drawer-embed.liquid block, which loaded
+// these through a dynamic injector, has been removed as a redundant duplicate.)
+assert.match(embed, /loopdesk-tier-progress\.js[\s\S]*loopdesk-cart-drawer\.js/, "tier-progress must be enqueued before the cart drawer so the evaluator is defined first");
+assert.match(embed, /loopdesk-promotion-pricing\.js/, "the drawer's promotion-pricing dependency must be loaded");
 assert.doesNotMatch(embed, /LoopDeskCartBootstrap/, "the removed cart bootstrap must remain absent");
-assert.doesNotMatch(embed, /applyRuntimeConfig/, "the removed runtime config application helper must remain absent");
 
 // CART-NAV-3: the embed's inline bounce-back check is a fast-path duplicate
 // of bounceBackFromUnwantedCartPageNavigation()/recordCartAddReturnIntent()
