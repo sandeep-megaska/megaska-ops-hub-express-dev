@@ -1,5 +1,5 @@
 import type { PromotionRuleValidationInput, PromotionTriggerReferenceInput, PromotionValidationError, PromotionValidationResult } from "./domain.ts";
-import { normalizeDate, normalizeProductType, normalizeRewardValue, normalizeShopifyCollectionGid, normalizeShopifyProductGid } from "./normalization.ts";
+import { normalizeDate, normalizeRewardValue, normalizeShopifyCollectionGid, normalizeShopifyProductGid } from "./normalization.ts";
 import { normalizePromotionReward } from "./reward-strategy.ts";
 
 const TEXT_LIMITS = {
@@ -22,7 +22,10 @@ export function validatePromotionTriggerReference(reference: PromotionTriggerRef
   } else if (reference.sourceType === "COLLECTION") {
     if (!normalizeShopifyCollectionGid(reference.referenceGid)) add(errors, "referenceGid", "Collection triggers require a canonical Shopify Collection GID.");
   } else if (reference.sourceType === "PRODUCT_TYPE") {
-    if (!normalizeProductType(reference.referenceValue) || !normalizeProductType(reference.normalizedValue)) add(errors, "normalizedValue", "Product-type triggers require non-empty reference and normalized values.");
+    // Product-type triggers are not supported by the discount Function runtime
+    // (it matches by product/collection GID). They compile but can never sync,
+    // so reject them here with a clear message instead of failing at publish.
+    add(errors, "sourceType", "Product-type triggers aren't supported yet. Use a Product or Collection trigger instead.");
   } else {
     add(errors, "sourceType", "Unsupported promotion trigger type.");
   }
