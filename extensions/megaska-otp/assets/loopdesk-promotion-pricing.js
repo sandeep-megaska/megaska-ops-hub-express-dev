@@ -33,9 +33,17 @@
     // "across". Detect it BEFORE the product-line marker so the order tier's
     // share that Shopify allocates onto a product-offer line is attributed to the
     // order discount instead of being double-counted as a product saving.
+    //
+    // Shopify's legacy cart shape (item.discounts) carries only { amount, title }
+    // with no discount_application, so target/method are empty. The order tier is
+    // then only distinguishable by its title ("… order promotion"). This title
+    // check must also run before the product-line marker: on a product-offer line
+    // the order tier's allocated share shares the line's _loopdesk_promotion_rule_id
+    // property and would otherwise be mis-attributed to the product.
     var target = String(app.target_selection || app.targetSelection || "").toLowerCase();
     var method = String(app.allocation_method || app.allocationMethod || "").toLowerCase();
-    if (target === "all" || method === "across") return TYPES.ORDER;
+    var title = String(allocation && (allocation.title || app.title) || "").toLowerCase();
+    if (target === "all" || method === "across" || /\border\b/.test(title)) return TYPES.ORDER;
     var properties = item && item.properties || {};
     if (properties._loopdesk_promotion_rule_id || properties._loopdesk_promotion_compilation_version) return TYPES.PRODUCT;
     if (target === "explicit" || target === "entitled") return TYPES.PRODUCT;
