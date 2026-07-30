@@ -4,10 +4,10 @@
 // writer (phase 2b) consumes NormalizedReviewImport rows, resolves products,
 // and persists with source = MANUAL_IMPORT.
 
-export type ReviewImportPlatform = "megaska" | "judge_me" | "shopify_native" | "generic";
+export type ReviewImportPlatform = "loopd2c" | "judge_me" | "shopify_native" | "generic";
 
 export const REVIEW_IMPORT_PLATFORMS: ReviewImportPlatform[] = [
-  "megaska",
+  "loopd2c",
   "judge_me",
   "shopify_native",
   "generic",

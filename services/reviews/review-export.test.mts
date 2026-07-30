@@ -103,11 +103,11 @@ test("multiple media URLs join with the pipe separator, falling back to thumbnai
 
 test("merchant reply body and author populate their columns", () => {
   const { csv } = reviewRowsToCsv([
-    baseReview({ merchantReply: { body: "Thanks!", authorLabel: "Megaska team" } }),
+    baseReview({ merchantReply: { body: "Thanks!", authorLabel: "Store team" } }),
   ]);
   const row = parseCsvRow(csv.split("\r\n")[1]);
   assert.equal(row[REVIEW_EXPORT_HEADERS.indexOf("reply_body")], "Thanks!");
-  assert.equal(row[REVIEW_EXPORT_HEADERS.indexOf("reply_author")], "Megaska team");
+  assert.equal(row[REVIEW_EXPORT_HEADERS.indexOf("reply_author")], "Store team");
 });
 
 test("null title/body/handle/variant render as empty cells, not the string 'null'", () => {
