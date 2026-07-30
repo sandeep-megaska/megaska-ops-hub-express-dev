@@ -35,6 +35,13 @@
 #loopdesk-customer-dashboard-root .ld-account-summary strong { font-size: clamp(24px, 4vw, 38px); overflow-wrap: anywhere; }
 #loopdesk-customer-dashboard-root .ld-account-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(280px, .8fr); gap: 18px; align-items: start; }
 #loopdesk-customer-dashboard-root .ld-account-order { display: grid; grid-template-columns: 104px minmax(0, 1fr); gap: 16px; padding: 16px 0; border-top: 1px solid var(--ld-account-line); }
+#loopdesk-customer-dashboard-root .ld-account-order--clickable { cursor: pointer; border-radius: 14px; padding-left: 12px; padding-right: 12px; transition: background 0.15s ease; }
+#loopdesk-customer-dashboard-root .ld-account-order--clickable:hover { background: var(--ld-account-soft); }
+#loopdesk-customer-dashboard-root .ld-account-order--clickable:focus-visible { outline: 2px solid var(--ld-account-brand-dark); outline-offset: -2px; }
+#loopdesk-customer-dashboard-root .ld-account-order--clickable a[href], #loopdesk-customer-dashboard-root .ld-account-order--clickable button { position: relative; z-index: 1; }
+#loopdesk-customer-dashboard-root .ld-account-order-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; flex-wrap: wrap; }
+#loopdesk-customer-dashboard-root .ld-account-order-cue { color: var(--ld-account-brand-dark); font-weight: 700; font-size: 13px; display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+#loopdesk-customer-dashboard-root .ld-account-order-cue::after { content: "\2192"; }
 #loopdesk-customer-dashboard-root .ld-account-order-body { min-width: 0; overflow-wrap: anywhere; }
 #loopdesk-customer-dashboard-root .ld-account-order-media { width: 104px; height: 104px; border-radius: 18px; background: var(--ld-account-soft); overflow: hidden; display: grid; place-items: center; color: var(--ld-account-muted); font-size: 12px; text-align: center; }
 #loopdesk-customer-dashboard-root .ld-account-order-media img { width: 100%; height: 100%; object-fit: cover; display: block; }
