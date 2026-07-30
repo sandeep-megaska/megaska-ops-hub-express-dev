@@ -140,15 +140,38 @@
   var diagnosticActions = {};
   var elements = {};
 
+  // Decimal places to show. The store's Shopify money format is authoritative:
+  // a "*_no_decimals*" format means the storefront rounds to whole units (e.g.
+  // ₹630, not ₹629.95), so the drawer must match it rather than always forcing
+  // the currency's default (2 for INR).
+  function moneyFractionDigits(format, currency) {
+    var fmt = String(format || "");
+    if (/no_decimals/i.test(fmt)) return 0;
+    if (fmt) return 2;
+    try { return new Intl.NumberFormat(undefined, { style: "currency", currency: currency }).resolvedOptions().maximumFractionDigits; }
+    catch (_error) { return 2; }
+  }
   function money(cents, currency) {
-    var amount = Number(cents || 0) / 100;
+    var minor = Math.round(Number(cents || 0));
+    var shopify = (typeof window !== "undefined" && window.Shopify) || {};
+    var format = shopify.money_format || "";
+    // Prefer Shopify's own formatter so symbol, separators, and the store's
+    // decimal preference exactly match what the theme renders.
+    if (typeof shopify.formatMoney === "function" && format) {
+      try { return shopify.formatMoney(minor, format); } catch (_error) {}
+    }
+    var resolvedCurrency = currency || (state.cart && state.cart.currency) || (shopify.currency && shopify.currency.active) || "INR";
+    var digits = moneyFractionDigits(format, resolvedCurrency);
+    var amount = minor / 100;
     try {
       return new Intl.NumberFormat(undefined, {
         style: "currency",
-        currency: currency || (state.cart && state.cart.currency) || "INR",
+        currency: resolvedCurrency,
+        minimumFractionDigits: digits,
+        maximumFractionDigits: digits,
       }).format(amount);
     } catch (_error) {
-      return amount.toFixed(2);
+      return digits === 0 ? String(Math.round(amount)) : amount.toFixed(2);
     }
   }
 
