@@ -7,6 +7,7 @@ const STOREFRONT_API_PREFIXES = [
   "profile/",
   "runtime/config",
   "reviews/submission/",
+  "track",
 ];
 
 const STOREFRONT_REVIEW_API_PATHS = new Set([
@@ -26,6 +27,7 @@ export function isStorefrontApiPath(path: string) {
 export function isPublicApiPath(path: string) {
   const normalized = path.replace(/^\/+/, "");
   return normalized === "runtime/config"
+    || normalized === "track"
     || STOREFRONT_REVIEW_API_PATHS.has(normalized)
     || normalized.startsWith("reviews/submission/");
 }
