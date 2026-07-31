@@ -394,6 +394,11 @@ export type ExchangePaymentInvoice = $Result.DefaultSelection<Prisma.$ExchangePa
  */
 export type ExpressCheckoutIntent = $Result.DefaultSelection<Prisma.$ExpressCheckoutIntentPayload>
 /**
+ * Model CheckoutFunnelEvent
+ * 
+ */
+export type CheckoutFunnelEvent = $Result.DefaultSelection<Prisma.$CheckoutFunnelEventPayload>
+/**
  * Model ShopifyCheckoutPricingSnapshot
  * 
  */
@@ -1285,6 +1290,37 @@ export const CheckoutRecoveryTokenStatus: {
 
 export type CheckoutRecoveryTokenStatus = (typeof CheckoutRecoveryTokenStatus)[keyof typeof CheckoutRecoveryTokenStatus]
 
+
+export const CheckoutFunnelEventType: {
+  CART_ADD: 'CART_ADD',
+  DRAWER_OPEN: 'DRAWER_OPEN',
+  EXPRESS_CLICK: 'EXPRESS_CLICK',
+  OTP_OPEN: 'OTP_OPEN',
+  OTP_SUCCESS: 'OTP_SUCCESS',
+  MODAL_OPEN: 'MODAL_OPEN'
+};
+
+export type CheckoutFunnelEventType = (typeof CheckoutFunnelEventType)[keyof typeof CheckoutFunnelEventType]
+
+
+export const CheckoutFunnelSource: {
+  DRAWER: 'DRAWER',
+  CART_PAGE: 'CART_PAGE',
+  PRODUCT: 'PRODUCT',
+  UNKNOWN: 'UNKNOWN'
+};
+
+export type CheckoutFunnelSource = (typeof CheckoutFunnelSource)[keyof typeof CheckoutFunnelSource]
+
+
+export const CheckoutFunnelDevice: {
+  MOBILE: 'MOBILE',
+  DESKTOP: 'DESKTOP',
+  UNKNOWN: 'UNKNOWN'
+};
+
+export type CheckoutFunnelDevice = (typeof CheckoutFunnelDevice)[keyof typeof CheckoutFunnelDevice]
+
 }
 
 export type CustomerIdentityReconciliationStatus = $Enums.CustomerIdentityReconciliationStatus
@@ -1590,6 +1626,18 @@ export const CheckoutRecoveryType: typeof $Enums.CheckoutRecoveryType
 export type CheckoutRecoveryTokenStatus = $Enums.CheckoutRecoveryTokenStatus
 
 export const CheckoutRecoveryTokenStatus: typeof $Enums.CheckoutRecoveryTokenStatus
+
+export type CheckoutFunnelEventType = $Enums.CheckoutFunnelEventType
+
+export const CheckoutFunnelEventType: typeof $Enums.CheckoutFunnelEventType
+
+export type CheckoutFunnelSource = $Enums.CheckoutFunnelSource
+
+export const CheckoutFunnelSource: typeof $Enums.CheckoutFunnelSource
+
+export type CheckoutFunnelDevice = $Enums.CheckoutFunnelDevice
+
+export const CheckoutFunnelDevice: typeof $Enums.CheckoutFunnelDevice
 
 /**
  * ##  Prisma Client ʲˢ
@@ -2473,6 +2521,16 @@ export class PrismaClient<
   get expressCheckoutIntent(): Prisma.ExpressCheckoutIntentDelegate<ExtArgs, ClientOptions>;
 
   /**
+   * `prisma.checkoutFunnelEvent`: Exposes CRUD operations for the **CheckoutFunnelEvent** model.
+    * Example usage:
+    * ```ts
+    * // Fetch zero or more CheckoutFunnelEvents
+    * const checkoutFunnelEvents = await prisma.checkoutFunnelEvent.findMany()
+    * ```
+    */
+  get checkoutFunnelEvent(): Prisma.CheckoutFunnelEventDelegate<ExtArgs, ClientOptions>;
+
+  /**
    * `prisma.shopifyCheckoutPricingSnapshot`: Exposes CRUD operations for the **ShopifyCheckoutPricingSnapshot** model.
     * Example usage:
     * ```ts
@@ -3071,6 +3129,7 @@ export namespace Prisma {
     GstReportRun: 'GstReportRun',
     ExchangePaymentInvoice: 'ExchangePaymentInvoice',
     ExpressCheckoutIntent: 'ExpressCheckoutIntent',
+    CheckoutFunnelEvent: 'CheckoutFunnelEvent',
     ShopifyCheckoutPricingSnapshot: 'ShopifyCheckoutPricingSnapshot',
     CheckoutRecoveryToken: 'CheckoutRecoveryToken',
     ExpressCheckoutAddressSnapshot: 'ExpressCheckoutAddressSnapshot',
@@ -3095,7 +3154,7 @@ export namespace Prisma {
       omit: GlobalOmitOptions
     }
     meta: {
-      modelProps: "customerProfile" | "shop" | "emailVerificationChallenge" | "customerIdentityReconciliationPlan" | "customerIdentityMerge" | "customerIdentityReconciliationAudit" | "billableFeature" | "pricingPlan" | "pricingPlanFeature" | "merchantSubscription" | "merchantPlanChange" | "merchantBillingProviderSubmission" | "merchantBillingReconciliation" | "merchantBillingPeriod" | "merchantRatedUsage" | "merchantUsageEvent" | "merchantNotificationSettings" | "merchantOtpSettings" | "merchantTwilioSettings" | "merchantMsg91Settings" | "promotionRule" | "promotionOrderTier" | "promotionTriggerReference" | "promotionCompilation" | "promotionCompiledMembership" | "promotionRuntimeSyncState" | "promotionAuditLog" | "authSession" | "oTPChallenge" | "auditEvent" | "orderActionRequest" | "orderActionItem" | "requestPayment" | "codAdvanceSettings" | "codAdvanceIntent" | "shipmentTracking" | "megaskaOrder" | "orderShipment" | "orderShipmentEvent" | "reviewSettings" | "reviewRequest" | "productReviewRequestDeliveryAttempt" | "productReview" | "productReviewMedia" | "productReviewMerchantReply" | "productReviewEditToken" | "productReviewRevision" | "productReviewAggregate" | "walletAccount" | "walletTransaction" | "walletReservation" | "refundRequest" | "refundPayoutDetails" | "refundPayout" | "refundEvent" | "gstSettings" | "gstCounter" | "gstDocument" | "gstDocumentLine" | "gstParty" | "gstExport" | "gstExportItem" | "gstReconciliationRun" | "gstAuditLog" | "gstLegacyDocument" | "gstHsnCode" | "gstTaxSlab" | "gstHsnSlabMap" | "gstProductTaxMap" | "gstSkuTaxMap" | "gstOrderImport" | "gstOrderImportLine" | "gstInvoiceTemplate" | "gstReportRun" | "exchangePaymentInvoice" | "expressCheckoutIntent" | "shopifyCheckoutPricingSnapshot" | "checkoutRecoveryToken" | "expressCheckoutAddressSnapshot" | "expressCheckoutDiscount" | "expressCheckoutPayment" | "expressCheckoutOrderLink" | "shopModuleConfig" | "shopProxyRoute" | "shopInstallationEvent"
+      modelProps: "customerProfile" | "shop" | "emailVerificationChallenge" | "customerIdentityReconciliationPlan" | "customerIdentityMerge" | "customerIdentityReconciliationAudit" | "billableFeature" | "pricingPlan" | "pricingPlanFeature" | "merchantSubscription" | "merchantPlanChange" | "merchantBillingProviderSubmission" | "merchantBillingReconciliation" | "merchantBillingPeriod" | "merchantRatedUsage" | "merchantUsageEvent" | "merchantNotificationSettings" | "merchantOtpSettings" | "merchantTwilioSettings" | "merchantMsg91Settings" | "promotionRule" | "promotionOrderTier" | "promotionTriggerReference" | "promotionCompilation" | "promotionCompiledMembership" | "promotionRuntimeSyncState" | "promotionAuditLog" | "authSession" | "oTPChallenge" | "auditEvent" | "orderActionRequest" | "orderActionItem" | "requestPayment" | "codAdvanceSettings" | "codAdvanceIntent" | "shipmentTracking" | "megaskaOrder" | "orderShipment" | "orderShipmentEvent" | "reviewSettings" | "reviewRequest" | "productReviewRequestDeliveryAttempt" | "productReview" | "productReviewMedia" | "productReviewMerchantReply" | "productReviewEditToken" | "productReviewRevision" | "productReviewAggregate" | "walletAccount" | "walletTransaction" | "walletReservation" | "refundRequest" | "refundPayoutDetails" | "refundPayout" | "refundEvent" | "gstSettings" | "gstCounter" | "gstDocument" | "gstDocumentLine" | "gstParty" | "gstExport" | "gstExportItem" | "gstReconciliationRun" | "gstAuditLog" | "gstLegacyDocument" | "gstHsnCode" | "gstTaxSlab" | "gstHsnSlabMap" | "gstProductTaxMap" | "gstSkuTaxMap" | "gstOrderImport" | "gstOrderImportLine" | "gstInvoiceTemplate" | "gstReportRun" | "exchangePaymentInvoice" | "expressCheckoutIntent" | "checkoutFunnelEvent" | "shopifyCheckoutPricingSnapshot" | "checkoutRecoveryToken" | "expressCheckoutAddressSnapshot" | "expressCheckoutDiscount" | "expressCheckoutPayment" | "expressCheckoutOrderLink" | "shopModuleConfig" | "shopProxyRoute" | "shopInstallationEvent"
       txIsolationLevel: Prisma.TransactionIsolationLevel
     }
     model: {
@@ -8723,6 +8782,80 @@ export namespace Prisma {
           }
         }
       }
+      CheckoutFunnelEvent: {
+        payload: Prisma.$CheckoutFunnelEventPayload<ExtArgs>
+        fields: Prisma.CheckoutFunnelEventFieldRefs
+        operations: {
+          findUnique: {
+            args: Prisma.CheckoutFunnelEventFindUniqueArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$CheckoutFunnelEventPayload> | null
+          }
+          findUniqueOrThrow: {
+            args: Prisma.CheckoutFunnelEventFindUniqueOrThrowArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$CheckoutFunnelEventPayload>
+          }
+          findFirst: {
+            args: Prisma.CheckoutFunnelEventFindFirstArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$CheckoutFunnelEventPayload> | null
+          }
+          findFirstOrThrow: {
+            args: Prisma.CheckoutFunnelEventFindFirstOrThrowArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$CheckoutFunnelEventPayload>
+          }
+          findMany: {
+            args: Prisma.CheckoutFunnelEventFindManyArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$CheckoutFunnelEventPayload>[]
+          }
+          create: {
+            args: Prisma.CheckoutFunnelEventCreateArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$CheckoutFunnelEventPayload>
+          }
+          createMany: {
+            args: Prisma.CheckoutFunnelEventCreateManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          createManyAndReturn: {
+            args: Prisma.CheckoutFunnelEventCreateManyAndReturnArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$CheckoutFunnelEventPayload>[]
+          }
+          delete: {
+            args: Prisma.CheckoutFunnelEventDeleteArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$CheckoutFunnelEventPayload>
+          }
+          update: {
+            args: Prisma.CheckoutFunnelEventUpdateArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$CheckoutFunnelEventPayload>
+          }
+          deleteMany: {
+            args: Prisma.CheckoutFunnelEventDeleteManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          updateMany: {
+            args: Prisma.CheckoutFunnelEventUpdateManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          updateManyAndReturn: {
+            args: Prisma.CheckoutFunnelEventUpdateManyAndReturnArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$CheckoutFunnelEventPayload>[]
+          }
+          upsert: {
+            args: Prisma.CheckoutFunnelEventUpsertArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$CheckoutFunnelEventPayload>
+          }
+          aggregate: {
+            args: Prisma.CheckoutFunnelEventAggregateArgs<ExtArgs>
+            result: $Utils.Optional<AggregateCheckoutFunnelEvent>
+          }
+          groupBy: {
+            args: Prisma.CheckoutFunnelEventGroupByArgs<ExtArgs>
+            result: $Utils.Optional<CheckoutFunnelEventGroupByOutputType>[]
+          }
+          count: {
+            args: Prisma.CheckoutFunnelEventCountArgs<ExtArgs>
+            result: $Utils.Optional<CheckoutFunnelEventCountAggregateOutputType> | number
+          }
+        }
+      }
       ShopifyCheckoutPricingSnapshot: {
         payload: Prisma.$ShopifyCheckoutPricingSnapshotPayload<ExtArgs>
         fields: Prisma.ShopifyCheckoutPricingSnapshotFieldRefs
@@ -9573,6 +9706,7 @@ export namespace Prisma {
     gstReportRun?: GstReportRunOmit
     exchangePaymentInvoice?: ExchangePaymentInvoiceOmit
     expressCheckoutIntent?: ExpressCheckoutIntentOmit
+    checkoutFunnelEvent?: CheckoutFunnelEventOmit
     shopifyCheckoutPricingSnapshot?: ShopifyCheckoutPricingSnapshotOmit
     checkoutRecoveryToken?: CheckoutRecoveryTokenOmit
     expressCheckoutAddressSnapshot?: ExpressCheckoutAddressSnapshotOmit
@@ -108426,6 +108560,10 @@ export namespace Prisma {
     expiresAt: Date | null
     createdAt: Date | null
     updatedAt: Date | null
+    paymentPendingAt: Date | null
+    abandonedAt: Date | null
+    completedAt: Date | null
+    lastTransitionAt: Date | null
   }
 
   export type ExpressCheckoutIntentMaxAggregateOutputType = {
@@ -108447,6 +108585,10 @@ export namespace Prisma {
     expiresAt: Date | null
     createdAt: Date | null
     updatedAt: Date | null
+    paymentPendingAt: Date | null
+    abandonedAt: Date | null
+    completedAt: Date | null
+    lastTransitionAt: Date | null
   }
 
   export type ExpressCheckoutIntentCountAggregateOutputType = {
@@ -108469,6 +108611,10 @@ export namespace Prisma {
     expiresAt: number
     createdAt: number
     updatedAt: number
+    paymentPendingAt: number
+    abandonedAt: number
+    completedAt: number
+    lastTransitionAt: number
     _all: number
   }
 
@@ -108508,6 +108654,10 @@ export namespace Prisma {
     expiresAt?: true
     createdAt?: true
     updatedAt?: true
+    paymentPendingAt?: true
+    abandonedAt?: true
+    completedAt?: true
+    lastTransitionAt?: true
   }
 
   export type ExpressCheckoutIntentMaxAggregateInputType = {
@@ -108529,6 +108679,10 @@ export namespace Prisma {
     expiresAt?: true
     createdAt?: true
     updatedAt?: true
+    paymentPendingAt?: true
+    abandonedAt?: true
+    completedAt?: true
+    lastTransitionAt?: true
   }
 
   export type ExpressCheckoutIntentCountAggregateInputType = {
@@ -108551,6 +108705,10 @@ export namespace Prisma {
     expiresAt?: true
     createdAt?: true
     updatedAt?: true
+    paymentPendingAt?: true
+    abandonedAt?: true
+    completedAt?: true
+    lastTransitionAt?: true
     _all?: true
   }
 
@@ -108660,6 +108818,10 @@ export namespace Prisma {
     expiresAt: Date | null
     createdAt: Date
     updatedAt: Date
+    paymentPendingAt: Date | null
+    abandonedAt: Date | null
+    completedAt: Date | null
+    lastTransitionAt: Date | null
     _count: ExpressCheckoutIntentCountAggregateOutputType | null
     _avg: ExpressCheckoutIntentAvgAggregateOutputType | null
     _sum: ExpressCheckoutIntentSumAggregateOutputType | null
@@ -108701,6 +108863,10 @@ export namespace Prisma {
     expiresAt?: boolean
     createdAt?: boolean
     updatedAt?: boolean
+    paymentPendingAt?: boolean
+    abandonedAt?: boolean
+    completedAt?: boolean
+    lastTransitionAt?: boolean
     addressSnapshots?: boolean | ExpressCheckoutIntent$addressSnapshotsArgs<ExtArgs>
     discounts?: boolean | ExpressCheckoutIntent$discountsArgs<ExtArgs>
     payments?: boolean | ExpressCheckoutIntent$paymentsArgs<ExtArgs>
@@ -108730,6 +108896,10 @@ export namespace Prisma {
     expiresAt?: boolean
     createdAt?: boolean
     updatedAt?: boolean
+    paymentPendingAt?: boolean
+    abandonedAt?: boolean
+    completedAt?: boolean
+    lastTransitionAt?: boolean
   }, ExtArgs["result"]["expressCheckoutIntent"]>
 
   export type ExpressCheckoutIntentSelectUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
@@ -108752,6 +108922,10 @@ export namespace Prisma {
     expiresAt?: boolean
     createdAt?: boolean
     updatedAt?: boolean
+    paymentPendingAt?: boolean
+    abandonedAt?: boolean
+    completedAt?: boolean
+    lastTransitionAt?: boolean
   }, ExtArgs["result"]["expressCheckoutIntent"]>
 
   export type ExpressCheckoutIntentSelectScalar = {
@@ -108774,9 +108948,13 @@ export namespace Prisma {
     expiresAt?: boolean
     createdAt?: boolean
     updatedAt?: boolean
+    paymentPendingAt?: boolean
+    abandonedAt?: boolean
+    completedAt?: boolean
+    lastTransitionAt?: boolean
   }
 
-  export type ExpressCheckoutIntentOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "shopId" | "customerProfileId" | "sessionTokenHash" | "status" | "phoneSnapshot" | "cartToken" | "shopifyCartId" | "cartSnapshot" | "subtotalAmountPaise" | "discountAmountPaise" | "shippingAmountPaise" | "codFeeAmountPaise" | "totalAmountPaise" | "currency" | "selectedPaymentMethod" | "expiresAt" | "createdAt" | "updatedAt", ExtArgs["result"]["expressCheckoutIntent"]>
+  export type ExpressCheckoutIntentOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "shopId" | "customerProfileId" | "sessionTokenHash" | "status" | "phoneSnapshot" | "cartToken" | "shopifyCartId" | "cartSnapshot" | "subtotalAmountPaise" | "discountAmountPaise" | "shippingAmountPaise" | "codFeeAmountPaise" | "totalAmountPaise" | "currency" | "selectedPaymentMethod" | "expiresAt" | "createdAt" | "updatedAt" | "paymentPendingAt" | "abandonedAt" | "completedAt" | "lastTransitionAt", ExtArgs["result"]["expressCheckoutIntent"]>
   export type ExpressCheckoutIntentInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     addressSnapshots?: boolean | ExpressCheckoutIntent$addressSnapshotsArgs<ExtArgs>
     discounts?: boolean | ExpressCheckoutIntent$discountsArgs<ExtArgs>
@@ -108819,6 +108997,10 @@ export namespace Prisma {
       expiresAt: Date | null
       createdAt: Date
       updatedAt: Date
+      paymentPendingAt: Date | null
+      abandonedAt: Date | null
+      completedAt: Date | null
+      lastTransitionAt: Date | null
     }, ExtArgs["result"]["expressCheckoutIntent"]>
     composites: {}
   }
@@ -109267,6 +109449,10 @@ export namespace Prisma {
     readonly expiresAt: FieldRef<"ExpressCheckoutIntent", 'DateTime'>
     readonly createdAt: FieldRef<"ExpressCheckoutIntent", 'DateTime'>
     readonly updatedAt: FieldRef<"ExpressCheckoutIntent", 'DateTime'>
+    readonly paymentPendingAt: FieldRef<"ExpressCheckoutIntent", 'DateTime'>
+    readonly abandonedAt: FieldRef<"ExpressCheckoutIntent", 'DateTime'>
+    readonly completedAt: FieldRef<"ExpressCheckoutIntent", 'DateTime'>
+    readonly lastTransitionAt: FieldRef<"ExpressCheckoutIntent", 'DateTime'>
   }
     
 
@@ -109814,6 +110000,1166 @@ export namespace Prisma {
      * Choose, which related nodes to fetch as well
      */
     include?: ExpressCheckoutIntentInclude<ExtArgs> | null
+  }
+
+
+  /**
+   * Model CheckoutFunnelEvent
+   */
+
+  export type AggregateCheckoutFunnelEvent = {
+    _count: CheckoutFunnelEventCountAggregateOutputType | null
+    _avg: CheckoutFunnelEventAvgAggregateOutputType | null
+    _sum: CheckoutFunnelEventSumAggregateOutputType | null
+    _min: CheckoutFunnelEventMinAggregateOutputType | null
+    _max: CheckoutFunnelEventMaxAggregateOutputType | null
+  }
+
+  export type CheckoutFunnelEventAvgAggregateOutputType = {
+    cartValuePaise: number | null
+  }
+
+  export type CheckoutFunnelEventSumAggregateOutputType = {
+    cartValuePaise: number | null
+  }
+
+  export type CheckoutFunnelEventMinAggregateOutputType = {
+    id: string | null
+    shopId: string | null
+    funnelSessionId: string | null
+    eventType: $Enums.CheckoutFunnelEventType | null
+    source: $Enums.CheckoutFunnelSource | null
+    device: $Enums.CheckoutFunnelDevice | null
+    customerProfileId: string | null
+    sessionTokenHash: string | null
+    phoneSnapshot: string | null
+    cartToken: string | null
+    cartValuePaise: number | null
+    expressCheckoutIntentId: string | null
+    occurredAt: Date | null
+    createdAt: Date | null
+  }
+
+  export type CheckoutFunnelEventMaxAggregateOutputType = {
+    id: string | null
+    shopId: string | null
+    funnelSessionId: string | null
+    eventType: $Enums.CheckoutFunnelEventType | null
+    source: $Enums.CheckoutFunnelSource | null
+    device: $Enums.CheckoutFunnelDevice | null
+    customerProfileId: string | null
+    sessionTokenHash: string | null
+    phoneSnapshot: string | null
+    cartToken: string | null
+    cartValuePaise: number | null
+    expressCheckoutIntentId: string | null
+    occurredAt: Date | null
+    createdAt: Date | null
+  }
+
+  export type CheckoutFunnelEventCountAggregateOutputType = {
+    id: number
+    shopId: number
+    funnelSessionId: number
+    eventType: number
+    source: number
+    device: number
+    customerProfileId: number
+    sessionTokenHash: number
+    phoneSnapshot: number
+    cartToken: number
+    cartValuePaise: number
+    expressCheckoutIntentId: number
+    metadata: number
+    occurredAt: number
+    createdAt: number
+    _all: number
+  }
+
+
+  export type CheckoutFunnelEventAvgAggregateInputType = {
+    cartValuePaise?: true
+  }
+
+  export type CheckoutFunnelEventSumAggregateInputType = {
+    cartValuePaise?: true
+  }
+
+  export type CheckoutFunnelEventMinAggregateInputType = {
+    id?: true
+    shopId?: true
+    funnelSessionId?: true
+    eventType?: true
+    source?: true
+    device?: true
+    customerProfileId?: true
+    sessionTokenHash?: true
+    phoneSnapshot?: true
+    cartToken?: true
+    cartValuePaise?: true
+    expressCheckoutIntentId?: true
+    occurredAt?: true
+    createdAt?: true
+  }
+
+  export type CheckoutFunnelEventMaxAggregateInputType = {
+    id?: true
+    shopId?: true
+    funnelSessionId?: true
+    eventType?: true
+    source?: true
+    device?: true
+    customerProfileId?: true
+    sessionTokenHash?: true
+    phoneSnapshot?: true
+    cartToken?: true
+    cartValuePaise?: true
+    expressCheckoutIntentId?: true
+    occurredAt?: true
+    createdAt?: true
+  }
+
+  export type CheckoutFunnelEventCountAggregateInputType = {
+    id?: true
+    shopId?: true
+    funnelSessionId?: true
+    eventType?: true
+    source?: true
+    device?: true
+    customerProfileId?: true
+    sessionTokenHash?: true
+    phoneSnapshot?: true
+    cartToken?: true
+    cartValuePaise?: true
+    expressCheckoutIntentId?: true
+    metadata?: true
+    occurredAt?: true
+    createdAt?: true
+    _all?: true
+  }
+
+  export type CheckoutFunnelEventAggregateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Filter which CheckoutFunnelEvent to aggregate.
+     */
+    where?: CheckoutFunnelEventWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of CheckoutFunnelEvents to fetch.
+     */
+    orderBy?: CheckoutFunnelEventOrderByWithRelationInput | CheckoutFunnelEventOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the start position
+     */
+    cursor?: CheckoutFunnelEventWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` CheckoutFunnelEvents from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` CheckoutFunnelEvents.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Count returned CheckoutFunnelEvents
+    **/
+    _count?: true | CheckoutFunnelEventCountAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to average
+    **/
+    _avg?: CheckoutFunnelEventAvgAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to sum
+    **/
+    _sum?: CheckoutFunnelEventSumAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to find the minimum value
+    **/
+    _min?: CheckoutFunnelEventMinAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to find the maximum value
+    **/
+    _max?: CheckoutFunnelEventMaxAggregateInputType
+  }
+
+  export type GetCheckoutFunnelEventAggregateType<T extends CheckoutFunnelEventAggregateArgs> = {
+        [P in keyof T & keyof AggregateCheckoutFunnelEvent]: P extends '_count' | 'count'
+      ? T[P] extends true
+        ? number
+        : GetScalarType<T[P], AggregateCheckoutFunnelEvent[P]>
+      : GetScalarType<T[P], AggregateCheckoutFunnelEvent[P]>
+  }
+
+
+
+
+  export type CheckoutFunnelEventGroupByArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    where?: CheckoutFunnelEventWhereInput
+    orderBy?: CheckoutFunnelEventOrderByWithAggregationInput | CheckoutFunnelEventOrderByWithAggregationInput[]
+    by: CheckoutFunnelEventScalarFieldEnum[] | CheckoutFunnelEventScalarFieldEnum
+    having?: CheckoutFunnelEventScalarWhereWithAggregatesInput
+    take?: number
+    skip?: number
+    _count?: CheckoutFunnelEventCountAggregateInputType | true
+    _avg?: CheckoutFunnelEventAvgAggregateInputType
+    _sum?: CheckoutFunnelEventSumAggregateInputType
+    _min?: CheckoutFunnelEventMinAggregateInputType
+    _max?: CheckoutFunnelEventMaxAggregateInputType
+  }
+
+  export type CheckoutFunnelEventGroupByOutputType = {
+    id: string
+    shopId: string
+    funnelSessionId: string
+    eventType: $Enums.CheckoutFunnelEventType
+    source: $Enums.CheckoutFunnelSource | null
+    device: $Enums.CheckoutFunnelDevice
+    customerProfileId: string | null
+    sessionTokenHash: string | null
+    phoneSnapshot: string | null
+    cartToken: string | null
+    cartValuePaise: number | null
+    expressCheckoutIntentId: string | null
+    metadata: JsonValue | null
+    occurredAt: Date
+    createdAt: Date
+    _count: CheckoutFunnelEventCountAggregateOutputType | null
+    _avg: CheckoutFunnelEventAvgAggregateOutputType | null
+    _sum: CheckoutFunnelEventSumAggregateOutputType | null
+    _min: CheckoutFunnelEventMinAggregateOutputType | null
+    _max: CheckoutFunnelEventMaxAggregateOutputType | null
+  }
+
+  type GetCheckoutFunnelEventGroupByPayload<T extends CheckoutFunnelEventGroupByArgs> = Prisma.PrismaPromise<
+    Array<
+      PickEnumerable<CheckoutFunnelEventGroupByOutputType, T['by']> &
+        {
+          [P in ((keyof T) & (keyof CheckoutFunnelEventGroupByOutputType))]: P extends '_count'
+            ? T[P] extends boolean
+              ? number
+              : GetScalarType<T[P], CheckoutFunnelEventGroupByOutputType[P]>
+            : GetScalarType<T[P], CheckoutFunnelEventGroupByOutputType[P]>
+        }
+      >
+    >
+
+
+  export type CheckoutFunnelEventSelect<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    shopId?: boolean
+    funnelSessionId?: boolean
+    eventType?: boolean
+    source?: boolean
+    device?: boolean
+    customerProfileId?: boolean
+    sessionTokenHash?: boolean
+    phoneSnapshot?: boolean
+    cartToken?: boolean
+    cartValuePaise?: boolean
+    expressCheckoutIntentId?: boolean
+    metadata?: boolean
+    occurredAt?: boolean
+    createdAt?: boolean
+  }, ExtArgs["result"]["checkoutFunnelEvent"]>
+
+  export type CheckoutFunnelEventSelectCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    shopId?: boolean
+    funnelSessionId?: boolean
+    eventType?: boolean
+    source?: boolean
+    device?: boolean
+    customerProfileId?: boolean
+    sessionTokenHash?: boolean
+    phoneSnapshot?: boolean
+    cartToken?: boolean
+    cartValuePaise?: boolean
+    expressCheckoutIntentId?: boolean
+    metadata?: boolean
+    occurredAt?: boolean
+    createdAt?: boolean
+  }, ExtArgs["result"]["checkoutFunnelEvent"]>
+
+  export type CheckoutFunnelEventSelectUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    shopId?: boolean
+    funnelSessionId?: boolean
+    eventType?: boolean
+    source?: boolean
+    device?: boolean
+    customerProfileId?: boolean
+    sessionTokenHash?: boolean
+    phoneSnapshot?: boolean
+    cartToken?: boolean
+    cartValuePaise?: boolean
+    expressCheckoutIntentId?: boolean
+    metadata?: boolean
+    occurredAt?: boolean
+    createdAt?: boolean
+  }, ExtArgs["result"]["checkoutFunnelEvent"]>
+
+  export type CheckoutFunnelEventSelectScalar = {
+    id?: boolean
+    shopId?: boolean
+    funnelSessionId?: boolean
+    eventType?: boolean
+    source?: boolean
+    device?: boolean
+    customerProfileId?: boolean
+    sessionTokenHash?: boolean
+    phoneSnapshot?: boolean
+    cartToken?: boolean
+    cartValuePaise?: boolean
+    expressCheckoutIntentId?: boolean
+    metadata?: boolean
+    occurredAt?: boolean
+    createdAt?: boolean
+  }
+
+  export type CheckoutFunnelEventOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "shopId" | "funnelSessionId" | "eventType" | "source" | "device" | "customerProfileId" | "sessionTokenHash" | "phoneSnapshot" | "cartToken" | "cartValuePaise" | "expressCheckoutIntentId" | "metadata" | "occurredAt" | "createdAt", ExtArgs["result"]["checkoutFunnelEvent"]>
+
+  export type $CheckoutFunnelEventPayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    name: "CheckoutFunnelEvent"
+    objects: {}
+    scalars: $Extensions.GetPayloadResult<{
+      id: string
+      shopId: string
+      funnelSessionId: string
+      eventType: $Enums.CheckoutFunnelEventType
+      source: $Enums.CheckoutFunnelSource | null
+      device: $Enums.CheckoutFunnelDevice
+      customerProfileId: string | null
+      sessionTokenHash: string | null
+      phoneSnapshot: string | null
+      cartToken: string | null
+      cartValuePaise: number | null
+      expressCheckoutIntentId: string | null
+      metadata: Prisma.JsonValue | null
+      occurredAt: Date
+      createdAt: Date
+    }, ExtArgs["result"]["checkoutFunnelEvent"]>
+    composites: {}
+  }
+
+  type CheckoutFunnelEventGetPayload<S extends boolean | null | undefined | CheckoutFunnelEventDefaultArgs> = $Result.GetResult<Prisma.$CheckoutFunnelEventPayload, S>
+
+  type CheckoutFunnelEventCountArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> =
+    Omit<CheckoutFunnelEventFindManyArgs, 'select' | 'include' | 'distinct' | 'omit'> & {
+      select?: CheckoutFunnelEventCountAggregateInputType | true
+    }
+
+  export interface CheckoutFunnelEventDelegate<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs, GlobalOmitOptions = {}> {
+    [K: symbol]: { types: Prisma.TypeMap<ExtArgs>['model']['CheckoutFunnelEvent'], meta: { name: 'CheckoutFunnelEvent' } }
+    /**
+     * Find zero or one CheckoutFunnelEvent that matches the filter.
+     * @param {CheckoutFunnelEventFindUniqueArgs} args - Arguments to find a CheckoutFunnelEvent
+     * @example
+     * // Get one CheckoutFunnelEvent
+     * const checkoutFunnelEvent = await prisma.checkoutFunnelEvent.findUnique({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findUnique<T extends CheckoutFunnelEventFindUniqueArgs>(args: SelectSubset<T, CheckoutFunnelEventFindUniqueArgs<ExtArgs>>): Prisma__CheckoutFunnelEventClient<$Result.GetResult<Prisma.$CheckoutFunnelEventPayload<ExtArgs>, T, "findUnique", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find one CheckoutFunnelEvent that matches the filter or throw an error with `error.code='P2025'`
+     * if no matches were found.
+     * @param {CheckoutFunnelEventFindUniqueOrThrowArgs} args - Arguments to find a CheckoutFunnelEvent
+     * @example
+     * // Get one CheckoutFunnelEvent
+     * const checkoutFunnelEvent = await prisma.checkoutFunnelEvent.findUniqueOrThrow({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findUniqueOrThrow<T extends CheckoutFunnelEventFindUniqueOrThrowArgs>(args: SelectSubset<T, CheckoutFunnelEventFindUniqueOrThrowArgs<ExtArgs>>): Prisma__CheckoutFunnelEventClient<$Result.GetResult<Prisma.$CheckoutFunnelEventPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find the first CheckoutFunnelEvent that matches the filter.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {CheckoutFunnelEventFindFirstArgs} args - Arguments to find a CheckoutFunnelEvent
+     * @example
+     * // Get one CheckoutFunnelEvent
+     * const checkoutFunnelEvent = await prisma.checkoutFunnelEvent.findFirst({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findFirst<T extends CheckoutFunnelEventFindFirstArgs>(args?: SelectSubset<T, CheckoutFunnelEventFindFirstArgs<ExtArgs>>): Prisma__CheckoutFunnelEventClient<$Result.GetResult<Prisma.$CheckoutFunnelEventPayload<ExtArgs>, T, "findFirst", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find the first CheckoutFunnelEvent that matches the filter or
+     * throw `PrismaKnownClientError` with `P2025` code if no matches were found.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {CheckoutFunnelEventFindFirstOrThrowArgs} args - Arguments to find a CheckoutFunnelEvent
+     * @example
+     * // Get one CheckoutFunnelEvent
+     * const checkoutFunnelEvent = await prisma.checkoutFunnelEvent.findFirstOrThrow({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findFirstOrThrow<T extends CheckoutFunnelEventFindFirstOrThrowArgs>(args?: SelectSubset<T, CheckoutFunnelEventFindFirstOrThrowArgs<ExtArgs>>): Prisma__CheckoutFunnelEventClient<$Result.GetResult<Prisma.$CheckoutFunnelEventPayload<ExtArgs>, T, "findFirstOrThrow", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find zero or more CheckoutFunnelEvents that matches the filter.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {CheckoutFunnelEventFindManyArgs} args - Arguments to filter and select certain fields only.
+     * @example
+     * // Get all CheckoutFunnelEvents
+     * const checkoutFunnelEvents = await prisma.checkoutFunnelEvent.findMany()
+     * 
+     * // Get first 10 CheckoutFunnelEvents
+     * const checkoutFunnelEvents = await prisma.checkoutFunnelEvent.findMany({ take: 10 })
+     * 
+     * // Only select the `id`
+     * const checkoutFunnelEventWithIdOnly = await prisma.checkoutFunnelEvent.findMany({ select: { id: true } })
+     * 
+     */
+    findMany<T extends CheckoutFunnelEventFindManyArgs>(args?: SelectSubset<T, CheckoutFunnelEventFindManyArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$CheckoutFunnelEventPayload<ExtArgs>, T, "findMany", GlobalOmitOptions>>
+
+    /**
+     * Create a CheckoutFunnelEvent.
+     * @param {CheckoutFunnelEventCreateArgs} args - Arguments to create a CheckoutFunnelEvent.
+     * @example
+     * // Create one CheckoutFunnelEvent
+     * const CheckoutFunnelEvent = await prisma.checkoutFunnelEvent.create({
+     *   data: {
+     *     // ... data to create a CheckoutFunnelEvent
+     *   }
+     * })
+     * 
+     */
+    create<T extends CheckoutFunnelEventCreateArgs>(args: SelectSubset<T, CheckoutFunnelEventCreateArgs<ExtArgs>>): Prisma__CheckoutFunnelEventClient<$Result.GetResult<Prisma.$CheckoutFunnelEventPayload<ExtArgs>, T, "create", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Create many CheckoutFunnelEvents.
+     * @param {CheckoutFunnelEventCreateManyArgs} args - Arguments to create many CheckoutFunnelEvents.
+     * @example
+     * // Create many CheckoutFunnelEvents
+     * const checkoutFunnelEvent = await prisma.checkoutFunnelEvent.createMany({
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     *     
+     */
+    createMany<T extends CheckoutFunnelEventCreateManyArgs>(args?: SelectSubset<T, CheckoutFunnelEventCreateManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Create many CheckoutFunnelEvents and returns the data saved in the database.
+     * @param {CheckoutFunnelEventCreateManyAndReturnArgs} args - Arguments to create many CheckoutFunnelEvents.
+     * @example
+     * // Create many CheckoutFunnelEvents
+     * const checkoutFunnelEvent = await prisma.checkoutFunnelEvent.createManyAndReturn({
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * 
+     * // Create many CheckoutFunnelEvents and only return the `id`
+     * const checkoutFunnelEventWithIdOnly = await prisma.checkoutFunnelEvent.createManyAndReturn({
+     *   select: { id: true },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * 
+     */
+    createManyAndReturn<T extends CheckoutFunnelEventCreateManyAndReturnArgs>(args?: SelectSubset<T, CheckoutFunnelEventCreateManyAndReturnArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$CheckoutFunnelEventPayload<ExtArgs>, T, "createManyAndReturn", GlobalOmitOptions>>
+
+    /**
+     * Delete a CheckoutFunnelEvent.
+     * @param {CheckoutFunnelEventDeleteArgs} args - Arguments to delete one CheckoutFunnelEvent.
+     * @example
+     * // Delete one CheckoutFunnelEvent
+     * const CheckoutFunnelEvent = await prisma.checkoutFunnelEvent.delete({
+     *   where: {
+     *     // ... filter to delete one CheckoutFunnelEvent
+     *   }
+     * })
+     * 
+     */
+    delete<T extends CheckoutFunnelEventDeleteArgs>(args: SelectSubset<T, CheckoutFunnelEventDeleteArgs<ExtArgs>>): Prisma__CheckoutFunnelEventClient<$Result.GetResult<Prisma.$CheckoutFunnelEventPayload<ExtArgs>, T, "delete", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Update one CheckoutFunnelEvent.
+     * @param {CheckoutFunnelEventUpdateArgs} args - Arguments to update one CheckoutFunnelEvent.
+     * @example
+     * // Update one CheckoutFunnelEvent
+     * const checkoutFunnelEvent = await prisma.checkoutFunnelEvent.update({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: {
+     *     // ... provide data here
+     *   }
+     * })
+     * 
+     */
+    update<T extends CheckoutFunnelEventUpdateArgs>(args: SelectSubset<T, CheckoutFunnelEventUpdateArgs<ExtArgs>>): Prisma__CheckoutFunnelEventClient<$Result.GetResult<Prisma.$CheckoutFunnelEventPayload<ExtArgs>, T, "update", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Delete zero or more CheckoutFunnelEvents.
+     * @param {CheckoutFunnelEventDeleteManyArgs} args - Arguments to filter CheckoutFunnelEvents to delete.
+     * @example
+     * // Delete a few CheckoutFunnelEvents
+     * const { count } = await prisma.checkoutFunnelEvent.deleteMany({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     * 
+     */
+    deleteMany<T extends CheckoutFunnelEventDeleteManyArgs>(args?: SelectSubset<T, CheckoutFunnelEventDeleteManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Update zero or more CheckoutFunnelEvents.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {CheckoutFunnelEventUpdateManyArgs} args - Arguments to update one or more rows.
+     * @example
+     * // Update many CheckoutFunnelEvents
+     * const checkoutFunnelEvent = await prisma.checkoutFunnelEvent.updateMany({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: {
+     *     // ... provide data here
+     *   }
+     * })
+     * 
+     */
+    updateMany<T extends CheckoutFunnelEventUpdateManyArgs>(args: SelectSubset<T, CheckoutFunnelEventUpdateManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Update zero or more CheckoutFunnelEvents and returns the data updated in the database.
+     * @param {CheckoutFunnelEventUpdateManyAndReturnArgs} args - Arguments to update many CheckoutFunnelEvents.
+     * @example
+     * // Update many CheckoutFunnelEvents
+     * const checkoutFunnelEvent = await prisma.checkoutFunnelEvent.updateManyAndReturn({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * 
+     * // Update zero or more CheckoutFunnelEvents and only return the `id`
+     * const checkoutFunnelEventWithIdOnly = await prisma.checkoutFunnelEvent.updateManyAndReturn({
+     *   select: { id: true },
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * 
+     */
+    updateManyAndReturn<T extends CheckoutFunnelEventUpdateManyAndReturnArgs>(args: SelectSubset<T, CheckoutFunnelEventUpdateManyAndReturnArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$CheckoutFunnelEventPayload<ExtArgs>, T, "updateManyAndReturn", GlobalOmitOptions>>
+
+    /**
+     * Create or update one CheckoutFunnelEvent.
+     * @param {CheckoutFunnelEventUpsertArgs} args - Arguments to update or create a CheckoutFunnelEvent.
+     * @example
+     * // Update or create a CheckoutFunnelEvent
+     * const checkoutFunnelEvent = await prisma.checkoutFunnelEvent.upsert({
+     *   create: {
+     *     // ... data to create a CheckoutFunnelEvent
+     *   },
+     *   update: {
+     *     // ... in case it already exists, update
+     *   },
+     *   where: {
+     *     // ... the filter for the CheckoutFunnelEvent we want to update
+     *   }
+     * })
+     */
+    upsert<T extends CheckoutFunnelEventUpsertArgs>(args: SelectSubset<T, CheckoutFunnelEventUpsertArgs<ExtArgs>>): Prisma__CheckoutFunnelEventClient<$Result.GetResult<Prisma.$CheckoutFunnelEventPayload<ExtArgs>, T, "upsert", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+
+    /**
+     * Count the number of CheckoutFunnelEvents.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {CheckoutFunnelEventCountArgs} args - Arguments to filter CheckoutFunnelEvents to count.
+     * @example
+     * // Count the number of CheckoutFunnelEvents
+     * const count = await prisma.checkoutFunnelEvent.count({
+     *   where: {
+     *     // ... the filter for the CheckoutFunnelEvents we want to count
+     *   }
+     * })
+    **/
+    count<T extends CheckoutFunnelEventCountArgs>(
+      args?: Subset<T, CheckoutFunnelEventCountArgs>,
+    ): Prisma.PrismaPromise<
+      T extends $Utils.Record<'select', any>
+        ? T['select'] extends true
+          ? number
+          : GetScalarType<T['select'], CheckoutFunnelEventCountAggregateOutputType>
+        : number
+    >
+
+    /**
+     * Allows you to perform aggregations operations on a CheckoutFunnelEvent.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {CheckoutFunnelEventAggregateArgs} args - Select which aggregations you would like to apply and on what fields.
+     * @example
+     * // Ordered by age ascending
+     * // Where email contains prisma.io
+     * // Limited to the 10 users
+     * const aggregations = await prisma.user.aggregate({
+     *   _avg: {
+     *     age: true,
+     *   },
+     *   where: {
+     *     email: {
+     *       contains: "prisma.io",
+     *     },
+     *   },
+     *   orderBy: {
+     *     age: "asc",
+     *   },
+     *   take: 10,
+     * })
+    **/
+    aggregate<T extends CheckoutFunnelEventAggregateArgs>(args: Subset<T, CheckoutFunnelEventAggregateArgs>): Prisma.PrismaPromise<GetCheckoutFunnelEventAggregateType<T>>
+
+    /**
+     * Group by CheckoutFunnelEvent.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {CheckoutFunnelEventGroupByArgs} args - Group by arguments.
+     * @example
+     * // Group by city, order by createdAt, get count
+     * const result = await prisma.user.groupBy({
+     *   by: ['city', 'createdAt'],
+     *   orderBy: {
+     *     createdAt: true
+     *   },
+     *   _count: {
+     *     _all: true
+     *   },
+     * })
+     * 
+    **/
+    groupBy<
+      T extends CheckoutFunnelEventGroupByArgs,
+      HasSelectOrTake extends Or<
+        Extends<'skip', Keys<T>>,
+        Extends<'take', Keys<T>>
+      >,
+      OrderByArg extends True extends HasSelectOrTake
+        ? { orderBy: CheckoutFunnelEventGroupByArgs['orderBy'] }
+        : { orderBy?: CheckoutFunnelEventGroupByArgs['orderBy'] },
+      OrderFields extends ExcludeUnderscoreKeys<Keys<MaybeTupleToUnion<T['orderBy']>>>,
+      ByFields extends MaybeTupleToUnion<T['by']>,
+      ByValid extends Has<ByFields, OrderFields>,
+      HavingFields extends GetHavingFields<T['having']>,
+      HavingValid extends Has<ByFields, HavingFields>,
+      ByEmpty extends T['by'] extends never[] ? True : False,
+      InputErrors extends ByEmpty extends True
+      ? `Error: "by" must not be empty.`
+      : HavingValid extends False
+      ? {
+          [P in HavingFields]: P extends ByFields
+            ? never
+            : P extends string
+            ? `Error: Field "${P}" used in "having" needs to be provided in "by".`
+            : [
+                Error,
+                'Field ',
+                P,
+                ` in "having" needs to be provided in "by"`,
+              ]
+        }[HavingFields]
+      : 'take' extends Keys<T>
+      ? 'orderBy' extends Keys<T>
+        ? ByValid extends True
+          ? {}
+          : {
+              [P in OrderFields]: P extends ByFields
+                ? never
+                : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+            }[OrderFields]
+        : 'Error: If you provide "take", you also need to provide "orderBy"'
+      : 'skip' extends Keys<T>
+      ? 'orderBy' extends Keys<T>
+        ? ByValid extends True
+          ? {}
+          : {
+              [P in OrderFields]: P extends ByFields
+                ? never
+                : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+            }[OrderFields]
+        : 'Error: If you provide "skip", you also need to provide "orderBy"'
+      : ByValid extends True
+      ? {}
+      : {
+          [P in OrderFields]: P extends ByFields
+            ? never
+            : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+        }[OrderFields]
+    >(args: SubsetIntersection<T, CheckoutFunnelEventGroupByArgs, OrderByArg> & InputErrors): {} extends InputErrors ? GetCheckoutFunnelEventGroupByPayload<T> : Prisma.PrismaPromise<InputErrors>
+  /**
+   * Fields of the CheckoutFunnelEvent model
+   */
+  readonly fields: CheckoutFunnelEventFieldRefs;
+  }
+
+  /**
+   * The delegate class that acts as a "Promise-like" for CheckoutFunnelEvent.
+   * Why is this prefixed with `Prisma__`?
+   * Because we want to prevent naming conflicts as mentioned in
+   * https://github.com/prisma/prisma-client-js/issues/707
+   */
+  export interface Prisma__CheckoutFunnelEventClient<T, Null = never, ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs, GlobalOmitOptions = {}> extends Prisma.PrismaPromise<T> {
+    readonly [Symbol.toStringTag]: "PrismaPromise"
+    /**
+     * Attaches callbacks for the resolution and/or rejection of the Promise.
+     * @param onfulfilled The callback to execute when the Promise is resolved.
+     * @param onrejected The callback to execute when the Promise is rejected.
+     * @returns A Promise for the completion of which ever callback is executed.
+     */
+    then<TResult1 = T, TResult2 = never>(onfulfilled?: ((value: T) => TResult1 | PromiseLike<TResult1>) | undefined | null, onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | undefined | null): $Utils.JsPromise<TResult1 | TResult2>
+    /**
+     * Attaches a callback for only the rejection of the Promise.
+     * @param onrejected The callback to execute when the Promise is rejected.
+     * @returns A Promise for the completion of the callback.
+     */
+    catch<TResult = never>(onrejected?: ((reason: any) => TResult | PromiseLike<TResult>) | undefined | null): $Utils.JsPromise<T | TResult>
+    /**
+     * Attaches a callback that is invoked when the Promise is settled (fulfilled or rejected). The
+     * resolved value cannot be modified from the callback.
+     * @param onfinally The callback to execute when the Promise is settled (fulfilled or rejected).
+     * @returns A Promise for the completion of the callback.
+     */
+    finally(onfinally?: (() => void) | undefined | null): $Utils.JsPromise<T>
+  }
+
+
+
+
+  /**
+   * Fields of the CheckoutFunnelEvent model
+   */
+  interface CheckoutFunnelEventFieldRefs {
+    readonly id: FieldRef<"CheckoutFunnelEvent", 'String'>
+    readonly shopId: FieldRef<"CheckoutFunnelEvent", 'String'>
+    readonly funnelSessionId: FieldRef<"CheckoutFunnelEvent", 'String'>
+    readonly eventType: FieldRef<"CheckoutFunnelEvent", 'CheckoutFunnelEventType'>
+    readonly source: FieldRef<"CheckoutFunnelEvent", 'CheckoutFunnelSource'>
+    readonly device: FieldRef<"CheckoutFunnelEvent", 'CheckoutFunnelDevice'>
+    readonly customerProfileId: FieldRef<"CheckoutFunnelEvent", 'String'>
+    readonly sessionTokenHash: FieldRef<"CheckoutFunnelEvent", 'String'>
+    readonly phoneSnapshot: FieldRef<"CheckoutFunnelEvent", 'String'>
+    readonly cartToken: FieldRef<"CheckoutFunnelEvent", 'String'>
+    readonly cartValuePaise: FieldRef<"CheckoutFunnelEvent", 'Int'>
+    readonly expressCheckoutIntentId: FieldRef<"CheckoutFunnelEvent", 'String'>
+    readonly metadata: FieldRef<"CheckoutFunnelEvent", 'Json'>
+    readonly occurredAt: FieldRef<"CheckoutFunnelEvent", 'DateTime'>
+    readonly createdAt: FieldRef<"CheckoutFunnelEvent", 'DateTime'>
+  }
+    
+
+  // Custom InputTypes
+  /**
+   * CheckoutFunnelEvent findUnique
+   */
+  export type CheckoutFunnelEventFindUniqueArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the CheckoutFunnelEvent
+     */
+    select?: CheckoutFunnelEventSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the CheckoutFunnelEvent
+     */
+    omit?: CheckoutFunnelEventOmit<ExtArgs> | null
+    /**
+     * Filter, which CheckoutFunnelEvent to fetch.
+     */
+    where: CheckoutFunnelEventWhereUniqueInput
+  }
+
+  /**
+   * CheckoutFunnelEvent findUniqueOrThrow
+   */
+  export type CheckoutFunnelEventFindUniqueOrThrowArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the CheckoutFunnelEvent
+     */
+    select?: CheckoutFunnelEventSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the CheckoutFunnelEvent
+     */
+    omit?: CheckoutFunnelEventOmit<ExtArgs> | null
+    /**
+     * Filter, which CheckoutFunnelEvent to fetch.
+     */
+    where: CheckoutFunnelEventWhereUniqueInput
+  }
+
+  /**
+   * CheckoutFunnelEvent findFirst
+   */
+  export type CheckoutFunnelEventFindFirstArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the CheckoutFunnelEvent
+     */
+    select?: CheckoutFunnelEventSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the CheckoutFunnelEvent
+     */
+    omit?: CheckoutFunnelEventOmit<ExtArgs> | null
+    /**
+     * Filter, which CheckoutFunnelEvent to fetch.
+     */
+    where?: CheckoutFunnelEventWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of CheckoutFunnelEvents to fetch.
+     */
+    orderBy?: CheckoutFunnelEventOrderByWithRelationInput | CheckoutFunnelEventOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for searching for CheckoutFunnelEvents.
+     */
+    cursor?: CheckoutFunnelEventWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` CheckoutFunnelEvents from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` CheckoutFunnelEvents.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of CheckoutFunnelEvents.
+     */
+    distinct?: CheckoutFunnelEventScalarFieldEnum | CheckoutFunnelEventScalarFieldEnum[]
+  }
+
+  /**
+   * CheckoutFunnelEvent findFirstOrThrow
+   */
+  export type CheckoutFunnelEventFindFirstOrThrowArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the CheckoutFunnelEvent
+     */
+    select?: CheckoutFunnelEventSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the CheckoutFunnelEvent
+     */
+    omit?: CheckoutFunnelEventOmit<ExtArgs> | null
+    /**
+     * Filter, which CheckoutFunnelEvent to fetch.
+     */
+    where?: CheckoutFunnelEventWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of CheckoutFunnelEvents to fetch.
+     */
+    orderBy?: CheckoutFunnelEventOrderByWithRelationInput | CheckoutFunnelEventOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for searching for CheckoutFunnelEvents.
+     */
+    cursor?: CheckoutFunnelEventWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` CheckoutFunnelEvents from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` CheckoutFunnelEvents.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of CheckoutFunnelEvents.
+     */
+    distinct?: CheckoutFunnelEventScalarFieldEnum | CheckoutFunnelEventScalarFieldEnum[]
+  }
+
+  /**
+   * CheckoutFunnelEvent findMany
+   */
+  export type CheckoutFunnelEventFindManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the CheckoutFunnelEvent
+     */
+    select?: CheckoutFunnelEventSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the CheckoutFunnelEvent
+     */
+    omit?: CheckoutFunnelEventOmit<ExtArgs> | null
+    /**
+     * Filter, which CheckoutFunnelEvents to fetch.
+     */
+    where?: CheckoutFunnelEventWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of CheckoutFunnelEvents to fetch.
+     */
+    orderBy?: CheckoutFunnelEventOrderByWithRelationInput | CheckoutFunnelEventOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for listing CheckoutFunnelEvents.
+     */
+    cursor?: CheckoutFunnelEventWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` CheckoutFunnelEvents from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` CheckoutFunnelEvents.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of CheckoutFunnelEvents.
+     */
+    distinct?: CheckoutFunnelEventScalarFieldEnum | CheckoutFunnelEventScalarFieldEnum[]
+  }
+
+  /**
+   * CheckoutFunnelEvent create
+   */
+  export type CheckoutFunnelEventCreateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the CheckoutFunnelEvent
+     */
+    select?: CheckoutFunnelEventSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the CheckoutFunnelEvent
+     */
+    omit?: CheckoutFunnelEventOmit<ExtArgs> | null
+    /**
+     * The data needed to create a CheckoutFunnelEvent.
+     */
+    data: XOR<CheckoutFunnelEventCreateInput, CheckoutFunnelEventUncheckedCreateInput>
+  }
+
+  /**
+   * CheckoutFunnelEvent createMany
+   */
+  export type CheckoutFunnelEventCreateManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * The data used to create many CheckoutFunnelEvents.
+     */
+    data: CheckoutFunnelEventCreateManyInput | CheckoutFunnelEventCreateManyInput[]
+    skipDuplicates?: boolean
+  }
+
+  /**
+   * CheckoutFunnelEvent createManyAndReturn
+   */
+  export type CheckoutFunnelEventCreateManyAndReturnArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the CheckoutFunnelEvent
+     */
+    select?: CheckoutFunnelEventSelectCreateManyAndReturn<ExtArgs> | null
+    /**
+     * Omit specific fields from the CheckoutFunnelEvent
+     */
+    omit?: CheckoutFunnelEventOmit<ExtArgs> | null
+    /**
+     * The data used to create many CheckoutFunnelEvents.
+     */
+    data: CheckoutFunnelEventCreateManyInput | CheckoutFunnelEventCreateManyInput[]
+    skipDuplicates?: boolean
+  }
+
+  /**
+   * CheckoutFunnelEvent update
+   */
+  export type CheckoutFunnelEventUpdateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the CheckoutFunnelEvent
+     */
+    select?: CheckoutFunnelEventSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the CheckoutFunnelEvent
+     */
+    omit?: CheckoutFunnelEventOmit<ExtArgs> | null
+    /**
+     * The data needed to update a CheckoutFunnelEvent.
+     */
+    data: XOR<CheckoutFunnelEventUpdateInput, CheckoutFunnelEventUncheckedUpdateInput>
+    /**
+     * Choose, which CheckoutFunnelEvent to update.
+     */
+    where: CheckoutFunnelEventWhereUniqueInput
+  }
+
+  /**
+   * CheckoutFunnelEvent updateMany
+   */
+  export type CheckoutFunnelEventUpdateManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * The data used to update CheckoutFunnelEvents.
+     */
+    data: XOR<CheckoutFunnelEventUpdateManyMutationInput, CheckoutFunnelEventUncheckedUpdateManyInput>
+    /**
+     * Filter which CheckoutFunnelEvents to update
+     */
+    where?: CheckoutFunnelEventWhereInput
+    /**
+     * Limit how many CheckoutFunnelEvents to update.
+     */
+    limit?: number
+  }
+
+  /**
+   * CheckoutFunnelEvent updateManyAndReturn
+   */
+  export type CheckoutFunnelEventUpdateManyAndReturnArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the CheckoutFunnelEvent
+     */
+    select?: CheckoutFunnelEventSelectUpdateManyAndReturn<ExtArgs> | null
+    /**
+     * Omit specific fields from the CheckoutFunnelEvent
+     */
+    omit?: CheckoutFunnelEventOmit<ExtArgs> | null
+    /**
+     * The data used to update CheckoutFunnelEvents.
+     */
+    data: XOR<CheckoutFunnelEventUpdateManyMutationInput, CheckoutFunnelEventUncheckedUpdateManyInput>
+    /**
+     * Filter which CheckoutFunnelEvents to update
+     */
+    where?: CheckoutFunnelEventWhereInput
+    /**
+     * Limit how many CheckoutFunnelEvents to update.
+     */
+    limit?: number
+  }
+
+  /**
+   * CheckoutFunnelEvent upsert
+   */
+  export type CheckoutFunnelEventUpsertArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the CheckoutFunnelEvent
+     */
+    select?: CheckoutFunnelEventSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the CheckoutFunnelEvent
+     */
+    omit?: CheckoutFunnelEventOmit<ExtArgs> | null
+    /**
+     * The filter to search for the CheckoutFunnelEvent to update in case it exists.
+     */
+    where: CheckoutFunnelEventWhereUniqueInput
+    /**
+     * In case the CheckoutFunnelEvent found by the `where` argument doesn't exist, create a new CheckoutFunnelEvent with this data.
+     */
+    create: XOR<CheckoutFunnelEventCreateInput, CheckoutFunnelEventUncheckedCreateInput>
+    /**
+     * In case the CheckoutFunnelEvent was found with the provided `where` argument, update it with this data.
+     */
+    update: XOR<CheckoutFunnelEventUpdateInput, CheckoutFunnelEventUncheckedUpdateInput>
+  }
+
+  /**
+   * CheckoutFunnelEvent delete
+   */
+  export type CheckoutFunnelEventDeleteArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the CheckoutFunnelEvent
+     */
+    select?: CheckoutFunnelEventSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the CheckoutFunnelEvent
+     */
+    omit?: CheckoutFunnelEventOmit<ExtArgs> | null
+    /**
+     * Filter which CheckoutFunnelEvent to delete.
+     */
+    where: CheckoutFunnelEventWhereUniqueInput
+  }
+
+  /**
+   * CheckoutFunnelEvent deleteMany
+   */
+  export type CheckoutFunnelEventDeleteManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Filter which CheckoutFunnelEvents to delete
+     */
+    where?: CheckoutFunnelEventWhereInput
+    /**
+     * Limit how many CheckoutFunnelEvents to delete.
+     */
+    limit?: number
+  }
+
+  /**
+   * CheckoutFunnelEvent without action
+   */
+  export type CheckoutFunnelEventDefaultArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the CheckoutFunnelEvent
+     */
+    select?: CheckoutFunnelEventSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the CheckoutFunnelEvent
+     */
+    omit?: CheckoutFunnelEventOmit<ExtArgs> | null
   }
 
 
@@ -122168,10 +123514,35 @@ export namespace Prisma {
     selectedPaymentMethod: 'selectedPaymentMethod',
     expiresAt: 'expiresAt',
     createdAt: 'createdAt',
-    updatedAt: 'updatedAt'
+    updatedAt: 'updatedAt',
+    paymentPendingAt: 'paymentPendingAt',
+    abandonedAt: 'abandonedAt',
+    completedAt: 'completedAt',
+    lastTransitionAt: 'lastTransitionAt'
   };
 
   export type ExpressCheckoutIntentScalarFieldEnum = (typeof ExpressCheckoutIntentScalarFieldEnum)[keyof typeof ExpressCheckoutIntentScalarFieldEnum]
+
+
+  export const CheckoutFunnelEventScalarFieldEnum: {
+    id: 'id',
+    shopId: 'shopId',
+    funnelSessionId: 'funnelSessionId',
+    eventType: 'eventType',
+    source: 'source',
+    device: 'device',
+    customerProfileId: 'customerProfileId',
+    sessionTokenHash: 'sessionTokenHash',
+    phoneSnapshot: 'phoneSnapshot',
+    cartToken: 'cartToken',
+    cartValuePaise: 'cartValuePaise',
+    expressCheckoutIntentId: 'expressCheckoutIntentId',
+    metadata: 'metadata',
+    occurredAt: 'occurredAt',
+    createdAt: 'createdAt'
+  };
+
+  export type CheckoutFunnelEventScalarFieldEnum = (typeof CheckoutFunnelEventScalarFieldEnum)[keyof typeof CheckoutFunnelEventScalarFieldEnum]
 
 
   export const ShopifyCheckoutPricingSnapshotScalarFieldEnum: {
@@ -123465,6 +124836,48 @@ export namespace Prisma {
    * Reference to a field of type 'ExpressCheckoutPaymentMethod[]'
    */
   export type ListEnumExpressCheckoutPaymentMethodFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'ExpressCheckoutPaymentMethod[]'>
+    
+
+
+  /**
+   * Reference to a field of type 'CheckoutFunnelEventType'
+   */
+  export type EnumCheckoutFunnelEventTypeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'CheckoutFunnelEventType'>
+    
+
+
+  /**
+   * Reference to a field of type 'CheckoutFunnelEventType[]'
+   */
+  export type ListEnumCheckoutFunnelEventTypeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'CheckoutFunnelEventType[]'>
+    
+
+
+  /**
+   * Reference to a field of type 'CheckoutFunnelSource'
+   */
+  export type EnumCheckoutFunnelSourceFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'CheckoutFunnelSource'>
+    
+
+
+  /**
+   * Reference to a field of type 'CheckoutFunnelSource[]'
+   */
+  export type ListEnumCheckoutFunnelSourceFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'CheckoutFunnelSource[]'>
+    
+
+
+  /**
+   * Reference to a field of type 'CheckoutFunnelDevice'
+   */
+  export type EnumCheckoutFunnelDeviceFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'CheckoutFunnelDevice'>
+    
+
+
+  /**
+   * Reference to a field of type 'CheckoutFunnelDevice[]'
+   */
+  export type ListEnumCheckoutFunnelDeviceFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'CheckoutFunnelDevice[]'>
     
 
 
@@ -132672,6 +134085,10 @@ export namespace Prisma {
     expiresAt?: DateTimeNullableFilter<"ExpressCheckoutIntent"> | Date | string | null
     createdAt?: DateTimeFilter<"ExpressCheckoutIntent"> | Date | string
     updatedAt?: DateTimeFilter<"ExpressCheckoutIntent"> | Date | string
+    paymentPendingAt?: DateTimeNullableFilter<"ExpressCheckoutIntent"> | Date | string | null
+    abandonedAt?: DateTimeNullableFilter<"ExpressCheckoutIntent"> | Date | string | null
+    completedAt?: DateTimeNullableFilter<"ExpressCheckoutIntent"> | Date | string | null
+    lastTransitionAt?: DateTimeNullableFilter<"ExpressCheckoutIntent"> | Date | string | null
     addressSnapshots?: ExpressCheckoutAddressSnapshotListRelationFilter
     discounts?: ExpressCheckoutDiscountListRelationFilter
     payments?: ExpressCheckoutPaymentListRelationFilter
@@ -132700,6 +134117,10 @@ export namespace Prisma {
     expiresAt?: SortOrderInput | SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
+    paymentPendingAt?: SortOrderInput | SortOrder
+    abandonedAt?: SortOrderInput | SortOrder
+    completedAt?: SortOrderInput | SortOrder
+    lastTransitionAt?: SortOrderInput | SortOrder
     addressSnapshots?: ExpressCheckoutAddressSnapshotOrderByRelationAggregateInput
     discounts?: ExpressCheckoutDiscountOrderByRelationAggregateInput
     payments?: ExpressCheckoutPaymentOrderByRelationAggregateInput
@@ -132732,6 +134153,10 @@ export namespace Prisma {
     expiresAt?: DateTimeNullableFilter<"ExpressCheckoutIntent"> | Date | string | null
     createdAt?: DateTimeFilter<"ExpressCheckoutIntent"> | Date | string
     updatedAt?: DateTimeFilter<"ExpressCheckoutIntent"> | Date | string
+    paymentPendingAt?: DateTimeNullableFilter<"ExpressCheckoutIntent"> | Date | string | null
+    abandonedAt?: DateTimeNullableFilter<"ExpressCheckoutIntent"> | Date | string | null
+    completedAt?: DateTimeNullableFilter<"ExpressCheckoutIntent"> | Date | string | null
+    lastTransitionAt?: DateTimeNullableFilter<"ExpressCheckoutIntent"> | Date | string | null
     addressSnapshots?: ExpressCheckoutAddressSnapshotListRelationFilter
     discounts?: ExpressCheckoutDiscountListRelationFilter
     payments?: ExpressCheckoutPaymentListRelationFilter
@@ -132760,6 +134185,10 @@ export namespace Prisma {
     expiresAt?: SortOrderInput | SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
+    paymentPendingAt?: SortOrderInput | SortOrder
+    abandonedAt?: SortOrderInput | SortOrder
+    completedAt?: SortOrderInput | SortOrder
+    lastTransitionAt?: SortOrderInput | SortOrder
     _count?: ExpressCheckoutIntentCountOrderByAggregateInput
     _avg?: ExpressCheckoutIntentAvgOrderByAggregateInput
     _max?: ExpressCheckoutIntentMaxOrderByAggregateInput
@@ -132790,6 +134219,114 @@ export namespace Prisma {
     expiresAt?: DateTimeNullableWithAggregatesFilter<"ExpressCheckoutIntent"> | Date | string | null
     createdAt?: DateTimeWithAggregatesFilter<"ExpressCheckoutIntent"> | Date | string
     updatedAt?: DateTimeWithAggregatesFilter<"ExpressCheckoutIntent"> | Date | string
+    paymentPendingAt?: DateTimeNullableWithAggregatesFilter<"ExpressCheckoutIntent"> | Date | string | null
+    abandonedAt?: DateTimeNullableWithAggregatesFilter<"ExpressCheckoutIntent"> | Date | string | null
+    completedAt?: DateTimeNullableWithAggregatesFilter<"ExpressCheckoutIntent"> | Date | string | null
+    lastTransitionAt?: DateTimeNullableWithAggregatesFilter<"ExpressCheckoutIntent"> | Date | string | null
+  }
+
+  export type CheckoutFunnelEventWhereInput = {
+    AND?: CheckoutFunnelEventWhereInput | CheckoutFunnelEventWhereInput[]
+    OR?: CheckoutFunnelEventWhereInput[]
+    NOT?: CheckoutFunnelEventWhereInput | CheckoutFunnelEventWhereInput[]
+    id?: StringFilter<"CheckoutFunnelEvent"> | string
+    shopId?: StringFilter<"CheckoutFunnelEvent"> | string
+    funnelSessionId?: StringFilter<"CheckoutFunnelEvent"> | string
+    eventType?: EnumCheckoutFunnelEventTypeFilter<"CheckoutFunnelEvent"> | $Enums.CheckoutFunnelEventType
+    source?: EnumCheckoutFunnelSourceNullableFilter<"CheckoutFunnelEvent"> | $Enums.CheckoutFunnelSource | null
+    device?: EnumCheckoutFunnelDeviceFilter<"CheckoutFunnelEvent"> | $Enums.CheckoutFunnelDevice
+    customerProfileId?: StringNullableFilter<"CheckoutFunnelEvent"> | string | null
+    sessionTokenHash?: StringNullableFilter<"CheckoutFunnelEvent"> | string | null
+    phoneSnapshot?: StringNullableFilter<"CheckoutFunnelEvent"> | string | null
+    cartToken?: StringNullableFilter<"CheckoutFunnelEvent"> | string | null
+    cartValuePaise?: IntNullableFilter<"CheckoutFunnelEvent"> | number | null
+    expressCheckoutIntentId?: StringNullableFilter<"CheckoutFunnelEvent"> | string | null
+    metadata?: JsonNullableFilter<"CheckoutFunnelEvent">
+    occurredAt?: DateTimeFilter<"CheckoutFunnelEvent"> | Date | string
+    createdAt?: DateTimeFilter<"CheckoutFunnelEvent"> | Date | string
+  }
+
+  export type CheckoutFunnelEventOrderByWithRelationInput = {
+    id?: SortOrder
+    shopId?: SortOrder
+    funnelSessionId?: SortOrder
+    eventType?: SortOrder
+    source?: SortOrderInput | SortOrder
+    device?: SortOrder
+    customerProfileId?: SortOrderInput | SortOrder
+    sessionTokenHash?: SortOrderInput | SortOrder
+    phoneSnapshot?: SortOrderInput | SortOrder
+    cartToken?: SortOrderInput | SortOrder
+    cartValuePaise?: SortOrderInput | SortOrder
+    expressCheckoutIntentId?: SortOrderInput | SortOrder
+    metadata?: SortOrderInput | SortOrder
+    occurredAt?: SortOrder
+    createdAt?: SortOrder
+  }
+
+  export type CheckoutFunnelEventWhereUniqueInput = Prisma.AtLeast<{
+    id?: string
+    AND?: CheckoutFunnelEventWhereInput | CheckoutFunnelEventWhereInput[]
+    OR?: CheckoutFunnelEventWhereInput[]
+    NOT?: CheckoutFunnelEventWhereInput | CheckoutFunnelEventWhereInput[]
+    shopId?: StringFilter<"CheckoutFunnelEvent"> | string
+    funnelSessionId?: StringFilter<"CheckoutFunnelEvent"> | string
+    eventType?: EnumCheckoutFunnelEventTypeFilter<"CheckoutFunnelEvent"> | $Enums.CheckoutFunnelEventType
+    source?: EnumCheckoutFunnelSourceNullableFilter<"CheckoutFunnelEvent"> | $Enums.CheckoutFunnelSource | null
+    device?: EnumCheckoutFunnelDeviceFilter<"CheckoutFunnelEvent"> | $Enums.CheckoutFunnelDevice
+    customerProfileId?: StringNullableFilter<"CheckoutFunnelEvent"> | string | null
+    sessionTokenHash?: StringNullableFilter<"CheckoutFunnelEvent"> | string | null
+    phoneSnapshot?: StringNullableFilter<"CheckoutFunnelEvent"> | string | null
+    cartToken?: StringNullableFilter<"CheckoutFunnelEvent"> | string | null
+    cartValuePaise?: IntNullableFilter<"CheckoutFunnelEvent"> | number | null
+    expressCheckoutIntentId?: StringNullableFilter<"CheckoutFunnelEvent"> | string | null
+    metadata?: JsonNullableFilter<"CheckoutFunnelEvent">
+    occurredAt?: DateTimeFilter<"CheckoutFunnelEvent"> | Date | string
+    createdAt?: DateTimeFilter<"CheckoutFunnelEvent"> | Date | string
+  }, "id">
+
+  export type CheckoutFunnelEventOrderByWithAggregationInput = {
+    id?: SortOrder
+    shopId?: SortOrder
+    funnelSessionId?: SortOrder
+    eventType?: SortOrder
+    source?: SortOrderInput | SortOrder
+    device?: SortOrder
+    customerProfileId?: SortOrderInput | SortOrder
+    sessionTokenHash?: SortOrderInput | SortOrder
+    phoneSnapshot?: SortOrderInput | SortOrder
+    cartToken?: SortOrderInput | SortOrder
+    cartValuePaise?: SortOrderInput | SortOrder
+    expressCheckoutIntentId?: SortOrderInput | SortOrder
+    metadata?: SortOrderInput | SortOrder
+    occurredAt?: SortOrder
+    createdAt?: SortOrder
+    _count?: CheckoutFunnelEventCountOrderByAggregateInput
+    _avg?: CheckoutFunnelEventAvgOrderByAggregateInput
+    _max?: CheckoutFunnelEventMaxOrderByAggregateInput
+    _min?: CheckoutFunnelEventMinOrderByAggregateInput
+    _sum?: CheckoutFunnelEventSumOrderByAggregateInput
+  }
+
+  export type CheckoutFunnelEventScalarWhereWithAggregatesInput = {
+    AND?: CheckoutFunnelEventScalarWhereWithAggregatesInput | CheckoutFunnelEventScalarWhereWithAggregatesInput[]
+    OR?: CheckoutFunnelEventScalarWhereWithAggregatesInput[]
+    NOT?: CheckoutFunnelEventScalarWhereWithAggregatesInput | CheckoutFunnelEventScalarWhereWithAggregatesInput[]
+    id?: StringWithAggregatesFilter<"CheckoutFunnelEvent"> | string
+    shopId?: StringWithAggregatesFilter<"CheckoutFunnelEvent"> | string
+    funnelSessionId?: StringWithAggregatesFilter<"CheckoutFunnelEvent"> | string
+    eventType?: EnumCheckoutFunnelEventTypeWithAggregatesFilter<"CheckoutFunnelEvent"> | $Enums.CheckoutFunnelEventType
+    source?: EnumCheckoutFunnelSourceNullableWithAggregatesFilter<"CheckoutFunnelEvent"> | $Enums.CheckoutFunnelSource | null
+    device?: EnumCheckoutFunnelDeviceWithAggregatesFilter<"CheckoutFunnelEvent"> | $Enums.CheckoutFunnelDevice
+    customerProfileId?: StringNullableWithAggregatesFilter<"CheckoutFunnelEvent"> | string | null
+    sessionTokenHash?: StringNullableWithAggregatesFilter<"CheckoutFunnelEvent"> | string | null
+    phoneSnapshot?: StringNullableWithAggregatesFilter<"CheckoutFunnelEvent"> | string | null
+    cartToken?: StringNullableWithAggregatesFilter<"CheckoutFunnelEvent"> | string | null
+    cartValuePaise?: IntNullableWithAggregatesFilter<"CheckoutFunnelEvent"> | number | null
+    expressCheckoutIntentId?: StringNullableWithAggregatesFilter<"CheckoutFunnelEvent"> | string | null
+    metadata?: JsonNullableWithAggregatesFilter<"CheckoutFunnelEvent">
+    occurredAt?: DateTimeWithAggregatesFilter<"CheckoutFunnelEvent"> | Date | string
+    createdAt?: DateTimeWithAggregatesFilter<"CheckoutFunnelEvent"> | Date | string
   }
 
   export type ShopifyCheckoutPricingSnapshotWhereInput = {
@@ -144316,6 +145853,10 @@ export namespace Prisma {
     expiresAt?: Date | string | null
     createdAt?: Date | string
     updatedAt?: Date | string
+    paymentPendingAt?: Date | string | null
+    abandonedAt?: Date | string | null
+    completedAt?: Date | string | null
+    lastTransitionAt?: Date | string | null
     addressSnapshots?: ExpressCheckoutAddressSnapshotCreateNestedManyWithoutIntentInput
     discounts?: ExpressCheckoutDiscountCreateNestedManyWithoutIntentInput
     payments?: ExpressCheckoutPaymentCreateNestedManyWithoutIntentInput
@@ -144344,6 +145885,10 @@ export namespace Prisma {
     expiresAt?: Date | string | null
     createdAt?: Date | string
     updatedAt?: Date | string
+    paymentPendingAt?: Date | string | null
+    abandonedAt?: Date | string | null
+    completedAt?: Date | string | null
+    lastTransitionAt?: Date | string | null
     addressSnapshots?: ExpressCheckoutAddressSnapshotUncheckedCreateNestedManyWithoutIntentInput
     discounts?: ExpressCheckoutDiscountUncheckedCreateNestedManyWithoutIntentInput
     payments?: ExpressCheckoutPaymentUncheckedCreateNestedManyWithoutIntentInput
@@ -144372,6 +145917,10 @@ export namespace Prisma {
     expiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    paymentPendingAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    abandonedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    completedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    lastTransitionAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     addressSnapshots?: ExpressCheckoutAddressSnapshotUpdateManyWithoutIntentNestedInput
     discounts?: ExpressCheckoutDiscountUpdateManyWithoutIntentNestedInput
     payments?: ExpressCheckoutPaymentUpdateManyWithoutIntentNestedInput
@@ -144400,6 +145949,10 @@ export namespace Prisma {
     expiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    paymentPendingAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    abandonedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    completedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    lastTransitionAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     addressSnapshots?: ExpressCheckoutAddressSnapshotUncheckedUpdateManyWithoutIntentNestedInput
     discounts?: ExpressCheckoutDiscountUncheckedUpdateManyWithoutIntentNestedInput
     payments?: ExpressCheckoutPaymentUncheckedUpdateManyWithoutIntentNestedInput
@@ -144428,6 +145981,10 @@ export namespace Prisma {
     expiresAt?: Date | string | null
     createdAt?: Date | string
     updatedAt?: Date | string
+    paymentPendingAt?: Date | string | null
+    abandonedAt?: Date | string | null
+    completedAt?: Date | string | null
+    lastTransitionAt?: Date | string | null
   }
 
   export type ExpressCheckoutIntentUpdateManyMutationInput = {
@@ -144450,6 +146007,10 @@ export namespace Prisma {
     expiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    paymentPendingAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    abandonedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    completedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    lastTransitionAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
 
   export type ExpressCheckoutIntentUncheckedUpdateManyInput = {
@@ -144472,6 +146033,136 @@ export namespace Prisma {
     expiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    paymentPendingAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    abandonedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    completedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    lastTransitionAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  }
+
+  export type CheckoutFunnelEventCreateInput = {
+    id?: string
+    shopId: string
+    funnelSessionId: string
+    eventType: $Enums.CheckoutFunnelEventType
+    source?: $Enums.CheckoutFunnelSource | null
+    device?: $Enums.CheckoutFunnelDevice
+    customerProfileId?: string | null
+    sessionTokenHash?: string | null
+    phoneSnapshot?: string | null
+    cartToken?: string | null
+    cartValuePaise?: number | null
+    expressCheckoutIntentId?: string | null
+    metadata?: NullableJsonNullValueInput | InputJsonValue
+    occurredAt?: Date | string
+    createdAt?: Date | string
+  }
+
+  export type CheckoutFunnelEventUncheckedCreateInput = {
+    id?: string
+    shopId: string
+    funnelSessionId: string
+    eventType: $Enums.CheckoutFunnelEventType
+    source?: $Enums.CheckoutFunnelSource | null
+    device?: $Enums.CheckoutFunnelDevice
+    customerProfileId?: string | null
+    sessionTokenHash?: string | null
+    phoneSnapshot?: string | null
+    cartToken?: string | null
+    cartValuePaise?: number | null
+    expressCheckoutIntentId?: string | null
+    metadata?: NullableJsonNullValueInput | InputJsonValue
+    occurredAt?: Date | string
+    createdAt?: Date | string
+  }
+
+  export type CheckoutFunnelEventUpdateInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    shopId?: StringFieldUpdateOperationsInput | string
+    funnelSessionId?: StringFieldUpdateOperationsInput | string
+    eventType?: EnumCheckoutFunnelEventTypeFieldUpdateOperationsInput | $Enums.CheckoutFunnelEventType
+    source?: NullableEnumCheckoutFunnelSourceFieldUpdateOperationsInput | $Enums.CheckoutFunnelSource | null
+    device?: EnumCheckoutFunnelDeviceFieldUpdateOperationsInput | $Enums.CheckoutFunnelDevice
+    customerProfileId?: NullableStringFieldUpdateOperationsInput | string | null
+    sessionTokenHash?: NullableStringFieldUpdateOperationsInput | string | null
+    phoneSnapshot?: NullableStringFieldUpdateOperationsInput | string | null
+    cartToken?: NullableStringFieldUpdateOperationsInput | string | null
+    cartValuePaise?: NullableIntFieldUpdateOperationsInput | number | null
+    expressCheckoutIntentId?: NullableStringFieldUpdateOperationsInput | string | null
+    metadata?: NullableJsonNullValueInput | InputJsonValue
+    occurredAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type CheckoutFunnelEventUncheckedUpdateInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    shopId?: StringFieldUpdateOperationsInput | string
+    funnelSessionId?: StringFieldUpdateOperationsInput | string
+    eventType?: EnumCheckoutFunnelEventTypeFieldUpdateOperationsInput | $Enums.CheckoutFunnelEventType
+    source?: NullableEnumCheckoutFunnelSourceFieldUpdateOperationsInput | $Enums.CheckoutFunnelSource | null
+    device?: EnumCheckoutFunnelDeviceFieldUpdateOperationsInput | $Enums.CheckoutFunnelDevice
+    customerProfileId?: NullableStringFieldUpdateOperationsInput | string | null
+    sessionTokenHash?: NullableStringFieldUpdateOperationsInput | string | null
+    phoneSnapshot?: NullableStringFieldUpdateOperationsInput | string | null
+    cartToken?: NullableStringFieldUpdateOperationsInput | string | null
+    cartValuePaise?: NullableIntFieldUpdateOperationsInput | number | null
+    expressCheckoutIntentId?: NullableStringFieldUpdateOperationsInput | string | null
+    metadata?: NullableJsonNullValueInput | InputJsonValue
+    occurredAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type CheckoutFunnelEventCreateManyInput = {
+    id?: string
+    shopId: string
+    funnelSessionId: string
+    eventType: $Enums.CheckoutFunnelEventType
+    source?: $Enums.CheckoutFunnelSource | null
+    device?: $Enums.CheckoutFunnelDevice
+    customerProfileId?: string | null
+    sessionTokenHash?: string | null
+    phoneSnapshot?: string | null
+    cartToken?: string | null
+    cartValuePaise?: number | null
+    expressCheckoutIntentId?: string | null
+    metadata?: NullableJsonNullValueInput | InputJsonValue
+    occurredAt?: Date | string
+    createdAt?: Date | string
+  }
+
+  export type CheckoutFunnelEventUpdateManyMutationInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    shopId?: StringFieldUpdateOperationsInput | string
+    funnelSessionId?: StringFieldUpdateOperationsInput | string
+    eventType?: EnumCheckoutFunnelEventTypeFieldUpdateOperationsInput | $Enums.CheckoutFunnelEventType
+    source?: NullableEnumCheckoutFunnelSourceFieldUpdateOperationsInput | $Enums.CheckoutFunnelSource | null
+    device?: EnumCheckoutFunnelDeviceFieldUpdateOperationsInput | $Enums.CheckoutFunnelDevice
+    customerProfileId?: NullableStringFieldUpdateOperationsInput | string | null
+    sessionTokenHash?: NullableStringFieldUpdateOperationsInput | string | null
+    phoneSnapshot?: NullableStringFieldUpdateOperationsInput | string | null
+    cartToken?: NullableStringFieldUpdateOperationsInput | string | null
+    cartValuePaise?: NullableIntFieldUpdateOperationsInput | number | null
+    expressCheckoutIntentId?: NullableStringFieldUpdateOperationsInput | string | null
+    metadata?: NullableJsonNullValueInput | InputJsonValue
+    occurredAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type CheckoutFunnelEventUncheckedUpdateManyInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    shopId?: StringFieldUpdateOperationsInput | string
+    funnelSessionId?: StringFieldUpdateOperationsInput | string
+    eventType?: EnumCheckoutFunnelEventTypeFieldUpdateOperationsInput | $Enums.CheckoutFunnelEventType
+    source?: NullableEnumCheckoutFunnelSourceFieldUpdateOperationsInput | $Enums.CheckoutFunnelSource | null
+    device?: EnumCheckoutFunnelDeviceFieldUpdateOperationsInput | $Enums.CheckoutFunnelDevice
+    customerProfileId?: NullableStringFieldUpdateOperationsInput | string | null
+    sessionTokenHash?: NullableStringFieldUpdateOperationsInput | string | null
+    phoneSnapshot?: NullableStringFieldUpdateOperationsInput | string | null
+    cartToken?: NullableStringFieldUpdateOperationsInput | string | null
+    cartValuePaise?: NullableIntFieldUpdateOperationsInput | number | null
+    expressCheckoutIntentId?: NullableStringFieldUpdateOperationsInput | string | null
+    metadata?: NullableJsonNullValueInput | InputJsonValue
+    occurredAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
 
   export type ShopifyCheckoutPricingSnapshotCreateInput = {
@@ -153095,6 +154786,10 @@ export namespace Prisma {
     expiresAt?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
+    paymentPendingAt?: SortOrder
+    abandonedAt?: SortOrder
+    completedAt?: SortOrder
+    lastTransitionAt?: SortOrder
   }
 
   export type ExpressCheckoutIntentAvgOrderByAggregateInput = {
@@ -153124,6 +154819,10 @@ export namespace Prisma {
     expiresAt?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
+    paymentPendingAt?: SortOrder
+    abandonedAt?: SortOrder
+    completedAt?: SortOrder
+    lastTransitionAt?: SortOrder
   }
 
   export type ExpressCheckoutIntentMinOrderByAggregateInput = {
@@ -153145,6 +154844,10 @@ export namespace Prisma {
     expiresAt?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
+    paymentPendingAt?: SortOrder
+    abandonedAt?: SortOrder
+    completedAt?: SortOrder
+    lastTransitionAt?: SortOrder
   }
 
   export type ExpressCheckoutIntentSumOrderByAggregateInput = {
@@ -153173,6 +154876,117 @@ export namespace Prisma {
     _count?: NestedIntNullableFilter<$PrismaModel>
     _min?: NestedEnumExpressCheckoutPaymentMethodNullableFilter<$PrismaModel>
     _max?: NestedEnumExpressCheckoutPaymentMethodNullableFilter<$PrismaModel>
+  }
+
+  export type EnumCheckoutFunnelEventTypeFilter<$PrismaModel = never> = {
+    equals?: $Enums.CheckoutFunnelEventType | EnumCheckoutFunnelEventTypeFieldRefInput<$PrismaModel>
+    in?: $Enums.CheckoutFunnelEventType[] | ListEnumCheckoutFunnelEventTypeFieldRefInput<$PrismaModel>
+    notIn?: $Enums.CheckoutFunnelEventType[] | ListEnumCheckoutFunnelEventTypeFieldRefInput<$PrismaModel>
+    not?: NestedEnumCheckoutFunnelEventTypeFilter<$PrismaModel> | $Enums.CheckoutFunnelEventType
+  }
+
+  export type EnumCheckoutFunnelSourceNullableFilter<$PrismaModel = never> = {
+    equals?: $Enums.CheckoutFunnelSource | EnumCheckoutFunnelSourceFieldRefInput<$PrismaModel> | null
+    in?: $Enums.CheckoutFunnelSource[] | ListEnumCheckoutFunnelSourceFieldRefInput<$PrismaModel> | null
+    notIn?: $Enums.CheckoutFunnelSource[] | ListEnumCheckoutFunnelSourceFieldRefInput<$PrismaModel> | null
+    not?: NestedEnumCheckoutFunnelSourceNullableFilter<$PrismaModel> | $Enums.CheckoutFunnelSource | null
+  }
+
+  export type EnumCheckoutFunnelDeviceFilter<$PrismaModel = never> = {
+    equals?: $Enums.CheckoutFunnelDevice | EnumCheckoutFunnelDeviceFieldRefInput<$PrismaModel>
+    in?: $Enums.CheckoutFunnelDevice[] | ListEnumCheckoutFunnelDeviceFieldRefInput<$PrismaModel>
+    notIn?: $Enums.CheckoutFunnelDevice[] | ListEnumCheckoutFunnelDeviceFieldRefInput<$PrismaModel>
+    not?: NestedEnumCheckoutFunnelDeviceFilter<$PrismaModel> | $Enums.CheckoutFunnelDevice
+  }
+
+  export type CheckoutFunnelEventCountOrderByAggregateInput = {
+    id?: SortOrder
+    shopId?: SortOrder
+    funnelSessionId?: SortOrder
+    eventType?: SortOrder
+    source?: SortOrder
+    device?: SortOrder
+    customerProfileId?: SortOrder
+    sessionTokenHash?: SortOrder
+    phoneSnapshot?: SortOrder
+    cartToken?: SortOrder
+    cartValuePaise?: SortOrder
+    expressCheckoutIntentId?: SortOrder
+    metadata?: SortOrder
+    occurredAt?: SortOrder
+    createdAt?: SortOrder
+  }
+
+  export type CheckoutFunnelEventAvgOrderByAggregateInput = {
+    cartValuePaise?: SortOrder
+  }
+
+  export type CheckoutFunnelEventMaxOrderByAggregateInput = {
+    id?: SortOrder
+    shopId?: SortOrder
+    funnelSessionId?: SortOrder
+    eventType?: SortOrder
+    source?: SortOrder
+    device?: SortOrder
+    customerProfileId?: SortOrder
+    sessionTokenHash?: SortOrder
+    phoneSnapshot?: SortOrder
+    cartToken?: SortOrder
+    cartValuePaise?: SortOrder
+    expressCheckoutIntentId?: SortOrder
+    occurredAt?: SortOrder
+    createdAt?: SortOrder
+  }
+
+  export type CheckoutFunnelEventMinOrderByAggregateInput = {
+    id?: SortOrder
+    shopId?: SortOrder
+    funnelSessionId?: SortOrder
+    eventType?: SortOrder
+    source?: SortOrder
+    device?: SortOrder
+    customerProfileId?: SortOrder
+    sessionTokenHash?: SortOrder
+    phoneSnapshot?: SortOrder
+    cartToken?: SortOrder
+    cartValuePaise?: SortOrder
+    expressCheckoutIntentId?: SortOrder
+    occurredAt?: SortOrder
+    createdAt?: SortOrder
+  }
+
+  export type CheckoutFunnelEventSumOrderByAggregateInput = {
+    cartValuePaise?: SortOrder
+  }
+
+  export type EnumCheckoutFunnelEventTypeWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: $Enums.CheckoutFunnelEventType | EnumCheckoutFunnelEventTypeFieldRefInput<$PrismaModel>
+    in?: $Enums.CheckoutFunnelEventType[] | ListEnumCheckoutFunnelEventTypeFieldRefInput<$PrismaModel>
+    notIn?: $Enums.CheckoutFunnelEventType[] | ListEnumCheckoutFunnelEventTypeFieldRefInput<$PrismaModel>
+    not?: NestedEnumCheckoutFunnelEventTypeWithAggregatesFilter<$PrismaModel> | $Enums.CheckoutFunnelEventType
+    _count?: NestedIntFilter<$PrismaModel>
+    _min?: NestedEnumCheckoutFunnelEventTypeFilter<$PrismaModel>
+    _max?: NestedEnumCheckoutFunnelEventTypeFilter<$PrismaModel>
+  }
+
+  export type EnumCheckoutFunnelSourceNullableWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: $Enums.CheckoutFunnelSource | EnumCheckoutFunnelSourceFieldRefInput<$PrismaModel> | null
+    in?: $Enums.CheckoutFunnelSource[] | ListEnumCheckoutFunnelSourceFieldRefInput<$PrismaModel> | null
+    notIn?: $Enums.CheckoutFunnelSource[] | ListEnumCheckoutFunnelSourceFieldRefInput<$PrismaModel> | null
+    not?: NestedEnumCheckoutFunnelSourceNullableWithAggregatesFilter<$PrismaModel> | $Enums.CheckoutFunnelSource | null
+    _count?: NestedIntNullableFilter<$PrismaModel>
+    _min?: NestedEnumCheckoutFunnelSourceNullableFilter<$PrismaModel>
+    _max?: NestedEnumCheckoutFunnelSourceNullableFilter<$PrismaModel>
+  }
+
+  export type EnumCheckoutFunnelDeviceWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: $Enums.CheckoutFunnelDevice | EnumCheckoutFunnelDeviceFieldRefInput<$PrismaModel>
+    in?: $Enums.CheckoutFunnelDevice[] | ListEnumCheckoutFunnelDeviceFieldRefInput<$PrismaModel>
+    notIn?: $Enums.CheckoutFunnelDevice[] | ListEnumCheckoutFunnelDeviceFieldRefInput<$PrismaModel>
+    not?: NestedEnumCheckoutFunnelDeviceWithAggregatesFilter<$PrismaModel> | $Enums.CheckoutFunnelDevice
+    _count?: NestedIntFilter<$PrismaModel>
+    _min?: NestedEnumCheckoutFunnelDeviceFilter<$PrismaModel>
+    _max?: NestedEnumCheckoutFunnelDeviceFilter<$PrismaModel>
   }
 
   export type EnumShopifyCheckoutPricingSnapshotStatusFilter<$PrismaModel = never> = {
@@ -161619,6 +163433,18 @@ export namespace Prisma {
     deleteMany?: ShopifyCheckoutPricingSnapshotScalarWhereInput | ShopifyCheckoutPricingSnapshotScalarWhereInput[]
   }
 
+  export type EnumCheckoutFunnelEventTypeFieldUpdateOperationsInput = {
+    set?: $Enums.CheckoutFunnelEventType
+  }
+
+  export type NullableEnumCheckoutFunnelSourceFieldUpdateOperationsInput = {
+    set?: $Enums.CheckoutFunnelSource | null
+  }
+
+  export type EnumCheckoutFunnelDeviceFieldUpdateOperationsInput = {
+    set?: $Enums.CheckoutFunnelDevice
+  }
+
   export type ShopCreateNestedOneWithoutCheckoutPricingSnapshotsInput = {
     create?: XOR<ShopCreateWithoutCheckoutPricingSnapshotsInput, ShopUncheckedCreateWithoutCheckoutPricingSnapshotsInput>
     connectOrCreate?: ShopCreateOrConnectWithoutCheckoutPricingSnapshotsInput
@@ -163428,6 +165254,57 @@ export namespace Prisma {
     _count?: NestedIntNullableFilter<$PrismaModel>
     _min?: NestedEnumExpressCheckoutPaymentMethodNullableFilter<$PrismaModel>
     _max?: NestedEnumExpressCheckoutPaymentMethodNullableFilter<$PrismaModel>
+  }
+
+  export type NestedEnumCheckoutFunnelEventTypeFilter<$PrismaModel = never> = {
+    equals?: $Enums.CheckoutFunnelEventType | EnumCheckoutFunnelEventTypeFieldRefInput<$PrismaModel>
+    in?: $Enums.CheckoutFunnelEventType[] | ListEnumCheckoutFunnelEventTypeFieldRefInput<$PrismaModel>
+    notIn?: $Enums.CheckoutFunnelEventType[] | ListEnumCheckoutFunnelEventTypeFieldRefInput<$PrismaModel>
+    not?: NestedEnumCheckoutFunnelEventTypeFilter<$PrismaModel> | $Enums.CheckoutFunnelEventType
+  }
+
+  export type NestedEnumCheckoutFunnelSourceNullableFilter<$PrismaModel = never> = {
+    equals?: $Enums.CheckoutFunnelSource | EnumCheckoutFunnelSourceFieldRefInput<$PrismaModel> | null
+    in?: $Enums.CheckoutFunnelSource[] | ListEnumCheckoutFunnelSourceFieldRefInput<$PrismaModel> | null
+    notIn?: $Enums.CheckoutFunnelSource[] | ListEnumCheckoutFunnelSourceFieldRefInput<$PrismaModel> | null
+    not?: NestedEnumCheckoutFunnelSourceNullableFilter<$PrismaModel> | $Enums.CheckoutFunnelSource | null
+  }
+
+  export type NestedEnumCheckoutFunnelDeviceFilter<$PrismaModel = never> = {
+    equals?: $Enums.CheckoutFunnelDevice | EnumCheckoutFunnelDeviceFieldRefInput<$PrismaModel>
+    in?: $Enums.CheckoutFunnelDevice[] | ListEnumCheckoutFunnelDeviceFieldRefInput<$PrismaModel>
+    notIn?: $Enums.CheckoutFunnelDevice[] | ListEnumCheckoutFunnelDeviceFieldRefInput<$PrismaModel>
+    not?: NestedEnumCheckoutFunnelDeviceFilter<$PrismaModel> | $Enums.CheckoutFunnelDevice
+  }
+
+  export type NestedEnumCheckoutFunnelEventTypeWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: $Enums.CheckoutFunnelEventType | EnumCheckoutFunnelEventTypeFieldRefInput<$PrismaModel>
+    in?: $Enums.CheckoutFunnelEventType[] | ListEnumCheckoutFunnelEventTypeFieldRefInput<$PrismaModel>
+    notIn?: $Enums.CheckoutFunnelEventType[] | ListEnumCheckoutFunnelEventTypeFieldRefInput<$PrismaModel>
+    not?: NestedEnumCheckoutFunnelEventTypeWithAggregatesFilter<$PrismaModel> | $Enums.CheckoutFunnelEventType
+    _count?: NestedIntFilter<$PrismaModel>
+    _min?: NestedEnumCheckoutFunnelEventTypeFilter<$PrismaModel>
+    _max?: NestedEnumCheckoutFunnelEventTypeFilter<$PrismaModel>
+  }
+
+  export type NestedEnumCheckoutFunnelSourceNullableWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: $Enums.CheckoutFunnelSource | EnumCheckoutFunnelSourceFieldRefInput<$PrismaModel> | null
+    in?: $Enums.CheckoutFunnelSource[] | ListEnumCheckoutFunnelSourceFieldRefInput<$PrismaModel> | null
+    notIn?: $Enums.CheckoutFunnelSource[] | ListEnumCheckoutFunnelSourceFieldRefInput<$PrismaModel> | null
+    not?: NestedEnumCheckoutFunnelSourceNullableWithAggregatesFilter<$PrismaModel> | $Enums.CheckoutFunnelSource | null
+    _count?: NestedIntNullableFilter<$PrismaModel>
+    _min?: NestedEnumCheckoutFunnelSourceNullableFilter<$PrismaModel>
+    _max?: NestedEnumCheckoutFunnelSourceNullableFilter<$PrismaModel>
+  }
+
+  export type NestedEnumCheckoutFunnelDeviceWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: $Enums.CheckoutFunnelDevice | EnumCheckoutFunnelDeviceFieldRefInput<$PrismaModel>
+    in?: $Enums.CheckoutFunnelDevice[] | ListEnumCheckoutFunnelDeviceFieldRefInput<$PrismaModel>
+    notIn?: $Enums.CheckoutFunnelDevice[] | ListEnumCheckoutFunnelDeviceFieldRefInput<$PrismaModel>
+    not?: NestedEnumCheckoutFunnelDeviceWithAggregatesFilter<$PrismaModel> | $Enums.CheckoutFunnelDevice
+    _count?: NestedIntFilter<$PrismaModel>
+    _min?: NestedEnumCheckoutFunnelDeviceFilter<$PrismaModel>
+    _max?: NestedEnumCheckoutFunnelDeviceFilter<$PrismaModel>
   }
 
   export type NestedEnumShopifyCheckoutPricingSnapshotStatusFilter<$PrismaModel = never> = {
@@ -198276,6 +200153,10 @@ export namespace Prisma {
     expiresAt?: Date | string | null
     createdAt?: Date | string
     updatedAt?: Date | string
+    paymentPendingAt?: Date | string | null
+    abandonedAt?: Date | string | null
+    completedAt?: Date | string | null
+    lastTransitionAt?: Date | string | null
     addressSnapshots?: ExpressCheckoutAddressSnapshotCreateNestedManyWithoutIntentInput
     discounts?: ExpressCheckoutDiscountCreateNestedManyWithoutIntentInput
     payments?: ExpressCheckoutPaymentCreateNestedManyWithoutIntentInput
@@ -198303,6 +200184,10 @@ export namespace Prisma {
     expiresAt?: Date | string | null
     createdAt?: Date | string
     updatedAt?: Date | string
+    paymentPendingAt?: Date | string | null
+    abandonedAt?: Date | string | null
+    completedAt?: Date | string | null
+    lastTransitionAt?: Date | string | null
     addressSnapshots?: ExpressCheckoutAddressSnapshotUncheckedCreateNestedManyWithoutIntentInput
     discounts?: ExpressCheckoutDiscountUncheckedCreateNestedManyWithoutIntentInput
     payments?: ExpressCheckoutPaymentUncheckedCreateNestedManyWithoutIntentInput
@@ -198499,6 +200384,10 @@ export namespace Prisma {
     expiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    paymentPendingAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    abandonedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    completedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    lastTransitionAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     addressSnapshots?: ExpressCheckoutAddressSnapshotUpdateManyWithoutIntentNestedInput
     discounts?: ExpressCheckoutDiscountUpdateManyWithoutIntentNestedInput
     payments?: ExpressCheckoutPaymentUpdateManyWithoutIntentNestedInput
@@ -198526,6 +200415,10 @@ export namespace Prisma {
     expiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    paymentPendingAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    abandonedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    completedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    lastTransitionAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     addressSnapshots?: ExpressCheckoutAddressSnapshotUncheckedUpdateManyWithoutIntentNestedInput
     discounts?: ExpressCheckoutDiscountUncheckedUpdateManyWithoutIntentNestedInput
     payments?: ExpressCheckoutPaymentUncheckedUpdateManyWithoutIntentNestedInput
@@ -198700,6 +200593,10 @@ export namespace Prisma {
     expiresAt?: Date | string | null
     createdAt?: Date | string
     updatedAt?: Date | string
+    paymentPendingAt?: Date | string | null
+    abandonedAt?: Date | string | null
+    completedAt?: Date | string | null
+    lastTransitionAt?: Date | string | null
     addressSnapshots?: ExpressCheckoutAddressSnapshotCreateNestedManyWithoutIntentInput
     discounts?: ExpressCheckoutDiscountCreateNestedManyWithoutIntentInput
     payments?: ExpressCheckoutPaymentCreateNestedManyWithoutIntentInput
@@ -198727,6 +200624,10 @@ export namespace Prisma {
     expiresAt?: Date | string | null
     createdAt?: Date | string
     updatedAt?: Date | string
+    paymentPendingAt?: Date | string | null
+    abandonedAt?: Date | string | null
+    completedAt?: Date | string | null
+    lastTransitionAt?: Date | string | null
     addressSnapshots?: ExpressCheckoutAddressSnapshotUncheckedCreateNestedManyWithoutIntentInput
     discounts?: ExpressCheckoutDiscountUncheckedCreateNestedManyWithoutIntentInput
     payments?: ExpressCheckoutPaymentUncheckedCreateNestedManyWithoutIntentInput
@@ -199002,6 +200903,10 @@ export namespace Prisma {
     expiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    paymentPendingAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    abandonedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    completedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    lastTransitionAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     addressSnapshots?: ExpressCheckoutAddressSnapshotUpdateManyWithoutIntentNestedInput
     discounts?: ExpressCheckoutDiscountUpdateManyWithoutIntentNestedInput
     payments?: ExpressCheckoutPaymentUpdateManyWithoutIntentNestedInput
@@ -199029,6 +200934,10 @@ export namespace Prisma {
     expiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    paymentPendingAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    abandonedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    completedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    lastTransitionAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     addressSnapshots?: ExpressCheckoutAddressSnapshotUncheckedUpdateManyWithoutIntentNestedInput
     discounts?: ExpressCheckoutDiscountUncheckedUpdateManyWithoutIntentNestedInput
     payments?: ExpressCheckoutPaymentUncheckedUpdateManyWithoutIntentNestedInput
@@ -199141,6 +201050,10 @@ export namespace Prisma {
     expiresAt?: Date | string | null
     createdAt?: Date | string
     updatedAt?: Date | string
+    paymentPendingAt?: Date | string | null
+    abandonedAt?: Date | string | null
+    completedAt?: Date | string | null
+    lastTransitionAt?: Date | string | null
     discounts?: ExpressCheckoutDiscountCreateNestedManyWithoutIntentInput
     payments?: ExpressCheckoutPaymentCreateNestedManyWithoutIntentInput
     orderLink?: ExpressCheckoutOrderLinkCreateNestedOneWithoutIntentInput
@@ -199168,6 +201081,10 @@ export namespace Prisma {
     expiresAt?: Date | string | null
     createdAt?: Date | string
     updatedAt?: Date | string
+    paymentPendingAt?: Date | string | null
+    abandonedAt?: Date | string | null
+    completedAt?: Date | string | null
+    lastTransitionAt?: Date | string | null
     discounts?: ExpressCheckoutDiscountUncheckedCreateNestedManyWithoutIntentInput
     payments?: ExpressCheckoutPaymentUncheckedCreateNestedManyWithoutIntentInput
     orderLink?: ExpressCheckoutOrderLinkUncheckedCreateNestedOneWithoutIntentInput
@@ -199211,6 +201128,10 @@ export namespace Prisma {
     expiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    paymentPendingAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    abandonedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    completedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    lastTransitionAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     discounts?: ExpressCheckoutDiscountUpdateManyWithoutIntentNestedInput
     payments?: ExpressCheckoutPaymentUpdateManyWithoutIntentNestedInput
     orderLink?: ExpressCheckoutOrderLinkUpdateOneWithoutIntentNestedInput
@@ -199238,6 +201159,10 @@ export namespace Prisma {
     expiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    paymentPendingAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    abandonedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    completedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    lastTransitionAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     discounts?: ExpressCheckoutDiscountUncheckedUpdateManyWithoutIntentNestedInput
     payments?: ExpressCheckoutPaymentUncheckedUpdateManyWithoutIntentNestedInput
     orderLink?: ExpressCheckoutOrderLinkUncheckedUpdateOneWithoutIntentNestedInput
@@ -199265,6 +201190,10 @@ export namespace Prisma {
     expiresAt?: Date | string | null
     createdAt?: Date | string
     updatedAt?: Date | string
+    paymentPendingAt?: Date | string | null
+    abandonedAt?: Date | string | null
+    completedAt?: Date | string | null
+    lastTransitionAt?: Date | string | null
     addressSnapshots?: ExpressCheckoutAddressSnapshotCreateNestedManyWithoutIntentInput
     payments?: ExpressCheckoutPaymentCreateNestedManyWithoutIntentInput
     orderLink?: ExpressCheckoutOrderLinkCreateNestedOneWithoutIntentInput
@@ -199292,6 +201221,10 @@ export namespace Prisma {
     expiresAt?: Date | string | null
     createdAt?: Date | string
     updatedAt?: Date | string
+    paymentPendingAt?: Date | string | null
+    abandonedAt?: Date | string | null
+    completedAt?: Date | string | null
+    lastTransitionAt?: Date | string | null
     addressSnapshots?: ExpressCheckoutAddressSnapshotUncheckedCreateNestedManyWithoutIntentInput
     payments?: ExpressCheckoutPaymentUncheckedCreateNestedManyWithoutIntentInput
     orderLink?: ExpressCheckoutOrderLinkUncheckedCreateNestedOneWithoutIntentInput
@@ -199335,6 +201268,10 @@ export namespace Prisma {
     expiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    paymentPendingAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    abandonedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    completedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    lastTransitionAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     addressSnapshots?: ExpressCheckoutAddressSnapshotUpdateManyWithoutIntentNestedInput
     payments?: ExpressCheckoutPaymentUpdateManyWithoutIntentNestedInput
     orderLink?: ExpressCheckoutOrderLinkUpdateOneWithoutIntentNestedInput
@@ -199362,6 +201299,10 @@ export namespace Prisma {
     expiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    paymentPendingAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    abandonedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    completedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    lastTransitionAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     addressSnapshots?: ExpressCheckoutAddressSnapshotUncheckedUpdateManyWithoutIntentNestedInput
     payments?: ExpressCheckoutPaymentUncheckedUpdateManyWithoutIntentNestedInput
     orderLink?: ExpressCheckoutOrderLinkUncheckedUpdateOneWithoutIntentNestedInput
@@ -199389,6 +201330,10 @@ export namespace Prisma {
     expiresAt?: Date | string | null
     createdAt?: Date | string
     updatedAt?: Date | string
+    paymentPendingAt?: Date | string | null
+    abandonedAt?: Date | string | null
+    completedAt?: Date | string | null
+    lastTransitionAt?: Date | string | null
     addressSnapshots?: ExpressCheckoutAddressSnapshotCreateNestedManyWithoutIntentInput
     discounts?: ExpressCheckoutDiscountCreateNestedManyWithoutIntentInput
     orderLink?: ExpressCheckoutOrderLinkCreateNestedOneWithoutIntentInput
@@ -199416,6 +201361,10 @@ export namespace Prisma {
     expiresAt?: Date | string | null
     createdAt?: Date | string
     updatedAt?: Date | string
+    paymentPendingAt?: Date | string | null
+    abandonedAt?: Date | string | null
+    completedAt?: Date | string | null
+    lastTransitionAt?: Date | string | null
     addressSnapshots?: ExpressCheckoutAddressSnapshotUncheckedCreateNestedManyWithoutIntentInput
     discounts?: ExpressCheckoutDiscountUncheckedCreateNestedManyWithoutIntentInput
     orderLink?: ExpressCheckoutOrderLinkUncheckedCreateNestedOneWithoutIntentInput
@@ -199459,6 +201408,10 @@ export namespace Prisma {
     expiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    paymentPendingAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    abandonedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    completedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    lastTransitionAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     addressSnapshots?: ExpressCheckoutAddressSnapshotUpdateManyWithoutIntentNestedInput
     discounts?: ExpressCheckoutDiscountUpdateManyWithoutIntentNestedInput
     orderLink?: ExpressCheckoutOrderLinkUpdateOneWithoutIntentNestedInput
@@ -199486,6 +201439,10 @@ export namespace Prisma {
     expiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    paymentPendingAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    abandonedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    completedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    lastTransitionAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     addressSnapshots?: ExpressCheckoutAddressSnapshotUncheckedUpdateManyWithoutIntentNestedInput
     discounts?: ExpressCheckoutDiscountUncheckedUpdateManyWithoutIntentNestedInput
     orderLink?: ExpressCheckoutOrderLinkUncheckedUpdateOneWithoutIntentNestedInput
@@ -199513,6 +201470,10 @@ export namespace Prisma {
     expiresAt?: Date | string | null
     createdAt?: Date | string
     updatedAt?: Date | string
+    paymentPendingAt?: Date | string | null
+    abandonedAt?: Date | string | null
+    completedAt?: Date | string | null
+    lastTransitionAt?: Date | string | null
     addressSnapshots?: ExpressCheckoutAddressSnapshotCreateNestedManyWithoutIntentInput
     discounts?: ExpressCheckoutDiscountCreateNestedManyWithoutIntentInput
     payments?: ExpressCheckoutPaymentCreateNestedManyWithoutIntentInput
@@ -199540,6 +201501,10 @@ export namespace Prisma {
     expiresAt?: Date | string | null
     createdAt?: Date | string
     updatedAt?: Date | string
+    paymentPendingAt?: Date | string | null
+    abandonedAt?: Date | string | null
+    completedAt?: Date | string | null
+    lastTransitionAt?: Date | string | null
     addressSnapshots?: ExpressCheckoutAddressSnapshotUncheckedCreateNestedManyWithoutIntentInput
     discounts?: ExpressCheckoutDiscountUncheckedCreateNestedManyWithoutIntentInput
     payments?: ExpressCheckoutPaymentUncheckedCreateNestedManyWithoutIntentInput
@@ -199583,6 +201548,10 @@ export namespace Prisma {
     expiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    paymentPendingAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    abandonedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    completedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    lastTransitionAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     addressSnapshots?: ExpressCheckoutAddressSnapshotUpdateManyWithoutIntentNestedInput
     discounts?: ExpressCheckoutDiscountUpdateManyWithoutIntentNestedInput
     payments?: ExpressCheckoutPaymentUpdateManyWithoutIntentNestedInput
@@ -199610,6 +201579,10 @@ export namespace Prisma {
     expiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    paymentPendingAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    abandonedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    completedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    lastTransitionAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     addressSnapshots?: ExpressCheckoutAddressSnapshotUncheckedUpdateManyWithoutIntentNestedInput
     discounts?: ExpressCheckoutDiscountUncheckedUpdateManyWithoutIntentNestedInput
     payments?: ExpressCheckoutPaymentUncheckedUpdateManyWithoutIntentNestedInput
