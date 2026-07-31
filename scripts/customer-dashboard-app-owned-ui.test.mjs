@@ -1,19 +1,19 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-const accountRoute = readFileSync("app/apps/megaska/account/route.ts", "utf8");
-const assetRoute = readFileSync("app/apps/megaska/account/assets/[asset]/route.ts", "utf8");
+const accountRoute = readFileSync("app/apps/loopd2c/account/route.ts", "utf8");
+const assetRoute = readFileSync("app/apps/loopd2c/account/assets/[asset]/route.ts", "utf8");
 const dashboardJs = readFileSync("extensions/megaska-otp/assets/loopdesk-customer-dashboard.js", "utf8");
 
 assert.match(accountRoute, /loopdesk-customer-dashboard-root/);
 assert.match(accountRoute, /loopdesk-customer-dashboard-config/);
-assert.match(accountRoute, /\/apps\/megaska\/api\/dashboard\/summary/);
+assert.match(accountRoute, /\/apps\/loopd2c\/api\/dashboard\/summary/);
 assert.doesNotMatch(accountRoute, /vercel\.app|customer-account|sessionToken|accessToken|Admin token/i);
-assert.ok(accountRoute.indexOf("megaska-auth.js") < accountRoute.indexOf("megaska-otp.js"));
-assert.ok(accountRoute.indexOf("megaska-otp.js") < accountRoute.indexOf("loopdesk-customer-dashboard.js"));
+assert.ok(accountRoute.indexOf('asset("loopd2c-auth.js")') < accountRoute.indexOf('asset("loopd2c-otp.js")'));
+assert.ok(accountRoute.indexOf('asset("loopd2c-otp.js")') < accountRoute.indexOf('asset("loopdesk-customer-dashboard.js")'));
 assert.match(accountRoute, /Cache-Control.*no-store/s);
 
-for (const asset of ["megaska-auth.js", "megaska-otp.js", "megaska-otp.css", "megaska_logo.png", "loopdesk-customer-dashboard.js", "loopdesk-customer-dashboard.css"]) {
+for (const asset of ["loopd2c-auth.js", "loopd2c-otp.js", "loopd2c-otp.css", "loopd2c_logo.png", "loopdesk-customer-dashboard.js", "loopdesk-customer-dashboard.css"]) {
   assert.match(assetRoute, new RegExp(asset.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 }
 assert.match(assetRoute, /X-Content-Type-Options/);

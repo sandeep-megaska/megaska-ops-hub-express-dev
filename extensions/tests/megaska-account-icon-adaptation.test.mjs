@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
 
-const source = readFileSync(new URL("../megaska-otp/assets/megaska-otp.js", import.meta.url), "utf8");
+const source = readFileSync(new URL("../megaska-otp/assets/loopd2c-otp.js", import.meta.url), "utf8");
 
 function functionSource(name, nextName) {
   const start = source.indexOf(`function ${name}(`);
@@ -59,10 +59,10 @@ test("hidden Dawn-like account anchor is cloned and sanitized at runtime", () =>
     "data-shopify-customer-account": "1", "aria-expanded": "false", "aria-controls": "account-menu", onclick: "nativeLogin()",
   }, [svg, avatar]);
 
-  const clone = sanitizeThemeOwnedAccountClone(sourceAnchor, "/apps/megaska/account");
+  const clone = sanitizeThemeOwnedAccountClone(sourceAnchor, "/apps/loopd2c/account");
   assert.notEqual(clone, sourceAnchor);
   assert.equal(clone.getAttribute("id"), "megaska-account-fallback-desktop");
-  assert.equal(clone.getAttribute("href"), "/apps/megaska/account");
+  assert.equal(clone.getAttribute("href"), "/apps/loopd2c/account");
   assert.equal(clone.getAttribute("data-megaska-open-login"), "1");
   assert.equal(clone.getAttribute("data-loopdesk-account-control-source"), "native-hidden-clone");
   assert.equal(clone.getAttribute("aria-label"), "My account");
@@ -140,7 +140,7 @@ test("adapter resolution and reconciliation cover all structural strategies", ()
 });
 
 test("neutral fallback CSS is isolated from theme-native account controls", () => {
-  const css = readFileSync(new URL("../megaska-otp/assets/megaska-otp.css", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../megaska-otp/assets/loopd2c-otp.css", import.meta.url), "utf8");
   assert.match(css, /\.megaska-account-fallback--desktop\[data-loopdesk-account-control-source="loopdesk-default"\]/);
   assert.match(css, /#megaska-account-fallback-desktop\s*\{\s*display: none !important/);
   assert.doesNotMatch(css, /\[data-loopdesk-account-control-source="native-hidden-clone"\][^{]*\{[^}]*(?:width|background|color):/s);

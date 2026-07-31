@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-const modalSource = readFileSync("extensions/megaska-otp/assets/megaska-express-modal.js", "utf8");
+const modalSource = readFileSync("extensions/megaska-otp/assets/loopd2c-express-modal.js", "utf8");
 const checkoutSource = readFileSync("assets/megaska-express-checkout.js", "utf8");
 
 function bodyOf(source, name) {

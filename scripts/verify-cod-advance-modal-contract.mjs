@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 
-const source = readFileSync('extensions/megaska-otp/assets/megaska-express-modal.js', 'utf8');
+const source = readFileSync('extensions/megaska-otp/assets/loopd2c-express-modal.js', 'utf8');
 const checks = [
   ['COD policy endpoint is fetched', /cod-policy`\)/],
   ['Policy request sends no monetary body', /apiFetch\(`\/express\/checkout\/intents\/\$\{encodeURIComponent\(state\.intent\.id\)\}\/cod-policy`\)/],

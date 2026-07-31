@@ -37,7 +37,7 @@ test("a top-level visit carrying a known shop bounces into Shopify Admin instead
     makeRequest("https://app.loopd2c.com/?shop=megaskastore.myshopify.com", { "sec-fetch-dest": "document" }),
   );
   assert.equal(response.status, 307);
-  assert.equal(response.headers.get("location"), "https://megaskastore.myshopify.com/admin/apps/megaska-ops-hub-express-dev");
+  assert.equal(response.headers.get("location"), "https://megaskastore.myshopify.com/admin/apps/loopd2c-ops-hub-express-dev");
   restore();
 });
 

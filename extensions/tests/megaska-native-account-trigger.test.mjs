@@ -3,7 +3,7 @@ import test from "node:test";
 import { readFileSync } from "node:fs";
 
 const source = readFileSync(
-  new URL("../megaska-otp/assets/megaska-otp.js", import.meta.url),
+  new URL("../megaska-otp/assets/loopd2c-otp.js", import.meta.url),
   "utf8"
 );
 
@@ -73,8 +73,8 @@ function buildAccountTriggerGuard() {
     `${guardSource}; return isUsableAccountEntryTrigger;`
   )(
     { location: { origin: "https://shop.example" } },
-    "/apps/megaska/account",
-    () => "/apps/megaska/account"
+    "/apps/loopd2c/account",
+    () => "/apps/loopd2c/account"
   );
 }
 
@@ -142,14 +142,14 @@ test("account routing uses OTP pending intent and the LoopDesk dashboard resolve
   assert.match(handler, /openModal\("account-intercept"\)/);
   assert.match(handler, /window\.location\.assign\(accountDestination\)/);
   assert.doesNotMatch(handler, /MegaskaExpressCheckout|openExpress|express-checkout/i);
-  assert.match(source, /const DEFAULT_MEGASKA_DASHBOARD_URL = "\/apps\/megaska\/account"/);
+  assert.match(source, /const DEFAULT_MEGASKA_DASHBOARD_URL = "\/apps\/loopd2c\/account"/);
 });
 
 test("desktop LoopDesk fallback dispatches to OTP before navigation and routes authenticated customers", async () => {
   const isUsableAccountEntryTrigger = buildAccountTriggerGuard();
   const fallback = new RuntimeAnchor({
     id: "megaska-account-fallback-desktop",
-    href: "/apps/megaska/account",
+    href: "/apps/loopd2c/account",
     "data-megaska-open-login": "1",
     "data-megaska-fallback-account": "desktop",
     "aria-label": "My account",
@@ -181,7 +181,7 @@ test("desktop LoopDesk fallback dispatches to OTP before navigation and routes a
       event.stopImmediatePropagation();
     },
     async () => ({ authenticated, verifiedPhonePresent: authenticated }),
-    () => "/apps/megaska/account",
+    () => "/apps/loopd2c/account",
     (action) => { pendingAction = action; },
     (modalSource) => { modalSources.push(modalSource); },
     async () => {},
@@ -200,14 +200,14 @@ test("desktop LoopDesk fallback dispatches to OTP before navigation and routes a
   assert.equal(guestClick.defaultPrevented, true);
   assert.deepEqual(modalSources, ["account-intercept"]);
   assert.equal(pendingAction.type, "account-redirect");
-  assert.equal(pendingAction.accountDestination, "/apps/megaska/account");
+  assert.equal(pendingAction.accountDestination, "/apps/loopd2c/account");
   assert.deepEqual(navigations, [], "guest navigation must wait for OTP verification");
 
   authenticated = true;
   await fallback.click();
   assert.equal(handlerCalls, 2);
   assert.deepEqual(modalSources, ["account-intercept"], "OTP must not reopen for a session");
-  assert.deepEqual(navigations, ["/apps/megaska/account"]);
+  assert.deepEqual(navigations, ["/apps/loopd2c/account"]);
 });
 
 test("LoopDesk-owned destinations reject logout, cross-origin, and unrelated proxy routes", () => {
@@ -219,8 +219,8 @@ test("LoopDesk-owned destinations reject logout, cross-origin, and unrelated pro
   });
 
   assert.equal(isUsableAccountEntryTrigger(ownedAnchor("/account/logout")), false);
-  assert.equal(isUsableAccountEntryTrigger(ownedAnchor("https://attacker.example/apps/megaska/account")), false);
-  assert.equal(isUsableAccountEntryTrigger(ownedAnchor("/apps/megaska/unrelated")), false);
+  assert.equal(isUsableAccountEntryTrigger(ownedAnchor("https://attacker.example/apps/loopd2c/account")), false);
+  assert.equal(isUsableAccountEntryTrigger(ownedAnchor("/apps/loopd2c/unrelated")), false);
   assert.equal(isUsableAccountEntryTrigger(ownedAnchor("javascript:alert(1)")), false);
 
   const accountCode = `${functionSource("isSafeLoopDeskAccountDestination", "isUsableAccountEntryTrigger")}\n${functionSource("handleAccountTriggerClick", "ensureMegaskaAuthenticatedBeforeCheckout")}`;

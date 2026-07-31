@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
-const otpSource = readFileSync('extensions/megaska-otp/assets/megaska-otp.js', 'utf8');
+const otpSource = readFileSync('extensions/megaska-otp/assets/loopd2c-otp.js', 'utf8');
 const embedSource = readFileSync('extensions/megaska-otp/blocks/megaska-otp-embed.liquid', 'utf8');
 
 const mustContain = (source, needle) => assert.ok(source.includes(needle), `missing ${needle}`);
