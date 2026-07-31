@@ -8,6 +8,14 @@ import CancellationLifecycleControls from "./CancellationLifecycleControls";
 
 export const dynamic = "force-dynamic";
 
+function statusBadgeVariant(status: string) {
+  const s = (status || "").toUpperCase();
+  if (["APPROVED", "CLOSED", "COMPLETED", "PAID", "REFUNDED"].includes(s)) return "success";
+  if (["REJECTED", "LOCKED", "CANCELLED", "FAILED"].includes(s)) return "danger";
+  if (["OPEN", "PENDING", "AWAITING_PAYMENT", "AWAITING_CUSTOMER"].includes(s)) return "warning";
+  return "neutral";
+}
+
 export default async function AdminCancellationDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const request = await prisma.orderActionRequest.findFirst({
@@ -19,7 +27,13 @@ export default async function AdminCancellationDetailPage({ params }: { params: 
   });
 
   if (!request) {
-    return <main style={{ padding: 24 }}>Cancellation request not found.</main>;
+    return (
+      <div className="mk-page">
+        <div className="mk-empty">
+          <p className="mk-empty-title">Cancellation request not found</p>
+        </div>
+      </div>
+    );
   }
 
   const shipmentStatus = request.shipments[0]?.status || "NOT_STARTED";
@@ -47,37 +61,48 @@ export default async function AdminCancellationDetailPage({ params }: { params: 
       </div>
 
       <section className="mk-card">
-        <h2 className="mk-section-title">Cancellation Outcome</h2>
-        <div className="mt-4 grid gap-3 md:grid-cols-2">
-          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-            <p className="mk-list-subtitle">Current cancellation status</p>
-            <p className="mk-list-title">{outcome.cancellationStatus}</p>
+        <div className="mk-page-header">
+          <h2 className="mk-section-title">Cancellation Outcome</h2>
+          <span className={`mk-badge mk-badge-${statusBadgeVariant(outcome.cancellationStatus)}`}>{outcome.cancellationStatus}</span>
+        </div>
+        <div className="mk-grid-2" style={{ marginTop: 16 }}>
+          <div className="mk-list-row">
+            <div>
+              <p className="mk-list-subtitle">Current cancellation status</p>
+              <p className="mk-list-title">{outcome.cancellationStatus}</p>
+            </div>
           </div>
-          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-            <p className="mk-list-subtitle">Refund requirement</p>
-            <p className="mk-list-title">{outcome.refundRequirementLabel}</p>
+          <div className="mk-list-row">
+            <div>
+              <p className="mk-list-subtitle">Refund requirement</p>
+              <p className="mk-list-title">{outcome.refundRequirementLabel}</p>
+            </div>
           </div>
-          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-            <p className="mk-list-subtitle">Refund method</p>
-            <p className="mk-list-title">{outcome.refundMethodLabel}</p>
+          <div className="mk-list-row">
+            <div>
+              <p className="mk-list-subtitle">Refund method</p>
+              <p className="mk-list-title">{outcome.refundMethodLabel}</p>
+            </div>
           </div>
-          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-            <p className="mk-list-subtitle">Refund request</p>
-            <p className="mk-list-title">
-              {outcome.refundRequest
-                ? `${outcome.refundRequest.id} / ${outcome.refundRequest.status}`
-                : "Not linked / not available"}
-            </p>
+          <div className="mk-list-row">
+            <div>
+              <p className="mk-list-subtitle">Refund request</p>
+              <p className="mk-list-title">
+                {outcome.refundRequest
+                  ? `${outcome.refundRequest.id} / ${outcome.refundRequest.status}`
+                  : "Not linked / not available"}
+              </p>
+            </div>
           </div>
         </div>
-        <div className="mt-4 grid gap-3 md:grid-cols-2">
-          <div className="rounded-lg border border-blue-100 bg-blue-50 p-3">
+        <div className="mk-grid-2" style={{ marginTop: 16 }}>
+          <div className="mk-alert mk-alert-info">
             <p className="mk-list-subtitle">Customer-facing explanation</p>
-            <p className="text-sm font-medium text-slate-900">{outcome.customerExplanation}</p>
+            <p style={{ fontWeight: 600 }}>{outcome.customerExplanation}</p>
           </div>
-          <div className="rounded-lg border border-amber-100 bg-amber-50 p-3">
+          <div className="mk-alert" style={{ background: "var(--warning-soft)", color: "var(--warning-text)", borderColor: "#fde68a" }}>
             <p className="mk-list-subtitle">Ops next step</p>
-            <p className="text-sm font-medium text-slate-900">{outcome.opsNextStep}</p>
+            <p style={{ fontWeight: 600 }}>{outcome.opsNextStep}</p>
           </div>
         </div>
       </section>
@@ -102,27 +127,37 @@ export default async function AdminCancellationDetailPage({ params }: { params: 
 
       <section className="mk-card">
         <h2 className="mk-section-title">Payment / Refund Tracking</h2>
-        {request.payments.length === 0 ? <p>No payment records.</p> : null}
-        {request.payments.map((payment) => (
-          <article key={payment.id} style={{ border: "1px solid #ddd", padding: 12, marginTop: 8 }}>
-            <p>Purpose: {payment.purpose}</p>
-            <p>Status: {payment.status}</p>
-            <p>Amount: {payment.amount} {payment.currency}</p>
-            <p>Provider: {payment.provider}</p>
-            <p>Reference: {payment.providerReferenceId || "-"}</p>
-          </article>
-        ))}
-        <div className="mt-4">
-          <h3 className="text-base font-semibold text-slate-900">Linked Refund Requests</h3>
-          {refundRequests.length === 0 ? <p className="mk-list-subtitle">No linked refund requests.</p> : null}
-          {refundRequests.map((refund: any) => (
-            <article key={refund.id} className="mt-2 rounded-lg border border-slate-200 p-3">
-              <p className="mk-list-subtitle">ID: {refund.id}</p>
-              <p className="mk-list-subtitle">Status: {refund.status}</p>
-              <p className="mk-list-subtitle">Method: {refund.walletTransactionId ? "STORE_CREDIT" : refund.method}</p>
-              <p className="mk-list-subtitle">Amount: {refund.amount} {refund.currency}</p>
+        {request.payments.length === 0 ? <p className="mk-list-subtitle">No payment records.</p> : null}
+        <div className="mk-list">
+          {request.payments.map((payment) => (
+            <article key={payment.id} className="mk-list-row">
+              <div>
+                <p className="mk-list-subtitle">Purpose: {payment.purpose}</p>
+                <p className="mk-list-subtitle">Status: {payment.status}</p>
+                <p className="mk-list-subtitle">Amount: {payment.amount} {payment.currency}</p>
+                <p className="mk-list-subtitle">Provider: {payment.provider}</p>
+                <p className="mk-list-subtitle">Reference: {payment.providerReferenceId || "-"}</p>
+              </div>
+              <span className={`mk-badge mk-badge-${statusBadgeVariant(payment.status)}`}>{payment.status}</span>
             </article>
           ))}
+        </div>
+        <div style={{ marginTop: 16 }}>
+          <h3 className="mk-section-title">Linked Refund Requests</h3>
+          {refundRequests.length === 0 ? <p className="mk-list-subtitle">No linked refund requests.</p> : null}
+          <div className="mk-list">
+            {refundRequests.map((refund: any) => (
+              <article key={refund.id} className="mk-list-row">
+                <div>
+                  <p className="mk-list-subtitle">ID: {refund.id}</p>
+                  <p className="mk-list-subtitle">Status: {refund.status}</p>
+                  <p className="mk-list-subtitle">Method: {refund.walletTransactionId ? "STORE_CREDIT" : refund.method}</p>
+                  <p className="mk-list-subtitle">Amount: {refund.amount} {refund.currency}</p>
+                </div>
+                <span className={`mk-badge mk-badge-${statusBadgeVariant(refund.status)}`}>{refund.status}</span>
+              </article>
+            ))}
+          </div>
         </div>
       </section>
 

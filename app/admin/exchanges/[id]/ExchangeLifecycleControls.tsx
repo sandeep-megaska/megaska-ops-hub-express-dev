@@ -106,15 +106,15 @@ function getStepState(currentStatus: string) {
 }
 
 function cardTitleClass() {
-  return "text-base font-semibold text-slate-900";
+  return "mk-section-title";
 }
 
 function paymentStatusBadgeClass(status: string) {
-  if (status === "PAID") return "bg-emerald-100 text-emerald-700 border-emerald-200";
-  if (status === "PENDING") return "bg-amber-100 text-amber-700 border-amber-200";
-  if (status === "FAILED") return "bg-red-100 text-red-700 border-red-200";
-  if (status === "CANCELLED") return "bg-slate-200 text-slate-700 border-slate-300";
-  return "bg-slate-100 text-slate-700 border-slate-200";
+  if (status === "PAID") return "mk-badge mk-badge-success";
+  if (status === "PENDING") return "mk-badge mk-badge-warning";
+  if (status === "FAILED") return "mk-badge mk-badge-danger";
+  if (status === "CANCELLED") return "mk-badge mk-badge-neutral";
+  return "mk-badge mk-badge-neutral";
 }
 
 
@@ -478,66 +478,67 @@ export default function ExchangeLifecycleControls({
 
 
   return (
-    <div className="grid gap-6">
-      <section className="rounded-xl border bg-white p-6 shadow-sm">
+    <div className="mk-page">
+      <section className="mk-card">
         <h2 className={cardTitleClass()}>Workflow progress</h2>
-        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <div className="mk-grid-4" style={{ marginTop: 16 }}>
           {stepState.map((step) => (
-            <div
+            <span
               key={step.label}
-              className={`rounded-lg border px-3 py-2 text-sm ${step.done ? "border-emerald-200 bg-emerald-50 text-emerald-700" : step.muted ? "border-slate-200 bg-slate-50 text-slate-400" : "border-amber-200 bg-amber-50 text-amber-700"}`}
+              className={`mk-badge ${step.done ? "mk-badge-success" : step.muted ? "mk-badge-neutral" : "mk-badge-warning"}`}
+              style={{ justifyContent: "center" }}
             >
               {step.label}
-            </div>
+            </span>
           ))}
         </div>
       </section>
 
-      <section className="rounded-xl border bg-white p-6 shadow-sm">
+      <section className="mk-card">
         <h2 className={cardTitleClass()}>Request details</h2>
-        <div className="mt-4 grid gap-4">
+        <div className="mk-list" style={{ marginTop: 16 }}>
           {items.map((item) => (
-            <article key={item.id} className="rounded-lg border border-slate-200 p-4 text-sm">
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                <div><p className="text-slate-500">Product</p><p className="font-medium">{item.productTitle || "—"}</p></div>
-                <div><p className="text-slate-500">Variant</p><p className="font-medium">{item.variantTitle || "—"}</p></div>
-                <div><p className="text-slate-500">Current size</p><p className="font-medium">{item.currentSize || "—"}</p></div>
-                <div><p className="text-slate-500">Requested size</p><p className="font-medium">{item.requestedSize || "—"}</p></div>
-                <div><p className="text-slate-500">Quantity</p><p className="font-medium">{item.quantity}</p></div>
-                <div className="md:col-span-2"><p className="text-slate-500">Customer reason</p><p className="font-medium">{reason || "—"}</p></div>
-                <div className="md:col-span-2"><p className="text-slate-500">Customer note</p><p className="font-medium">{customerNote || "—"}</p></div>
-                <div className="md:col-span-2"><p className="text-slate-500">Stock review note</p><p className="font-medium">{item.stockReviewNote || "—"}</p></div>
+            <article key={item.id} className="mk-card">
+              <div className="mk-grid-4">
+                <div><p className="mk-stat-label">Product</p><p style={{ fontWeight: 600 }}>{item.productTitle || "—"}</p></div>
+                <div><p className="mk-stat-label">Variant</p><p style={{ fontWeight: 600 }}>{item.variantTitle || "—"}</p></div>
+                <div><p className="mk-stat-label">Current size</p><p style={{ fontWeight: 600 }}>{item.currentSize || "—"}</p></div>
+                <div><p className="mk-stat-label">Requested size</p><p style={{ fontWeight: 600 }}>{item.requestedSize || "—"}</p></div>
+                <div><p className="mk-stat-label">Quantity</p><p style={{ fontWeight: 600 }}>{item.quantity}</p></div>
+                <div><p className="mk-stat-label">Customer reason</p><p style={{ fontWeight: 600 }}>{reason || "—"}</p></div>
+                <div><p className="mk-stat-label">Customer note</p><p style={{ fontWeight: 600 }}>{customerNote || "—"}</p></div>
+                <div><p className="mk-stat-label">Stock review note</p><p style={{ fontWeight: 600 }}>{item.stockReviewNote || "—"}</p></div>
               </div>
             </article>
           ))}
         </div>
       </section>
 
-      <section className="rounded-xl border bg-white p-6 shadow-sm">
+      <section className="mk-card">
         <h2 className={cardTitleClass()}>Ops review</h2>
-        <div className="mt-4 grid gap-4 lg:grid-cols-2">
-          <label className="text-sm">
-            <span className="mb-1 block text-slate-600">Admin note</span>
-            <textarea value={adminNote} onChange={(event) => setAdminNote(event.target.value)} className="min-h-24 w-full rounded-lg border px-3 py-2" placeholder="Ops review notes" />
-          </label>
-          <div className="grid gap-4">
-            <label className="text-sm">
-              <span className="mb-1 block text-slate-600">Current status</span>
-              <input value={currentStatus} disabled className="w-full rounded-lg border bg-slate-50 px-3 py-2 text-slate-500" />
-            </label>
-            <label className="text-sm">
-              <span className="mb-1 block text-slate-600">Available next status</span>
-              <select value={nextStatus} onChange={(event) => setNextStatus(event.target.value)} className="w-full rounded-lg border px-3 py-2">
+        <div className="mk-grid-2" style={{ marginTop: 16 }}>
+          <div className="mk-field">
+            <label className="mk-label">Admin note</label>
+            <textarea value={adminNote} onChange={(event) => setAdminNote(event.target.value)} className="mk-textarea" placeholder="Ops review notes" />
+          </div>
+          <div className="mk-page" style={{ gap: 16 }}>
+            <div className="mk-field">
+              <label className="mk-label">Current status</label>
+              <input value={currentStatus} disabled className="mk-input" />
+            </div>
+            <div className="mk-field">
+              <label className="mk-label">Available next status</label>
+              <select value={nextStatus} onChange={(event) => setNextStatus(event.target.value)} className="mk-select">
                 {(allowedTransitions.length ? allowedTransitions : [currentStatus]).map((status) => (
                   <option key={status} value={status}>{status}</option>
                 ))}
               </select>
-            </label>
-            <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={saveNote} disabled={noteLoading} className="rounded-lg border px-4 py-2 text-sm font-medium hover:bg-slate-50 disabled:opacity-60">
+            </div>
+            <div className="mk-header-actions">
+              <button type="button" onClick={saveNote} disabled={noteLoading} className="mk-btn">
                 {noteLoading ? "Saving note..." : "Save admin note"}
               </button>
-              <button type="button" onClick={updateStatus} disabled={!allowedTransitions.length || statusLoading || (!canApprove && (nextStatus === "APPROVED" || nextStatus === "AWAITING_PAYMENT"))} className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60">
+              <button type="button" onClick={updateStatus} disabled={!allowedTransitions.length || statusLoading || (!canApprove && (nextStatus === "APPROVED" || nextStatus === "AWAITING_PAYMENT"))} className="mk-btn mk-btn-primary">
                 {statusLoading ? "Applying..." : "Apply status"}
               </button>
             </div>
@@ -545,95 +546,93 @@ export default function ExchangeLifecycleControls({
         </div>
       </section>
 
-      <section className="rounded-xl border bg-white p-6 shadow-sm">
+      <section className="mk-card">
         <h2 className={cardTitleClass()}>Return method</h2>
-        <div className="mt-4 grid gap-4 lg:grid-cols-2">
-          <label className="text-sm">
-            <span className="mb-1 block text-slate-600">Return mode</span>
-            <select value={returnMethod} onChange={(event) => setReturnMethod(event.target.value as "REVERSE_PICKUP" | "SELF_SHIP")} className="w-full rounded-lg border px-3 py-2">
+        <div className="mk-grid-2" style={{ marginTop: 16 }}>
+          <div className="mk-field">
+            <label className="mk-label">Return mode</label>
+            <select value={returnMethod} onChange={(event) => setReturnMethod(event.target.value as "REVERSE_PICKUP" | "SELF_SHIP")} className="mk-select">
               <option value="REVERSE_PICKUP">Reverse pickup</option>
               <option value="SELF_SHIP">Self ship</option>
             </select>
-          </label>
-          <label className="text-sm">
-            <span className="mb-1 block text-slate-600">Reverse pickup charge (₹)</span>
-            <input type="number" min="0" step="1" value={reversePickupCharge} onChange={(event) => setReversePickupCharge(event.target.value)} className="w-full rounded-lg border px-3 py-2" />
-          </label>
+          </div>
+          <div className="mk-field">
+            <label className="mk-label">Reverse pickup charge (₹)</label>
+            <input type="number" min="0" step="1" value={reversePickupCharge} onChange={(event) => setReversePickupCharge(event.target.value)} className="mk-input" />
+          </div>
         </div>
-        <p className="mt-2 text-xs text-slate-500">Configured charge is used for payment-link generation if backend supports dynamic amount. Current saved amount: ₹{reversePickupCharge || "120"}.</p>
+        <p className="mk-help" style={{ marginTop: 8 }}>Configured charge is used for payment-link generation if backend supports dynamic amount. Current saved amount: ₹{reversePickupCharge || "120"}.</p>
 
-        <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          <label className="text-sm"><span className="mb-1 block text-slate-600">Shipment status</span><select value={reverseShipmentStatus} onChange={(event) => setReverseShipmentStatus(event.target.value)} className="w-full rounded-lg border px-3 py-2">{SHIPMENT_STATUSES.map((status) => (<option key={status} value={status}>{status}</option>))}</select></label>
-          <label className="text-sm"><span className="mb-1 block text-slate-600">Carrier</span><input value={reverseCarrier} onChange={(event) => setReverseCarrier(event.target.value)} className="w-full rounded-lg border px-3 py-2" /></label>
-          <label className="text-sm"><span className="mb-1 block text-slate-600">AWB</span><input value={reverseAwb} onChange={(event) => setReverseAwb(event.target.value)} className="w-full rounded-lg border px-3 py-2" /></label>
-          <label className="text-sm"><span className="mb-1 block text-slate-600">Tracking URL</span><input value={reverseTrackingUrl} onChange={(event) => setReverseTrackingUrl(event.target.value)} className="w-full rounded-lg border px-3 py-2" /></label>
-          <label className="text-sm"><span className="mb-1 block text-slate-600">Pickup date</span><input type="datetime-local" value={reversePickupAt} onChange={(event) => setReversePickupAt(event.target.value)} className="w-full rounded-lg border px-3 py-2" /></label>
-          <label className="text-sm"><span className="mb-1 block text-slate-600">Delivered/received date</span><input type="datetime-local" value={reverseDeliveredAt} onChange={(event) => setReverseDeliveredAt(event.target.value)} className="w-full rounded-lg border px-3 py-2" /></label>
-          <label className="text-sm md:col-span-2 xl:col-span-3"><span className="mb-1 block text-slate-600">Remarks</span><textarea value={reverseRemarks} onChange={(event) => setReverseRemarks(event.target.value)} className="min-h-20 w-full rounded-lg border px-3 py-2" /></label>
+        <div className="mk-grid-3" style={{ marginTop: 16 }}>
+          <div className="mk-field"><label className="mk-label">Shipment status</label><select value={reverseShipmentStatus} onChange={(event) => setReverseShipmentStatus(event.target.value)} className="mk-select">{SHIPMENT_STATUSES.map((status) => (<option key={status} value={status}>{status}</option>))}</select></div>
+          <div className="mk-field"><label className="mk-label">Carrier</label><input value={reverseCarrier} onChange={(event) => setReverseCarrier(event.target.value)} className="mk-input" /></div>
+          <div className="mk-field"><label className="mk-label">AWB</label><input value={reverseAwb} onChange={(event) => setReverseAwb(event.target.value)} className="mk-input" /></div>
+          <div className="mk-field"><label className="mk-label">Tracking URL</label><input value={reverseTrackingUrl} onChange={(event) => setReverseTrackingUrl(event.target.value)} className="mk-input" /></div>
+          <div className="mk-field"><label className="mk-label">Pickup date</label><input type="datetime-local" value={reversePickupAt} onChange={(event) => setReversePickupAt(event.target.value)} className="mk-input" /></div>
+          <div className="mk-field"><label className="mk-label">Delivered/received date</label><input type="datetime-local" value={reverseDeliveredAt} onChange={(event) => setReverseDeliveredAt(event.target.value)} className="mk-input" /></div>
+          <div className="mk-field" style={{ gridColumn: "1 / -1" }}><label className="mk-label">Remarks</label><textarea value={reverseRemarks} onChange={(event) => setReverseRemarks(event.target.value)} className="mk-textarea" /></div>
         </div>
-        <button type="button" onClick={saveReverseShipment} disabled={reverseShipmentLoading || !canCreateReverseShipment} className="mt-4 rounded-lg border px-4 py-2 text-sm font-medium hover:bg-slate-50 disabled:opacity-60">
+        <button type="button" onClick={saveReverseShipment} disabled={reverseShipmentLoading || !canCreateReverseShipment} className="mk-btn mk-btn-primary" style={{ marginTop: 16 }}>
           {reverseShipmentLoading ? "Saving reverse shipment..." : "Save reverse shipment"}
         </button>
         {!canCreateReverseShipment ? (
-          <p className="mt-2 text-xs text-amber-700">Reverse pickup actions are locked until reverse pickup payment is completed.</p>
+          <p className="mk-help" style={{ marginTop: 8, color: "var(--warning-text)" }}>Reverse pickup actions are locked until reverse pickup payment is completed.</p>
         ) : null}
       </section>
 
-      <section className="rounded-xl border bg-white p-6 shadow-sm">
+      <section className="mk-card">
         <h2 className={cardTitleClass()}>Payment + GST</h2>
-        <div className="mt-4 rounded-lg border border-slate-200">
-          <div className="border-b bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700">Payment records</div>
-          <div className="overflow-x-auto p-4 text-sm">
-            {payments.length === 0 ? (
-              <p className="text-slate-500">No payment records found yet.</p>
-            ) : (
-              <table className="min-w-full border-collapse">
-                <thead>
-                  <tr className="border-b text-left text-xs uppercase tracking-wide text-slate-500">
-                    <th className="px-2 py-2">Amount</th>
-                    <th className="px-2 py-2">Purpose</th>
-                    <th className="px-2 py-2">Status</th>
-                    <th className="px-2 py-2">Provider</th>
-                    <th className="px-2 py-2">Payment Link</th>
-                    <th className="px-2 py-2">Payment ID</th>
-                    <th className="px-2 py-2">Created At</th>
-                    <th className="px-2 py-2">Paid At</th>
-                    <th className="px-2 py-2">Invoice</th>
+        <p className="mk-section-subtitle">Payment records</p>
+        {payments.length === 0 ? (
+          <p className="mk-help">No payment records found yet.</p>
+        ) : (
+          <div className="mk-table-wrap">
+            <table className="mk-table">
+              <thead>
+                <tr>
+                  <th>Amount</th>
+                  <th>Purpose</th>
+                  <th>Status</th>
+                  <th>Provider</th>
+                  <th>Payment Link</th>
+                  <th>Payment ID</th>
+                  <th>Created At</th>
+                  <th>Paid At</th>
+                  <th>Invoice</th>
+                </tr>
+              </thead>
+              <tbody>
+                {payments.map((payment) => (
+                  <tr key={payment.id}>
+                    <td style={{ fontWeight: 600 }}>₹{payment.amount}</td>
+                    <td>{payment.purpose}</td>
+                    <td>
+                      <span className={paymentStatusBadgeClass(payment.status)}>
+                        {payment.status}
+                      </span>
+                    </td>
+                    <td>{payment.provider}</td>
+                    <td style={{ maxWidth: 256, wordBreak: "break-all" }}>
+                      {payment.paymentLinkUrl ? (
+                        <a href={payment.paymentLinkUrl} target="_blank" rel="noreferrer" className="mk-link">
+                          Open payment link
+                        </a>
+                      ) : (
+                        <span className="mk-help">Payment link will be generated after approval</span>
+                      )}
+                    </td>
+                    <td>{payment.paymentId || "—"}</td>
+                    <td>{formatDate(payment.createdAtIso)}</td>
+                    <td>{formatDate(payment.paidAtIso)}</td>
+                    <td>{payment.invoice ? payment.invoice.invoiceNumber : "—"}</td>
                   </tr>
-                </thead>
-                <tbody>
-                  {payments.map((payment) => (
-                    <tr key={payment.id} className="border-b align-top">
-                      <td className="px-2 py-2 font-medium text-slate-900">₹{payment.amount}</td>
-                      <td className="px-2 py-2">{payment.purpose}</td>
-                      <td className="px-2 py-2">
-                        <span className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold ${paymentStatusBadgeClass(payment.status)}`}>
-                          {payment.status}
-                        </span>
-                      </td>
-                      <td className="px-2 py-2">{payment.provider}</td>
-                      <td className="max-w-64 break-all px-2 py-2">
-                        {payment.paymentLinkUrl ? (
-                          <a href={payment.paymentLinkUrl} target="_blank" rel="noreferrer" className="text-indigo-600 underline">
-                            Open payment link
-                          </a>
-                        ) : (
-                          <span className="text-slate-500">Payment link will be generated after approval</span>
-                        )}
-                      </td>
-                      <td className="px-2 py-2">{payment.paymentId || "—"}</td>
-                      <td className="px-2 py-2">{formatDate(payment.createdAtIso)}</td>
-                      <td className="px-2 py-2">{formatDate(payment.paidAtIso)}</td>
-                      <td className="px-2 py-2">{payment.invoice ? payment.invoice.invoiceNumber : "—"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
+                ))}
+              </tbody>
+            </table>
           </div>
-        </div>
+        )}
 
-        <div className="mt-4 rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-xs text-indigo-700">
+        <div className="mk-alert mk-alert-info" style={{ marginTop: 16 }}>
           {latestPayment?.status === "PAID"
             ? "Payment received via Razorpay"
             : latestPayment?.status === "PENDING"
@@ -641,77 +640,65 @@ export default function ExchangeLifecycleControls({
               : "Customer can pay via dashboard"}
         </div>
 
-        <div className="mt-5 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4">
-          <h3 className="text-sm font-semibold text-slate-900">GST invoice</h3>
-          <div className="mt-2 grid gap-2 text-sm text-slate-600">
+        <div className="mk-card" style={{ marginTop: 20, background: "var(--panel-2)" }}>
+          <h3 className="mk-section-title">GST invoice</h3>
+          <div className="mk-page" style={{ gap: 6, marginTop: 8 }}>
             {latestPayment?.invoice ? (
               <>
-                <p>Invoice status: {latestPayment.invoice.invoiceStatus}</p>
-                <p>Invoice number: {latestPayment.invoice.invoiceNumber}</p>
-                <p>GST amount: ₹{(latestPayment.invoice.gstPaise / 100).toFixed(2)}</p>
+                <p className="mk-help">Invoice status: {latestPayment.invoice.invoiceStatus}</p>
+                <p className="mk-help">Invoice number: {latestPayment.invoice.invoiceNumber}</p>
+                <p className="mk-help">GST amount: ₹{(latestPayment.invoice.gstPaise / 100).toFixed(2)}</p>
               </>
             ) : (
-              <p>{latestPayment?.status === "PAID" ? "Ready to generate invoice." : "Invoice will be available after payment is completed."}</p>
+              <p className="mk-help">{latestPayment?.status === "PAID" ? "Ready to generate invoice." : "Invoice will be available after payment is completed."}</p>
             )}
           </div>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <button type="button" onClick={async()=>{ if(!ensureAdminContext()) return; setInvoiceLoadingId("generate"); const r=await fetch(`/api/admin/exchange-requests/${requestId}/invoice`,{method:"POST",headers:await getHeaders(),body:JSON.stringify({action:"generate"})}); setInvoiceLoadingId(null); if(r.ok){setSuccess("Invoice generated. Refresh to view latest values.")} else {const d=await r.json().catch(()=>({})); setError(d?.error||"Failed");}}} disabled={latestPayment?.status!=="PAID" || Boolean(latestPayment?.invoice) || invoiceLoadingId!==null} className="rounded-lg border px-3 py-2 text-xs">{invoiceLoadingId==="generate"?"Generating...":"Generate GST Invoice"}</button>
-            <button type="button" onClick={async()=>{ if(!ensureAdminContext()) return; setInvoiceLoadingId("send"); const r=await fetch(`/api/admin/exchange-requests/${requestId}/invoice`,{method:"POST",headers:await getHeaders(),body:JSON.stringify({action:"send"})}); setInvoiceLoadingId(null); if(r.ok){setSuccess("Invoice email sent.")} else {const d=await r.json().catch(()=>({})); setError(d?.error||"Failed");}}} disabled={latestPayment?.status!=="PAID" || invoiceLoadingId!==null} className="rounded-lg border px-3 py-2 text-xs">{invoiceLoadingId==="send"?"Sending...":"Send Invoice Email"}</button>
+          <div className="mk-header-actions" style={{ marginTop: 12 }}>
+            <button type="button" onClick={async()=>{ if(!ensureAdminContext()) return; setInvoiceLoadingId("generate"); const r=await fetch(`/api/admin/exchange-requests/${requestId}/invoice`,{method:"POST",headers:await getHeaders(),body:JSON.stringify({action:"generate"})}); setInvoiceLoadingId(null); if(r.ok){setSuccess("Invoice generated. Refresh to view latest values.")} else {const d=await r.json().catch(()=>({})); setError(d?.error||"Failed");}}} disabled={latestPayment?.status!=="PAID" || Boolean(latestPayment?.invoice) || invoiceLoadingId!==null} className="mk-btn mk-btn-sm">{invoiceLoadingId==="generate"?"Generating...":"Generate GST Invoice"}</button>
+            <button type="button" onClick={async()=>{ if(!ensureAdminContext()) return; setInvoiceLoadingId("send"); const r=await fetch(`/api/admin/exchange-requests/${requestId}/invoice`,{method:"POST",headers:await getHeaders(),body:JSON.stringify({action:"send"})}); setInvoiceLoadingId(null); if(r.ok){setSuccess("Invoice email sent.")} else {const d=await r.json().catch(()=>({})); setError(d?.error||"Failed");}}} disabled={latestPayment?.status!=="PAID" || invoiceLoadingId!==null} className="mk-btn mk-btn-sm">{invoiceLoadingId==="send"?"Sending...":"Send Invoice Email"}</button>
           </div>
         </div>
       </section>
 
-      <section className="rounded-xl border bg-white p-6 shadow-sm">
+      <section className="mk-card">
         <h2 className={cardTitleClass()}>Replacement shipment</h2>
-        <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          <label className="text-sm"><span className="mb-1 block text-slate-600">Shipment status</span><select value={forwardShipmentStatus} onChange={(event) => setForwardShipmentStatus(event.target.value)} className="w-full rounded-lg border px-3 py-2">{SHIPMENT_STATUSES.map((status) => (<option key={status} value={status}>{status}</option>))}</select></label>
-          <label className="text-sm"><span className="mb-1 block text-slate-600">Carrier</span><input value={forwardCarrier} onChange={(event) => setForwardCarrier(event.target.value)} className="w-full rounded-lg border px-3 py-2" /></label>
-          <label className="text-sm"><span className="mb-1 block text-slate-600">AWB</span><input value={forwardAwb} onChange={(event) => setForwardAwb(event.target.value)} className="w-full rounded-lg border px-3 py-2" /></label>
-          <label className="text-sm"><span className="mb-1 block text-slate-600">Tracking URL</span><input value={forwardTrackingUrl} onChange={(event) => setForwardTrackingUrl(event.target.value)} className="w-full rounded-lg border px-3 py-2" /></label>
-          <label className="text-sm"><span className="mb-1 block text-slate-600">Shipped date</span><input type="datetime-local" value={forwardShippedAt} onChange={(event) => setForwardShippedAt(event.target.value)} className="w-full rounded-lg border px-3 py-2" /></label>
-          <label className="text-sm"><span className="mb-1 block text-slate-600">Delivered date</span><input type="datetime-local" value={forwardDeliveredAt} onChange={(event) => setForwardDeliveredAt(event.target.value)} className="w-full rounded-lg border px-3 py-2" /></label>
-          <label className="text-sm md:col-span-2 xl:col-span-3"><span className="mb-1 block text-slate-600">Remarks</span><textarea value={forwardRemarks} onChange={(event) => setForwardRemarks(event.target.value)} className="min-h-20 w-full rounded-lg border px-3 py-2" /></label>
+        <div className="mk-grid-3" style={{ marginTop: 16 }}>
+          <div className="mk-field"><label className="mk-label">Shipment status</label><select value={forwardShipmentStatus} onChange={(event) => setForwardShipmentStatus(event.target.value)} className="mk-select">{SHIPMENT_STATUSES.map((status) => (<option key={status} value={status}>{status}</option>))}</select></div>
+          <div className="mk-field"><label className="mk-label">Carrier</label><input value={forwardCarrier} onChange={(event) => setForwardCarrier(event.target.value)} className="mk-input" /></div>
+          <div className="mk-field"><label className="mk-label">AWB</label><input value={forwardAwb} onChange={(event) => setForwardAwb(event.target.value)} className="mk-input" /></div>
+          <div className="mk-field"><label className="mk-label">Tracking URL</label><input value={forwardTrackingUrl} onChange={(event) => setForwardTrackingUrl(event.target.value)} className="mk-input" /></div>
+          <div className="mk-field"><label className="mk-label">Shipped date</label><input type="datetime-local" value={forwardShippedAt} onChange={(event) => setForwardShippedAt(event.target.value)} className="mk-input" /></div>
+          <div className="mk-field"><label className="mk-label">Delivered date</label><input type="datetime-local" value={forwardDeliveredAt} onChange={(event) => setForwardDeliveredAt(event.target.value)} className="mk-input" /></div>
+          <div className="mk-field" style={{ gridColumn: "1 / -1" }}><label className="mk-label">Remarks</label><textarea value={forwardRemarks} onChange={(event) => setForwardRemarks(event.target.value)} className="mk-textarea" /></div>
         </div>
-        <button type="button" onClick={saveForwardShipment} disabled={forwardShipmentLoading || !canCreateForwardShipment} className="mt-4 rounded-lg border px-4 py-2 text-sm font-medium hover:bg-slate-50 disabled:opacity-60">
+        <button type="button" onClick={saveForwardShipment} disabled={forwardShipmentLoading || !canCreateForwardShipment} className="mk-btn mk-btn-primary" style={{ marginTop: 16 }}>
           {forwardShipmentLoading ? "Saving replacement shipment..." : "Save replacement shipment"}
         </button>
         {!canCreateForwardShipment ? (
-          <p className="mt-2 text-xs text-amber-700">Replacement shipment actions unlock only after returned item is received.</p>
+          <p className="mk-help" style={{ marginTop: 8, color: "var(--warning-text)" }}>Replacement shipment actions unlock only after returned item is received.</p>
         ) : null}
       </section>
 
-      <section className="rounded-xl border bg-white p-6 shadow-sm">
+      <section className="mk-card">
         <h2 className={cardTitleClass()}>Delhivery automation</h2>
-        <p className="mt-2 text-sm text-slate-600">
+        <p className="mk-section-subtitle" style={{ marginTop: 8 }}>
           {delhiveryCapability.configured
             ? "Delhivery credentials detected. Reverse pickup and manual replacement shipment actions are available only at eligible lifecycle steps."
             : delhiveryCapability.reason}
         </p>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <button type="button" onClick={createDelhiveryReversePickup} disabled={!canCreateDelhiveryReversePickup || delhiveryLoading} className="rounded-lg border px-3 py-2 text-xs font-medium hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60">{delhiveryLoading ? "Creating reverse pickup..." : "Create reverse pickup"}</button>
-          <button type="button" onClick={syncDelhiveryReversePickupTracking} disabled={!canSyncDelhiveryReversePickup || delhiverySyncLoading} className="rounded-lg border px-3 py-2 text-xs font-medium hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60">{delhiverySyncLoading ? "Syncing tracking..." : "Sync reverse pickup tracking"}</button>
-          <button type="button" disabled className="cursor-not-allowed rounded-lg border px-3 py-2 text-xs text-slate-500">Generate manifest/slip (Coming next)</button>
-          <button type="button" onClick={createDelhiveryForwardShipment} disabled={!canCreateDelhiveryForwardShipment || delhiveryForwardLoading} className="rounded-lg border px-3 py-2 text-xs font-medium hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60">{delhiveryForwardLoading ? "Creating replacement shipment..." : "Create replacement shipment"}</button>
-          <button type="button" onClick={syncDelhiveryForwardShipmentTracking} disabled={!canSyncDelhiveryForwardShipment || delhiveryForwardSyncLoading} className="rounded-lg border px-3 py-2 text-xs font-medium hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60">{delhiveryForwardSyncLoading ? "Syncing replacement tracking..." : "Sync replacement tracking"}</button>
+        <div className="mk-header-actions" style={{ marginTop: 12 }}>
+          <button type="button" onClick={createDelhiveryReversePickup} disabled={!canCreateDelhiveryReversePickup || delhiveryLoading} className="mk-btn mk-btn-sm">{delhiveryLoading ? "Creating reverse pickup..." : "Create reverse pickup"}</button>
+          <button type="button" onClick={syncDelhiveryReversePickupTracking} disabled={!canSyncDelhiveryReversePickup || delhiverySyncLoading} className="mk-btn mk-btn-sm">{delhiverySyncLoading ? "Syncing tracking..." : "Sync reverse pickup tracking"}</button>
+          <button type="button" onClick={createDelhiveryForwardShipment} disabled={!canCreateDelhiveryForwardShipment || delhiveryForwardLoading} className="mk-btn mk-btn-sm">{delhiveryForwardLoading ? "Creating replacement shipment..." : "Create replacement shipment"}</button>
+          <button type="button" onClick={syncDelhiveryForwardShipmentTracking} disabled={!canSyncDelhiveryForwardShipment || delhiveryForwardSyncLoading} className="mk-btn mk-btn-sm">{delhiveryForwardSyncLoading ? "Syncing replacement tracking..." : "Sync replacement tracking"}</button>
         </div>
         {!canCreateDelhiveryReversePickup ? (
-          <p className="mt-2 text-xs text-slate-500">Reverse pickup create requires Delhivery config, paid reverse pickup fee, eligible status, and no existing AWB. Replacement create requires ITEM_RECEIVED/REPLACEMENT_PROCESSING and no forward AWB. Sync requires a Delhivery AWB for the matching reverse or replacement shipment.</p>
+          <p className="mk-help" style={{ marginTop: 8 }}>Reverse pickup create requires Delhivery config, paid reverse pickup fee, eligible status, and no existing AWB. Replacement create requires ITEM_RECEIVED/REPLACEMENT_PROCESSING and no forward AWB. Sync requires a Delhivery AWB for the matching reverse or replacement shipment.</p>
         ) : null}
       </section>
 
-
-      <section className="rounded-xl border bg-white p-6 shadow-sm">
-        <h2 className={cardTitleClass()}>Completion</h2>
-        <p className="mt-2 text-sm text-slate-600">
-          Completion actions are controlled strictly by backend lifecycle transitions.
-        </p>
-        <div className="mt-3 rounded-lg border bg-slate-50 p-3 text-sm text-slate-700">
-          Allowed transitions from <span className="font-semibold">{currentStatus}</span>: {allowedTransitions.length ? allowedTransitions.join(", ") : "None (terminal)"}
-        </div>
-      </section>
-
       {message ? (
-        <div className={`rounded-xl border p-4 text-sm ${message.type === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-red-200 bg-red-50 text-red-700"}`}>
+        <div className={`mk-alert ${message.type === "success" ? "mk-alert-success" : "mk-alert-error"}`}>
           {message.text}
         </div>
       ) : null}
