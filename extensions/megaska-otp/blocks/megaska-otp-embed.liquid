@@ -37,6 +37,18 @@
 
 <script>
   window.MEGASKA_SHOP_DOMAIN = {{ shop.permanent_domain | json }};
+  // Seed the drawer's brand name from the real Shopify store name so the cart
+  // drawer header shows e.g. "Megaska" instead of the raw myshopify domain.
+  // loopdesk-cart-drawer.js reads window.LoopDeskConfig.branding once at load,
+  // and this inline script runs before that deferred asset, so the seed is in
+  // place for the header's first render. (Restores the seed that the removed
+  // loopdesk-cart-drawer-embed.liquid block used to provide.)
+  window.LoopDeskConfig = Object.assign({}, window.LoopDeskConfig || {}, {
+    branding: Object.assign({}, (window.LoopDeskConfig && window.LoopDeskConfig.branding) || {}, {
+      merchantName: {{ shop.name | default: shop.permanent_domain | json }},
+      storeName: {{ shop.name | default: shop.permanent_domain | json }}
+    })
+  });
   window.LOOPDESK_CART_DRAWER_CONFIG = Object.assign({}, window.LOOPDESK_CART_DRAWER_CONFIG || {}, {
     enabled: {{ block.settings.cart_drawer_enabled | json }},
     openAfterAddToCart: {{ block.settings.open_after_add_to_cart | json }},
