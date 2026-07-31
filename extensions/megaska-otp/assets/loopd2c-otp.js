@@ -1267,6 +1267,7 @@
   }
 
   function openModal(triggerSource) {
+    try { if (!state.isOpen && window.LoopDeskAnalytics) window.LoopDeskAnalytics.track('OTP_OPEN', { metadata: { source: triggerSource || null } }); } catch (e) {}
     closeAccountMenu();
     closeCartDrawerBeforeModal();
     const { modal } = getModalParts();
