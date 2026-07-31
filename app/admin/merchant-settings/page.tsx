@@ -131,7 +131,6 @@ async function saveMerchantSettings(
       },
       account: {
         dashboardRedirectEnabled: formData.get("accountDashboardRedirectEnabled") === "on",
-        dashboardPath: formData.get("accountDashboardPath"),
         customTriggerSelector: formData.get("accountCustomTriggerSelector"),
       },
       checkout: {
@@ -488,22 +487,13 @@ export default async function MerchantSettingsPage({
             defaultChecked={settings.account.dashboardRedirectEnabled}
             help="When off, the account icon behaves like the theme's native account link/page."
           />
-          <div className="grid gap-4 md:grid-cols-2">
-            <Field
-              label="Dashboard path"
-              name="accountDashboardPath"
-              defaultValue={settings.account.dashboardPath}
-              placeholder="/apps/loopd2c/account"
-              help="Relative app-proxy path customers are sent to instead of /account."
-            />
-            <Field
-              label="Custom account icon selector (advanced)"
-              name="accountCustomTriggerSelector"
-              defaultValue={settings.account.customTriggerSelector}
-              placeholder="#AccountIcon, .site-header__account-toggle"
-              help="Only needed if clicking your theme's account icon still opens the Shopify account page. Enter a CSS selector that matches it (comma-separate multiple). Leave blank to use automatic detection."
-            />
-          </div>
+          <Field
+            label="Custom account icon selector (advanced)"
+            name="accountCustomTriggerSelector"
+            defaultValue={settings.account.customTriggerSelector}
+            placeholder="#AccountIcon, .site-header__account-toggle"
+            help="Only needed if clicking your theme's account icon still opens the Shopify account page. Enter a CSS selector that matches it (comma-separate multiple). Leave blank to use automatic detection."
+          />
         </section>
 
         <section id="otp-modal-branding" className={`${cardClass} grid gap-5`}>

@@ -8,7 +8,7 @@ CONFIG-2B.1 stores long-term merchant settings in `ShopModuleConfig.config` usin
 - `branding`: `logoUrl`, `primaryColor`, `secondaryColor`, `accentColor`, `textColor`, `surfaceColor`, `borderRadius`, `fontFamily`, `showPoweredBy`, `poweredByText`.
 - `labels`: `expressCheckoutText`, `viewCartText`, `continueShoppingText`, `loadingText`, `secureCheckoutText`, `otpContinueText`.
 - `cart`: `drawerMode`, `openAfterAddToCart`, `expressCheckoutButtonEnabled`, `viewCartButtonEnabled`, `nativeDrawerDisabledRequiredMessage`, `customCartTriggerSelector`.
-- `account`: `dashboardRedirectEnabled`, `dashboardPath`, `customTriggerSelector`.
+- `account`: `dashboardRedirectEnabled`, `dashboardPath` (app-managed; not merchant-editable — defaults to the current app-proxy subpath `/apps/loopd2c/account`, and legacy `/apps/megaska/*` values are migrated on normalize), `customTriggerSelector`.
 - `checkout`: `showSecureBadge`, `showTrustCopy`.
 - `integrations`: read-only placeholders for Razorpay and Delhivery status/display names.
 - `analytics`: read-only placeholder flags.
