@@ -3,7 +3,7 @@
   const root = document.getElementById("loopdesk-review-submission");
   let token = new URL(location.href).searchParams.get("token");
   history.replaceState({}, "", location.pathname);
-  const api = "/apps/megaska/api/reviews/submission/";
+  const api = "/apps/loopd2c/api/reviews/submission/";
   const messages = { REVIEW_TOKEN_INVALID: "This review link is invalid.", REVIEW_TOKEN_EXPIRED: "This review link has expired.", REVIEW_ALREADY_SUBMITTED: "A review has already been submitted using this link.", REVIEW_TOKEN_REQUEST_INACTIVE: "This review request is no longer available.", REVIEWS_DISABLED: "Reviews are currently unavailable for this store.", REVIEW_PRODUCT_UNAVAILABLE: "We could not load this product for review." };
   const text = value => String(value || "").replace(/[&<>"']/g, character => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" })[character]);
   async function request(path, body) { const response = await fetch(api + path, { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin", body: JSON.stringify(body) }); return { response, payload: await response.json() }; }

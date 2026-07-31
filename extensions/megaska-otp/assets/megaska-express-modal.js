@@ -1,7 +1,7 @@
 (function () {
   const SESSION_KEY = "megaska_session_token";
-  const APP_PROXY_API_BASE = "/apps/megaska/api";
-  const PAGE_FALLBACK_URL = "/apps/megaska/checkout";
+  const APP_PROXY_API_BASE = "/apps/loopd2c/api";
+  const PAGE_FALLBACK_URL = "/apps/loopd2c/checkout";
   const RAZORPAY_INLINE_SCRIPT_SRC = "https://checkout.razorpay.com/v1/razorpay.js";
   const RAZORPAY_CHECKOUT_SCRIPT_SRC = "https://checkout.razorpay.com/v1/checkout.js";
   const TRIGGER_SELECTOR = "[data-megaska-express-checkout], [data-bag-action='checkout']";

@@ -136,7 +136,7 @@
   const resumingCartAddForms = new WeakSet();
   const ACCOUNT_FALLBACK_DESKTOP_ID = "megaska-account-fallback-desktop";
   const ACCOUNT_FALLBACK_MOBILE_ID = "megaska-account-fallback-mobile";
-  const DEFAULT_MEGASKA_DASHBOARD_URL = "/apps/megaska/account";
+  const DEFAULT_MEGASKA_DASHBOARD_URL = "/apps/loopd2c/account";
   const ACCOUNT_FALLBACK_DISCOVERY_DELAY_MS = 1500;
 
   const ACCOUNT_TRIGGER_SELECTORS = [

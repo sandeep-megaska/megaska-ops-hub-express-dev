@@ -1,7 +1,7 @@
 {% liquid
   assign support_url = block.settings.support_url | default: '/pages/contact'
   assign continue_shopping_url = block.settings.continue_shopping_url | default: '/collections/all'
-  assign dashboard_path = block.settings.dashboard_path | default: block.settings.dashboard_url | default: '/apps/megaska/account'
+  assign dashboard_path = block.settings.dashboard_path | default: block.settings.dashboard_url | default: '/apps/loopd2c/account'
 %}
 
 {{ 'megaska-otp.css' | asset_url | stylesheet_tag }}
@@ -19,7 +19,7 @@
 
 <script type="application/json" id="loopdesk-customer-dashboard-config">
 {
-  "apiUrl": "/apps/megaska/api/dashboard/summary",
+  "apiUrl": "/apps/loopd2c/api/dashboard/summary",
   "dashboardPath": {{ dashboard_path | json }},
   "dashboardUrl": {{ dashboard_path | json }},
   "homeUrl": "/",

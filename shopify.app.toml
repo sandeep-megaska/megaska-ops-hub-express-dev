@@ -6,8 +6,8 @@ application_url = "https://app.loopd2c.com"
 embedded = true
 
 [app_proxy]
-url = "https://app.loopd2c.com/apps/megaska"
-subpath = "megaska"
+url = "https://app.loopd2c.com/apps/loopd2c"
+subpath = "loopd2c"
 prefix = "apps"
 
 [webhooks]
