@@ -711,6 +711,12 @@ textarea {
   border-color: #bae6fd;
 }
 
+.mk-alert-warning {
+  background: var(--warning-soft);
+  color: var(--warning-text);
+  border-color: #fde68a;
+}
+
 /* --------------------------------------------------------------------- Hero */
 
 .mk-hero {
