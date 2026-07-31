@@ -2,8 +2,6 @@ import type { NextRequest } from "next/server";
 import { prisma } from "../../services/db/prisma";
 import { hashSessionToken } from "../../services/auth/session";
 import {
-  getShopDomainFromRequest,
-  normalizeShopDomain,
   requireStorefrontShopFromRequest,
   ShopResolutionError,
 } from "../../services/shopify/shop";
@@ -27,22 +25,15 @@ export type ExpressCheckoutCustomerSessionContext = {
   session: CustomerSessionForShop;
 };
 
-function isExpressCheckoutEnabled() {
-  return process.env.EXPRESS_CHECKOUT_ENABLED === "true";
-}
-
-function getAllowedShopDomains() {
-  return String(process.env.EXPRESS_CHECKOUT_ALLOWED_SHOPS || "")
-    .split(",")
-    .map((shopDomain) => normalizeShopDomain(shopDomain))
-    .filter(Boolean);
-}
-
-function isAllowedShop(shopDomain: string) {
-  const normalizedShopDomain = normalizeShopDomain(shopDomain);
-  if (!normalizedShopDomain) return false;
-
-  return getAllowedShopDomains().includes(normalizedShopDomain);
+// Public SaaS: express checkout is available to any installed shop that has
+// completed per-shop readiness (merchant enable toggle + a configured and
+// validated Razorpay key), which resolveExpressCheckoutReadiness enforces in
+// requireExpressCheckoutShop below. There is no per-shop allowlist.
+// EXPRESS_CHECKOUT_ENABLED is retained only as an opt-out emergency kill
+// switch: unset — or anything other than the literal "false" — keeps express
+// checkout enabled.
+function isExpressCheckoutGloballyDisabled() {
+  return String(process.env.EXPRESS_CHECKOUT_ENABLED || "").trim().toLowerCase() === "false";
 }
 
 async function findCustomerSessionForShop(sessionToken: string, shopId: string) {
@@ -92,13 +83,7 @@ async function findCustomerSessionForDifferentShop(sessionToken: string, shopId:
 export async function requireExpressCheckoutShop(
   req: NextRequest
 ): Promise<ExpressCheckoutShopContext | ExpressCheckoutSafetyError> {
-  if (!isExpressCheckoutEnabled()) {
-    return { status: 403, error: "Express checkout disabled" };
-  }
-
-  const shopDomain = getShopDomainFromRequest(req);
-
-  if (!isAllowedShop(shopDomain)) {
+  if (isExpressCheckoutGloballyDisabled()) {
     return { status: 403, error: "Express checkout disabled" };
   }
 
