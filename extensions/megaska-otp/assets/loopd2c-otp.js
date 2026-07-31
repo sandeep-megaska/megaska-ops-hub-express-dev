@@ -3511,6 +3511,150 @@ function consumePendingAccountRedirect() {
     return svg;
   }
 
+  // Merchant account-icon customization (admin: Account dashboard → Account icon
+  // appearance). style "auto" keeps the theme-adaptive icon; a preset or a
+  // sanitized custom SVG overrides the glyph; size (px) overrides the auto
+  // sizing. Values are seeded onto window.LoopDeskConfig.account by the runtime
+  // config, and re-applied when that config arrives after first injection.
+  const MERCHANT_ICON_PRESETS = ["outline", "filled", "circle", "custom"];
+  function getAccountIconConfig() {
+    const account = (window.LoopDeskConfig && window.LoopDeskConfig.account) || {};
+    const rawStyle = typeof account.iconStyle === "string" ? account.iconStyle.trim().toLowerCase() : "";
+    const style = MERCHANT_ICON_PRESETS.includes(rawStyle) ? rawStyle : "auto";
+    const rawSize = Number(account.iconSize);
+    const size = Number.isFinite(rawSize) && rawSize > 0 ? Math.min(40, Math.max(16, Math.round(rawSize))) : 0;
+    const customSvg = typeof account.iconCustomSvg === "string" ? account.iconCustomSvg : "";
+    return { style, size, customSvg };
+  }
+
+  function createPresetAccountSvg(style) {
+    const namespace = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(namespace, "svg");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("width", "22");
+    svg.setAttribute("height", "22");
+    svg.setAttribute("aria-hidden", "true");
+    svg.setAttribute("focusable", "false");
+    if (style === "filled") {
+      svg.setAttribute("fill", "currentColor");
+      svg.innerHTML = '<path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm0 2c-4.4 0-8 2.2-8 5v1h16v-1c0-2.8-3.6-5-8-5Z"></path>';
+      return svg;
+    }
+    svg.setAttribute("fill", "none");
+    svg.setAttribute("stroke", "currentColor");
+    svg.setAttribute("stroke-width", "1.6");
+    svg.setAttribute("stroke-linecap", "round");
+    svg.setAttribute("stroke-linejoin", "round");
+    if (style === "circle") {
+      svg.innerHTML = '<circle cx="12" cy="12" r="9"></circle><circle cx="12" cy="10" r="2.75"></circle><path d="M6.8 18.2c1-2.3 2.9-3.2 5.2-3.2s4.2.9 5.2 3.2"></path>';
+    } else {
+      svg.innerHTML = '<circle cx="12" cy="7.5" r="3.25"></circle><path d="M5.5 20c.55-4.2 2.75-6.25 6.5-6.25S17.95 15.8 18.5 20"></path>';
+    }
+    return svg;
+  }
+
+  // Strict allowlist sanitizer for a merchant-supplied SVG. This is the
+  // authoritative gate at the injection point (the admin also blocklists on
+  // save). Anything outside the geometry/presentation allowlist is dropped.
+  const CUSTOM_SVG_ALLOWED_TAGS = new Set(["svg", "g", "path", "circle", "ellipse", "rect", "line", "polyline", "polygon"]);
+  const CUSTOM_SVG_ALLOWED_ATTRS = new Set([
+    "viewbox", "d", "cx", "cy", "r", "rx", "ry", "x", "y", "x1", "x2", "y1", "y2",
+    "width", "height", "points", "fill", "stroke", "stroke-width", "stroke-linecap",
+    "stroke-linejoin", "stroke-miterlimit", "fill-rule", "clip-rule", "transform",
+    "opacity", "fill-opacity", "stroke-opacity", "stroke-dasharray", "stroke-dashoffset", "xmlns",
+  ]);
+  function sanitizeCustomAccountSvg(raw) {
+    if (typeof raw !== "string") return null;
+    const trimmed = raw.trim();
+    if (!trimmed || trimmed.length > 12000 || !/^<svg[\s>]/i.test(trimmed)) return null;
+    if (typeof DOMParser !== "function") return null;
+    let doc;
+    try {
+      doc = new DOMParser().parseFromString(trimmed, "image/svg+xml");
+    } catch (_error) {
+      return null;
+    }
+    if (!doc || (doc.getElementsByTagName && doc.getElementsByTagName("parsererror").length)) return null;
+    const root = doc.documentElement;
+    if (!root || String(root.nodeName).toLowerCase() !== "svg") return null;
+    const scrub = (element) => {
+      Array.from(element.attributes || []).forEach((attribute) => {
+        const name = String(attribute.name).toLowerCase();
+        const value = String(attribute.value || "");
+        const unsafe =
+          !CUSTOM_SVG_ALLOWED_ATTRS.has(name) ||
+          name.startsWith("on") ||
+          name.startsWith("xlink") ||
+          /javascript:|url\s*\(|expression\s*\(|[<>]/i.test(value);
+        if (unsafe) element.removeAttribute(attribute.name);
+      });
+      Array.from(element.children || []).forEach((child) => {
+        if (!CUSTOM_SVG_ALLOWED_TAGS.has(String(child.nodeName).toLowerCase())) {
+          child.remove();
+          return;
+        }
+        scrub(child);
+      });
+    };
+    scrub(root);
+    if (!root.querySelector("path,circle,ellipse,rect,line,polyline,polygon")) return null;
+    let imported;
+    try {
+      imported = document.importNode(root, true);
+    } catch (_error) {
+      return null;
+    }
+    imported.setAttribute("aria-hidden", "true");
+    imported.setAttribute("focusable", "false");
+    return imported;
+  }
+
+  function accountIconSignature(config) {
+    return config.style + "|" + config.size + "|" + (config.style === "custom" ? String(config.customSvg).length : "0");
+  }
+
+  function applyMerchantAccountIcon(link) {
+    if (!link || typeof link.querySelector !== "function") return;
+    const config = getAccountIconConfig();
+    const signature = accountIconSignature(config);
+    if (link.getAttribute("data-loopdesk-icon-signature") === signature) return;
+    link.setAttribute("data-loopdesk-icon-signature", signature);
+
+    const existing = link.querySelector("svg");
+    let iconSvg = existing;
+    if (config.style !== "auto") {
+      const built = config.style === "custom"
+        ? sanitizeCustomAccountSvg(config.customSvg)
+        : createPresetAccountSvg(config.style);
+      if (built) {
+        if (existing && existing.getAttribute("class")) {
+          built.setAttribute("class", existing.getAttribute("class"));
+        }
+        built.setAttribute("aria-hidden", "true");
+        built.setAttribute("focusable", "false");
+        if (existing && existing.parentNode) {
+          existing.parentNode.replaceChild(built, existing);
+        } else {
+          link.appendChild(built);
+        }
+        iconSvg = built;
+        link.setAttribute(
+          "data-loopdesk-account-icon-source",
+          config.style === "custom" ? "merchant-custom" : "merchant-preset",
+        );
+      }
+    }
+
+    if (config.size > 0) {
+      link.style.setProperty("--loopdesk-account-icon-size", config.size + "px");
+      link.style.setProperty("--loopdesk-account-control-size", (config.size + 14) + "px");
+      if (iconSvg && iconSvg.style) {
+        iconSvg.style.width = config.size + "px";
+        iconSvg.style.height = config.size + "px";
+      }
+    }
+  }
+
   function createDesktopAccountFallback(container) {
     const dashboardUrl = resolveAccountDestinationUrl();
     const hiddenAccount = findHiddenThemeAccountControl(container);
@@ -3633,10 +3777,15 @@ function ensureDesktopAccountFallback() {
       ensureDesktopAccountFallback();
       return;
     }
+    // Re-apply in case the merchant icon config arrived after first injection
+    // (runtime config is fetched asynchronously). The signature guard makes
+    // this a no-op once the current config is already reflected.
+    applyMerchantAccountIcon(existingFallback);
     return;
   }
 
   const fallback = createDesktopAccountFallback(desktopContainer);
+  applyMerchantAccountIcon(fallback);
   const containerTag = String(desktopContainer.tagName || "").toUpperCase();
 
   const cartCandidate = desktopContainer.querySelector(
@@ -3990,6 +4139,10 @@ function hasVisibleNativeDesktopAccountEntry() {
     const eventPolicy = event?.detail?.otpCountryPolicy;
     const rawPolicy = hasUsableOtpCountryPolicy(eventPolicy) ? eventPolicy : window.LoopDeskConfig?.otpCountryPolicy;
     if (hasUsableOtpCountryPolicy(rawPolicy)) refreshOtpCountryPolicy(rawPolicy);
+    // The merchant account-icon config lands with the runtime config; reconcile
+    // so the injected icon picks it up even if it was created earlier with the
+    // theme-adaptive default. Guarded like the rest of the fallback lifecycle.
+    if (isAccountDashboardRedirectEnabled()) scheduleAccountFallbackReconciliation();
   });
 
   document.addEventListener("DOMContentLoaded", init);

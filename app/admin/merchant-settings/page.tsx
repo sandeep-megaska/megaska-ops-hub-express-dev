@@ -132,6 +132,9 @@ async function saveMerchantSettings(
       account: {
         dashboardRedirectEnabled: formData.get("accountDashboardRedirectEnabled") === "on",
         customTriggerSelector: formData.get("accountCustomTriggerSelector"),
+        iconStyle: formData.get("accountIconStyle"),
+        iconCustomSvg: formData.get("accountIconCustomSvg"),
+        iconSize: formData.get("accountIconSize"),
       },
       checkout: {
         showSecureBadge: formData.get("showSecureBadge") === "on",
@@ -494,6 +497,50 @@ export default async function MerchantSettingsPage({
             placeholder="#AccountIcon, .site-header__account-toggle"
             help="Only needed if clicking your theme's account icon still opens the Shopify account page. Enter a CSS selector that matches it (comma-separate multiple). Leave blank to use automatic detection."
           />
+
+          <div className="border-t border-[var(--line)] pt-5">
+            <h3 className="mk-label mb-1">Account icon appearance</h3>
+            <p className="mk-help mb-4">
+              Choose how the injected account icon looks. &ldquo;Auto&rdquo; matches
+              your theme&rsquo;s existing header icons; presets or a custom SVG let
+              you override it, and the size can be tuned to line up with nearby icons.
+            </p>
+            <div className="grid gap-4 md:grid-cols-2">
+              <label className="mk-field">
+                <span className="mk-label">Icon style</span>
+                <select
+                  className="mk-select"
+                  name="accountIconStyle"
+                  defaultValue={settings.account.iconStyle}
+                >
+                  <option value="auto">Auto (match theme)</option>
+                  <option value="outline">Outline person</option>
+                  <option value="filled">Filled person</option>
+                  <option value="circle">Person in circle</option>
+                  <option value="custom">Custom SVG</option>
+                </select>
+                <span className="mk-help">
+                  &ldquo;Auto&rdquo; borrows your theme&rsquo;s own icon styling. Presets and
+                  custom SVGs render in the current text color so they still match the header.
+                </span>
+              </label>
+              <Field
+                label="Icon size (px)"
+                name="accountIconSize"
+                type="number"
+                defaultValue={settings.account.iconSize ? String(settings.account.iconSize) : ""}
+                placeholder="Auto"
+                help="Leave blank for Auto (match nearby icons), or set 16–40px to fine-tune."
+              />
+            </div>
+            <TextArea
+              label="Custom icon SVG (used when Icon style is Custom)"
+              name="accountIconCustomSvg"
+              defaultValue={settings.account.iconCustomSvg}
+              placeholder={'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">…</svg>'}
+              help="Paste a single <svg>…</svg>. For best results use fill/stroke of currentColor so it matches your header. Scripts, styles, external references (href/src/url()), and event handlers are stripped; use a 0 0 24 24 viewBox."
+            />
+          </div>
         </section>
 
         <section id="otp-modal-branding" className={`${cardClass} grid gap-5`}>
