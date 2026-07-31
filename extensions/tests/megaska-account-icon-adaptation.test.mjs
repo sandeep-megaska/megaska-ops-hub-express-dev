@@ -145,6 +145,48 @@ test("neutral fallback CSS is isolated from theme-native account controls", () =
   assert.doesNotMatch(css, /\[data-loopdesk-account-control-source="native-hidden-clone"\][^{]*\{[^}]*(?:width|background|color):/s);
 });
 
+test("merchant account-icon customization is read, built, sanitized, and applied", () => {
+  const config = functionSource("getAccountIconConfig", "createPresetAccountSvg");
+  const preset = functionSource("createPresetAccountSvg", "sanitizeCustomAccountSvg");
+  const sanitize = functionSource("sanitizeCustomAccountSvg", "accountIconSignature");
+  const apply = functionSource("applyMerchantAccountIcon", "createDesktopAccountFallback");
+  const insertion = functionSource("ensureDesktopAccountFallback", "observeDesktopAccountContainer");
+
+  // Reads the three merchant fields with clamping/allowlisting.
+  assert.match(config, /account\.iconStyle/);
+  assert.match(config, /account\.iconSize/);
+  assert.match(config, /account\.iconCustomSvg/);
+  assert.match(config, /Math\.min\(40, Math\.max\(16,/);
+
+  // Presets are hard-coded currentColor glyphs (no merchant markup).
+  assert.match(preset, /createElementNS/);
+  assert.match(preset, /currentColor/);
+  assert.match(preset, /"filled"|"circle"/);
+
+  // Custom SVG is sanitized with a strict tag/attr allowlist and drops unsafe
+  // attributes/elements before it is injected.
+  assert.match(sanitize, /DOMParser/);
+  assert.match(sanitize, /CUSTOM_SVG_ALLOWED_TAGS/);
+  assert.match(sanitize, /CUSTOM_SVG_ALLOWED_ATTRS/);
+  assert.match(sanitize, /name\.startsWith\("on"\)/);
+  assert.match(sanitize, /name\.startsWith\("xlink"\)/);
+  assert.match(sanitize, /javascript:\|url\\s\*\\\(/);
+  assert.doesNotMatch(source, /new Set\(\["svg"[^)]*"script"/);
+
+  // Apply is signature-guarded (idempotent) and honors preset/custom + size.
+  assert.match(apply, /data-loopdesk-icon-signature/);
+  assert.match(apply, /replaceChild\(built, existing\)/);
+  assert.match(apply, /--loopdesk-account-icon-size/);
+  assert.match(apply, /merchant-custom|merchant-preset/);
+
+  // Reconciliation applies the merchant icon to both new and existing icons.
+  assert.match(insertion, /applyMerchantAccountIcon\(fallback\)/);
+  assert.match(insertion, /applyMerchantAccountIcon\(existingFallback\)/);
+
+  // Runtime-config arrival re-reconciles so a late config still styles the icon.
+  assert.match(source, /runtime-config-ready[\s\S]*if \(isAccountDashboardRedirectEnabled\(\)\) scheduleAccountFallbackReconciliation\(\)/);
+});
+
 test("mobile hide of the header account icon is gated on a real mobile account entry", () => {
   const css = readFileSync(new URL("../megaska-otp/assets/loopd2c-otp.css", import.meta.url), "utf8");
   // The small-viewport hide only applies when a dedicated mobile account entry

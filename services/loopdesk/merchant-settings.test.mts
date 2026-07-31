@@ -114,6 +114,96 @@ test("migrates a legacy /apps/megaska dashboard path to /apps/loopd2c", () => {
   assert.equal(merged.account.dashboardPath, "/apps/loopd2c/account");
 });
 
+test("account icon customization defaults to auto, no override", () => {
+  const settings = normalizeLoopDeskMerchantSettings({});
+  assert.equal(settings.account.iconStyle, "auto");
+  assert.equal(settings.account.iconSize, 0);
+  assert.equal(settings.account.iconCustomSvg, "");
+});
+
+test("account icon customization normalizes presets, size, and a safe custom SVG", () => {
+  const safeSvg =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 4h16v16H4z"></path></svg>';
+  const settings = normalizeLoopDeskMerchantSettings({
+    account: { iconStyle: "custom", iconSize: "28", iconCustomSvg: safeSvg },
+  });
+  assert.equal(settings.account.iconStyle, "custom");
+  assert.equal(settings.account.iconSize, 28);
+  assert.equal(settings.account.iconCustomSvg, safeSvg);
+
+  // Preset + auto size.
+  const preset = normalizeLoopDeskMerchantSettings({
+    account: { iconStyle: "filled" },
+  });
+  assert.equal(preset.account.iconStyle, "filled");
+  assert.equal(preset.account.iconSize, 0);
+
+  // Unknown style falls back to auto; size clamps into 16–40 (0 = auto).
+  assert.equal(
+    normalizeLoopDeskMerchantSettings({ account: { iconStyle: "rainbow" } }).account.iconStyle,
+    "auto",
+  );
+  assert.equal(normalizeLoopDeskMerchantSettings({ account: { iconSize: 100 } }).account.iconSize, 40);
+  assert.equal(normalizeLoopDeskMerchantSettings({ account: { iconSize: 5 } }).account.iconSize, 16);
+  assert.equal(normalizeLoopDeskMerchantSettings({ account: { iconSize: "abc" } }).account.iconSize, 0);
+
+  // The public runtime config carries the icon fields to the storefront.
+  assert.equal(toLoopDeskPublicRuntimeConfig(settings).account.iconStyle, "custom");
+  assert.equal(toLoopDeskPublicRuntimeConfig(settings).account.iconCustomSvg, safeSvg);
+});
+
+test("account icon custom SVG rejects unsafe markup", () => {
+  const unsafe = [
+    '<svg onclick="steal()"><path d="M0 0"></path></svg>',
+    '<svg><script>alert(1)</script><path d="M0 0"></path></svg>',
+    '<svg><image href="https://evil.example/x.png"></image></svg>',
+    '<svg><use href="#x"></use><path d="M0 0"></path></svg>',
+    '<svg><path d="M0 0" fill="url(#g)"></path></svg>',
+    '<svg><foreignObject><body>x</body></foreignObject></svg>',
+    "<div>not an svg</div>",
+  ];
+  for (const markup of unsafe) {
+    assert.equal(
+      normalizeLoopDeskMerchantSettings({ account: { iconStyle: "custom", iconCustomSvg: markup } })
+        .account.iconCustomSvg,
+      "",
+      `should reject: ${markup}`,
+    );
+  }
+});
+
+test("account icon validation flags unsafe/incomplete/invalid values", () => {
+  const unsafeErrors = validateLoopDeskMerchantSettingsPatch({
+    account: { iconCustomSvg: '<svg><script>x</script></svg>' },
+  });
+  assert.ok(unsafeErrors.some((e) => /Custom account icon must be/i.test(e)));
+
+  const missingSvgErrors = validateLoopDeskMerchantSettingsPatch({
+    account: { iconStyle: "custom", iconCustomSvg: "" },
+  });
+  assert.ok(missingSvgErrors.some((e) => /Add a valid custom SVG/i.test(e)));
+
+  const badSizeErrors = validateLoopDeskMerchantSettingsPatch({
+    account: { iconSize: 200 },
+  });
+  assert.ok(badSizeErrors.some((e) => /Account icon size must be/i.test(e)));
+
+  const badStyleErrors = validateLoopDeskMerchantSettingsPatch({
+    account: { iconStyle: "rainbow" },
+  });
+  assert.ok(badStyleErrors.some((e) => /Account icon style is invalid/i.test(e)));
+
+  // A safe SVG with a valid preset/size produces no icon errors.
+  const ok = validateLoopDeskMerchantSettingsPatch({
+    account: {
+      iconStyle: "custom",
+      iconSize: 24,
+      iconCustomSvg: '<svg viewBox="0 0 24 24"><path d="M4 4h16v16H4z"></path></svg>',
+    },
+  });
+  assert.equal(ok.filter((e) => /icon/i.test(e)).length, 0);
+});
+
 test("normalizes and merges a custom cart trigger selector", () => {
   const settings = normalizeLoopDeskMerchantSettings({
     cart: { customCartTriggerSelector: "#CartIcon, .site-header__cart-toggle" },
