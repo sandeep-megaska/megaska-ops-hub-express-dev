@@ -1,6 +1,6 @@
 {% if product %}
   {{ 'loopdesk-product-reviews.css' | asset_url | stylesheet_tag }}
-  <div id="loopdesk-product-reviews-root-{{ block.id }}" data-loopdesk-product-reviews data-product-id="{{ product.id }}" data-product-gid="gid://shopify/Product/{{ product.id }}" data-variant-id="{{ product.selected_or_first_available_variant.id }}" data-app-proxy-base="/apps/megaska" role="region" aria-label="Product reviews" {{ block.shopify_attributes }}></div>
+  <div id="loopdesk-product-reviews-root-{{ block.id }}" data-loopdesk-product-reviews data-product-id="{{ product.id }}" data-product-gid="gid://shopify/Product/{{ product.id }}" data-variant-id="{{ product.selected_or_first_available_variant.id }}" data-app-proxy-base="/apps/loopd2c" role="region" aria-label="Product reviews" {{ block.shopify_attributes }}></div>
   <script src="{{ 'loopdesk-product-reviews.js' | asset_url }}" defer></script>
 {% endif %}
 {% schema %}

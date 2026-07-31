@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 
 // Public build/version marker. Lets you positively confirm which deployment is
 // serving a request — staging vs production, and the exact commit — from the
-// browser console (reachable through the app proxy at /apps/megaska/api/version)
+// browser console (reachable through the app proxy at /apps/loopd2c/api/version)
 // or directly. It exposes only build metadata (commit / branch / env); no
 // secrets. Vercel injects these env vars at build time.
 export async function GET() {

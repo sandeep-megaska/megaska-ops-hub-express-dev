@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { appProxyHtmlError, requireEnabledModule, requireStorefrontShopFromAppProxy } from "../../../../services/shopify/app-proxy";
 
 const MODULE_KEY = "dashboard";
-const ASSET_BASE = "/apps/megaska/account/assets";
+const ASSET_BASE = "/apps/loopd2c/account/assets";
 
 // The assets are served immutable + long-lived (see the [asset] route), but at a
 // FIXED url — so a mutable, per-deploy file like loopdesk-customer-dashboard.js
@@ -22,8 +22,8 @@ export async function GET(request: NextRequest) {
     const shop = await requireStorefrontShopFromAppProxy(request);
     await requireEnabledModule(shop.id, MODULE_KEY);
     const config = {
-      apiUrl: "/apps/megaska/api/dashboard/summary",
-      dashboardUrl: "/apps/megaska/account",
+      apiUrl: "/apps/loopd2c/api/dashboard/summary",
+      dashboardUrl: "/apps/loopd2c/account",
       homeUrl: "/",
       supportUrl: "/pages/contact",
       continueShoppingUrl: "/collections/all",

@@ -75,7 +75,7 @@ export default function StoreCreditClient() {
 
   return (
     <main style={{ padding: 24, display: "grid", gap: 18, maxWidth: 920, margin: "0 auto", fontFamily: "system-ui, sans-serif" }}>
-      <Link href="/apps/megaska/account">← Back to dashboard</Link>
+      <Link href="/apps/loopd2c/account">← Back to dashboard</Link>
       <header>
         <h1>Store Credit</h1>
         <p>Store Credit can be used for future purchases once checkout redemption is enabled.</p>

@@ -103,7 +103,7 @@ export async function generateCheckoutRecoveryToken(params: {
 
   logRecovery("token_created", { shopId: params.shopId, tokenId: created.id, checkoutIntentId: created.checkoutIntentId, recoveryType: created.recoveryType, expiresAt: created.expiresAt });
 
-  return { token: rawToken, tokenId: created.id, recoveryUrl: `/apps/megaska/checkout/recover?t=${encodeURIComponent(rawToken)}`, expiresAt: created.expiresAt };
+  return { token: rawToken, tokenId: created.id, recoveryUrl: `/apps/loopd2c/checkout/recover?t=${encodeURIComponent(rawToken)}`, expiresAt: created.expiresAt };
 }
 
 export async function validateCheckoutRecoveryToken(params: { shopId: string; token: string }): Promise<CheckoutRecoveryContext> {

@@ -1,6 +1,6 @@
 (function () {
-  const FALLBACK_DASHBOARD_URL = "/apps/megaska/account";
-  const OBSOLETE_DASHBOARD_PATH = "/apps/megaska/dashboard";
+  const FALLBACK_DASHBOARD_URL = "/apps/loopd2c/account";
+  const OBSOLETE_DASHBOARD_PATH = "/apps/loopd2c/dashboard";
 
   function resolveDashboardUrl(rawValue) {
     const value = String(rawValue || "").trim();

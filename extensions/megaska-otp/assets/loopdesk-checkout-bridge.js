@@ -30,7 +30,7 @@ async function resolveExpressCheckoutReadiness() {
   var shop = window.MEGASKA_SHOP_DOMAIN || window.LoopDeskConfig && (window.LoopDeskConfig.shopDomain || window.LoopDeskConfig.shop);
   if (shop && typeof window.fetch === "function") {
     try {
-      var response = await window.fetch("/apps/megaska/api/runtime/config?shop=" + encodeURIComponent(shop) + "&_loopdesk_checkout_readiness=" + Date.now(), { credentials: "same-origin" });
+      var response = await window.fetch("/apps/loopd2c/api/runtime/config?shop=" + encodeURIComponent(shop) + "&_loopdesk_checkout_readiness=" + Date.now(), { credentials: "same-origin" });
       var payload = response.ok ? await response.json() : null;
       if (payload && payload.config) {
         window.LoopDeskConfig = Object.assign({}, window.LoopDeskConfig || {}, payload.config);

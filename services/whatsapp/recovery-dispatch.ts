@@ -2,7 +2,7 @@ import { createHash, randomBytes } from "crypto";
 import { prisma } from "../db/prisma";
 import { sendTemplateMessage, WHATSAPP_PROVIDER_META_CLOUD_API } from "./index";
 
-const RECOVERY_LINK_PREFIX = "/apps/megaska/checkout/recover?t=";
+const RECOVERY_LINK_PREFIX = "/apps/loopd2c/checkout/recover?t=";
 const RECOVERY_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const RECENT_RECOVERY_SUPPRESSION_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_LANGUAGE_CODE = "en";

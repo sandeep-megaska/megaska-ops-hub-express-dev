@@ -78,7 +78,7 @@
       return;
     }
     if (!shopDomain) return;
-    fetch("/apps/megaska/api/runtime/config?shop=" + encodeURIComponent(shopDomain) + "&_loopdesk_otp_runtime=" + Date.now(), { credentials: "same-origin" })
+    fetch("/apps/loopd2c/api/runtime/config?shop=" + encodeURIComponent(shopDomain) + "&_loopdesk_otp_runtime=" + Date.now(), { credentials: "same-origin" })
       .then(function (response) { return response.ok ? response.json() : null; })
       .then(function (payload) {
         if (!payload || !payload.config) return;
@@ -102,7 +102,7 @@
   <script src="{{ 'loopdesk-tier-progress.js' | asset_url }}" defer></script>
   <script src="{{ 'loopdesk-cart-drawer.js' | asset_url }}" defer></script>
 {% endif %}
-<script src="/apps/megaska/megaska-exchange-hook.js" defer></script>
+<script src="/apps/loopd2c/loopd2c-exchange-hook.js" defer></script>
 
 {% schema %}
 {

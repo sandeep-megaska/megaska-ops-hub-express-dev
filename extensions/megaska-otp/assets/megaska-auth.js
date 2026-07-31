@@ -1,5 +1,5 @@
 (function () {
-  const API_BASE = "/apps/megaska/api";
+  const API_BASE = "/apps/loopd2c/api";
   const SESSION_KEY = "megaska_session_token";
   let identityReplacementPending = false;
   const ACCOUNT_ENTRY_SELECTORS = [
@@ -1143,7 +1143,7 @@ const sku = order?.firstLineItemSku || order?.sku || "";
 
   async function initDashboardPage() {
     const pathname = String(window?.location?.pathname || "");
-    if (!(pathname.includes("/pages/megaska-dashboard") || pathname.includes("/apps/megaska/account"))) return;
+    if (!(pathname.includes("/pages/megaska-dashboard") || pathname.includes("/apps/loopd2c/account"))) return;
 
     const mountTarget =
       [

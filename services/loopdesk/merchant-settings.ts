@@ -762,7 +762,7 @@ export function normalizeLoopDeskMerchantSettings(
     },
     account: {
       dashboardRedirectEnabled: bool(account.dashboardRedirectEnabled, true),
-      dashboardPath: relativePath(account.dashboardPath, "/apps/megaska/account", 200),
+      dashboardPath: relativePath(account.dashboardPath, "/apps/loopd2c/account", 200),
       customTriggerSelector: text(account.customTriggerSelector, "", 500),
     },
     checkout: {

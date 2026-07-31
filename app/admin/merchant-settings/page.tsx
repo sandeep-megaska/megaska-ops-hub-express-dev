@@ -493,7 +493,7 @@ export default async function MerchantSettingsPage({
               label="Dashboard path"
               name="accountDashboardPath"
               defaultValue={settings.account.dashboardPath}
-              placeholder="/apps/megaska/account"
+              placeholder="/apps/loopd2c/account"
               help="Relative app-proxy path customers are sent to instead of /account."
             />
             <Field

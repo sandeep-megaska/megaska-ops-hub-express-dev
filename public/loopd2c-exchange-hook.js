@@ -1,5 +1,5 @@
 (function () {
-  const API_BASE_URL = String(window.MEGASKA_API_BASE || "/apps/megaska/api").replace(/\/$/, "");
+  const API_BASE_URL = String(window.MEGASKA_API_BASE || "/apps/loopd2c/api").replace(/\/$/, "");
   const SESSION_STORAGE_KEY = "megaska_session_token";
   const MODAL_ID = "mk-exchange-modal-layer";
   const DEBUG_CANCEL_FLAG = "megaska_debug_cancel";
