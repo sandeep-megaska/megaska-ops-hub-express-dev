@@ -631,7 +631,11 @@
 }
 
 @media (max-width: 1024px) {
-  #megaska-account-fallback-desktop {
+  /* Only suppress the injected header icon on mobile when a dedicated mobile
+     account entry exists (a native menu link or our injected menu item).
+     Themes that share one header icon row across breakpoints keep the icon
+     visible so the account control isn't lost on mobile. */
+  html.loopdesk-has-mobile-account-entry #megaska-account-fallback-desktop {
     display: none !important;
   }
 
