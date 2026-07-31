@@ -20,7 +20,7 @@ test("supports custom expiry and builds token-only review URL", () => {
   const expiresAt = new Date("2026-07-25T00:00:00.000Z");
   const token = createReviewRequestToken({ now, expiresAt });
   assert.equal(token.expiresAt, expiresAt);
-  const url = new URL(buildReviewSubmissionUrl({ baseUrl: "https://example.com/apps/megaska", token: token.token }));
+  const url = new URL(buildReviewSubmissionUrl({ baseUrl: "https://example.com/apps/loopd2c", token: token.token }));
   assert.equal(url.pathname, "/customer/reviews/write");
   assert.equal(url.searchParams.get("token"), token.token);
   assert.equal(url.searchParams.has("shopId"), false);

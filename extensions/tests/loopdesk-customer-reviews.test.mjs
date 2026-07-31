@@ -7,7 +7,7 @@ const form = readFileSync("extensions/megaska-otp/assets/loopdesk-product-review
 const formStyles = readFileSync("extensions/megaska-otp/assets/loopdesk-product-reviews.css", "utf8");
 const eligiblePurchasesRoute = readFileSync("app/api/reviews/submissions/eligible-purchases/route.ts", "utf8");
 const block = readFileSync("extensions/megaska-otp/blocks/loopdesk-customer-dashboard.liquid", "utf8");
-const expressCheckout = readFileSync("extensions/megaska-otp/assets/megaska-express-modal.js", "utf8");
+const expressCheckout = readFileSync("extensions/megaska-otp/assets/loopd2c-express-modal.js", "utf8");
 
 test("dashboard renders customer-safe review states and empty states", () => {
   for (const text of ["Pending moderation", "Published", "Not published", "You have not submitted any reviews yet.", "You have no delivered purchases awaiting review."]) assert.match(dashboard, new RegExp(text.replace(/[.]/g, "\\.")));

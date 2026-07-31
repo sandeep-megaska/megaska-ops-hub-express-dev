@@ -16,7 +16,7 @@ test("customer-safe review routes are available through the storefront proxy", (
 
 test("eligible purchase forwarding preserves product and variant query parameters", () => {
   const target = buildInternalApiUrl(
-    "https://example.test/apps/megaska/api/reviews/submissions/eligible-purchases?productId=123&variantId=456&signature=secret&hmac=secret",
+    "https://example.test/apps/loopd2c/api/reviews/submissions/eligible-purchases?productId=123&variantId=456&signature=secret&hmac=secret",
     "reviews/submissions/eligible-purchases",
     "shop.example.com",
   );

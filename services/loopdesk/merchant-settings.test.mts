@@ -60,7 +60,7 @@ test("normalizes merchant settings defaults", () => {
   assert.equal(settings.cart.drawerMode, "auto");
   assert.equal(settings.cart.customCartTriggerSelector, "");
   assert.equal(settings.account.dashboardRedirectEnabled, true);
-  assert.equal(settings.account.dashboardPath, "/apps/megaska/account");
+  assert.equal(settings.account.dashboardPath, "/apps/loopd2c/account");
   assert.equal(settings.account.customTriggerSelector, "");
   assert.equal(settings.integrations.razorpay.status, "not_configured");
 });
@@ -69,12 +69,12 @@ test("normalizes and merges account dashboard redirect settings", () => {
   const settings = normalizeLoopDeskMerchantSettings({
     account: {
       dashboardRedirectEnabled: false,
-      dashboardPath: "/apps/megaska/dashboard",
+      dashboardPath: "/apps/loopd2c/dashboard",
       customTriggerSelector: "#AccountIcon, .site-header__account-toggle",
     },
   });
   assert.equal(settings.account.dashboardRedirectEnabled, false);
-  assert.equal(settings.account.dashboardPath, "/apps/megaska/dashboard");
+  assert.equal(settings.account.dashboardPath, "/apps/loopd2c/dashboard");
   assert.equal(
     settings.account.customTriggerSelector,
     "#AccountIcon, .site-header__account-toggle",
@@ -83,14 +83,14 @@ test("normalizes and merges account dashboard redirect settings", () => {
     account: { dashboardRedirectEnabled: true },
   });
   assert.equal(merged.account.dashboardRedirectEnabled, true);
-  assert.equal(merged.account.dashboardPath, "/apps/megaska/dashboard");
+  assert.equal(merged.account.dashboardPath, "/apps/loopd2c/dashboard");
 });
 
 test("rejects an unsafe dashboard path and falls back to the default", () => {
   const settings = normalizeLoopDeskMerchantSettings({
     account: { dashboardPath: "//attacker.example/phish" },
   });
-  assert.equal(settings.account.dashboardPath, "/apps/megaska/account");
+  assert.equal(settings.account.dashboardPath, "/apps/loopd2c/account");
 });
 
 test("normalizes and merges a custom cart trigger selector", () => {

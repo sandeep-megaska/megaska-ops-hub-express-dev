@@ -6,10 +6,10 @@ import { NextResponse } from "next/server";
 const ROOT = process.cwd();
 const ASSETS_DIR = path.join(ROOT, "extensions", "megaska-otp", "assets");
 const ALLOWED: Record<string, string> = {
-  "megaska-auth.js": "application/javascript; charset=utf-8",
-  "megaska-otp.js": "application/javascript; charset=utf-8",
-  "megaska-otp.css": "text/css; charset=utf-8",
-  "megaska_logo.png": "image/png",
+  "loopd2c-auth.js": "application/javascript; charset=utf-8",
+  "loopd2c-otp.js": "application/javascript; charset=utf-8",
+  "loopd2c-otp.css": "text/css; charset=utf-8",
+  "loopd2c_logo.png": "image/png",
   "loopdesk-customer-dashboard.js": "application/javascript; charset=utf-8",
   "loopdesk-customer-dashboard.css": "text/css; charset=utf-8",
   "loopdesk-account-launcher.js": "application/javascript; charset=utf-8",

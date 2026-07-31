@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 const source = readFileSync(new URL("../assets/megaska-express-checkout.js", import.meta.url), "utf8");
-const modalSource = readFileSync(new URL("../extensions/megaska-otp/assets/megaska-express-modal.js", import.meta.url), "utf8");
+const modalSource = readFileSync(new URL("../extensions/megaska-otp/assets/loopd2c-express-modal.js", import.meta.url), "utf8");
 
 test("summary uses the additive pricing view and Shopify total without local total arithmetic", () => {
   assert.match(source, /const current = status === "CURRENT" && pricing\?\.authoritative/);

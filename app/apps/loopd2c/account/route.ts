@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Account</title>
-  <link rel="stylesheet" href="${asset("megaska-otp.css")}">
+  <link rel="stylesheet" href="${asset("loopd2c-otp.css")}">
   <link rel="stylesheet" href="${asset("loopdesk-customer-dashboard.css")}">
 </head>
 <body>
@@ -48,8 +48,8 @@ export async function GET(request: NextRequest) {
   </main>
   <script type="application/json" id="loopdesk-customer-dashboard-config">${escapeJson(config)}</script>
   <script>window.MEGASKA_SHOP_DOMAIN=${escapeJson(shop.shopDomain)};</script>
-  <script src="${asset("megaska-auth.js")}" defer></script>
-  <script src="${asset("megaska-otp.js")}" defer></script>
+  <script src="${asset("loopd2c-auth.js")}" defer></script>
+  <script src="${asset("loopd2c-otp.js")}" defer></script>
   <script src="${asset("loopdesk-customer-dashboard.js")}" defer></script>
 </body>
 </html>`;
