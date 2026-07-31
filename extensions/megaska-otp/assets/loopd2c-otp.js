@@ -3591,18 +3591,35 @@ function ensureAccountEntryFallbacks() {
     ensureDesktopAccountFallback();
   }
 
+  // Track whether a dedicated mobile account entry exists (a native menu link
+  // or our injected menu item). Themes with a separate mobile menu get that
+  // entry, and the desktop header icon is hidden on mobile to avoid a
+  // duplicate. Themes whose header icon row is shared across breakpoints (no
+  // matching mobile menu container, e.g. custom mk-header layouts) have no
+  // separate entry, so the injected header icon must stay visible on mobile
+  // instead of being suppressed by the small-viewport hide rule.
+  let hasMobileAccountEntry = false;
   if (!hasVisibleNativeMobileMenuAccountEntry()) {
     const mobileContainer = getMobileAccountContainer();
-    if (mobileContainer && !document.getElementById(ACCOUNT_FALLBACK_MOBILE_ID)) {
-      insertMobileFallbackInMenu(mobileContainer, createMobileAccountFallback());
-      console.log("[Megaska OTP] mobile account fallback inserted");
+    if (mobileContainer) {
+      if (!document.getElementById(ACCOUNT_FALLBACK_MOBILE_ID)) {
+        insertMobileFallbackInMenu(mobileContainer, createMobileAccountFallback());
+        console.log("[Megaska OTP] mobile account fallback inserted");
+      }
+      hasMobileAccountEntry = true;
     }
   } else {
     const existingMobileFallback = document.getElementById(ACCOUNT_FALLBACK_MOBILE_ID);
     if (existingMobileFallback) {
       existingMobileFallback.remove();
     }
+    hasMobileAccountEntry = true;
   }
+
+  document.documentElement.classList.toggle(
+    "loopdesk-has-mobile-account-entry",
+    hasMobileAccountEntry,
+  );
 }
 
 function ensureDesktopAccountFallback() {

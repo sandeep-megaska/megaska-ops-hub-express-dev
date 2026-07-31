@@ -142,6 +142,24 @@ test("adapter resolution and reconciliation cover all structural strategies", ()
 test("neutral fallback CSS is isolated from theme-native account controls", () => {
   const css = readFileSync(new URL("../megaska-otp/assets/loopd2c-otp.css", import.meta.url), "utf8");
   assert.match(css, /\.megaska-account-fallback--desktop\[data-loopdesk-account-control-source="loopdesk-default"\]/);
-  assert.match(css, /#megaska-account-fallback-desktop\s*\{\s*display: none !important/);
   assert.doesNotMatch(css, /\[data-loopdesk-account-control-source="native-hidden-clone"\][^{]*\{[^}]*(?:width|background|color):/s);
+});
+
+test("mobile hide of the header account icon is gated on a real mobile account entry", () => {
+  const css = readFileSync(new URL("../megaska-otp/assets/loopd2c-otp.css", import.meta.url), "utf8");
+  // The small-viewport hide only applies when a dedicated mobile account entry
+  // exists; themes that share one header icon row keep the icon on mobile.
+  assert.match(
+    css,
+    /loopdesk-has-mobile-account-entry\s+#megaska-account-fallback-desktop\s*\{\s*display: none !important/,
+  );
+  // It must NOT be blanket-hidden below 1024px regardless of a mobile entry.
+  assert.doesNotMatch(css, /@media[^{]*\{\s*#megaska-account-fallback-desktop\s*\{\s*display: none/s);
+
+  // The reconciler toggles the gating class based on whether a mobile account
+  // entry is present.
+  const reconcile = functionSource("ensureAccountEntryFallbacks", "ensureDesktopAccountFallback");
+  assert.match(reconcile, /let hasMobileAccountEntry = false/);
+  assert.match(reconcile, /hasMobileAccountEntry = true/);
+  assert.match(reconcile, /classList\.toggle\(\s*"loopdesk-has-mobile-account-entry",\s*hasMobileAccountEntry/s);
 });
