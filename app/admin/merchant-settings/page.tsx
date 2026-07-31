@@ -544,18 +544,18 @@ export default async function MerchantSettingsPage({
         </section>
 
         <section id="otp-provider" className={`${cardClass} grid gap-5`}>
-          <SectionHeader title="OTP provider" description="LoopDesk currently sends OTPs using the platform-managed Twilio Verify service. Merchant-owned Twilio and MSG91 connections can be configured after provider verification support is enabled." />
+          <SectionHeader title="OTP provider" description="LoopD2C currently sends OTPs using the platform-managed Twilio Verify service. Merchant-owned Twilio and MSG91 connections can be configured after provider verification support is enabled." />
           <div className="mk-alert mk-alert-info">
-            These settings now control whether LoopDesk uses the platform-managed Twilio service for this shop. Merchant-owned providers remain unavailable until secure credential verification is implemented.
+            These settings now control whether LoopD2C uses the platform-managed Twilio service for this shop. Merchant-owned providers remain unavailable until secure credential verification is implemented.
           </div>
           <div className="grid gap-3 md:grid-cols-2">
             <NotificationCheck label="Enable OTP authentication" name="otpEnabled" defaultChecked={otpSettings.otpEnabled} help="When disabled, OTP requests are unavailable. This does not bypass authentication requirements." />
-            <NotificationCheck label="Allow platform Twilio fallback" name="otpAllowPlatformFallback" defaultChecked={otpSettings.allowPlatformFallback} help="Allows LoopDesk managed Twilio to handle OTPs when a merchant-owned provider is unavailable." />
+            <NotificationCheck label="Allow platform Twilio fallback" name="otpAllowPlatformFallback" defaultChecked={otpSettings.allowPlatformFallback} help="Allows LoopD2C managed Twilio to handle OTPs when a merchant-owned provider is unavailable." />
           </div>
           <label className="mk-field">
             <span className="mk-label">Preferred OTP provider</span>
             <select className="mk-select" name="otpProviderMode" defaultValue={otpSettings.providerMode}>
-              <option value="PLATFORM_TWILIO">LoopDesk managed Twilio</option>
+              <option value="PLATFORM_TWILIO">LoopD2C managed Twilio</option>
               <option value="MERCHANT_TWILIO" disabled>Use my Twilio account — coming after verification support</option>
               <option value="MERCHANT_MSG91" disabled>Use my MSG91 account — coming after approval support</option>
             </select>
