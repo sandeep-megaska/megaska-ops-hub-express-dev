@@ -160,59 +160,61 @@ export function GstTemplateAdmin() {
 
   return (
     <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-      <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm space-y-4">
-        <h2 className="text-base font-semibold text-gray-900">GST Invoice Template</h2>
-        <p className="text-sm text-gray-600">Choose an app-level preset and safe field visibility options. Arbitrary HTML editing is not supported.</p>
+      <div className="mk-card space-y-5">
+        <div>
+          <h2 className="mk-section-title">GST Invoice Template</h2>
+          <p className="mk-section-subtitle">Choose an app-level preset and safe field visibility options. Arbitrary HTML editing is not supported.</p>
+        </div>
 
         <div className="space-y-3">
-          <h3 className="text-sm font-semibold">Preset</h3>
+          <h3 className="mk-section-title" style={{ marginBottom: 0 }}>Preset</h3>
           <div className="grid gap-3 md:grid-cols-3">
             {PRESETS.map((preset) => (
-              <button key={preset.value} type="button" disabled={loading} onClick={() => void saveTemplateConfig(PRESET_DEFAULTS[preset.value])} className={`rounded-xl border p-3 text-left text-sm ${invoiceTemplate.preset === preset.value ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}>
+              <button key={preset.value} type="button" disabled={loading} onClick={() => void saveTemplateConfig(PRESET_DEFAULTS[preset.value])} className={`rounded-xl border p-3 text-left text-sm transition ${invoiceTemplate.preset === preset.value ? 'border-[color:var(--primary)] bg-[color:var(--primary-soft)]' : 'border-[color:var(--line)] hover:border-[color:var(--line-strong)]'}`}>
                 <span className="font-semibold">{preset.label}</span>
-                <span className="mt-1 block text-xs text-gray-600">{preset.description}</span>
+                <span className="mt-1 block text-xs text-[color:var(--muted)]">{preset.description}</span>
               </button>
             ))}
           </div>
         </div>
 
         <div className="space-y-3">
-          <h3 className="text-sm font-semibold">Controlled fields</h3>
+          <h3 className="mk-section-title" style={{ marginBottom: 0 }}>Controlled fields</h3>
           <div className="grid gap-2 md:grid-cols-2">
             {FIELD_OPTIONS.map((option) => (
-              <label key={option.key} className="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2 text-sm">
+              <label key={option.key} className="flex items-center justify-between rounded-lg border border-[color:var(--line)] px-3 py-2 text-sm">
                 <span>{option.label}{option.locked ? ' (required)' : ''}</span>
-                <input type="checkbox" checked={Boolean(invoiceTemplate[option.key])} disabled={loading || option.locked} onChange={(event) => void saveTemplateConfig({ ...invoiceTemplate, [option.key]: event.target.checked })} />
+                <input type="checkbox" className="h-4 w-4 accent-[color:var(--primary)]" checked={Boolean(invoiceTemplate[option.key])} disabled={loading || option.locked} onChange={(event) => void saveTemplateConfig({ ...invoiceTemplate, [option.key]: event.target.checked })} />
               </label>
             ))}
           </div>
         </div>
 
-        <p className="text-sm text-gray-600">Upload header/footer logos for GST invoices (PNG, JPG, WEBP, AVIF, SVG up to 2MB).</p>
+        <p className="mk-section-subtitle">Upload header/footer logos for GST invoices (PNG, JPG, WEBP, AVIF, SVG up to 2MB).</p>
 
         <div className="grid gap-5 md:grid-cols-2">
           {(['header', 'footer'] as const).map((slot) => (
-            <div key={slot} className="rounded-xl border border-gray-200 p-4 space-y-3">
-              <h3 className="text-sm font-semibold capitalize">{slot} logo</h3>
+            <div key={slot} className="rounded-xl border border-[color:var(--line)] p-4 space-y-3">
+              <h3 className="mk-section-title capitalize" style={{ marginBottom: 0 }}>{slot} logo</h3>
               <input type="file" accept="image/png,image/jpeg,image/webp,image/avif,image/svg+xml" onChange={(e) => void uploadLogo(slot, e.target.files?.[0] || null)} disabled={loading} className="text-xs" />
-              <button type="button" className="rounded-lg border px-3 py-1.5 text-xs" onClick={() => void clearLogo(slot)} disabled={loading}>Reset</button>
+              <button type="button" className="mk-btn mk-btn-sm" onClick={() => void clearLogo(slot)} disabled={loading}>Reset</button>
             </div>
           ))}
         </div>
 
-        {message ? <p className="text-sm text-green-700">{message}</p> : null}
-        {error ? <p className="text-sm text-red-700">{error}</p> : null}
+        {message ? <div className="mk-alert mk-alert-success">{message}</div> : null}
+        {error ? <div className="mk-alert mk-alert-error">{error}</div> : null}
       </div>
 
-      <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-        <h2 className="text-base font-semibold text-gray-900 mb-4">Preview</h2>
+      <div className="mk-card">
+        <h2 className="mk-section-title">Preview</h2>
         <div className="space-y-4">
           <div>
-            <div className="text-xs text-gray-500 mb-1">Header</div>
+            <div className="mk-help mb-1">Header</div>
             <Image src={headerSrc} alt="Header logo preview" width={260} height={60} className="h-16 w-auto object-contain border rounded bg-white" />
           </div>
           <div>
-            <div className="text-xs text-gray-500 mb-1">Footer</div>
+            <div className="mk-help mb-1">Footer</div>
             <Image src={footerSrc} alt="Footer logo preview" width={180} height={48} className="h-12 w-auto object-contain border rounded bg-white" />
           </div>
         </div>
