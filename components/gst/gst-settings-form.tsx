@@ -2,7 +2,6 @@
 
 import { useEffect, useState, type FormEvent } from 'react'
 import { createOrUpdateGstSettings, getGstSettings } from '../../lib/gst-client'
-import { GstResponseViewer } from './gst-response-viewer'
 import {
   buildFormattedDocumentNumber,
   counterPeriodLabel,
@@ -168,13 +167,11 @@ function DocFormatEditor({
   }
 
   return (
-    <div className="rounded-xl border border-gray-200 p-4 space-y-3">
+    <div className="rounded-xl border border-[color:var(--line)] p-4 space-y-3">
       <div className="flex items-center justify-between">
-        <h4 className="text-sm font-semibold text-gray-900">{DOC_LABELS[docKey]}</h4>
+        <h4 className="mk-section-title" style={{ marginBottom: 0 }}>{DOC_LABELS[docKey]}</h4>
         <span
-          className={`rounded-md px-2 py-1 font-mono text-xs ${
-            overLimit ? 'bg-red-50 text-red-700' : 'bg-gray-100 text-gray-700'
-          }`}
+          className={`mk-badge ${overLimit ? 'mk-badge-danger' : 'mk-badge-neutral'} font-mono`}
           title="First number for the current period"
         >
           {first || '—'}
@@ -182,56 +179,56 @@ function DocFormatEditor({
       </div>
 
       <div className="grid gap-3 md:grid-cols-3">
-        <label className="text-xs text-gray-600">
-          Prefix
+        <div className="mk-field">
+          <label className="mk-label">Prefix</label>
           <input
-            className="mt-1 w-full rounded-lg border border-gray-300 px-2.5 py-2 text-sm uppercase"
+            className="mk-input uppercase"
             value={format.prefix}
             onChange={(e) => set({ prefix: e.target.value.toUpperCase() })}
           />
-        </label>
-        <label className="text-xs text-gray-600">
-          Separator
+        </div>
+        <div className="mk-field">
+          <label className="mk-label">Separator</label>
           <input
-            className="mt-1 w-full rounded-lg border border-gray-300 px-2.5 py-2 text-sm"
+            className="mk-input"
             value={format.separator}
             maxLength={1}
             onChange={(e) => set({ separator: e.target.value })}
           />
-        </label>
-        <label className="text-xs text-gray-600">
-          Suffix
+        </div>
+        <div className="mk-field">
+          <label className="mk-label">Suffix</label>
           <input
-            className="mt-1 w-full rounded-lg border border-gray-300 px-2.5 py-2 text-sm uppercase"
+            className="mk-input uppercase"
             value={format.suffix}
             onChange={(e) => set({ suffix: e.target.value.toUpperCase() })}
           />
-        </label>
-        <label className="text-xs text-gray-600">
-          Start number
+        </div>
+        <div className="mk-field">
+          <label className="mk-label">Start number</label>
           <input
             type="number"
             min={1}
-            className="mt-1 w-full rounded-lg border border-gray-300 px-2.5 py-2 text-sm"
+            className="mk-input"
             value={format.startNumber}
             onChange={(e) => set({ startNumber: Math.max(1, Math.floor(Number(e.target.value) || 1)) })}
           />
-        </label>
-        <label className="text-xs text-gray-600">
-          Min digits (padding)
+        </div>
+        <div className="mk-field">
+          <label className="mk-label">Min digits (padding)</label>
           <input
             type="number"
             min={0}
             max={12}
-            className="mt-1 w-full rounded-lg border border-gray-300 px-2.5 py-2 text-sm"
+            className="mk-input"
             value={format.minDigits}
             onChange={(e) => set({ minDigits: Math.max(0, Math.min(12, Math.floor(Number(e.target.value) || 0))) })}
           />
-        </label>
-        <label className="text-xs text-gray-600">
-          Date segment
+        </div>
+        <div className="mk-field">
+          <label className="mk-label">Date segment</label>
           <select
-            className="mt-1 w-full rounded-lg border border-gray-300 px-2.5 py-2 text-sm"
+            className="mk-select"
             value={format.yearDisplay}
             onChange={(e) => set({ yearDisplay: e.target.value as DocNumberFormat['yearDisplay'] })}
           >
@@ -241,11 +238,11 @@ function DocFormatEditor({
               </option>
             ))}
           </select>
-        </label>
-        <label className="text-xs text-gray-600">
-          Restart sequence
+        </div>
+        <div className="mk-field">
+          <label className="mk-label">Restart sequence</label>
           <select
-            className="mt-1 w-full rounded-lg border border-gray-300 px-2.5 py-2 text-sm"
+            className="mk-select"
             value={format.resetPeriod}
             onChange={(e) => {
               const resetPeriod = e.target.value as GstResetPeriod
@@ -263,34 +260,34 @@ function DocFormatEditor({
               </option>
             ))}
           </select>
-        </label>
-        <label className="text-xs text-gray-600">
-          Continue from (one-time)
+        </div>
+        <div className="mk-field">
+          <label className="mk-label">Continue from (one-time)</label>
           <input
             type="number"
             min={1}
             placeholder="next number"
-            className="mt-1 w-full rounded-lg border border-gray-300 px-2.5 py-2 text-sm"
+            className="mk-input"
             value={format.migration ? format.migration.nextNumber : ''}
             onChange={(e) => setContinueFrom(e.target.value)}
           />
-        </label>
+        </div>
       </div>
 
-      <p className="text-xs text-gray-500">
-        First number this period: <span className="font-mono text-gray-700">{first || '—'}</span>
+      <p className="mk-help">
+        First number this period: <span className="font-mono text-[color:var(--text)]">{first || '—'}</span>
         {format.resetPeriod !== 'CONTINUOUS' && (
           <>
-            {' '}· current bucket <span className="font-mono text-gray-700">{periodLabel}</span>
+            {' '}· current bucket <span className="font-mono text-[color:var(--text)]">{periodLabel}</span>
           </>
         )}
         {migrationActive && (
-          <span className="ml-1 text-emerald-700">· continuing from your last number (one-time)</span>
+          <span className="ml-1 text-[color:var(--success-text)]">· continuing from your last number (one-time)</span>
         )}
-        {overLimit && <span className="ml-2 text-red-600">Exceeds the 16-character GST limit</span>}
+        {overLimit && <span className="ml-2 text-[color:var(--danger-text)]">Exceeds the 16-character GST limit</span>}
       </p>
       {format.migration && !migrationActive && (
-        <p className="text-xs text-amber-600">
+        <p className="text-xs text-[color:var(--warning-text)]">
           The “continue from” value is anchored to period {format.migration.periodLabel}, which isn’t the current
           period ({currentPeriod}). It will only apply when that period is first numbered.
         </p>
@@ -366,11 +363,13 @@ export function GstSettingsForm() {
   }
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-      <form onSubmit={onSubmit} className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm space-y-5">
-        <h2 className="text-base font-semibold text-gray-900">GST Settings</h2>
+    <div className="mk-page">
+      {error ? <div className="mk-alert mk-alert-error">{error}</div> : null}
 
-        <label className="flex items-start gap-3 rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
+      <form onSubmit={onSubmit} className="mk-card space-y-5">
+        <h2 className="mk-section-title">GST Settings</h2>
+
+        <label className="mk-check items-start rounded-xl border border-[color:var(--line)] bg-[color:var(--panel-2)] p-3">
           <input
             type="checkbox"
             className="mt-0.5"
@@ -378,8 +377,8 @@ export function GstSettingsForm() {
             onChange={(e) => setForm((p) => ({ ...p, gstModuleEnabled: e.target.checked }))}
           />
           <span>
-            <span className="font-medium text-gray-900">Enable GST invoicing in this app</span>
-            <span className="block text-xs text-gray-500">
+            <span className="font-medium text-[color:var(--text)]">Enable GST invoicing in this app</span>
+            <span className="block mk-help">
               Turn this off if another GST app already numbers your invoices — this app will then stop
               auto-generating GST documents so your invoice sequence stays with the other tool.
             </span>
@@ -387,20 +386,35 @@ export function GstSettingsForm() {
         </label>
 
         <div className="grid gap-3 md:grid-cols-2">
-          <input className="rounded-xl border border-gray-300 px-3 py-2.5 text-sm" placeholder="Legal Name" value={form.legalName} onChange={(e) => setForm((p) => ({ ...p, legalName: e.target.value }))} />
-          <input className="rounded-xl border border-gray-300 px-3 py-2.5 text-sm" placeholder="Trade Name" value={form.tradeName} onChange={(e) => setForm((p) => ({ ...p, tradeName: e.target.value }))} />
-          <input className="rounded-xl border border-gray-300 px-3 py-2.5 text-sm uppercase" placeholder="GSTIN" value={form.gstin} onChange={(e) => setForm((p) => ({ ...p, gstin: e.target.value.toUpperCase() }))} />
-          <input className="rounded-xl border border-gray-300 px-3 py-2.5 text-sm uppercase" placeholder="PAN" value={form.pan} onChange={(e) => setForm((p) => ({ ...p, pan: e.target.value.toUpperCase() }))} />
-          <input className="rounded-xl border border-gray-300 px-3 py-2.5 text-sm" placeholder="State Code" value={form.stateCode} onChange={(e) => setForm((p) => ({ ...p, stateCode: e.target.value }))} />
+          <div className="mk-field">
+            <label className="mk-label">Legal Name</label>
+            <input className="mk-input" placeholder="Legal Name" value={form.legalName} onChange={(e) => setForm((p) => ({ ...p, legalName: e.target.value }))} />
+          </div>
+          <div className="mk-field">
+            <label className="mk-label">Trade Name</label>
+            <input className="mk-input" placeholder="Trade Name" value={form.tradeName} onChange={(e) => setForm((p) => ({ ...p, tradeName: e.target.value }))} />
+          </div>
+          <div className="mk-field">
+            <label className="mk-label">GSTIN</label>
+            <input className="mk-input uppercase" placeholder="GSTIN" value={form.gstin} onChange={(e) => setForm((p) => ({ ...p, gstin: e.target.value.toUpperCase() }))} />
+          </div>
+          <div className="mk-field">
+            <label className="mk-label">PAN</label>
+            <input className="mk-input uppercase" placeholder="PAN" value={form.pan} onChange={(e) => setForm((p) => ({ ...p, pan: e.target.value.toUpperCase() }))} />
+          </div>
+          <div className="mk-field">
+            <label className="mk-label">State Code</label>
+            <input className="mk-input" placeholder="State Code" value={form.stateCode} onChange={(e) => setForm((p) => ({ ...p, stateCode: e.target.value }))} />
+          </div>
         </div>
 
         <div className="space-y-3">
           <div>
-            <h3 className="text-sm font-semibold text-gray-900">Document Numbering</h3>
-            <p className="text-xs text-gray-500">
-              Set the format, start number and reset cycle for each document type. <span className="font-medium text-gray-700">Start number</span> is
+            <h3 className="mk-section-title" style={{ marginBottom: 0 }}>Document Numbering</h3>
+            <p className="mk-help">
+              Set the format, start number and reset cycle for each document type. <span className="font-medium text-[color:var(--text)]">Start number</span> is
               what each new period resets to. To migrate from another GST app without a gap, put the
-              <span className="font-medium text-gray-700"> next</span> number to issue in <span className="font-medium text-gray-700">Continue from</span> —
+              <span className="font-medium text-[color:var(--text)]"> next</span> number to issue in <span className="font-medium text-[color:var(--text)]">Continue from</span> —
               that applies once, to the current period only, and later periods still reset to the start number.
               Keep the composed number ≤ 16 characters (GST limit).
             </p>
@@ -410,7 +424,7 @@ export function GstSettingsForm() {
           <DocFormatEditor docKey="debitNote" format={form.numbering.debitNote} onChange={(next) => updateDoc('debitNote', next)} />
         </div>
 
-        <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+        <label className="mk-check">
           <input
             type="checkbox"
             checked={form.priceIncludesTax}
@@ -419,7 +433,7 @@ export function GstSettingsForm() {
           Selling price includes tax (default true)
         </label>
 
-        <label className="flex items-start gap-2 text-sm text-gray-700">
+        <label className="mk-check items-start">
           <input
             type="checkbox"
             className="mt-0.5"
@@ -428,18 +442,16 @@ export function GstSettingsForm() {
           />
           <span>
             Automatically generate a GST invoice when an order is created
-            <span className="block text-xs text-gray-500">
+            <span className="block mk-help">
               Skips orders with unmapped SKUs or missing GST details — those stay available for manual generation on the Orders page.
             </span>
           </span>
         </label>
 
-        <button type="submit" className="rounded-xl bg-gray-900 px-5 py-2.5 text-sm text-white" disabled={loading}>
+        <button type="submit" className="mk-btn mk-btn-primary" disabled={loading}>
           {loading ? 'Saving...' : 'Save GST Settings'}
         </button>
       </form>
-
-      <GstResponseViewer title="Settings API Response" data={result} error={error} />
     </div>
   )
 }

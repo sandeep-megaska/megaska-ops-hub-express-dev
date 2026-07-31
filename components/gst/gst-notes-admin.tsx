@@ -123,66 +123,68 @@ export function GstNotesAdmin() {
   }
 
   return (
-    <div className="space-y-6">
-      <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-        <h2 className="text-base font-semibold text-gray-900">Create a Credit / Debit Note</h2>
-        <p className="mt-1 text-sm text-gray-600">
-          Pick a tax invoice below. The note is generated as a full reversal that inherits the
-          invoice&apos;s exact HSN, GST rate, and CGST/SGST/IGST split.
-        </p>
+    <div className="mk-page">
+      <section className="mk-card space-y-4">
+        <div>
+          <h2 className="mk-section-title">Create a Credit / Debit Note</h2>
+          <p className="mk-section-subtitle">
+            Pick a tax invoice below. The note is generated as a full reversal that inherits the
+            invoice&apos;s exact HSN, GST rate, and CGST/SGST/IGST split.
+          </p>
+        </div>
 
-        <label className="mt-4 block text-sm text-gray-700">
-          <span className="mb-1 block">Reason (optional, stored on the note)</span>
+        <div className="mk-field">
+          <label className="mk-label">Reason (optional, stored on the note)</label>
           <input
             type="text"
-            className="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm"
+            className="mk-input"
             placeholder="e.g. Customer return - order #1234"
             value={reason}
             onChange={(e) => setReason(e.target.value)}
           />
-        </label>
+        </div>
 
-        {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
-        {success ? <p className="mt-4 text-sm text-green-700">{success}</p> : null}
+        {error ? <div className="mk-alert mk-alert-error">{error}</div> : null}
+        {success ? <div className="mk-alert mk-alert-success">{success}</div> : null}
 
-        <div className="mt-4 overflow-x-auto">
-          <table className="min-w-full text-sm">
+        <div className="mk-table-wrap">
+          <table className="mk-table">
             <thead>
-              <tr className="text-left text-gray-500">
-                <th className="py-2 pr-4">Invoice</th>
-                <th className="py-2 pr-4">Date</th>
-                <th className="py-2 pr-4">Order</th>
-                <th className="py-2 pr-4">Total</th>
-                <th className="py-2 pr-4">Status</th>
-                <th className="py-2 pr-4">Actions</th>
+              <tr>
+                <th>Invoice</th>
+                <th>Date</th>
+                <th>Order</th>
+                <th>Total</th>
+                <th>Status</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td className="py-3 text-gray-500" colSpan={6}>
+                  <td className="text-[color:var(--muted)]" colSpan={6}>
                     Loading invoices…
                   </td>
                 </tr>
               ) : invoices.length === 0 ? (
                 <tr>
-                  <td className="py-3 text-gray-500" colSpan={6}>
+                  <td className="text-[color:var(--muted)]" colSpan={6}>
                     No tax invoices found. Generate invoices from the Orders tab first.
                   </td>
                 </tr>
               ) : (
                 invoices.map((invoice) => (
-                  <tr key={invoice.id} className="border-t border-gray-100">
-                    <td className="py-2 pr-4 font-medium text-gray-900">{invoice.documentNumber}</td>
-                    <td className="py-2 pr-4 text-gray-700">{formatDate(invoice.documentDate)}</td>
-                    <td className="py-2 pr-4 text-gray-700">{invoice.sourceOrderNumber || '—'}</td>
-                    <td className="py-2 pr-4 text-gray-700">{formatAmount(invoice.totalAmount)}</td>
-                    <td className="py-2 pr-4 text-gray-700">{invoice.status}</td>
-                    <td className="py-2 pr-4">
-                      <div className="flex gap-2">
+                  <tr key={invoice.id}>
+                    <td className="font-medium">{invoice.documentNumber}</td>
+                    <td>{formatDate(invoice.documentDate)}</td>
+                    <td>{invoice.sourceOrderNumber || '—'}</td>
+                    <td>{formatAmount(invoice.totalAmount)}</td>
+                    <td>{invoice.status}</td>
+                    <td>
+                      <div className="mk-header-actions">
                         <button
                           type="button"
-                          className="rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-60"
+                          className="mk-btn mk-btn-sm mk-btn-primary"
                           disabled={busyId === invoice.id}
                           onClick={() => void onCreateNote(invoice, 'CREDIT_NOTE')}
                         >
@@ -190,7 +192,7 @@ export function GstNotesAdmin() {
                         </button>
                         <button
                           type="button"
-                          className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-800 disabled:opacity-60"
+                          className="mk-btn mk-btn-sm"
                           disabled={busyId === invoice.id}
                           onClick={() => void onCreateNote(invoice, 'DEBIT_NOTE')}
                         >
@@ -206,51 +208,51 @@ export function GstNotesAdmin() {
         </div>
       </section>
 
-      <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-        <h2 className="text-base font-semibold text-gray-900">Recent Credit / Debit Notes</h2>
-        <div className="mt-4 overflow-x-auto">
-          <table className="min-w-full text-sm">
+      <section className="mk-card space-y-4">
+        <h2 className="mk-section-title">Recent Credit / Debit Notes</h2>
+        <div className="mk-table-wrap">
+          <table className="mk-table">
             <thead>
-              <tr className="text-left text-gray-500">
-                <th className="py-2 pr-4">Note</th>
-                <th className="py-2 pr-4">Type</th>
-                <th className="py-2 pr-4">Date</th>
-                <th className="py-2 pr-4">Order</th>
-                <th className="py-2 pr-4">Total</th>
-                <th className="py-2 pr-4">Status</th>
-                <th className="py-2 pr-4">View</th>
+              <tr>
+                <th>Note</th>
+                <th>Type</th>
+                <th>Date</th>
+                <th>Order</th>
+                <th>Total</th>
+                <th>Status</th>
+                <th>View</th>
               </tr>
             </thead>
             <tbody>
               {notes.length === 0 ? (
                 <tr>
-                  <td className="py-3 text-gray-500" colSpan={7}>
+                  <td className="text-[color:var(--muted)]" colSpan={7}>
                     No credit or debit notes yet.
                   </td>
                 </tr>
               ) : (
                 notes.map((note) => (
-                  <tr key={note.id} className="border-t border-gray-100">
-                    <td className="py-2 pr-4 font-medium text-gray-900">{note.documentNumber}</td>
-                    <td className="py-2 pr-4 text-gray-700">
+                  <tr key={note.id}>
+                    <td className="font-medium">{note.documentNumber}</td>
+                    <td>
                       {note.documentType === 'CREDIT_NOTE' ? 'Credit Note' : 'Debit Note'}
                     </td>
-                    <td className="py-2 pr-4 text-gray-700">{formatDate(note.documentDate)}</td>
-                    <td className="py-2 pr-4 text-gray-700">{note.sourceOrderNumber || '—'}</td>
-                    <td className="py-2 pr-4 text-gray-700">{formatAmount(note.totalAmount)}</td>
-                    <td className="py-2 pr-4 text-gray-700">{note.status}</td>
-                    <td className="py-2 pr-4">
-                      <div className="flex gap-3">
+                    <td>{formatDate(note.documentDate)}</td>
+                    <td>{note.sourceOrderNumber || '—'}</td>
+                    <td>{formatAmount(note.totalAmount)}</td>
+                    <td>{note.status}</td>
+                    <td>
+                      <div className="mk-header-actions">
                         <button
                           type="button"
-                          className="text-blue-600 hover:underline"
+                          className="mk-btn mk-btn-sm mk-btn-ghost"
                           onClick={() => openNoteDocument(note.id, 'html')}
                         >
                           View
                         </button>
                         <button
                           type="button"
-                          className="text-blue-600 hover:underline"
+                          className="mk-btn mk-btn-sm mk-btn-ghost"
                           onClick={() => openNoteDocument(note.id, 'pdf')}
                         >
                           PDF

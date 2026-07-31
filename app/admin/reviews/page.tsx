@@ -3,7 +3,7 @@ import { formatAdminShopResolutionError, resolveAdminShopFromSearchParams } from
 import ReviewDisplaySettingsClient from "./ReviewDisplaySettingsClient";
 import ReviewModerationClient from "./ReviewModerationClient";
 import ReviewImportExportClient from "./ReviewImportExportClient";
-export default async function AdminReviewsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }){const params=await searchParams;const resolved=await resolveAdminShopFromSearchParams(params);const shop=resolved.shop;if(!shop?.id)return <main style={{padding:24}}>{formatAdminShopResolutionError(resolved)}</main>;const settings = await getReviewSettings(shop.id);
+export default async function AdminReviewsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }){const params=await searchParams;const resolved=await resolveAdminShopFromSearchParams(params);const shop=resolved.shop;if(!shop?.id)return <main className="mk-main"><div className="mk-alert mk-alert-error">{formatAdminShopResolutionError(resolved)}</div></main>;const settings = await getReviewSettings(shop.id);
 
 const displaySettings = {
   reviewsEnabled: settings.reviewsEnabled,
@@ -23,21 +23,19 @@ const displaySettings = {
 
 return (
   <>
-    <>
-      {!settings.reviewsEnabled && (
-        <p style={{ margin: 24 }}>
-          New review collection is disabled. Existing reviews remain available
-          for moderation and can still appear on the storefront if storefront
-          display is enabled.
-        </p>
-      )}
+    {!settings.reviewsEnabled && (
+      <div className="mk-alert mk-alert-info" style={{ margin: 24 }}>
+        New review collection is disabled. Existing reviews remain available
+        for moderation and can still appear on the storefront if storefront
+        display is enabled.
+      </div>
+    )}
 
-      {!settings.storefrontReviewsEnabled && (
-        <p style={{ margin: 24 }}>
-          Published reviews are hidden from the storefront.
-        </p>
-      )}
-    </>
+    {!settings.storefrontReviewsEnabled && (
+      <div className="mk-alert mk-alert-info" style={{ margin: 24 }}>
+        Published reviews are hidden from the storefront.
+      </div>
+    )}
 
     <ReviewImportExportClient shop={shop.shopDomain} />
     <ReviewDisplaySettingsClient initial={displaySettings} />

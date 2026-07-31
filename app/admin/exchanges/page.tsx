@@ -24,6 +24,14 @@ function formatDateTime(value: Date | null | undefined) {
   return value.toLocaleString();
 }
 
+function statusBadgeVariant(status: string) {
+  const s = (status || "").toUpperCase();
+  if (["APPROVED", "COMPLETED", "CLOSED", "PAYMENT_RECEIVED", "PICKUP_COMPLETED", "ITEM_RECEIVED", "REPLACEMENT_SHIPPED"].includes(s)) return "success";
+  if (["REJECTED", "CANCELLED", "FAILED"].includes(s)) return "danger";
+  if (["OPEN", "PENDING", "AWAITING_PAYMENT", "PICKUP_PENDING", "PICKUP_SCHEDULED", "REPLACEMENT_PROCESSING"].includes(s)) return "warning";
+  return "neutral";
+}
+
 export default async function AdminExchangesPage({
   searchParams,
 }: {
@@ -44,15 +52,18 @@ export default async function AdminExchangesPage({
 
   if (!currentShop?.id) {
     return (
-      <main className="p-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-slate-950">Exchange Requests</h1>
-          <p className="mt-1 text-slate-500">Manage customer exchange requests.</p>
+      <div className="mk-page">
+        <div className="mk-page-header">
+          <div>
+            <h1 className="mk-page-title">Exchange Requests</h1>
+            <p className="mk-page-subtitle">Manage customer exchange requests.</p>
+          </div>
         </div>
-        <div className="rounded-xl border bg-white p-8 text-slate-500">
-          Shop context is unavailable. Open this page from the embedded admin for a specific shop.
+        <div className="mk-empty">
+          <p className="mk-empty-title">Shop context unavailable</p>
+          <p>Open this page from the embedded admin for a specific shop.</p>
         </div>
-      </main>
+      </div>
     );
   }
 
@@ -80,78 +91,78 @@ export default async function AdminExchangesPage({
   };
 
   return (
-    <main className="p-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-slate-950">Exchange Requests</h1>
-        <p className="mt-1 text-slate-500">Manage customer exchange requests.</p>
-      </div>
-
-      <div className="mb-6 grid gap-4 md:grid-cols-3">
-        <div className="rounded-xl border bg-white p-5 shadow-sm">
-          <p className="text-sm text-slate-500">Total</p>
-          <p className="mt-1 text-2xl font-bold">{stats.total}</p>
-        </div>
-
-        <div className="rounded-xl border bg-white p-5 shadow-sm">
-          <p className="text-sm text-slate-500">Pending</p>
-          <p className="mt-1 text-2xl font-bold">{stats.pending}</p>
-        </div>
-
-        <div className="rounded-xl border bg-white p-5 shadow-sm">
-          <p className="text-sm text-slate-500">Approved</p>
-          <p className="mt-1 text-2xl font-bold">{stats.approved}</p>
+    <div className="mk-page">
+      <div className="mk-page-header">
+        <div>
+          <h1 className="mk-page-title">Exchange Requests</h1>
+          <p className="mk-page-subtitle">Manage customer exchange requests.</p>
         </div>
       </div>
+
+      <section className="mk-grid-3">
+        <div className="mk-card mk-stat-card">
+          <p className="mk-stat-label">Total</p>
+          <p className="mk-stat-value">{stats.total}</p>
+        </div>
+        <div className="mk-card mk-stat-card">
+          <p className="mk-stat-label">Pending</p>
+          <p className="mk-stat-value">{stats.pending}</p>
+        </div>
+        <div className="mk-card mk-stat-card">
+          <p className="mk-stat-label">Approved</p>
+          <p className="mk-stat-value">{stats.approved}</p>
+        </div>
+      </section>
 
       {requests.length === 0 ? (
-        <div className="rounded-xl border bg-white p-8 text-slate-500">No exchange requests found.</div>
-      ) : null}
-
-      {requests.length > 0 ? (
-        <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-slate-50 text-slate-600">
+        <div className="mk-empty">
+          <p className="mk-empty-title">No exchange requests found</p>
+        </div>
+      ) : (
+        <div className="mk-table-wrap">
+          <table className="mk-table">
+            <thead>
               <tr>
-                <th className="px-5 py-4">Order</th>
-                <th className="px-5 py-4">Customer</th>
-                <th className="px-5 py-4">Phone</th>
-                <th className="px-5 py-4">Items</th>
-                <th className="px-5 py-4">Status</th>
-                <th className="px-5 py-4">Requested</th>
-                <th className="px-5 py-4 text-right">Action</th>
+                <th>Order</th>
+                <th>Customer</th>
+                <th>Phone</th>
+                <th>Items</th>
+                <th>Status</th>
+                <th>Requested</th>
+                <th style={{ textAlign: "right" }}>Action</th>
               </tr>
             </thead>
 
             <tbody>
               {requests.map((request) => (
-                <tr key={request.id} className="border-t">
-                  <td className="px-5 py-4 font-medium">{request.orderNumber || "—"}</td>
+                <tr key={request.id}>
+                  <td style={{ fontWeight: 600 }}>{request.orderNumber || "—"}</td>
 
-                  <td className="px-5 py-4">
+                  <td>
                     {request.customerNameSnapshot ||
                       request.customerEmailSnapshot ||
                       request.customerPhoneSnapshot ||
                       "—"}
                   </td>
 
-                  <td className="px-5 py-4">{request.customerPhoneSnapshot || "—"}</td>
+                  <td>{request.customerPhoneSnapshot || "—"}</td>
 
-                  <td className="px-5 py-4">{Array.isArray(request.items) ? request.items.length : "—"}</td>
+                  <td>{Array.isArray(request.items) ? request.items.length : "—"}</td>
 
-                  <td className="px-5 py-4">
-                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold">{request.status}</span>
+                  <td>
+                    <span className={`mk-badge mk-badge-${statusBadgeVariant(request.status)}`}>{request.status}</span>
                   </td>
 
-                  <td className="px-5 py-4">{formatDateTime(request.requestedAt || request.createdAt)}</td>
+                  <td>{formatDateTime(request.requestedAt || request.createdAt)}</td>
 
-                  <td className="px-5 py-4 text-right">
+                  <td style={{ textAlign: "right" }}>
                     <Link
                       href={
                         shopDomain
                           ? `/admin/exchanges/${request.id}?shop=${encodeURIComponent(shopDomain)}`
                           : `/admin/exchanges/${request.id}`
                       }
-                      className="font-medium text-indigo-600 hover:underline"
+                      className="mk-btn mk-btn-sm"
                     >
                       View
                     </Link>
@@ -161,7 +172,7 @@ export default async function AdminExchangesPage({
             </tbody>
           </table>
         </div>
-      ) : null}
-    </main>
+      )}
+    </div>
   );
 }

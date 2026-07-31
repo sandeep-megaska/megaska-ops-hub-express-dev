@@ -54,22 +54,22 @@ export default function OtpCountryPolicyField({
   return (
     <div className="grid gap-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <label className="grid flex-1 gap-2 text-sm font-medium text-gray-800" htmlFor="otp-country-search">
-          <span>Search countries</span>
+        <label className="mk-field flex-1" htmlFor="otp-country-search">
+          <span className="mk-label">Search countries</span>
           <input
             id="otp-country-search"
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Country name, ISO code, or dial code"
-            className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-950 shadow-sm outline-none transition focus:border-gray-900 focus:ring-2 focus:ring-gray-900/10"
+            className="mk-input"
           />
         </label>
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={selectAll} className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-800 outline-none hover:bg-gray-50 focus:ring-2 focus:ring-gray-900/20">
+          <button type="button" onClick={selectAll} className="mk-btn mk-btn-sm">
             Select all
           </button>
-          <button type="button" onClick={keepOnlyDefault} disabled={selectedCodes.length === 1} className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-800 outline-none hover:bg-gray-50 focus:ring-2 focus:ring-gray-900/20 disabled:cursor-not-allowed disabled:opacity-50">
+          <button type="button" onClick={keepOnlyDefault} disabled={selectedCodes.length === 1} className="mk-btn mk-btn-sm">
             Keep only default
           </button>
         </div>
@@ -93,7 +93,8 @@ export default function OtpCountryPolicyField({
                 checked={checked}
                 aria-disabled={checked && selectedCodes.length === 1}
                 onChange={(event) => setCountrySelected(country.iso2, event.target.checked)}
-                className="size-4 rounded border-gray-300 text-gray-950 focus:ring-gray-900"
+                className="size-4 rounded"
+                style={{ accentColor: "var(--primary)" }}
               />
               <span className="text-lg" aria-hidden="true">{country.flag}</span>
               <span className="min-w-0 flex-1 font-medium">{country.name}</span>
@@ -120,12 +121,12 @@ export default function OtpCountryPolicyField({
         </fieldset>
       ) : null}
 
-      <label className="grid gap-2 text-sm font-medium text-gray-800">
-        <span>Default country</span>
-        <select name="otpDefaultCountryCode" value={defaultCode} onChange={(event) => setDefaultCode(event.target.value)} className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-950 shadow-sm outline-none transition focus:border-gray-900 focus:ring-2 focus:ring-gray-900/10">
+      <label className="mk-field">
+        <span className="mk-label">Default country</span>
+        <select name="otpDefaultCountryCode" value={defaultCode} onChange={(event) => setDefaultCode(event.target.value)} className="mk-select">
           {selectedCodes.map((code) => <option key={code} value={code}>{countryLabel(code)}</option>)}
         </select>
-        <span className="text-xs leading-5 text-gray-500">The default must be one of the selected countries.</span>
+        <span className="mk-help">The default must be one of the selected countries.</span>
       </label>
     </div>
   );

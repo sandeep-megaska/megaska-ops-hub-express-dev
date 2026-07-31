@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type CSSProperties } from "react";
+import { useState } from "react";
 
 // Import/export home for the Review module.
 // Export: a CSV backup / migration-out of every review.
@@ -34,27 +34,6 @@ const DEFAULT_STATUSES: { value: string; label: string }[] = [
   { value: "PENDING_MODERATION", label: "Pending moderation" },
   { value: "HIDDEN", label: "Hidden" },
 ];
-
-const primaryButton: CSSProperties = {
-  padding: "8px 16px",
-  borderRadius: 8,
-  border: "1px solid #008060",
-  background: "#008060",
-  color: "#fff",
-  textDecoration: "none",
-  fontWeight: 600,
-  cursor: "pointer",
-};
-
-const secondaryButton: CSSProperties = {
-  padding: "8px 16px",
-  borderRadius: 8,
-  border: "1px solid #008060",
-  background: "#fff",
-  color: "#008060",
-  fontWeight: 600,
-  cursor: "pointer",
-};
 
 export default function ReviewImportExportClient({ shop }: { shop: string }) {
   const exportHref = `/api/admin/reviews/export?shop=${encodeURIComponent(shop)}`;
@@ -109,26 +88,24 @@ export default function ReviewImportExportClient({ shop }: { shop: string }) {
   }
 
   return (
-    <section style={{ margin: 24, padding: 16, border: "1px solid #ddd", borderRadius: 8 }}>
-      <h2 style={{ marginTop: 0 }}>Import &amp; export reviews</h2>
+    <section className="mk-card mk-page" style={{ margin: 24 }}>
+      <h2 className="mk-section-title">Import &amp; export reviews</h2>
 
-      <div style={{ marginBottom: 20 }}>
-        <h3 style={{ marginBottom: 4 }}>Export</h3>
-        <p style={{ marginTop: 0, color: "#4b5563" }}>
+      <div className="mk-field">
+        <h3 className="mk-section-title">Export</h3>
+        <p className="mk-section-subtitle">
           Download every review as a CSV backup. Includes product, rating, title,
           body, author, status, merchant reply, and media URLs. Soft-deleted
           reviews are excluded.
         </p>
-        <a href={exportHref} download style={primaryButton}>
+        <a href={exportHref} download className="mk-btn mk-btn-primary">
           Export reviews (CSV)
         </a>
       </div>
 
-      <hr style={{ border: 0, borderTop: "1px solid #eee", margin: "16px 0" }} />
-
       <div>
-        <h3 style={{ marginBottom: 4 }}>Import</h3>
-        <p style={{ marginTop: 0, color: "#4b5563" }}>
+        <h3 className="mk-section-title">Import</h3>
+        <p className="mk-section-subtitle">
           Migrate existing reviews in from Judge.me, the Shopify Product Reviews
           app, or a LoopD2C export. Each row needs a <code>product_id</code>
           (numeric Shopify id) or a <code>product_handle</code> — handles are
@@ -136,50 +113,53 @@ export default function ReviewImportExportClient({ shop }: { shop: string }) {
           and counts without saving anything.
         </p>
 
-        <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", marginTop: 12 }}>
-          <label>
-            Source platform
-            <select value={platform} onChange={(e) => setPlatform(e.target.value)} style={{ display: "block", width: "100%", marginTop: 4 }}>
+        <div className="mk-form-grid" style={{ marginTop: 12 }}>
+          <label className="mk-field">
+            <span className="mk-label">Source platform</span>
+            <select className="mk-select" value={platform} onChange={(e) => setPlatform(e.target.value)}>
               {PLATFORMS.map((option) => (
                 <option key={option.value} value={option.value}>{option.label}</option>
               ))}
             </select>
           </label>
 
-          <label>
-            Import reviews as
-            <select value={defaultStatus} onChange={(e) => setDefaultStatus(e.target.value)} style={{ display: "block", width: "100%", marginTop: 4 }}>
+          <label className="mk-field">
+            <span className="mk-label">Import reviews as</span>
+            <select className="mk-select" value={defaultStatus} onChange={(e) => setDefaultStatus(e.target.value)}>
               {DEFAULT_STATUSES.map((option) => (
                 <option key={option.value} value={option.value}>{option.label}</option>
               ))}
             </select>
           </label>
 
-          <label style={{ alignSelf: "end" }}>
-            <input type="checkbox" checked={defaultVerified} onChange={(e) => setDefaultVerified(e.target.checked)} />{" "}
+          <label className="mk-check" style={{ alignSelf: "end" }}>
+            <input type="checkbox" checked={defaultVerified} onChange={(e) => setDefaultVerified(e.target.checked)} />
             Mark as verified purchases
           </label>
         </div>
 
-        <div style={{ marginTop: 12 }}>
-          <input type="file" accept=".csv,text/csv" onChange={onFile} aria-label="Review CSV file" />
-          {fileName && <span style={{ marginLeft: 8, color: "#4b5563" }}>{fileName}</span>}
+        <div className="mk-field" style={{ marginTop: 12 }}>
+          <span className="mk-label">Review CSV file</span>
+          <div>
+            <input type="file" accept=".csv,text/csv" onChange={onFile} aria-label="Review CSV file" />
+            {fileName && <span className="mk-help" style={{ marginLeft: 8 }}>{fileName}</span>}
+          </div>
         </div>
 
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 12 }}>
-          <button type="button" onClick={() => runImport(true)} disabled={busy || !csv} style={secondaryButton}>
+        <div className="mk-header-actions" style={{ marginTop: 12 }}>
+          <button type="button" onClick={() => runImport(true)} disabled={busy || !csv} className="mk-btn">
             Preview (dry run)
           </button>
-          <button type="button" onClick={() => runImport(false)} disabled={busy || !csv} style={primaryButton}>
+          <button type="button" onClick={() => runImport(false)} disabled={busy || !csv} className="mk-btn mk-btn-primary">
             Import reviews
           </button>
         </div>
 
-        {busy && <p aria-busy="true" style={{ marginTop: 12 }}>Working…</p>}
-        {error && <p role="alert" style={{ color: "#b91c1c", marginTop: 12 }}>{error}</p>}
+        {busy && <p aria-busy="true" className="mk-help" style={{ marginTop: 12 }}>Working…</p>}
+        {error && <div role="alert" className="mk-alert mk-alert-error" style={{ marginTop: 12 }}>{error}</div>}
 
         {result && (
-          <div style={{ marginTop: 16, padding: 12, border: "1px solid #e5e7eb", borderRadius: 8, background: "#f9fafb" }}>
+          <div className="mk-card" style={{ marginTop: 16 }}>
             <strong>{result.dryRun ? "Preview" : "Import complete"}</strong>
             <ul style={{ margin: "8px 0 0", paddingLeft: 18 }}>
               <li>{result.dryRun ? "Would create" : "Created"}: {result.created} review(s) across {result.affectedProducts} product(s)</li>
@@ -188,7 +168,7 @@ export default function ReviewImportExportClient({ shop }: { shop: string }) {
               {result.duplicatesSkippedInFile > 0 && <li>Duplicate rows in file skipped: {result.duplicatesSkippedInFile}</li>}
               {result.duplicatesSkippedExisting > 0 && <li>Already-imported reviews skipped: {result.duplicatesSkippedExisting}</li>}
               {result.unmatched > 0 && <li>Rows whose product could not be matched (skipped): {result.unmatched}</li>}
-              {result.failed > 0 && <li style={{ color: "#b91c1c" }}>Failed to save: {result.failed}</li>}
+              {result.failed > 0 && <li style={{ color: "var(--danger-text)" }}>Failed to save: {result.failed}</li>}
             </ul>
             {result.errors.length > 0 && (
               <details style={{ marginTop: 8 }}>

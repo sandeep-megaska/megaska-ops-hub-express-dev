@@ -61,16 +61,41 @@ export default function RefundActions({ id, status, method, walletTransactionId,
   const settledAsStoreCredit = method === "COD" && Boolean(walletTransactionId);
 
   return (
-    <section style={{ border: "1px solid #ddd", borderRadius: 8, padding: 12, display: "grid", gap: 8 }}>
-      <h3>Actions</h3>
-      <p>Current status: {status}. Manual payout mode.</p>
-      <button type="button" onClick={() => act("approve")} disabled={status !== "DETAILS_SUBMITTED"}>Approve</button>
-      <div><input placeholder="Reject note" value={note} onChange={(e) => setNote(e.target.value)} /><button type="button" onClick={() => act("reject", { note })} disabled={status !== "DETAILS_SUBMITTED"}>Reject</button></div>
-      <div><input placeholder="UTR / Reference" value={referenceId} onChange={(e) => setReferenceId(e.target.value)} /><button type="button" onClick={() => act("mark-paid", { referenceId, note })} disabled={status !== "APPROVED"}>Mark Paid</button></div>
-      <div><input placeholder="Failure reason" value={reason} onChange={(e) => setReason(e.target.value)} /><button type="button" onClick={() => act("mark-failed", { reason })} disabled={status !== "APPROVED"}>Mark Failed</button></div>
-      {canSettleStoreCredit ? <button type="button" onClick={settleStoreCredit} disabled={settlingStoreCredit}>{settlingStoreCredit ? "Settling…" : "Settle as Store Credit"}</button> : null}
-      {settledAsStoreCredit ? <p>Settled as Store Credit{walletTransactionId ? ` (${walletTransactionId})` : ""}</p> : null}
-      {message ? <p>{message}</p> : null}
+    <section className="mk-card">
+      <h3 className="mk-section-title">Actions</h3>
+      <p className="mk-section-subtitle">Current status: {status}. Manual payout mode.</p>
+
+      <div className="mk-page" style={{ gap: 16 }}>
+        <div>
+          <button type="button" className="mk-btn mk-btn-success" onClick={() => act("approve")} disabled={status !== "DETAILS_SUBMITTED"}>Approve</button>
+        </div>
+
+        <div className="mk-field">
+          <label className="mk-label">Reject note</label>
+          <input className="mk-input" placeholder="Reject note" value={note} onChange={(e) => setNote(e.target.value)} />
+          <button type="button" className="mk-btn mk-btn-danger" onClick={() => act("reject", { note })} disabled={status !== "DETAILS_SUBMITTED"} style={{ justifySelf: "start" }}>Reject</button>
+        </div>
+
+        <div className="mk-field">
+          <label className="mk-label">UTR / Reference</label>
+          <input className="mk-input" placeholder="UTR / Reference" value={referenceId} onChange={(e) => setReferenceId(e.target.value)} />
+          <button type="button" className="mk-btn mk-btn-primary" onClick={() => act("mark-paid", { referenceId, note })} disabled={status !== "APPROVED"} style={{ justifySelf: "start" }}>Mark Paid</button>
+        </div>
+
+        <div className="mk-field">
+          <label className="mk-label">Failure reason</label>
+          <input className="mk-input" placeholder="Failure reason" value={reason} onChange={(e) => setReason(e.target.value)} />
+          <button type="button" className="mk-btn mk-btn-danger" onClick={() => act("mark-failed", { reason })} disabled={status !== "APPROVED"} style={{ justifySelf: "start" }}>Mark Failed</button>
+        </div>
+
+        {canSettleStoreCredit ? (
+          <div>
+            <button type="button" className="mk-btn mk-btn-primary" onClick={settleStoreCredit} disabled={settlingStoreCredit}>{settlingStoreCredit ? "Settling…" : "Settle as Store Credit"}</button>
+          </div>
+        ) : null}
+        {settledAsStoreCredit ? <p className="mk-help">Settled as Store Credit{walletTransactionId ? ` (${walletTransactionId})` : ""}</p> : null}
+        {message ? <p className="mk-alert mk-alert-info">{message}</p> : null}
+      </div>
     </section>
   );
 }

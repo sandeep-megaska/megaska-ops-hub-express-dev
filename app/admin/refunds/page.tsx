@@ -18,6 +18,14 @@ type RefundSummary = {
 
 const formatDate = (value: Date | null) => (value ? value.toLocaleString() : "—");
 
+function statusBadgeVariant(status: string) {
+  const s = (status || "").toUpperCase();
+  if (["PAID", "APPROVED", "COMPLETED"].includes(s)) return "success";
+  if (["REJECTED", "FAILED", "CANCELLED"].includes(s)) return "danger";
+  if (["DETAILS_SUBMITTED", "PENDING", "PAYOUT_PENDING", "MANUAL_PENDING"].includes(s)) return "warning";
+  return "neutral";
+}
+
 export default async function AdminRefundsPage({
   searchParams,
 }: {
@@ -28,7 +36,20 @@ export default async function AdminRefundsPage({
   const shop = resolved.shop;
 
   if (!shop?.id) {
-    return <main style={{ padding: 24 }}>{formatAdminShopResolutionError(resolved)}</main>;
+    return (
+      <div className="mk-page">
+        <div className="mk-page-header">
+          <div>
+            <h1 className="mk-page-title">Admin Refunds</h1>
+            <p className="mk-page-subtitle">Manual payout only.</p>
+          </div>
+        </div>
+        <div className="mk-empty">
+          <p className="mk-empty-title">Shop context unavailable</p>
+          <p>{formatAdminShopResolutionError(resolved)}</p>
+        </div>
+      </div>
+    );
   }
 
   const refunds = (await listAdminRefunds(shop.id)) as RefundSummary[];
@@ -46,5 +67,64 @@ export default async function AdminRefundsPage({
 
   const shopDomain = resolved.shopDomain || "";
 
-  return <main style={{ padding: 24, display: "grid", gap: 16 }}><h1>Admin Refunds</h1><p>Manual payout only.</p><div>Total: {counts.total} | Pending Approval: {counts.pendingApproval} | Awaiting Payout: {counts.pendingPayout} | Paid: {counts.paid} | Rejected/Failed: {counts.closed}</div><table style={{ width: "100%", borderCollapse: "collapse" }}><thead><tr><th align="left">Created</th><th align="left">ID</th><th align="left">Source</th><th align="left">Method</th><th align="left">Amount</th><th align="left">Status</th><th align="left">Action</th></tr></thead><tbody>{refunds.map((item) => <tr key={item.id} style={{ borderTop: "1px solid #ddd" }}><td>{formatDate(item.createdAt)}</td><td>{item.id}</td><td>{item.source}{item.sourceId ? ` (${item.sourceId})` : ""}</td><td>{item.method}</td><td>{item.amount} {item.currency}</td><td>{item.status}<br />D:{formatDate(item.detailsSubmittedAt)}<br />A:{formatDate(item.approvedAt)}<br />P:{formatDate(item.paidAt)}</td><td><Link href={shopDomain ? `/admin/refunds/${item.id}?shop=${encodeURIComponent(shopDomain)}` : `/admin/refunds/${item.id}`}>Open</Link></td></tr>)}</tbody></table></main>;
+  return (
+    <div className="mk-page">
+      <div className="mk-page-header">
+        <div>
+          <h1 className="mk-page-title">Admin Refunds</h1>
+          <p className="mk-page-subtitle">Manual payout only.</p>
+        </div>
+      </div>
+
+      <section className="mk-grid-4">
+        <div className="mk-card mk-stat-card"><p className="mk-stat-label">Total</p><p className="mk-stat-value">{counts.total}</p></div>
+        <div className="mk-card mk-stat-card"><p className="mk-stat-label">Pending Approval</p><p className="mk-stat-value">{counts.pendingApproval}</p></div>
+        <div className="mk-card mk-stat-card"><p className="mk-stat-label">Awaiting Payout</p><p className="mk-stat-value">{counts.pendingPayout}</p></div>
+        <div className="mk-card mk-stat-card"><p className="mk-stat-label">Paid</p><p className="mk-stat-value">{counts.paid}</p></div>
+      </section>
+      <section className="mk-grid-4">
+        <div className="mk-card mk-stat-card"><p className="mk-stat-label">Rejected / Failed</p><p className="mk-stat-value">{counts.closed}</p></div>
+      </section>
+
+      {refunds.length === 0 ? (
+        <div className="mk-empty"><p className="mk-empty-title">No refunds found</p></div>
+      ) : (
+        <div className="mk-table-wrap">
+          <table className="mk-table">
+            <thead>
+              <tr>
+                <th>Created</th>
+                <th>ID</th>
+                <th>Source</th>
+                <th>Method</th>
+                <th>Amount</th>
+                <th>Status</th>
+                <th style={{ textAlign: "right" }}>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {refunds.map((item) => (
+                <tr key={item.id}>
+                  <td>{formatDate(item.createdAt)}</td>
+                  <td>{item.id}</td>
+                  <td>{item.source}{item.sourceId ? ` (${item.sourceId})` : ""}</td>
+                  <td>{item.method}</td>
+                  <td>{item.amount} {item.currency}</td>
+                  <td>
+                    <span className={`mk-badge mk-badge-${statusBadgeVariant(item.status)}`}>{item.status}</span>
+                    <p className="mk-help" style={{ marginTop: 6 }}>D: {formatDate(item.detailsSubmittedAt)}</p>
+                    <p className="mk-help">A: {formatDate(item.approvedAt)}</p>
+                    <p className="mk-help">P: {formatDate(item.paidAt)}</p>
+                  </td>
+                  <td style={{ textAlign: "right" }}>
+                    <Link className="mk-btn mk-btn-sm" href={shopDomain ? `/admin/refunds/${item.id}?shop=${encodeURIComponent(shopDomain)}` : `/admin/refunds/${item.id}`}>Open</Link>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
 }

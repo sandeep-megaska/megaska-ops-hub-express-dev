@@ -77,8 +77,8 @@ function withEmbeddedContext(pathname: string, params: EmbeddedContextInput, ove
 const SHOP_UNRESOLVED_MESSAGE =
   "Unable to resolve shop. Open this page from Shopify admin or add a shop query parameter.";
 
-const cardClass = "rounded-2xl border border-gray-200 bg-white p-6 shadow-sm";
-const helpClass = "text-xs leading-5 text-gray-500";
+const cardClass = "mk-card";
+const helpClass = "mk-help";
 
 async function saveMerchantSettings(
   shopId: string,
@@ -278,16 +278,16 @@ function Field(props: {
   placeholder?: string;
 }) {
   return (
-    <label className="grid gap-2 text-sm font-medium text-gray-800">
-      <span>{props.label}</span>
+    <label className="mk-field">
+      <span className="mk-label">{props.label}</span>
       <input
-        className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-950 shadow-sm outline-none transition focus:border-gray-900 focus:ring-2 focus:ring-gray-900/10"
+        className="mk-input"
         name={props.name}
         type={props.type || "text"}
         defaultValue={props.defaultValue || ""}
         placeholder={props.placeholder}
       />
-      {props.help ? <span className={helpClass}>{props.help}</span> : null}
+      {props.help ? <span className="mk-help">{props.help}</span> : null}
     </label>
   );
 }
@@ -298,16 +298,15 @@ function Check(props: {
   help?: string;
 }) {
   return (
-    <label className="flex items-start gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-3 text-sm text-gray-800">
+    <label className="mk-check items-start">
       <input
-        className="mt-1"
         name={props.name}
         type="checkbox"
         defaultChecked={props.defaultChecked}
       />
       <span>
-        <span className="font-medium">{props.label}</span>
-        {props.help ? <span className={`block ${helpClass}`}>{props.help}</span> : null}
+        <span className="mk-label">{props.label}</span>
+        {props.help ? <span className="mk-help block">{props.help}</span> : null}
       </span>
     </label>
   );
@@ -315,27 +314,27 @@ function Check(props: {
 
 function TextArea(props: { label: string; name: string; defaultValue?: string | null; help?: string; placeholder?: string; }) {
   return (
-    <label className="grid gap-2 text-sm font-medium text-gray-800">
-      <span>{props.label}</span>
+    <label className="mk-field">
+      <span className="mk-label">{props.label}</span>
       <textarea
-        className="min-h-28 rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-950 shadow-sm outline-none transition focus:border-gray-900 focus:ring-2 focus:ring-gray-900/10"
+        className="mk-textarea"
         name={props.name}
         defaultValue={props.defaultValue || ""}
         placeholder={props.placeholder}
       />
-      {props.help ? <span className={helpClass}>{props.help}</span> : null}
+      {props.help ? <span className="mk-help">{props.help}</span> : null}
     </label>
   );
 }
 
 function NotificationCheck(props: { label: string; name: string; defaultChecked: boolean; help?: string; }) {
   return (
-    <label className="flex items-start gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-3 text-sm text-gray-800">
+    <label className="mk-check items-start">
       <input type="hidden" name={props.name} value="false" />
-      <input className="mt-1" name={props.name} type="checkbox" value="true" defaultChecked={props.defaultChecked} />
+      <input name={props.name} type="checkbox" value="true" defaultChecked={props.defaultChecked} />
       <span>
-        <span className="font-medium">{props.label}</span>
-        {props.help ? <span className={`block ${helpClass}`}>{props.help}</span> : null}
+        <span className="mk-label">{props.label}</span>
+        {props.help ? <span className="mk-help block">{props.help}</span> : null}
       </span>
     </label>
   );
@@ -343,9 +342,9 @@ function NotificationCheck(props: { label: string; name: string; defaultChecked:
 
 function SectionHeader(props: { title: string; description: string }) {
   return (
-    <div className="border-b border-gray-100 pb-4">
-      <h2 className="text-lg font-semibold text-gray-950">{props.title}</h2>
-      <p className="mt-1 text-sm leading-6 text-gray-600">{props.description}</p>
+    <div className="border-b border-[var(--line)] pb-4">
+      <h2 className="mk-section-title">{props.title}</h2>
+      <p className="mk-section-subtitle" style={{ marginBottom: 0 }}>{props.description}</p>
     </div>
   );
 }
@@ -393,34 +392,32 @@ export default async function MerchantSettingsPage({
   );
   return (
     <main className="mx-auto max-w-5xl px-6 py-8">
-      <div className="mb-6 flex flex-col gap-4 rounded-2xl bg-gray-950 p-6 text-white shadow-sm md:flex-row md:items-end md:justify-between">
+      <div className="mk-hero mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-gray-300">
-            LoopD2C runtime settings
-          </p>
-          <h1 className="mt-2 text-3xl font-semibold">Merchant Settings</h1>
-          <p className="mt-3 max-w-3xl text-sm leading-6 text-gray-200">
+          <p className="mk-hero-tagline">LoopD2C runtime settings</p>
+          <h1 className="mk-hero-title mt-2">Merchant Settings</h1>
+          <p className="mk-hero-subtitle">
             Manage storefront drawer branding and labels for {resolved.shop.shopDomain}.
             Saves are persisted to ShopModuleConfig with moduleKey
             loopdesk_runtime_config and exposed through the runtime config endpoints.
           </p>
         </div>
-        <div className="flex flex-wrap gap-2 text-sm">
-          <a className="rounded-lg bg-white/10 px-3 py-2 font-medium hover:bg-white/20" href={withEmbeddedContext("/", params, { shop: resolved.shop.shopDomain, saved: null, error: null })}>
+        <div className="mk-hero-actions">
+          <a className="mk-btn" href={withEmbeddedContext("/", params, { shop: resolved.shop.shopDomain, saved: null, error: null })}>
             Dashboard
           </a>
-          <a className="rounded-lg bg-white/10 px-3 py-2 font-medium hover:bg-white/20" href={`/api/runtime/config?shop=${shopParam}`}>
+          <a className="mk-btn" href={`/api/runtime/config?shop=${shopParam}`}>
             View runtime JSON
           </a>
         </div>
       </div>
       {params.saved === "1" ? (
-        <div className="mb-4 rounded-xl border border-green-200 bg-green-50 p-4 text-sm font-medium text-green-800">
+        <div className="mk-alert mk-alert-success mb-4">
           Merchant settings saved. Reload the storefront to refresh the latest settings.
         </div>
       ) : null}
       {params.error ? (
-        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-800">
+        <div className="mk-alert mk-alert-error mb-4">
           {params.error}
         </div>
       ) : null}
@@ -458,9 +455,9 @@ export default async function MerchantSettingsPage({
         </section>
         <section id="cart" className={`${cardClass} grid gap-5`}>
           <SectionHeader title="Cart behavior" description="Choose whether LoopD2C owns the drawer or allows the theme cart to continue." />
-          <label className="grid gap-2 text-sm font-medium text-gray-800">
-            <span>Drawer mode</span>
-            <select className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-950 shadow-sm outline-none transition focus:border-gray-900 focus:ring-2 focus:ring-gray-900/10" name="drawerMode" defaultValue={settings.cart.drawerMode}>
+          <label className="mk-field">
+            <span className="mk-label">Drawer mode</span>
+            <select className="mk-select" name="drawerMode" defaultValue={settings.cart.drawerMode}>
               <option value="auto">Auto</option>
               <option value="loopdesk">LoopD2C Enhanced Drawer</option>
               <option value="theme">Theme drawer</option>
@@ -511,7 +508,7 @@ export default async function MerchantSettingsPage({
 
         <section id="otp-modal-branding" className={`${cardClass} grid gap-5`}>
           <SectionHeader title="OTP Modal Branding & Content" description="Presentation-only OTP modal settings. These values do not change OTP logic, authentication, sessions, checkout continuation, or discount rules." />
-          <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm font-medium text-blue-900">
+          <div className="mk-alert mk-alert-info">
             Use your store logo URL or upload/select a logo supported by the existing admin asset workflow. Promotional copy is display-only and is not coupled to active promotion rules or discount codes.
           </div>
           <div className="grid gap-4 md:grid-cols-2">
@@ -548,16 +545,16 @@ export default async function MerchantSettingsPage({
 
         <section id="otp-provider" className={`${cardClass} grid gap-5`}>
           <SectionHeader title="OTP provider" description="LoopDesk currently sends OTPs using the platform-managed Twilio Verify service. Merchant-owned Twilio and MSG91 connections can be configured after provider verification support is enabled." />
-          <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm font-medium text-blue-900">
+          <div className="mk-alert mk-alert-info">
             These settings now control whether LoopDesk uses the platform-managed Twilio service for this shop. Merchant-owned providers remain unavailable until secure credential verification is implemented.
           </div>
           <div className="grid gap-3 md:grid-cols-2">
             <NotificationCheck label="Enable OTP authentication" name="otpEnabled" defaultChecked={otpSettings.otpEnabled} help="When disabled, OTP requests are unavailable. This does not bypass authentication requirements." />
             <NotificationCheck label="Allow platform Twilio fallback" name="otpAllowPlatformFallback" defaultChecked={otpSettings.allowPlatformFallback} help="Allows LoopDesk managed Twilio to handle OTPs when a merchant-owned provider is unavailable." />
           </div>
-          <label className="grid gap-2 text-sm font-medium text-gray-800">
-            <span>Preferred OTP provider</span>
-            <select className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-950 shadow-sm outline-none transition focus:border-gray-900 focus:ring-2 focus:ring-gray-900/10" name="otpProviderMode" defaultValue={otpSettings.providerMode}>
+          <label className="mk-field">
+            <span className="mk-label">Preferred OTP provider</span>
+            <select className="mk-select" name="otpProviderMode" defaultValue={otpSettings.providerMode}>
               <option value="PLATFORM_TWILIO">LoopDesk managed Twilio</option>
               <option value="MERCHANT_TWILIO" disabled>Use my Twilio account — coming after verification support</option>
               <option value="MERCHANT_MSG91" disabled>Use my MSG91 account — coming after approval support</option>
@@ -585,7 +582,7 @@ export default async function MerchantSettingsPage({
 
         <section id="email-notifications" className={`${cardClass} grid gap-5`}>
           <SectionHeader title="Email notifications" description="LoopD2C can send operational and customer notification emails using the platform-managed email service. Configure who should receive store alerts and which notification categories are enabled." />
-          <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm font-medium text-blue-900">
+          <div className="mk-alert mk-alert-info">
             These settings control the store-admin recipients and operational alert categories used by LoopD2C. Emails are sent through the platform-managed email service.
           </div>
           <div className="grid gap-3 md:grid-cols-2">
@@ -749,10 +746,10 @@ export default async function MerchantSettingsPage({
               help="Required when enabled. Maximum 240 characters; plain text only."
             />
             <div className="grid min-w-0 gap-4 md:grid-cols-2 lg:grid-cols-[minmax(0,1.5fr)_7rem_minmax(0,1fr)_minmax(0,1fr)]">
-              <label className="grid min-w-0 gap-2 text-sm font-medium text-gray-800">
-                <span>Placement</span>
+              <label className="mk-field min-w-0">
+                <span className="mk-label">Placement</span>
                 <select
-                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
+                  className="mk-select"
                   name="dynamicBannerPlacement"
                   defaultValue={cartIntelligence.dynamicBanner.placement}
                 >
@@ -780,10 +777,10 @@ export default async function MerchantSettingsPage({
                 type="number"
                 defaultValue={String(cartIntelligence.dynamicBanner.sortOrder)}
               />
-              <label className="grid min-w-0 gap-2 text-sm font-medium text-gray-800">
-                <span>Style</span>
+              <label className="mk-field min-w-0">
+                <span className="mk-label">Style</span>
                 <select
-                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
+                  className="mk-select"
                   name="dynamicBannerStyle"
                   defaultValue={cartIntelligence.dynamicBanner.style}
                 >
@@ -796,10 +793,10 @@ export default async function MerchantSettingsPage({
                   )}
                 </select>
               </label>
-              <label className="grid min-w-0 gap-2 text-sm font-medium text-gray-800">
-                <span>Text Alignment</span>
+              <label className="mk-field min-w-0">
+                <span className="mk-label">Text Alignment</span>
                 <select
-                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
+                  className="mk-select"
                   name="dynamicBannerAlignment"
                   defaultValue={cartIntelligence.dynamicBanner.alignment}
                 >
@@ -881,10 +878,10 @@ export default async function MerchantSettingsPage({
                 defaultValue={cartIntelligence.savingsSummary.title}
                 help="Plain text, maximum 80 characters."
               />
-              <label className="grid min-w-0 gap-2 text-sm font-medium text-gray-800">
-                <span>Placement</span>
+              <label className="mk-field min-w-0">
+                <span className="mk-label">Placement</span>
                 <select
-                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
+                  className="mk-select"
                   name="savingsSummaryPlacement"
                   defaultValue={cartIntelligence.savingsSummary.placement}
                 >
@@ -933,10 +930,10 @@ export default async function MerchantSettingsPage({
                 defaultChecked={cartIntelligence.trustBadges.enabled}
                 help="Individual claims remain disabled until you approve them."
               />
-              <label className="grid min-w-0 gap-2 text-sm font-medium text-gray-800">
-                <span>Placement</span>
+              <label className="mk-field min-w-0">
+                <span className="mk-label">Placement</span>
                 <select
-                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
+                  className="mk-select"
                   name="trustBadgesPlacement"
                   defaultValue={cartIntelligence.trustBadges.placement}
                 >
@@ -946,10 +943,10 @@ export default async function MerchantSettingsPage({
                   </option>
                 </select>
               </label>
-              <label className="grid min-w-0 gap-2 text-sm font-medium text-gray-800">
-                <span>Layout</span>
+              <label className="mk-field min-w-0">
+                <span className="mk-label">Layout</span>
                 <select
-                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
+                  className="mk-select"
                   name="trustBadgesLayout"
                   defaultValue={cartIntelligence.trustBadges.layout}
                 >
@@ -972,10 +969,10 @@ export default async function MerchantSettingsPage({
                   name={`trustBadgeId${index}`}
                   value={item.id}
                 />
-                <label className="grid min-w-0 gap-2 text-sm font-medium">
-                  <span>Icon</span>
+                <label className="mk-field min-w-0">
+                  <span className="mk-label">Icon</span>
                   <select
-                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
+                    className="mk-select"
                     name={`trustBadgeIcon${index}`}
                     defaultValue={item.icon}
                   >
@@ -1019,17 +1016,17 @@ export default async function MerchantSettingsPage({
             <Check label="COD Fallback Enabled" name="razorpayCodFallbackEnabled" defaultChecked={razorpay.codFallbackEnabled} help="Allows backend flows to know whether COD fallback is allowed by default; no checkout behavior changes are made here." />
           </div>
           <div className="grid gap-4 md:grid-cols-2">
-            <label className="grid gap-2 text-sm font-medium text-gray-800">
-              <span>Environment</span>
-              <select className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-950 shadow-sm outline-none transition focus:border-gray-900 focus:ring-2 focus:ring-gray-900/10" name="razorpayEnvironment" defaultValue={razorpay.environment}>
+            <label className="mk-field">
+              <span className="mk-label">Environment</span>
+              <select className="mk-select" name="razorpayEnvironment" defaultValue={razorpay.environment}>
                 <option value="test">Test</option>
                 <option value="production">Production</option>
               </select>
               <span className={helpClass}>Test mode uses Razorpay test credentials. Production mode should use live merchant credentials.</span>
             </label>
-            <label className="grid gap-2 text-sm font-medium text-gray-800">
-              <span>Capture Mode</span>
-              <select className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-950 shadow-sm outline-none transition focus:border-gray-900 focus:ring-2 focus:ring-gray-900/10" name="razorpayCaptureMode" defaultValue={razorpay.captureMode}>
+            <label className="mk-field">
+              <span className="mk-label">Capture Mode</span>
+              <select className="mk-select" name="razorpayCaptureMode" defaultValue={razorpay.captureMode}>
                 <option value="automatic">Automatic</option>
                 <option value="manual">Manual</option>
               </select>
@@ -1050,9 +1047,9 @@ export default async function MerchantSettingsPage({
             <Check label="COD Enabled" name="delhiveryCodEnabled" defaultChecked={delhivery.codEnabled} help="COD toggle is a merchant-level default only; no payment behavior changes are made here." />
             <Check label="Prepaid Enabled" name="delhiveryPrepaidEnabled" defaultChecked={delhivery.prepaidEnabled} help="Prepaid toggle is a merchant-level default only; no checkout behavior changes are made here." />
           </div>
-          <label className="grid gap-2 text-sm font-medium text-gray-800">
-            <span>Environment</span>
-            <select className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-950 shadow-sm outline-none transition focus:border-gray-900 focus:ring-2 focus:ring-gray-900/10" name="delhiveryEnvironment" defaultValue={delhivery.environment}>
+          <label className="mk-field">
+            <span className="mk-label">Environment</span>
+            <select className="mk-select" name="delhiveryEnvironment" defaultValue={delhivery.environment}>
               <option value="test">Test</option>
               <option value="production">Production</option>
             </select>
@@ -1079,11 +1076,11 @@ export default async function MerchantSettingsPage({
             <p className="mt-2">Enabled: {settings.analytics.enabled ? "Yes" : "No"}</p>
           </div>
         </section>
-        <div className="sticky bottom-4 flex flex-wrap items-center justify-end gap-3 rounded-2xl border border-gray-200 bg-white/95 p-4 shadow-lg backdrop-blur">
-          <button className="rounded-lg border border-gray-300 px-4 py-2 font-medium text-gray-800" type="reset">
+        <div className="mk-card sticky bottom-4 flex flex-wrap items-center justify-end gap-3">
+          <button className="mk-btn" type="reset">
             Reset unsaved changes
           </button>
-          <button className="rounded-lg bg-gray-900 px-5 py-2 font-medium text-white shadow-sm hover:bg-gray-800" type="submit">
+          <button className="mk-btn mk-btn-primary" type="submit">
             Save Merchant Settings
           </button>
         </div>
