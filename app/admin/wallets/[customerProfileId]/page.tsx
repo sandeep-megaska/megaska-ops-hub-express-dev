@@ -23,7 +23,7 @@ export default async function AdminWalletDetailPage({
   const shop = resolved.shop;
 
   if (!shop?.id) {
-    return <main style={{ padding: 24 }}>{formatAdminShopResolutionError(resolved)}</main>;
+    return <main className="mk-page"><div className="mk-alert mk-alert-error" role="alert">{formatAdminShopResolutionError(resolved)}</div></main>;
   }
 
   const customer = await prisma.customerProfile.findUnique({
@@ -41,7 +41,7 @@ export default async function AdminWalletDetailPage({
 
  // Tenant isolation: only render a customer that belongs to the acting shop.
  if (!customer || customer.shopId !== shop.id) {
-  return <main style={{ padding: 24 }}>Customer not found.</main>;
+  return <main className="mk-page"><div className="mk-empty"><p className="mk-empty-title">Customer not found</p></div></main>;
 }
   const wallet = await getOrCreateWalletAccount(customer.id, "INR", {
   shopId: shop.id,
@@ -53,88 +53,97 @@ const transactions = await listWalletTransactions(customer.id, "INR", 200, {
   const reservations = await listWalletReservationsForAdmin(customer.id);
 
   return (
-    <main style={{ padding: 24, display: "grid", gap: 14 }}>
-      <h1>Wallet Detail</h1>
-      <section>
-        <p>Customer: {displayName(customer)}</p>
-        <p>Phone: {customer.phoneE164}</p>
-        <p>Email: {customer.email || "-"}</p>
-        <p>Current Balance: {wallet.currency} {(wallet.currentBalance / 100).toFixed(2)}</p>
+    <main className="mk-page">
+      <header className="mk-page-header">
+        <div>
+          <h1 className="mk-page-title">Wallet Detail</h1>
+          <p className="mk-page-subtitle">{displayName(customer)}</p>
+        </div>
+      </header>
+
+      <section className="mk-grid-4">
+        <div className="mk-card mk-stat-card">
+          <p className="mk-stat-label">Current Balance</p>
+          <p className="mk-stat-value">{wallet.currency} {(wallet.currentBalance / 100).toFixed(2)}</p>
+        </div>
+        <div className="mk-card mk-stat-card">
+          <p className="mk-stat-label">Customer</p>
+          <p className="mk-stat-value" style={{ fontSize: 20 }}>{displayName(customer)}</p>
+        </div>
+        <div className="mk-card mk-stat-card">
+          <p className="mk-stat-label">Phone</p>
+          <p className="mk-stat-value" style={{ fontSize: 20 }}>{customer.phoneE164}</p>
+        </div>
+        <div className="mk-card mk-stat-card">
+          <p className="mk-stat-label">Email</p>
+          <p className="mk-stat-value" style={{ fontSize: 20 }}>{customer.email || "-"}</p>
+        </div>
       </section>
 
       <WalletOpsControls customerProfileId={customer.id} />
 
-
-      <section>
-        <h3>Wallet Reservations</h3>
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead>
-            <tr>
-              {["Created", "Status", "Amount", "Code", "Expires", "Order"].map((head) => (
-                <th key={head} style={{ textAlign: "left", borderBottom: "1px solid #ccc", padding: 8 }}>
-                  {head}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {reservations.map((row) => (
-              <tr key={row.id}>
-                <td style={{ padding: 8 }}>{row.createdAt.toISOString().slice(0, 19).replace("T", " ")}</td>
-                <td style={{ padding: 8 }}>{row.status}</td>
-                <td style={{ padding: 8 }}>{row.currency} {(row.reservedAmount / 100).toFixed(2)}</td>
-                <td style={{ padding: 8 }}>{row.discountCode || "-"}</td>
-                <td style={{ padding: 8 }}>{row.expiresAt.toISOString().slice(0, 19).replace("T", " ")}</td>
-                <td style={{ padding: 8 }}>{row.orderNumber || row.shopifyOrderId || "-"}</td>
-              </tr>
-            ))}
-            {!reservations.length ? (
-              <tr>
-                <td style={{ padding: 8 }} colSpan={6}>
-                  No reservations yet.
-                </td>
-              </tr>
-            ) : null}
-          </tbody>
-        </table>
+      <section className="mk-card">
+        <h3 className="mk-section-title">Wallet Reservations</h3>
+        {reservations.length ? (
+          <div className="mk-table-wrap">
+            <table className="mk-table">
+              <thead>
+                <tr>
+                  {["Created", "Status", "Amount", "Code", "Expires", "Order"].map((head) => (
+                    <th key={head}>{head}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {reservations.map((row) => (
+                  <tr key={row.id}>
+                    <td>{row.createdAt.toISOString().slice(0, 19).replace("T", " ")}</td>
+                    <td>{row.status}</td>
+                    <td>{row.currency} {(row.reservedAmount / 100).toFixed(2)}</td>
+                    <td>{row.discountCode || "-"}</td>
+                    <td>{row.expiresAt.toISOString().slice(0, 19).replace("T", " ")}</td>
+                    <td>{row.orderNumber || row.shopifyOrderId || "-"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="mk-empty"><p className="mk-empty-title">No reservations yet</p></div>
+        )}
       </section>
 
-      <section>
-        <h3>Wallet Ledger</h3>
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead>
-            <tr>
-              {["Date", "Direction", "Type", "Amount", "Reason", "Source", "Order", "Created By"].map((head) => (
-                <th key={head} style={{ textAlign: "left", borderBottom: "1px solid #ccc", padding: 8 }}>
-                  {head}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {transactions.map((txn) => (
-              <tr key={txn.id}>
-                <td style={{ padding: 8 }}>{txn.createdAt.toISOString().slice(0, 19).replace("T", " ")}</td>
-                <td style={{ padding: 8 }}>{txn.direction}</td>
-                <td style={{ padding: 8 }}>{txn.transactionType}</td>
-                <td style={{ padding: 8 }}>
-                  {txn.currency} {(txn.amount / 100).toFixed(2)}
-                </td>
-                <td style={{ padding: 8 }}>{txn.reason || txn.adminNote || "-"}</td>
-                <td style={{ padding: 8 }}>{txn.sourceType}{txn.sourceReference ? ` (${txn.sourceReference})` : ""}</td>
-                <td style={{ padding: 8 }}>{txn.orderNumber || "-"}</td>
-                <td style={{ padding: 8 }}>{txn.createdByType}{txn.createdById ? ` (${txn.createdById})` : ""}</td>
-              </tr>
-            ))}
-            {!transactions.length ? (
-              <tr>
-                <td style={{ padding: 8 }} colSpan={8}>
-                  No wallet transactions yet.
-                </td>
-              </tr>
-            ) : null}
-          </tbody>
-        </table>
+      <section className="mk-card">
+        <h3 className="mk-section-title">Wallet Ledger</h3>
+        {transactions.length ? (
+          <div className="mk-table-wrap">
+            <table className="mk-table">
+              <thead>
+                <tr>
+                  {["Date", "Direction", "Type", "Amount", "Reason", "Source", "Order", "Created By"].map((head) => (
+                    <th key={head}>{head}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {transactions.map((txn) => (
+                  <tr key={txn.id}>
+                    <td>{txn.createdAt.toISOString().slice(0, 19).replace("T", " ")}</td>
+                    <td>{txn.direction}</td>
+                    <td>{txn.transactionType}</td>
+                    <td>{txn.currency} {(txn.amount / 100).toFixed(2)}</td>
+                    <td>{txn.reason || txn.adminNote || "-"}</td>
+                    <td>{txn.sourceType}{txn.sourceReference ? ` (${txn.sourceReference})` : ""}</td>
+                    <td>{txn.orderNumber || "-"}</td>
+                    <td>{txn.createdByType}{txn.createdById ? ` (${txn.createdById})` : ""}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="mk-empty"><p className="mk-empty-title">No wallet transactions yet</p></div>
+        )}
       </section>
     </main>
   );

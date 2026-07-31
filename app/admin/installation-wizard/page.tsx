@@ -25,30 +25,23 @@ type PageProps = {
 
 type WizardStatus = "Complete" | "Incomplete" | "Needs attention";
 
-const cardClass = "rounded-2xl border border-gray-200 bg-white p-6 shadow-sm";
-const mutedClass = "text-sm leading-6 text-gray-600";
-
 function envPresent(name: string) {
   return Boolean(String(process.env[name] || "").trim());
 }
 
-function statusClass(status: WizardStatus) {
-  if (status === "Complete") return "border-green-200 bg-green-50 text-green-800";
-  if (status === "Needs attention") return "border-amber-200 bg-amber-50 text-amber-900";
-  return "border-gray-200 bg-gray-50 text-gray-700";
+function badgeClass(status: WizardStatus) {
+  if (status === "Complete") return "mk-badge mk-badge-success";
+  if (status === "Needs attention") return "mk-badge mk-badge-warning";
+  return "mk-badge mk-badge-neutral";
 }
 
 function StatusPill({ status }: { status: WizardStatus }) {
-  return (
-    <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${statusClass(status)}`}>
-      {status}
-    </span>
-  );
+  return <span className={badgeClass(status)}>{status}</span>;
 }
 
 function LinkButton({ href, children }: { href: string; children: React.ReactNode }) {
   return (
-    <a className="inline-flex rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50" href={href}>
+    <a className="mk-btn mk-btn-sm" href={href}>
       {children}
     </a>
   );
@@ -70,21 +63,35 @@ function WizardStep({
   details?: React.ReactNode;
 }) {
   return (
-    <section className={`${cardClass} grid gap-4`}>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex gap-3">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-950 text-sm font-semibold text-white">
+    <section className="mk-card" style={{ display: "grid", gap: 16 }}>
+      <div className="mk-page-header" style={{ alignItems: "flex-start" }}>
+        <div style={{ display: "flex", gap: 12 }}>
+          <div
+            style={{
+              display: "flex",
+              height: 36,
+              width: 36,
+              flexShrink: 0,
+              alignItems: "center",
+              justifyContent: "center",
+              borderRadius: 999,
+              background: "var(--primary)",
+              color: "#fff",
+              fontWeight: 700,
+              fontSize: 14,
+            }}
+          >
             {number}
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-gray-950">{title}</h2>
-            <p className={`mt-1 ${mutedClass}`}>{description}</p>
+            <h2 className="mk-section-title" style={{ margin: 0 }}>{title}</h2>
+            <p className="mk-section-subtitle" style={{ margin: "4px 0 0" }}>{description}</p>
           </div>
         </div>
         <StatusPill status={status} />
       </div>
-      {details ? <div className="rounded-xl border border-gray-100 bg-gray-50 p-4 text-sm text-gray-700">{details}</div> : null}
-      {actions ? <div className="flex flex-wrap gap-2">{actions}</div> : null}
+      {details ? <div className="mk-card" style={{ background: "var(--panel-2)", padding: 16, fontSize: 14, color: "var(--muted)" }}>{details}</div> : null}
+      {actions ? <div className="mk-header-actions">{actions}</div> : null}
     </section>
   );
 }
@@ -95,20 +102,18 @@ export default async function InstallationWizardPage({ searchParams }: PageProps
 
   if (!resolved.shop?.id) {
     return (
-      <main className="mx-auto max-w-3xl p-8">
-        <div className={cardClass}>
-          <h1 className="text-2xl font-semibold text-gray-950">Installation Wizard</h1>
-          <p className="mt-3 text-sm text-red-700">
-            {formatAdminShopResolutionError(resolved)}
-          </p>
-          {resolved.shopDomain ? (
-            <p className="mt-4 text-sm">
-              <a className="font-medium text-blue-700 underline" href={`/api/auth/install?shop=${encodeURIComponent(resolved.shopDomain)}`}>
-                Reinstall the Shopify app for {resolved.shopDomain}
-              </a>
-            </p>
-          ) : null}
+      <main className="mk-page mx-auto max-w-3xl">
+        <header className="mk-page-header">
+          <div><h1 className="mk-page-title">Installation Wizard</h1></div>
+        </header>
+        <div className="mk-alert mk-alert-error" role="alert">
+          {formatAdminShopResolutionError(resolved)}
         </div>
+        {resolved.shopDomain ? (
+          <a className="mk-btn mk-btn-primary" href={`/api/auth/install?shop=${encodeURIComponent(resolved.shopDomain)}`}>
+            Reinstall the Shopify app for {resolved.shopDomain}
+          </a>
+        ) : null}
       </main>
     );
   }
@@ -149,16 +154,16 @@ export default async function InstallationWizardPage({ searchParams }: PageProps
   const ready = installationComplete && runtimeComplete && missingCoreEnv.length === 0 && brandingComplete && delhiveryComplete && razorpayComplete;
 
   return (
-    <main className="mx-auto max-w-5xl px-6 py-8">
-      <div className="mb-6 rounded-2xl bg-gray-950 p-6 text-white shadow-sm">
-        <p className="text-xs font-semibold uppercase tracking-wide text-gray-300">LoopD2C SaaS onboarding</p>
-        <h1 className="mt-2 text-3xl font-semibold">Installation Wizard</h1>
-        <p className="mt-3 max-w-3xl text-sm leading-6 text-gray-200">
+    <main className="mk-page mx-auto max-w-5xl">
+      <div className="mk-hero">
+        <p className="mk-hero-tagline">LoopD2C SaaS onboarding</p>
+        <h1 className="mk-hero-title">Installation Wizard</h1>
+        <p className="mk-hero-subtitle">
           Guide {resolved.shop.shopDomain} through install, OAuth, environment checks, theme app embed guidance, cart mode, branding, Delhivery, Razorpay, and launch readiness. This page reads existing configuration only and never exposes secrets.
         </p>
       </div>
 
-      <div className="grid gap-5">
+      <div style={{ display: "grid", gap: 20 }}>
         <WizardStep
           number={1}
           title="Welcome"
@@ -180,7 +185,7 @@ export default async function InstallationWizardPage({ searchParams }: PageProps
           status={missingCoreEnv.length === 0 && runtimeComplete ? "Complete" : "Needs attention"}
           description="Checks required environment values by presence only and verifies runtime config resolves for this shop. Secret values are not displayed."
           details={<p>{missingCoreEnv.length ? `Missing environment values: ${missingCoreEnv.join(", ")}.` : "Required environment values are present."} Runtime config: <strong>{runtimeComplete ? "resolved" : "needs review"}</strong>.</p>}
-          actions={<><LinkButton href={diagnosticsHref}>Open diagnostics JSON</LinkButton><LinkButton href={runtimeHref}>View safe runtime JSON</LinkButton></>}
+          actions={<><LinkButton href={diagnosticsHref}>Open diagnostics</LinkButton><LinkButton href={runtimeHref}>View safe runtime config</LinkButton></>}
         />
         <WizardStep
           number={4}
@@ -227,7 +232,7 @@ export default async function InstallationWizardPage({ searchParams }: PageProps
           title="Cart Intelligence setup status"
           status={cartIntelligenceConfigured ? "Complete" : "Incomplete"}
           description="Shows merchant-configurable Cart Intelligence setup status. This is configuration foundation only and may require later activation before any storefront feature renders."
-          details={<p>Module key: <strong>cart_intelligence_config</strong>. Master enabled: <strong>{cartIntelligence.enabled ? "Yes" : "No"}</strong>. Cart goal progress: <strong>{cartIntelligence.cartGoalProgress.enabled ? "Yes" : "No"}</strong>. Target: <strong>{cartIntelligence.cartGoalProgress.targetAmountMinor == null ? "Not set" : cartIntelligence.cartGoalProgress.targetAmountMinor / 100}</strong>. Upsells, bundles, and AI flags are saved as safe public flags only.</p>}
+          details={<p>Master enabled: <strong>{cartIntelligence.enabled ? "Yes" : "No"}</strong>. Cart goal progress: <strong>{cartIntelligence.cartGoalProgress.enabled ? "Yes" : "No"}</strong>. Target: <strong>{cartIntelligence.cartGoalProgress.targetAmountMinor == null ? "Not set" : cartIntelligence.cartGoalProgress.targetAmountMinor / 100}</strong>. Upsells, bundles, and AI flags are saved as safe public flags only.</p>}
           actions={<LinkButton href={`${settingsHref}#cart-intelligence`}>Open Cart Intelligence settings</LinkButton>}
         />
         <WizardStep
@@ -235,7 +240,7 @@ export default async function InstallationWizardPage({ searchParams }: PageProps
           title="Ready / launch checklist"
           status={ready ? "Complete" : "Needs attention"}
           description="Launch once install, OAuth, environment validation, theme embed, cart guidance, branding, Delhivery, and Razorpay are reviewed."
-          details={<ul className="list-disc space-y-1 pl-5"><li>Runtime config reads loopdesk_runtime_config, cart_intelligence_config, delhivery_config, and razorpay_config.</li><li>No checkout, payment execution, shipment creation, OTP, cart logic, analytics, upsell, or AI behavior is changed by this wizard.</li><li>Preserved shop parameter: {resolved.shop.shopDomain}</li></ul>}
+          details={<ul style={{ margin: 0, paddingLeft: 20, display: "grid", gap: 4 }}><li>Runtime config reads loopdesk_runtime_config, cart_intelligence_config, delhivery_config, and razorpay_config.</li><li>No checkout, payment execution, shipment creation, OTP, cart logic, analytics, upsell, or AI behavior is changed by this wizard.</li><li>Preserved shop parameter: {resolved.shop.shopDomain}</li></ul>}
         />
       </div>
     </main>
