@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 test("public policy delivery leaves the India-only OTP behavior dormant", () => {
   const requestRoute = readFileSync("app/api/otp/request/route.ts", "utf8");
   const phoneService = readFileSync("services/phone.ts", "utf8");
-  const modal = readFileSync("extensions/megaska-otp/assets/megaska-otp.js", "utf8");
+  const modal = readFileSync("extensions/megaska-otp/assets/loopd2c-otp.js", "utf8");
   assert.match(requestRoute, /normalizeIndianPhone/);
   assert.match(phoneService, /export function normalizeIndianPhone/);
   assert.match(modal, /\+91/);

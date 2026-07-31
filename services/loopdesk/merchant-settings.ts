@@ -13,6 +13,7 @@ export const LOOPDESK_RUNTIME_CONFIG_MODULE_KEY = "loopdesk_runtime_config";
 export const CART_INTELLIGENCE_CONFIG_MODULE_KEY = "cart_intelligence_config";
 
 type DrawerMode = "theme" | "loopdesk" | "auto";
+type AccountIconStyle = "auto" | "outline" | "filled" | "circle" | "custom";
 type IntegrationStatus = "not_configured" | "configured" | "disabled";
 
 export type LoopDeskMerchantSettings = {
@@ -57,6 +58,9 @@ export type LoopDeskMerchantSettings = {
     dashboardRedirectEnabled: boolean;
     dashboardPath: string;
     customTriggerSelector: string;
+    iconStyle: AccountIconStyle;
+    iconCustomSvg: string;
+    iconSize: number;
   };
   checkout: { showSecureBadge: boolean; showTrustCopy: boolean };
   otpModalBranding: {
@@ -269,6 +273,59 @@ function relativePath(value: unknown, fallback: string, max = 200) {
   const next = typeof value === "string" ? stripHtml(value.trim()).slice(0, max) : "";
   if (!next) return fallback;
   return next.startsWith("/") && !next.startsWith("//") ? next : fallback;
+}
+// Self-healing migration for the account-dashboard proxy path. Installs
+// created before the app-proxy subpath was rebranded persisted values like
+// "/apps/megaska/account"; the account-icon redirect reads this saved value,
+// so a stale entry sent customers to the old (now non-existent) subpath.
+// Rewriting on every normalize (load and save both funnel through here)
+// migrates legacy values without a separate data-migration pass.
+function migrateAccountDashboardPath(value: string): string {
+  return value.replace(/^\/apps\/megaska(?=\/|$)/, "/apps/loopd2c");
+}
+const ACCOUNT_ICON_STYLES: readonly AccountIconStyle[] = [
+  "auto",
+  "outline",
+  "filled",
+  "circle",
+  "custom",
+];
+function accountIconStyle(value: unknown): AccountIconStyle {
+  return typeof value === "string" &&
+    (ACCOUNT_ICON_STYLES as readonly string[]).includes(value)
+    ? (value as AccountIconStyle)
+    : "auto";
+}
+// 0 means "auto" (match nearby icons). Any explicit size is clamped to a
+// header-appropriate range so a bad value can't blow out the layout.
+function accountIconSize(value: unknown): number {
+  const next =
+    typeof value === "number"
+      ? value
+      : typeof value === "string" && value.trim()
+        ? Number(value)
+        : NaN;
+  if (!Number.isFinite(next) || next <= 0) return 0;
+  return Math.min(40, Math.max(16, Math.round(next)));
+}
+// Server-side safety gate for a merchant-supplied account icon SVG. The
+// storefront re-sanitizes with a strict element/attribute allowlist before
+// injecting; this rejects obviously dangerous markup up front and caps size.
+// stripHtml is intentionally NOT used here (it would destroy the SVG markup).
+function accountIconCustomSvg(value: unknown): string {
+  if (typeof value !== "string") return "";
+  let svg = value.trim();
+  if (!svg || svg.length > 12000) return "";
+  // Must be a single <svg>…</svg> root.
+  if (!/^<svg[\s>]/i.test(svg) || !/<\/svg>\s*$/i.test(svg)) return "";
+  svg = svg
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .replace(/<!\[CDATA\[[\s\S]*?\]\]>/g, "")
+    .trim();
+  const forbidden =
+    /<\s*(script|foreignobject|iframe|image|use|a|animate|animatetransform|animatemotion|set|style|handler|link|meta|audio|video|embed|object|marker|pattern|filter)\b|\son[a-z]+\s*=|javascript:|href\s*=|src\s*=|url\s*\(|expression\s*\(|<!doctype|<\?/i;
+  if (forbidden.test(svg)) return "";
+  return svg;
 }
 function drawerMode(value: unknown, fallback: DrawerMode): DrawerMode {
   return value === "theme" || value === "loopdesk" || value === "auto"
@@ -655,6 +712,38 @@ export function validateLoopDeskMerchantSettingsPatch(
       }
     }
   }
+  if (
+    account.iconStyle !== undefined &&
+    account.iconStyle !== null &&
+    account.iconStyle !== "" &&
+    !(ACCOUNT_ICON_STYLES as readonly string[]).includes(String(account.iconStyle))
+  ) {
+    errors.push("Account icon style is invalid.");
+  }
+  const iconSvgProvided =
+    typeof account.iconCustomSvg === "string" && account.iconCustomSvg.trim() !== "";
+  if (iconSvgProvided && accountIconCustomSvg(account.iconCustomSvg) === "") {
+    errors.push(
+      "Custom account icon must be a single safe <svg>…</svg> (no scripts, styles, external references, or event handlers) under 12KB.",
+    );
+  }
+  if (
+    account.iconStyle === "custom" &&
+    accountIconCustomSvg(account.iconCustomSvg) === ""
+  ) {
+    errors.push("Add a valid custom SVG to use the Custom account icon style.");
+  }
+  if (
+    account.iconSize !== undefined &&
+    account.iconSize !== null &&
+    account.iconSize !== "" &&
+    account.iconSize !== 0
+  ) {
+    const size = Number(account.iconSize);
+    if (!Number.isFinite(size) || size < 16 || size > 40) {
+      errors.push("Account icon size must be 0 (auto) or between 16 and 40 pixels.");
+    }
+  }
   validateBool(checkout.showSecureBadge, "Show secure badge");
   validateBool(checkout.showTrustCopy, "Show trust copy");
   validateUrl(otpModalBranding.logoUrl, "OTP modal logo URL", { httpsOnly: true });
@@ -762,8 +851,13 @@ export function normalizeLoopDeskMerchantSettings(
     },
     account: {
       dashboardRedirectEnabled: bool(account.dashboardRedirectEnabled, true),
-      dashboardPath: relativePath(account.dashboardPath, "/apps/megaska/account", 200),
+      dashboardPath: migrateAccountDashboardPath(
+        relativePath(account.dashboardPath, "/apps/loopd2c/account", 200),
+      ),
       customTriggerSelector: text(account.customTriggerSelector, "", 500),
+      iconStyle: accountIconStyle(account.iconStyle),
+      iconCustomSvg: accountIconCustomSvg(account.iconCustomSvg),
+      iconSize: accountIconSize(account.iconSize),
     },
     checkout: {
       showSecureBadge: bool(checkout.showSecureBadge, true),

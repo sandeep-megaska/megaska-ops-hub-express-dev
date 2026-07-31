@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-const auth = readFileSync(new URL("../megaska-otp/assets/megaska-auth.js", import.meta.url), "utf8");
+const auth = readFileSync(new URL("../megaska-otp/assets/loopd2c-auth.js", import.meta.url), "utf8");
 const dashboard = readFileSync(new URL("../megaska-otp/assets/loopdesk-customer-dashboard.js", import.meta.url), "utf8");
 
 test("OTP success replaces browser storage before publishing the new identity", () => {

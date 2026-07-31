@@ -17,7 +17,7 @@ export default async function AdminWalletsPage({ searchParams }: Props) {
   const shop = resolved.shop;
 
   if (!shop?.id) {
-    return <main style={{ padding: 24 }}>{formatAdminShopResolutionError(resolved)}</main>;
+    return <main className="mk-page"><div className="mk-alert mk-alert-error" role="alert">{formatAdminShopResolutionError(resolved)}</div></main>;
   }
 
   const q = String(Array.isArray(filters.q) ? filters.q[0] : filters.q || "").trim();
@@ -55,45 +55,51 @@ export default async function AdminWalletsPage({ searchParams }: Props) {
   `;
 
   return (
-    <main style={{ padding: 24, display: "grid", gap: 12 }}>
-      <h1>Wallet Operations</h1>
-      <form style={{ display: "flex", gap: 8, maxWidth: 560 }}>
-        <input name="q" defaultValue={q} placeholder="Search by phone, name, email" style={{ width: "100%" }} />
-        <button type="submit">Search</button>
+    <main className="mk-page">
+      <header className="mk-page-header">
+        <div>
+          <h1 className="mk-page-title">Wallet Operations</h1>
+          <p className="mk-page-subtitle">Search customer wallets and open a customer to manage credits, debits, and view their ledger.</p>
+        </div>
+      </header>
+
+      <form className="mk-header-actions" style={{ maxWidth: 560 }}>
+        <input className="mk-input" name="q" defaultValue={q} placeholder="Search by phone, name, email" />
+        <button type="submit" className="mk-btn mk-btn-primary">Search</button>
       </form>
 
-      <table style={{ width: "100%", borderCollapse: "collapse" }}>
-        <thead>
-          <tr>
-            {["Customer", "Phone", "Email", "Balance", "Updated", "Action"].map((head) => (
-              <th key={head} style={{ textAlign: "left", borderBottom: "1px solid #ccc", padding: 8 }}>
-                {head}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {wallets.map((wallet) => (
-            <tr key={wallet.id}>
-              <td style={{ padding: 8 }}>{getName(wallet)}</td>
-              <td style={{ padding: 8 }}>{wallet.phoneE164}</td>
-              <td style={{ padding: 8 }}>{wallet.email || "-"}</td>
-              <td style={{ padding: 8 }}>{wallet.currency} {(wallet.currentBalance / 100).toFixed(2)}</td>
-              <td style={{ padding: 8 }}>{wallet.updatedAt.toISOString().slice(0, 19).replace("T", " ")}</td>
-              <td style={{ padding: 8 }}>
-                <Link href={`/admin/wallets/${wallet.customerProfileId}`}>Open</Link>
-              </td>
-            </tr>
-          ))}
-          {!wallets.length ? (
-            <tr>
-              <td colSpan={6} style={{ padding: 8 }}>
-                No wallets found.
-              </td>
-            </tr>
-          ) : null}
-        </tbody>
-      </table>
+      {wallets.length ? (
+        <div className="mk-table-wrap">
+          <table className="mk-table">
+            <thead>
+              <tr>
+                {["Customer", "Phone", "Email", "Balance", "Updated", "Action"].map((head) => (
+                  <th key={head}>{head}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {wallets.map((wallet) => (
+                <tr key={wallet.id}>
+                  <td>{getName(wallet)}</td>
+                  <td>{wallet.phoneE164}</td>
+                  <td>{wallet.email || "-"}</td>
+                  <td>{wallet.currency} {(wallet.currentBalance / 100).toFixed(2)}</td>
+                  <td>{wallet.updatedAt.toISOString().slice(0, 19).replace("T", " ")}</td>
+                  <td>
+                    <Link className="mk-btn mk-btn-sm" href={`/admin/wallets/${wallet.customerProfileId}`}>Open</Link>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="mk-empty">
+          <p className="mk-empty-title">No wallets found</p>
+          <p>Try a different phone number, name, or email.</p>
+        </div>
+      )}
     </main>
   );
 }

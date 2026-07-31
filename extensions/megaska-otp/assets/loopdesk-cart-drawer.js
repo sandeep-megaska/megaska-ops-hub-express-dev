@@ -641,7 +641,7 @@
 
     state.promotionRuntimeRefresh.attempts += 1;
     state.promotionRuntimeRefresh.inFlight = true;
-    var url = "/apps/megaska/api/runtime/config?shop=" + encodeURIComponent(shopDomain) + "&_loopdesk_runtime=" + Date.now();
+    var url = "/apps/loopd2c/api/runtime/config?shop=" + encodeURIComponent(shopDomain) + "&_loopdesk_runtime=" + Date.now();
     debugLog("promotion runtime refresh started", { reason: reason, attempt: state.promotionRuntimeRefresh.attempts }, true);
     return fetch(url, { credentials: "same-origin", cache: "no-store", headers: { Accept: "application/json" } })
       .then(function (response) {
@@ -1838,7 +1838,7 @@
     } else {
       debugLog("Express modal API missing", { source: checkoutSource });
       window.setTimeout(releaseLock, 900);
-      window.location.href = "/apps/megaska/checkout";
+      window.location.href = "/apps/loopd2c/checkout";
     }
   }
 

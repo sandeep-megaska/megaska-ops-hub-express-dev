@@ -80,44 +80,47 @@ export function GstReportsAdmin() {
   }
 
   return (
-    <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-      <h2 className="text-base font-semibold text-gray-900">B2C Sales Register</h2>
-      <p className="mt-1 text-sm text-gray-600">
-        Create a B2C GST CSV for a selected date range. Includes tax invoices and nets credit / debit
-        notes (credit notes appear as negative rows) so the totals match GSTR-1.
-      </p>
+    <section className="mk-card space-y-4">
+      <div>
+        <h2 className="mk-section-title">B2C Sales Register</h2>
+        <p className="mk-section-subtitle">
+          Create a B2C GST CSV for a selected date range. Includes tax invoices and nets credit / debit
+          notes (credit notes appear as negative rows) so the totals match GSTR-1.
+        </p>
+      </div>
 
-      <div className="mt-4 grid gap-3 md:grid-cols-3">
-        <label className="text-sm text-gray-700">
-          <span className="mb-1 block">From date</span>
+      <div className="grid gap-3 md:grid-cols-3">
+        <div className="mk-field">
+          <label className="mk-label">From date</label>
           <input
             type="date"
-            className="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm"
+            className="mk-input"
             value={from}
             onChange={(e) => {
               setFrom(e.target.value)
               setResult(undefined)
             }}
           />
-        </label>
+        </div>
 
-        <label className="text-sm text-gray-700">
-          <span className="mb-1 block">To date</span>
+        <div className="mk-field">
+          <label className="mk-label">To date</label>
           <input
             type="date"
-            className="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm"
+            className="mk-input"
             value={to}
             onChange={(e) => {
               setTo(e.target.value)
               setResult(undefined)
             }}
           />
-        </label>
+        </div>
 
-        <div className="flex items-end">
+        <div className="mk-field">
+          <label className="mk-label">&nbsp;</label>
           <button
             type="button"
-            className="rounded-xl bg-gray-900 px-4 py-2.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
+            className="mk-btn mk-btn-primary"
             onClick={() => void onCreateReport()}
             disabled={isCreatingReport}
           >
@@ -126,15 +129,15 @@ export function GstReportsAdmin() {
         </div>
       </div>
 
-      {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
+      {error ? <div className="mk-alert mk-alert-error">{error}</div> : null}
 
       {result ? (
-        <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
-          <p className="font-medium text-gray-900">Report ready</p>
-          <p className="mt-2">Rows included: {result.rowCount}</p>
+        <div className="rounded-xl border border-[color:var(--line)] bg-[color:var(--panel-2)] p-4 text-sm">
+          <p className="font-medium text-[color:var(--text)]">Report ready</p>
+          <p className="mt-2 text-[color:var(--muted)]">Rows included: {result.rowCount}</p>
 
           {result.warnings.length > 0 ? (
-            <div className="mt-3 text-amber-700">
+            <div className="mt-3 text-[color:var(--warning-text)]">
               <p className="font-medium">Warnings ({result.warnings.length})</p>
               <ul className="list-disc pl-5">
                 {result.warnings.map((warning, index) => (
@@ -147,7 +150,7 @@ export function GstReportsAdmin() {
           <div className="mt-4">
             <button
               type="button"
-              className="rounded-xl bg-gray-900 px-4 py-2 text-sm font-medium text-white"
+              className="mk-btn mk-btn-primary"
               onClick={() => downloadCsv(`gst-b2c-sales-register-${from}-to-${to}.csv`, result.csv)}
             >
               Download CSV

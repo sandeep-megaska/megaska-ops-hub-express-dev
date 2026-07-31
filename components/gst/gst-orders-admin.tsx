@@ -7,7 +7,6 @@ import {
   syncOrders,
 } from '../../lib/gst-client'
 import { adminAuthHeaders } from '../../lib/admin-fetch'
-import { GstResponseViewer } from './gst-response-viewer'
 
 type OrderLineRow = {
   lineNumber: number
@@ -95,29 +94,27 @@ function formatInr(amount: number): string {
 
 function TaxCheckBadge({ recon }: { recon: TaxReconciliation | null }) {
   if (!recon) {
-    return <span className="text-xs text-gray-400" title="Generate the invoice to reconcile against checkout tax">—</span>
+    return <span className="mk-badge mk-badge-neutral" title="Generate the invoice to reconcile against checkout tax">—</span>
   }
   if (recon.matches) {
     return (
       <span
-        className="inline-flex items-center rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700"
+        className="mk-badge mk-badge-success"
         title={`Invoice GST ${formatInr(recon.invoiceTax)} matches checkout tax ${formatInr(recon.shopifyTax)}`}
       >
-        ✓ Matches
+        Matches
       </span>
     )
   }
   return (
     <span
-      className="inline-flex flex-col items-start gap-0.5"
+      className="inline-flex flex-col items-start gap-1"
       title={`Invoice GST ${formatInr(recon.invoiceTax)} does not match the tax charged at checkout ${formatInr(
         recon.shopifyTax,
       )}. Check that this product's GST rate matches your Shopify tax settings.`}
     >
-      <span className="inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700">
-        ⚠ Mismatch
-      </span>
-      <span className="text-[11px] leading-tight text-red-600">
+      <span className="mk-badge mk-badge-danger">Mismatch</span>
+      <span className="text-[11px] leading-tight text-[color:var(--danger-text)]">
         Inv {formatInr(recon.invoiceTax)} vs Checkout {formatInr(recon.shopifyTax)}
       </span>
     </span>
@@ -455,58 +452,70 @@ export function GstOrdersAdmin() {
   )
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[1.25fr_0.75fr]">
-      <div className="space-y-5">
-        <form onSubmit={onSync} className="space-y-3 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-          <h2 className="text-base font-semibold text-gray-900">Recent Shopify Orders</h2>
-          <div className="grid gap-3 md:grid-cols-3">
-            <input type="date" className="rounded-xl border border-gray-300 px-3 py-2.5 text-sm" value={from} onChange={(e) => setFrom(e.target.value)} />
-            <input type="date" className="rounded-xl border border-gray-300 px-3 py-2.5 text-sm" value={to} onChange={(e) => setTo(e.target.value)} />
-            <button type="submit" className="rounded-xl bg-gray-900 px-4 py-2.5 text-sm text-white" disabled={loading}>{loading ? 'Syncing...' : 'Sync Orders'}</button>
+    <div className="mk-page">
+      {error ? <div className="mk-alert mk-alert-error">{error}</div> : null}
+
+      <form onSubmit={onSync} className="mk-card space-y-4">
+        <div>
+          <h2 className="mk-section-title">Recent Shopify Orders</h2>
+          <p className="mk-section-subtitle">Sync orders for a date range, then generate GST invoices below.</p>
+        </div>
+        <div className="grid gap-3 md:grid-cols-3">
+          <div className="mk-field">
+            <label className="mk-label">From</label>
+            <input type="date" className="mk-input" value={from} onChange={(e) => setFrom(e.target.value)} />
           </div>
-          <label className="flex items-center gap-2 text-sm text-gray-700">
-            <input type="checkbox" checked={forceResync} onChange={(e) => setForceResync(e.target.checked)} />
-            Re-import already-synced orders (refresh HSN/tax mapping &amp; readiness)
-          </label>
-          <button type="button" className="rounded-xl border border-gray-300 px-4 py-2 text-sm" onClick={() => void loadOrders()}>
+          <div className="mk-field">
+            <label className="mk-label">To</label>
+            <input type="date" className="mk-input" value={to} onChange={(e) => setTo(e.target.value)} />
+          </div>
+          <div className="mk-field">
+            <label className="mk-label">&nbsp;</label>
+            <button type="submit" className="mk-btn mk-btn-primary" disabled={loading}>{loading ? 'Syncing...' : 'Sync Orders'}</button>
+          </div>
+        </div>
+        <label className="mk-check">
+          <input type="checkbox" checked={forceResync} onChange={(e) => setForceResync(e.target.checked)} />
+          Re-import already-synced orders (refresh HSN/tax mapping &amp; readiness)
+        </label>
+        <div className="mk-header-actions">
+          <button type="button" className="mk-btn" onClick={() => void loadOrders()}>
             Refresh Order List
           </button>
-          <div className="flex flex-wrap gap-2 pt-2">
-            <button type="button" className="rounded-xl border border-gray-300 px-3 py-1.5 text-sm" onClick={() => void onGenerateB2cReport()} disabled={isB2cExporting}>
-              {isB2cExporting ? 'Exporting B2C...' : 'B2C Export'}
-            </button>
-            <button type="button" className="rounded-xl border border-gray-300 px-3 py-1.5 text-sm text-gray-500" disabled title="Coming soon">Credit Note Export</button>
-            <button type="button" className="rounded-xl border border-gray-300 px-3 py-1.5 text-sm text-gray-500" disabled title="Coming soon">Debit Note Export</button>
+          <button type="button" className="mk-btn" onClick={() => void onGenerateB2cReport()} disabled={isB2cExporting}>
+            {isB2cExporting ? 'Exporting B2C...' : 'B2C Export'}
+          </button>
+        </div>
+        {b2cExportError ? <div className="mk-alert mk-alert-error">{b2cExportError}</div> : null}
+        {b2cWarnings.length > 0 ? (
+          <div className="mk-alert mk-alert-info">
+            <p className="font-medium">B2C export warnings ({b2cWarnings.length}):</p>
+            <ul className="list-disc pl-5">
+              {b2cWarnings.map((warning, index) => (
+                <li key={`${warning.code}-${warning.documentId}-${warning.lineNumber ?? 'na'}-${index}`}>
+                  {warning.message} (Doc: {warning.documentNumber}{warning.lineNumber != null ? `, Line ${warning.lineNumber}` : ''})
+                </li>
+              ))}
+            </ul>
           </div>
-          {b2cExportError ? <p className="pt-2 text-sm text-red-600">{b2cExportError}</p> : null}
-          {b2cWarnings.length > 0 ? (
-            <div className="pt-2 text-sm text-amber-700">
-              <p className="font-medium">B2C export warnings ({b2cWarnings.length}):</p>
-              <ul className="list-disc pl-5">
-                {b2cWarnings.map((warning, index) => (
-                  <li key={`${warning.code}-${warning.documentId}-${warning.lineNumber ?? 'na'}-${index}`}>
-                    {warning.message} (Doc: {warning.documentNumber}{warning.lineNumber != null ? `, Line ${warning.lineNumber}` : ''})
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-        </form>
+        ) : null}
+      </form>
 
-        <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-          <h2 className="mb-3 text-base font-semibold text-gray-900">GST Orders</h2>
-          {mismatchCount > 0 ? (
-            <div className="mb-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              <span className="font-medium">
-                {mismatchCount} order{mismatchCount === 1 ? '' : 's'} with a tax mismatch.
-              </span>{' '}
-              The invoice GST (from the app&apos;s HSN mapping) does not match the tax charged at checkout. Fix the
-              product&apos;s GST rate or the Shopify tax setting so they agree — see the &ldquo;Tax check&rdquo; column.
-            </div>
-          ) : null}
-          <div className="overflow-x-auto rounded-xl border border-gray-200">
-            <table className="min-w-full text-sm">
-              <thead className="bg-gray-50 text-left text-gray-600"><tr><th className="px-3 py-2">Order</th><th className="px-3 py-2">Date</th><th className="px-3 py-2">Mapping</th><th className="px-3 py-2">Missing SKU</th><th className="px-3 py-2">Invoice</th><th className="px-3 py-2">Tax check</th><th className="px-3 py-2">Actions</th></tr></thead>
+      <div className="mk-card space-y-4">
+        <h2 className="mk-section-title">GST Orders</h2>
+        {mismatchCount > 0 ? (
+          <div className="mk-alert mk-alert-error">
+            <span className="font-medium">
+              {mismatchCount} order{mismatchCount === 1 ? '' : 's'} with a tax mismatch.
+            </span>{' '}
+            The invoice GST (from the app&apos;s HSN mapping) does not match the tax charged at checkout. Fix the
+            product&apos;s GST rate or the Shopify tax setting so they agree — see the &ldquo;Tax check&rdquo; column.
+          </div>
+        ) : null}
+        {hasOrders ? (
+          <div className="mk-table-wrap">
+            <table className="mk-table">
+              <thead><tr><th>Order</th><th>Date</th><th>Mapping</th><th>Missing SKU</th><th>Invoice</th><th>Tax check</th><th>Actions</th></tr></thead>
               <tbody>
                 {rows.map((row) => {
                   const id = row.id
@@ -514,58 +523,60 @@ export function GstOrdersAdmin() {
                   const expanded = Boolean(expandedRows[id])
                   return (
                     <Fragment key={id}>
-                    <tr className="border-t border-gray-100 align-top">
-                      <td className="px-3 py-2 font-medium">
-                        <button className="mr-2 rounded border border-gray-300 px-2 py-0.5 text-xs" onClick={() => setExpandedRows((prev) => ({ ...prev, [id]: !expanded }))}>
+                    <tr className="align-top">
+                      <td className="font-medium">
+                        <button className="mk-btn mk-btn-sm mk-btn-ghost mr-2" onClick={() => setExpandedRows((prev) => ({ ...prev, [id]: !expanded }))}>
                           {expanded ? 'Hide' : 'Show'} lines
                         </button>
                         {row.orderName}
                       </td>
-                      <td className="px-3 py-2">{String(row.orderDate || '').slice(0, 10)}</td>
-                      <td className="px-3 py-2">{row.mappingCompleteness}%</td>
-                      <td className="px-3 py-2 text-xs text-amber-700">{unmappedSkus.length > 0 ? unmappedSkus.join(', ') : 'None'}</td>
-                      <td className="px-3 py-2">{row.invoiceStatus}</td>
-                      <td className="px-3 py-2"><TaxCheckBadge recon={row.taxReconciliation} /></td>
-                      <td className="space-x-2 whitespace-nowrap px-3 py-2">
-                        <button className="rounded-lg border border-gray-300 px-3 py-1.5" onClick={() => void onGenerate(id)} disabled={generatingId === id}>
-                          {generatingId === id ? 'Generating...' : 'Generate Invoice'}
-                        </button>
-                        {row.invoiceDocumentId ? (
-                          <>
-                            <button className="rounded-lg border border-gray-300 px-3 py-1.5" onClick={() => void onPrintInvoice(row.invoiceDocumentId!)}>Print Invoice</button>
-                            <button className="rounded-lg border border-gray-300 px-3 py-1.5 disabled:cursor-not-allowed disabled:opacity-60" onClick={() => onDownloadPdf(row.invoiceDocumentId!)} disabled={Boolean(downloadingPdfId)}>
-                              {downloadingPdfId === row.invoiceDocumentId ? 'Downloading PDF...' : 'Download PDF'}
-                            </button>
-                          </>
-                        ) : null}
+                      <td>{String(row.orderDate || '').slice(0, 10)}</td>
+                      <td>{row.mappingCompleteness}%</td>
+                      <td className="text-xs text-[color:var(--warning-text)]">{unmappedSkus.length > 0 ? unmappedSkus.join(', ') : 'None'}</td>
+                      <td>{row.invoiceStatus}</td>
+                      <td><TaxCheckBadge recon={row.taxReconciliation} /></td>
+                      <td className="whitespace-nowrap">
+                        <div className="mk-header-actions">
+                          <button className="mk-btn mk-btn-sm mk-btn-primary" onClick={() => void onGenerate(id)} disabled={generatingId === id}>
+                            {generatingId === id ? 'Generating...' : 'Generate Invoice'}
+                          </button>
+                          {row.invoiceDocumentId ? (
+                            <>
+                              <button className="mk-btn mk-btn-sm" onClick={() => void onPrintInvoice(row.invoiceDocumentId!)}>Print Invoice</button>
+                              <button className="mk-btn mk-btn-sm" onClick={() => onDownloadPdf(row.invoiceDocumentId!)} disabled={Boolean(downloadingPdfId)}>
+                                {downloadingPdfId === row.invoiceDocumentId ? 'Downloading PDF...' : 'Download PDF'}
+                              </button>
+                            </>
+                          ) : null}
+                        </div>
                       </td>
                     </tr>
                     {expanded ? (
-                      <tr className="border-t border-gray-100 bg-gray-50/50">
-                        <td className="px-3 py-3" colSpan={7}>
-                          <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
-                            <table className="min-w-full text-xs">
-                              <thead className="bg-gray-100 text-gray-600">
+                      <tr>
+                        <td colSpan={7}>
+                          <div className="mk-table-wrap">
+                            <table className="mk-table">
+                              <thead>
                                 <tr>
-                                  <th className="px-2 py-1.5 text-left">SKU</th>
-                                  <th className="px-2 py-1.5 text-right">Qty</th>
-                                  <th className="px-2 py-1.5 text-right">Price</th>
-                                  <th className="px-2 py-1.5 text-right">Gross</th>
-                                  <th className="px-2 py-1.5 text-left">Mapping</th>
-                                  <th className="px-2 py-1.5 text-left">HSN</th>
-                                  <th className="px-2 py-1.5 text-right">GST %</th>
+                                  <th>SKU</th>
+                                  <th className="text-right">Qty</th>
+                                  <th className="text-right">Price</th>
+                                  <th className="text-right">Gross</th>
+                                  <th>Mapping</th>
+                                  <th>HSN</th>
+                                  <th className="text-right">GST %</th>
                                 </tr>
                               </thead>
                               <tbody>
                                 {row.lineItems.map((line) => (
-                                  <tr key={`${id}-${line.lineNumber}`} className="border-t border-gray-100">
-                                    <td className="px-2 py-1.5">{line.sku || '-'}</td>
-                                    <td className="px-2 py-1.5 text-right">{line.quantity.toFixed(3).replace(/\.?0+$/, '')}</td>
-                                    <td className="px-2 py-1.5 text-right">{line.unitPrice.toFixed(2)}</td>
-                                    <td className="px-2 py-1.5 text-right">{line.grossAmount.toFixed(2)}</td>
-                                    <td className="px-2 py-1.5">{line.mappingStatus}</td>
-                                    <td className="px-2 py-1.5">{line.hsnCode || '-'}</td>
-                                    <td className="px-2 py-1.5 text-right">{line.taxRate == null ? '-' : line.taxRate.toFixed(2)}</td>
+                                  <tr key={`${id}-${line.lineNumber}`}>
+                                    <td>{line.sku || '-'}</td>
+                                    <td className="text-right">{line.quantity.toFixed(3).replace(/\.?0+$/, '')}</td>
+                                    <td className="text-right">{line.unitPrice.toFixed(2)}</td>
+                                    <td className="text-right">{line.grossAmount.toFixed(2)}</td>
+                                    <td>{line.mappingStatus}</td>
+                                    <td>{line.hsnCode || '-'}</td>
+                                    <td className="text-right">{line.taxRate == null ? '-' : line.taxRate.toFixed(2)}</td>
                                   </tr>
                                 ))}
                               </tbody>
@@ -580,8 +591,12 @@ export function GstOrdersAdmin() {
               </tbody>
             </table>
           </div>
-          {!hasOrders ? <p className="mt-3 text-sm text-gray-500">No synced orders found for this date range.</p> : null}
-        </div>
+        ) : (
+          <div className="mk-empty">
+            <p className="mk-empty-title">No synced orders</p>
+            <p>No synced orders found for this date range.</p>
+          </div>
+        )}
       </div>
 
       {printHtml ? (
@@ -589,11 +604,11 @@ export function GstOrdersAdmin() {
           <div className="flex h-[90vh] w-full max-w-6xl flex-col rounded-xl bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
               <h3 className="text-sm font-semibold text-gray-900">Invoice Preview</h3>
-              <div className="space-x-2">
-                <button className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm" onClick={() => printFrameRef.current?.contentWindow?.print()}>
+              <div className="mk-header-actions">
+                <button className="mk-btn mk-btn-sm mk-btn-primary" onClick={() => printFrameRef.current?.contentWindow?.print()}>
                   Print
                 </button>
-                <button className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm" onClick={() => setPrintHtml(null)}>
+                <button className="mk-btn mk-btn-sm" onClick={() => setPrintHtml(null)}>
                   Close
                 </button>
               </div>
@@ -602,8 +617,6 @@ export function GstOrdersAdmin() {
           </div>
         </div>
       ) : null}
-
-      <GstResponseViewer title="Orders API Response" data={result} error={error} />
     </div>
   )
 }

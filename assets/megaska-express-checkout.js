@@ -2,7 +2,7 @@
   const root = document.getElementById("megaska-express-checkout-root");
   if (!root) return;
 
-  const API_BASE = String(window.MEGASKA_API_BASE || "/apps/megaska/api").replace(/\/$/, "");
+  const API_BASE = String(window.MEGASKA_API_BASE || "/apps/loopd2c/api").replace(/\/$/, "");
   const SESSION_KEY = "megaska_session_token";
 
   const state = {

@@ -30,6 +30,14 @@ function formatDateTime(value: Date | null | undefined) {
   return value.toLocaleString();
 }
 
+function statusBadgeVariant(status: string) {
+  const s = (status || "").toUpperCase();
+  if (["APPROVED", "CLOSED", "COMPLETED", "PAID", "REFUNDED"].includes(s)) return "success";
+  if (["REJECTED", "LOCKED", "CANCELLED", "FAILED"].includes(s)) return "danger";
+  if (["OPEN", "PENDING", "AWAITING_PAYMENT", "AWAITING_CUSTOMER"].includes(s)) return "warning";
+  return "neutral";
+}
+
 function toDate(value: string | null | undefined) {
   if (!value) return null;
   const parsed = new Date(value);
@@ -260,23 +268,23 @@ export default async function CancellationsPage({
 
       <section className="mk-card">
         <form method="get" className="mk-grid-4">
-          <label className="mk-list-subtitle">
-            Range
-            <select name="range" defaultValue={range} className="mk-input">
+          <div className="mk-field">
+            <label className="mk-label">Range</label>
+            <select name="range" defaultValue={range} className="mk-select">
               <option value="7d">Last 7 days</option>
               <option value="30d">Last 30 days</option>
               <option value="90d">Last 90 days</option>
               <option value="custom">Custom</option>
             </select>
-          </label>
-          <label className="mk-list-subtitle">
-            From
+          </div>
+          <div className="mk-field">
+            <label className="mk-label">From</label>
             <input type="date" name="from" defaultValue={fromRaw} className="mk-input" />
-          </label>
-          <label className="mk-list-subtitle">
-            To
+          </div>
+          <div className="mk-field">
+            <label className="mk-label">To</label>
             <input type="date" name="to" defaultValue={toRaw} className="mk-input" />
-          </label>
+          </div>
           <div style={{ display: "flex", alignItems: "end" }}>
             <button className="mk-btn mk-btn-primary" type="submit">Apply</button>
           </div>
@@ -299,7 +307,7 @@ export default async function CancellationsPage({
       <section className="mk-card">
         <h2 className="mk-section-title">Cancellation Queue</h2>
         {merged.length === 0 ? (
-          <div className="mk-list-row"><p className="mk-list-subtitle">No cancellations found for the selected date range.</p></div>
+          <div className="mk-empty"><p className="mk-empty-title">No cancellations found</p><p>Nothing matched the selected date range.</p></div>
         ) : (
           <div className="mk-list">
             {merged.map((row) => (
@@ -318,7 +326,7 @@ export default async function CancellationsPage({
                   <p className="mk-list-subtitle">Customer Explanation: {row.customerExplanation}</p>
                   <p className="mk-list-subtitle">Source: {row.source}</p>
                 </div>
-                <span className="mk-badge mk-badge-warning">{row.status}</span>
+                <span className={`mk-badge mk-badge-${statusBadgeVariant(row.status)}`}>{row.status}</span>
               </div>
             ))}
           </div>

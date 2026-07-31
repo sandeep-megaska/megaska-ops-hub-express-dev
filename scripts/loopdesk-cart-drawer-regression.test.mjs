@@ -169,7 +169,7 @@ assert.match(css, /\.loopdesk-cart-drawer__offer[\s\S]*\.loopdesk-cart-drawer__o
 
 const refreshRuntime = source.match(new RegExp('function refreshPromotionRuntime\\(reason\\) \\{[\\s\\S]*?\n  \\}\n\n  function schedulePromotionRuntimeRefresh'));
 assert.ok(refreshRuntime, "promotion runtime refresh helper should exist");
-assert.match(refreshRuntime[0], /\/apps\/megaska\/api\/runtime\/config\?shop=/, "empty promotion recovery should fetch the app-proxy runtime config endpoint");
+assert.match(refreshRuntime[0], /\/apps\/loopd2c\/api\/runtime\/config\?shop=/, "empty promotion recovery should fetch the app-proxy runtime config endpoint");
 assert.match(refreshRuntime[0], /encodeURIComponent\(shopDomain\)[\s\S]*_loopdesk_runtime=" \+ Date\.now\(\)/, "runtime recovery should pass the shop domain and cache-busting timestamp");
 assert.match(refreshRuntime[0], /credentials: "same-origin", cache: "no-store"/, "runtime recovery should use same-origin credentials and no-store cache");
 assert.match(refreshRuntime[0], /freshConfig\.promotions && Array\.isArray\(freshConfig\.promotions\.rules\)[\s\S]*applyFreshRuntimePromotions\(freshConfig\.promotions\)/, "fresh runtime responses with promotion rules should replace the drawer promotion runtime");

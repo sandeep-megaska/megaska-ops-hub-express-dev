@@ -23,13 +23,11 @@ function formatDate(value: Date | null | undefined) {
   return value.toISOString();
 }
 
-function statusBadgeClass(status: string) {
-  if (["REJECTED"].includes(status)) return "bg-red-100 text-red-700 border-red-200";
-  if (["CLOSED"].includes(status)) return "bg-emerald-100 text-emerald-700 border-emerald-200";
-  if (["APPROVED", "PAYMENT_RECEIVED", "REPLACEMENT_SHIPPED"].includes(status)) {
-    return "bg-indigo-100 text-indigo-700 border-indigo-200";
-  }
-  return "bg-amber-100 text-amber-700 border-amber-200";
+function statusBadgeVariant(status: string) {
+  if (["REJECTED", "CANCELLED", "FAILED"].includes(status)) return "danger";
+  if (["CLOSED", "COMPLETED", "APPROVED", "PAYMENT_RECEIVED", "PICKUP_COMPLETED", "ITEM_RECEIVED", "REPLACEMENT_SHIPPED"].includes(status)) return "success";
+  if (["OPEN", "PENDING", "AWAITING_PAYMENT", "PICKUP_PENDING", "PICKUP_SCHEDULED", "REPLACEMENT_PROCESSING"].includes(status)) return "warning";
+  return "neutral";
 }
 
 export default async function AdminExchangeDetailPage({
@@ -53,11 +51,11 @@ export default async function AdminExchangeDetailPage({
     : await resolveShopConfig();
   if (!shop) {
     return (
-      <main className="p-8">
-        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-red-700">
+      <div className="mk-page">
+        <div className="mk-alert mk-alert-error">
           Unable to load exchange request details right now. Please refresh and try again.
         </div>
-      </main>
+      </div>
     );
   }
 
@@ -71,7 +69,13 @@ export default async function AdminExchangeDetailPage({
   });
 
   if (!request) {
-    return <main className="p-8">Exchange request not found.</main>;
+    return (
+      <div className="mk-page">
+        <div className="mk-empty">
+          <p className="mk-empty-title">Exchange request not found</p>
+        </div>
+      </div>
+    );
   }
 
   const reverseShipment = request.shipments.find((shipment) => shipment.direction === "REVERSE_PICKUP") || null;
@@ -80,38 +84,38 @@ export default async function AdminExchangeDetailPage({
   const nextTransitions = allowedStatusTransitions[request.status] || [];
 
   return (
-    <main className="grid gap-6 p-8">
-      <section className="rounded-xl border bg-white p-6 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-4">
+    <div className="mk-page">
+      <section className="mk-card">
+        <div className="mk-page-header">
           <div>
-            <h1 className="text-2xl font-semibold text-slate-900">Exchange Request #{request.id}</h1>
-            <p className="mt-1 text-sm text-slate-500">Order {request.orderNumber || "—"}</p>
+            <h1 className="mk-page-title">Exchange Request #{request.id}</h1>
+            <p className="mk-page-subtitle">Order {request.orderNumber || "—"}</p>
           </div>
-          <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${statusBadgeClass(request.status)}`}>
+          <span className={`mk-badge mk-badge-${statusBadgeVariant(request.status)}`}>
             {request.status}
           </span>
         </div>
 
-        <div className="mt-5 grid gap-4 text-sm md:grid-cols-2 xl:grid-cols-3">
+        <div className="mk-grid-3" style={{ marginTop: 20 }}>
           <div>
-            <p className="text-slate-500">Customer</p>
-            <p className="font-medium text-slate-900">{request.customerNameSnapshot || "—"}</p>
+            <p className="mk-stat-label">Customer</p>
+            <p style={{ fontWeight: 600 }}>{request.customerNameSnapshot || "—"}</p>
           </div>
           <div>
-            <p className="text-slate-500">Phone</p>
-            <p className="font-medium text-slate-900">{request.customerPhoneSnapshot || "—"}</p>
+            <p className="mk-stat-label">Phone</p>
+            <p style={{ fontWeight: 600 }}>{request.customerPhoneSnapshot || "—"}</p>
           </div>
           <div>
-            <p className="text-slate-500">Email</p>
-            <p className="font-medium text-slate-900">{request.customerEmailSnapshot || "—"}</p>
+            <p className="mk-stat-label">Email</p>
+            <p style={{ fontWeight: 600 }}>{request.customerEmailSnapshot || "—"}</p>
           </div>
           <div>
-            <p className="text-slate-500">Requested Date</p>
-            <p className="font-medium text-slate-900">{formatDate(request.requestedAt)}</p>
+            <p className="mk-stat-label">Requested Date</p>
+            <p style={{ fontWeight: 600 }}>{formatDate(request.requestedAt)}</p>
           </div>
           <div>
-            <p className="text-slate-500">Last Updated</p>
-            <p className="font-medium text-slate-900">{formatDate(request.updatedAt)}</p>
+            <p className="mk-stat-label">Last Updated</p>
+            <p style={{ fontWeight: 600 }}>{formatDate(request.updatedAt)}</p>
           </div>
         </div>
       </section>
@@ -181,6 +185,6 @@ export default async function AdminExchangeDetailPage({
             : null
         }
       />
-    </main>
+    </div>
   );
 }

@@ -3,8 +3,8 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
 
-const otpSource = readFileSync(new URL("../../extensions/megaska-otp/assets/megaska-otp.js", import.meta.url), "utf8");
-const authSource = readFileSync(new URL("../../extensions/megaska-otp/assets/megaska-auth.js", import.meta.url), "utf8");
+const otpSource = readFileSync(new URL("../../extensions/megaska-otp/assets/loopd2c-otp.js", import.meta.url), "utf8");
+const authSource = readFileSync(new URL("../../extensions/megaska-otp/assets/loopd2c-auth.js", import.meta.url), "utf8");
 
 function extractFunction(name) {
   const start = otpSource.indexOf(`  function ${name}(`);
@@ -170,7 +170,7 @@ test("collapsed trigger and country options use compact, aligned country content
   assert.match(renderCountryControl, /megaska-otp-country-name[^`]*country\.name/);
   assert.match(renderCountryControl, /megaska-otp-country-dial-code[^`]*country\.dialCode/);
 
-  const cssSource = readFileSync(new URL("../../extensions/megaska-otp/assets/megaska-otp.css", import.meta.url), "utf8");
+  const cssSource = readFileSync(new URL("../../extensions/megaska-otp/assets/loopd2c-otp.css", import.meta.url), "utf8");
   assert.match(cssSource, /grid-template-columns:\s*32px minmax\(0, 1fr\) auto/);
   assert.doesNotMatch(cssSource, /megaska-otp-country-option\[aria-selected="true"\]::after/);
 });

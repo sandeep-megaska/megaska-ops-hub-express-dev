@@ -218,6 +218,7 @@ export default async function IssuesPage({
                       <td>{refund ? `${refund.status} (${refund.method})` : "Not created"}</td>
                       <td>
                         <Link
+                          className="mk-btn mk-btn-sm"
                           href={
                             shopDomain
                               ? `/admin/issues/${issue.id}?shop=${encodeURIComponent(shopDomain)}`

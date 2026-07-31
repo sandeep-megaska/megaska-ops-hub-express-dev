@@ -35,8 +35,8 @@ export function GstShell({
               GST
             </div>
             <div>
-              <h1 className="text-2xl font-semibold tracking-tight text-gray-900">{title}</h1>
-              <p className="mt-1 text-sm text-gray-600">{subtitle || 'GST operations console.'}</p>
+              <h1 className="mk-page-title">{title}</h1>
+              <p className="mk-page-subtitle">{subtitle || 'GST operations console.'}</p>
             </div>
           </div>
         </div>

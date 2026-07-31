@@ -6,8 +6,8 @@ application_url = "https://staging-loopd2c.vercel.app"
 embedded = true
 
 [app_proxy]
-url = "https://staging-loopd2c.vercel.app/apps/megaska"
-subpath = "megaska"
+url = "https://staging-loopd2c.vercel.app/apps/loopd2c"
+subpath = "loopd2c"
 prefix = "apps"
 
 [webhooks]
