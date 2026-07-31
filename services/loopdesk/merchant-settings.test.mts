@@ -93,6 +93,27 @@ test("rejects an unsafe dashboard path and falls back to the default", () => {
   assert.equal(settings.account.dashboardPath, "/apps/loopd2c/account");
 });
 
+test("migrates a legacy /apps/megaska dashboard path to /apps/loopd2c", () => {
+  const account = normalizeLoopDeskMerchantSettings({
+    account: { dashboardPath: "/apps/megaska/account" },
+  });
+  assert.equal(account.account.dashboardPath, "/apps/loopd2c/account");
+
+  const custom = normalizeLoopDeskMerchantSettings({
+    account: { dashboardPath: "/apps/megaska/dashboard" },
+  });
+  assert.equal(custom.account.dashboardPath, "/apps/loopd2c/dashboard");
+
+  // A persisted legacy value heals on the next save/merge too.
+  const merged = mergeLoopDeskMerchantSettings(
+    normalizeLoopDeskMerchantSettings({
+      account: { dashboardPath: "/apps/megaska/account" },
+    }),
+    { account: { dashboardRedirectEnabled: true } },
+  );
+  assert.equal(merged.account.dashboardPath, "/apps/loopd2c/account");
+});
+
 test("normalizes and merges a custom cart trigger selector", () => {
   const settings = normalizeLoopDeskMerchantSettings({
     cart: { customCartTriggerSelector: "#CartIcon, .site-header__cart-toggle" },

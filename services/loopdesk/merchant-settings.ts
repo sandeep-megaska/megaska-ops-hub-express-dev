@@ -270,6 +270,15 @@ function relativePath(value: unknown, fallback: string, max = 200) {
   if (!next) return fallback;
   return next.startsWith("/") && !next.startsWith("//") ? next : fallback;
 }
+// Self-healing migration for the account-dashboard proxy path. Installs
+// created before the app-proxy subpath was rebranded persisted values like
+// "/apps/megaska/account"; the account-icon redirect reads this saved value,
+// so a stale entry sent customers to the old (now non-existent) subpath.
+// Rewriting on every normalize (load and save both funnel through here)
+// migrates legacy values without a separate data-migration pass.
+function migrateAccountDashboardPath(value: string): string {
+  return value.replace(/^\/apps\/megaska(?=\/|$)/, "/apps/loopd2c");
+}
 function drawerMode(value: unknown, fallback: DrawerMode): DrawerMode {
   return value === "theme" || value === "loopdesk" || value === "auto"
     ? value
@@ -762,7 +771,9 @@ export function normalizeLoopDeskMerchantSettings(
     },
     account: {
       dashboardRedirectEnabled: bool(account.dashboardRedirectEnabled, true),
-      dashboardPath: relativePath(account.dashboardPath, "/apps/loopd2c/account", 200),
+      dashboardPath: migrateAccountDashboardPath(
+        relativePath(account.dashboardPath, "/apps/loopd2c/account", 200),
+      ),
       customTriggerSelector: text(account.customTriggerSelector, "", 500),
     },
     checkout: {
