@@ -9,7 +9,7 @@ function paiseToRupees(value: unknown) {
   return Number.isFinite(paise) ? String(paise / 100) : '0'
 }
 
-type PrepaidDiscount = { enabled?: boolean; type?: string; value?: number; maxPaise?: number | null; minSubtotalPaise?: number | null }
+type PrepaidDiscount = { enabled?: boolean; type?: string; value?: number; maxPaise?: number | null; minSubtotalPaise?: number | null; offerMessage?: string | null }
 
 export function ExpressCheckoutSettingsForm() {
   const [form, setForm] = useState({
@@ -21,6 +21,7 @@ export function ExpressCheckoutSettingsForm() {
     prepaidDiscountFixedRupees: '0',
     prepaidDiscountMaxRupees: '0',
     prepaidDiscountMinSubtotalRupees: '0',
+    prepaidOfferMessage: '',
   })
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
@@ -43,6 +44,7 @@ export function ExpressCheckoutSettingsForm() {
         prepaidDiscountFixedRupees: type === 'FIXED_AMOUNT' ? paiseToRupees(prepaid.value) : '0',
         prepaidDiscountMaxRupees: paiseToRupees(prepaid.maxPaise),
         prepaidDiscountMinSubtotalRupees: paiseToRupees(prepaid.minSubtotalPaise),
+        prepaidOfferMessage: String(prepaid.offerMessage || ''),
       })
     }
     if (data.readiness) { setReadiness(data.readiness); setEnabled(data.readiness.expressCheckoutEnabled) }
@@ -72,6 +74,7 @@ export function ExpressCheckoutSettingsForm() {
       : <div className="mk-field"><label className="mk-label" htmlFor="ec-prepaid-fixed">Discount amount (₹)</label><input id="ec-prepaid-fixed" className="mk-input" value={form.prepaidDiscountFixedRupees} onChange={(e) => setForm((p) => ({ ...p, prepaidDiscountFixedRupees: e.target.value }))} inputMode="decimal" min="0" step="0.01" /></div>}
     <div className="mk-field"><label className="mk-label" htmlFor="ec-prepaid-max">Maximum discount cap (₹)</label><input id="ec-prepaid-max" className="mk-input" value={form.prepaidDiscountMaxRupees} onChange={(e) => setForm((p) => ({ ...p, prepaidDiscountMaxRupees: e.target.value }))} inputMode="decimal" min="0" step="0.01" /><span className="mk-help">Set 0 for no cap. Caps the discount (useful with a percentage), e.g. 15% up to ₹200.</span></div>
     <div className="mk-field"><label className="mk-label" htmlFor="ec-prepaid-min">Minimum order subtotal (₹)</label><input id="ec-prepaid-min" className="mk-input" value={form.prepaidDiscountMinSubtotalRupees} onChange={(e) => setForm((p) => ({ ...p, prepaidDiscountMinSubtotalRupees: e.target.value }))} inputMode="decimal" min="0" step="0.01" /><span className="mk-help">Set 0 to apply to all orders. The offer only applies when the product subtotal is at least this amount.</span></div>
+    <div className="mk-field"><label className="mk-label" htmlFor="ec-prepaid-msg">Cart drawer / checkout teaser (optional)</label><input id="ec-prepaid-msg" className="mk-input" value={form.prepaidOfferMessage} maxLength={160} placeholder="🎉 Exciting {percent} offer waiting at checkout!" onChange={(e) => setForm((p) => ({ ...p, prepaidOfferMessage: e.target.value }))} /><span className="mk-help">Shown in the cart drawer and express checkout when the offer applies. Leave blank for the default. Placeholders: <b>{'{percent}'}</b> (e.g. 15%), <b>{'{amount}'}</b> (the shopper&apos;s saving on this cart), <b>{'{cap}'}</b> (the max cap).</span></div>
     <div><button type="submit" className="mk-btn mk-btn-primary" disabled={loading}>{loading ? 'Saving...' : 'Save settings'}</button></div>
   </form>
 }

@@ -24,8 +24,12 @@ export async function GET(req: NextRequest) {
         enabled: true,
         type: prepaid.type,
         value: prepaid.value,
+        // Convenience for storefront copy: the percent for a PERCENTAGE offer.
+        percent: prepaid.type === "PERCENTAGE" ? prepaid.value : null,
         maxPaise: prepaid.maxPaise,
         minSubtotalPaise: prepaid.minSubtotalPaise,
+        // Merchant-customized teaser (supports {percent}/{amount}/{cap}); null = default.
+        message: prepaid.offerMessage,
       }
     : null;
 

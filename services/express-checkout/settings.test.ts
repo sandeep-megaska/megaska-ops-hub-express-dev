@@ -50,8 +50,17 @@ test("prepaid discount defaults to disabled when unset", async () => {
 });
 
 test("saved prepaid discount config loads as a structured offer", async () => {
-  const settings = await getExpressCheckoutSettings("shop-1", { db: db({ prepaidDiscountEnabled: true, prepaidDiscountType: "PERCENTAGE", prepaidDiscountValue: 15, prepaidDiscountMaxPaise: 20000, prepaidDiscountMinSubtotalPaise: 50000 }) });
-  assert.deepEqual(settings.prepaidDiscount, { enabled: true, type: "PERCENTAGE", value: 15, maxPaise: 20000, minSubtotalPaise: 50000 });
+  const settings = await getExpressCheckoutSettings("shop-1", { db: db({ prepaidDiscountEnabled: true, prepaidDiscountType: "PERCENTAGE", prepaidDiscountValue: 15, prepaidDiscountMaxPaise: 20000, prepaidDiscountMinSubtotalPaise: 50000, prepaidOfferMessage: "🎉 {percent} off when you pay online" }) });
+  assert.deepEqual(settings.prepaidDiscount, { enabled: true, type: "PERCENTAGE", value: 15, maxPaise: 20000, minSubtotalPaise: 50000, offerMessage: "🎉 {percent} off when you pay online" });
+});
+
+test("prepaid offer message defaults to null and is trimmed and length-capped", async () => {
+  const unset = await getExpressCheckoutSettings("shop-1", { db: db({ prepaidDiscountEnabled: true, prepaidDiscountValue: 15 }) });
+  assert.equal(unset.prepaidDiscount.offerMessage, null);
+  const trimmed = await getExpressCheckoutSettings("shop-1", { db: db({ prepaidDiscountEnabled: true, prepaidDiscountValue: 15, prepaidOfferMessage: "  hello  " }) });
+  assert.equal(trimmed.prepaidDiscount.offerMessage, "hello");
+  const long = await getExpressCheckoutSettings("shop-1", { db: db({ prepaidDiscountEnabled: true, prepaidDiscountValue: 15, prepaidOfferMessage: "x".repeat(500) }) });
+  assert.equal(long.prepaidDiscount.offerMessage?.length, 160);
 });
 
 test("prepaid discount stays disabled when the value is zero even if the flag is on", async () => {
