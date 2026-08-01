@@ -132,7 +132,7 @@
   var COMBINED_CART_TRIGGER_SELECTOR = CUSTOM_CART_TRIGGER_SELECTOR ? CART_TRIGGER_SELECTOR + "," + CUSTOM_CART_TRIGGER_SELECTOR : CART_TRIGGER_SELECTOR;
   var CART_TRIGGER_KEYWORD_REGEX = /\b(cart|bag|basket|trolley)\b|cart-icon|cart-toggle|cart-trigger|cart-link|cart-count|mini-cart|header__icon--cart|header-cart/;
 
-  var state = { selectedOfferVariants: {}, offerProducts: {}, offerLoading: {}, open: false, loading: false, cart: null, error: "", hostMode: LOOPDESK_HOST_MODE, themeDrawer: null, fallbackReason: "", expressCheckoutLock: false, capability: null, drawerModeActive: false, neutralizedThemeDrawers: [], bodyLockSnapshot: null, removedThemeBodyClasses: [], cartTriggerTakeovers: [], promotionRuntimeRefresh: { attempts: 0, maxAttempts: 3, inFlight: false, delayedTimer: null, cartNonEmptyAttempted: false } };
+  var state = { selectedOfferVariants: {}, offerProducts: {}, offerLoading: {}, open: false, loading: false, cart: null, error: "", hostMode: LOOPDESK_HOST_MODE, themeDrawer: null, fallbackReason: "", expressCheckoutLock: false, capability: null, drawerModeActive: false, expectPostAddNavigation: 0, suppressAddReturnIntent: false, neutralizedThemeDrawers: [], bodyLockSnapshot: null, removedThemeBodyClasses: [], cartTriggerTakeovers: [], promotionRuntimeRefresh: { attempts: 0, maxAttempts: 3, inFlight: false, delayedTimer: null, cartNonEmptyAttempted: false } };
   var cartTriggerObserver = null;
   var cartTriggerTakeoverTimer = null;
   var suppressNextCartClickUntil = 0;
@@ -263,11 +263,23 @@
   var CART_ADD_REOPEN_KEY = "loopdeskCartAddReopenDrawer";
   var CART_ADD_RETURN_MAX_AGE_MS = 8000;
 
+  function drawerWantsAddTakeover() {
+    return shouldOpenLoopDeskAfterCartAdd() || (config.cart.ajaxAddToCart && isLoopDeskDrawerActive());
+  }
+
   function recordCartAddReturnIntent() {
-    if (!shouldOpenLoopDeskAfterCartAdd() && !(config.cart.ajaxAddToCart && isLoopDeskDrawerActive())) return;
+    if (!drawerWantsAddTakeover()) return;
     try {
       sessionStorage.setItem(CART_ADD_RETURN_KEY, JSON.stringify({ url: window.location.href, ts: Date.now() }));
     } catch (_error) {}
+  }
+
+  // Some themes add via fetch(/cart/add.js) then navigate to their OWN cart/bag
+  // page (e.g. /pages/bag, not /cart) via location.assign/replace. After an AJAX
+  // add we arm this window so patchLocationNavigation can intercept that first
+  // page navigation and open the drawer instead — regardless of the target URL.
+  function armPostAddNavigationTakeover() {
+    if (drawerWantsAddTakeover()) state.expectPostAddNavigation = Date.now();
   }
 
   function consumeCartAddReturnIntent() {
@@ -407,6 +419,7 @@
         return;
       }
       recordCartAddReturnIntent();
+      armPostAddNavigationTakeover();
     }, true);
   }
 
@@ -2512,6 +2525,23 @@
             refreshAndMaybeOpen(true);
             return;
           }
+          // Themes with a custom bag page (e.g. /pages/bag) navigate there after a
+          // programmatic /cart/add.js instead of /cart, so hasCartPath never matches.
+          // When we've just armed a post-add takeover, treat the FIRST same-origin
+          // non-checkout navigation as that redirect and open the drawer instead.
+          if (
+            url &&
+            url.origin === window.location.origin &&
+            url.pathname !== '/checkout' &&
+            state.expectPostAddNavigation &&
+            Date.now() - state.expectPostAddNavigation < 4000 &&
+            isLoopDeskDrawerActive()
+          ) {
+            state.expectPostAddNavigation = 0;
+            debugLog('post-add page navigation intercepted -> drawer', { method: method, target: String(target) });
+            refreshAndMaybeOpen(true);
+            return;
+          }
           return original.apply(window.location, arguments);
         };
       } catch (_error) {}
@@ -2537,7 +2567,10 @@
       // Theme-driven AJAX add (e.g. mobile size-popup) then redirects to /cart.
       // Record where the shopper was so the bounce-back returns them to the PDP
       // and reopens the drawer. Suppressed for our own in-page add (no redirect).
-      if (isAdd && !state.suppressAddReturnIntent) recordCartAddReturnIntent();
+      if (isAdd && !state.suppressAddReturnIntent) {
+        recordCartAddReturnIntent();
+        armPostAddNavigationTakeover();
+      }
       if (isMutation) {
         this.addEventListener('load', function () {
           if (this.status >= 200 && this.status < 300) {
@@ -2561,7 +2594,10 @@
       var cartMutation = isCartMutationUrl(args[0]);
       // See patchXMLHttpRequest: capture the return-to-PDP intent for a
       // theme-driven AJAX add so a subsequent /cart redirect bounces back.
-      if (cartAdd && !state.suppressAddReturnIntent) recordCartAddReturnIntent();
+      if (cartAdd && !state.suppressAddReturnIntent) {
+        recordCartAddReturnIntent();
+        armPostAddNavigationTakeover();
+      }
       return originalFetch.apply(this, args).then(function (response) {
         if (cartMutation && response && response.ok) {
           window.setTimeout(function () { refreshAfterCartMutation(cartAdd); }, 0);
