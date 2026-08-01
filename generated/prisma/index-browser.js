@@ -1601,7 +1601,29 @@ exports.Prisma.ExpressCheckoutIntentScalarFieldEnum = {
   selectedPaymentMethod: 'selectedPaymentMethod',
   expiresAt: 'expiresAt',
   createdAt: 'createdAt',
-  updatedAt: 'updatedAt'
+  updatedAt: 'updatedAt',
+  paymentPendingAt: 'paymentPendingAt',
+  abandonedAt: 'abandonedAt',
+  completedAt: 'completedAt',
+  lastTransitionAt: 'lastTransitionAt'
+};
+
+exports.Prisma.CheckoutFunnelEventScalarFieldEnum = {
+  id: 'id',
+  shopId: 'shopId',
+  funnelSessionId: 'funnelSessionId',
+  eventType: 'eventType',
+  source: 'source',
+  device: 'device',
+  customerProfileId: 'customerProfileId',
+  sessionTokenHash: 'sessionTokenHash',
+  phoneSnapshot: 'phoneSnapshot',
+  cartToken: 'cartToken',
+  cartValuePaise: 'cartValuePaise',
+  expressCheckoutIntentId: 'expressCheckoutIntentId',
+  metadata: 'metadata',
+  occurredAt: 'occurredAt',
+  createdAt: 'createdAt'
 };
 
 exports.Prisma.ShopifyCheckoutPricingSnapshotScalarFieldEnum = {
@@ -2356,6 +2378,28 @@ exports.ExpressCheckoutPaymentMethod = exports.$Enums.ExpressCheckoutPaymentMeth
   COD: 'COD'
 };
 
+exports.CheckoutFunnelEventType = exports.$Enums.CheckoutFunnelEventType = {
+  CART_ADD: 'CART_ADD',
+  DRAWER_OPEN: 'DRAWER_OPEN',
+  EXPRESS_CLICK: 'EXPRESS_CLICK',
+  OTP_OPEN: 'OTP_OPEN',
+  OTP_SUCCESS: 'OTP_SUCCESS',
+  MODAL_OPEN: 'MODAL_OPEN'
+};
+
+exports.CheckoutFunnelSource = exports.$Enums.CheckoutFunnelSource = {
+  DRAWER: 'DRAWER',
+  CART_PAGE: 'CART_PAGE',
+  PRODUCT: 'PRODUCT',
+  UNKNOWN: 'UNKNOWN'
+};
+
+exports.CheckoutFunnelDevice = exports.$Enums.CheckoutFunnelDevice = {
+  MOBILE: 'MOBILE',
+  DESKTOP: 'DESKTOP',
+  UNKNOWN: 'UNKNOWN'
+};
+
 exports.ShopifyCheckoutPricingSnapshotStatus = exports.$Enums.ShopifyCheckoutPricingSnapshotStatus = {
   CURRENT: 'CURRENT',
   INVALIDATED: 'INVALIDATED'
@@ -2468,6 +2512,7 @@ exports.Prisma.ModelName = {
   GstReportRun: 'GstReportRun',
   ExchangePaymentInvoice: 'ExchangePaymentInvoice',
   ExpressCheckoutIntent: 'ExpressCheckoutIntent',
+  CheckoutFunnelEvent: 'CheckoutFunnelEvent',
   ShopifyCheckoutPricingSnapshot: 'ShopifyCheckoutPricingSnapshot',
   CheckoutRecoveryToken: 'CheckoutRecoveryToken',
   ExpressCheckoutAddressSnapshot: 'ExpressCheckoutAddressSnapshot',

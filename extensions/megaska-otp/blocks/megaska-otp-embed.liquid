@@ -36,6 +36,9 @@
 {% endif %}
 
 <script>
+  // Funnel-analytics queue stub. Guarantees track() calls made by the deferred
+  // assets are never lost to load order; loopd2c-analytics.js drains this queue.
+  window.LoopDeskAnalytics = window.LoopDeskAnalytics || { q: [], track: function () { try { this.q.push(arguments); } catch (e) {} } };
   window.MEGASKA_SHOP_DOMAIN = {{ shop.permanent_domain | json }};
   // Seed the drawer's brand name from the real Shopify store name so the cart
   // drawer header shows e.g. "Megaska" instead of the raw myshopify domain.
@@ -92,6 +95,7 @@
   })();
 </script>
 
+<script src="{{ 'loopd2c-analytics.js' | asset_url }}" defer></script>
 <script src="{{ 'loopd2c-auth.js' | asset_url }}" defer></script>
 <script src="{{ 'loopd2c-otp.js' | asset_url }}" defer></script>
 <script src="{{ 'loopdesk-promotion-pricing.js' | asset_url }}" defer></script>
