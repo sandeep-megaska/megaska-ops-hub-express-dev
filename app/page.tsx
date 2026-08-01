@@ -10,6 +10,7 @@ const moduleGroups: ModuleGroup[] = [
     heading: "Storefront & conversion",
     blurb: "Everything the shopper sees — promotions, express checkout, reviews, and the drawer.",
     cards: [
+      { title: "Checkout Analytics", meta: "Express-checkout funnel, drop-off, abandoned carts, and recovery", href: "/admin/analytics" },
       { title: "Promotions", meta: "Cart offers, tiered order discounts, and compilation status", href: "/admin/promotions" },
       { title: "Express Checkout", meta: "One-step checkout, COD, and Razorpay configuration", href: "/admin/express-checkout" },
       { title: "Reviews", meta: "Moderate, import/export, and configure review display", href: "/admin/reviews" },

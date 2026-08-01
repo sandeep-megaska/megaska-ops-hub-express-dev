@@ -1,0 +1,292 @@
+"use client";
+import { useEffect, useState } from "react";
+
+type Comparison = { value: number; previousValue: number; percentageChange: number | null };
+type Stage = {
+  key: string;
+  label: string;
+  basis: "session" | "intent";
+  count: number;
+  conversionFromPrevious: number | null;
+  dropOffFromPrevious: number | null;
+};
+type FunnelData = {
+  funnel: {
+    stages: Stage[];
+    headline: Record<string, Comparison>;
+    segments: {
+      entryPoint: { key: string; label: string; sessions: number; share: number }[];
+      device: { key: string; label: string; sessions: number; share: number }[];
+    };
+    notes: { basisHandoff: string };
+  };
+  paymentMix: {
+    methods: { method: string; label: string; selected: number; completed: number; share: number; completionRate: number }[];
+  };
+};
+type Cart = {
+  id: string;
+  startedAt: string;
+  lastActivityAt: string;
+  valuePaise: number;
+  currency: string;
+  lineCount: number;
+  paymentMethod: string | null;
+  furthestStep: string;
+  mobileMasked: string | null;
+  recovery: { status: string; sentAt: string | null; clickedAt: string | null };
+};
+type CartData = {
+  summary: { abandonedCount: number; valueAtRiskPaise: number; recoverableCount: number };
+  idleThresholdMinutes: number;
+  carts: Cart[];
+  recovery: { metrics: Record<string, Comparison> };
+};
+
+const HEADLINE_LABELS: Record<string, string> = {
+  checkoutsStarted: "Checkouts started",
+  ordersPlaced: "Orders placed",
+  startToOrderConversion: "Start → order",
+  topToOrderConversion: "Cart → order",
+};
+const RECOVERY_LABELS: Record<string, string> = {
+  recoveryMessagesSent: "Recovery messages sent",
+  recoveryClicks: "Recovery clicks",
+  cartsRecovered: "Carts recovered",
+  clickThroughRate: "Click-through rate",
+  recoveryRate: "Recovery rate",
+};
+
+const pct = (n: number | null | undefined) => (n === null || n === undefined ? "—" : `${(n * 100).toFixed(1)}%`);
+const money = (paise: number, currency = "INR") => {
+  const symbol = currency === "INR" ? "₹" : "";
+  return `${symbol}${(paise / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+};
+const isRate = (key: string) => /conversion|rate/i.test(key);
+const dateTime = (iso: string) => {
+  try {
+    return new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+  } catch {
+    return iso;
+  }
+};
+
+function delta(metric: Comparison) {
+  if (metric.percentageChange === null) return "vs prior: n/a";
+  const arrow = metric.percentageChange >= 0 ? "▲" : "▼";
+  return `${arrow} ${Math.abs(metric.percentageChange).toFixed(1)}% vs prior`;
+}
+
+function recoveryBadge(status: string) {
+  const map: Record<string, string> = { used: "mk-badge-success", clicked: "mk-badge-info", sent: "mk-badge-neutral", none: "mk-badge-neutral" };
+  const text: Record<string, string> = { used: "Recovered", clicked: "Clicked", sent: "Sent", none: "—" };
+  return <span className={`mk-badge ${map[status] || "mk-badge-neutral"}`}>{text[status] || status}</span>;
+}
+
+export default function CheckoutAnalyticsClient({ shop }: { shop: string }) {
+  const [range, setRange] = useState("30");
+  const [funnel, setFunnel] = useState<FunnelData | null>(null);
+  const [carts, setCarts] = useState<CartData | null>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    setError("");
+    setFunnel(null);
+    setCarts(null);
+    const q = `shop=${encodeURIComponent(shop)}&range=${range}`;
+    Promise.all([
+      fetch(`/api/admin/analytics/checkout-funnel?${q}`).then((r) => r.json()),
+      fetch(`/api/admin/analytics/abandoned-carts?${q}`).then((r) => r.json()),
+    ])
+      .then(([f, c]) => {
+        if (!active) return;
+        if (f.ok) setFunnel(f); else setError(f.error || "Unable to load analytics.");
+        if (c.ok) setCarts(c);
+      })
+      .catch(() => active && setError("Unable to load analytics."));
+    return () => {
+      active = false;
+    };
+  }, [range, shop]);
+
+  return (
+    <div className="mk-page">
+      <div className="mk-page-header">
+        <div>
+          <h1 className="mk-page-title">Checkout analytics</h1>
+          <p className="mk-page-subtitle">
+            The express-checkout funnel Shopify can&rsquo;t see — where shoppers drop off, who abandons, and what to recover.
+          </p>
+        </div>
+        <div className="mk-header-actions">
+          <label className="mk-field">
+            <span className="mk-label">Period</span>
+            <select className="mk-select" value={range} onChange={(e) => setRange(e.target.value)}>
+              <option value="7">Last 7 days</option>
+              <option value="30">Last 30 days</option>
+              <option value="90">Last 90 days</option>
+              <option value="365">Last 12 months</option>
+            </select>
+          </label>
+        </div>
+      </div>
+
+      {error && <div className="mk-alert mk-alert-error" role="alert">{error}</div>}
+      {!funnel ? (
+        <p className="mk-help" aria-busy="true">Loading analytics…</p>
+      ) : (
+        <>
+          {/* Headline */}
+          <section className="mk-grid-4">
+            {Object.entries(funnel.funnel.headline).map(([key, metric]) => (
+              <div key={key} className="mk-card mk-stat-card">
+                <p className="mk-stat-label">{HEADLINE_LABELS[key] || key}</p>
+                <p className="mk-stat-value">{isRate(key) ? pct(metric.value) : metric.value.toLocaleString()}</p>
+                <p className="mk-stat-meta">{delta(metric)}</p>
+              </div>
+            ))}
+          </section>
+
+          {/* Funnel */}
+          <section className="mk-card">
+            <h2 className="mk-section-title">Conversion funnel</h2>
+            <p className="mk-section-subtitle">{funnel.funnel.notes.basisHandoff}</p>
+            <div className="mk-table-wrap">
+              <table className="mk-table">
+                <caption>Express-checkout funnel stages and drop-off</caption>
+                <thead>
+                  <tr><th>Stage</th><th>Basis</th><th>Reached</th><th>Step conversion</th><th>Drop-off</th></tr>
+                </thead>
+                <tbody>
+                  {funnel.funnel.stages.map((s) => (
+                    <tr key={s.key}>
+                      <td>{s.label}</td>
+                      <td>{s.basis === "session" ? "Sessions" : "Checkouts"}</td>
+                      <td>{s.count.toLocaleString()}</td>
+                      <td>{s.conversionFromPrevious === null ? "—" : pct(s.conversionFromPrevious)}</td>
+                      <td>
+                        {s.dropOffFromPrevious === null ? "—" : (
+                          <span className={s.dropOffFromPrevious > 0.5 ? "mk-badge mk-badge-warning" : "mk-badge mk-badge-neutral"}>
+                            {pct(s.dropOffFromPrevious)}
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          {/* Segments */}
+          <section className="mk-grid-3">
+            <div className="mk-card">
+              <h2 className="mk-section-title">Entry point</h2>
+              <p className="mk-section-subtitle">Where the express-checkout click came from.</p>
+              <div className="mk-table-wrap">
+                <table className="mk-table">
+                  <thead><tr><th>Source</th><th>Sessions</th><th>Share</th></tr></thead>
+                  <tbody>
+                    {funnel.funnel.segments.entryPoint.map((e) => (
+                      <tr key={e.key}><td>{e.label}</td><td>{e.sessions.toLocaleString()}</td><td>{pct(e.share)}</td></tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div className="mk-card">
+              <h2 className="mk-section-title">Device</h2>
+              <p className="mk-section-subtitle">Measured at the express-checkout click.</p>
+              <div className="mk-table-wrap">
+                <table className="mk-table">
+                  <thead><tr><th>Device</th><th>Sessions</th><th>Share</th></tr></thead>
+                  <tbody>
+                    {funnel.funnel.segments.device.map((d) => (
+                      <tr key={d.key}><td>{d.label}</td><td>{d.sessions.toLocaleString()}</td><td>{pct(d.share)}</td></tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div className="mk-card">
+              <h2 className="mk-section-title">Payment mix</h2>
+              <p className="mk-section-subtitle">Share and completion by method.</p>
+              <div className="mk-table-wrap">
+                <table className="mk-table">
+                  <thead><tr><th>Method</th><th>Share</th><th>Completion</th></tr></thead>
+                  <tbody>
+                    {funnel.paymentMix.methods.length === 0 ? (
+                      <tr><td colSpan={3} className="mk-help">No payment selections yet.</td></tr>
+                    ) : funnel.paymentMix.methods.map((m) => (
+                      <tr key={m.method}><td>{m.label}</td><td>{pct(m.share)}</td><td>{pct(m.completionRate)}</td></tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          {/* Abandoned carts */}
+          {carts && (
+            <>
+              <section className="mk-grid-4">
+                <div className="mk-card mk-stat-card">
+                  <p className="mk-stat-label">Abandoned carts</p>
+                  <p className="mk-stat-value">{carts.summary.abandonedCount.toLocaleString()}</p>
+                  <p className="mk-stat-meta">Idle &gt; {carts.idleThresholdMinutes}m, no order</p>
+                </div>
+                <div className="mk-card mk-stat-card">
+                  <p className="mk-stat-label">Value at risk</p>
+                  <p className="mk-stat-value">{money(carts.summary.valueAtRiskPaise)}</p>
+                  <p className="mk-stat-meta">Recoverable: {carts.summary.recoverableCount}</p>
+                </div>
+                {carts.recovery && Object.entries(carts.recovery.metrics).slice(0, 2).map(([key, metric]) => (
+                  <div key={key} className="mk-card mk-stat-card">
+                    <p className="mk-stat-label">{RECOVERY_LABELS[key] || key}</p>
+                    <p className="mk-stat-value">{isRate(key) ? pct(metric.value) : metric.value.toLocaleString()}</p>
+                    <p className="mk-stat-meta">{delta(metric)}</p>
+                  </div>
+                ))}
+              </section>
+
+              <section className="mk-card">
+                <h2 className="mk-section-title">Abandoned carts</h2>
+                <p className="mk-section-subtitle">
+                  Express-checkout carts that stalled before an order. Mobile numbers are masked.
+                </p>
+                <div className="mk-table-wrap">
+                  <table className="mk-table">
+                    <caption>Recoverable abandoned express-checkout carts</caption>
+                    <thead>
+                      <tr>
+                        <th>Started</th><th>Last activity</th><th>Value</th><th>Items</th>
+                        <th>Furthest step</th><th>Method</th><th>Mobile</th><th>Recovery</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {carts.carts.length === 0 ? (
+                        <tr><td colSpan={8} className="mk-help">No abandoned carts in this period. 🎉</td></tr>
+                      ) : carts.carts.map((c) => (
+                        <tr key={c.id}>
+                          <td>{dateTime(c.startedAt)}</td>
+                          <td>{dateTime(c.lastActivityAt)}</td>
+                          <td>{money(c.valuePaise, c.currency)}</td>
+                          <td>{c.lineCount}</td>
+                          <td>{c.furthestStep}</td>
+                          <td>{c.paymentMethod || "—"}</td>
+                          <td>{c.mobileMasked || "Guest"}</td>
+                          <td>{recoveryBadge(c.recovery.status)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            </>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
