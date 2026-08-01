@@ -43,6 +43,22 @@ type CartData = {
   recovery: { metrics: Record<string, Comparison> };
 };
 
+type LoginData = {
+  metrics: Record<string, Comparison>;
+  breakdown: {
+    newVsReturning: { key: string; label: string; count: number }[];
+    checkoutIdentity: { key: string; label: string; count: number }[];
+  };
+};
+
+const LOGIN_LABELS: Record<string, string> = {
+  verifiedLogins: "Mobile logins",
+  uniqueCustomers: "Unique customers",
+  newCustomers: "New customers",
+  returningCustomers: "Returning customers",
+  loginToPurchaseRate: "Login → purchase",
+  identifiedCheckoutRate: "Identified checkout",
+};
 const HEADLINE_LABELS: Record<string, string> = {
   checkoutsStarted: "Checkouts started",
   ordersPlaced: "Orders placed",
@@ -87,6 +103,7 @@ export default function CheckoutAnalyticsClient({ shop }: { shop: string }) {
   const [range, setRange] = useState("30");
   const [funnel, setFunnel] = useState<FunnelData | null>(null);
   const [carts, setCarts] = useState<CartData | null>(null);
+  const [logins, setLogins] = useState<LoginData | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -94,15 +111,18 @@ export default function CheckoutAnalyticsClient({ shop }: { shop: string }) {
     setError("");
     setFunnel(null);
     setCarts(null);
+    setLogins(null);
     const q = `shop=${encodeURIComponent(shop)}&range=${range}`;
     Promise.all([
       fetch(`/api/admin/analytics/checkout-funnel?${q}`).then((r) => r.json()),
       fetch(`/api/admin/analytics/abandoned-carts?${q}`).then((r) => r.json()),
+      fetch(`/api/admin/analytics/logins?${q}`).then((r) => r.json()),
     ])
-      .then(([f, c]) => {
+      .then(([f, c, l]) => {
         if (!active) return;
         if (f.ok) setFunnel(f); else setError(f.error || "Unable to load analytics.");
         if (c.ok) setCarts(c);
+        if (l.ok) setLogins(l);
       })
       .catch(() => active && setError("Unable to load analytics."));
     return () => {
@@ -226,6 +246,51 @@ export default function CheckoutAnalyticsClient({ shop }: { shop: string }) {
               </div>
             </div>
           </section>
+
+          {/* Customers & logins */}
+          {logins && (
+            <>
+              <section className="mk-grid-4">
+                {Object.entries(logins.metrics).map(([key, metric]) => (
+                  <div key={key} className="mk-card mk-stat-card">
+                    <p className="mk-stat-label">{LOGIN_LABELS[key] || key}</p>
+                    <p className="mk-stat-value">{isRate(key) ? pct(metric.value) : metric.value.toLocaleString()}</p>
+                    <p className="mk-stat-meta">{delta(metric)}</p>
+                  </div>
+                ))}
+              </section>
+              <section className="mk-grid-3">
+                <div className="mk-card">
+                  <h2 className="mk-section-title">New vs returning</h2>
+                  <p className="mk-section-subtitle">Customers who signed in this period.</p>
+                  <div className="mk-table-wrap">
+                    <table className="mk-table">
+                      <thead><tr><th>Segment</th><th>Customers</th></tr></thead>
+                      <tbody>
+                        {logins.breakdown.newVsReturning.map((b) => (
+                          <tr key={b.key}><td>{b.label}</td><td>{b.count.toLocaleString()}</td></tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+                <div className="mk-card">
+                  <h2 className="mk-section-title">Checkout identity</h2>
+                  <p className="mk-section-subtitle">Express checkouts started, signed in vs guest.</p>
+                  <div className="mk-table-wrap">
+                    <table className="mk-table">
+                      <thead><tr><th>Type</th><th>Checkouts</th></tr></thead>
+                      <tbody>
+                        {logins.breakdown.checkoutIdentity.map((b) => (
+                          <tr key={b.key}><td>{b.label}</td><td>{b.count.toLocaleString()}</td></tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </section>
+            </>
+          )}
 
           {/* Abandoned carts */}
           {carts && (
