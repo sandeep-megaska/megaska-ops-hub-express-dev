@@ -55,6 +55,7 @@
   window.LOOPDESK_CART_DRAWER_CONFIG = Object.assign({}, window.LOOPDESK_CART_DRAWER_CONFIG || {}, {
     enabled: {{ block.settings.cart_drawer_enabled | json }},
     openAfterAddToCart: {{ block.settings.open_after_add_to_cart | json }},
+    ajaxAddToCart: {{ block.settings.ajax_add_to_cart | json }},
     expressCheckoutButtonEnabled: {{ block.settings.express_checkout_button_enabled | json }},
     viewCartButtonEnabled: {{ block.settings.view_cart_button_enabled | json }},
     shopDomain: {{ shop.permanent_domain | json }}
@@ -126,6 +127,13 @@
       "id": "open_after_add_to_cart",
       "label": "Open drawer after add to cart",
       "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "ajax_add_to_cart",
+      "label": "Add to cart without leaving the product page",
+      "info": "Adds via AJAX and opens the drawer instead of navigating to the cart/bag page. Enable for themes whose Add to cart button loads the cart page.",
+      "default": false
     },
     {
       "type": "checkbox",
