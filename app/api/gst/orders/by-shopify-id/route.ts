@@ -6,6 +6,8 @@ import { generateInvoiceBatch } from "../../../../../services/gst/dispatch-batch
 import { requireAdminShopFromRequest } from "../../../../../services/shopify/admin-auth";
 import { ShopResolutionError } from "../../../../../services/shopify/shop";
 import { signInvoiceDocumentAccess } from "../../../../../services/gst/invoice-url-signing";
+import { getActiveGstSettings } from "../../../../../services/gst/settings";
+import { reconcileInvoiceTax } from "../../../../../services/gst/tax-reconciliation";
 import { extensionCorsPreflight, withExtensionCors } from "../../../../../services/shopify/extension-cors";
 
 export const runtime = "nodejs";
@@ -60,7 +62,7 @@ export async function POST(req: NextRequest) {
 
   let orderImport = await prisma.gstOrderImport.findFirst({
     where: { shopId: resolvedShopId, shopifyOrderId },
-    select: { id: true, shopifyOrderName: true, readinessErrors: true, orderTaxTotal: true },
+    select: { id: true, shopifyOrderName: true, readinessErrors: true, orderTaxTotal: true, orderGrandTotal: true },
   });
 
   // Re-import when the order is new OR when the caller explicitly asks to
@@ -83,7 +85,7 @@ export async function POST(req: NextRequest) {
     }
     orderImport = await prisma.gstOrderImport.findFirst({
       where: { shopId: resolvedShopId, shopifyOrderId },
-      select: { id: true, shopifyOrderName: true, readinessErrors: true, orderTaxTotal: true },
+      select: { id: true, shopifyOrderName: true, readinessErrors: true, orderTaxTotal: true, orderGrandTotal: true },
     });
   }
 
@@ -124,23 +126,28 @@ export async function POST(req: NextRequest) {
     : null;
   const buyer = snapshot?.buyer && typeof snapshot.buyer === "object" ? (snapshot.buyer as Record<string, unknown>) : null;
 
-  // Reconciliation: the invoice's GST (from the app's HSN mapping) must equal the
-  // tax actually charged at checkout (Shopify). A divergence means the product's
-  // app GST rate and the Shopify tax setting disagree - surface it so a wrong
-  // rate is caught before the invoice ships. Tolerance covers rounding only.
+  // Reconciliation: the invoice's GST (from the app's HSN mapping) is checked
+  // against the order. For tax-exclusive stores that means comparing the invoice
+  // GST to the tax Shopify charged at checkout; for tax-inclusive stores where
+  // Shopify records no separate tax (e.g. LoopD2C express orders) it means
+  // comparing the invoice grand total to what the customer paid. See
+  // reconcileInvoiceTax. A divergence surfaces a wrong rate before the invoice
+  // ships; tolerance covers rounding only.
   const toNum = (value: unknown) => {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : 0;
   };
-  const round2 = (value: number) => Math.round(value * 100) / 100;
+  const gstSettingsResult = await getActiveGstSettings({ shopId: resolvedShopId });
+  const priceIncludesTax = gstSettingsResult.ok && gstSettingsResult.data ? gstSettingsResult.data.priceIncludesTax : true;
   const taxReconciliation = invoice
-    ? (() => {
-        const invoiceTax = round2(
+    ? reconcileInvoiceTax({
+        invoiceTax:
           toNum(invoice.cgstAmount) + toNum(invoice.sgstAmount) + toNum(invoice.igstAmount) + toNum(invoice.cessAmount),
-        );
-        const shopifyTax = round2(toNum(orderImport.orderTaxTotal));
-        return { invoiceTax, shopifyTax, matches: Math.abs(invoiceTax - shopifyTax) <= 1 };
-      })()
+        shopifyTax: toNum(orderImport.orderTaxTotal),
+        invoiceTotal: toNum(invoice.totalAmount),
+        orderTotal: toNum(orderImport.orderGrandTotal),
+        priceIncludesTax,
+      })
     : null;
 
   return withExtensionCors(
