@@ -36,6 +36,9 @@ type TaxReconciliation = {
   invoiceTax: number
   shopifyTax: number
   matches: boolean
+  basis?: 'CHECKOUT_TAX' | 'GRAND_TOTAL'
+  invoiceTotal?: number
+  orderTotal?: number
 }
 
 type ReportWarning = {
@@ -96,13 +99,31 @@ function TaxCheckBadge({ recon }: { recon: TaxReconciliation | null }) {
   if (!recon) {
     return <span className="mk-badge mk-badge-neutral" title="Generate the invoice to reconcile against checkout tax">—</span>
   }
+  const isInclusiveTotalBasis = recon.basis === 'GRAND_TOTAL'
   if (recon.matches) {
+    const title = isInclusiveTotalBasis
+      ? `Tax-inclusive order: GST ${formatInr(recon.invoiceTax)} is included in the price. Invoice total ${formatInr(
+          recon.invoiceTotal ?? 0,
+        )} matches the amount paid ${formatInr(recon.orderTotal ?? 0)}.`
+      : `Invoice GST ${formatInr(recon.invoiceTax)} matches checkout tax ${formatInr(recon.shopifyTax)}`
+    return (
+      <span className="mk-badge mk-badge-success" title={title}>
+        Matches
+      </span>
+    )
+  }
+  if (isInclusiveTotalBasis) {
     return (
       <span
-        className="mk-badge mk-badge-success"
-        title={`Invoice GST ${formatInr(recon.invoiceTax)} matches checkout tax ${formatInr(recon.shopifyTax)}`}
+        className="inline-flex flex-col items-start gap-1"
+        title={`Tax-inclusive order: invoice total ${formatInr(recon.invoiceTotal ?? 0)} does not match the amount paid ${formatInr(
+          recon.orderTotal ?? 0,
+        )}. Check the order's pricing.`}
       >
-        Matches
+        <span className="mk-badge mk-badge-danger">Mismatch</span>
+        <span className="text-[11px] leading-tight text-[color:var(--danger-text)]">
+          Inv {formatInr(recon.invoiceTotal ?? 0)} vs Paid {formatInr(recon.orderTotal ?? 0)}
+        </span>
       </span>
     )
   }
@@ -183,6 +204,9 @@ export function GstOrdersAdmin() {
               invoiceTax: Number(recon.invoiceTax || 0),
               shopifyTax: Number(recon.shopifyTax || 0),
               matches: Boolean(recon.matches),
+              basis: recon.basis === 'GRAND_TOTAL' ? 'GRAND_TOTAL' : 'CHECKOUT_TAX',
+              invoiceTotal: Number(recon.invoiceTotal || 0),
+              orderTotal: Number(recon.orderTotal || 0),
             }
           : null
 

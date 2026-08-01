@@ -6,6 +6,7 @@ import { markOrderInvoiced } from "./order-import";
 import { resolveSkuTaxMap } from "./sku-tax-map";
 import { getTemplateById } from "./template";
 import { gstPerfLog, gstPerfNow } from "./perf";
+import { reconcileInvoiceTax } from "./tax-reconciliation";
 
 interface DispatchFilters {
   shopId?: string | null;
@@ -118,6 +119,7 @@ export async function listDispatchReadyOrders(filters: DispatchFilters): Promise
     const rows = await dispatchDb.gstOrderImport.findMany({
       where,
       include: {
+        gstSettings: { select: { priceIncludesTax: true } },
         lines: {
           orderBy: { lineNumber: "asc" },
           select: {
@@ -165,6 +167,7 @@ export async function listDispatchReadyOrders(filters: DispatchFilters): Promise
             sgstAmount: true,
             igstAmount: true,
             cessAmount: true,
+            totalAmount: true,
           },
         })
       : [];
@@ -244,22 +247,25 @@ export async function listDispatchReadyOrders(filters: DispatchFilters): Promise
 
       const invoice = invoiceByOrderImportId.get(orderImportId) || invoiceByShopifyOrderId.get(String(row.shopifyOrderId || "").trim()) || null;
 
-      // Reconciliation: the invoice GST (app HSN mapping) vs the tax actually
-      // charged at checkout (Shopify orderTaxTotal). A divergence means the
-      // product's app GST rate and the Shopify tax setting disagree - flag it on
-      // the dashboard so a wrong rate is caught before the invoice ships.
-      // Tolerance of Re. 1 covers rounding only. Null until an invoice exists.
+      // Reconciliation: the invoice GST (app HSN mapping) vs the order. For
+      // tax-exclusive stores that is the tax Shopify charged; for tax-inclusive
+      // stores that record no separate Shopify tax (e.g. LoopD2C express orders)
+      // it is the invoice grand total vs what the customer paid. See
+      // reconcileInvoiceTax. A divergence is flagged so a wrong rate is caught
+      // before the invoice ships. Null until an invoice exists.
       const taxReconciliation = invoice
-        ? (() => {
-            const invoiceTax = round2(
+        ? reconcileInvoiceTax({
+            invoiceTax:
               parseNum(invoice.cgstAmount) +
-                parseNum(invoice.sgstAmount) +
-                parseNum(invoice.igstAmount) +
-                parseNum(invoice.cessAmount),
-            );
-            const shopifyTax = round2(parseNum(row.orderTaxTotal));
-            return { invoiceTax, shopifyTax, matches: Math.abs(invoiceTax - shopifyTax) <= 1 };
-          })()
+              parseNum(invoice.sgstAmount) +
+              parseNum(invoice.igstAmount) +
+              parseNum(invoice.cessAmount),
+            shopifyTax: parseNum(row.orderTaxTotal),
+            invoiceTotal: parseNum(invoice.totalAmount),
+            orderTotal: parseNum(row.orderGrandTotal),
+            priceIncludesTax:
+              ((row.gstSettings as { priceIncludesTax?: unknown } | null)?.priceIncludesTax ?? true) !== false,
+          })
         : null;
 
       const readinessErrors = Array.isArray(row.readinessErrors) ? row.readinessErrors : [];
