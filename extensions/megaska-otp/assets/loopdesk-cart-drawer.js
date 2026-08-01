@@ -264,7 +264,7 @@
   var CART_ADD_RETURN_MAX_AGE_MS = 8000;
 
   function recordCartAddReturnIntent() {
-    if (!shouldOpenLoopDeskAfterCartAdd()) return;
+    if (!shouldOpenLoopDeskAfterCartAdd() && !(config.cart.ajaxAddToCart && isLoopDeskDrawerActive())) return;
     try {
       sessionStorage.setItem(CART_ADD_RETURN_KEY, JSON.stringify({ url: window.location.href, ts: Date.now() }));
     } catch (_error) {}
@@ -353,6 +353,10 @@
   function ajaxAddToCartFromForm(form) {
     var body;
     try { body = new FormData(form); } catch (_error) { showCartAddToast("Could not add to cart. Please try again.", true); return; }
+    // This add stays on the page (no navigation), so suppress the AJAX-add
+    // return-intent recording in patchFetch — otherwise a later /cart visit
+    // would spuriously bounce back to this product page.
+    state.suppressAddReturnIntent = true;
     fetch("/cart/add.js", { method: "POST", credentials: "same-origin", cache: "no-store", headers: { Accept: "application/json" }, body: body })
       .then(function (response) { return response.json().then(function (data) { return { ok: response.ok, data: data }; }); })
       .then(function (result) {
@@ -365,7 +369,8 @@
           else showCartAddToast("Added to cart", false);
         });
       })
-      .catch(function () { showCartAddToast("Could not add to cart. Please try again.", true); });
+      .catch(function () { showCartAddToast("Could not add to cart. Please try again.", true); })
+      .finally(function () { state.suppressAddReturnIntent = false; });
   }
 
   function listenForCartAddFormSubmissions() {
@@ -2529,6 +2534,10 @@
     proto.send = function () {
       var isAdd = isCartAddUrl(this.__loopdeskCartRequestUrl);
       var isMutation = isCartMutationUrl(this.__loopdeskCartRequestUrl);
+      // Theme-driven AJAX add (e.g. mobile size-popup) then redirects to /cart.
+      // Record where the shopper was so the bounce-back returns them to the PDP
+      // and reopens the drawer. Suppressed for our own in-page add (no redirect).
+      if (isAdd && !state.suppressAddReturnIntent) recordCartAddReturnIntent();
       if (isMutation) {
         this.addEventListener('load', function () {
           if (this.status >= 200 && this.status < 300) {
@@ -2550,6 +2559,9 @@
       var args = arguments;
       var cartAdd = isCartAddUrl(args[0]);
       var cartMutation = isCartMutationUrl(args[0]);
+      // See patchXMLHttpRequest: capture the return-to-PDP intent for a
+      // theme-driven AJAX add so a subsequent /cart redirect bounces back.
+      if (cartAdd && !state.suppressAddReturnIntent) recordCartAddReturnIntent();
       return originalFetch.apply(this, args).then(function (response) {
         if (cartMutation && response && response.ok) {
           window.setTimeout(function () { refreshAfterCartMutation(cartAdd); }, 0);
