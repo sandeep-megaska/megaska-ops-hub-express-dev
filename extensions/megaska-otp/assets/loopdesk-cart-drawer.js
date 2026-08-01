@@ -308,7 +308,25 @@
   }
 
   function ajaxAddToCartEnabled() {
-    return Boolean(config.cart.ajaxAddToCart && isLoopDeskDrawerActive());
+    // Explicit merchant opt-in — honor it regardless of the drawer-ownership
+    // decision. The AJAX add + toast keeps the shopper on the PDP even when the
+    // drawer itself isn't active; if it is active, ajaxAddToCartFromForm opens it.
+    return Boolean(config.cart.ajaxAddToCart);
+  }
+
+  // The submit control of a /cart/add form, resolved from a clicked descendant.
+  // Targets the add button by its reliable signals (name="add" — the Shopify
+  // convention — or an explicit submit button); NOT quantity steppers or variant
+  // swatches (which are type="button"), and excluding Buy-it-now / dynamic-
+  // checkout submitters.
+  function cartAddFormForSubmitControl(el) {
+    if (!el || !el.closest) return null;
+    var control = el.closest('[name="add"], button[type="submit"], input[type="submit"]');
+    if (!control) return null;
+    if (/\/checkout/.test(String((control.getAttribute && control.getAttribute("formaction")) || ""))) return null;
+    var form = control.form || (control.closest && control.closest("form"));
+    if (!form || !isCartAddUrl(form.getAttribute("action") || "")) return null;
+    return form;
   }
 
   // Lightweight, self-contained confirmation toast (no external CSS dependency)
@@ -351,6 +369,22 @@
   }
 
   function listenForCartAddFormSubmissions() {
+    // Capture-phase CLICK take-over. Many themes prevent the form's default
+    // submit and do their own fetch(/cart/add.js) + redirect to the cart/bag
+    // page — so there is no submit event to catch and the redirect isn't
+    // stopped (the drawer only "flashes"). Intercepting the add-button click in
+    // the capture phase fires before the theme's own handler; preventDefault +
+    // stopImmediatePropagation stop the theme's add+redirect entirely, and we
+    // add via AJAX ourselves so the shopper never leaves the product page.
+    document.addEventListener("click", function (event) {
+      if (!ajaxAddToCartEnabled()) return;
+      var form = cartAddFormForSubmitControl(event.target);
+      if (!form) return;
+      event.preventDefault();
+      if (typeof event.stopImmediatePropagation === "function") event.stopImmediatePropagation();
+      ajaxAddToCartFromForm(form);
+    }, true);
+
     document.addEventListener("submit", function (event) {
       var form = event.target;
       if (!form || form.nodeName !== "FORM") return;
