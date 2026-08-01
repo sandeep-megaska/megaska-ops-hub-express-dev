@@ -25,6 +25,7 @@
     cart: {
       drawerMode: "auto",
       openAfterAddToCart: false,
+      ajaxAddToCart: false,
       expressCheckoutButtonEnabled: true,
       viewCartButtonEnabled: true,
       nativeDrawerDisabledRequiredMessage: "To use LoopD2C Enhanced Drawer, set your theme cart type to Page in Shopify theme settings.",
@@ -43,6 +44,7 @@
     enabled: config.enabled,
     drawerMode: config.cart.drawerMode,
     openAfterAddToCart: config.cart.openAfterAddToCart,
+    ajaxAddToCart: config.cart.ajaxAddToCart,
     expressCheckoutButtonEnabled: config.cart.expressCheckoutButtonEnabled,
     viewCartButtonEnabled: config.cart.viewCartButtonEnabled,
     primaryColor: config.branding.primaryColor,
@@ -305,11 +307,66 @@
     }
   }
 
+  function ajaxAddToCartEnabled() {
+    return Boolean(config.cart.ajaxAddToCart && isLoopDeskDrawerActive());
+  }
+
+  // Lightweight, self-contained confirmation toast (no external CSS dependency)
+  // so "Added to cart" feedback works even before the drawer stylesheet loads.
+  function showCartAddToast(message, isError) {
+    try {
+      var host = getLoopDeskRoot() || document.body;
+      if (!host) return;
+      var toast = document.createElement("div");
+      toast.setAttribute("role", "status");
+      toast.setAttribute("aria-live", "polite");
+      toast.textContent = message;
+      toast.style.cssText = "position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:2147483000;background:" + (isError ? "#b91c1c" : "#111827") + ";color:#fff;padding:11px 18px;border-radius:12px;font:600 14px/1.4 -apple-system,Segoe UI,Roboto,sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.28);max-width:90vw;text-align:center";
+      host.appendChild(toast);
+      window.setTimeout(function () { try { toast.parentNode && toast.parentNode.removeChild(toast); } catch (_e) {} }, 2600);
+    } catch (_error) {}
+  }
+
+  // Adds the product form via /cart/add.js and keeps the shopper on the PDP:
+  // opens the drawer when "open after add to cart" is on, otherwise just toasts.
+  // Surfaces Shopify's own error (e.g. "Please select a size") instead of a
+  // silent failure. Opt-in via the merchant setting so it never disrupts a
+  // theme that manages its own add-to-cart submit.
+  function ajaxAddToCartFromForm(form) {
+    var body;
+    try { body = new FormData(form); } catch (_error) { showCartAddToast("Could not add to cart. Please try again.", true); return; }
+    fetch("/cart/add.js", { method: "POST", credentials: "same-origin", cache: "no-store", headers: { Accept: "application/json" }, body: body })
+      .then(function (response) { return response.json().then(function (data) { return { ok: response.ok, data: data }; }); })
+      .then(function (result) {
+        if (!result.ok) {
+          showCartAddToast((result.data && (result.data.description || result.data.message)) || "Could not add to cart.", true);
+          return;
+        }
+        return fetchCart().then(function () {
+          if (shouldOpenLoopDeskAfterCartAdd()) setOpen(true);
+          else showCartAddToast("Added to cart", false);
+        });
+      })
+      .catch(function () { showCartAddToast("Could not add to cart. Please try again.", true); });
+  }
+
   function listenForCartAddFormSubmissions() {
     document.addEventListener("submit", function (event) {
       var form = event.target;
       if (!form || form.nodeName !== "FORM") return;
       if (!isCartAddUrl(form.getAttribute("action") || "")) return;
+      // A "Buy it now" / dynamic-checkout submitter overrides the form action to
+      // /checkout — leave those to the checkout interception path.
+      var submitter = event.submitter;
+      if (submitter && /\/checkout/.test(String((submitter.getAttribute && submitter.getAttribute("formaction")) || ""))) return;
+      if (ajaxAddToCartEnabled()) {
+        // Take over the native form navigation entirely and add via AJAX so the
+        // shopper never leaves the product page (no cart/bag page, no flash).
+        event.preventDefault();
+        if (typeof event.stopImmediatePropagation === "function") event.stopImmediatePropagation();
+        ajaxAddToCartFromForm(form);
+        return;
+      }
       recordCartAddReturnIntent();
     }, true);
   }
@@ -559,6 +616,7 @@
       cart: {
         drawerMode: mode,
         openAfterAddToCart: bool(firstDefined(cart.openAfterAddToCart, legacy.openAfterAddToCart), DEFAULT_CONFIG.cart.openAfterAddToCart),
+        ajaxAddToCart: bool(firstDefined(cart.ajaxAddToCart, legacy.ajaxAddToCart), DEFAULT_CONFIG.cart.ajaxAddToCart),
         expressCheckoutButtonEnabled: bool(firstDefined(cart.expressCheckoutButtonEnabled, legacy.expressCheckoutButtonEnabled), DEFAULT_CONFIG.cart.expressCheckoutButtonEnabled),
         viewCartButtonEnabled: bool(firstDefined(cart.viewCartButtonEnabled, legacy.viewCartButtonEnabled), DEFAULT_CONFIG.cart.viewCartButtonEnabled),
         nativeDrawerDisabledRequiredMessage: text(cart.nativeDrawerDisabledRequiredMessage, DEFAULT_CONFIG.cart.nativeDrawerDisabledRequiredMessage),
