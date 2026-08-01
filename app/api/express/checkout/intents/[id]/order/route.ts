@@ -423,7 +423,10 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
   // only real product variants so draft creation can succeed reliably.
 
   const inputBuildStartedAt = Date.now();
-  const discountAmount = Math.max(0, Math.min(intent.subtotalAmountPaise + intent.shippingAmountPaise, intent.discountAmountPaise + storeCreditAmountPaise));
+  // prepaidDiscountAmountPaise is 0 for COD; for a prepaid order fully covered
+  // by store credit it is folded in here so Shopify allocates it across lines
+  // (reducing GST-taxable value pre-tax), mirroring the prepaid finalization path.
+  const discountAmount = Math.max(0, Math.min(intent.subtotalAmountPaise + intent.shippingAmountPaise, intent.discountAmountPaise + intent.prepaidDiscountAmountPaise + storeCreditAmountPaise));
   const diagnostic = orderDiagnostic({ shopId: shop.shopId, intentId, customerProfileId, intent, lineItemCount: lineItems.length, hasAddressSnapshot: Boolean(address) });
   console.info("[EXPRESS CHECKOUT ORDER] creating draft order", diagnostic);
   const { firstName, lastName } = nameParts(address.name);

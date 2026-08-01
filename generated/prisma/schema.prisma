@@ -2728,29 +2728,30 @@ enum CheckoutRecoveryTokenStatus {
 }
 
 model ExpressCheckoutIntent {
-  id                    String                        @id @default(uuid())
-  shopId                String
-  customerProfileId     String?
-  sessionTokenHash      String?
-  status                ExpressCheckoutIntentStatus   @default(CREATED)
-  phoneSnapshot         String?
-  cartToken             String?
-  shopifyCartId         String?
-  cartSnapshot          Json?
-  subtotalAmountPaise   Int                           @default(0)
-  discountAmountPaise   Int                           @default(0)
-  shippingAmountPaise   Int                           @default(0)
-  codFeeAmountPaise     Int                           @default(0)
-  totalAmountPaise      Int                           @default(0)
-  currency              String                        @default("INR")
-  selectedPaymentMethod ExpressCheckoutPaymentMethod?
-  expiresAt             DateTime?
-  createdAt             DateTime                      @default(now())
-  updatedAt             DateTime                      @updatedAt
-  paymentPendingAt      DateTime?
-  abandonedAt           DateTime?
-  completedAt           DateTime?
-  lastTransitionAt      DateTime?
+  id                         String                        @id @default(uuid())
+  shopId                     String
+  customerProfileId          String?
+  sessionTokenHash           String?
+  status                     ExpressCheckoutIntentStatus   @default(CREATED)
+  phoneSnapshot              String?
+  cartToken                  String?
+  shopifyCartId              String?
+  cartSnapshot               Json?
+  subtotalAmountPaise        Int                           @default(0)
+  discountAmountPaise        Int                           @default(0)
+  shippingAmountPaise        Int                           @default(0)
+  codFeeAmountPaise          Int                           @default(0)
+  prepaidDiscountAmountPaise Int                           @default(0)
+  totalAmountPaise           Int                           @default(0)
+  currency                   String                        @default("INR")
+  selectedPaymentMethod      ExpressCheckoutPaymentMethod?
+  expiresAt                  DateTime?
+  createdAt                  DateTime                      @default(now())
+  updatedAt                  DateTime                      @updatedAt
+  paymentPendingAt           DateTime?
+  abandonedAt                DateTime?
+  completedAt                DateTime?
+  lastTransitionAt           DateTime?
 
   addressSnapshots ExpressCheckoutAddressSnapshot[]
   discounts        ExpressCheckoutDiscount[]

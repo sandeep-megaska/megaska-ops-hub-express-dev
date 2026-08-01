@@ -175,6 +175,24 @@
     }
   }
 
+  // Preview of the merchant's prepaid discount for the drawer nudge, mirroring
+  // the server engine (services/express-checkout/pricing.ts). Display-only: the
+  // express modal and server remain authoritative. Reads the public offer that
+  // the storefront runtime-config endpoint exposes as LoopDeskConfig.prepaidOffer.
+  function prepaidOfferSavingsMinor(subtotalMinor) {
+    var offer = (window.LoopDeskConfig && window.LoopDeskConfig.prepaidOffer) || null;
+    if (!offer || !offer.enabled) return 0;
+    var subtotal = Math.max(0, Math.floor(Number(subtotalMinor || 0)));
+    if (subtotal <= 0) return 0;
+    var value = Number(offer.value || 0);
+    if (!(value > 0)) return 0;
+    var minSubtotal = offer.minSubtotalPaise == null ? null : Math.max(0, Math.floor(Number(offer.minSubtotalPaise)));
+    if (minSubtotal != null && subtotal < minSubtotal) return 0;
+    var raw = offer.type === "FIXED_AMOUNT" ? Math.floor(value) : Math.round(subtotal * (value / 100));
+    var capped = offer.maxPaise == null ? raw : Math.min(raw, Math.max(0, Math.floor(Number(offer.maxPaise))));
+    return Math.max(0, Math.min(subtotal, capped));
+  }
+
   function escapeHtml(value) {
     return String(value || "")
       .replace(/&/g, "&amp;")
@@ -1477,6 +1495,16 @@
   if (elements.savingsRow) elements.savingsRow.hidden = !(pricing && pricing.totalSavings > 0);
   if (elements.savings) elements.savings.textContent = pricing ? "-" + money(pricing.totalSavings, cart && cart.currency) : "";
   elements.subtotal.textContent = money(pricing ? pricing.finalPayableSubtotal : (cart ? cart.total_price : 0), cart && cart.currency);
+  if (elements.prepaidNudge) {
+    var prepaidSavings = prepaidOfferSavingsMinor(pricing ? pricing.merchandiseSubtotal : (cart ? cart.total_price : 0));
+    if (prepaidSavings > 0) {
+      elements.prepaidNudge.textContent = "💸 Pay online at checkout and save " + money(prepaidSavings, cart && cart.currency);
+      elements.prepaidNudge.hidden = false;
+    } else {
+      elements.prepaidNudge.textContent = "";
+      elements.prepaidNudge.hidden = true;
+    }
+  }
   renderBoundSlot("BEFORE_TOTALS", slotContext);
   renderBoundSlot("AFTER_TOTALS", slotContext);
   renderBoundSlot("BEFORE_CHECKOUT", slotContext);
@@ -1709,7 +1737,7 @@
       '<header class="loopdesk-cart-drawer__header"><div class="loopdesk-cart-drawer__brand">' + logo + '<div><h2>' + escapeHtml(config.branding.merchantName || config.branding.storeName) + ' <span data-loopdesk-cart-count></span></h2><p>Your bag</p></div></div><button type="button" class="loopdesk-cart-drawer__close" aria-label="Close cart">×</button></header>',
       '<div class="loopdesk-cart-drawer__body"></div>',
       '<span data-loopdesk-slot="BEFORE_FOOTER"></span>',
-      '<footer class="loopdesk-cart-drawer__footer"><span data-loopdesk-slot="BEFORE_TOTALS"></span><div class="loopdesk-cart-drawer__subtotal"><span>Merchandise subtotal</span><strong data-loopdesk-cart-merchandise-subtotal></strong></div><div class="loopdesk-cart-drawer__subtotal" data-loopdesk-cart-savings-row hidden><span>Total savings</span><strong data-loopdesk-cart-savings></strong></div><div class="loopdesk-cart-drawer__subtotal loopdesk-cart-drawer__payable"><span>You pay</span><strong data-loopdesk-cart-subtotal></strong></div><span data-loopdesk-slot="AFTER_TOTALS"></span><div data-loopdesk-trust-below-totals></div><span data-loopdesk-slot="BEFORE_CHECKOUT"></span><button type="button" class="loopdesk-cart-drawer__express" data-loopdesk-express-checkout></button><span data-loopdesk-slot="AFTER_CHECKOUT"></span><div data-loopdesk-trust-below-checkout></div><a class="loopdesk-cart-drawer__view-cart" href="/cart"></a><p class="loopdesk-cart-drawer__microcopy"></p><p class="loopdesk-cart-drawer__powered"></p></footer>',
+      '<footer class="loopdesk-cart-drawer__footer"><span data-loopdesk-slot="BEFORE_TOTALS"></span><div class="loopdesk-cart-drawer__subtotal"><span>Merchandise subtotal</span><strong data-loopdesk-cart-merchandise-subtotal></strong></div><div class="loopdesk-cart-drawer__subtotal" data-loopdesk-cart-savings-row hidden><span>Total savings</span><strong data-loopdesk-cart-savings></strong></div><div class="loopdesk-cart-drawer__subtotal loopdesk-cart-drawer__payable"><span>You pay</span><strong data-loopdesk-cart-subtotal></strong></div><span data-loopdesk-slot="AFTER_TOTALS"></span><div data-loopdesk-trust-below-totals></div><span data-loopdesk-slot="BEFORE_CHECKOUT"></span><p class="loopdesk-cart-drawer__prepaid-nudge" data-loopdesk-prepaid-nudge hidden></p><button type="button" class="loopdesk-cart-drawer__express" data-loopdesk-express-checkout></button><span data-loopdesk-slot="AFTER_CHECKOUT"></span><div data-loopdesk-trust-below-checkout></div><a class="loopdesk-cart-drawer__view-cart" href="/cart"></a><p class="loopdesk-cart-drawer__microcopy"></p><p class="loopdesk-cart-drawer__powered"></p></footer>',
       '<span data-loopdesk-slot="AFTER_FOOTER"></span>',
       '</aside>',
     ].join("");
@@ -1749,6 +1777,7 @@
       trustBelowCheckout: hostRoot.querySelector("[data-loopdesk-trust-below-checkout]"),
       count: hostRoot.querySelector("[data-loopdesk-cart-count]"),
       express: hostRoot.querySelector(".loopdesk-cart-drawer__express"),
+      prepaidNudge: hostRoot.querySelector("[data-loopdesk-prepaid-nudge]"),
       viewCart: hostRoot.querySelector(".loopdesk-cart-drawer__view-cart"),
       poweredBy: hostRoot.querySelector(".loopdesk-cart-drawer__powered"),
     };

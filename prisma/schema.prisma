@@ -2741,6 +2741,7 @@ model ExpressCheckoutIntent {
   discountAmountPaise   Int                           @default(0)
   shippingAmountPaise   Int                           @default(0)
   codFeeAmountPaise     Int                           @default(0)
+  prepaidDiscountAmountPaise Int                      @default(0)
   totalAmountPaise      Int                           @default(0)
   currency              String                        @default("INR")
   selectedPaymentMethod ExpressCheckoutPaymentMethod?

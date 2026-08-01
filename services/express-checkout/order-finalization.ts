@@ -3,7 +3,7 @@ import { ShopifyAdminConfigError, shopifyAdminGraphql } from "./shopify-admin";
 import { consumeStoreCreditReservationForOrder, getActiveStoreCreditReservation, releaseStoreCreditReservation } from "./store-credit";
 
 type OrderLink = { id?: string; shopifyOrderId?: string | null; shopifyOrderName?: string | null; financialStatus?: string | null; fulfillmentStatus?: string | null; draftOrderId?: string | null; draftOrderName?: string | null };
-type IntentRecord = { id: string; status?: string | null; selectedPaymentMethod?: string | null; customerProfileId?: string | null; cartSnapshot?: unknown; subtotalAmountPaise: number; discountAmountPaise: number; shippingAmountPaise: number; totalAmountPaise: number; discounts?: unknown[] };
+type IntentRecord = { id: string; status?: string | null; selectedPaymentMethod?: string | null; customerProfileId?: string | null; cartSnapshot?: unknown; subtotalAmountPaise: number; discountAmountPaise: number; prepaidDiscountAmountPaise: number; shippingAmountPaise: number; totalAmountPaise: number; discounts?: unknown[] };
 type AddressRecord = { name: string; phone: string; email?: string | null; address1: string; address2?: string | null; city: string; province: string; country: string; zip: string };
 type CustomerRecord = { email?: string | null; phoneE164?: string | null; shopifyCustomerId?: string | null };
 type TxClient = {
@@ -211,7 +211,11 @@ export async function finalizePrepaidExpressCheckoutOrder(params: FinalizeParams
   const shippingAddress = { firstName, lastName, address1: address.address1, address2: address.address2, city: address.city, province: normalizeProvince(address.province), country: address.country, zip: address.zip, phone: address.phone };
   const storeCreditReservation = await getActiveStoreCreditReservation({ shopId: params.shopId, customerProfileId: params.customerProfileId, checkoutIntentId: params.intentId });
   const storeCreditAmountPaise = Math.min(Number(storeCreditReservation?.reservedAmount || 0), Math.max(0, intent.totalAmountPaise));
-  const discountAmount = Math.max(0, Math.min(intent.subtotalAmountPaise + intent.shippingAmountPaise, intent.discountAmountPaise + storeCreditAmountPaise));
+  // Fold the prepaid discount into the single order-level appliedDiscount
+  // alongside the coupon and store credit. Shopify allocates this across line
+  // items, so the prepaid offer reduces the GST-taxable per-line price (pre-tax)
+  // and the Shopify order total matches the Razorpay charge.
+  const discountAmount = Math.max(0, Math.min(intent.subtotalAmountPaise + intent.shippingAmountPaise, intent.discountAmountPaise + intent.prepaidDiscountAmountPaise + storeCreditAmountPaise));
   const discountValue = Number(paiseToAmountNumber(discountAmount));
   const appliedDiscount = Number.isFinite(discountValue) && discountValue > 0
     ? { title: "Express checkout discount", value: discountValue, valueType: "FIXED_AMOUNT" }
@@ -221,6 +225,7 @@ export async function finalizePrepaidExpressCheckoutOrder(params: FinalizeParams
     { key: "megaska_customer_profile_id", value: params.customerProfileId },
     { key: "megaska_payment_method", value: "PREPAID" },
     { key: "megaska_discount_snapshot", value: JSON.stringify(intent.discounts) },
+    ...(intent.prepaidDiscountAmountPaise > 0 ? [{ key: "megaska_prepaid_discount", value: paiseToAmount(intent.prepaidDiscountAmountPaise) }] : []),
     ...(storeCreditAmountPaise > 0 ? [
       { key: "store_credit_applied", value: "true" },
       { key: "store_credit_amount", value: String(storeCreditAmountPaise) },
