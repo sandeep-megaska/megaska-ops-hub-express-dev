@@ -108530,6 +108530,7 @@ export namespace Prisma {
     discountAmountPaise: number | null
     shippingAmountPaise: number | null
     codFeeAmountPaise: number | null
+    prepaidDiscountAmountPaise: number | null
     totalAmountPaise: number | null
   }
 
@@ -108538,6 +108539,7 @@ export namespace Prisma {
     discountAmountPaise: number | null
     shippingAmountPaise: number | null
     codFeeAmountPaise: number | null
+    prepaidDiscountAmountPaise: number | null
     totalAmountPaise: number | null
   }
 
@@ -108554,6 +108556,7 @@ export namespace Prisma {
     discountAmountPaise: number | null
     shippingAmountPaise: number | null
     codFeeAmountPaise: number | null
+    prepaidDiscountAmountPaise: number | null
     totalAmountPaise: number | null
     currency: string | null
     selectedPaymentMethod: $Enums.ExpressCheckoutPaymentMethod | null
@@ -108579,6 +108582,7 @@ export namespace Prisma {
     discountAmountPaise: number | null
     shippingAmountPaise: number | null
     codFeeAmountPaise: number | null
+    prepaidDiscountAmountPaise: number | null
     totalAmountPaise: number | null
     currency: string | null
     selectedPaymentMethod: $Enums.ExpressCheckoutPaymentMethod | null
@@ -108605,6 +108609,7 @@ export namespace Prisma {
     discountAmountPaise: number
     shippingAmountPaise: number
     codFeeAmountPaise: number
+    prepaidDiscountAmountPaise: number
     totalAmountPaise: number
     currency: number
     selectedPaymentMethod: number
@@ -108624,6 +108629,7 @@ export namespace Prisma {
     discountAmountPaise?: true
     shippingAmountPaise?: true
     codFeeAmountPaise?: true
+    prepaidDiscountAmountPaise?: true
     totalAmountPaise?: true
   }
 
@@ -108632,6 +108638,7 @@ export namespace Prisma {
     discountAmountPaise?: true
     shippingAmountPaise?: true
     codFeeAmountPaise?: true
+    prepaidDiscountAmountPaise?: true
     totalAmountPaise?: true
   }
 
@@ -108648,6 +108655,7 @@ export namespace Prisma {
     discountAmountPaise?: true
     shippingAmountPaise?: true
     codFeeAmountPaise?: true
+    prepaidDiscountAmountPaise?: true
     totalAmountPaise?: true
     currency?: true
     selectedPaymentMethod?: true
@@ -108673,6 +108681,7 @@ export namespace Prisma {
     discountAmountPaise?: true
     shippingAmountPaise?: true
     codFeeAmountPaise?: true
+    prepaidDiscountAmountPaise?: true
     totalAmountPaise?: true
     currency?: true
     selectedPaymentMethod?: true
@@ -108699,6 +108708,7 @@ export namespace Prisma {
     discountAmountPaise?: true
     shippingAmountPaise?: true
     codFeeAmountPaise?: true
+    prepaidDiscountAmountPaise?: true
     totalAmountPaise?: true
     currency?: true
     selectedPaymentMethod?: true
@@ -108812,6 +108822,7 @@ export namespace Prisma {
     discountAmountPaise: number
     shippingAmountPaise: number
     codFeeAmountPaise: number
+    prepaidDiscountAmountPaise: number
     totalAmountPaise: number
     currency: string
     selectedPaymentMethod: $Enums.ExpressCheckoutPaymentMethod | null
@@ -108857,6 +108868,7 @@ export namespace Prisma {
     discountAmountPaise?: boolean
     shippingAmountPaise?: boolean
     codFeeAmountPaise?: boolean
+    prepaidDiscountAmountPaise?: boolean
     totalAmountPaise?: boolean
     currency?: boolean
     selectedPaymentMethod?: boolean
@@ -108890,6 +108902,7 @@ export namespace Prisma {
     discountAmountPaise?: boolean
     shippingAmountPaise?: boolean
     codFeeAmountPaise?: boolean
+    prepaidDiscountAmountPaise?: boolean
     totalAmountPaise?: boolean
     currency?: boolean
     selectedPaymentMethod?: boolean
@@ -108916,6 +108929,7 @@ export namespace Prisma {
     discountAmountPaise?: boolean
     shippingAmountPaise?: boolean
     codFeeAmountPaise?: boolean
+    prepaidDiscountAmountPaise?: boolean
     totalAmountPaise?: boolean
     currency?: boolean
     selectedPaymentMethod?: boolean
@@ -108942,6 +108956,7 @@ export namespace Prisma {
     discountAmountPaise?: boolean
     shippingAmountPaise?: boolean
     codFeeAmountPaise?: boolean
+    prepaidDiscountAmountPaise?: boolean
     totalAmountPaise?: boolean
     currency?: boolean
     selectedPaymentMethod?: boolean
@@ -108954,7 +108969,7 @@ export namespace Prisma {
     lastTransitionAt?: boolean
   }
 
-  export type ExpressCheckoutIntentOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "shopId" | "customerProfileId" | "sessionTokenHash" | "status" | "phoneSnapshot" | "cartToken" | "shopifyCartId" | "cartSnapshot" | "subtotalAmountPaise" | "discountAmountPaise" | "shippingAmountPaise" | "codFeeAmountPaise" | "totalAmountPaise" | "currency" | "selectedPaymentMethod" | "expiresAt" | "createdAt" | "updatedAt" | "paymentPendingAt" | "abandonedAt" | "completedAt" | "lastTransitionAt", ExtArgs["result"]["expressCheckoutIntent"]>
+  export type ExpressCheckoutIntentOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "shopId" | "customerProfileId" | "sessionTokenHash" | "status" | "phoneSnapshot" | "cartToken" | "shopifyCartId" | "cartSnapshot" | "subtotalAmountPaise" | "discountAmountPaise" | "shippingAmountPaise" | "codFeeAmountPaise" | "prepaidDiscountAmountPaise" | "totalAmountPaise" | "currency" | "selectedPaymentMethod" | "expiresAt" | "createdAt" | "updatedAt" | "paymentPendingAt" | "abandonedAt" | "completedAt" | "lastTransitionAt", ExtArgs["result"]["expressCheckoutIntent"]>
   export type ExpressCheckoutIntentInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     addressSnapshots?: boolean | ExpressCheckoutIntent$addressSnapshotsArgs<ExtArgs>
     discounts?: boolean | ExpressCheckoutIntent$discountsArgs<ExtArgs>
@@ -108991,6 +109006,7 @@ export namespace Prisma {
       discountAmountPaise: number
       shippingAmountPaise: number
       codFeeAmountPaise: number
+      prepaidDiscountAmountPaise: number
       totalAmountPaise: number
       currency: string
       selectedPaymentMethod: $Enums.ExpressCheckoutPaymentMethod | null
@@ -109443,6 +109459,7 @@ export namespace Prisma {
     readonly discountAmountPaise: FieldRef<"ExpressCheckoutIntent", 'Int'>
     readonly shippingAmountPaise: FieldRef<"ExpressCheckoutIntent", 'Int'>
     readonly codFeeAmountPaise: FieldRef<"ExpressCheckoutIntent", 'Int'>
+    readonly prepaidDiscountAmountPaise: FieldRef<"ExpressCheckoutIntent", 'Int'>
     readonly totalAmountPaise: FieldRef<"ExpressCheckoutIntent", 'Int'>
     readonly currency: FieldRef<"ExpressCheckoutIntent", 'String'>
     readonly selectedPaymentMethod: FieldRef<"ExpressCheckoutIntent", 'ExpressCheckoutPaymentMethod'>
@@ -123509,6 +123526,7 @@ export namespace Prisma {
     discountAmountPaise: 'discountAmountPaise',
     shippingAmountPaise: 'shippingAmountPaise',
     codFeeAmountPaise: 'codFeeAmountPaise',
+    prepaidDiscountAmountPaise: 'prepaidDiscountAmountPaise',
     totalAmountPaise: 'totalAmountPaise',
     currency: 'currency',
     selectedPaymentMethod: 'selectedPaymentMethod',
@@ -134079,6 +134097,7 @@ export namespace Prisma {
     discountAmountPaise?: IntFilter<"ExpressCheckoutIntent"> | number
     shippingAmountPaise?: IntFilter<"ExpressCheckoutIntent"> | number
     codFeeAmountPaise?: IntFilter<"ExpressCheckoutIntent"> | number
+    prepaidDiscountAmountPaise?: IntFilter<"ExpressCheckoutIntent"> | number
     totalAmountPaise?: IntFilter<"ExpressCheckoutIntent"> | number
     currency?: StringFilter<"ExpressCheckoutIntent"> | string
     selectedPaymentMethod?: EnumExpressCheckoutPaymentMethodNullableFilter<"ExpressCheckoutIntent"> | $Enums.ExpressCheckoutPaymentMethod | null
@@ -134111,6 +134130,7 @@ export namespace Prisma {
     discountAmountPaise?: SortOrder
     shippingAmountPaise?: SortOrder
     codFeeAmountPaise?: SortOrder
+    prepaidDiscountAmountPaise?: SortOrder
     totalAmountPaise?: SortOrder
     currency?: SortOrder
     selectedPaymentMethod?: SortOrderInput | SortOrder
@@ -134147,6 +134167,7 @@ export namespace Prisma {
     discountAmountPaise?: IntFilter<"ExpressCheckoutIntent"> | number
     shippingAmountPaise?: IntFilter<"ExpressCheckoutIntent"> | number
     codFeeAmountPaise?: IntFilter<"ExpressCheckoutIntent"> | number
+    prepaidDiscountAmountPaise?: IntFilter<"ExpressCheckoutIntent"> | number
     totalAmountPaise?: IntFilter<"ExpressCheckoutIntent"> | number
     currency?: StringFilter<"ExpressCheckoutIntent"> | string
     selectedPaymentMethod?: EnumExpressCheckoutPaymentMethodNullableFilter<"ExpressCheckoutIntent"> | $Enums.ExpressCheckoutPaymentMethod | null
@@ -134179,6 +134200,7 @@ export namespace Prisma {
     discountAmountPaise?: SortOrder
     shippingAmountPaise?: SortOrder
     codFeeAmountPaise?: SortOrder
+    prepaidDiscountAmountPaise?: SortOrder
     totalAmountPaise?: SortOrder
     currency?: SortOrder
     selectedPaymentMethod?: SortOrderInput | SortOrder
@@ -134213,6 +134235,7 @@ export namespace Prisma {
     discountAmountPaise?: IntWithAggregatesFilter<"ExpressCheckoutIntent"> | number
     shippingAmountPaise?: IntWithAggregatesFilter<"ExpressCheckoutIntent"> | number
     codFeeAmountPaise?: IntWithAggregatesFilter<"ExpressCheckoutIntent"> | number
+    prepaidDiscountAmountPaise?: IntWithAggregatesFilter<"ExpressCheckoutIntent"> | number
     totalAmountPaise?: IntWithAggregatesFilter<"ExpressCheckoutIntent"> | number
     currency?: StringWithAggregatesFilter<"ExpressCheckoutIntent"> | string
     selectedPaymentMethod?: EnumExpressCheckoutPaymentMethodNullableWithAggregatesFilter<"ExpressCheckoutIntent"> | $Enums.ExpressCheckoutPaymentMethod | null
@@ -145847,6 +145870,7 @@ export namespace Prisma {
     discountAmountPaise?: number
     shippingAmountPaise?: number
     codFeeAmountPaise?: number
+    prepaidDiscountAmountPaise?: number
     totalAmountPaise?: number
     currency?: string
     selectedPaymentMethod?: $Enums.ExpressCheckoutPaymentMethod | null
@@ -145879,6 +145903,7 @@ export namespace Prisma {
     discountAmountPaise?: number
     shippingAmountPaise?: number
     codFeeAmountPaise?: number
+    prepaidDiscountAmountPaise?: number
     totalAmountPaise?: number
     currency?: string
     selectedPaymentMethod?: $Enums.ExpressCheckoutPaymentMethod | null
@@ -145911,6 +145936,7 @@ export namespace Prisma {
     discountAmountPaise?: IntFieldUpdateOperationsInput | number
     shippingAmountPaise?: IntFieldUpdateOperationsInput | number
     codFeeAmountPaise?: IntFieldUpdateOperationsInput | number
+    prepaidDiscountAmountPaise?: IntFieldUpdateOperationsInput | number
     totalAmountPaise?: IntFieldUpdateOperationsInput | number
     currency?: StringFieldUpdateOperationsInput | string
     selectedPaymentMethod?: NullableEnumExpressCheckoutPaymentMethodFieldUpdateOperationsInput | $Enums.ExpressCheckoutPaymentMethod | null
@@ -145943,6 +145969,7 @@ export namespace Prisma {
     discountAmountPaise?: IntFieldUpdateOperationsInput | number
     shippingAmountPaise?: IntFieldUpdateOperationsInput | number
     codFeeAmountPaise?: IntFieldUpdateOperationsInput | number
+    prepaidDiscountAmountPaise?: IntFieldUpdateOperationsInput | number
     totalAmountPaise?: IntFieldUpdateOperationsInput | number
     currency?: StringFieldUpdateOperationsInput | string
     selectedPaymentMethod?: NullableEnumExpressCheckoutPaymentMethodFieldUpdateOperationsInput | $Enums.ExpressCheckoutPaymentMethod | null
@@ -145975,6 +146002,7 @@ export namespace Prisma {
     discountAmountPaise?: number
     shippingAmountPaise?: number
     codFeeAmountPaise?: number
+    prepaidDiscountAmountPaise?: number
     totalAmountPaise?: number
     currency?: string
     selectedPaymentMethod?: $Enums.ExpressCheckoutPaymentMethod | null
@@ -146001,6 +146029,7 @@ export namespace Prisma {
     discountAmountPaise?: IntFieldUpdateOperationsInput | number
     shippingAmountPaise?: IntFieldUpdateOperationsInput | number
     codFeeAmountPaise?: IntFieldUpdateOperationsInput | number
+    prepaidDiscountAmountPaise?: IntFieldUpdateOperationsInput | number
     totalAmountPaise?: IntFieldUpdateOperationsInput | number
     currency?: StringFieldUpdateOperationsInput | string
     selectedPaymentMethod?: NullableEnumExpressCheckoutPaymentMethodFieldUpdateOperationsInput | $Enums.ExpressCheckoutPaymentMethod | null
@@ -146027,6 +146056,7 @@ export namespace Prisma {
     discountAmountPaise?: IntFieldUpdateOperationsInput | number
     shippingAmountPaise?: IntFieldUpdateOperationsInput | number
     codFeeAmountPaise?: IntFieldUpdateOperationsInput | number
+    prepaidDiscountAmountPaise?: IntFieldUpdateOperationsInput | number
     totalAmountPaise?: IntFieldUpdateOperationsInput | number
     currency?: StringFieldUpdateOperationsInput | string
     selectedPaymentMethod?: NullableEnumExpressCheckoutPaymentMethodFieldUpdateOperationsInput | $Enums.ExpressCheckoutPaymentMethod | null
@@ -154780,6 +154810,7 @@ export namespace Prisma {
     discountAmountPaise?: SortOrder
     shippingAmountPaise?: SortOrder
     codFeeAmountPaise?: SortOrder
+    prepaidDiscountAmountPaise?: SortOrder
     totalAmountPaise?: SortOrder
     currency?: SortOrder
     selectedPaymentMethod?: SortOrder
@@ -154797,6 +154828,7 @@ export namespace Prisma {
     discountAmountPaise?: SortOrder
     shippingAmountPaise?: SortOrder
     codFeeAmountPaise?: SortOrder
+    prepaidDiscountAmountPaise?: SortOrder
     totalAmountPaise?: SortOrder
   }
 
@@ -154813,6 +154845,7 @@ export namespace Prisma {
     discountAmountPaise?: SortOrder
     shippingAmountPaise?: SortOrder
     codFeeAmountPaise?: SortOrder
+    prepaidDiscountAmountPaise?: SortOrder
     totalAmountPaise?: SortOrder
     currency?: SortOrder
     selectedPaymentMethod?: SortOrder
@@ -154838,6 +154871,7 @@ export namespace Prisma {
     discountAmountPaise?: SortOrder
     shippingAmountPaise?: SortOrder
     codFeeAmountPaise?: SortOrder
+    prepaidDiscountAmountPaise?: SortOrder
     totalAmountPaise?: SortOrder
     currency?: SortOrder
     selectedPaymentMethod?: SortOrder
@@ -154855,6 +154889,7 @@ export namespace Prisma {
     discountAmountPaise?: SortOrder
     shippingAmountPaise?: SortOrder
     codFeeAmountPaise?: SortOrder
+    prepaidDiscountAmountPaise?: SortOrder
     totalAmountPaise?: SortOrder
   }
 
@@ -200147,6 +200182,7 @@ export namespace Prisma {
     discountAmountPaise?: number
     shippingAmountPaise?: number
     codFeeAmountPaise?: number
+    prepaidDiscountAmountPaise?: number
     totalAmountPaise?: number
     currency?: string
     selectedPaymentMethod?: $Enums.ExpressCheckoutPaymentMethod | null
@@ -200178,6 +200214,7 @@ export namespace Prisma {
     discountAmountPaise?: number
     shippingAmountPaise?: number
     codFeeAmountPaise?: number
+    prepaidDiscountAmountPaise?: number
     totalAmountPaise?: number
     currency?: string
     selectedPaymentMethod?: $Enums.ExpressCheckoutPaymentMethod | null
@@ -200378,6 +200415,7 @@ export namespace Prisma {
     discountAmountPaise?: IntFieldUpdateOperationsInput | number
     shippingAmountPaise?: IntFieldUpdateOperationsInput | number
     codFeeAmountPaise?: IntFieldUpdateOperationsInput | number
+    prepaidDiscountAmountPaise?: IntFieldUpdateOperationsInput | number
     totalAmountPaise?: IntFieldUpdateOperationsInput | number
     currency?: StringFieldUpdateOperationsInput | string
     selectedPaymentMethod?: NullableEnumExpressCheckoutPaymentMethodFieldUpdateOperationsInput | $Enums.ExpressCheckoutPaymentMethod | null
@@ -200409,6 +200447,7 @@ export namespace Prisma {
     discountAmountPaise?: IntFieldUpdateOperationsInput | number
     shippingAmountPaise?: IntFieldUpdateOperationsInput | number
     codFeeAmountPaise?: IntFieldUpdateOperationsInput | number
+    prepaidDiscountAmountPaise?: IntFieldUpdateOperationsInput | number
     totalAmountPaise?: IntFieldUpdateOperationsInput | number
     currency?: StringFieldUpdateOperationsInput | string
     selectedPaymentMethod?: NullableEnumExpressCheckoutPaymentMethodFieldUpdateOperationsInput | $Enums.ExpressCheckoutPaymentMethod | null
@@ -200587,6 +200626,7 @@ export namespace Prisma {
     discountAmountPaise?: number
     shippingAmountPaise?: number
     codFeeAmountPaise?: number
+    prepaidDiscountAmountPaise?: number
     totalAmountPaise?: number
     currency?: string
     selectedPaymentMethod?: $Enums.ExpressCheckoutPaymentMethod | null
@@ -200618,6 +200658,7 @@ export namespace Prisma {
     discountAmountPaise?: number
     shippingAmountPaise?: number
     codFeeAmountPaise?: number
+    prepaidDiscountAmountPaise?: number
     totalAmountPaise?: number
     currency?: string
     selectedPaymentMethod?: $Enums.ExpressCheckoutPaymentMethod | null
@@ -200897,6 +200938,7 @@ export namespace Prisma {
     discountAmountPaise?: IntFieldUpdateOperationsInput | number
     shippingAmountPaise?: IntFieldUpdateOperationsInput | number
     codFeeAmountPaise?: IntFieldUpdateOperationsInput | number
+    prepaidDiscountAmountPaise?: IntFieldUpdateOperationsInput | number
     totalAmountPaise?: IntFieldUpdateOperationsInput | number
     currency?: StringFieldUpdateOperationsInput | string
     selectedPaymentMethod?: NullableEnumExpressCheckoutPaymentMethodFieldUpdateOperationsInput | $Enums.ExpressCheckoutPaymentMethod | null
@@ -200928,6 +200970,7 @@ export namespace Prisma {
     discountAmountPaise?: IntFieldUpdateOperationsInput | number
     shippingAmountPaise?: IntFieldUpdateOperationsInput | number
     codFeeAmountPaise?: IntFieldUpdateOperationsInput | number
+    prepaidDiscountAmountPaise?: IntFieldUpdateOperationsInput | number
     totalAmountPaise?: IntFieldUpdateOperationsInput | number
     currency?: StringFieldUpdateOperationsInput | string
     selectedPaymentMethod?: NullableEnumExpressCheckoutPaymentMethodFieldUpdateOperationsInput | $Enums.ExpressCheckoutPaymentMethod | null
@@ -201044,6 +201087,7 @@ export namespace Prisma {
     discountAmountPaise?: number
     shippingAmountPaise?: number
     codFeeAmountPaise?: number
+    prepaidDiscountAmountPaise?: number
     totalAmountPaise?: number
     currency?: string
     selectedPaymentMethod?: $Enums.ExpressCheckoutPaymentMethod | null
@@ -201075,6 +201119,7 @@ export namespace Prisma {
     discountAmountPaise?: number
     shippingAmountPaise?: number
     codFeeAmountPaise?: number
+    prepaidDiscountAmountPaise?: number
     totalAmountPaise?: number
     currency?: string
     selectedPaymentMethod?: $Enums.ExpressCheckoutPaymentMethod | null
@@ -201122,6 +201167,7 @@ export namespace Prisma {
     discountAmountPaise?: IntFieldUpdateOperationsInput | number
     shippingAmountPaise?: IntFieldUpdateOperationsInput | number
     codFeeAmountPaise?: IntFieldUpdateOperationsInput | number
+    prepaidDiscountAmountPaise?: IntFieldUpdateOperationsInput | number
     totalAmountPaise?: IntFieldUpdateOperationsInput | number
     currency?: StringFieldUpdateOperationsInput | string
     selectedPaymentMethod?: NullableEnumExpressCheckoutPaymentMethodFieldUpdateOperationsInput | $Enums.ExpressCheckoutPaymentMethod | null
@@ -201153,6 +201199,7 @@ export namespace Prisma {
     discountAmountPaise?: IntFieldUpdateOperationsInput | number
     shippingAmountPaise?: IntFieldUpdateOperationsInput | number
     codFeeAmountPaise?: IntFieldUpdateOperationsInput | number
+    prepaidDiscountAmountPaise?: IntFieldUpdateOperationsInput | number
     totalAmountPaise?: IntFieldUpdateOperationsInput | number
     currency?: StringFieldUpdateOperationsInput | string
     selectedPaymentMethod?: NullableEnumExpressCheckoutPaymentMethodFieldUpdateOperationsInput | $Enums.ExpressCheckoutPaymentMethod | null
@@ -201184,6 +201231,7 @@ export namespace Prisma {
     discountAmountPaise?: number
     shippingAmountPaise?: number
     codFeeAmountPaise?: number
+    prepaidDiscountAmountPaise?: number
     totalAmountPaise?: number
     currency?: string
     selectedPaymentMethod?: $Enums.ExpressCheckoutPaymentMethod | null
@@ -201215,6 +201263,7 @@ export namespace Prisma {
     discountAmountPaise?: number
     shippingAmountPaise?: number
     codFeeAmountPaise?: number
+    prepaidDiscountAmountPaise?: number
     totalAmountPaise?: number
     currency?: string
     selectedPaymentMethod?: $Enums.ExpressCheckoutPaymentMethod | null
@@ -201262,6 +201311,7 @@ export namespace Prisma {
     discountAmountPaise?: IntFieldUpdateOperationsInput | number
     shippingAmountPaise?: IntFieldUpdateOperationsInput | number
     codFeeAmountPaise?: IntFieldUpdateOperationsInput | number
+    prepaidDiscountAmountPaise?: IntFieldUpdateOperationsInput | number
     totalAmountPaise?: IntFieldUpdateOperationsInput | number
     currency?: StringFieldUpdateOperationsInput | string
     selectedPaymentMethod?: NullableEnumExpressCheckoutPaymentMethodFieldUpdateOperationsInput | $Enums.ExpressCheckoutPaymentMethod | null
@@ -201293,6 +201343,7 @@ export namespace Prisma {
     discountAmountPaise?: IntFieldUpdateOperationsInput | number
     shippingAmountPaise?: IntFieldUpdateOperationsInput | number
     codFeeAmountPaise?: IntFieldUpdateOperationsInput | number
+    prepaidDiscountAmountPaise?: IntFieldUpdateOperationsInput | number
     totalAmountPaise?: IntFieldUpdateOperationsInput | number
     currency?: StringFieldUpdateOperationsInput | string
     selectedPaymentMethod?: NullableEnumExpressCheckoutPaymentMethodFieldUpdateOperationsInput | $Enums.ExpressCheckoutPaymentMethod | null
@@ -201324,6 +201375,7 @@ export namespace Prisma {
     discountAmountPaise?: number
     shippingAmountPaise?: number
     codFeeAmountPaise?: number
+    prepaidDiscountAmountPaise?: number
     totalAmountPaise?: number
     currency?: string
     selectedPaymentMethod?: $Enums.ExpressCheckoutPaymentMethod | null
@@ -201355,6 +201407,7 @@ export namespace Prisma {
     discountAmountPaise?: number
     shippingAmountPaise?: number
     codFeeAmountPaise?: number
+    prepaidDiscountAmountPaise?: number
     totalAmountPaise?: number
     currency?: string
     selectedPaymentMethod?: $Enums.ExpressCheckoutPaymentMethod | null
@@ -201402,6 +201455,7 @@ export namespace Prisma {
     discountAmountPaise?: IntFieldUpdateOperationsInput | number
     shippingAmountPaise?: IntFieldUpdateOperationsInput | number
     codFeeAmountPaise?: IntFieldUpdateOperationsInput | number
+    prepaidDiscountAmountPaise?: IntFieldUpdateOperationsInput | number
     totalAmountPaise?: IntFieldUpdateOperationsInput | number
     currency?: StringFieldUpdateOperationsInput | string
     selectedPaymentMethod?: NullableEnumExpressCheckoutPaymentMethodFieldUpdateOperationsInput | $Enums.ExpressCheckoutPaymentMethod | null
@@ -201433,6 +201487,7 @@ export namespace Prisma {
     discountAmountPaise?: IntFieldUpdateOperationsInput | number
     shippingAmountPaise?: IntFieldUpdateOperationsInput | number
     codFeeAmountPaise?: IntFieldUpdateOperationsInput | number
+    prepaidDiscountAmountPaise?: IntFieldUpdateOperationsInput | number
     totalAmountPaise?: IntFieldUpdateOperationsInput | number
     currency?: StringFieldUpdateOperationsInput | string
     selectedPaymentMethod?: NullableEnumExpressCheckoutPaymentMethodFieldUpdateOperationsInput | $Enums.ExpressCheckoutPaymentMethod | null
@@ -201464,6 +201519,7 @@ export namespace Prisma {
     discountAmountPaise?: number
     shippingAmountPaise?: number
     codFeeAmountPaise?: number
+    prepaidDiscountAmountPaise?: number
     totalAmountPaise?: number
     currency?: string
     selectedPaymentMethod?: $Enums.ExpressCheckoutPaymentMethod | null
@@ -201495,6 +201551,7 @@ export namespace Prisma {
     discountAmountPaise?: number
     shippingAmountPaise?: number
     codFeeAmountPaise?: number
+    prepaidDiscountAmountPaise?: number
     totalAmountPaise?: number
     currency?: string
     selectedPaymentMethod?: $Enums.ExpressCheckoutPaymentMethod | null
@@ -201542,6 +201599,7 @@ export namespace Prisma {
     discountAmountPaise?: IntFieldUpdateOperationsInput | number
     shippingAmountPaise?: IntFieldUpdateOperationsInput | number
     codFeeAmountPaise?: IntFieldUpdateOperationsInput | number
+    prepaidDiscountAmountPaise?: IntFieldUpdateOperationsInput | number
     totalAmountPaise?: IntFieldUpdateOperationsInput | number
     currency?: StringFieldUpdateOperationsInput | string
     selectedPaymentMethod?: NullableEnumExpressCheckoutPaymentMethodFieldUpdateOperationsInput | $Enums.ExpressCheckoutPaymentMethod | null
@@ -201573,6 +201631,7 @@ export namespace Prisma {
     discountAmountPaise?: IntFieldUpdateOperationsInput | number
     shippingAmountPaise?: IntFieldUpdateOperationsInput | number
     codFeeAmountPaise?: IntFieldUpdateOperationsInput | number
+    prepaidDiscountAmountPaise?: IntFieldUpdateOperationsInput | number
     totalAmountPaise?: IntFieldUpdateOperationsInput | number
     currency?: StringFieldUpdateOperationsInput | string
     selectedPaymentMethod?: NullableEnumExpressCheckoutPaymentMethodFieldUpdateOperationsInput | $Enums.ExpressCheckoutPaymentMethod | null

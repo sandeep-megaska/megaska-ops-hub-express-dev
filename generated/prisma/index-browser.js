@@ -1596,6 +1596,7 @@ exports.Prisma.ExpressCheckoutIntentScalarFieldEnum = {
   discountAmountPaise: 'discountAmountPaise',
   shippingAmountPaise: 'shippingAmountPaise',
   codFeeAmountPaise: 'codFeeAmountPaise',
+  prepaidDiscountAmountPaise: 'prepaidDiscountAmountPaise',
   totalAmountPaise: 'totalAmountPaise',
   currency: 'currency',
   selectedPaymentMethod: 'selectedPaymentMethod',
