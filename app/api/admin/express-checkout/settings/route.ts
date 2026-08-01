@@ -15,7 +15,10 @@ type ExpressCheckoutConfigBlob = {
   prepaidDiscountValue: number;
   prepaidDiscountMaxPaise: number;
   prepaidDiscountMinSubtotalPaise: number;
+  prepaidOfferMessage: string;
 };
+
+const PREPAID_OFFER_MESSAGE_MAX_LENGTH = 160;
 
 type ShopModuleConfigDelegate = {
   upsert(args: {
@@ -76,6 +79,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "Prepaid discount minimum order must be a non-negative amount with up to two decimal places" }, { status: 400 });
   }
   const prepaidDiscountEnabled = body.prepaidDiscountEnabled === true && prepaidDiscountValue > 0;
+  const prepaidOfferMessage = String(body.prepaidOfferMessage || "").trim().slice(0, PREPAID_OFFER_MESSAGE_MAX_LENGTH);
 
   const config: ExpressCheckoutConfigBlob = {
     codFeeAmountPaise,
@@ -85,6 +89,7 @@ export async function POST(req: NextRequest) {
     prepaidDiscountValue,
     prepaidDiscountMaxPaise,
     prepaidDiscountMinSubtotalPaise,
+    prepaidOfferMessage,
   };
   const settings = await db().shopModuleConfig.upsert({
     where: { shopId_moduleKey: { shopId: resolved.id, moduleKey: MODULE_KEY } },

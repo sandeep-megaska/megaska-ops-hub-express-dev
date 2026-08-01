@@ -22,6 +22,9 @@ export type PrepaidDiscountSettings = {
   maxPaise: number | null;
   // Minimum product subtotal (paise) required for the offer (null = no minimum).
   minSubtotalPaise: number | null;
+  // Merchant-customized storefront teaser (cart drawer / express modal). Supports
+  // {percent}, {amount}, {cap} placeholders. null = use the built-in default.
+  offerMessage: string | null;
 };
 
 export type ExpressCheckoutPricingSettings = {

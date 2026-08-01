@@ -193,6 +193,23 @@
     return Math.max(0, Math.min(subtotal, capped));
   }
 
+  // Storefront teaser for the prepaid offer. Uses the merchant's custom message
+  // (LoopDeskConfig.prepaidOffer.message) with {percent}/{amount}/{cap}
+  // placeholders substituted; falls back to a sensible default built from the
+  // offer's percent (or the computed savings amount for a fixed-amount offer).
+  function prepaidOfferNudgeText(savingsMinor, currency) {
+    var offer = (window.LoopDeskConfig && window.LoopDeskConfig.prepaidOffer) || null;
+    if (!offer) return "";
+    var amount = money(savingsMinor, currency);
+    var percent = offer.percent != null && Number(offer.percent) > 0 ? String(Number(offer.percent)).replace(/\.0+$/, "") + "%" : "";
+    var cap = offer.maxPaise != null ? money(offer.maxPaise, currency) : "";
+    var custom = typeof offer.message === "string" ? offer.message.trim() : "";
+    if (custom) return custom.replace(/\{percent\}/gi, percent).replace(/\{amount\}/gi, amount).replace(/\{cap\}/gi, cap);
+    return percent
+      ? "💸 Pay online at checkout & get " + percent + " off — you save " + amount
+      : "💸 Pay online at checkout and save " + amount;
+  }
+
   function escapeHtml(value) {
     return String(value || "")
       .replace(/&/g, "&amp;")
@@ -1580,8 +1597,9 @@
   elements.subtotal.textContent = money(pricing ? pricing.finalPayableSubtotal : (cart ? cart.total_price : 0), cart && cart.currency);
   if (elements.prepaidNudge) {
     var prepaidSavings = prepaidOfferSavingsMinor(pricing ? pricing.merchandiseSubtotal : (cart ? cart.total_price : 0));
-    if (prepaidSavings > 0) {
-      elements.prepaidNudge.textContent = "💸 Pay online at checkout and save " + money(prepaidSavings, cart && cart.currency);
+    var prepaidText = prepaidSavings > 0 ? prepaidOfferNudgeText(prepaidSavings, cart && cart.currency) : "";
+    if (prepaidText) {
+      elements.prepaidNudge.textContent = prepaidText;
       elements.prepaidNudge.hidden = false;
     } else {
       elements.prepaidNudge.textContent = "";
