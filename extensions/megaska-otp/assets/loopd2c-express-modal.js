@@ -691,7 +691,19 @@ function buildBufferedEta(rawEta) {
   // Savings line shown only while a prepaid method is selected. On COD the line
   // disappears (COD does not earn the offer), so the shopper sees the price gap.
   function prepaidSummary(method) { if (method !== "PREPAID") return ""; const save = prepaidDiscountPreviewPaise(); if (save <= 0) return ""; return `<p class="megaska-express-prepaid-line" style="color:#047857"><span>Prepaid discount<br><small>Online payment offer</small></span><strong>- ${money(save, state.intent?.currency)}</strong></p>`; }
-  function prepaidOfferBanner() { const save = prepaidDiscountPreviewPaise(); if (save <= 0) return ""; return `<p class="megaska-express-prepaid-banner" style="margin:0 0 10px;padding:9px 12px;border-radius:10px;background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46;font-size:13px;font-weight:600">🎉 Pay online and save ${money(save, state.intent?.currency)} — instant prepaid discount.</p>`; }
+  // Uses the merchant's custom offer message (with {percent}/{amount}/{cap}
+  // placeholders) when set; otherwise a default built from the percent/amount.
+  function prepaidOfferText(saveMinor) {
+    const cfg = state.settings?.prepaidDiscount;
+    const cur = state.intent?.currency;
+    const amount = money(saveMinor, cur);
+    const percent = cfg && cfg.type === "PERCENTAGE" && Number(cfg.value) > 0 ? String(Number(cfg.value)).replace(/\.0+$/, "") + "%" : "";
+    const cap = cfg && cfg.maxPaise != null ? money(cfg.maxPaise, cur) : "";
+    const custom = cfg && typeof cfg.offerMessage === "string" ? cfg.offerMessage.trim() : "";
+    if (custom) return custom.replace(/\{percent\}/gi, percent).replace(/\{amount\}/gi, amount).replace(/\{cap\}/gi, cap);
+    return percent ? `Pay online & get ${percent} off — you save ${amount}` : `Pay online and save ${amount} — instant prepaid discount.`;
+  }
+  function prepaidOfferBanner() { const save = prepaidDiscountPreviewPaise(); if (save <= 0) return ""; return `<p class="megaska-express-prepaid-banner" style="margin:0 0 10px;padding:9px 12px;border-radius:10px;background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46;font-size:13px;font-weight:600">🎉 ${escapeHtml(prepaidOfferText(save))}</p>`; }
   function storeCreditAppliedPaise() { return Math.round(Number(state.storeCredit?.appliedAmount || 0) * 100); }
   function remainingBasePayablePaise() { return Math.max(0, Number(state.intent?.totalAmountPaise || 0) - storeCreditAppliedPaise()); }
   // Client-side preview of the merchant's prepaid discount, mirroring the

@@ -10,6 +10,7 @@ export const DEFAULT_PREPAID_DISCOUNT: PrepaidDiscountSettings = {
   value: 0,
   maxPaise: null,
   minSubtotalPaise: null,
+  offerMessage: null,
 };
 
 const MODULE_KEY = "express_checkout_settings";
@@ -33,7 +34,10 @@ type ExpressCheckoutSettingsConfig = {
   prepaidDiscountValue?: unknown;
   prepaidDiscountMaxPaise?: unknown;
   prepaidDiscountMinSubtotalPaise?: unknown;
+  prepaidOfferMessage?: unknown;
 };
+
+const PREPAID_OFFER_MESSAGE_MAX_LENGTH = 160;
 
 export function parseCodFeeRupeesToPaise(value: unknown) {
   if (value == null) return 0;
@@ -81,12 +85,16 @@ function parsePrepaidDiscount(config: ExpressCheckoutSettingsConfig): PrepaidDis
   const value = Number.isFinite(rawValue) && rawValue > 0 ? rawValue : 0;
   const enabled = config.prepaidDiscountEnabled === true && value > 0;
 
+  const offerMessageRaw = typeof config.prepaidOfferMessage === "string" ? config.prepaidOfferMessage.trim() : "";
+  const offerMessage = offerMessageRaw ? offerMessageRaw.slice(0, PREPAID_OFFER_MESSAGE_MAX_LENGTH) : null;
+
   return {
     enabled,
     type,
     value,
     maxPaise: optionalNonNegativeInt(config.prepaidDiscountMaxPaise),
     minSubtotalPaise: optionalNonNegativeInt(config.prepaidDiscountMinSubtotalPaise),
+    offerMessage,
   };
 }
 

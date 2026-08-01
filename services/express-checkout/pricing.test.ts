@@ -10,13 +10,13 @@ import {
 
 const DISABLED: ExpressCheckoutPricingSettings = {
   codFeeAmountPaise: 5000,
-  prepaidDiscount: { enabled: false, type: "PERCENTAGE", value: 15, maxPaise: null, minSubtotalPaise: null },
+  prepaidDiscount: { enabled: false, type: "PERCENTAGE", value: 15, maxPaise: null, minSubtotalPaise: null, offerMessage: null },
 };
 
 function settings(overrides: Partial<ExpressCheckoutPricingSettings["prepaidDiscount"]>, codFeeAmountPaise = 0): ExpressCheckoutPricingSettings {
   return {
     codFeeAmountPaise,
-    prepaidDiscount: { enabled: true, type: "PERCENTAGE", value: 15, maxPaise: null, minSubtotalPaise: null, ...overrides },
+    prepaidDiscount: { enabled: true, type: "PERCENTAGE", value: 15, maxPaise: null, minSubtotalPaise: null, offerMessage: null, ...overrides },
   };
 }
 
