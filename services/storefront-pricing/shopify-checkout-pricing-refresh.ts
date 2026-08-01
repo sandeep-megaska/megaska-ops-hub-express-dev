@@ -53,37 +53,52 @@ export async function refreshShopifyCheckoutPricing(input: ShopifyCheckoutPricin
   const now = dependencies.now?.() ?? new Date();
   const audit = dependencies.audit ?? ((event, data) => console.info("[SHOPIFY CHECKOUT PRICING]", event, data));
   try {
+    // Phase 1 — read the trusted inputs and compute the pre-refresh fingerprints.
+    // Deliberately NOT inside a DB transaction: the small serverless connection
+    // pool (max ~1) must not be held across the Shopify Admin round-trip in
+    // Phase 2, or sibling checkout requests (address save, store credit) starve
+    // and fail with "timeout exceeded when trying to connect". Each read below
+    // acquires and releases a connection.
+    const intent = await db.expressCheckoutIntent.findFirst({ where: { id: input.checkoutIntentId, shopId: input.shopId }, include: { discounts: { where: { shopId: input.shopId }, orderBy: { createdAt: "desc" } } } });
+    if (!intent) return fail("checkout_intent_not_found");
+    if (intent.cartSnapshot === null || intent.cartSnapshot === undefined) return fail("cart_snapshot_missing");
+    const cartLines = lines(intent.cartSnapshot); if (!cartLines.length) return fail("cart_snapshot_invalid");
+    const address = await db.expressCheckoutAddressSnapshot.findFirst({ where: { shopId: input.shopId, intentId: input.checkoutIntentId, ...(intent.customerProfileId ? { customerProfileId: intent.customerProfileId } : {}) }, orderBy: { createdAt: "desc" } });
+    if (!address) return fail("address_missing");
+    const shop = await db.shop.findFirst({ where: { id: input.shopId }, select: { shopDomain: true } }); if (!shop) return fail("checkout_intent_shop_mismatch");
+    const previous = await db.shopifyCheckoutPricingSnapshot.findFirst({ where: { shopId: input.shopId, checkoutIntentId: input.checkoutIntentId }, select: { shopifyDraftOrderId: true } });
+    const expectedFingerprints = {
+      cart: cartSnapshotPricingFingerprint(intent.cartSnapshot) ?? cartPricingFingerprint(cartLines),
+      address: addressPricingFingerprint({ countryCode: address.country, provinceCode: address.province, postalCode: address.zip, city: address.city }),
+      shipping: pricingInputFingerprint({ title: "Shipping", amountMinor: intent.shippingAmountPaise, currency: intent.currency }),
+      discount: pricingInputFingerprint((intent.discounts || []).map((d: any) => ({ type: d.type, code: d.code || null, rawShopifyPayload: d.rawShopifyPayload || null }))),
+    };
+    const reusedDraftOrder = Boolean(previous?.shopifyDraftOrderId); const { firstName, lastName } = names(address.name);
+    const draftInput = { lineItems: cartLines, shippingAddress: { firstName, lastName, address1: address.address1, address2: address.address2 || undefined, city: address.city, province: address.province, country: address.country, zip: address.zip, phone: address.phone }, shippingLine: { title: "Shipping", price: (intent.shippingAmountPaise / 100).toFixed(2) }, customAttributes: [{ key: "megaska_express_intent_id", value: intent.id }] };
+    const mutation = reusedDraftOrder
+      ? `mutation DraftOrderUpdate($id: ID!, $input: DraftOrderInput!) { draftOrderUpdate(id: $id, input: $input) { draftOrder { ${PRICING_FIELDS} } userErrors { field message } } }`
+      : `mutation DraftOrderCreate($input: DraftOrderInput!) { draftOrderCreate(input: $input) { draftOrder { ${PRICING_FIELDS} } userErrors { field message } } }`;
+
+    // Phase 2 — Shopify Admin round-trip, holding NO database connection.
+    let response: any;
+    try { response = await graphql(shop.shopDomain, mutation, { ...(reusedDraftOrder ? { id: previous!.shopifyDraftOrderId } : {}), input: draftInput }, { shopId: input.shopId }); }
+    catch { audit("refresh_failed", { shopId: input.shopId, checkoutIntentPublicId: intent.id, reason: input.reason, resultStatus: "failed", failureCode: "shopify_unavailable" }); return fail("shopify_unavailable", true); }
+    const payload = reusedDraftOrder ? response?.draftOrderUpdate : response?.draftOrderCreate;
+    if (payload?.userErrors?.length) { const code = reusedDraftOrder ? "draft_order_update_failed" : "draft_order_create_failed"; audit("refresh_failed", { shopId: input.shopId, checkoutIntentPublicId: intent.id, reason: input.reason, operation: reusedDraftOrder ? "update" : "create", resultStatus: "failed", failureCode: code, userErrorCount: payload.userErrors.length }); return fail(code); }
+    const draft = object(payload?.draftOrder); if (!draft?.id) return fail("draft_order_response_invalid");
+    let currency: string; let taxSummary;
+    try { currency = validateShopMoney(draft); taxSummary = taxSummaryFromShopifyDraftOrder(draft, { currencyExponent: exponent(String(draft.currencyCode).toUpperCase()) }); }
+    catch (error) { return fail(error instanceof Error && error.message === "currency missing" ? "draft_order_currency_missing" : "draft_order_pricing_invalid"); }
+    const authoritativeAt = safeDate(draft.updatedAt, now);
+
+    // Phase 3 — short transaction: re-verify the inputs did not change during the
+    // Shopify call (mid-flight guard), then persist under an advisory lock that
+    // serializes concurrent persists for this intent. The Shopify call already
+    // completed, so no connection was held across the network. (Two concurrent
+    // first-time refreshes may each create a Draft Order; the extra one is an
+    // orphan that Shopify expires — the persisted snapshot stays consistent.)
     return await db.$transaction(async (tx: any) => {
       if (typeof tx.$executeRaw === "function") await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`${input.shopId}:${input.checkoutIntentId}:shopify_pricing_refresh`}))`;
-      const intent = await tx.expressCheckoutIntent.findFirst({ where: { id: input.checkoutIntentId, shopId: input.shopId }, include: { discounts: { where: { shopId: input.shopId }, orderBy: { createdAt: "desc" } } } });
-      if (!intent) return fail("checkout_intent_not_found");
-      if (intent.cartSnapshot === null || intent.cartSnapshot === undefined) return fail("cart_snapshot_missing");
-      const cartLines = lines(intent.cartSnapshot); if (!cartLines.length) return fail("cart_snapshot_invalid");
-      const address = await tx.expressCheckoutAddressSnapshot.findFirst({ where: { shopId: input.shopId, intentId: input.checkoutIntentId, ...(intent.customerProfileId ? { customerProfileId: intent.customerProfileId } : {}) }, orderBy: { createdAt: "desc" } });
-      if (!address) return fail("address_missing");
-      const shop = await tx.shop.findFirst({ where: { id: input.shopId }, select: { shopDomain: true } }); if (!shop) return fail("checkout_intent_shop_mismatch");
-      const previous = await tx.shopifyCheckoutPricingSnapshot.findFirst({ where: { shopId: input.shopId, checkoutIntentId: input.checkoutIntentId }, select: { shopifyDraftOrderId: true } });
-      const expectedFingerprints = {
-        cart: cartSnapshotPricingFingerprint(intent.cartSnapshot) ?? cartPricingFingerprint(cartLines),
-        address: addressPricingFingerprint({ countryCode: address.country, provinceCode: address.province, postalCode: address.zip, city: address.city }),
-        shipping: pricingInputFingerprint({ title: "Shipping", amountMinor: intent.shippingAmountPaise, currency: intent.currency }),
-        discount: pricingInputFingerprint((intent.discounts || []).map((d: any) => ({ type: d.type, code: d.code || null, rawShopifyPayload: d.rawShopifyPayload || null }))),
-      };
-      const reusedDraftOrder = Boolean(previous?.shopifyDraftOrderId); const { firstName, lastName } = names(address.name);
-      const draftInput = { lineItems: cartLines, shippingAddress: { firstName, lastName, address1: address.address1, address2: address.address2 || undefined, city: address.city, province: address.province, country: address.country, zip: address.zip, phone: address.phone }, shippingLine: { title: "Shipping", price: (intent.shippingAmountPaise / 100).toFixed(2) }, customAttributes: [{ key: "megaska_express_intent_id", value: intent.id }] };
-      const mutation = reusedDraftOrder
-        ? `mutation DraftOrderUpdate($id: ID!, $input: DraftOrderInput!) { draftOrderUpdate(id: $id, input: $input) { draftOrder { ${PRICING_FIELDS} } userErrors { field message } } }`
-        : `mutation DraftOrderCreate($input: DraftOrderInput!) { draftOrderCreate(input: $input) { draftOrder { ${PRICING_FIELDS} } userErrors { field message } } }`;
-      let response: any;
-      try { response = await graphql(shop.shopDomain, mutation, { ...(reusedDraftOrder ? { id: previous.shopifyDraftOrderId } : {}), input: draftInput }, { shopId: input.shopId }); }
-      catch { audit("refresh_failed", { shopId: input.shopId, checkoutIntentPublicId: intent.id, reason: input.reason, resultStatus: "failed", failureCode: "shopify_unavailable" }); return fail("shopify_unavailable", true); }
-      const payload = reusedDraftOrder ? response?.draftOrderUpdate : response?.draftOrderCreate;
-      if (payload?.userErrors?.length) { const code = reusedDraftOrder ? "draft_order_update_failed" : "draft_order_create_failed"; audit("refresh_failed", { shopId: input.shopId, checkoutIntentPublicId: intent.id, reason: input.reason, operation: reusedDraftOrder ? "update" : "create", resultStatus: "failed", failureCode: code, userErrorCount: payload.userErrors.length }); return fail(code); }
-      const draft = object(payload?.draftOrder); if (!draft?.id) return fail("draft_order_response_invalid");
-      let currency: string; let taxSummary;
-      try { currency = validateShopMoney(draft); taxSummary = taxSummaryFromShopifyDraftOrder(draft, { currencyExponent: exponent(String(draft.currencyCode).toUpperCase()) }); }
-      catch (error) { return fail(error instanceof Error && error.message === "currency missing" ? "draft_order_currency_missing" : "draft_order_pricing_invalid"); }
-      const authoritativeAt = safeDate(draft.updatedAt, now);
       const latestIntent = await tx.expressCheckoutIntent.findFirst({ where: { id: input.checkoutIntentId, shopId: input.shopId }, include: { discounts: { where: { shopId: input.shopId }, orderBy: { createdAt: "desc" } } } });
       const latestAddress = await tx.expressCheckoutAddressSnapshot.findFirst({ where: { shopId: input.shopId, intentId: input.checkoutIntentId, ...(intent.customerProfileId ? { customerProfileId: intent.customerProfileId } : {}) }, orderBy: { createdAt: "desc" } });
       const latestLines = lines(latestIntent?.cartSnapshot);
@@ -105,6 +120,6 @@ export async function refreshShopifyCheckoutPricing(input: ShopifyCheckoutPricin
       if (!snapshot) return fail("pricing_snapshot_persist_failed", true);
       audit("refresh_succeeded", { shopId: input.shopId, checkoutIntentPublicId: intent.id, reason: input.reason, operation: reusedDraftOrder ? "update" : "create", reusedDraftOrder, shopifyDraftOrderId: draft.id, snapshotPublicId: snapshot.publicId, currency, totalPayable: taxSummary.totalPayable, totalTax: taxSummary.totalTax, taxesIncluded: taxSummary.taxesIncluded, resultStatus: "succeeded", timestamp: now.toISOString() });
       return { ok: true, checkoutIntentPublicId: intent.id, shopifyDraftOrderId: draft.id, snapshotPublicId: snapshot.publicId, taxSummary, authoritativeAt, reusedDraftOrder };
-    }, { timeout: 20_000 });
+    }, { timeout: 10_000 });
   } catch { return fail("pricing_snapshot_persist_failed", true); }
 }
