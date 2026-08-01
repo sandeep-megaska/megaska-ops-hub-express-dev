@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { FunnelChart, ShareBar, DeltaMeta } from "./charts";
 
 type Comparison = { value: number; previousValue: number; percentageChange: number | null };
 type Stage = {
@@ -96,12 +97,6 @@ const dateTime = (iso: string) => {
     return iso;
   }
 };
-
-function delta(metric: Comparison) {
-  if (metric.percentageChange === null) return "vs prior: n/a";
-  const arrow = metric.percentageChange >= 0 ? "▲" : "▼";
-  return `${arrow} ${Math.abs(metric.percentageChange).toFixed(1)}% vs prior`;
-}
 
 function recoveryBadge(status: string) {
   const map: Record<string, string> = { used: "mk-badge-success", clicked: "mk-badge-info", sent: "mk-badge-neutral", none: "mk-badge-neutral" };
@@ -231,7 +226,7 @@ export default function CheckoutAnalyticsClient({ shop }: { shop: string }) {
               <div key={key} className="mk-card mk-stat-card">
                 <p className="mk-stat-label">{HEADLINE_LABELS[key] || key}</p>
                 <p className="mk-stat-value">{isRate(key) ? pct(metric.value) : metric.value.toLocaleString()}</p>
-                <p className="mk-stat-meta">{delta(metric)}</p>
+                <DeltaMeta metric={metric} />
               </div>
             ))}
           </section>
@@ -240,9 +235,12 @@ export default function CheckoutAnalyticsClient({ shop }: { shop: string }) {
           <section className="mk-card">
             <h2 className="mk-section-title">Conversion funnel</h2>
             <p className="mk-section-subtitle">{funnel.funnel.notes.basisHandoff}</p>
-            <div className="mk-table-wrap">
-              <table className="mk-table">
-                <caption>Express-checkout funnel stages and drop-off</caption>
+            <FunnelChart stages={funnel.funnel.stages} />
+            <details style={{ marginTop: "0.75rem" }}>
+              <summary className="mk-stat-meta" style={{ cursor: "pointer" }}>View as table</summary>
+              <div className="mk-table-wrap" style={{ marginTop: "0.5rem" }}>
+                <table className="mk-table">
+                  <caption>Express-checkout funnel stages and drop-off</caption>
                 <thead>
                   <tr><th>Stage</th><th>Basis</th><th>Reached</th><th>Step conversion</th><th>Drop-off</th></tr>
                 </thead>
@@ -262,9 +260,10 @@ export default function CheckoutAnalyticsClient({ shop }: { shop: string }) {
                       </td>
                     </tr>
                   ))}
-                </tbody>
-              </table>
-            </div>
+                  </tbody>
+                </table>
+              </div>
+            </details>
           </section>
 
           {/* Segments */}
@@ -272,46 +271,28 @@ export default function CheckoutAnalyticsClient({ shop }: { shop: string }) {
             <div className="mk-card">
               <h2 className="mk-section-title">Entry point</h2>
               <p className="mk-section-subtitle">Where the express-checkout click came from.</p>
-              <div className="mk-table-wrap">
-                <table className="mk-table">
-                  <thead><tr><th>Source</th><th>Sessions</th><th>Share</th></tr></thead>
-                  <tbody>
-                    {funnel.funnel.segments.entryPoint.map((e) => (
-                      <tr key={e.key}><td>{e.label}</td><td>{e.sessions.toLocaleString()}</td><td>{pct(e.share)}</td></tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <ShareBar items={funnel.funnel.segments.entryPoint.map((e) => ({ label: e.label, value: e.sessions, share: e.share }))} />
             </div>
             <div className="mk-card">
               <h2 className="mk-section-title">Device</h2>
               <p className="mk-section-subtitle">Measured at the express-checkout click.</p>
-              <div className="mk-table-wrap">
-                <table className="mk-table">
-                  <thead><tr><th>Device</th><th>Sessions</th><th>Share</th></tr></thead>
-                  <tbody>
-                    {funnel.funnel.segments.device.map((d) => (
-                      <tr key={d.key}><td>{d.label}</td><td>{d.sessions.toLocaleString()}</td><td>{pct(d.share)}</td></tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <ShareBar items={funnel.funnel.segments.device.map((d) => ({ label: d.label, value: d.sessions, share: d.share }))} />
             </div>
             <div className="mk-card">
               <h2 className="mk-section-title">Payment mix</h2>
               <p className="mk-section-subtitle">Share and completion by method.</p>
-              <div className="mk-table-wrap">
-                <table className="mk-table">
-                  <thead><tr><th>Method</th><th>Share</th><th>Completion</th></tr></thead>
-                  <tbody>
-                    {funnel.paymentMix.methods.length === 0 ? (
-                      <tr><td colSpan={3} className="mk-help">No payment selections yet.</td></tr>
-                    ) : funnel.paymentMix.methods.map((m) => (
-                      <tr key={m.method}><td>{m.label}</td><td>{pct(m.share)}</td><td>{pct(m.completionRate)}</td></tr>
+              {funnel.paymentMix.methods.length === 0 ? (
+                <p className="mk-help">No payment selections yet.</p>
+              ) : (
+                <>
+                  <ShareBar items={funnel.paymentMix.methods.map((m) => ({ label: m.label, value: m.selected, share: m.share }))} />
+                  <div style={{ marginTop: "0.5rem", display: "grid", gap: "0.25rem" }}>
+                    {funnel.paymentMix.methods.map((m) => (
+                      <span key={m.method} className="mk-stat-meta">{m.label} completion: {pct(m.completionRate)}</span>
                     ))}
-                  </tbody>
-                </table>
-              </div>
+                  </div>
+                </>
+              )}
             </div>
           </section>
 
@@ -323,7 +304,7 @@ export default function CheckoutAnalyticsClient({ shop }: { shop: string }) {
                   <div key={key} className="mk-card mk-stat-card">
                     <p className="mk-stat-label">{LOGIN_LABELS[key] || key}</p>
                     <p className="mk-stat-value">{isRate(key) ? pct(metric.value) : metric.value.toLocaleString()}</p>
-                    <p className="mk-stat-meta">{delta(metric)}</p>
+                    <DeltaMeta metric={metric} />
                   </div>
                 ))}
               </section>
@@ -378,7 +359,7 @@ export default function CheckoutAnalyticsClient({ shop }: { shop: string }) {
                   <div key={key} className="mk-card mk-stat-card">
                     <p className="mk-stat-label">{RECOVERY_LABELS[key] || key}</p>
                     <p className="mk-stat-value">{isRate(key) ? pct(metric.value) : metric.value.toLocaleString()}</p>
-                    <p className="mk-stat-meta">{delta(metric)}</p>
+                    <DeltaMeta metric={metric} />
                   </div>
                 ))}
               </section>
