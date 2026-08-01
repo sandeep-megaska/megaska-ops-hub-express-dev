@@ -418,12 +418,21 @@
   justify-content: center;
   align-self: start;
   justify-self: start;
-  width: 100%;
-  min-height: 58px;
+  box-sizing: border-box;
+  /* Injected into the merchant's native /cart page, so defend the box against
+     hostile theme button styles: some themes force aspect-ratio:1 or a fixed
+     height, which — with a pill radius — rendered this as a full black circle.
+     Force auto height/aspect and a rectangular radius. */
+  width: 100% !important;
+  max-width: 460px;
+  height: auto !important;
+  min-height: 58px !important;
+  max-height: none !important;
+  aspect-ratio: auto !important;
   margin: 10px 0;
   padding: 12px 18px;
   border: 1px solid var(--ld-border, transparent);
-  border-radius: var(--loopdesk-radius, 999px);
+  border-radius: 14px !important;
   background: var(--loopdesk-primary, var(--ld-primary, #111827));
   color: var(--ld-primary-text, #ffffff);
   cursor: pointer;
