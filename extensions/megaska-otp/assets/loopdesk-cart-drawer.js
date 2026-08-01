@@ -1453,6 +1453,88 @@
     render();
   });
 
+  // ---- Coupon (in-drawer discount code) ----
+  // The coupon input lives in the cart drawer only (it was previously carried by
+  // the now-removed loopdesk-cart-drawer-embed block; ported here into the active
+  // drawer asset). The code is applied to the Shopify cart via /cart/update.js,
+  // so the express-checkout intent later picks it up from the cart snapshot — the
+  // express modal shows the applied discount but no longer collects the code, so
+  // there is a single place to enter it and the modal's price summary stays simple.
+  function cartDiscountCode(cart) {
+    var codes = cart && Array.isArray(cart.discount_codes) ? cart.discount_codes : [];
+    for (var index = 0; index < codes.length; index += 1) {
+      var code = typeof codes[index] === "string" ? codes[index] : codes[index] && codes[index].code;
+      if (code) return String(code).trim().toUpperCase();
+    }
+    var applications = cart && Array.isArray(cart.cart_level_discount_applications) ? cart.cart_level_discount_applications : [];
+    for (var appIndex = 0; appIndex < applications.length; appIndex += 1) {
+      var application = applications[appIndex] || {};
+      if (String(application.type || "").toLowerCase() === "discount_code" && (application.code || application.title)) {
+        return String(application.code || application.title).trim().toUpperCase();
+      }
+    }
+    return "";
+  }
+
+  function couponMarkup(cart) {
+    var code = cartDiscountCode(cart);
+    var savings = Math.max(0, Number(cart && cart.total_discount || 0));
+    var transient = state.couponStatus && state.couponStatus.message ? state.couponStatus : null;
+    var status = transient
+      ? '<p class="loopdesk-cart-drawer__coupon-status" data-state="' + escapeHtml(transient.state || "") + '" aria-live="polite">' + escapeHtml(transient.message) + '</p>'
+      : code
+        ? '<p class="loopdesk-cart-drawer__coupon-status" data-state="success"><strong>' + escapeHtml(code) + ' applied</strong>' + (savings > 0 ? " · Total savings " + escapeHtml(money(savings, cart && cart.currency)) : "") + ' <button type="button" class="loopdesk-cart-drawer__coupon-remove" data-loopdesk-coupon-remove>Remove</button></p>'
+        : '<p class="loopdesk-cart-drawer__coupon-status" aria-live="polite"></p>';
+    return '<section class="loopdesk-cart-drawer__coupon" data-loopdesk-coupon><h3 class="loopdesk-cart-drawer__coupon-title">Have a coupon?</h3><form data-loopdesk-coupon-form><div class="loopdesk-cart-drawer__coupon-row"><input class="loopdesk-cart-drawer__coupon-input" name="code" type="text" autocomplete="off" placeholder="Enter coupon code" value="' + escapeHtml(code) + '"><button class="loopdesk-cart-drawer__coupon-button" type="submit"' + (state.couponBusy ? " disabled" : "") + ">Apply</button></div></form>" + status + "</section>";
+  }
+
+  function readCartFresh() {
+    return fetch("/cart.js?_loopdesk_coupon=" + Date.now(), { credentials: "same-origin", cache: "no-store", headers: { Accept: "application/json" } })
+      .then(function (response) { if (!response.ok) throw new Error("Unable to refresh cart"); return response.json(); });
+  }
+
+  function updateShopifyCartDiscount(code) {
+    return fetch("/cart/update.js", {
+      method: "POST",
+      credentials: "same-origin",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ discount: code })
+    }).then(function (response) { if (!response.ok) throw new Error("Coupon could not be updated"); return response.json(); });
+  }
+
+  function applyCoupon(code) {
+    if (state.couponBusy) return;
+    var normalized = String(code || "").trim().toUpperCase();
+    if (!normalized) { state.couponStatus = { message: "Enter a coupon code.", state: "error" }; render(); return; }
+    state.couponBusy = true;
+    state.couponStatus = { message: "Applying coupon…", state: "" };
+    render();
+    updateShopifyCartDiscount(normalized)
+      .then(function () { return readCartFresh(); })
+      .then(function (cart) {
+        state.cart = cart;
+        maybeRefreshPromotionsForCart(cart);
+        var applied = cartDiscountCode(cart);
+        if (!applied || applied !== normalized) throw new Error("This coupon is not valid for the current cart");
+        state.couponStatus = { message: "", state: "" };
+      })
+      .catch(function (error) { state.couponStatus = { message: (error && error.message) || "Coupon could not be applied", state: "error" }; })
+      .finally(function () { state.couponBusy = false; render(); });
+  }
+
+  function removeCoupon() {
+    if (state.couponBusy) return;
+    state.couponBusy = true;
+    state.couponStatus = { message: "Removing coupon…", state: "" };
+    render();
+    updateShopifyCartDiscount("")
+      .then(function () { return readCartFresh(); })
+      .then(function (cart) { state.cart = cart; maybeRefreshPromotionsForCart(cart); state.couponStatus = { message: "", state: "" }; })
+      .catch(function (error) { state.couponStatus = { message: (error && error.message) || "Coupon could not be removed", state: "error" }; })
+      .finally(function () { state.couponBusy = false; render(); });
+  }
+
  function render() {
   var cart = state.cart;
   var itemCount = cart && typeof cart.item_count === "number" ? cart.item_count : 0;
@@ -1487,6 +1569,7 @@
       + renderOffers(cart)
       + renderCartDrawerSlot("AFTER_PROMOTIONS", slotContext)
       + renderCartDrawerSlot("BEFORE_COUPON", slotContext)
+      + (hasItems ? couponMarkup(cart) : "")
       + '<span data-loopdesk-slot="AFTER_COUPON">'
       + renderCartDrawerSlot("AFTER_COUPON", slotContext)
       + '</span>';
@@ -1623,6 +1706,8 @@
   }
 
   function handleDrawerAction(event) {
+    var couponRemove = event.target && event.target.closest && event.target.closest("[data-loopdesk-coupon-remove]");
+    if (couponRemove) { event.preventDefault(); return removeCoupon(); }
     var qtyButton = event.target && event.target.closest && event.target.closest("[data-loopdesk-qty]");
     var removeButton = event.target && event.target.closest && event.target.closest("[data-loopdesk-remove]");
     var select = event.target && event.target.closest && event.target.closest("[data-loopdesk-offer-variant]");
@@ -1801,6 +1886,12 @@
     if (elements.body) {
       elements.body.addEventListener("click", handleDrawerAction);
       elements.body.addEventListener("change", handleDrawerAction);
+      elements.body.addEventListener("submit", function (event) {
+        var form = event.target && event.target.closest && event.target.closest("[data-loopdesk-coupon-form]");
+        if (!form) return;
+        event.preventDefault();
+        applyCoupon(String(new FormData(form).get("code") || "").trim());
+      });
     }
     applyCssVariables(elements.root || document.documentElement);
   }
