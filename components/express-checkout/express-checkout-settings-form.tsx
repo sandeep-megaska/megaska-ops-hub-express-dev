@@ -9,8 +9,19 @@ function paiseToRupees(value: unknown) {
   return Number.isFinite(paise) ? String(paise / 100) : '0'
 }
 
+type PrepaidDiscount = { enabled?: boolean; type?: string; value?: number; maxPaise?: number | null; minSubtotalPaise?: number | null }
+
 export function ExpressCheckoutSettingsForm() {
-  const [form, setForm] = useState({ codFeeAmountRupees: '0', codInformationText: DEFAULT_TEXT })
+  const [form, setForm] = useState({
+    codFeeAmountRupees: '0',
+    codInformationText: DEFAULT_TEXT,
+    prepaidDiscountEnabled: false,
+    prepaidDiscountType: 'PERCENTAGE',
+    prepaidDiscountPercent: '0',
+    prepaidDiscountFixedRupees: '0',
+    prepaidDiscountMaxRupees: '0',
+    prepaidDiscountMinSubtotalRupees: '0',
+  })
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
@@ -20,7 +31,20 @@ export function ExpressCheckoutSettingsForm() {
   useEffect(() => { (async () => {
     const res = await fetch('/api/admin/express-checkout/settings')
     const data = await res.json().catch(() => ({}))
-    if (data.settings) setForm({ codFeeAmountRupees: paiseToRupees(data.settings.codFeeAmountPaise), codInformationText: String(data.settings.codInformationText || DEFAULT_TEXT) })
+    if (data.settings) {
+      const prepaid: PrepaidDiscount = data.settings.prepaidDiscount || {}
+      const type = prepaid.type === 'FIXED_AMOUNT' ? 'FIXED_AMOUNT' : 'PERCENTAGE'
+      setForm({
+        codFeeAmountRupees: paiseToRupees(data.settings.codFeeAmountPaise),
+        codInformationText: String(data.settings.codInformationText || DEFAULT_TEXT),
+        prepaidDiscountEnabled: prepaid.enabled === true,
+        prepaidDiscountType: type,
+        prepaidDiscountPercent: type === 'PERCENTAGE' ? String(prepaid.value ?? 0) : '0',
+        prepaidDiscountFixedRupees: type === 'FIXED_AMOUNT' ? paiseToRupees(prepaid.value) : '0',
+        prepaidDiscountMaxRupees: paiseToRupees(prepaid.maxPaise),
+        prepaidDiscountMinSubtotalRupees: paiseToRupees(prepaid.minSubtotalPaise),
+      })
+    }
     if (data.readiness) { setReadiness(data.readiness); setEnabled(data.readiness.expressCheckoutEnabled) }
   })() }, [])
 
@@ -40,6 +64,14 @@ export function ExpressCheckoutSettingsForm() {
     {message ? <div className="mk-alert mk-alert-success">{message}</div> : null}
     <div className="mk-field"><label className="mk-label" htmlFor="ec-cod-fee">COD charge (₹)</label><input id="ec-cod-fee" className="mk-input" value={form.codFeeAmountRupees} onChange={(e) => setForm((p) => ({ ...p, codFeeAmountRupees: e.target.value }))} inputMode="decimal" min="0" step="0.01" /><span className="mk-help">Set 0 to disable the COD fee. This charge is separate from Partial COD advance.</span></div>
     <div className="mk-field"><label className="mk-label" htmlFor="ec-cod-text">COD/refund information text</label><textarea id="ec-cod-text" className="mk-textarea" value={form.codInformationText} onChange={(e) => setForm((p) => ({ ...p, codInformationText: e.target.value }))} /></div>
+    <div><h2 className="mk-section-title">Prepaid discount offer</h2><p className="mk-section-subtitle" style={{ margin: 0 }}>Reward shoppers who pay online. The discount applies only to prepaid methods at express checkout — COD prices stay unchanged. The offer is calculated on the product subtotal and reduces the taxable value on the GST invoice.</p></div>
+    <label className="mk-check"><input type="checkbox" checked={form.prepaidDiscountEnabled} onChange={(e) => setForm((p) => ({ ...p, prepaidDiscountEnabled: e.target.checked }))} /> Enable prepaid discount</label>
+    <div className="mk-field"><label className="mk-label" htmlFor="ec-prepaid-type">Discount type</label><select id="ec-prepaid-type" className="mk-input" value={form.prepaidDiscountType} onChange={(e) => setForm((p) => ({ ...p, prepaidDiscountType: e.target.value }))}><option value="PERCENTAGE">Percentage of subtotal</option><option value="FIXED_AMOUNT">Fixed amount</option></select></div>
+    {form.prepaidDiscountType === 'PERCENTAGE'
+      ? <div className="mk-field"><label className="mk-label" htmlFor="ec-prepaid-percent">Discount percentage (%)</label><input id="ec-prepaid-percent" className="mk-input" value={form.prepaidDiscountPercent} onChange={(e) => setForm((p) => ({ ...p, prepaidDiscountPercent: e.target.value }))} inputMode="decimal" min="0" max="100" step="0.01" /><span className="mk-help">For example, 15 gives a 15% prepaid discount on the product subtotal.</span></div>
+      : <div className="mk-field"><label className="mk-label" htmlFor="ec-prepaid-fixed">Discount amount (₹)</label><input id="ec-prepaid-fixed" className="mk-input" value={form.prepaidDiscountFixedRupees} onChange={(e) => setForm((p) => ({ ...p, prepaidDiscountFixedRupees: e.target.value }))} inputMode="decimal" min="0" step="0.01" /></div>}
+    <div className="mk-field"><label className="mk-label" htmlFor="ec-prepaid-max">Maximum discount cap (₹)</label><input id="ec-prepaid-max" className="mk-input" value={form.prepaidDiscountMaxRupees} onChange={(e) => setForm((p) => ({ ...p, prepaidDiscountMaxRupees: e.target.value }))} inputMode="decimal" min="0" step="0.01" /><span className="mk-help">Set 0 for no cap. Caps the discount (useful with a percentage), e.g. 15% up to ₹200.</span></div>
+    <div className="mk-field"><label className="mk-label" htmlFor="ec-prepaid-min">Minimum order subtotal (₹)</label><input id="ec-prepaid-min" className="mk-input" value={form.prepaidDiscountMinSubtotalRupees} onChange={(e) => setForm((p) => ({ ...p, prepaidDiscountMinSubtotalRupees: e.target.value }))} inputMode="decimal" min="0" step="0.01" /><span className="mk-help">Set 0 to apply to all orders. The offer only applies when the product subtotal is at least this amount.</span></div>
     <div><button type="submit" className="mk-btn mk-btn-primary" disabled={loading}>{loading ? 'Saving...' : 'Save settings'}</button></div>
   </form>
 }

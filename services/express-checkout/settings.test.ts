@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { DEFAULT_COD_FEE_AMOUNT_PAISE, getExpressCheckoutSettings, parseCodFeeRupeesToPaise } from "./settings.ts";
+import { DEFAULT_COD_FEE_AMOUNT_PAISE, getExpressCheckoutSettings, parseCodFeeRupeesToPaise, parsePercentValue } from "./settings.ts";
 
 function db(config: unknown) {
   return { shopModuleConfig: { findUnique: async () => config == null ? null : { config } } };
@@ -38,6 +38,35 @@ test("invalid COD fee rupee values are rejected", () => {
 test("existing saved merchant COD fee values still load correctly", async () => {
   const settings = await getExpressCheckoutSettings("shop-1", { db: db({ codFeeAmountPaise: 4950 }) });
   assert.equal(settings.codFeeAmountPaise, 4950);
+});
+
+test("prepaid discount defaults to disabled when unset", async () => {
+  const settings = await getExpressCheckoutSettings("shop-1", { db: db(null) });
+  assert.equal(settings.prepaidDiscount.enabled, false);
+  assert.equal(settings.prepaidDiscount.type, "PERCENTAGE");
+  assert.equal(settings.prepaidDiscount.value, 0);
+  assert.equal(settings.prepaidDiscount.maxPaise, null);
+  assert.equal(settings.prepaidDiscount.minSubtotalPaise, null);
+});
+
+test("saved prepaid discount config loads as a structured offer", async () => {
+  const settings = await getExpressCheckoutSettings("shop-1", { db: db({ prepaidDiscountEnabled: true, prepaidDiscountType: "PERCENTAGE", prepaidDiscountValue: 15, prepaidDiscountMaxPaise: 20000, prepaidDiscountMinSubtotalPaise: 50000 }) });
+  assert.deepEqual(settings.prepaidDiscount, { enabled: true, type: "PERCENTAGE", value: 15, maxPaise: 20000, minSubtotalPaise: 50000 });
+});
+
+test("prepaid discount stays disabled when the value is zero even if the flag is on", async () => {
+  const settings = await getExpressCheckoutSettings("shop-1", { db: db({ prepaidDiscountEnabled: true, prepaidDiscountValue: 0 }) });
+  assert.equal(settings.prepaidDiscount.enabled, false);
+});
+
+test("percentage parser accepts 0-100 with up to two decimals and rejects the rest", () => {
+  assert.equal(parsePercentValue(""), 0);
+  assert.equal(parsePercentValue("15"), 15);
+  assert.equal(parsePercentValue("12.5"), 12.5);
+  assert.equal(parsePercentValue("100"), 100);
+  assert.equal(parsePercentValue("100.01"), null);
+  assert.equal(parsePercentValue("-5"), null);
+  assert.equal(parsePercentValue("abc"), null);
 });
 
 test("admin settings route uses the strict COD fee parser", async () => {

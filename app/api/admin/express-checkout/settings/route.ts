@@ -1,17 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "../../../../../services/db/prisma";
 import { getShopDomainFromRequest, resolveShopConfig } from "../../../../../services/shopify/shop";
-import { DEFAULT_COD_INFORMATION_TEXT, getExpressCheckoutSettings, parseCodFeeRupeesToPaise } from "../../../../../services/express-checkout/settings";
+import { DEFAULT_COD_INFORMATION_TEXT, getExpressCheckoutSettings, parseCodFeeRupeesToPaise, parsePercentValue, parseRupeesToPaise } from "../../../../../services/express-checkout/settings";
 import { resolveExpressCheckoutReadiness, setExpressCheckoutEnabled } from "../../../../../services/express-checkout/readiness";
 
 export const runtime = "nodejs";
 const MODULE_KEY = "express_checkout_settings";
 
+type ExpressCheckoutConfigBlob = {
+  codFeeAmountPaise: number;
+  codInformationText: string;
+  prepaidDiscountEnabled: boolean;
+  prepaidDiscountType: "PERCENTAGE" | "FIXED_AMOUNT";
+  prepaidDiscountValue: number;
+  prepaidDiscountMaxPaise: number;
+  prepaidDiscountMinSubtotalPaise: number;
+};
+
 type ShopModuleConfigDelegate = {
   upsert(args: {
     where: { shopId_moduleKey: { shopId: string; moduleKey: string } };
-    create: { shopId: string; moduleKey: string; enabled: boolean; config: { codFeeAmountPaise: number; codInformationText: string } };
-    update: { enabled: boolean; config: { codFeeAmountPaise: number; codInformationText: string } };
+    create: { shopId: string; moduleKey: string; enabled: boolean; config: ExpressCheckoutConfigBlob };
+    update: { enabled: boolean; config: ExpressCheckoutConfigBlob };
   }): Promise<{ id: string }>;
 };
 
@@ -46,7 +56,36 @@ export async function POST(req: NextRequest) {
   if (codFeeAmountPaise === null) return NextResponse.json({ ok: false, error: "COD charge must be a non-negative amount with up to two decimal places" }, { status: 400 });
 
   const codInformationText = String(body.codInformationText || "").trim() || DEFAULT_COD_INFORMATION_TEXT;
-  const config = { codFeeAmountPaise, codInformationText };
+
+  // Prepaid discount: a PERCENTAGE value is a percent (0–100); a FIXED_AMOUNT is
+  // captured in rupees and stored as paise. The cap and minimum-order are always
+  // rupees→paise. A null from any parser means the input was malformed.
+  const prepaidDiscountType = body.prepaidDiscountType === "FIXED_AMOUNT" ? "FIXED_AMOUNT" : "PERCENTAGE";
+  const prepaidDiscountValue = prepaidDiscountType === "PERCENTAGE"
+    ? parsePercentValue(body.prepaidDiscountPercent)
+    : parseRupeesToPaise(body.prepaidDiscountFixedRupees);
+  if (prepaidDiscountValue === null) {
+    return NextResponse.json({ ok: false, error: prepaidDiscountType === "PERCENTAGE" ? "Prepaid discount percentage must be between 0 and 100" : "Prepaid discount amount must be a non-negative amount with up to two decimal places" }, { status: 400 });
+  }
+  const prepaidDiscountMaxPaise = parseRupeesToPaise(body.prepaidDiscountMaxRupees);
+  if (prepaidDiscountMaxPaise === null) {
+    return NextResponse.json({ ok: false, error: "Prepaid discount cap must be a non-negative amount with up to two decimal places" }, { status: 400 });
+  }
+  const prepaidDiscountMinSubtotalPaise = parseRupeesToPaise(body.prepaidDiscountMinSubtotalRupees);
+  if (prepaidDiscountMinSubtotalPaise === null) {
+    return NextResponse.json({ ok: false, error: "Prepaid discount minimum order must be a non-negative amount with up to two decimal places" }, { status: 400 });
+  }
+  const prepaidDiscountEnabled = body.prepaidDiscountEnabled === true && prepaidDiscountValue > 0;
+
+  const config: ExpressCheckoutConfigBlob = {
+    codFeeAmountPaise,
+    codInformationText,
+    prepaidDiscountEnabled,
+    prepaidDiscountType,
+    prepaidDiscountValue,
+    prepaidDiscountMaxPaise,
+    prepaidDiscountMinSubtotalPaise,
+  };
   const settings = await db().shopModuleConfig.upsert({
     where: { shopId_moduleKey: { shopId: resolved.id, moduleKey: MODULE_KEY } },
     create: { shopId: resolved.id, moduleKey: MODULE_KEY, enabled: true, config },

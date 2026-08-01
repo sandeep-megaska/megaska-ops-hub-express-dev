@@ -8,6 +8,7 @@ import {
   requireExpressCheckoutShop,
 } from "../../../../../../../lib/express-checkout/safety";
 import { checkoutDiscountFingerprint } from "../../../../../../../services/storefront-pricing/pricing-mutation-fingerprints";
+import { computeExpressCheckoutTotalPaise } from "../../../../../../../services/express-checkout/pricing";
 import { invalidateAndOptionallyRefreshCheckoutPricing } from "../../../../../../../services/storefront-pricing/pricing-snapshot-orchestration";
 
 export const runtime = "nodejs";
@@ -87,15 +88,23 @@ function calculateKnownDiscount(input: { code: string; subtotalAmountPaise: numb
   return null;
 }
 
+// A coupon change never changes the selected payment method, so the intent's
+// existing codFee/prepaidDiscount are carried through unchanged — only the
+// coupon term is recomputed. Routed through the shared engine so the prepaid
+// term is never dropped when a coupon is applied or removed.
 function recalculateTotal(intent: {
   subtotalAmountPaise: number;
   shippingAmountPaise: number;
   codFeeAmountPaise: number;
+  prepaidDiscountAmountPaise: number;
 }, discountAmountPaise: number) {
-  return Math.max(
-    0,
-    intent.subtotalAmountPaise + intent.shippingAmountPaise + intent.codFeeAmountPaise - discountAmountPaise
-  );
+  return computeExpressCheckoutTotalPaise({
+    subtotalAmountPaise: intent.subtotalAmountPaise,
+    shippingAmountPaise: intent.shippingAmountPaise,
+    codFeeAmountPaise: intent.codFeeAmountPaise,
+    discountAmountPaise,
+    prepaidDiscountAmountPaise: intent.prepaidDiscountAmountPaise,
+  });
 }
 
 export async function OPTIONS(req: NextRequest) {

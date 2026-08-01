@@ -8,6 +8,7 @@ import {
   requireExpressCheckoutShop,
 } from "../../../../../../../lib/express-checkout/safety";
 import { getExpressCheckoutSettings } from "../../../../../../../services/express-checkout/settings";
+import { computeExpressCheckoutTotalPaise, resolveMethodPricingPaise } from "../../../../../../../services/express-checkout/pricing";
 import { CheckoutStateDb, transitionCheckoutIntent } from "../../../../../../../lib/express-checkout/state-machine";
 
 export const runtime = "nodejs";
@@ -134,8 +135,17 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
 
   const method = body.method;
   const settings = await getExpressCheckoutSettings(shop.shopId);
-  const codFeeAmountPaise = method === "COD" ? settings.codFeeAmountPaise : 0;
-  const totalAmountPaise = Math.max(0, intent.subtotalAmountPaise + intent.shippingAmountPaise + codFeeAmountPaise - intent.discountAmountPaise);
+  // COD keeps its fee; a prepaid method earns the merchant's prepaid discount
+  // (0 for COD). Both are derived server-side from the product subtotal — never
+  // trusted from the client — and the total is assembled by the shared engine.
+  const { codFeeAmountPaise, prepaidDiscountAmountPaise } = resolveMethodPricingPaise({ method, settings, subtotalAmountPaise: intent.subtotalAmountPaise });
+  const totalAmountPaise = computeExpressCheckoutTotalPaise({
+    subtotalAmountPaise: intent.subtotalAmountPaise,
+    shippingAmountPaise: intent.shippingAmountPaise,
+    codFeeAmountPaise,
+    discountAmountPaise: intent.discountAmountPaise,
+    prepaidDiscountAmountPaise,
+  });
   const amountPaise = method === "COD" ? 0 : totalAmountPaise;
   const paymentStatus = method === "COD" ? "NOT_REQUIRED" : "PENDING";
 
@@ -160,6 +170,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
       data: {
         selectedPaymentMethod: method,
         codFeeAmountPaise,
+        prepaidDiscountAmountPaise,
         totalAmountPaise,
         ...(isUnsupportedDiscountAppliedStatus ? { status: "PAYMENT_SELECTED" as const } : {}),
       },
