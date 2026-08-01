@@ -2747,6 +2747,10 @@ model ExpressCheckoutIntent {
   expiresAt             DateTime?
   createdAt             DateTime                      @default(now())
   updatedAt             DateTime                      @updatedAt
+  paymentPendingAt      DateTime?
+  abandonedAt           DateTime?
+  completedAt           DateTime?
+  lastTransitionAt      DateTime?
 
   addressSnapshots ExpressCheckoutAddressSnapshot[]
   discounts        ExpressCheckoutDiscount[]
@@ -2762,6 +2766,56 @@ model ExpressCheckoutIntent {
   @@index([shopId, sessionTokenHash])
   @@index([shopId, cartToken])
   @@index([shopId, shopifyCartId])
+}
+
+enum CheckoutFunnelEventType {
+  CART_ADD
+  DRAWER_OPEN
+  EXPRESS_CLICK
+  OTP_OPEN
+  OTP_SUCCESS
+  MODAL_OPEN
+}
+
+enum CheckoutFunnelSource {
+  DRAWER
+  CART_PAGE
+  PRODUCT
+  UNKNOWN
+}
+
+enum CheckoutFunnelDevice {
+  MOBILE
+  DESKTOP
+  UNKNOWN
+}
+
+// Captures the pre-intent express-checkout funnel steps (add-to-cart, drawer
+// open, express-checkout click, OTP login) that are otherwise only client-side.
+// Post-intent steps live on ExpressCheckoutIntent; these join to it by
+// cartToken / customerProfileId / funnelSessionId. Write-only from the
+// storefront beacon; never carries raw session tokens (only a hash).
+model CheckoutFunnelEvent {
+  id                      String                  @id @default(uuid())
+  shopId                  String
+  funnelSessionId         String
+  eventType               CheckoutFunnelEventType
+  source                  CheckoutFunnelSource?
+  device                  CheckoutFunnelDevice    @default(UNKNOWN)
+  customerProfileId       String?
+  sessionTokenHash        String?
+  phoneSnapshot           String?
+  cartToken               String?
+  cartValuePaise          Int?
+  expressCheckoutIntentId String?
+  metadata                Json?
+  occurredAt              DateTime                @default(now())
+  createdAt               DateTime                @default(now())
+
+  @@index([shopId, occurredAt])
+  @@index([shopId, eventType, occurredAt])
+  @@index([shopId, funnelSessionId])
+  @@index([shopId, customerProfileId])
 }
 
 model ShopifyCheckoutPricingSnapshot {

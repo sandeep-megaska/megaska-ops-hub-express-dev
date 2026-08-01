@@ -141,6 +141,7 @@ document.addEventListener('click', function (event) {
   if (event.stopImmediatePropagation) event.stopImmediatePropagation();
   state.clicks += 1;
   var source = closest(expressCheckout, '#loopdesk-cart-drawer-root') ? 'loopdesk-cart-drawer' : 'loopdesk-cart-page';
+  try { if (window.LoopDeskAnalytics) window.LoopDeskAnalytics.track('EXPRESS_CLICK', { source: source === 'loopdesk-cart-drawer' ? 'DRAWER' : 'CART_PAGE' }); } catch (e) {}
   setPendingExpressCheckoutIntent(source);
   if (hasMegaskaSessionToken()) {
     state.lastReason = 'express-checkout-authenticated';

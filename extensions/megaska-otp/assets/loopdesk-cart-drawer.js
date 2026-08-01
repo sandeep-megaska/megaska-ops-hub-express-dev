@@ -1507,6 +1507,7 @@
   function setOpen(open) {
     state.hostMode = LOOPDESK_HOST_MODE;
     if (open) rememberBodyLockState();
+    if (open && !state.open) { try { if (window.LoopDeskAnalytics) window.LoopDeskAnalytics.track("DRAWER_OPEN"); } catch (e) {} }
     state.open = open;
     render();
     if (open) {
