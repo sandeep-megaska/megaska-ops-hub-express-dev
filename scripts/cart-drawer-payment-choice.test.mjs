@@ -43,14 +43,23 @@ test("both prices are shown, prepaid discounted and COD loss-framed", () => {
   assert.match(src, /more than online/, "COD option must be loss-framed against online");
 });
 
-test("clicking an option updates the choice and re-renders", () => {
+test("each option is a direct-action button: sets the intent then proceeds", () => {
   assert.match(src, /data-loopdesk-pay-choice/, "options must carry the choice hook");
-  assert.match(src, /setPaymentIntent\(choice\.getAttribute\("data-loopdesk-pay-choice"\)\)/, "handler must set the intent from the clicked option");
+  assert.match(src, /var intent = choice\.getAttribute\("data-loopdesk-pay-choice"\)/, "handler must read the clicked option's intent");
+  assert.match(src, /setPaymentIntent\(intent\)/, "handler must set the intent");
+  // Clicking the option immediately proceeds to the flow (COD modal / prepaid).
+  assert.match(src, /openExpressCheckout\(intent === "cod" \? "loopdesk-drawer-cod" : "loopdesk-drawer-prepaid"\)/, "handler must proceed to the chosen flow");
 });
 
-test("styles exist for the choice block", () => {
+test("no separate Express Checkout button in choice mode; nudge suppressed", () => {
+  assert.match(src, /elements\.express\.hidden = !config\.cart\.expressCheckoutButtonEnabled \|\| config\.cart\.paymentChoiceEnabled/, "express button must be hidden when the choice is active");
+  assert.match(src, /!config\.cart\.paymentChoiceEnabled\) \? prepaidOfferNudgeText/, "redundant prepaid nudge must be suppressed in choice mode");
+});
+
+test("styles exist for the choice block (primary/secondary CTA buttons)", () => {
   assert.match(css, /\.loopdesk-cart-drawer__pay-option/, "option styling must be present");
-  assert.match(css, /\.loopdesk-cart-drawer__pay-option\.is-active/, "selected-state styling must be present");
+  assert.match(css, /\.loopdesk-cart-drawer__pay-option--primary/, "prepaid primary-button styling must be present");
+  assert.match(css, /\.loopdesk-cart-drawer__pay-option--secondary/, "COD secondary-button styling must be present");
 });
 
 // PR-3a: when the flag is on, prepaid (and the unset default) hands off to
