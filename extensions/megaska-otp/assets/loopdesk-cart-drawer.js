@@ -1756,7 +1756,10 @@
     }
   }
   if (elements.paymentChoice) {
-    if (config.cart.paymentChoiceEnabled && hasItems && pricing) {
+    // The prepaid savings come from LoopDeskConfig.prepaidOffer, not the
+    // promotion-pricing object, so the choice must not depend on `pricing` being
+    // built (renderPaymentChoice falls back to the cart total when it is null).
+    if (config.cart.paymentChoiceEnabled && hasItems) {
       elements.paymentChoice.innerHTML = renderPaymentChoice(pricing, cart);
       elements.paymentChoice.hidden = false;
     } else {
@@ -2118,12 +2121,21 @@
     // choice opens the modal. This is the single choke point every checkout
     // entry funnels through, so the routing holds for the drawer button, checkout
     // link clicks, and programmatic form/navigation intercepts alike.
-    if (config.cart.paymentChoiceEnabled && paymentIntentValue() !== "cod") {
+    var choiceMode = config.cart.paymentChoiceEnabled;
+    if (choiceMode && paymentIntentValue() !== "cod") {
       handoffPrepaidToShopifyCheckout(source);
       return;
     }
     var readiness = window.LoopDeskConfig && window.LoopDeskConfig.express_checkout;
-    if (!readiness || readiness.enabled !== true || readiness.ready !== true || readiness.provider !== "razorpay") {
+    // In choice mode the modal is COD-only (prepaid is handed off to Shopify
+    // Checkout), so it opens whenever the module is ready for COD - no Razorpay
+    // needed. The legacy modal still requires Razorpay for its in-modal prepaid
+    // capture, so that path keeps the stricter gate.
+    var codChoice = choiceMode && paymentIntentValue() === "cod";
+    var modalReady = codChoice
+      ? Boolean(readiness && readiness.enabled === true && (readiness.codAvailable === true || readiness.ready === true))
+      : Boolean(readiness && readiness.enabled === true && readiness.ready === true && readiness.provider === "razorpay");
+    if (!modalReady) {
       debugLog("Shopify checkout fallback", { source: source || "checkout-intent", reason: readiness && readiness.ready === false ? "not-ready" : "config-unavailable" }, true);
       window.location.assign("/checkout");
       return;
@@ -2143,7 +2155,7 @@
       debugLog("Express modal API present", { source: checkoutSource });
       window.setTimeout(function () {
         try {
-          window.MegaskaExpressCheckout.open({ source: checkoutSource });
+          window.MegaskaExpressCheckout.open({ source: checkoutSource, codOnly: codChoice });
         } finally {
           window.setTimeout(releaseLock, 900);
         }
