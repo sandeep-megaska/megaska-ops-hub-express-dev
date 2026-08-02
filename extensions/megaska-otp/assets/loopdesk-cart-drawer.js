@@ -2161,21 +2161,29 @@
 
   // Shopify-Checkout migration: prepaid hands off to Shopify Checkout with the
   // loopd2c_payment_intent attribute persisted first, so the discount Function
-  // applies there (COD is disabled in the store's payment settings). Navigate
-  // regardless of the write result so a flaky /cart/update.js never traps the
-  // shopper in the drawer.
+  // applies there (COD is disabled in the store's payment settings). Logged-out
+  // shoppers are gated through OTP (MegaskaOtp.beginGatedShopifyCheckout), which
+  // verifies the mobile number and then continues to Shopify Checkout with
+  // buyer-identity prefill; already-verified shoppers go straight through. If the
+  // OTP module is unavailable we navigate directly so the shopper is never
+  // stranded, and a 1.2s guard covers a flaky /cart/update.js write.
   function handoffPrepaidToShopifyCheckout(source) {
     state.paymentIntent = "prepaid";
     debugLog("prepaid Shopify checkout hand-off", { source: source || "checkout-intent" }, true);
-    var navigated = false;
-    var go = function () {
-      if (navigated) return;
-      navigated = true;
-      closeDrawerForCheckoutHandoff();
-      window.location.assign("/checkout");
+    closeDrawerForCheckoutHandoff();
+    var proceeded = false;
+    var proceed = function () {
+      if (proceeded) return;
+      proceeded = true;
+      if (window.MegaskaOtp && typeof window.MegaskaOtp.beginGatedShopifyCheckout === "function") {
+        Promise.resolve(window.MegaskaOtp.beginGatedShopifyCheckout({ triggerSource: "loopdesk-drawer-prepaid" }))
+          .catch(function () { window.location.assign("/checkout"); });
+      } else {
+        window.location.assign("/checkout");
+      }
     };
-    var timer = window.setTimeout(go, 1200);
-    Promise.resolve(persistPaymentIntent()).then(function () { window.clearTimeout(timer); go(); });
+    var timer = window.setTimeout(proceed, 1200);
+    Promise.resolve(persistPaymentIntent()).then(function () { window.clearTimeout(timer); proceed(); });
   }
 
   function interceptCheckout(event, source) {

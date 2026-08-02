@@ -53,3 +53,24 @@ test("openLoopDeskExpressCheckout routes prepaid to the hand-off, COD to the mod
   assert.match(src, /config\.cart\.paymentChoiceEnabled && paymentIntentValue\(\) !== "cod"/, "must branch on the flag + non-COD intent");
   assert.match(src, /handoffPrepaidToShopifyCheckout\(source\)/, "prepaid branch must call the hand-off");
 });
+
+// OTP verification must gate BOTH flows for logged-out shoppers. COD keeps its
+// in-modal gate (loopd2c-express-modal.js ensureAuthenticated); the prepaid
+// hand-off gates through the OTP module before reaching Shopify Checkout.
+test("prepaid hand-off gates through OTP before Shopify Checkout", () => {
+  assert.match(src, /window\.MegaskaOtp\.beginGatedShopifyCheckout/, "prepaid must gate via the OTP module");
+  // Direct navigate remains only as a fallback when the OTP module is absent.
+  assert.match(src, /beginGatedShopifyCheckout[\s\S]*?window\.location\.assign\("\/checkout"\)/, "direct navigate must be the fallback path");
+});
+
+const otp = readFileSync("extensions/megaska-otp/assets/loopd2c-otp.js", "utf8");
+
+test("OTP module exposes a session-gated Shopify Checkout hand-off with prefill", () => {
+  assert.match(otp, /async function beginGatedShopifyCheckout/, "beginGatedShopifyCheckout must exist");
+  assert.match(otp, /beginGatedShopifyCheckout,/, "it must be exported on window.MegaskaOtp");
+  // Gates on verified session state (not the checkout-page phone-field match)
+  // and continues with the shared prefill + buyer-identity handoff.
+  assert.match(otp, /gateState\.authenticated && gateState\.verifiedPhonePresent/, "must gate on the verified session state");
+  assert.match(otp, /continueToCheckoutFromPendingAction\(gateState\.customer/, "authed path must continue with prefill");
+  assert.match(otp, /setPendingAction\(\{ type: "navigate", url: "\/checkout" \}\)/, "unauthed path must queue the navigate resume");
+});
