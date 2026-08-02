@@ -30,7 +30,7 @@ with a CLI-registered `uid`, and the generated `schema.graphql` for the
 can't be authored by hand):
 
 ```bash
-shopify app generate extension --template payment_customization --name megaska-payment-customization
+shopify app generate extension --template payment_customization --name loopd2c-payment-customization
 ```
 
 Then:
@@ -46,5 +46,5 @@ Then:
 ## Tests
 
 ```bash
-node --test extensions/megaska-payment-customization/tests/
+node --test extensions/loopd2c-payment-customization/tests/
 ```
