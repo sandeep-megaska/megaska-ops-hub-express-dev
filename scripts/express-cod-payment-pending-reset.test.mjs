@@ -69,3 +69,23 @@ test("modal: ensureBackendPaymentMethod refuses to re-select PREPAID while COD i
   const body = bodyOf(modalSource, "function ensureBackendPaymentMethod");
   assert.match(body, /method === "PREPAID" && state\.codLocked/, "a late warm-up POST must be refused once COD is locked");
 });
+
+// The sticky footer total and order-summary totals live outside the payment
+// section, so a method switch (which only re-renders the payment section) left
+// the footer showing the prepaid-discounted total under a COD selection.
+
+test("modal: totals block and footer total have refreshable hooks", () => {
+  assert.match(modalSource, /class="megaska-express-totals" data-express-totals/, "totals block must be addressable for in-place refresh");
+  assert.match(modalSource, /<strong data-express-footer-total>/, "sticky footer total must be addressable for in-place refresh");
+});
+
+test("modal: a payment-section render also refreshes the method-dependent totals", () => {
+  const body = bodyOf(modalSource, "function renderPaymentSectionOnly");
+  assert.match(body, /renderTotalsOnly\(\)/, "payment-section render must refresh the footer/summary totals so they follow the selected method");
+});
+
+test("modal: totals refresh is method-aware (uses payMethod payable, not a frozen total)", () => {
+  const body = bodyOf(modalSource, "function renderTotalsOnly");
+  assert.match(body, /payableAmount\(payMethod\(\)\)/, "footer total must recompute from the currently selected method");
+  assert.match(body, /data-express-totals/, "totals block must be re-rendered from totalsMarkup()");
+});
