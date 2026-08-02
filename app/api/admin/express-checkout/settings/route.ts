@@ -52,8 +52,11 @@ export async function POST(req: NextRequest) {
   if (!body) return NextResponse.json({ ok: false, error: "Invalid JSON payload" }, { status: 400 });
 
   const requestedEnabled = body.enabled === true;
+  // Enabling Express Checkout no longer requires Razorpay: COD opens the modal
+  // with no payment provider, and prepaid is handed off to Shopify Checkout.
+  // `readiness.razorpayReady` still reports whether the legacy in-app prepaid
+  // capture is usable, for merchants who want to surface that.
   const readiness = await setExpressCheckoutEnabled(resolved.id, requestedEnabled);
-  if (requestedEnabled && !readiness.ready) return NextResponse.json({ ok: false, code: "EXPRESS_CHECKOUT_NOT_READY", readiness, error: "Express Checkout requires a valid Razorpay configuration in LoopD2C Merchant Settings. Complete the Razorpay settings there, or continue using Shopify Checkout. A Razorpay gateway configured only in Shopify does not configure LoopD2C Express Checkout." }, { status: 409 });
 
   const codFeeAmountPaise = parseCodFeeRupeesToPaise(body.codFeeAmountRupees);
   if (codFeeAmountPaise === null) return NextResponse.json({ ok: false, error: "COD charge must be a non-negative amount with up to two decimal places" }, { status: 400 });
