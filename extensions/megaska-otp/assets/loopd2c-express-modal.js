@@ -28,6 +28,10 @@
     prepaidWarmupKey: "",
     prepaidWarmupCompletedKey: "",
     prepaidWarmupPromise: null,
+    // Set true the moment the shopper explicitly picks COD, so the background
+    // prepaid warm-up cannot flip the intent (and the sticky total) back to
+    // PREPAID pricing behind their choice.
+    codLocked: false,
     addressSavedForIntentId: null,
     paymentInProgress: false,
     inlinePaymentError: "",
@@ -965,7 +969,7 @@ function buildBufferedEta(rawEta) {
   async function open(opts) {
     try { if (!state.open && window.LoopDeskAnalytics) window.LoopDeskAnalytics.track('MODAL_OPEN'); } catch (e) {}
     const openStart = Number(opts?.openStart || perfNow());
-    state.open = true; state.step = "checkout"; state.error = ""; state.busy = false; state.paymentStarted = false; state.orderSubmitting = false; state.intent = null; state.pricing = null; state.customer = null; state.customerDefaultAddress = null; state.addressDraft = {}; state.editingAddress = false; state.discountMessage = ""; state.storeCredit = { loading: false, availableAmount: 0, appliedAmount: 0, remainingPayable: null, currency: "INR", enabled: false, error: "" }; state.inlinePaymentMode = false; state.inlinePaymentError = ""; state.activeRazorpayOrder = null; state.activeRazorpayOrderPromise = null; state.activeRazorpayInstance = null; state.prepaidWarmupKey = ""; state.prepaidWarmupCompletedKey = ""; state.prepaidWarmupPromise = null; state.addressSavedForIntentId = null; state.paymentInProgress = false; resetCodAdvanceState(); resetDeliveryServiceability(); state.pincode = ""; state.pincodeStatus = "idle"; state.pincodeMessage = "Enter 6-digit PIN code to check delivery."; state.pincodeEta = ""; state.pincodeCity = ""; state.pincodeState = ""; state.lastCheckedPincode = ""; state.pincodeCache = {}; state.savedPincode = ""; state.savedPincodeStatus = "idle"; state.savedPincodeMessage = ""; state.savedPincodeEta = ""; state.lastCheckedSavedPincode = ""; state.hydration = { session: "loading", cart: "idle", intent: "idle", address: "loading", discount: "loading", pincode: "idle", payment: "loading" }; resetApiCallPerf(openStart);
+    state.open = true; state.step = "checkout"; state.error = ""; state.busy = false; state.paymentStarted = false; state.orderSubmitting = false; state.intent = null; state.pricing = null; state.customer = null; state.customerDefaultAddress = null; state.addressDraft = {}; state.editingAddress = false; state.discountMessage = ""; state.storeCredit = { loading: false, availableAmount: 0, appliedAmount: 0, remainingPayable: null, currency: "INR", enabled: false, error: "" }; state.inlinePaymentMode = false; state.inlinePaymentError = ""; state.activeRazorpayOrder = null; state.activeRazorpayOrderPromise = null; state.activeRazorpayInstance = null; state.prepaidWarmupKey = ""; state.prepaidWarmupCompletedKey = ""; state.prepaidWarmupPromise = null; state.codLocked = false; state.addressSavedForIntentId = null; state.paymentInProgress = false; resetCodAdvanceState(); resetDeliveryServiceability(); state.pincode = ""; state.pincodeStatus = "idle"; state.pincodeMessage = "Enter 6-digit PIN code to check delivery."; state.pincodeEta = ""; state.pincodeCity = ""; state.pincodeState = ""; state.lastCheckedPincode = ""; state.pincodeCache = {}; state.savedPincode = ""; state.savedPincodeStatus = "idle"; state.savedPincodeMessage = ""; state.savedPincodeEta = ""; state.lastCheckedSavedPincode = ""; state.hydration = { session: "loading", cart: "idle", intent: "idle", address: "loading", discount: "loading", pincode: "idle", payment: "loading" }; resetApiCallPerf(openStart);
     const modal = ensureModal(); modal.hidden = false; modal.setAttribute("aria-hidden", "false"); document.documentElement.classList.add("megaska-otp-open"); render();
     try {
       await waitForModalShellPaint(openStart);
@@ -1071,9 +1075,15 @@ function buildBufferedEta(rawEta) {
     state.inlinePaymentMode = true;
     state.inlinePaymentError = "";
     if (backendMethod === "COD") {
+      // Explicit COD choice wins over any in-flight/queued prepaid warm-up.
+      state.codLocked = true;
+      state.prepaidWarmupKey = "";
+      state.prepaidWarmupCompletedKey = "";
+      state.prepaidWarmupPromise = null;
       state.codAdvance = freshCodAdvanceState();
       codAdvanceState().loadingPolicy = true;
     } else {
+      state.codLocked = false;
       resetCodAdvanceState();
     }
     renderPaymentSectionOnly();
@@ -1086,6 +1096,7 @@ function buildBufferedEta(rawEta) {
     } catch (error) {
       state.selectedDisplayPaymentMethod = previousDisplayMethod;
       state.optimisticPaymentMethod = previousOptimisticPaymentMethod;
+      state.codLocked = backendPaymentMethodForDisplay(previousDisplayMethod) === "COD";
       resetCodAdvanceState();
       state.inlinePaymentError = error instanceof Error ? error.message : "Could not update payment method. Please try again.";
     } finally {
@@ -1186,6 +1197,10 @@ function renderStoreCreditOrderPanel() {
       state.optimisticPaymentMethod = null;
       return;
     }
+    // A background prepaid warm-up must never override an explicit COD choice.
+    // Without this, a warm-up POST that lands after the shopper taps COD flips
+    // the intent back to PREPAID and the sticky total diverges from the COD box.
+    if (method === "PREPAID" && state.codLocked) return;
     const data = await apiFetch(`/express/checkout/intents/${encodeURIComponent(state.intent.id)}/payment-method`, { method: "POST", body: { method } });
     if (data?.intent) state.intent = data.intent;
     if (method === "COD") {
@@ -1201,15 +1216,17 @@ function renderStoreCreditOrderPanel() {
   async function warmupPrepaidPayment(displayMethod) {
     const method = backendPaymentMethodForDisplay(displayMethod);
     const intentId = state.intent?.id;
-    if (remainingBasePayablePaise() <= 0 || method === "COD" || !intentId) return null;
+    if (remainingBasePayablePaise() <= 0 || method === "COD" || state.codLocked || !intentId) return null;
     const warmupKey = `${intentId}:${displayMethod || selectedDisplayPaymentMethod()}`;
     if (state.prepaidWarmupCompletedKey === warmupKey && state.activeRazorpayOrder?.intentId === intentId && state.intent?.selectedPaymentMethod === "PREPAID") return state.prepaidWarmupPromise;
     if (state.prepaidWarmupKey === warmupKey && state.prepaidWarmupPromise) return state.prepaidWarmupPromise;
     state.prepaidWarmupKey = warmupKey;
     state.prepaidWarmupPromise = (async () => {
       try {
+        if (state.codLocked) return;
         const scriptPromise = ensureRazorpayScript();
         await ensureBackendPaymentMethod("PREPAID");
+        if (state.codLocked) return;
         await Promise.all([scriptPromise, ensureRazorpayOrder()]);
         state.prepaidWarmupCompletedKey = warmupKey;
       } catch (error) {

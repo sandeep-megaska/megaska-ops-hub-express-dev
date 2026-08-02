@@ -163,16 +163,27 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     }
 
     const isUnsupportedDiscountAppliedStatus = latestIntent.status === "DISCOUNT_APPLIED";
+    // A background prepaid warm-up can advance the intent to PAYMENT_PENDING
+    // before the shopper commits to a method. We only reach here with no
+    // CONFIRMED payment (guarded above), so switching method must drop that
+    // abandoned prepaid attempt back to a selectable state. The state machine
+    // forbids PAYMENT_PENDING -> PAYMENT_SELECTED in one hop, so we set it in
+    // this same guarded write - otherwise COD-policy resolution rejects
+    // PAYMENT_PENDING and the COD button stays permanently disabled.
+    const isAbandonedPaymentPending = latestIntent.status === PAYMENT_METHOD_PAYMENT_PENDING_STATUS;
+    const forcePaymentSelected = isUnsupportedDiscountAppliedStatus || isAbandonedPaymentPending;
     const updateResult = await tx.expressCheckoutIntent.updateMany({
       where: isUnsupportedDiscountAppliedStatus
         ? intentWhere
-        : { ...intentWhere, status: { in: paymentMethodMutableStatusesForPrisma() } },
+        : isAbandonedPaymentPending
+          ? { ...intentWhere, status: PAYMENT_METHOD_PAYMENT_PENDING_STATUS }
+          : { ...intentWhere, status: { in: paymentMethodMutableStatusesForPrisma() } },
       data: {
         selectedPaymentMethod: method,
         codFeeAmountPaise,
         prepaidDiscountAmountPaise,
         totalAmountPaise,
-        ...(isUnsupportedDiscountAppliedStatus ? { status: "PAYMENT_SELECTED" as const } : {}),
+        ...(forcePaymentSelected ? { status: "PAYMENT_SELECTED" as const } : {}),
       },
     });
 
@@ -181,7 +192,14 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
       return { intent, payment: null };
     }
 
-    await tx.expressCheckoutPayment.deleteMany({ where: { shopId: shop.shopId, intentId, method, status: "PENDING", intent: { customerProfileId } } });
+    // When resetting an abandoned PAYMENT_PENDING intent, clear every pending
+    // payment row for it (not just the incoming method's) so no stale PENDING
+    // PREPAID attempt from the warm-up lingers against a now-COD intent.
+    await tx.expressCheckoutPayment.deleteMany({
+      where: isAbandonedPaymentPending
+        ? { shopId: shop.shopId, intentId, status: "PENDING", intent: { customerProfileId } }
+        : { shopId: shop.shopId, intentId, method, status: "PENDING", intent: { customerProfileId } },
+    });
 
     const payment = await tx.expressCheckoutPayment.create({ data: { shopId: shop.shopId, intentId, method, status: paymentStatus, amountPaise, currency: intent.currency } });
     const updatedIntent = await tx.expressCheckoutIntent.findFirstOrThrow({ where: intentWhere });
