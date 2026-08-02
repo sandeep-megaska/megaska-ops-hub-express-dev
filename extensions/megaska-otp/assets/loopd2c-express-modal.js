@@ -605,8 +605,21 @@ function buildBufferedEta(rawEta) {
     return { token: cart?.token || "", items, lineItems, promotionPricing: pricing, item_count: Number(cart?.item_count || 0), total_price: Number(cart?.total_price || 0), original_total_price: Number(cart?.original_total_price || 0), items_subtotal_price: Number(cart?.items_subtotal_price || 0), total_discount: Number(cart?.total_discount || 0), cart_level_discount_applications: cart?.cart_level_discount_applications || [], discount_codes: cart?.discount_codes || [], currency: cart?.currency || "INR" };
   }
 
+  // The OTP + auth modules load as separate deferred scripts, so on the very
+  // first checkout click they may not be on `window` yet (the "first attempt
+  // fails, works after refresh" race). Wait briefly for them before gating.
+  async function waitForAuthModules(timeoutMs) {
+    const deadline = perfNow() + (timeoutMs || 3000);
+    while (perfNow() < deadline) {
+      if (window.MegaskaAuth?.fetchSession && window.MegaskaOtp?.ensureMegaskaAuthenticatedBeforeCheckout) return true;
+      await new Promise((resolve) => window.setTimeout(resolve, 60));
+    }
+    return Boolean(window.MegaskaAuth?.fetchSession && window.MegaskaOtp?.ensureMegaskaAuthenticatedBeforeCheckout);
+  }
+
   async function ensureAuthenticated(triggerEl, event, reopenOpts) {
     const startedAt = perfNow();
+    await waitForAuthModules(3000);
     const session = window.MegaskaAuth?.fetchSession ? await window.MegaskaAuth.fetchSession() : { authenticated: Boolean(await getToken()) };
     perfDetails("session_init_ms", { shopId: getShopDomain() || null, intentId: state.intent?.id || null, duplicateCallsFound: state.perf.duplicateCallsFound, durationMs: Math.round(perfNow() - startedAt) });
     if (session?.authenticated) {

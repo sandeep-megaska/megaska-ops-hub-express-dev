@@ -97,6 +97,18 @@ test("prepaid hand-off gates through OTP before Shopify Checkout", () => {
 
 const otp = readFileSync("extensions/megaska-otp/assets/loopd2c-otp.js", "utf8");
 
+test("OTP: no premature guard error when the modal is the prompt", () => {
+  // When the reason opens the OTP modal, the guard error message is suppressed
+  // (the modal itself explains why login is needed).
+  assert.match(otp, /const opensModal = \["no-session", "no-verified-phone"\]\.includes\(validation\.reason\)/, "must detect modal-opening reasons");
+  assert.match(otp, /message: opensModal \? "" : validation\.message/, "must suppress the guard message when opening the modal");
+});
+
+test("express modal waits for the OTP/auth modules before gating (first-click race)", () => {
+  assert.match(modal, /async function waitForAuthModules/, "must have a wait-for-modules helper");
+  assert.match(modal, /await waitForAuthModules\(3000\)/, "ensureAuthenticated must await the modules");
+});
+
 const modal = readFileSync("extensions/megaska-otp/assets/loopd2c-express-modal.js", "utf8");
 
 test("COD-only mode suppresses all prepaid pricing in the modal", () => {
