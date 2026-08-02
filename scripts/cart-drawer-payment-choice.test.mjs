@@ -15,6 +15,16 @@ test("payment choice is a config flag, default OFF", () => {
   assert.match(src, /paymentChoiceEnabled: bool\(firstDefined\(cart\.paymentChoiceEnabled/, "normalizeConfig must read the flag");
 });
 
+test("the flag survives the async runtime-config fetch (re-normalize + re-render)", () => {
+  // paymentChoiceEnabled is NOT a theme-block setting; it only arrives via the
+  // async runtime-config fetch, which resolves after this script computes
+  // `config`. Without re-normalizing on runtime-config-ready, the flag stays
+  // frozen false and the choice never renders. Regression guard for that bug.
+  assert.match(src, /addEventListener\("loopdesk:runtime-config-ready"/, "drawer must listen for the runtime config");
+  assert.match(src, /loopdesk:runtime-config-ready"[\s\S]*?config = normalizeConfig\(window\.LoopDeskConfig/, "must re-normalize config when the runtime config lands");
+  assert.match(src, /loopdesk:runtime-config-ready"[\s\S]*?getElementById\(ROOT_ID\)\) render\(\)/, "must re-render after re-normalizing");
+});
+
 test("the block renders when the flag is on and there are items (independent of promotion pricing)", () => {
   // Prepaid savings come from LoopDeskConfig.prepaidOffer, so the choice must NOT
   // depend on the promotion-pricing object being built.

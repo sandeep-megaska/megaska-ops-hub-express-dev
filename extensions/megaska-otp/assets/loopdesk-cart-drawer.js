@@ -41,6 +41,20 @@
   };
   var config = normalizeConfig(window.LoopDeskConfig || window.LOOPDESK_CART_DRAWER_CONFIG || window.LoopDeskCartDrawerConfig || {});
   window.LoopDeskConfig = Object.assign({}, window.LoopDeskConfig || {}, config);
+  // `config` is normalized once, at load. But some cart settings — notably
+  // `paymentChoiceEnabled` — are NOT theme-block settings; they arrive only via
+  // the async runtime-config fetch, which resolves AFTER this script runs. So we
+  // re-normalize when the runtime config lands and re-render, otherwise those
+  // values stay frozen at their load-time defaults (the choice block would never
+  // appear even with the flag on). The drawer script is deferred and fetch is
+  // always async, so this listener is registered before the event can fire.
+  window.addEventListener("loopdesk:runtime-config-ready", function () {
+    try {
+      config = normalizeConfig(window.LoopDeskConfig || {});
+      window.LoopDeskConfig = Object.assign({}, window.LoopDeskConfig || {}, config);
+      if (document.getElementById(ROOT_ID)) render();
+    } catch (e) {}
+  });
   window.LOOPDESK_CART_DRAWER_CONFIG = Object.assign({}, window.LOOPDESK_CART_DRAWER_CONFIG || {}, {
     enabled: config.enabled,
     drawerMode: config.cart.drawerMode,
