@@ -80,7 +80,9 @@ test("COD choice opens the modal without a Razorpay requirement, in COD-only mod
   // The COD path must not require provider === "razorpay" (Razorpay is retired
   // for the in-modal capture); it opens whenever the module is ready for COD.
   assert.match(src, /var codChoice = choiceMode && paymentIntentValue\(\) === "cod"/, "must detect the COD choice");
-  assert.match(src, /codChoice[\s\S]*?readiness\.codAvailable === true \|\| readiness\.ready === true/, "COD path must gate on cod-availability, not Razorpay");
+  // COD ALWAYS opens the modal (no Razorpay/readiness gate) - it must never fall
+  // back to Shopify Checkout, where COD is disabled.
+  assert.match(src, /var modalReady = codChoice \|\| Boolean\(readiness/, "COD must bypass the readiness gate entirely");
   assert.match(src, /MegaskaExpressCheckout\.open\(\{ source: checkoutSource, codOnly: codChoice \}\)/, "must open the modal in COD-only mode for the COD choice");
 });
 

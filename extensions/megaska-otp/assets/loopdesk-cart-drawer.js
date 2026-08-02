@@ -2153,14 +2153,13 @@
       return;
     }
     var readiness = window.LoopDeskConfig && window.LoopDeskConfig.express_checkout;
-    // In choice mode the modal is COD-only (prepaid is handed off to Shopify
-    // Checkout), so it opens whenever the module is ready for COD - no Razorpay
-    // needed. The legacy modal still requires Razorpay for its in-modal prepaid
-    // capture, so that path keeps the stricter gate.
+    // The COD choice ALWAYS opens the COD-only modal - it needs no payment
+    // provider, and it must never fall back to Shopify Checkout (COD is disabled
+    // there, so the shopper would be stranded). So no Razorpay/readiness gate for
+    // COD. Only the legacy (flag-off) path, which captures prepaid in-modal via
+    // Razorpay, keeps the stricter readiness gate.
     var codChoice = choiceMode && paymentIntentValue() === "cod";
-    var modalReady = codChoice
-      ? Boolean(readiness && readiness.enabled === true && (readiness.codAvailable === true || readiness.ready === true))
-      : Boolean(readiness && readiness.enabled === true && readiness.ready === true && readiness.provider === "razorpay");
+    var modalReady = codChoice || Boolean(readiness && readiness.enabled === true && readiness.ready === true && readiness.provider === "razorpay");
     if (!modalReady) {
       debugLog("Shopify checkout fallback", { source: source || "checkout-intent", reason: readiness && readiness.ready === false ? "not-ready" : "config-unavailable" }, true);
       window.location.assign("/checkout");
