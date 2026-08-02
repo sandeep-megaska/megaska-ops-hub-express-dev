@@ -1185,6 +1185,12 @@
   line-height: 1.35;
   margin: 0;
 }
+.megaska-express-cod-nudge { align-items:center; background:linear-gradient(135deg,#ecfdf5,#d1fae5); border:1px solid #6ee7b7; border-radius:12px; display:flex; flex-wrap:wrap; gap:10px 12px; justify-content:space-between; margin:0 0 12px; padding:11px 13px; }
+.megaska-express-cod-nudge-copy { display:flex; flex-direction:column; gap:2px; min-width:0; }
+.megaska-express-cod-nudge-copy strong { color:#065f46; font-size:14px; font-weight:800; }
+.megaska-express-cod-nudge-copy span { color:#047857; font-size:12px; }
+.megaska-express-cod-nudge-btn { background:#059669; border:0; border-radius:9px; color:#fff; cursor:pointer; flex-shrink:0; font-size:13px; font-weight:700; padding:9px 15px; white-space:nowrap; }
+.megaska-express-cod-nudge-btn:hover { background:#047857; }
 .megaska-express-cod-confirm {
   background: #f0fdf4;
   border: 1px solid #bbf7d0;
