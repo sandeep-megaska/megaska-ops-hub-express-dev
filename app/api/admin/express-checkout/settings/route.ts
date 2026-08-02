@@ -3,6 +3,7 @@ import { prisma } from "../../../../../services/db/prisma";
 import { getShopDomainFromRequest, resolveShopConfig } from "../../../../../services/shopify/shop";
 import { DEFAULT_COD_INFORMATION_TEXT, getExpressCheckoutSettings, parseCodFeeRupeesToPaise, parsePercentValue, parseRupeesToPaise } from "../../../../../services/express-checkout/settings";
 import { resolveExpressCheckoutReadiness, setExpressCheckoutEnabled } from "../../../../../services/express-checkout/readiness";
+import { publishPrepaidOfferMetafield } from "../../../../../services/express-checkout/prepaid-offer-metafield";
 
 export const runtime = "nodejs";
 const MODULE_KEY = "express_checkout_settings";
@@ -99,6 +100,22 @@ export async function POST(req: NextRequest) {
     create: { shopId: resolved.id, moduleKey: MODULE_KEY, enabled: true, config },
     update: { enabled: true, config },
   });
+
+  // Publish the prepaid offer to the shop metafield the discount Function reads
+  // at Shopify Checkout. Best-effort: a metafield failure must not fail the
+  // settings save, so we don't propagate it into the response.
+  try {
+    const publishResult = await publishPrepaidOfferMetafield(resolved.shopDomain, {
+      enabled: prepaidDiscountEnabled,
+      type: prepaidDiscountType,
+      value: prepaidDiscountValue,
+      maxPaise: prepaidDiscountMaxPaise,
+      minSubtotalPaise: prepaidDiscountMinSubtotalPaise,
+    });
+    if (!publishResult.ok) console.warn("prepaid_offer_metafield_publish_failed", { shopId: resolved.id, reason: publishResult.reason });
+  } catch (error) {
+    console.error("prepaid_offer_metafield_publish_error", { shopId: resolved.id, error: error instanceof Error ? error.message : String(error) });
+  }
 
   return NextResponse.json({ ok: true, settings: { ...config, id: settings.id }, readiness });
 }
