@@ -90,6 +90,42 @@ impl Decimal {
         })
     }
 
+    /// Sum of two non-negative decimals (fixed-point, scale 1e6).
+    pub fn add(&self, other: &Self) -> Option<Self> {
+        if self.neg || other.neg {
+            return None;
+        }
+        Some(Self {
+            neg: false,
+            units: self.units.checked_add(other.units)?,
+        })
+    }
+
+    /// `self` * (`percent` / 100), i.e. `percent`% of `self`, truncated to scale
+    /// 1e6. Both operands are non-negative fixed-point (scale 1e6).
+    pub fn mul_percent(&self, percent: &Self) -> Option<Self> {
+        if self.neg || percent.neg {
+            return None;
+        }
+        // units are scaled by 1e6; product is scaled by 1e12. Divide by 1e6 to
+        // return to scale 1e6, then by 100 for the percentage.
+        let product = self.units.checked_mul(percent.units)?;
+        Some(Self {
+            neg: false,
+            units: product / 1_000_000 / 100,
+        })
+    }
+
+    /// The smaller of two non-negative decimals (named to avoid clashing with
+    /// the `Ord::min` provided method, which takes its args by value).
+    pub fn min_with(&self, other: &Self) -> Self {
+        if self <= other {
+            self.clone()
+        } else {
+            other.clone()
+        }
+    }
+
     pub fn to_shopify(&self) -> String {
         let w = self.units / 1_000_000;
         let mut f = format!("{:06}", self.units % 1_000_000);
