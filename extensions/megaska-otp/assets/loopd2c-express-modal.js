@@ -937,10 +937,10 @@ function buildBufferedEta(rawEta) {
 
   async function refreshIntent() { const startedAt = perfNow(); const data = await apiFetch(`/express/checkout/intents/${encodeURIComponent(state.intent.id)}`); state.intent = data.intent; state.pricing = data.pricing || null; state.customerDefaultAddress = data.customerDefaultAddress || state.customerDefaultAddress; state.settings = Object.assign({}, state.settings, data.settings || {}); state.discountCode = state.intent?.discounts?.[0]?.code || state.discountCode; await loadStoreCredit(); invalidateCodPolicy("intent_refresh"); perfDetails("intent_fetch_ms", { shopId: getShopDomain() || null, intentId: state.intent?.id || null, duplicateCallsFound: state.perf.duplicateCallsFound, durationMs: Math.round(perfNow() - startedAt) }); }
 
-  async function createIntent() {
+  async function createIntent(cartPromise) {
     state.hydration.cart = "loading";
     render();
-    const cart = await readCart();
+    const cart = await (cartPromise || readCart());
     if (!Number(cart?.item_count || 0)) throw new Error("Your cart is empty.");
     const snapshot = cartSnapshot(cart);
     state.intent = Object.assign({}, state.intent || {}, { cartSnapshot: snapshot, subtotalAmountPaise: cartSubtotalPaise(cart), discountAmountPaise: cartDiscountPaise(cart), shippingAmountPaise: 0, totalAmountPaise: cartTotalPaise(cart), currency: snapshot.currency || "INR" });
@@ -954,7 +954,6 @@ function buildBufferedEta(rawEta) {
     state.customerDefaultAddress = data.customerDefaultAddress || state.customerDefaultAddress;
     state.settings = Object.assign({}, state.settings, data.settings || {});
     state.discountCode = state.intent?.discounts?.[0]?.code || state.discountCode;
-    await loadStoreCredit();
     state.hydration.intent = "ready";
     state.hydration.address = state.customerDefaultAddress || state.intent?.addressSnapshots?.length ? "ready" : "ready";
     state.hydration.discount = "ready";
@@ -962,6 +961,11 @@ function buildBufferedEta(rawEta) {
     perfDetails("intent_create_ms", { shopId: getShopDomain() || null, intentId: state.intent?.id || null, duplicateCallsFound: state.perf.duplicateCallsFound, durationMs: Math.round(perfNow() - startedAt) });
     state.editingAddress = false;
     state.addressDraft = {};
+    // Store credit is a secondary enhancement: load it in the background so the
+    // payment methods and totals appear as soon as the intent exists, instead of
+    // blocking the whole modal on its round-trip. It re-renders in place when it
+    // resolves (a no-op for the common case where the shopper has no credit).
+    void loadStoreCredit().then(() => { if (state.open) render(); }).catch(() => {});
   }
 
   async function open(opts) {
@@ -970,11 +974,17 @@ function buildBufferedEta(rawEta) {
     state.open = true; state.step = "checkout"; state.error = ""; state.busy = false; state.paymentStarted = false; state.orderSubmitting = false; state.intent = null; state.pricing = null; state.customer = null; state.customerDefaultAddress = null; state.addressDraft = {}; state.editingAddress = false; state.discountMessage = ""; state.storeCredit = { loading: false, availableAmount: 0, appliedAmount: 0, remainingPayable: null, currency: "INR", enabled: false, error: "" }; state.inlinePaymentMode = false; state.inlinePaymentError = ""; state.activeRazorpayOrder = null; state.activeRazorpayOrderPromise = null; state.activeRazorpayInstance = null; state.prepaidWarmupKey = ""; state.prepaidWarmupCompletedKey = ""; state.prepaidWarmupPromise = null; state.codLocked = false; state.addressSavedForIntentId = null; state.paymentInProgress = false; resetCodAdvanceState(); resetDeliveryServiceability(); state.pincode = ""; state.pincodeStatus = "idle"; state.pincodeMessage = "Enter 6-digit PIN code to check delivery."; state.pincodeEta = ""; state.pincodeCity = ""; state.pincodeState = ""; state.lastCheckedPincode = ""; state.pincodeCache = {}; state.savedPincode = ""; state.savedPincodeStatus = "idle"; state.savedPincodeMessage = ""; state.savedPincodeEta = ""; state.lastCheckedSavedPincode = ""; state.hydration = { session: "loading", cart: "idle", intent: "idle", address: "loading", discount: "loading", pincode: "idle", payment: "loading" }; resetApiCallPerf(openStart);
     const modal = ensureModal(); modal.hidden = false; modal.setAttribute("aria-hidden", "false"); document.documentElement.classList.add("megaska-otp-open"); render();
     try {
+      // Fetch the Shopify cart in parallel with the shell paint + auth check: it
+      // depends on neither and needs no token, so racing it removes a round-trip
+      // from the boot waterfall. The no-op catch just prevents an early rejection
+      // from surfacing as unhandled; createIntent still awaits (and rethrows) it.
+      const cartPromise = readCart();
+      cartPromise.catch(() => {});
       await waitForModalShellPaint(openStart);
       if (!(await ensureAuthenticated(opts?.triggerEl, opts?.event))) { close(); return; }
       state.hydration.session = "ready";
       render();
-      await createIntent();
+      await createIntent(cartPromise);
       debugLog("modal ready", { intentId: state.intent?.id }); render(); perfDetails("duplicate_api_calls_found", { shopId: getShopDomain() || null, intentId: state.intent?.id || null, duplicateCallsFound: state.perf.duplicateCallsFound, calls: state.perf.apiCalls }); perfDetails("modal_ready_total_ms", { shopId: getShopDomain() || null, intentId: state.intent?.id || null, duplicateCallsFound: state.perf.duplicateCallsFound, durationMs: Math.round(perfNow() - openStart) }); const initialZip = ensureModal().querySelector('[name="zip"]')?.value || ""; if (initialZip) schedulePincodeCheck(initialZip); const savedAddress = address(); const savedZip = hasCompleteAddress(savedAddress) ? savedAddress.zip : ""; if (savedZip) { state.addressSavedForIntentId = state.intent?.id || null; scheduleSavedAddressPincodeCheck(savedZip); if (backendPaymentMethodForDisplay(selectedDisplayPaymentMethod()) !== "COD") warmupPrepaidPayment(selectedDisplayPaymentMethod()); }
     }
     catch (error) { state.step = "error"; state.error = error instanceof Error ? error.message : "Unable to prepare checkout."; render(); }
