@@ -2997,6 +2997,31 @@ function consumePendingAccountRedirect() {
   });
 }
 
+  // Shopify-Checkout migration: gate a prepaid hand-off on OTP for logged-out
+  // shoppers, then continue to Shopify Checkout with buyer-identity prefill. This
+  // is initiated from the cart drawer, where — unlike the checkout page —
+  // there is no phone input to match against, so it gates purely on the verified
+  // session state (authenticated + verified phone) rather than on a phone-field
+  // match. On success it runs the same prefill + buyer-identity handoff the
+  // intercepted-anchor path uses; otherwise it opens the OTP modal and resumes
+  // the navigate to /checkout after verification.
+  async function beginGatedShopifyCheckout(options) {
+    const opts = options || {};
+    const source = opts.triggerSource || "gated-shopify-checkout";
+    const gateState = await getMegaskaCheckoutGateState();
+    if (gateState.authenticated && gateState.verifiedPhonePresent) {
+      await continueToCheckoutFromPendingAction(gateState.customer, source + ".authed");
+      return true;
+    }
+    setPendingAction({ type: "navigate", url: "/checkout" });
+    try {
+      openModal(source);
+    } catch {
+      await handlePromptFallback();
+    }
+    return false;
+  }
+
  async function handleCheckoutTriggerClick(event, triggerEl) {
   if (!checkoutInterceptionEnabled) return;
 
@@ -4128,6 +4153,7 @@ function hasVisibleNativeDesktopAccountEntry() {
     resetModalState,
     interceptCheckoutClicks,
     ensureMegaskaAuthenticatedBeforeCheckout,
+    beginGatedShopifyCheckout,
     clearCheckoutErrors,
     clearPendingAction,
     hideAccountMenu,

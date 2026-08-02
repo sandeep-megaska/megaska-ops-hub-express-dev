@@ -741,3 +741,16 @@ body.loopdesk-cart-drawer-is-open #loopdesk-cart-drawer-root .loopdesk-cart-draw
 .loopdesk-cart-drawer__coupon-status[data-state="success"] { color:#15803d; }
 .loopdesk-cart-drawer__coupon-status[data-state="error"] { color:#b91c1c; }
 .loopdesk-cart-drawer__coupon-remove { margin-left:8px; padding:0; border:0; background:transparent; color:inherit; font:inherit; text-decoration:underline; cursor:pointer; }
+
+/* Payment choice block (flag-gated: config.cart.paymentChoiceEnabled) */
+.loopdesk-cart-drawer__payment-choice { display:flex; flex-direction:column; gap:8px; margin:4px 0 12px; }
+.loopdesk-cart-drawer__pay-label { margin:0 0 2px; font-size:12px; font-weight:700; color:#64748b; }
+.loopdesk-cart-drawer__pay-option { display:flex; align-items:center; justify-content:space-between; gap:12px; width:100%; text-align:left; background:#fff; border:1.5px solid #e2e8f0; border-radius:12px; padding:12px 14px; cursor:pointer; font:inherit; transition:border-color .12s, background .12s; }
+.loopdesk-cart-drawer__pay-option:hover { border-color:#cbd5e1; }
+.loopdesk-cart-drawer__pay-option.is-active { border-color:#4f46e5; background:#f5f5ff; box-shadow:0 0 0 1px #4f46e5 inset; }
+.loopdesk-cart-drawer__pay-copy { display:flex; flex-direction:column; gap:2px; min-width:0; }
+.loopdesk-cart-drawer__pay-copy strong { font-size:14px; font-weight:700; color:#0f172a; }
+.loopdesk-cart-drawer__pay-copy em { font-style:normal; font-size:12px; color:#64748b; }
+.loopdesk-cart-drawer__pay-copy em.is-save { color:#047857; font-weight:700; }
+.loopdesk-cart-drawer__pay-copy em.is-more { color:#b45309; font-weight:600; }
+.loopdesk-cart-drawer__pay-amt { font-size:15px; font-weight:800; color:#0f172a; white-space:nowrap; }
