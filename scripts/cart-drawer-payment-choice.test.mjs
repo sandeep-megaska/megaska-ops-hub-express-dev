@@ -15,8 +15,11 @@ test("payment choice is a config flag, default OFF", () => {
   assert.match(src, /paymentChoiceEnabled: bool\(firstDefined\(cart\.paymentChoiceEnabled/, "normalizeConfig must read the flag");
 });
 
-test("the block only renders when the flag is on and there are items", () => {
-  assert.match(src, /config\.cart\.paymentChoiceEnabled && hasItems && pricing/, "render must gate on the flag + items + pricing");
+test("the block renders when the flag is on and there are items (independent of promotion pricing)", () => {
+  // Prepaid savings come from LoopDeskConfig.prepaidOffer, so the choice must NOT
+  // depend on the promotion-pricing object being built.
+  assert.match(src, /config\.cart\.paymentChoiceEnabled && hasItems\b/, "render must gate on the flag + items");
+  assert.doesNotMatch(src, /config\.cart\.paymentChoiceEnabled && hasItems && pricing/, "render must not require the pricing object");
 });
 
 test("choosing a method persists a cart attribute for the Functions", () => {
@@ -50,8 +53,16 @@ test("prepaid hands off to Shopify Checkout after persisting the attribute", () 
 });
 
 test("openLoopDeskExpressCheckout routes prepaid to the hand-off, COD to the modal", () => {
-  assert.match(src, /config\.cart\.paymentChoiceEnabled && paymentIntentValue\(\) !== "cod"/, "must branch on the flag + non-COD intent");
+  assert.match(src, /choiceMode && paymentIntentValue\(\) !== "cod"/, "must branch on the flag + non-COD intent");
   assert.match(src, /handoffPrepaidToShopifyCheckout\(source\)/, "prepaid branch must call the hand-off");
+});
+
+test("COD choice opens the modal without a Razorpay requirement, in COD-only mode", () => {
+  // The COD path must not require provider === "razorpay" (Razorpay is retired
+  // for the in-modal capture); it opens whenever the module is ready for COD.
+  assert.match(src, /var codChoice = choiceMode && paymentIntentValue\(\) === "cod"/, "must detect the COD choice");
+  assert.match(src, /codChoice[\s\S]*?readiness\.codAvailable === true \|\| readiness\.ready === true/, "COD path must gate on cod-availability, not Razorpay");
+  assert.match(src, /MegaskaExpressCheckout\.open\(\{ source: checkoutSource, codOnly: codChoice \}\)/, "must open the modal in COD-only mode for the COD choice");
 });
 
 // OTP verification must gate BOTH flows for logged-out shoppers. COD keeps its
@@ -64,6 +75,17 @@ test("prepaid hand-off gates through OTP before Shopify Checkout", () => {
 });
 
 const otp = readFileSync("extensions/megaska-otp/assets/loopd2c-otp.js", "utf8");
+
+const modal = readFileSync("extensions/megaska-otp/assets/loopd2c-express-modal.js", "utf8");
+
+test("express modal supports a COD-only mode driven by the open() option", () => {
+  assert.match(modal, /state\.codOnly = Boolean\(opts\?\.codOnly\)/, "open() must read the codOnly option");
+  assert.match(modal, /state\.codOnly[\s\S]*?state\.selectedDisplayPaymentMethod = "COD"/, "codOnly must preselect COD");
+  // COD-only mode filters the method list down to the COD row (no Razorpay).
+  assert.match(modal, /state\.codOnly\s*\n?\s*\?\s*DISPLAY_PAYMENT_METHODS\.filter\(\(method\) => method\.backendMethod === "COD"\)/, "codOnly must present COD alone");
+  // The OTP re-open after verification must preserve COD-only mode.
+  assert.match(modal, /callback: \(\) => open\(\{ triggerEl, codOnly: Boolean\(reopenOpts\?\.codOnly\) \}\)/, "OTP re-open must keep codOnly");
+});
 
 test("OTP module exposes a session-gated Shopify Checkout hand-off with prefill", () => {
   assert.match(otp, /async function beginGatedShopifyCheckout/, "beginGatedShopifyCheckout must exist");

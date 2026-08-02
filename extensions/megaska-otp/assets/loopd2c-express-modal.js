@@ -19,6 +19,10 @@
     paymentUpdating: false,
     codPolicyRequestId: 0,
     selectedDisplayPaymentMethod: "UPI",
+    // COD-only mode: opened from the cart drawer's Prepaid/COD choice when the
+    // shopper picked COD. Prepaid is handed off to Shopify Checkout, so the modal
+    // presents Cash on Delivery alone (no Razorpay methods, no prepaid warm-up).
+    codOnly: false,
     inlinePaymentMode: false,
     razorpayInlineScriptPromise: null,
     razorpayCheckoutScriptPromise: null,
@@ -601,7 +605,7 @@ function buildBufferedEta(rawEta) {
     return { token: cart?.token || "", items, lineItems, promotionPricing: pricing, item_count: Number(cart?.item_count || 0), total_price: Number(cart?.total_price || 0), original_total_price: Number(cart?.original_total_price || 0), items_subtotal_price: Number(cart?.items_subtotal_price || 0), total_discount: Number(cart?.total_discount || 0), cart_level_discount_applications: cart?.cart_level_discount_applications || [], discount_codes: cart?.discount_codes || [], currency: cart?.currency || "INR" };
   }
 
-  async function ensureAuthenticated(triggerEl, event) {
+  async function ensureAuthenticated(triggerEl, event, reopenOpts) {
     const startedAt = perfNow();
     const session = window.MegaskaAuth?.fetchSession ? await window.MegaskaAuth.fetchSession() : { authenticated: Boolean(await getToken()) };
     perfDetails("session_init_ms", { shopId: getShopDomain() || null, intentId: state.intent?.id || null, duplicateCallsFound: state.perf.duplicateCallsFound, durationMs: Math.round(perfNow() - startedAt) });
@@ -613,7 +617,7 @@ function buildBufferedEta(rawEta) {
       return window.MegaskaOtp.ensureMegaskaAuthenticatedBeforeCheckout({
         event,
         triggerEl,
-        pendingAction: { type: "callback", callback: () => open({ triggerEl }) },
+        pendingAction: { type: "callback", callback: () => open({ triggerEl, codOnly: Boolean(reopenOpts?.codOnly) }) },
       });
     }
     if (window.MegaskaOtp?.openModal) window.MegaskaOtp.openModal("express-checkout");
@@ -855,7 +859,12 @@ function buildBufferedEta(rawEta) {
   }
 
   function paymentMethodRows(selectedMethod, disabled) {
-    return DISPLAY_PAYMENT_METHODS.map((method) => {
+    // In COD-only mode the modal presents Cash on Delivery alone; prepaid is
+    // completed on Shopify Checkout, so the Razorpay methods are not offered.
+    const methods = state.codOnly
+      ? DISPLAY_PAYMENT_METHODS.filter((method) => method.backendMethod === "COD")
+      : DISPLAY_PAYMENT_METHODS;
+    return methods.map((method) => {
       const codDisabled = method.key === "COD" && isCodUnavailable();
       const rowDisabled = disabled || codDisabled;
       const selected = method.key === selectedMethod && !codDisabled;
@@ -993,6 +1002,11 @@ function buildBufferedEta(rawEta) {
     try { if (!state.open && window.LoopDeskAnalytics) window.LoopDeskAnalytics.track('MODAL_OPEN'); } catch (e) {}
     const openStart = Number(opts?.openStart || perfNow());
     state.open = true; state.step = "checkout"; state.error = ""; state.busy = false; state.paymentStarted = false; state.orderSubmitting = false; state.intent = null; state.pricing = null; state.customer = null; state.customerDefaultAddress = null; state.addressDraft = {}; state.editingAddress = false; state.discountMessage = ""; state.storeCredit = { loading: false, availableAmount: 0, appliedAmount: 0, remainingPayable: null, currency: "INR", enabled: false, error: "" }; state.inlinePaymentMode = false; state.inlinePaymentError = ""; state.activeRazorpayOrder = null; state.activeRazorpayOrderPromise = null; state.activeRazorpayInstance = null; state.prepaidWarmupKey = ""; state.prepaidWarmupCompletedKey = ""; state.prepaidWarmupPromise = null; state.codLocked = false; state.addressSavedForIntentId = null; state.paymentInProgress = false; resetCodAdvanceState(); resetDeliveryServiceability(); state.pincode = ""; state.pincodeStatus = "idle"; state.pincodeMessage = "Enter 6-digit PIN code to check delivery."; state.pincodeEta = ""; state.pincodeCity = ""; state.pincodeState = ""; state.lastCheckedPincode = ""; state.pincodeCache = {}; state.savedPincode = ""; state.savedPincodeStatus = "idle"; state.savedPincodeMessage = ""; state.savedPincodeEta = ""; state.lastCheckedSavedPincode = ""; state.hydration = { session: "loading", cart: "idle", intent: "idle", address: "loading", discount: "loading", pincode: "idle", payment: "loading" }; resetApiCallPerf(openStart);
+    // COD-only open (from the drawer's COD choice): present Cash on Delivery
+    // alone and lock it, so the background prepaid warm-up never runs and the
+    // Razorpay methods are never offered.
+    state.codOnly = Boolean(opts?.codOnly);
+    if (state.codOnly) { state.selectedDisplayPaymentMethod = "COD"; state.codLocked = true; }
     const modal = ensureModal(); modal.hidden = false; modal.setAttribute("aria-hidden", "false"); document.documentElement.classList.add("megaska-otp-open"); render();
     try {
       // Fetch the Shopify cart in parallel with the shell paint + auth check: it
@@ -1002,7 +1016,7 @@ function buildBufferedEta(rawEta) {
       const cartPromise = readCart();
       cartPromise.catch(() => {});
       await waitForModalShellPaint(openStart);
-      if (!(await ensureAuthenticated(opts?.triggerEl, opts?.event))) { close(); return; }
+      if (!(await ensureAuthenticated(opts?.triggerEl, opts?.event, { codOnly: state.codOnly }))) { close(); return; }
       state.hydration.session = "ready";
       render();
       await createIntent(cartPromise);
