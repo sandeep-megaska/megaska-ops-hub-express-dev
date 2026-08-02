@@ -3,6 +3,16 @@ query CartValidationsGenerateRun {
     buyerIdentity {
       phone
     }
+    # Migration hardening: the OTP hand-off stamps the verified mobile number and
+    # the chosen payment intent onto the cart. These let the validation enforce
+    # that a verified checkout keeps its verified number, and that a COD-intent
+    # cart never completes on Shopify Checkout (COD belongs in the app modal).
+    verifiedPhone: attribute(key: "megaska_verified_phone") {
+      value
+    }
+    paymentIntent: attribute(key: "loopd2c_payment_intent") {
+      value
+    }
     deliveryGroups {
       deliveryAddress {
         phone
