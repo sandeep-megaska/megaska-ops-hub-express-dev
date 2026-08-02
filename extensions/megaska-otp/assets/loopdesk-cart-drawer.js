@@ -1665,14 +1665,19 @@
   }
 
   function paymentIntentValue() { return state.paymentIntent || ""; }
-  // Persist the shopper's Prepaid/COD choice to Shopify cart attributes so the
-  // discount + validation Functions can read it at checkout. Fire-and-forget;
-  // the UI updates optimistically from state.
+  // Write the shopper's Prepaid/COD choice to Shopify cart attributes so the
+  // discount + validation Functions can read it at checkout. Returns the fetch
+  // promise so callers that must guarantee the attribute lands before a Shopify
+  // Checkout hand-off (prepaid redirect) can await it.
+  function persistPaymentIntent() {
+    try {
+      return fetch("/cart/update.js", { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ attributes: { loopd2c_payment_intent: state.paymentIntent } }) }).catch(function () {});
+    } catch (e) { return Promise.resolve(); }
+  }
+  // Fire-and-forget for the in-drawer toggle; the UI updates optimistically.
   function setPaymentIntent(intent) {
     state.paymentIntent = intent === "cod" ? "cod" : "prepaid";
-    try {
-      fetch("/cart/update.js", { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ attributes: { loopd2c_payment_intent: state.paymentIntent } }) }).catch(function () {});
-    } catch (e) {}
+    persistPaymentIntent();
   }
   // Flag-gated drawer decision block: shows both the Prepaid and COD price and
   // lets the shopper choose in the drawer (before any checkout). Prepaid price
@@ -2108,6 +2113,15 @@
   }
 
   function openLoopDeskExpressCheckout(source) {
+    // When the merchant has opted into the in-drawer Prepaid/COD choice, prepaid
+    // (and the unset default) goes to Shopify Checkout; only an explicit COD
+    // choice opens the modal. This is the single choke point every checkout
+    // entry funnels through, so the routing holds for the drawer button, checkout
+    // link clicks, and programmatic form/navigation intercepts alike.
+    if (config.cart.paymentChoiceEnabled && paymentIntentValue() !== "cod") {
+      handoffPrepaidToShopifyCheckout(source);
+      return;
+    }
     var readiness = window.LoopDeskConfig && window.LoopDeskConfig.express_checkout;
     if (!readiness || readiness.enabled !== true || readiness.ready !== true || readiness.provider !== "razorpay") {
       debugLog("Shopify checkout fallback", { source: source || "checkout-intent", reason: readiness && readiness.ready === false ? "not-ready" : "config-unavailable" }, true);
@@ -2143,6 +2157,33 @@
 
   function openExpressCheckout(source) {
     openLoopDeskExpressCheckout(source || "checkout-intent");
+  }
+
+  // Shopify-Checkout migration: prepaid hands off to Shopify Checkout with the
+  // loopd2c_payment_intent attribute persisted first, so the discount Function
+  // applies there (COD is disabled in the store's payment settings). Logged-out
+  // shoppers are gated through OTP (MegaskaOtp.beginGatedShopifyCheckout), which
+  // verifies the mobile number and then continues to Shopify Checkout with
+  // buyer-identity prefill; already-verified shoppers go straight through. If the
+  // OTP module is unavailable we navigate directly so the shopper is never
+  // stranded, and a 1.2s guard covers a flaky /cart/update.js write.
+  function handoffPrepaidToShopifyCheckout(source) {
+    state.paymentIntent = "prepaid";
+    debugLog("prepaid Shopify checkout hand-off", { source: source || "checkout-intent" }, true);
+    closeDrawerForCheckoutHandoff();
+    var proceeded = false;
+    var proceed = function () {
+      if (proceeded) return;
+      proceeded = true;
+      if (window.MegaskaOtp && typeof window.MegaskaOtp.beginGatedShopifyCheckout === "function") {
+        Promise.resolve(window.MegaskaOtp.beginGatedShopifyCheckout({ triggerSource: "loopdesk-drawer-prepaid" }))
+          .catch(function () { window.location.assign("/checkout"); });
+      } else {
+        window.location.assign("/checkout");
+      }
+    };
+    var timer = window.setTimeout(proceed, 1200);
+    Promise.resolve(persistPaymentIntent()).then(function () { window.clearTimeout(timer); proceed(); });
   }
 
   function interceptCheckout(event, source) {

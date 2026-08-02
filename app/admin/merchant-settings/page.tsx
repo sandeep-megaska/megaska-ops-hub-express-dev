@@ -127,6 +127,7 @@ async function saveMerchantSettings(
         expressCheckoutButtonEnabled:
           formData.get("expressCheckoutButtonEnabled") === "on",
         viewCartButtonEnabled: formData.get("viewCartButtonEnabled") === "on",
+        paymentChoiceEnabled: formData.get("paymentChoiceEnabled") === "on",
         customCartTriggerSelector: formData.get("customCartTriggerSelector"),
       },
       account: {
@@ -472,6 +473,7 @@ export default async function MerchantSettingsPage({
             <Check label="Open after add to cart" name="openAfterAddToCart" defaultChecked={settings.cart.openAfterAddToCart} help="Opens LoopD2C drawer after cart add when LoopD2C drawer is active." />
             <Check label="Express checkout button" name="expressCheckoutButtonEnabled" defaultChecked={settings.cart.expressCheckoutButtonEnabled} help="Keeps Express Checkout visible in drawer." />
             <Check label="View cart button" name="viewCartButtonEnabled" defaultChecked={settings.cart.viewCartButtonEnabled} help="Keeps the standard cart link visible." />
+            <Check label="In-drawer Prepaid/COD choice" name="paymentChoiceEnabled" defaultChecked={settings.cart.paymentChoiceEnabled} help="Shopper picks Prepaid or COD in the drawer. Prepaid hands off to Shopify Checkout (disable COD in Shopify payment settings); COD opens the express modal." />
           </div>
           <Field
             label="Custom cart icon selector (advanced)"
