@@ -51,6 +51,7 @@ export type LoopDeskMerchantSettings = {
     openAfterAddToCart: boolean;
     expressCheckoutButtonEnabled: boolean;
     viewCartButtonEnabled: boolean;
+    paymentChoiceEnabled: boolean;
     nativeDrawerDisabledRequiredMessage: string;
     customCartTriggerSelector: string;
   };
@@ -689,6 +690,7 @@ export function validateLoopDeskMerchantSettingsPatch(
     "Express checkout button enabled",
   );
   validateBool(cart.viewCartButtonEnabled, "View cart button enabled");
+  validateBool(cart.paymentChoiceEnabled, "Payment choice enabled");
   validateText(
     cart.customCartTriggerSelector,
     "Custom cart icon selector",
@@ -842,6 +844,10 @@ export function normalizeLoopDeskMerchantSettings(
         true,
       ),
       viewCartButtonEnabled: bool(cart.viewCartButtonEnabled, true),
+      // Shopify-Checkout migration flag. OFF by default so the live drawer is
+      // unchanged; when on, the drawer shows a Prepaid vs COD choice and hands
+      // prepaid off to Shopify Checkout (COD disabled in payment settings).
+      paymentChoiceEnabled: bool(cart.paymentChoiceEnabled, false),
       nativeDrawerDisabledRequiredMessage: text(
         cart.nativeDrawerDisabledRequiredMessage,
         "To use LoopD2C Enhanced Drawer, set your theme cart type to Page in Shopify theme settings.",

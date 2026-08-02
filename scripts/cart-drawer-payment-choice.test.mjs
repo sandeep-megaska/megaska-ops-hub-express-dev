@@ -39,3 +39,17 @@ test("styles exist for the choice block", () => {
   assert.match(css, /\.loopdesk-cart-drawer__pay-option/, "option styling must be present");
   assert.match(css, /\.loopdesk-cart-drawer__pay-option\.is-active/, "selected-state styling must be present");
 });
+
+// PR-3a: when the flag is on, prepaid (and the unset default) hands off to
+// Shopify Checkout with the intent attribute persisted first, and only an
+// explicit COD choice opens the modal.
+test("prepaid hands off to Shopify Checkout after persisting the attribute", () => {
+  assert.match(src, /function handoffPrepaidToShopifyCheckout/, "hand-off helper must exist");
+  assert.match(src, /persistPaymentIntent\(\)/, "hand-off must persist the intent before navigating");
+  assert.match(src, /window\.location\.assign\("\/checkout"\)/, "hand-off must navigate to Shopify Checkout");
+});
+
+test("openLoopDeskExpressCheckout routes prepaid to the hand-off, COD to the modal", () => {
+  assert.match(src, /config\.cart\.paymentChoiceEnabled && paymentIntentValue\(\) !== "cod"/, "must branch on the flag + non-COD intent");
+  assert.match(src, /handoffPrepaidToShopifyCheckout\(source\)/, "prepaid branch must call the hand-off");
+});
