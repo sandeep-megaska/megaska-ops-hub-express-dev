@@ -76,7 +76,7 @@ test("modal: ensureBackendPaymentMethod refuses to re-select PREPAID while COD i
 
 test("modal: totals block and footer total have refreshable hooks", () => {
   assert.match(modalSource, /class="megaska-express-totals" data-express-totals/, "totals block must be addressable for in-place refresh");
-  assert.match(modalSource, /<strong data-express-footer-total>/, "sticky footer total must be addressable for in-place refresh");
+  assert.match(modalSource, /data-express-footer-total>\$\{footerAmountsMarkup\(\)\}/, "sticky footer must be addressable and rendered from footerAmountsMarkup()");
 });
 
 test("modal: a payment-section render also refreshes the method-dependent totals", () => {
@@ -84,8 +84,17 @@ test("modal: a payment-section render also refreshes the method-dependent totals
   assert.match(body, /renderTotalsOnly\(\)/, "payment-section render must refresh the footer/summary totals so they follow the selected method");
 });
 
-test("modal: totals refresh is method-aware (uses payMethod payable, not a frozen total)", () => {
+test("modal: totals refresh re-renders both the summary and the footer amounts", () => {
   const body = bodyOf(modalSource, "function renderTotalsOnly");
-  assert.match(body, /payableAmount\(payMethod\(\)\)/, "footer total must recompute from the currently selected method");
-  assert.match(body, /data-express-totals/, "totals block must be re-rendered from totalsMarkup()");
+  assert.match(body, /totals\.innerHTML = totalsMarkup\(\)/, "summary totals must be re-rendered from totalsMarkup()");
+  assert.match(body, /footerTotal\.innerHTML = footerAmountsMarkup\(\)/, "footer must be re-rendered from footerAmountsMarkup()");
+});
+
+test("modal: footer shows both prepaid and COD payables, collapsing to one when equal or COD unavailable", () => {
+  const body = bodyOf(modalSource, "function footerAmountsMarkup");
+  assert.match(body, /payableAmount\("PREPAID"\)/, "must compute the prepaid payable");
+  assert.match(body, /payableAmount\("COD"\)/, "must compute the COD payable");
+  assert.match(body, /prepaidPaise === codPaise/, "must collapse to a single figure when the two methods cost the same");
+  assert.match(body, /isCodUnavailable/, "must collapse to prepaid-only when COD is unavailable");
+  assert.match(body, /is-active/, "must highlight the currently selected method");
 });

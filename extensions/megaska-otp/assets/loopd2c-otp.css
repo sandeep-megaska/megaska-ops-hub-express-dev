@@ -1062,6 +1062,14 @@
 .megaska-express-sticky-cta span { color:#64748b; display:block; font-size:12px; font-weight:700; }
 .megaska-express-sticky-cta strong { color:#0f172a; display:block; font-size:17px; }
 .megaska-express-sticky-cta .megaska-otp-primary-btn { margin:0; min-width:148px; }
+.megaska-express-footer-label { color:#64748b; display:block; font-size:12px; font-weight:700; margin-bottom:6px; }
+.megaska-express-footer-amounts { display:flex; flex-wrap:wrap; gap:8px; }
+.megaska-express-footer-amount { align-items:flex-start; background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; display:flex; flex-direction:column; gap:1px; padding:5px 11px; }
+.megaska-express-footer-amount em { color:#64748b; font-size:11px; font-style:normal; font-weight:700; letter-spacing:.02em; text-transform:uppercase; }
+.megaska-express-footer-amount b { color:#0f172a; font-size:16px; font-weight:800; line-height:1.15; }
+.megaska-express-footer-amount.is-active { background:#ecfdf5; border-color:#a7f3d0; }
+.megaska-express-footer-amount.is-active em { color:#047857; }
+.megaska-express-footer-amount.is-active b { color:#065f46; }
 @media (max-width: 420px) { .megaska-express-sticky-trust { grid-template-columns:1fr; } .megaska-express-sticky-main { grid-template-columns:1fr; } .megaska-express-sticky-cta .megaska-otp-primary-btn { width:100%; } }
 @media (max-width: 520px) {
   .megaska-express-modal-header { gap:10px; grid-template-columns:minmax(76px,auto) minmax(0,1fr); padding-right:42px; }
