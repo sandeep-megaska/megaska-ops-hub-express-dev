@@ -741,6 +741,20 @@ function buildBufferedEta(rawEta) {
   function payableAmount(method) {
     return Math.max(0, methodTotalPaise(method) - storeCreditAppliedPaise());
   }
+  // What the shopper forfeits by choosing COD instead of paying online: the
+  // prepaid discount they lose plus any COD fee they take on. Drives the
+  // loss-framed nudge and the "₹X more than online" tag on the COD row.
+  function codVsPrepaidExtraPaise() {
+    return Math.max(0, payableAmount("COD") - payableAmount("PREPAID"));
+  }
+  // Loss-framed nudge shown on the COD step: name the amount they give up and
+  // offer a one-tap switch back to online payment.
+  function prepaidNudgeMarkup() {
+    const extra = codVsPrepaidExtraPaise();
+    if (extra <= 0) return "";
+    const cur = state.intent?.currency;
+    return `<div class="megaska-express-cod-nudge"><div class="megaska-express-cod-nudge-copy"><strong>💸 Pay online and keep ${money(extra, cur)}</strong><span>Cash on Delivery costs ${money(extra, cur)} more on this order.</span></div><button type="button" class="megaska-express-cod-nudge-btn" data-express-action="switch-to-prepaid">Pay online &amp; save</button></div>`;
+  }
 
   const PAYMENT_LOGO_MARKS = [
     { key: "upi", label: "UPI", markup: `<svg viewBox="0 0 54 20" aria-hidden="true" focusable="false"><path d="M4 2h12l5 8-5 8H4l5-8-5-8Z" fill="#0f9d58"/><path d="M15 2h12l5 8-5 8H15l5-8-5-8Z" fill="#f57c00"/><text x="32" y="14" fill="#17324d" font-size="11" font-weight="900" font-family="Arial, sans-serif">UPI</text></svg>` },
@@ -846,7 +860,14 @@ function buildBufferedEta(rawEta) {
       const rowDisabled = disabled || codDisabled;
       const selected = method.key === selectedMethod && !codDisabled;
       const prepaidSave = method.backendMethod === "PREPAID" ? prepaidDiscountPreviewPaise() : 0;
-      const subtitle = codDisabled ? "COD unavailable for this pincode" : (prepaidSave > 0 ? `Save ${money(prepaidSave, state.intent?.currency)} · ${method.subtitle}` : method.subtitle);
+      const codExtra = method.backendMethod === "COD" ? codVsPrepaidExtraPaise() : 0;
+      const subtitle = codDisabled
+        ? "COD unavailable for this pincode"
+        : prepaidSave > 0
+          ? `Save ${money(prepaidSave, state.intent?.currency)} · ${method.subtitle}`
+          : codExtra > 0
+            ? `${money(codExtra, state.intent?.currency)} more than paying online`
+            : method.subtitle;
       const totalLabel = state.hydration.intent !== "ready" ? "Calculating..." : money(payableAmount(method.backendMethod), state.intent?.currency);
       const disabledStyle = codDisabled ? ' style="opacity:0.5;pointer-events:none;cursor:not-allowed;" aria-disabled="true"' : "";
       return `<label class="megaska-express-payment-option ${selected ? "is-selected" : ""} ${method.key === "UPI" ? "megaska-express-payment-option--upi" : "megaska-express-payment-option--compact"}" data-express-payment-method="${escapeHtml(method.key)}"${disabledStyle}>
@@ -1178,7 +1199,7 @@ function renderStoreCreditOrderPanel() {
     const cod = codAdvanceState();
     if (cod.loadingPolicy) return `<div class="megaska-express-cod-confirm" aria-live="polite"><strong>Confirm Cash on Delivery</strong><p>Loading Cash on Delivery options...</p></div>`;
     if (cod.policyLoaded && (!cod.available || !cod.eligible)) return `<div class="megaska-express-cod-confirm" aria-live="polite"><strong>Cash on Delivery unavailable</strong><p class="megaska-express-inline-error" data-express-inline-error>${escapeHtml(cod.error || cod.customerMessage || "Cash on Delivery is not available for this checkout.")}</p></div>`;
-    if (!cod.requiresAdvance) return `<div class="megaska-express-cod-confirm" aria-live="polite"><strong>Confirm Cash on Delivery</strong><p>${escapeHtml(state.settings?.codInformationText || "Pay to the delivery agent at delivery.")}</p><p>Total payable on delivery: <b>${escapeHtml(totalLabel)}</b></p>${cod.error ? `<p class="megaska-express-inline-error" data-express-inline-error>${escapeHtml(cod.error)}</p>` : ""}</div>`;
+    if (!cod.requiresAdvance) return `<div class="megaska-express-cod-confirm" aria-live="polite">${prepaidNudgeMarkup()}<strong>Confirm Cash on Delivery</strong><p>${escapeHtml(state.settings?.codInformationText || "Pay to the delivery agent at delivery.")}</p><p>Total payable on delivery: <b>${escapeHtml(totalLabel)}</b></p>${cod.error ? `<p class="megaska-express-inline-error" data-express-inline-error>${escapeHtml(cod.error)}</p>` : ""}</div>`;
     if (cod.verified) {
       return `<div class="megaska-express-cod-confirm megaska-express-cod-advance" aria-live="polite" tabindex="-1" data-express-cod-success><strong>Advance payment received</strong><p>${escapeHtml(money(cod.advanceAmountPaise, cod.currency))} paid online</p><p>${escapeHtml(money(cod.codBalanceAmountPaise, cod.currency))} due on delivery</p>${cod.error ? `<p class="megaska-express-secure-note">${escapeHtml(cod.error)}</p>` : ""}</div>`;
     }
@@ -1862,6 +1883,7 @@ function renderStoreCreditOrderPanel() {
         state.inlinePaymentMode = false; state.inlinePaymentError = ""; renderPaymentSectionOnly();
       }
       if (action === "standard-razorpay") await openStandardRazorpayFallback();
+      if (action === "switch-to-prepaid") { try { if (window.LoopDeskAnalytics) window.LoopDeskAnalytics.track('COD_NUDGE_SWITCH_PREPAID'); } catch (e) {} await setSelectedDisplayPaymentMethod("UPI"); }
       if (action === "apply-store-credit") await applyStoreCredit();
       if (action === "release-store-credit") await releaseStoreCredit();
       if (action === "resume-partial-cod-order") resumePartialCodOrder();
