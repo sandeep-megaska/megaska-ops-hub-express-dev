@@ -97,7 +97,30 @@ test("prepaid hand-off gates through OTP before Shopify Checkout", () => {
 
 const otp = readFileSync("extensions/megaska-otp/assets/loopd2c-otp.js", "utf8");
 
+test("OTP: no premature guard error when the modal is the prompt", () => {
+  // When the reason opens the OTP modal, the guard error message is suppressed
+  // (the modal itself explains why login is needed).
+  assert.match(otp, /const opensModal = \["no-session", "no-verified-phone"\]\.includes\(validation\.reason\)/, "must detect modal-opening reasons");
+  assert.match(otp, /message: opensModal \? "" : validation\.message/, "must suppress the guard message when opening the modal");
+});
+
+test("express modal waits for the OTP/auth modules before gating (first-click race)", () => {
+  assert.match(modal, /async function waitForAuthModules/, "must have a wait-for-modules helper");
+  assert.match(modal, /await waitForAuthModules\(3000\)/, "ensureAuthenticated must await the modules");
+});
+
 const modal = readFileSync("extensions/megaska-otp/assets/loopd2c-express-modal.js", "utf8");
+
+test("COD-only mode suppresses all prepaid pricing in the modal", () => {
+  // A COD order must not show prepaid discounts, the prepaid offer banner, the
+  // switch-to-prepaid nudge, or the Prepaid/COD comparison.
+  assert.match(modal, /function prepaidSummary\(method\) \{ if \(state\.codOnly \|\| method !== "PREPAID"\)/, "prepaid discount line hidden in codOnly");
+  assert.match(modal, /function prepaidOfferBanner\(\) \{ if \(state\.codOnly\) return ""/, "prepaid offer banner hidden in codOnly");
+  assert.match(modal, /function prepaidNudgeMarkup\(\)[\s\S]*?if \(state\.codOnly\) return ""/, "switch-to-prepaid nudge hidden in codOnly");
+  assert.match(modal, /if \(state\.codOnly\) \{\s*\n\s*return `<span>Total Payable<\/span><strong>\$\{money\(codPaise/, "footer shows COD total alone in codOnly");
+  // And the intent is switched to COD at open so the summary total is the COD price.
+  assert.match(modal, /if \(state\.codOnly\) \{ try \{ await ensureBackendPaymentMethod\("COD"\)/, "codOnly forces the COD backend method at open");
+});
 
 test("express modal supports a COD-only mode driven by the open() option", () => {
   assert.match(modal, /state\.codOnly = Boolean\(opts\?\.codOnly\)/, "open() must read the codOnly option");

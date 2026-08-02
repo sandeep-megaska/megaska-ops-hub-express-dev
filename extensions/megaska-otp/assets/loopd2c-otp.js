@@ -2632,13 +2632,19 @@ function consumePendingAccountRedirect() {
 
     hardBlockEvent(opts.event);
 
+    // When the reason opens the OTP modal (no session / no verified phone), the
+    // modal itself is the prompt - so don't also paint a red "verify your number"
+    // guard error, which reads as a validation failure the instant the modal
+    // opens. The guard error is only for checkout-page field problems
+    // (mismatch/invalid/empty) where the modal does NOT open.
+    const opensModal = ["no-session", "no-verified-phone"].includes(validation.reason);
     renderCheckoutGuardError({
       anchor: opts.triggerEl,
       field: validation.phoneField,
-      message: validation.message,
+      message: opensModal ? "" : validation.message,
     });
 
-    if (opts.pendingAction && ["no-session", "no-verified-phone"].includes(validation.reason)) {
+    if (opts.pendingAction && opensModal) {
       setPendingAction(opts.pendingAction);
     }
 
