@@ -698,7 +698,7 @@ function buildBufferedEta(rawEta) {
   function discountSummary(intent) { const discount = selectedDiscount(intent); if (!discount || !Number(intent?.discountAmountPaise || 0)) return ""; const raw = discount.rawShopifyPayload || {}; const code = discount.code || raw.discountCode || discount.title || "Discount"; return `<p><span>Discount<br><small>${escapeHtml(code)} applied</small></span><strong>- ${money(intent.discountAmountPaise, intent.currency)}</strong></p>`; }
   // Savings line shown only while a prepaid method is selected. On COD the line
   // disappears (COD does not earn the offer), so the shopper sees the price gap.
-  function prepaidSummary(method) { if (method !== "PREPAID") return ""; const save = prepaidDiscountPreviewPaise(); if (save <= 0) return ""; return `<p class="megaska-express-prepaid-line" style="color:#047857"><span>Prepaid discount<br><small>Online payment offer</small></span><strong>- ${money(save, state.intent?.currency)}</strong></p>`; }
+  function prepaidSummary(method) { if (state.codOnly || method !== "PREPAID") return ""; const save = prepaidDiscountPreviewPaise(); if (save <= 0) return ""; return `<p class="megaska-express-prepaid-line" style="color:#047857"><span>Prepaid discount<br><small>Online payment offer</small></span><strong>- ${money(save, state.intent?.currency)}</strong></p>`; }
   // Uses the merchant's custom offer message (with {percent}/{amount}/{cap}
   // placeholders) when set; otherwise a default built from the percent/amount.
   function prepaidOfferText(saveMinor) {
@@ -711,7 +711,7 @@ function buildBufferedEta(rawEta) {
     if (custom) return custom.replace(/\{percent\}/gi, percent).replace(/\{amount\}/gi, amount).replace(/\{cap\}/gi, cap);
     return percent ? `Pay online & get ${percent} off — you save ${amount}` : `Pay online and save ${amount} — instant prepaid discount.`;
   }
-  function prepaidOfferBanner() { const save = prepaidDiscountPreviewPaise(); if (save <= 0) return ""; return `<p class="megaska-express-prepaid-banner" style="margin:0 0 10px;padding:9px 12px;border-radius:10px;background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46;font-size:13px;font-weight:600">🎉 ${escapeHtml(prepaidOfferText(save))}</p>`; }
+  function prepaidOfferBanner() { if (state.codOnly) return ""; const save = prepaidDiscountPreviewPaise(); if (save <= 0) return ""; return `<p class="megaska-express-prepaid-banner" style="margin:0 0 10px;padding:9px 12px;border-radius:10px;background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46;font-size:13px;font-weight:600">🎉 ${escapeHtml(prepaidOfferText(save))}</p>`; }
   function storeCreditAppliedPaise() { return Math.round(Number(state.storeCredit?.appliedAmount || 0) * 100); }
   function remainingBasePayablePaise() { return Math.max(0, Number(state.intent?.totalAmountPaise || 0) - storeCreditAppliedPaise()); }
   // Client-side preview of the merchant's prepaid discount, mirroring the
@@ -754,6 +754,9 @@ function buildBufferedEta(rawEta) {
   // Loss-framed nudge shown on the COD step: name the amount they give up and
   // offer a one-tap switch back to online payment.
   function prepaidNudgeMarkup() {
+    // COD-only mode (opened from the drawer's COD choice) never advertises the
+    // prepaid alternative - the shopper already chose COD in the drawer.
+    if (state.codOnly) return "";
     const extra = codVsPrepaidExtraPaise();
     if (extra <= 0) return "";
     const cur = state.intent?.currency;
@@ -1020,6 +1023,9 @@ function buildBufferedEta(rawEta) {
       state.hydration.session = "ready";
       render();
       await createIntent(cartPromise);
+      // COD-only mode: switch the backend intent to COD immediately so the order
+      // summary shows the COD total (not the prepaid price) from the first paint.
+      if (state.codOnly) { try { await ensureBackendPaymentMethod("COD"); resetCodAdvanceState(); await loadCodPolicy("cod_only_open"); } catch (e) {} }
       debugLog("modal ready", { intentId: state.intent?.id }); render(); perfDetails("duplicate_api_calls_found", { shopId: getShopDomain() || null, intentId: state.intent?.id || null, duplicateCallsFound: state.perf.duplicateCallsFound, calls: state.perf.apiCalls }); perfDetails("modal_ready_total_ms", { shopId: getShopDomain() || null, intentId: state.intent?.id || null, duplicateCallsFound: state.perf.duplicateCallsFound, durationMs: Math.round(perfNow() - openStart) }); const initialZip = ensureModal().querySelector('[name="zip"]')?.value || ""; if (initialZip) schedulePincodeCheck(initialZip); const savedAddress = address(); const savedZip = hasCompleteAddress(savedAddress) ? savedAddress.zip : ""; if (savedZip) { state.addressSavedForIntentId = state.intent?.id || null; scheduleSavedAddressPincodeCheck(savedZip); if (backendPaymentMethodForDisplay(selectedDisplayPaymentMethod()) !== "COD") warmupPrepaidPayment(selectedDisplayPaymentMethod()); }
     }
     catch (error) { state.step = "error"; state.error = error instanceof Error ? error.message : "Unable to prepare checkout."; render(); }
@@ -1250,6 +1256,10 @@ function renderStoreCreditOrderPanel() {
     const prepaidPaise = payableAmount("PREPAID");
     const codPaise = payableAmount("COD");
     const codAvailable = typeof isCodUnavailable === "function" ? !isCodUnavailable() : true;
+    // COD-only mode shows the COD total alone - no Prepaid/COD comparison.
+    if (state.codOnly) {
+      return `<span>Total Payable</span><strong>${money(codPaise, cur)}</strong>`;
+    }
     if (!codAvailable || prepaidPaise === codPaise) {
       return `<span>Total Payable</span><strong>${money(payableAmount(selected), cur)}</strong>`;
     }
