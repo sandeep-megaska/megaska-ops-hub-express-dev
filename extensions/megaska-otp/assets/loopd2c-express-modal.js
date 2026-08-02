@@ -871,7 +871,6 @@ function buildBufferedEta(rawEta) {
   function renderCheckout(root) {
     const intent = state.intent || {};
     const currentAddress = Object.assign({}, address(), state.addressDraft);
-    const selected = payMethod();
     const selectedDisplayMethod = selectedDisplayPaymentMethod();
     const priceHydrating = state.hydration.intent !== "ready";
     const addressHydrating = state.hydration.session !== "ready" || state.hydration.address === "loading" || state.hydration.intent === "loading";
@@ -880,14 +879,13 @@ function buildBufferedEta(rawEta) {
     const extraCount = Math.max(0, lines().length - 3);
     const hasAddress = hasCompleteAddress(currentAddress) && !state.editingAddress;
     const savedPincodeMarkup = hasAddress && state.savedPincodeMessage ? `<p class="megaska-express-saved-pincode-status" data-express-saved-pincode-message data-status="${escapeHtml(state.savedPincodeStatus)}">${escapeHtml(state.savedPincodeMessage)}</p>` : "";
-    const totalAmount = priceHydrating ? "Calculating..." : money(payableAmount(selected), intent.currency);
     const storeCreditBlock = renderStoreCreditBlock(intent, priceHydrating);
     const addressMarkup = addressHydrating && !hasAddress
       ? `<section class="megaska-express-stack"><h3>Delivery address</h3><p class="megaska-otp-step-subtitle" aria-live="polite">Loading saved address...</p></section>`
       : hasAddress
         ? `<section class="megaska-express-stack"><div class="megaska-express-section-head"><h3>Delivery address</h3><button class="megaska-express-link-btn" type="button" data-express-action="change-address">Change Address ›</button></div><div class="megaska-express-address-card"><span class="megaska-express-address-icon" aria-hidden="true">⌖</span><div><strong>${escapeHtml(currentAddress.name)}</strong><p>${escapeHtml(currentAddress.address1)}${currentAddress.address2 ? `, ${escapeHtml(currentAddress.address2)}` : ""}</p><p>${escapeHtml(currentAddress.city)}, ${escapeHtml(currentAddress.province)} ${escapeHtml(currentAddress.zip)}, ${escapeHtml(currentAddress.country)}</p><p>${escapeHtml(intent.phoneSnapshot || currentAddress.phone)}</p>${savedPincodeMarkup}</div></div></section>`
         : `<form data-express-form="address" class="megaska-express-stack" novalidate><h3>Delivery address</h3><input name="name" value="${escapeHtml(currentAddress.name || "")}" placeholder="Full name" required><input name="email" value="${escapeHtml(currentAddress.email || state.customer?.email || "")}" placeholder="Email" type="email"><input value="${escapeHtml(intent.phoneSnapshot || currentAddress.phone || "Verified phone")}" disabled><input name="zip" value="${escapeHtml(currentAddress.zip || state.customer?.postalCode || "")}" placeholder="PIN code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required><p class="megaska-express-pincode-status" data-express-pincode-message data-status="${escapeHtml(state.pincodeStatus)}">${escapeHtml(state.pincodeMessage)}</p><p class="megaska-express-pincode-eta" data-express-pincode-eta>${state.pincodeEta ? `Estimated delivery by ${escapeHtml(formatEta(state.pincodeEta))}` : ""}</p><div class="megaska-express-fields"><input name="city" value="${escapeHtml(currentAddress.city || state.customer?.city || "")}" placeholder="City" required><input name="province" value="${escapeHtml(currentAddress.province || state.customer?.stateProvince || "")}" placeholder="State" required></div><input name="address1" value="${escapeHtml(currentAddress.address1 || state.customer?.addressLine1 || "")}" placeholder="Address line 1" required><input name="address2" value="${escapeHtml(currentAddress.address2 || state.customer?.addressLine2 || "")}" placeholder="Address line 2 / Landmark"><input name="country" value="${escapeHtml(currentAddress.country || "India")}" placeholder="Country" required><button type="submit" ${!state.intent?.id || state.busy ? "disabled" : ""}>Save address</button><p class="megaska-otp-step-subtitle">Address is saved to your checkout and profile.</p></form>`;
-    root.innerHTML = `${state.error ? `<p class="megaska-otp-error">${escapeHtml(state.error)}</p>` : ""}<header class="megaska-express-modal-header"><div class="megaska-express-logo">${logoMarkup()}</div><div class="megaska-express-heading"><p class="megaska-otp-step-subtitle">Secure Checkout</p><h2 id="megaska-express-title" class="megaska-otp-step-title">Express checkout</h2></div></header><div class="megaska-express-progress"><span>Address</span><span>Payment</span></div><section class="megaska-express-summary"><h3>Order summary</h3>${rows || `<p class="megaska-otp-step-subtitle">${state.hydration.cart === "loading" ? "Loading cart summary..." : "Cart details unavailable."}</p>`}${extraCount ? `<p class="megaska-otp-step-subtitle">+ ${extraCount} more item${extraCount > 1 ? "s" : ""}</p>` : ""}<div class="megaska-express-totals" data-express-totals>${totalsMarkup()}</div></section>${addressMarkup}${storeCreditBlock}<section class="megaska-express-stack megaska-express-payment${storeCreditFullyCovers ? " megaska-express-payment--store-credit-only" : ""}" data-express-payment-section>${storeCreditFullyCovers ? renderStoreCreditOrderPanel() : (state.inlinePaymentMode ? renderInlinePaymentPanel(selectedDisplayMethod) : renderPaymentMethodList())}</section><div class="megaska-express-sticky-cta"><div class="megaska-express-sticky-trust"><p><span>🔒</span><strong>100% Secure Payments</strong></p><p><span>🛡</span><strong>Trusted & Reliable</strong></p></div><div class="megaska-express-sticky-main"><div><span>Total Payable</span><strong data-express-footer-total>${totalAmount}</strong></div></div></div>`;
+    root.innerHTML = `${state.error ? `<p class="megaska-otp-error">${escapeHtml(state.error)}</p>` : ""}<header class="megaska-express-modal-header"><div class="megaska-express-logo">${logoMarkup()}</div><div class="megaska-express-heading"><p class="megaska-otp-step-subtitle">Secure Checkout</p><h2 id="megaska-express-title" class="megaska-otp-step-title">Express checkout</h2></div></header><div class="megaska-express-progress"><span>Address</span><span>Payment</span></div><section class="megaska-express-summary"><h3>Order summary</h3>${rows || `<p class="megaska-otp-step-subtitle">${state.hydration.cart === "loading" ? "Loading cart summary..." : "Cart details unavailable."}</p>`}${extraCount ? `<p class="megaska-otp-step-subtitle">+ ${extraCount} more item${extraCount > 1 ? "s" : ""}</p>` : ""}<div class="megaska-express-totals" data-express-totals>${totalsMarkup()}</div></section>${addressMarkup}${storeCreditBlock}<section class="megaska-express-stack megaska-express-payment${storeCreditFullyCovers ? " megaska-express-payment--store-credit-only" : ""}" data-express-payment-section>${storeCreditFullyCovers ? renderStoreCreditOrderPanel() : (state.inlinePaymentMode ? renderInlinePaymentPanel(selectedDisplayMethod) : renderPaymentMethodList())}</section><div class="megaska-express-sticky-cta"><div class="megaska-express-sticky-trust"><p><span>🔒</span><strong>100% Secure Payments</strong></p><p><span>🛡</span><strong>Trusted & Reliable</strong></p></div><div class="megaska-express-sticky-main"><div data-express-footer-total>${footerAmountsMarkup()}</div></div></div>`;
     console.info("[EXPRESS UI] payment chips rendered", {
       paymentOptionCount: document.querySelectorAll(".megaska-express-payment-option").length,
       selectedDisplayMethod,
@@ -1196,6 +1194,24 @@ function renderStoreCreditOrderPanel() {
     return `<p><span>Merchandise subtotal</span><strong>${priceHydrating ? "Calculating..." : money(intent.subtotalAmountPaise, intent.currency)}</strong></p>${discountSummary(intent)}${prepaidSummary(selected)}<p><span>Delivery</span><strong>${Number(intent.shippingAmountPaise || 0) ? money(intent.shippingAmountPaise, intent.currency) : "Free"}</strong></p>${checkoutTaxSummary()}<p class="megaska-express-total"><span>You pay</span><strong>${totalAmount}</strong></p>`;
   }
 
+  // Sticky-footer payable. When the two methods cost the same (no prepaid
+  // discount / no COD fee) or COD is unavailable, a single figure is clearer;
+  // otherwise show both Prepaid and COD side by side with the current choice
+  // highlighted, so the shopper is never surprised by which price applies.
+  function footerAmountsMarkup() {
+    const cur = state.intent?.currency;
+    if (state.hydration.intent !== "ready") return `<span>Total Payable</span><strong>Calculating...</strong>`;
+    const selected = payMethod();
+    const prepaidPaise = payableAmount("PREPAID");
+    const codPaise = payableAmount("COD");
+    const codAvailable = typeof isCodUnavailable === "function" ? !isCodUnavailable() : true;
+    if (!codAvailable || prepaidPaise === codPaise) {
+      return `<span>Total Payable</span><strong>${money(payableAmount(selected), cur)}</strong>`;
+    }
+    const amount = (key, label, paise) => `<div class="megaska-express-footer-amount${selected === key ? " is-active" : ""}"><em>${label}</em><b>${money(paise, cur)}</b></div>`;
+    return `<span class="megaska-express-footer-label">Payable Amount</span><div class="megaska-express-footer-amounts">${amount("PREPAID", "Prepaid", prepaidPaise)}${amount("COD", "COD", codPaise)}</div>`;
+  }
+
   // The sticky footer total and the order-summary totals sit outside the payment
   // section, so a payment-section-only re-render would leave them stale on a
   // method switch (e.g. COD still showing the prepaid-discounted total). Refresh
@@ -1206,7 +1222,7 @@ function renderStoreCreditOrderPanel() {
     const totals = modal.querySelector("[data-express-totals]");
     if (totals) totals.innerHTML = totalsMarkup();
     const footerTotal = modal.querySelector("[data-express-footer-total]");
-    if (footerTotal) footerTotal.textContent = state.hydration.intent !== "ready" ? "Calculating..." : money(payableAmount(payMethod()), state.intent?.currency);
+    if (footerTotal) footerTotal.innerHTML = footerAmountsMarkup();
   }
 
   function renderPaymentSectionOnly() {
