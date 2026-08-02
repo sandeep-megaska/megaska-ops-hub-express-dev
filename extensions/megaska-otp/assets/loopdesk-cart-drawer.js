@@ -1702,17 +1702,18 @@
     var base = pricing ? pricing.finalPayableSubtotal : (cart ? cart.total_price : 0);
     var prepaidSavings = prepaidOfferSavingsMinor(pricing ? pricing.merchandiseSubtotal : base);
     var prepaidPrice = Math.max(0, base - prepaidSavings);
-    var selected = paymentIntentValue();
-    function opt(key, title, price, sub, subClass, active) {
-      return '<button type="button" class="loopdesk-cart-drawer__pay-option' + (active ? " is-active" : "") + '" data-loopdesk-pay-choice="' + key + '" aria-pressed="' + (active ? "true" : "false") + '">'
+    // Each option is a CTA button: clicking it proceeds straight to that flow
+    // (prepaid -> Shopify Checkout, COD -> COD-only modal). No separate button.
+    function opt(key, variant, title, price, sub, subClass) {
+      return '<button type="button" class="loopdesk-cart-drawer__pay-option loopdesk-cart-drawer__pay-option--' + variant + '" data-loopdesk-pay-choice="' + key + '">'
         + '<span class="loopdesk-cart-drawer__pay-copy"><strong>' + title + '</strong>' + (sub ? '<em class="' + (subClass || "") + '">' + sub + '</em>' : '') + '</span>'
-        + '<span class="loopdesk-cart-drawer__pay-amt">' + money(price, cur) + '</span></button>';
+        + '<span class="loopdesk-cart-drawer__pay-amt">' + money(price, cur) + '<span class="loopdesk-cart-drawer__pay-arrow" aria-hidden="true">›</span></span></button>';
     }
     var saveText = prepaidSavings > 0 ? "Save " + money(prepaidSavings, cur) : "Fast & secure";
     var codText = prepaidSavings > 0 ? money(prepaidSavings, cur) + " more than online" : "Pay at delivery";
     return '<p class="loopdesk-cart-drawer__pay-label">Choose how to pay</p>'
-      + opt("prepaid", "Pay Online", prepaidPrice, saveText, "is-save", selected === "prepaid")
-      + opt("cod", "Cash on Delivery", base, codText, prepaidSavings > 0 ? "is-more" : "", selected === "cod");
+      + opt("prepaid", "primary", "Pay Online", prepaidPrice, saveText, "is-save")
+      + opt("cod", "secondary", "Cash on Delivery", base, codText, prepaidSavings > 0 ? "is-more" : "");
   }
 
  function render() {
@@ -1760,7 +1761,9 @@
   elements.subtotal.textContent = money(pricing ? pricing.finalPayableSubtotal : (cart ? cart.total_price : 0), cart && cart.currency);
   if (elements.prepaidNudge) {
     var prepaidSavings = prepaidOfferSavingsMinor(pricing ? pricing.merchandiseSubtotal : (cart ? cart.total_price : 0));
-    var prepaidText = prepaidSavings > 0 ? prepaidOfferNudgeText(prepaidSavings, cart && cart.currency) : "";
+    // The choice block already states the prepaid saving on the "Pay Online"
+    // button, so the standalone nudge would be redundant in choice mode.
+    var prepaidText = (prepaidSavings > 0 && !config.cart.paymentChoiceEnabled) ? prepaidOfferNudgeText(prepaidSavings, cart && cart.currency) : "";
     if (prepaidText) {
       elements.prepaidNudge.textContent = prepaidText;
       elements.prepaidNudge.hidden = false;
@@ -1792,7 +1795,9 @@
   elements.trustBelowCheckout.innerHTML = renderTrustBadges("BELOW_CHECKOUT_BUTTON");
 
   elements.count.textContent = itemCount ? "(" + itemCount + ")" : "";
-  elements.express.hidden = !config.cart.expressCheckoutButtonEnabled;
+  // In choice mode the two Prepaid/COD options ARE the checkout buttons, so the
+  // separate Express Checkout button is suppressed.
+  elements.express.hidden = !config.cart.expressCheckoutButtonEnabled || config.cart.paymentChoiceEnabled;
   elements.express.disabled = !hasItems || state.loading || state.expressCheckoutLock;
   elements.express.setAttribute("aria-disabled", elements.express.disabled ? "true" : "false");
   elements.express.classList.toggle("is-loading", state.expressCheckoutLock);
@@ -2072,8 +2077,15 @@
     hostRoot.addEventListener("click", function (event) {
       var choice = event.target && event.target.closest && event.target.closest("[data-loopdesk-pay-choice]");
       if (!choice || !hostRoot.contains(choice)) return;
-      setPaymentIntent(choice.getAttribute("data-loopdesk-pay-choice"));
+      var intent = choice.getAttribute("data-loopdesk-pay-choice");
+      setPaymentIntent(intent);
       render();
+      // The option IS the CTA (there is no separate Express Checkout button in
+      // choice mode): proceed straight to the chosen flow - COD opens the
+      // COD-only modal, prepaid hands off to Shopify Checkout. Guard on a
+      // non-empty, non-busy cart, mirroring interceptCheckout.
+      if (!state.cart || Number(state.cart.item_count || 0) <= 0 || state.loading) return;
+      openExpressCheckout(intent === "cod" ? "loopdesk-drawer-cod" : "loopdesk-drawer-prepaid");
     });
     if (elements.express) {
       elements.express.textContent = config.labels.expressCheckoutText;
