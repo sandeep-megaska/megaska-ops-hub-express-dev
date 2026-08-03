@@ -1753,6 +1753,13 @@
   // base by adding the prepaid saving back when it is currently applied - reading the
   // attribute off `cart` keeps it in sync with cart.total_price. Display-only; the
   // Functions remain authoritative at checkout.
+  // The in-drawer Prepaid/COD choice is active when the merchant enables it OR the
+  // collapsed "Place Order" experiment (a variant of the same choice) - so turning
+  // on just the collapse flag activates the choice on its own.
+  function paymentChoiceActive() {
+    return Boolean(config.cart.paymentChoiceEnabled || config.cart.paymentChoiceCollapsed);
+  }
+
   function choicePrices(pricing, cart) {
     var payable = pricing ? pricing.finalPayableSubtotal : (cart ? cart.total_price : 0);
     var prepaidSavings = prepaidOfferSavingsMinor(pricing ? pricing.merchandiseSubtotal : payable);
@@ -1845,7 +1852,7 @@
   // (Pay Online) reads as inconsistent with the ₹1,251.00 COD button. Text only; the
   // amounts come from the same intent-neutral helper the CTA uses.
   if (elements.payableLabel && elements.payNote) {
-    if (config.cart.paymentChoiceEnabled && hasItems) {
+    if (paymentChoiceActive() && hasItems) {
       var cp = choicePrices(pricing, cart);
       var noteCur = cart && cart.currency;
       if (cp.prepaidApplied) {
@@ -1866,7 +1873,7 @@
     var prepaidSavings = prepaidOfferSavingsMinor(pricing ? pricing.merchandiseSubtotal : (cart ? cart.total_price : 0));
     // The choice block already states the prepaid saving on the "Pay Online"
     // button, so the standalone nudge would be redundant in choice mode.
-    var prepaidText = (prepaidSavings > 0 && !config.cart.paymentChoiceEnabled) ? prepaidOfferNudgeText(prepaidSavings, cart && cart.currency) : "";
+    var prepaidText = (prepaidSavings > 0 && !paymentChoiceActive()) ? prepaidOfferNudgeText(prepaidSavings, cart && cart.currency) : "";
     if (prepaidText) {
       elements.prepaidNudge.textContent = prepaidText;
       elements.prepaidNudge.hidden = false;
@@ -1879,7 +1886,7 @@
     // The prepaid savings come from LoopDeskConfig.prepaidOffer, not the
     // promotion-pricing object, so the choice must not depend on `pricing` being
     // built (renderPaymentChoice falls back to the cart total when it is null).
-    if (config.cart.paymentChoiceEnabled && hasItems) {
+    if (paymentChoiceActive() && hasItems) {
       elements.paymentChoice.innerHTML = renderPaymentChoice(pricing, cart);
       elements.paymentChoice.hidden = false;
     } else {
@@ -1900,7 +1907,7 @@
   elements.count.textContent = itemCount ? "(" + itemCount + ")" : "";
   // In choice mode the two Prepaid/COD options ARE the checkout buttons, so the
   // separate Express Checkout button is suppressed.
-  elements.express.hidden = !config.cart.expressCheckoutButtonEnabled || config.cart.paymentChoiceEnabled;
+  elements.express.hidden = !config.cart.expressCheckoutButtonEnabled || paymentChoiceActive();
   elements.express.disabled = !hasItems || state.loading || state.expressCheckoutLock;
   elements.express.setAttribute("aria-disabled", elements.express.disabled ? "true" : "false");
   elements.express.classList.toggle("is-loading", state.expressCheckoutLock);
@@ -2269,7 +2276,7 @@
     // single choke point every checkout entry funnels through, so the routing
     // holds for the drawer button, checkout link clicks, and programmatic
     // form/navigation intercepts alike.
-    var choiceMode = config.cart.paymentChoiceEnabled;
+    var choiceMode = paymentChoiceActive();
     if (choiceMode) {
       handoffToShopifyCheckout(paymentIntentValue() === "cod" ? "cod" : "prepaid", source);
       return;
