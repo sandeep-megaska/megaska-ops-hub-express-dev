@@ -28,8 +28,8 @@ test("the flag survives the async runtime-config fetch (re-normalize + re-render
 test("the block renders when the flag is on and there are items (independent of promotion pricing)", () => {
   // Prepaid savings come from LoopDeskConfig.prepaidOffer, so the choice must NOT
   // depend on the promotion-pricing object being built.
-  assert.match(src, /config\.cart\.paymentChoiceEnabled && hasItems\b/, "render must gate on the flag + items");
-  assert.doesNotMatch(src, /config\.cart\.paymentChoiceEnabled && hasItems && pricing/, "render must not require the pricing object");
+  assert.match(src, /paymentChoiceActive\(\) && hasItems\b/, "render must gate on the choice being active + items");
+  assert.doesNotMatch(src, /paymentChoiceActive\(\) && hasItems && pricing/, "render must not require the pricing object");
 });
 
 test("choosing a method persists a cart attribute for the Functions", () => {
@@ -82,8 +82,8 @@ test("each option is a direct-action button: sets the intent then proceeds", () 
 });
 
 test("no separate Express Checkout button in choice mode; nudge suppressed", () => {
-  assert.match(src, /elements\.express\.hidden = !config\.cart\.expressCheckoutButtonEnabled \|\| config\.cart\.paymentChoiceEnabled/, "express button must be hidden when the choice is active");
-  assert.match(src, /!config\.cart\.paymentChoiceEnabled\) \? prepaidOfferNudgeText/, "redundant prepaid nudge must be suppressed in choice mode");
+  assert.match(src, /elements\.express\.hidden = !config\.cart\.expressCheckoutButtonEnabled \|\| paymentChoiceActive\(\)/, "express button must be hidden when the choice is active");
+  assert.match(src, /!paymentChoiceActive\(\)\) \? prepaidOfferNudgeText/, "redundant prepaid nudge must be suppressed in choice mode");
 });
 
 test("only the CTA is pinned in the sticky footer; totals/trust/fine-print scroll", () => {
@@ -118,6 +118,9 @@ test("collapsed-CTA experiment: flag-gated Place Order button that expands to th
   assert.match(src, /paymentChoiceCollapsed: false/, "DEFAULT_CONFIG must default the collapsed flag to false");
   assert.match(src, /paymentChoiceCollapsed: bool\(firstDefined\(cart\.paymentChoiceCollapsed/, "normalizeConfig must read the collapsed flag");
   assert.match(src, /if \(config\.cart\.paymentChoiceCollapsed && !state\.payChoiceExpanded\)/, "collapsed mode renders only behind the flag, until expanded");
+  // The collapse flag is self-sufficient: it activates the choice on its own,
+  // without also needing paymentChoiceEnabled (regression from the first attempt).
+  assert.match(src, /config\.cart\.paymentChoiceEnabled \|\| config\.cart\.paymentChoiceCollapsed/, "paymentChoiceActive must treat the collapse flag as activating the choice");
   assert.match(src, /data-loopdesk-place-order/, "a Place Order button must render in collapsed mode");
   assert.match(src, /closest\("\[data-loopdesk-place-order\]"\)[\s\S]*?state\.payChoiceExpanded = true/, "clicking Place Order expands to the options");
   assert.match(src, /if \(open && !state\.open\) state\.payChoiceExpanded = false/, "each fresh open starts collapsed");
