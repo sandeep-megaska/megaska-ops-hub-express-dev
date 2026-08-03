@@ -3,6 +3,8 @@ import { prisma } from "../../../../../services/db/prisma";
 import { getShopDomainFromRequest, resolveShopConfig } from "../../../../../services/shopify/shop";
 import { DEFAULT_COD_INFORMATION_TEXT, getExpressCheckoutSettings, parseCodFeeRupeesToPaise, parsePercentValue, parseRupeesToPaise } from "../../../../../services/express-checkout/settings";
 import { resolveExpressCheckoutReadiness, setExpressCheckoutEnabled } from "../../../../../services/express-checkout/readiness";
+import { publishPrepaidOfferMetafield } from "../../../../../services/express-checkout/prepaid-offer-metafield";
+import { ensurePaymentCustomization } from "../../../../../services/express-checkout/payment-customization";
 
 export const runtime = "nodejs";
 const MODULE_KEY = "express_checkout_settings";
@@ -100,5 +102,34 @@ export async function POST(req: NextRequest) {
     update: { enabled: true, config },
   });
 
-  return NextResponse.json({ ok: true, settings: { ...config, id: settings.id }, readiness });
+  // Publish the prepaid offer to the shop metafield the discount Function reads
+  // at Shopify Checkout. Best-effort: a metafield failure must not fail the
+  // settings save, so we don't propagate it into the response.
+  try {
+    const publishResult = await publishPrepaidOfferMetafield(resolved.shopDomain, {
+      enabled: prepaidDiscountEnabled,
+      type: prepaidDiscountType,
+      value: prepaidDiscountValue,
+      maxPaise: prepaidDiscountMaxPaise,
+      minSubtotalPaise: prepaidDiscountMinSubtotalPaise,
+    });
+    if (!publishResult.ok) console.warn("prepaid_offer_metafield_publish_failed", { shopId: resolved.id, reason: publishResult.reason });
+  } catch (error) {
+    console.error("prepaid_offer_metafield_publish_error", { shopId: resolved.id, error: error instanceof Error ? error.message : String(error) });
+  }
+
+  // Auto-register (create + enable) the payment customization that hides COD on
+  // prepaid carts, so the merchant never runs an Admin GraphQL mutation. Idempotent
+  // and best-effort - a failure (e.g. the Function not deployed yet) never fails
+  // the settings save. Reported back so the admin can surface it.
+  let paymentCustomization: Awaited<ReturnType<typeof ensurePaymentCustomization>> | { ok: false; reason: string } = { ok: false, reason: "not_attempted" };
+  try {
+    paymentCustomization = await ensurePaymentCustomization(resolved.shopDomain);
+    if (!paymentCustomization.ok) console.warn("payment_customization_ensure_failed", { shopId: resolved.id, reason: paymentCustomization.reason });
+  } catch (error) {
+    paymentCustomization = { ok: false, reason: error instanceof Error ? error.message : String(error) };
+    console.error("payment_customization_ensure_error", { shopId: resolved.id, error: paymentCustomization.reason });
+  }
+
+  return NextResponse.json({ ok: true, settings: { ...config, id: settings.id }, readiness, paymentCustomization });
 }

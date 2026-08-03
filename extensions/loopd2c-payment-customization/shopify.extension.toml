@@ -1,0 +1,21 @@
+api_version = "2026-07"
+
+[[extensions]]
+name = "t:name"
+handle = "loopd2c-payment-customization"
+type = "function"
+uid = "0f7aa2ac-fe26-ac68-4038-2109fd0c247ed9f61b81"
+description = "t:description"
+
+  [[extensions.targeting]]
+  target = "cart.payment-methods.transform.run"
+  input_query = "src/cart_payment_methods_transform_run.graphql"
+  export = "cart-payment-methods-transform-run"
+
+  [extensions.build]
+  command = ""
+  path = "dist/function.wasm"
+
+  [extensions.ui.paths]
+  create = "/"
+  details = "/"

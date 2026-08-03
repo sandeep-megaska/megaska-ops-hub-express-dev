@@ -5,6 +5,9 @@ query Input {
         amount
       }
     }
+    paymentIntent: attribute(key: "loopd2c_payment_intent") {
+      value
+    }
     lines {
       id
       quantity
@@ -33,6 +36,11 @@ query Input {
   discount {
     discountClasses
     configuration: metafield(namespace: "$app:loopdesk-promotions", key: "function-config") {
+      value
+    }
+  }
+  shop {
+    prepaidOffer: metafield(namespace: "$app:loopd2c-express", key: "prepaid-offer") {
       value
     }
   }

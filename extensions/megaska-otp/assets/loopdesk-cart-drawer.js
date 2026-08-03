@@ -41,6 +41,20 @@
   };
   var config = normalizeConfig(window.LoopDeskConfig || window.LOOPDESK_CART_DRAWER_CONFIG || window.LoopDeskCartDrawerConfig || {});
   window.LoopDeskConfig = Object.assign({}, window.LoopDeskConfig || {}, config);
+  // `config` is normalized once, at load. But some cart settings — notably
+  // `paymentChoiceEnabled` — are NOT theme-block settings; they arrive only via
+  // the async runtime-config fetch, which resolves AFTER this script runs. So we
+  // re-normalize when the runtime config lands and re-render, otherwise those
+  // values stay frozen at their load-time defaults (the choice block would never
+  // appear even with the flag on). The drawer script is deferred and fetch is
+  // always async, so this listener is registered before the event can fire.
+  window.addEventListener("loopdesk:runtime-config-ready", function () {
+    try {
+      config = normalizeConfig(window.LoopDeskConfig || {});
+      window.LoopDeskConfig = Object.assign({}, window.LoopDeskConfig || {}, config);
+      if (document.getElementById(ROOT_ID)) render();
+    } catch (e) {}
+  });
   window.LOOPDESK_CART_DRAWER_CONFIG = Object.assign({}, window.LOOPDESK_CART_DRAWER_CONFIG || {}, {
     enabled: config.enabled,
     drawerMode: config.cart.drawerMode,
@@ -1683,22 +1697,45 @@
   // lets the shopper choose in the drawer (before any checkout). Prepaid price
   // reflects the merchant's prepaid offer; the actual discount is applied by the
   // discount Function at checkout keyed on the loopd2c_payment_intent attribute.
+  // Intent-neutral Prepaid vs COD prices for the drawer. cart.total_price already
+  // reflects the persisted choice (the discount Function applies the prepaid saving
+  // to the cart itself when loopd2c_payment_intent=prepaid), so recover a stable COD
+  // base by adding the prepaid saving back when it is currently applied - reading the
+  // attribute off `cart` keeps it in sync with cart.total_price. Display-only; the
+  // Functions remain authoritative at checkout.
+  function choicePrices(pricing, cart) {
+    var payable = pricing ? pricing.finalPayableSubtotal : (cart ? cart.total_price : 0);
+    var prepaidSavings = prepaidOfferSavingsMinor(pricing ? pricing.merchandiseSubtotal : payable);
+    var prepaidApplied = String((cart && cart.attributes && cart.attributes.loopd2c_payment_intent) || "").toLowerCase() === "prepaid";
+    var codBase = payable + (prepaidApplied ? prepaidSavings : 0);
+    return { codBase: codBase, prepaidPrice: Math.max(0, codBase - prepaidSavings), prepaidSavings: prepaidSavings, prepaidApplied: prepaidApplied };
+  }
+
   function renderPaymentChoice(pricing, cart) {
     var cur = cart && cart.currency;
-    var base = pricing ? pricing.finalPayableSubtotal : (cart ? cart.total_price : 0);
-    var prepaidSavings = prepaidOfferSavingsMinor(pricing ? pricing.merchandiseSubtotal : base);
-    var prepaidPrice = Math.max(0, base - prepaidSavings);
-    var selected = paymentIntentValue();
-    function opt(key, title, price, sub, subClass, active) {
-      return '<button type="button" class="loopdesk-cart-drawer__pay-option' + (active ? " is-active" : "") + '" data-loopdesk-pay-choice="' + key + '" aria-pressed="' + (active ? "true" : "false") + '">'
-        + '<span class="loopdesk-cart-drawer__pay-copy"><strong>' + title + '</strong>' + (sub ? '<em class="' + (subClass || "") + '">' + sub + '</em>' : '') + '</span>'
-        + '<span class="loopdesk-cart-drawer__pay-amt">' + money(price, cur) + '</span></button>';
+    var prices = choicePrices(pricing, cart);
+    var prepaidSavings = prices.prepaidSavings;
+    var base = prices.codBase;
+    var prepaidPrice = prices.prepaidPrice;
+    // Each option is a CTA button: clicking it proceeds straight to that flow -
+    // both prepaid and COD hand off to native Shopify Checkout. No separate button.
+    function opt(key, variant, title, price, sub, subClass, extra) {
+      return '<button type="button" class="loopdesk-cart-drawer__pay-option loopdesk-cart-drawer__pay-option--' + variant + '" data-loopdesk-pay-choice="' + key + '">'
+        + '<span class="loopdesk-cart-drawer__pay-copy"><strong>' + title + '</strong>' + (sub ? '<em class="' + (subClass || "") + '">' + sub + '</em>' : '') + (extra || "") + '</span>'
+        + '<span class="loopdesk-cart-drawer__pay-amt">' + money(price, cur) + '<span class="loopdesk-cart-drawer__pay-arrow" aria-hidden="true">›</span></span></button>';
     }
+    // Accepted online methods shown under Pay Online. Generic category badges (no
+    // third-party brand marks) so the extension stays self-contained; swap for
+    // official logo assets later if desired.
+    var payMethods = ["UPI", "Cards", "Net Banking", "Wallets"];
+    var methodsHtml = '<span class="loopdesk-cart-drawer__pay-methods" aria-label="Accepted online: ' + payMethods.join(", ") + '">'
+      + payMethods.map(function (m) { return '<span class="loopdesk-cart-drawer__pay-method">' + m + '</span>'; }).join("")
+      + '</span>';
     var saveText = prepaidSavings > 0 ? "Save " + money(prepaidSavings, cur) : "Fast & secure";
     var codText = prepaidSavings > 0 ? money(prepaidSavings, cur) + " more than online" : "Pay at delivery";
     return '<p class="loopdesk-cart-drawer__pay-label">Choose how to pay</p>'
-      + opt("prepaid", "Pay Online", prepaidPrice, saveText, "is-save", selected === "prepaid")
-      + opt("cod", "Cash on Delivery", base, codText, prepaidSavings > 0 ? "is-more" : "", selected === "cod");
+      + opt("prepaid", "primary", "Pay Online", prepaidPrice, saveText, "is-save", methodsHtml)
+      + opt("cod", "secondary", "Cash on Delivery", base, codText, prepaidSavings > 0 ? "is-more" : "");
   }
 
  function render() {
@@ -1744,9 +1781,33 @@
   if (elements.savingsRow) elements.savingsRow.hidden = !(pricing && pricing.totalSavings > 0);
   if (elements.savings) elements.savings.textContent = pricing ? "-" + money(pricing.totalSavings, cart && cart.currency) : "";
   elements.subtotal.textContent = money(pricing ? pricing.finalPayableSubtotal : (cart ? cart.total_price : 0), cart && cart.currency);
+  // In choice mode the "You pay" total reflects the currently-selected method, so
+  // label which price it is and state the other option's price - otherwise ₹1,042.50
+  // (Pay Online) reads as inconsistent with the ₹1,251.00 COD button. Text only; the
+  // amounts come from the same intent-neutral helper the CTA uses.
+  if (elements.payableLabel && elements.payNote) {
+    if (config.cart.paymentChoiceEnabled && hasItems) {
+      var cp = choicePrices(pricing, cart);
+      var noteCur = cart && cart.currency;
+      if (cp.prepaidApplied) {
+        elements.payableLabel.textContent = "You pay online";
+        elements.payNote.innerHTML = (cp.prepaidSavings > 0 ? '<span class="loopdesk-cart-drawer__pay-note-save">Special prepaid discount applied -' + money(cp.prepaidSavings, noteCur) + '</span> · ' : '') + 'Cash on Delivery ' + money(cp.codBase, noteCur);
+      } else {
+        elements.payableLabel.textContent = "You pay";
+        elements.payNote.innerHTML = 'Pay Online ' + money(cp.prepaidPrice, noteCur) + (cp.prepaidSavings > 0 ? ' · <span class="loopdesk-cart-drawer__pay-note-save">save ' + money(cp.prepaidSavings, noteCur) + '</span> with the prepaid offer' : '');
+      }
+      elements.payNote.hidden = false;
+    } else {
+      elements.payableLabel.textContent = "You pay";
+      elements.payNote.textContent = "";
+      elements.payNote.hidden = true;
+    }
+  }
   if (elements.prepaidNudge) {
     var prepaidSavings = prepaidOfferSavingsMinor(pricing ? pricing.merchandiseSubtotal : (cart ? cart.total_price : 0));
-    var prepaidText = prepaidSavings > 0 ? prepaidOfferNudgeText(prepaidSavings, cart && cart.currency) : "";
+    // The choice block already states the prepaid saving on the "Pay Online"
+    // button, so the standalone nudge would be redundant in choice mode.
+    var prepaidText = (prepaidSavings > 0 && !config.cart.paymentChoiceEnabled) ? prepaidOfferNudgeText(prepaidSavings, cart && cart.currency) : "";
     if (prepaidText) {
       elements.prepaidNudge.textContent = prepaidText;
       elements.prepaidNudge.hidden = false;
@@ -1778,7 +1839,9 @@
   elements.trustBelowCheckout.innerHTML = renderTrustBadges("BELOW_CHECKOUT_BUTTON");
 
   elements.count.textContent = itemCount ? "(" + itemCount + ")" : "";
-  elements.express.hidden = !config.cart.expressCheckoutButtonEnabled;
+  // In choice mode the two Prepaid/COD options ARE the checkout buttons, so the
+  // separate Express Checkout button is suppressed.
+  elements.express.hidden = !config.cart.expressCheckoutButtonEnabled || config.cart.paymentChoiceEnabled;
   elements.express.disabled = !hasItems || state.loading || state.expressCheckoutLock;
   elements.express.setAttribute("aria-disabled", elements.express.disabled ? "true" : "false");
   elements.express.classList.toggle("is-loading", state.expressCheckoutLock);
@@ -1999,9 +2062,14 @@
       '<div class="loopdesk-cart-drawer__overlay" hidden></div>',
       '<aside class="loopdesk-cart-drawer" aria-hidden="true" aria-label="Cart" role="dialog">',
       '<header class="loopdesk-cart-drawer__header"><div class="loopdesk-cart-drawer__brand">' + logo + '<div><h2>' + escapeHtml(config.branding.merchantName || config.branding.storeName) + ' <span data-loopdesk-cart-count></span></h2><p>Your bag</p></div></div><button type="button" class="loopdesk-cart-drawer__close" aria-label="Close cart">×</button></header>',
+      // Only the checkout CTA is pinned in the sticky footer; the totals, trust
+      // badges and fine print scroll with the cart so more cart content is visible.
+      '<div class="loopdesk-cart-drawer__scroll">',
       '<div class="loopdesk-cart-drawer__body"></div>',
       '<span data-loopdesk-slot="BEFORE_FOOTER"></span>',
-      '<footer class="loopdesk-cart-drawer__footer"><span data-loopdesk-slot="BEFORE_TOTALS"></span><div class="loopdesk-cart-drawer__subtotal"><span>Merchandise subtotal</span><strong data-loopdesk-cart-merchandise-subtotal></strong></div><div class="loopdesk-cart-drawer__subtotal" data-loopdesk-cart-savings-row hidden><span>Total savings</span><strong data-loopdesk-cart-savings></strong></div><div class="loopdesk-cart-drawer__subtotal loopdesk-cart-drawer__payable"><span>You pay</span><strong data-loopdesk-cart-subtotal></strong></div><span data-loopdesk-slot="AFTER_TOTALS"></span><div data-loopdesk-trust-below-totals></div><span data-loopdesk-slot="BEFORE_CHECKOUT"></span><p class="loopdesk-cart-drawer__prepaid-nudge" data-loopdesk-prepaid-nudge hidden></p><div class="loopdesk-cart-drawer__payment-choice" data-loopdesk-payment-choice hidden></div><button type="button" class="loopdesk-cart-drawer__express" data-loopdesk-express-checkout></button><span data-loopdesk-slot="AFTER_CHECKOUT"></span><div data-loopdesk-trust-below-checkout></div><a class="loopdesk-cart-drawer__view-cart" href="/cart"></a><p class="loopdesk-cart-drawer__microcopy"></p><p class="loopdesk-cart-drawer__powered"></p></footer>',
+      '<div class="loopdesk-cart-drawer__summary"><span data-loopdesk-slot="BEFORE_TOTALS"></span><div class="loopdesk-cart-drawer__subtotal"><span>Merchandise subtotal</span><strong data-loopdesk-cart-merchandise-subtotal></strong></div><div class="loopdesk-cart-drawer__subtotal" data-loopdesk-cart-savings-row hidden><span>Total savings</span><strong data-loopdesk-cart-savings></strong></div><div class="loopdesk-cart-drawer__subtotal loopdesk-cart-drawer__payable"><span data-loopdesk-payable-label>You pay</span><strong data-loopdesk-cart-subtotal></strong></div><p class="loopdesk-cart-drawer__pay-note" data-loopdesk-pay-note hidden></p><span data-loopdesk-slot="AFTER_TOTALS"></span><div data-loopdesk-trust-below-totals></div><a class="loopdesk-cart-drawer__view-cart" href="/cart"></a><p class="loopdesk-cart-drawer__microcopy"></p><p class="loopdesk-cart-drawer__powered"></p></div>',
+      '</div>',
+      '<footer class="loopdesk-cart-drawer__footer"><span data-loopdesk-slot="BEFORE_CHECKOUT"></span><p class="loopdesk-cart-drawer__prepaid-nudge" data-loopdesk-prepaid-nudge hidden></p><div class="loopdesk-cart-drawer__payment-choice" data-loopdesk-payment-choice hidden></div><button type="button" class="loopdesk-cart-drawer__express" data-loopdesk-express-checkout></button><span data-loopdesk-slot="AFTER_CHECKOUT"></span><div data-loopdesk-trust-below-checkout></div></footer>',
       '<span data-loopdesk-slot="AFTER_FOOTER"></span>',
       '</aside>',
     ].join("");
@@ -2034,6 +2102,8 @@
       body: hostRoot.querySelector(".loopdesk-cart-drawer__body"),
       close: hostRoot.querySelector(".loopdesk-cart-drawer__close"),
       subtotal: hostRoot.querySelector("[data-loopdesk-cart-subtotal]"),
+      payableLabel: hostRoot.querySelector("[data-loopdesk-payable-label]"),
+      payNote: hostRoot.querySelector("[data-loopdesk-pay-note]"),
       merchandiseSubtotal: hostRoot.querySelector("[data-loopdesk-cart-merchandise-subtotal]"),
       savingsRow: hostRoot.querySelector("[data-loopdesk-cart-savings-row]"),
       savings: hostRoot.querySelector("[data-loopdesk-cart-savings]"),
@@ -2058,8 +2128,15 @@
     hostRoot.addEventListener("click", function (event) {
       var choice = event.target && event.target.closest && event.target.closest("[data-loopdesk-pay-choice]");
       if (!choice || !hostRoot.contains(choice)) return;
-      setPaymentIntent(choice.getAttribute("data-loopdesk-pay-choice"));
+      var intent = choice.getAttribute("data-loopdesk-pay-choice");
+      setPaymentIntent(intent);
       render();
+      // The option IS the CTA (there is no separate Express Checkout button in
+      // choice mode): proceed straight to the chosen flow - both prepaid and COD
+      // hand off to native Shopify Checkout. Guard on a non-empty, non-busy cart,
+      // mirroring interceptCheckout.
+      if (!state.cart || Number(state.cart.item_count || 0) <= 0 || state.loading) return;
+      openExpressCheckout(intent === "cod" ? "loopdesk-drawer-cod" : "loopdesk-drawer-prepaid");
     });
     if (elements.express) {
       elements.express.textContent = config.labels.expressCheckoutText;
@@ -2116,25 +2193,22 @@
   }
 
   function openLoopDeskExpressCheckout(source) {
-    // When the merchant has opted into the in-drawer Prepaid/COD choice, prepaid
-    // (and the unset default) goes to Shopify Checkout; only an explicit COD
-    // choice opens the modal. This is the single choke point every checkout
-    // entry funnels through, so the routing holds for the drawer button, checkout
-    // link clicks, and programmatic form/navigation intercepts alike.
+    // Modal-free migration: when the merchant has opted into the in-drawer
+    // Prepaid/COD choice, BOTH options finish in native Shopify Checkout. Prepaid
+    // (and the unset default) and COD alike persist their intent and hand off
+    // through the OTP gate - the COD-only modal is retired here. This is the
+    // single choke point every checkout entry funnels through, so the routing
+    // holds for the drawer button, checkout link clicks, and programmatic
+    // form/navigation intercepts alike.
     var choiceMode = config.cart.paymentChoiceEnabled;
-    if (choiceMode && paymentIntentValue() !== "cod") {
-      handoffPrepaidToShopifyCheckout(source);
+    if (choiceMode) {
+      handoffToShopifyCheckout(paymentIntentValue() === "cod" ? "cod" : "prepaid", source);
       return;
     }
     var readiness = window.LoopDeskConfig && window.LoopDeskConfig.express_checkout;
-    // In choice mode the modal is COD-only (prepaid is handed off to Shopify
-    // Checkout), so it opens whenever the module is ready for COD - no Razorpay
-    // needed. The legacy modal still requires Razorpay for its in-modal prepaid
-    // capture, so that path keeps the stricter gate.
-    var codChoice = choiceMode && paymentIntentValue() === "cod";
-    var modalReady = codChoice
-      ? Boolean(readiness && readiness.enabled === true && (readiness.codAvailable === true || readiness.ready === true))
-      : Boolean(readiness && readiness.enabled === true && readiness.ready === true && readiness.provider === "razorpay");
+    // Legacy (flag-off) path only: prepaid is captured in-modal via Razorpay, so
+    // it keeps the stricter readiness gate.
+    var modalReady = Boolean(readiness && readiness.enabled === true && readiness.ready === true && readiness.provider === "razorpay");
     if (!modalReady) {
       debugLog("Shopify checkout fallback", { source: source || "checkout-intent", reason: readiness && readiness.ready === false ? "not-ready" : "config-unavailable" }, true);
       window.location.assign("/checkout");
@@ -2155,7 +2229,7 @@
       debugLog("Express modal API present", { source: checkoutSource });
       window.setTimeout(function () {
         try {
-          window.MegaskaExpressCheckout.open({ source: checkoutSource, codOnly: codChoice });
+          window.MegaskaExpressCheckout.open({ source: checkoutSource });
         } finally {
           window.setTimeout(releaseLock, 900);
         }
@@ -2171,24 +2245,26 @@
     openLoopDeskExpressCheckout(source || "checkout-intent");
   }
 
-  // Shopify-Checkout migration: prepaid hands off to Shopify Checkout with the
-  // loopd2c_payment_intent attribute persisted first, so the discount Function
-  // applies there (COD is disabled in the store's payment settings). Logged-out
+  // Modal-free migration: BOTH prepaid and COD hand off to native Shopify
+  // Checkout with the loopd2c_payment_intent attribute persisted first, so the
+  // Functions can key off it there - prepaid gets the discount, COD is kept
+  // visible (and hidden on prepaid) by the payment customization. Logged-out
   // shoppers are gated through OTP (MegaskaOtp.beginGatedShopifyCheckout), which
   // verifies the mobile number and then continues to Shopify Checkout with
   // buyer-identity prefill; already-verified shoppers go straight through. If the
   // OTP module is unavailable we navigate directly so the shopper is never
   // stranded, and a 1.2s guard covers a flaky /cart/update.js write.
-  function handoffPrepaidToShopifyCheckout(source) {
-    state.paymentIntent = "prepaid";
-    debugLog("prepaid Shopify checkout hand-off", { source: source || "checkout-intent" }, true);
+  function handoffToShopifyCheckout(intent, source) {
+    state.paymentIntent = intent === "cod" ? "cod" : "prepaid";
+    var triggerSource = "loopdesk-drawer-" + state.paymentIntent;
+    debugLog("Shopify checkout hand-off", { source: source || "checkout-intent", intent: state.paymentIntent }, true);
     closeDrawerForCheckoutHandoff();
     var proceeded = false;
     var proceed = function () {
       if (proceeded) return;
       proceeded = true;
       if (window.MegaskaOtp && typeof window.MegaskaOtp.beginGatedShopifyCheckout === "function") {
-        Promise.resolve(window.MegaskaOtp.beginGatedShopifyCheckout({ triggerSource: "loopdesk-drawer-prepaid" }))
+        Promise.resolve(window.MegaskaOtp.beginGatedShopifyCheckout({ triggerSource: triggerSource }))
           .catch(function () { window.location.assign("/checkout"); });
       } else {
         window.location.assign("/checkout");

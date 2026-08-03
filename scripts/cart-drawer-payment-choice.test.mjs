@@ -15,6 +15,16 @@ test("payment choice is a config flag, default OFF", () => {
   assert.match(src, /paymentChoiceEnabled: bool\(firstDefined\(cart\.paymentChoiceEnabled/, "normalizeConfig must read the flag");
 });
 
+test("the flag survives the async runtime-config fetch (re-normalize + re-render)", () => {
+  // paymentChoiceEnabled is NOT a theme-block setting; it only arrives via the
+  // async runtime-config fetch, which resolves after this script computes
+  // `config`. Without re-normalizing on runtime-config-ready, the flag stays
+  // frozen false and the choice never renders. Regression guard for that bug.
+  assert.match(src, /addEventListener\("loopdesk:runtime-config-ready"/, "drawer must listen for the runtime config");
+  assert.match(src, /loopdesk:runtime-config-ready"[\s\S]*?config = normalizeConfig\(window\.LoopDeskConfig/, "must re-normalize config when the runtime config lands");
+  assert.match(src, /loopdesk:runtime-config-ready"[\s\S]*?getElementById\(ROOT_ID\)\) render\(\)/, "must re-render after re-normalizing");
+});
+
 test("the block renders when the flag is on and there are items (independent of promotion pricing)", () => {
   // Prepaid savings come from LoopDeskConfig.prepaidOffer, so the choice must NOT
   // depend on the promotion-pricing object being built.
@@ -33,36 +43,82 @@ test("both prices are shown, prepaid discounted and COD loss-framed", () => {
   assert.match(src, /more than online/, "COD option must be loss-framed against online");
 });
 
-test("clicking an option updates the choice and re-renders", () => {
+test("payment-choice base is intent-neutral (never double-counts an already-applied prepaid discount)", () => {
+  // When the cart already carries loopd2c_payment_intent=prepaid, cart.total_price
+  // already includes the prepaid saving; the shared helper adds it back to recover
+  // the COD base rather than subtracting prepaid a second time.
+  assert.match(src, /function choicePrices\(pricing, cart\)/, "shared intent-neutral price helper must exist");
+  assert.match(src, /cart\.attributes && cart\.attributes\.loopd2c_payment_intent\)[\s\S]*?=== "prepaid"/, "must read the current intent from the same cart fetch");
+  assert.match(src, /var codBase = payable \+ \(prepaidApplied \? prepaidSavings : 0\)/, "COD base must add prepaid back when it is already applied to the cart total");
+});
+
+test("the You-pay summary labels the prepaid price and states the COD price (choice mode)", () => {
+  // Removes the ambiguity between the summary total and the two CTA prices, without
+  // touching any discount logic - text/style only, using the same price helper.
+  assert.match(src, /data-loopdesk-pay-note/, "a clarifying pay-note element must exist");
+  assert.match(src, /You pay online/, "the summary must label the prepaid total as the online price");
+  assert.match(src, /Cash on Delivery ' \+ money\(cp\.codBase/, "the note must state the COD price alongside");
+  assert.match(css, /\.loopdesk-cart-drawer__pay-note\b/, "pay-note styling must exist");
+});
+
+test("each option is a direct-action button: sets the intent then proceeds", () => {
   assert.match(src, /data-loopdesk-pay-choice/, "options must carry the choice hook");
-  assert.match(src, /setPaymentIntent\(choice\.getAttribute\("data-loopdesk-pay-choice"\)\)/, "handler must set the intent from the clicked option");
+  assert.match(src, /var intent = choice\.getAttribute\("data-loopdesk-pay-choice"\)/, "handler must read the clicked option's intent");
+  assert.match(src, /setPaymentIntent\(intent\)/, "handler must set the intent");
+  // Clicking the option immediately proceeds to the flow (COD modal / prepaid).
+  assert.match(src, /openExpressCheckout\(intent === "cod" \? "loopdesk-drawer-cod" : "loopdesk-drawer-prepaid"\)/, "handler must proceed to the chosen flow");
 });
 
-test("styles exist for the choice block", () => {
+test("no separate Express Checkout button in choice mode; nudge suppressed", () => {
+  assert.match(src, /elements\.express\.hidden = !config\.cart\.expressCheckoutButtonEnabled \|\| config\.cart\.paymentChoiceEnabled/, "express button must be hidden when the choice is active");
+  assert.match(src, /!config\.cart\.paymentChoiceEnabled\) \? prepaidOfferNudgeText/, "redundant prepaid nudge must be suppressed in choice mode");
+});
+
+test("only the CTA is pinned in the sticky footer; totals/trust/fine-print scroll", () => {
+  // The tall summary was eating the drawer; it now scrolls with the cart while the
+  // payment CTA stays pinned, so more cart content is visible.
+  assert.match(src, /class="loopdesk-cart-drawer__scroll"/, "a scroll wrapper must exist");
+  assert.match(src, /class="loopdesk-cart-drawer__summary"/, "totals/trust/fine-print live in a scrollable summary block");
+  assert.match(css, /\.loopdesk-cart-drawer__scroll \{[\s\S]*?overflow-y: auto/, "the scroll wrapper is the scroll region");
+  const footer = src.match(/<footer class="loopdesk-cart-drawer__footer">[\s\S]*?<\/footer>/);
+  assert.ok(footer, "footer must be present");
+  assert.match(footer[0], /data-loopdesk-payment-choice/, "footer keeps the payment-choice CTA");
+  assert.doesNotMatch(footer[0], /data-loopdesk-cart-subtotal|loopdesk-cart-drawer__microcopy/, "footer must not carry the totals rows or fine print");
+});
+
+test("styles exist for the choice block (primary/secondary CTA buttons)", () => {
   assert.match(css, /\.loopdesk-cart-drawer__pay-option/, "option styling must be present");
-  assert.match(css, /\.loopdesk-cart-drawer__pay-option\.is-active/, "selected-state styling must be present");
+  assert.match(css, /\.loopdesk-cart-drawer__pay-option--primary/, "prepaid primary-button styling must be present");
+  assert.match(css, /\.loopdesk-cart-drawer__pay-option--secondary/, "COD secondary-button styling must be present");
 });
 
-// PR-3a: when the flag is on, prepaid (and the unset default) hands off to
-// Shopify Checkout with the intent attribute persisted first, and only an
-// explicit COD choice opens the modal.
-test("prepaid hands off to Shopify Checkout after persisting the attribute", () => {
-  assert.match(src, /function handoffPrepaidToShopifyCheckout/, "hand-off helper must exist");
-  assert.match(src, /persistPaymentIntent\(\)/, "hand-off must persist the intent before navigating");
-  assert.match(src, /window\.location\.assign\("\/checkout"\)/, "hand-off must navigate to Shopify Checkout");
+test("the Pay Online option lists accepted online methods (self-contained badges)", () => {
+  // A generic accepted-methods strip (no third-party brand marks) under Pay Online.
+  assert.match(src, /loopdesk-cart-drawer__pay-methods/, "methods strip must render");
+  assert.match(src, /\["UPI", "Cards", "Net Banking", "Wallets"\]/, "generic method labels must be present");
+  assert.match(src, /opt\("prepaid", "primary"[\s\S]*?methodsHtml\)/, "methods strip must attach to the Pay Online option only");
+  assert.match(css, /\.loopdesk-cart-drawer__pay-method \{/, "method badge styling must exist");
 });
 
-test("openLoopDeskExpressCheckout routes prepaid to the hand-off, COD to the modal", () => {
-  assert.match(src, /choiceMode && paymentIntentValue\(\) !== "cod"/, "must branch on the flag + non-COD intent");
-  assert.match(src, /handoffPrepaidToShopifyCheckout\(source\)/, "prepaid branch must call the hand-off");
+// Phase 2 (modal-free): with the flag on, BOTH prepaid and COD hand off to
+// native Shopify Checkout - the chosen intent is persisted, then the shared OTP
+// gate runs. The COD-only modal is retired from this path.
+test("the shared hand-off persists the chosen intent then navigates to Shopify Checkout", () => {
+  assert.match(src, /function handoffToShopifyCheckout\(intent, source\)/, "generalized hand-off helper must exist");
+  assert.match(src, /state\.paymentIntent = intent === "cod" \? "cod" : "prepaid"/, "hand-off must set the chosen intent");
+  assert.match(src, /handoffToShopifyCheckout[\s\S]*?persistPaymentIntent\(\)/, "hand-off must persist the intent before navigating");
+  assert.match(src, /handoffToShopifyCheckout[\s\S]*?window\.location\.assign\("\/checkout"\)/, "hand-off must navigate to Shopify Checkout (fallback)");
 });
 
-test("COD choice opens the modal without a Razorpay requirement, in COD-only mode", () => {
-  // The COD path must not require provider === "razorpay" (Razorpay is retired
-  // for the in-modal capture); it opens whenever the module is ready for COD.
-  assert.match(src, /var codChoice = choiceMode && paymentIntentValue\(\) === "cod"/, "must detect the COD choice");
-  assert.match(src, /codChoice[\s\S]*?readiness\.codAvailable === true \|\| readiness\.ready === true/, "COD path must gate on cod-availability, not Razorpay");
-  assert.match(src, /MegaskaExpressCheckout\.open\(\{ source: checkoutSource, codOnly: codChoice \}\)/, "must open the modal in COD-only mode for the COD choice");
+test("choice mode routes BOTH prepaid and COD through the native hand-off (no modal)", () => {
+  assert.match(src, /if \(choiceMode\) \{\s*handoffToShopifyCheckout\(paymentIntentValue\(\) === "cod" \? "cod" : "prepaid", source\)/, "choice mode must hand both intents off natively");
+  // The COD-only modal open must no longer be reachable from the choice path.
+  assert.doesNotMatch(src, /codOnly: codChoice/, "COD-only modal open must be retired from the drawer");
+  assert.doesNotMatch(src, /var codChoice = /, "the codChoice modal branch must be gone");
+});
+
+test("each intent labels its OTP trigger source", () => {
+  assert.match(src, /var triggerSource = "loopdesk-drawer-" \+ state\.paymentIntent/, "trigger source must reflect the chosen intent");
 });
 
 // OTP verification must gate BOTH flows for logged-out shoppers. COD keeps its
@@ -76,7 +132,30 @@ test("prepaid hand-off gates through OTP before Shopify Checkout", () => {
 
 const otp = readFileSync("extensions/megaska-otp/assets/loopd2c-otp.js", "utf8");
 
+test("OTP: no premature guard error when the modal is the prompt", () => {
+  // When the reason opens the OTP modal, the guard error message is suppressed
+  // (the modal itself explains why login is needed).
+  assert.match(otp, /const opensModal = \["no-session", "no-verified-phone"\]\.includes\(validation\.reason\)/, "must detect modal-opening reasons");
+  assert.match(otp, /message: opensModal \? "" : validation\.message/, "must suppress the guard message when opening the modal");
+});
+
+test("express modal waits for the OTP/auth modules before gating (first-click race)", () => {
+  assert.match(modal, /async function waitForAuthModules/, "must have a wait-for-modules helper");
+  assert.match(modal, /await waitForAuthModules\(3000\)/, "ensureAuthenticated must await the modules");
+});
+
 const modal = readFileSync("extensions/megaska-otp/assets/loopd2c-express-modal.js", "utf8");
+
+test("COD-only mode suppresses all prepaid pricing in the modal", () => {
+  // A COD order must not show prepaid discounts, the prepaid offer banner, the
+  // switch-to-prepaid nudge, or the Prepaid/COD comparison.
+  assert.match(modal, /function prepaidSummary\(method\) \{ if \(state\.codOnly \|\| method !== "PREPAID"\)/, "prepaid discount line hidden in codOnly");
+  assert.match(modal, /function prepaidOfferBanner\(\) \{ if \(state\.codOnly\) return ""/, "prepaid offer banner hidden in codOnly");
+  assert.match(modal, /function prepaidNudgeMarkup\(\)[\s\S]*?if \(state\.codOnly\) return ""/, "switch-to-prepaid nudge hidden in codOnly");
+  assert.match(modal, /if \(state\.codOnly\) \{\s*\n\s*return `<span>Total Payable<\/span><strong>\$\{money\(codPaise/, "footer shows COD total alone in codOnly");
+  // And the intent is switched to COD at open so the summary total is the COD price.
+  assert.match(modal, /if \(state\.codOnly\) \{ try \{ await ensureBackendPaymentMethod\("COD"\)/, "codOnly forces the COD backend method at open");
+});
 
 test("express modal supports a COD-only mode driven by the open() option", () => {
   assert.match(modal, /state\.codOnly = Boolean\(opts\?\.codOnly\)/, "open() must read the codOnly option");

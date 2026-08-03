@@ -2,6 +2,7 @@ pub mod cart_lines_discounts_generate_run;
 pub mod config;
 pub mod decimal;
 pub mod eligibility;
+pub mod prepaid;
 pub mod rewards;
 pub mod schema;
 
@@ -112,7 +113,81 @@ mod tests {
         Cart {
             subtotal: Decimal::parse("100.00"),
             lines: vec![trigger_line(), offer_line(offer_quantity, version)],
+            payment_intent: None,
         }
+    }
+
+    #[test]
+    fn prepaid_percentage_offer_computes_the_amount() {
+        let offer =
+            crate::prepaid::parse(r#"{"schemaVersion":1,"type":"PERCENTAGE","percent":"15"}"#)
+                .unwrap();
+        let subtotal = Decimal::parse("1390.00").unwrap();
+        // 15% of 1390.00 = 208.50
+        assert_eq!(
+            crate::prepaid::discount_amount(&offer, &subtotal)
+                .unwrap()
+                .to_shopify(),
+            "208.5"
+        );
+    }
+
+    #[test]
+    fn prepaid_offer_respects_cap_and_minimum() {
+        // Cap binds: 15% of 1390 = 208.50, capped at 100.
+        let capped = crate::prepaid::parse(
+            r#"{"schemaVersion":1,"type":"PERCENTAGE","percent":"15","maxAmount":"100"}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            crate::prepaid::discount_amount(&capped, &Decimal::parse("1390.00").unwrap())
+                .unwrap()
+                .to_shopify(),
+            "100"
+        );
+        // Below minimum subtotal: no discount.
+        let gated = crate::prepaid::parse(
+            r#"{"schemaVersion":1,"type":"PERCENTAGE","percent":"15","minSubtotal":"2000"}"#,
+        )
+        .unwrap();
+        assert!(
+            crate::prepaid::discount_amount(&gated, &Decimal::parse("1390.00").unwrap()).is_none()
+        );
+    }
+
+    #[test]
+    fn prepaid_fixed_amount_offer() {
+        let offer =
+            crate::prepaid::parse(r#"{"schemaVersion":1,"type":"FIXED_AMOUNT","amount":"50"}"#)
+                .unwrap();
+        assert_eq!(
+            crate::prepaid::discount_amount(&offer, &Decimal::parse("1390.00").unwrap())
+                .unwrap()
+                .to_shopify(),
+            "50"
+        );
+    }
+
+    #[test]
+    fn prepaid_malformed_or_wrong_schema_is_ignored() {
+        assert!(crate::prepaid::parse("{bad").is_none());
+        assert!(crate::prepaid::parse(r#"{"schemaVersion":2,"type":"PERCENTAGE","percent":"15"}"#)
+            .is_none());
+    }
+
+    #[test]
+    fn decimal_add_and_mul_percent() {
+        let a = Decimal::parse("139.00").unwrap();
+        let b = Decimal::parse("208.50").unwrap();
+        assert_eq!(a.add(&b).unwrap().to_shopify(), "347.5");
+        assert_eq!(
+            Decimal::parse("1390.00")
+                .unwrap()
+                .mul_percent(&Decimal::parse("10").unwrap())
+                .unwrap()
+                .to_shopify(),
+            "139"
+        );
     }
 
     #[test]

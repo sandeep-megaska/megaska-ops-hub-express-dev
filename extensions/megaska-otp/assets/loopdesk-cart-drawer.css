@@ -104,22 +104,31 @@
   line-height: 1;
 }
 
-.loopdesk-cart-drawer__body {
+.loopdesk-cart-drawer__scroll {
   flex: 1;
   min-width: 0;
   min-height: 0;
   overflow-x: clip;
   overflow-y: auto;
-  padding: 6px 20px 18px;
   overscroll-behavior: contain;
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
 
-.loopdesk-cart-drawer__body::-webkit-scrollbar {
+.loopdesk-cart-drawer__scroll::-webkit-scrollbar {
   display: none;
   width: 0;
   height: 0;
+}
+
+.loopdesk-cart-drawer__body {
+  min-width: 0;
+  padding: 6px 20px 0;
+}
+
+.loopdesk-cart-drawer__summary {
+  min-width: 0;
+  padding: 4px 20px 16px;
 }
 
 .loopdesk-cart-drawer__loading,
@@ -289,6 +298,18 @@
 
 .loopdesk-cart-drawer__subtotal strong {
   font-size: 20px;
+}
+
+.loopdesk-cart-drawer__pay-note {
+  margin: -8px 0 14px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #64748b;
+}
+
+.loopdesk-cart-drawer__pay-note-save {
+  color: #047857;
+  font-weight: 700;
 }
 
 .loopdesk-tier-progress { max-width:100%; margin:16px 0; padding:16px; overflow:hidden; border:1px solid #dbe3ee; border-radius:var(--loopdesk-radius, 16px); background:#f8fafc; }
@@ -511,7 +532,8 @@
 
   .loopdesk-cart-drawer__header,
   .loopdesk-cart-drawer__footer,
-  .loopdesk-cart-drawer__body {
+  .loopdesk-cart-drawer__body,
+  .loopdesk-cart-drawer__summary {
     padding-left: 16px;
     padding-right: 16px;
   }
@@ -743,14 +765,24 @@ body.loopdesk-cart-drawer-is-open #loopdesk-cart-drawer-root .loopdesk-cart-draw
 .loopdesk-cart-drawer__coupon-remove { margin-left:8px; padding:0; border:0; background:transparent; color:inherit; font:inherit; text-decoration:underline; cursor:pointer; }
 
 /* Payment choice block (flag-gated: config.cart.paymentChoiceEnabled) */
-.loopdesk-cart-drawer__payment-choice { display:flex; flex-direction:column; gap:8px; margin:4px 0 12px; }
+.loopdesk-cart-drawer__payment-choice { display:flex; flex-direction:column; gap:10px; margin:4px 0 12px; }
 .loopdesk-cart-drawer__pay-label { margin:0 0 2px; font-size:12px; font-weight:700; color:#64748b; }
-.loopdesk-cart-drawer__pay-option { display:flex; align-items:center; justify-content:space-between; gap:12px; width:100%; text-align:left; background:#fff; border:1.5px solid #e2e8f0; border-radius:12px; padding:12px 14px; cursor:pointer; font:inherit; transition:border-color .12s, background .12s; }
-.loopdesk-cart-drawer__pay-option:hover { border-color:#cbd5e1; }
-.loopdesk-cart-drawer__pay-option.is-active { border-color:#4f46e5; background:#f5f5ff; box-shadow:0 0 0 1px #4f46e5 inset; }
+/* Each option is an action button (there is no separate Express Checkout CTA in
+   choice mode). Prepaid is the primary (dark) button; COD is secondary. */
+.loopdesk-cart-drawer__pay-option { display:flex; align-items:center; justify-content:space-between; gap:12px; width:100%; text-align:left; border-radius:12px; padding:14px 16px; cursor:pointer; font:inherit; border:1.5px solid transparent; transition:filter .12s, border-color .12s, background .12s; }
+.loopdesk-cart-drawer__pay-option--primary { background:#0f172a; border-color:#0f172a; }
+.loopdesk-cart-drawer__pay-option--primary:hover { filter:brightness(1.15); }
+.loopdesk-cart-drawer__pay-option--primary .loopdesk-cart-drawer__pay-copy strong,
+.loopdesk-cart-drawer__pay-option--primary .loopdesk-cart-drawer__pay-amt { color:#fff; }
+.loopdesk-cart-drawer__pay-option--primary .loopdesk-cart-drawer__pay-copy em.is-save { color:#6ee7b7; }
+.loopdesk-cart-drawer__pay-option--secondary { background:#fff; border-color:#e2e8f0; }
+.loopdesk-cart-drawer__pay-option--secondary:hover { border-color:#cbd5e1; }
 .loopdesk-cart-drawer__pay-copy { display:flex; flex-direction:column; gap:2px; min-width:0; }
 .loopdesk-cart-drawer__pay-copy strong { font-size:14px; font-weight:700; color:#0f172a; }
 .loopdesk-cart-drawer__pay-copy em { font-style:normal; font-size:12px; color:#64748b; }
 .loopdesk-cart-drawer__pay-copy em.is-save { color:#047857; font-weight:700; }
 .loopdesk-cart-drawer__pay-copy em.is-more { color:#b45309; font-weight:600; }
-.loopdesk-cart-drawer__pay-amt { font-size:15px; font-weight:800; color:#0f172a; white-space:nowrap; }
+.loopdesk-cart-drawer__pay-amt { display:flex; align-items:center; gap:6px; font-size:15px; font-weight:800; color:#0f172a; white-space:nowrap; }
+.loopdesk-cart-drawer__pay-arrow { font-size:18px; font-weight:700; line-height:1; opacity:.7; }
+.loopdesk-cart-drawer__pay-methods { display:flex; flex-wrap:wrap; gap:4px; margin-top:6px; }
+.loopdesk-cart-drawer__pay-method { font-size:10px; font-weight:700; letter-spacing:.02em; line-height:1; padding:3px 6px; border-radius:5px; background:rgba(255,255,255,.16); color:#e2e8f0; white-space:nowrap; }

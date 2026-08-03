@@ -109,7 +109,9 @@ test("a malformed verified-phone attribute never hard-blocks a valid prepaid che
   assert.deepEqual(errorsOf(output), []);
 });
 
-test("a COD-intent cart is blocked from completing on Shopify Checkout", () => {
+test("a COD-intent cart now completes natively at Shopify Checkout (no COD block)", () => {
+  // Modal-free migration: COD is no longer blocked here - it finishes on the
+  // native Shopify Checkout with a matching verified phone.
   const output = cartValidationsGenerateRun({
     cart: {
       paymentIntent: { value: "cod" },
@@ -117,10 +119,20 @@ test("a COD-intent cart is blocked from completing on Shopify Checkout", () => {
       deliveryGroups: [{ deliveryAddress: { countryCode: "IN", phone: "9539180257" } }],
     },
   });
-  const errors = errorsOf(output);
-  assert.equal(errors.length, 1);
-  assert.match(errors[0].message, /Cash on Delivery isn't available here/);
-  assert.equal(errors[0].target, "$.cart");
+  assert.deepEqual(errorsOf(output), []);
+});
+
+test("the verified-phone match also guards a COD hand-off", () => {
+  // COD now goes through the same OTP gate as prepaid, so a swap to a different
+  // (valid) number must be blocked for cod intent too.
+  const output = cartValidationsGenerateRun({
+    cart: {
+      paymentIntent: { value: "cod" },
+      verifiedPhone: { value: "+919539180257" },
+      deliveryGroups: [{ deliveryAddress: { countryCode: "IN", phone: "9812345678" } }],
+    },
+  });
+  assert.equal(errorsOf(output)[0].message, "Use your verified mobile number for delivery.");
 });
 
 test("a prepaid-intent cart with a matching verified phone passes", () => {

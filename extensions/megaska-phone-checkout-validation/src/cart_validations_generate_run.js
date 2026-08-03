@@ -1,15 +1,12 @@
 import { validateCheckoutPhone } from "./phone_validation.js";
 
 const PHONE_FIELD_TARGET = "$.cart.deliveryGroups[0].deliveryAddress.phone";
-const CART_TARGET = "$.cart";
 const MESSAGES = {
   PHONE_REQUIRED: "Enter a mobile number for delivery updates.",
   INVALID_PHONE: "Enter a valid mobile number for the selected country.",
   INVALID_COUNTRY: "Enter a valid mobile number for the selected country.",
   COUNTRY_MISMATCH: "Enter a mobile number that matches the selected delivery country.",
   VERIFIED_PHONE_MISMATCH: "Use your verified mobile number for delivery.",
-  COD_NOT_AT_CHECKOUT:
-    "Cash on Delivery isn't available here. Go back to your cart to place a Cash on Delivery order, or pay online to continue.",
 };
 
 function getCheckoutDetails(input) {
@@ -93,28 +90,27 @@ export function cartValidationsGenerateRun(input) {
   const verifiedPhone = attributeValue(cart, "verifiedPhone");
   const paymentIntent = attributeValue(cart, "paymentIntent").toLowerCase();
 
-  // A verified prepaid hand-off must keep its verified number: if the delivery
-  // phone is otherwise valid but differs from the OTP-verified one, block the
-  // swap. Gated on the prepaid intent so the whole rule stays inert until the
-  // in-drawer choice flow is live (pre-migration carts carry no payment intent,
-  // so behaviour is unchanged). Only enforced when the stamped value is itself a
+  // A verified hand-off must keep its verified number: if the delivery phone is
+  // otherwise valid but differs from the OTP-verified one, block the swap. Both
+  // prepaid and COD now hand off through the same OTP gate, so the rule fires for
+  // either app-stamped intent (pre-migration carts carry no payment intent, so
+  // behaviour is unchanged). Only enforced when the stamped value is itself a
   // plausible phone (>= 10 digits), so a malformed attribute can never hard-block.
+  const isAppIntent = paymentIntent === "prepaid" || paymentIntent === "cod";
   const hasVerifiedPhone = digitsOf(verifiedPhone).length >= 10;
   if (
     result.valid &&
-    paymentIntent === "prepaid" &&
+    isAppIntent &&
     hasVerifiedPhone &&
     !phonesEqual(result.normalizedPhone, verifiedPhone)
   ) {
     errors.push({ message: MESSAGES.VERIFIED_PHONE_MISMATCH, target: PHONE_FIELD_TARGET });
   }
 
-  // COD is completed in the app's modal (with native COD disabled in payment
-  // settings); a COD-intent cart must never finish on Shopify Checkout, where it
-  // would take the prepaid price without paying online.
-  if (paymentIntent === "cod") {
-    errors.push({ message: MESSAGES.COD_NOT_AT_CHECKOUT, target: CART_TARGET });
-  }
+  // Modal-free migration: COD now completes natively in Shopify Checkout (native
+  // COD re-enabled in payment settings, kept visible by the payment customization
+  // on cod carts and hidden on prepaid). A cod-intent cart is no longer blocked
+  // here - only the verified-phone match above guards it.
 
   return validationResult(errors);
 }
