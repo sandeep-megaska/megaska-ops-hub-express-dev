@@ -46,7 +46,5 @@ test("storefront assets emit the six funnel events at their trigger points", () 
 
   // OTP_OPEN only on a genuine open (guarded by !state.isOpen).
   assert.match(asset("loopd2c-otp.js"), /if \(!state\.isOpen && window\.LoopDeskAnalytics\) window\.LoopDeskAnalytics\.track\('OTP_OPEN'/);
-
-  // MODAL_OPEN once per express-modal open.
-  assert.match(asset("loopd2c-express-modal.js"), /if \(!state\.open && window\.LoopDeskAnalytics\) window\.LoopDeskAnalytics\.track\('MODAL_OPEN'\)/);
+  // (MODAL_OPEN removed — the express modal has been retired.)
 });
