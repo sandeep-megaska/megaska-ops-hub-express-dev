@@ -45,10 +45,20 @@ test("both prices are shown, prepaid discounted and COD loss-framed", () => {
 
 test("payment-choice base is intent-neutral (never double-counts an already-applied prepaid discount)", () => {
   // When the cart already carries loopd2c_payment_intent=prepaid, cart.total_price
-  // already includes the prepaid saving; the choice must add it back to recover the
-  // COD base rather than subtracting prepaid a second time.
+  // already includes the prepaid saving; the shared helper adds it back to recover
+  // the COD base rather than subtracting prepaid a second time.
+  assert.match(src, /function choicePrices\(pricing, cart\)/, "shared intent-neutral price helper must exist");
   assert.match(src, /cart\.attributes && cart\.attributes\.loopd2c_payment_intent\)[\s\S]*?=== "prepaid"/, "must read the current intent from the same cart fetch");
-  assert.match(src, /var base = payable \+ \(prepaidAppliedNow \? prepaidSavings : 0\)/, "COD base must add prepaid back when it is already applied to the cart total");
+  assert.match(src, /var codBase = payable \+ \(prepaidApplied \? prepaidSavings : 0\)/, "COD base must add prepaid back when it is already applied to the cart total");
+});
+
+test("the You-pay summary labels the prepaid price and states the COD price (choice mode)", () => {
+  // Removes the ambiguity between the summary total and the two CTA prices, without
+  // touching any discount logic - text/style only, using the same price helper.
+  assert.match(src, /data-loopdesk-pay-note/, "a clarifying pay-note element must exist");
+  assert.match(src, /You pay online/, "the summary must label the prepaid total as the online price");
+  assert.match(src, /Cash on Delivery ' \+ money\(cp\.codBase/, "the note must state the COD price alongside");
+  assert.match(css, /\.loopdesk-cart-drawer__pay-note\b/, "pay-note styling must exist");
 });
 
 test("each option is a direct-action button: sets the intent then proceeds", () => {

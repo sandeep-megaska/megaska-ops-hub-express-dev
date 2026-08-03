@@ -300,6 +300,18 @@
   font-size: 20px;
 }
 
+.loopdesk-cart-drawer__pay-note {
+  margin: -8px 0 14px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #64748b;
+}
+
+.loopdesk-cart-drawer__pay-note-save {
+  color: #047857;
+  font-weight: 700;
+}
+
 .loopdesk-tier-progress { max-width:100%; margin:16px 0; padding:16px; overflow:hidden; border:1px solid #dbe3ee; border-radius:var(--loopdesk-radius, 16px); background:#f8fafc; }
 .loopdesk-tier-progress p, .loopdesk-tier-progress h3 { margin:0; }
 .loopdesk-tier-progress__eyebrow { color:var(--loopdesk-primary, #111827); font-size:15px; font-weight:800; }
