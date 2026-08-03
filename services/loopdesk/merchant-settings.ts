@@ -52,6 +52,7 @@ export type LoopDeskMerchantSettings = {
     expressCheckoutButtonEnabled: boolean;
     viewCartButtonEnabled: boolean;
     paymentChoiceEnabled: boolean;
+    paymentChoiceCollapsed: boolean;
     nativeDrawerDisabledRequiredMessage: string;
     customCartTriggerSelector: string;
   };
@@ -691,6 +692,7 @@ export function validateLoopDeskMerchantSettingsPatch(
   );
   validateBool(cart.viewCartButtonEnabled, "View cart button enabled");
   validateBool(cart.paymentChoiceEnabled, "Payment choice enabled");
+  validateBool(cart.paymentChoiceCollapsed, "Payment choice collapsed");
   validateText(
     cart.customCartTriggerSelector,
     "Custom cart icon selector",
@@ -848,6 +850,9 @@ export function normalizeLoopDeskMerchantSettings(
       // unchanged; when on, the drawer shows a Prepaid vs COD choice and hands
       // prepaid off to Shopify Checkout (COD disabled in payment settings).
       paymentChoiceEnabled: bool(cart.paymentChoiceEnabled, false),
+      // Experiment flag (default OFF): collapse the Prepaid/COD choice behind a
+      // single "Place Order" button that expands to the two options on click.
+      paymentChoiceCollapsed: bool(cart.paymentChoiceCollapsed, false),
       nativeDrawerDisabledRequiredMessage: text(
         cart.nativeDrawerDisabledRequiredMessage,
         "To use LoopD2C Enhanced Drawer, set your theme cart type to Page in Shopify theme settings.",

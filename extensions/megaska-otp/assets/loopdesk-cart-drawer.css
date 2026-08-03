@@ -312,6 +312,21 @@
   font-weight: 700;
 }
 
+.loopdesk-cart-drawer__delivery {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+.loopdesk-cart-drawer__delivery-icon { flex: 0 0 auto; color: #475569; line-height: 0; }
+.loopdesk-cart-drawer__delivery-copy { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.loopdesk-cart-drawer__delivery-copy strong { font-size: 13px; font-weight: 700; color: #0f172a; overflow-wrap: anywhere; }
+.loopdesk-cart-drawer__delivery-copy em { font-style: normal; font-size: 12px; font-weight: 600; color: #047857; }
+
 .loopdesk-tier-progress { max-width:100%; margin:16px 0; padding:16px; overflow:hidden; border:1px solid #dbe3ee; border-radius:var(--loopdesk-radius, 16px); background:#f8fafc; }
 .loopdesk-tier-progress p, .loopdesk-tier-progress h3 { margin:0; }
 .loopdesk-tier-progress__eyebrow { color:var(--loopdesk-primary, #111827); font-size:15px; font-weight:800; }
@@ -511,6 +526,42 @@
 @keyframes loopdesk-spin {
   to { transform: rotate(360deg); }
 }
+
+.loopdesk-checkout-handoff {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483040;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.55);
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+.loopdesk-checkout-handoff.is-visible { opacity: 1; }
+.loopdesk-checkout-handoff__card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  max-width: min(360px, 80vw);
+  padding: 26px 30px;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.35);
+  text-align: center;
+}
+.loopdesk-checkout-handoff__spinner {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 3px solid #e2e8f0;
+  border-top-color: #0f172a;
+  animation: loopdesk-spin 700ms linear infinite;
+}
+.loopdesk-checkout-handoff__title { font-size: 15px; font-weight: 700; color: #0f172a; }
+.loopdesk-checkout-handoff__sub { font-size: 12px; line-height: 1.4; color: #64748b; }
 
 @media (max-width: 640px) {
   .loopdesk-cart-drawer {
@@ -784,5 +835,11 @@ body.loopdesk-cart-drawer-is-open #loopdesk-cart-drawer-root .loopdesk-cart-draw
 .loopdesk-cart-drawer__pay-copy em.is-more { color:#b45309; font-weight:600; }
 .loopdesk-cart-drawer__pay-amt { display:flex; align-items:center; gap:6px; font-size:15px; font-weight:800; color:#0f172a; white-space:nowrap; }
 .loopdesk-cart-drawer__pay-arrow { font-size:18px; font-weight:700; line-height:1; opacity:.7; }
+.loopdesk-cart-drawer__place-order { display:flex; align-items:center; justify-content:space-between; gap:12px; width:100%; text-align:left; border:none; border-radius:12px; padding:15px 18px; margin:4px 0 8px; cursor:pointer; font:inherit; background:#0f172a; transition:filter .12s; }
+.loopdesk-cart-drawer__place-order:hover { filter:brightness(1.15); }
+.loopdesk-cart-drawer__place-order-copy { display:flex; flex-direction:column; gap:2px; min-width:0; }
+.loopdesk-cart-drawer__place-order-copy strong { font-size:15px; font-weight:800; color:#fff; letter-spacing:.01em; }
+.loopdesk-cart-drawer__place-order-copy em { font-style:normal; font-size:12px; color:#cbd5e1; }
+.loopdesk-cart-drawer__place-order .loopdesk-cart-drawer__pay-arrow { color:#fff; }
 .loopdesk-cart-drawer__pay-methods { display:flex; flex-wrap:wrap; gap:4px; margin-top:6px; }
 .loopdesk-cart-drawer__pay-method { font-size:10px; font-weight:700; letter-spacing:.02em; line-height:1; padding:3px 6px; border-radius:5px; background:rgba(255,255,255,.16); color:#e2e8f0; white-space:nowrap; }
