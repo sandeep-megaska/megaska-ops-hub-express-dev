@@ -1699,8 +1699,16 @@
   // discount Function at checkout keyed on the loopd2c_payment_intent attribute.
   function renderPaymentChoice(pricing, cart) {
     var cur = cart && cart.currency;
-    var base = pricing ? pricing.finalPayableSubtotal : (cart ? cart.total_price : 0);
-    var prepaidSavings = prepaidOfferSavingsMinor(pricing ? pricing.merchandiseSubtotal : base);
+    var payable = pricing ? pricing.finalPayableSubtotal : (cart ? cart.total_price : 0);
+    var prepaidSavings = prepaidOfferSavingsMinor(pricing ? pricing.merchandiseSubtotal : payable);
+    // The cart total is intent-dependent: when loopd2c_payment_intent=prepaid the
+    // discount Function has already applied the prepaid saving to cart.total_price.
+    // Reconstruct an intent-neutral COD base (tier/coupon only, prepaid removed)
+    // from the SAME cart fetch - reading the attribute off `cart` keeps it in sync
+    // with cart.total_price - so the comparison never double-counts, or depends on,
+    // the currently-persisted choice.
+    var prepaidAppliedNow = String((cart && cart.attributes && cart.attributes.loopd2c_payment_intent) || "").toLowerCase() === "prepaid";
+    var base = payable + (prepaidAppliedNow ? prepaidSavings : 0);
     var prepaidPrice = Math.max(0, base - prepaidSavings);
     // Each option is a CTA button: clicking it proceeds straight to that flow -
     // both prepaid and COD hand off to native Shopify Checkout. No separate button.
