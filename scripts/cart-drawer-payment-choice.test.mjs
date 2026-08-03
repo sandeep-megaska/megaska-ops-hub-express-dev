@@ -62,28 +62,25 @@ test("styles exist for the choice block (primary/secondary CTA buttons)", () => 
   assert.match(css, /\.loopdesk-cart-drawer__pay-option--secondary/, "COD secondary-button styling must be present");
 });
 
-// PR-3a: when the flag is on, prepaid (and the unset default) hands off to
-// Shopify Checkout with the intent attribute persisted first, and only an
-// explicit COD choice opens the modal.
-test("prepaid hands off to Shopify Checkout after persisting the attribute", () => {
-  assert.match(src, /function handoffPrepaidToShopifyCheckout/, "hand-off helper must exist");
-  assert.match(src, /persistPaymentIntent\(\)/, "hand-off must persist the intent before navigating");
-  assert.match(src, /window\.location\.assign\("\/checkout"\)/, "hand-off must navigate to Shopify Checkout");
+// Phase 2 (modal-free): with the flag on, BOTH prepaid and COD hand off to
+// native Shopify Checkout - the chosen intent is persisted, then the shared OTP
+// gate runs. The COD-only modal is retired from this path.
+test("the shared hand-off persists the chosen intent then navigates to Shopify Checkout", () => {
+  assert.match(src, /function handoffToShopifyCheckout\(intent, source\)/, "generalized hand-off helper must exist");
+  assert.match(src, /state\.paymentIntent = intent === "cod" \? "cod" : "prepaid"/, "hand-off must set the chosen intent");
+  assert.match(src, /handoffToShopifyCheckout[\s\S]*?persistPaymentIntent\(\)/, "hand-off must persist the intent before navigating");
+  assert.match(src, /handoffToShopifyCheckout[\s\S]*?window\.location\.assign\("\/checkout"\)/, "hand-off must navigate to Shopify Checkout (fallback)");
 });
 
-test("openLoopDeskExpressCheckout routes prepaid to the hand-off, COD to the modal", () => {
-  assert.match(src, /choiceMode && paymentIntentValue\(\) !== "cod"/, "must branch on the flag + non-COD intent");
-  assert.match(src, /handoffPrepaidToShopifyCheckout\(source\)/, "prepaid branch must call the hand-off");
+test("choice mode routes BOTH prepaid and COD through the native hand-off (no modal)", () => {
+  assert.match(src, /if \(choiceMode\) \{\s*handoffToShopifyCheckout\(paymentIntentValue\(\) === "cod" \? "cod" : "prepaid", source\)/, "choice mode must hand both intents off natively");
+  // The COD-only modal open must no longer be reachable from the choice path.
+  assert.doesNotMatch(src, /codOnly: codChoice/, "COD-only modal open must be retired from the drawer");
+  assert.doesNotMatch(src, /var codChoice = /, "the codChoice modal branch must be gone");
 });
 
-test("COD choice opens the modal without a Razorpay requirement, in COD-only mode", () => {
-  // The COD path must not require provider === "razorpay" (Razorpay is retired
-  // for the in-modal capture); it opens whenever the module is ready for COD.
-  assert.match(src, /var codChoice = choiceMode && paymentIntentValue\(\) === "cod"/, "must detect the COD choice");
-  // COD ALWAYS opens the modal (no Razorpay/readiness gate) - it must never fall
-  // back to Shopify Checkout, where COD is disabled.
-  assert.match(src, /var modalReady = codChoice \|\| Boolean\(readiness/, "COD must bypass the readiness gate entirely");
-  assert.match(src, /MegaskaExpressCheckout\.open\(\{ source: checkoutSource, codOnly: codChoice \}\)/, "must open the modal in COD-only mode for the COD choice");
+test("each intent labels its OTP trigger source", () => {
+  assert.match(src, /var triggerSource = "loopdesk-drawer-" \+ state\.paymentIntent/, "trigger source must reflect the chosen intent");
 });
 
 // OTP verification must gate BOTH flows for logged-out shoppers. COD keeps its
