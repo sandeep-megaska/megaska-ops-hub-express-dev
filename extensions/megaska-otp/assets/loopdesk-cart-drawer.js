@@ -874,7 +874,8 @@
   }
 
   function canUseExpressCheckoutBridge() {
-    return Boolean(window.MegaskaExpressCheckout && typeof window.MegaskaExpressCheckout.open === "function") || true;
+    // Modal retired: checkout always finishes in native Shopify Checkout.
+    return true;
   }
 
   function getCapabilityResult() {
@@ -2272,21 +2273,11 @@
     };
     clearLocalCartDrawerErrors();
     closeDrawerForCheckoutHandoff();
-    debugLog("OTP/checkout handoff started", { source: checkoutSource }, true);
-    if (window.MegaskaExpressCheckout && typeof window.MegaskaExpressCheckout.open === "function") {
-      debugLog("Express modal API present", { source: checkoutSource });
-      window.setTimeout(function () {
-        try {
-          window.MegaskaExpressCheckout.open({ source: checkoutSource });
-        } finally {
-          window.setTimeout(releaseLock, 900);
-        }
-      }, 32);
-    } else {
-      debugLog("Express modal API missing", { source: checkoutSource });
-      window.setTimeout(releaseLock, 900);
-      window.location.href = "/apps/loopd2c/checkout";
-    }
+    // Modal retired: the legacy (flag-off) path now finishes in native Shopify
+    // Checkout like the in-drawer choice, instead of opening the express modal.
+    debugLog("Shopify checkout handoff started", { source: checkoutSource }, true);
+    window.setTimeout(releaseLock, 900);
+    window.location.assign("/checkout");
   }
 
   function openExpressCheckout(source) {
@@ -2647,8 +2638,8 @@
   }
 
   function openExpressCheckoutFromIntent(reason, control, context) {
-    var modalApiExists = Boolean(window.MegaskaExpressCheckout && typeof window.MegaskaExpressCheckout.open === 'function');
-    logCheckoutIntent(reason, control, context, modalApiExists);
+    // Modal retired - the intercept always resolves to native Shopify Checkout.
+    logCheckoutIntent(reason, control, context, false);
     openExpressCheckout('checkout-intercept-fallback');
   }
 

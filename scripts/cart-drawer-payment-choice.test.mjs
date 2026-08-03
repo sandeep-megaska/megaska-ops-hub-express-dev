@@ -133,9 +133,9 @@ test("each intent labels its OTP trigger source", () => {
   assert.match(src, /var triggerSource = "loopdesk-drawer-" \+ state\.paymentIntent/, "trigger source must reflect the chosen intent");
 });
 
-// OTP verification must gate BOTH flows for logged-out shoppers. COD keeps its
-// in-modal gate (loopd2c-express-modal.js ensureAuthenticated); the prepaid
-// hand-off gates through the OTP module before reaching Shopify Checkout.
+// OTP verification must gate BOTH flows for logged-out shoppers. Both COD and
+// prepaid hand off through the OTP module (beginGatedShopifyCheckout) before
+// reaching native Shopify Checkout - there is no in-modal gate any more.
 test("prepaid hand-off gates through OTP before Shopify Checkout", () => {
   assert.match(src, /window\.MegaskaOtp\.beginGatedShopifyCheckout/, "prepaid must gate via the OTP module");
   // Direct navigate remains only as a fallback when the OTP module is absent.
@@ -151,32 +151,8 @@ test("OTP: no premature guard error when the modal is the prompt", () => {
   assert.match(otp, /message: opensModal \? "" : validation\.message/, "must suppress the guard message when opening the modal");
 });
 
-test("express modal waits for the OTP/auth modules before gating (first-click race)", () => {
-  assert.match(modal, /async function waitForAuthModules/, "must have a wait-for-modules helper");
-  assert.match(modal, /await waitForAuthModules\(3000\)/, "ensureAuthenticated must await the modules");
-});
-
-const modal = readFileSync("extensions/megaska-otp/assets/loopd2c-express-modal.js", "utf8");
-
-test("COD-only mode suppresses all prepaid pricing in the modal", () => {
-  // A COD order must not show prepaid discounts, the prepaid offer banner, the
-  // switch-to-prepaid nudge, or the Prepaid/COD comparison.
-  assert.match(modal, /function prepaidSummary\(method\) \{ if \(state\.codOnly \|\| method !== "PREPAID"\)/, "prepaid discount line hidden in codOnly");
-  assert.match(modal, /function prepaidOfferBanner\(\) \{ if \(state\.codOnly\) return ""/, "prepaid offer banner hidden in codOnly");
-  assert.match(modal, /function prepaidNudgeMarkup\(\)[\s\S]*?if \(state\.codOnly\) return ""/, "switch-to-prepaid nudge hidden in codOnly");
-  assert.match(modal, /if \(state\.codOnly\) \{\s*\n\s*return `<span>Total Payable<\/span><strong>\$\{money\(codPaise/, "footer shows COD total alone in codOnly");
-  // And the intent is switched to COD at open so the summary total is the COD price.
-  assert.match(modal, /if \(state\.codOnly\) \{ try \{ await ensureBackendPaymentMethod\("COD"\)/, "codOnly forces the COD backend method at open");
-});
-
-test("express modal supports a COD-only mode driven by the open() option", () => {
-  assert.match(modal, /state\.codOnly = Boolean\(opts\?\.codOnly\)/, "open() must read the codOnly option");
-  assert.match(modal, /state\.codOnly[\s\S]*?state\.selectedDisplayPaymentMethod = "COD"/, "codOnly must preselect COD");
-  // COD-only mode filters the method list down to the COD row (no Razorpay).
-  assert.match(modal, /state\.codOnly\s*\n?\s*\?\s*DISPLAY_PAYMENT_METHODS\.filter\(\(method\) => method\.backendMethod === "COD"\)/, "codOnly must present COD alone");
-  // The OTP re-open after verification must preserve COD-only mode.
-  assert.match(modal, /callback: \(\) => open\(\{ triggerEl, codOnly: Boolean\(reopenOpts\?\.codOnly\) \}\)/, "OTP re-open must keep codOnly");
-});
+// The COD-only express modal has been retired; both flows finish in native
+// Shopify Checkout, so the modal's codOnly behaviour is no longer asserted here.
 
 test("OTP module exposes a session-gated Shopify Checkout hand-off with prefill", () => {
   assert.match(otp, /async function beginGatedShopifyCheckout/, "beginGatedShopifyCheckout must exist");
