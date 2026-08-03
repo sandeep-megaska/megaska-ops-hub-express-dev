@@ -43,6 +43,14 @@ test("both prices are shown, prepaid discounted and COD loss-framed", () => {
   assert.match(src, /more than online/, "COD option must be loss-framed against online");
 });
 
+test("payment-choice base is intent-neutral (never double-counts an already-applied prepaid discount)", () => {
+  // When the cart already carries loopd2c_payment_intent=prepaid, cart.total_price
+  // already includes the prepaid saving; the choice must add it back to recover the
+  // COD base rather than subtracting prepaid a second time.
+  assert.match(src, /cart\.attributes && cart\.attributes\.loopd2c_payment_intent\)[\s\S]*?=== "prepaid"/, "must read the current intent from the same cart fetch");
+  assert.match(src, /var base = payable \+ \(prepaidAppliedNow \? prepaidSavings : 0\)/, "COD base must add prepaid back when it is already applied to the cart total");
+});
+
 test("each option is a direct-action button: sets the intent then proceeds", () => {
   assert.match(src, /data-loopdesk-pay-choice/, "options must carry the choice hook");
   assert.match(src, /var intent = choice\.getAttribute\("data-loopdesk-pay-choice"\)/, "handler must read the clicked option's intent");
