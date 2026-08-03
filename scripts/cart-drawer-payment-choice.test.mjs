@@ -62,6 +62,14 @@ test("styles exist for the choice block (primary/secondary CTA buttons)", () => 
   assert.match(css, /\.loopdesk-cart-drawer__pay-option--secondary/, "COD secondary-button styling must be present");
 });
 
+test("the Pay Online option lists accepted online methods (self-contained badges)", () => {
+  // A generic accepted-methods strip (no third-party brand marks) under Pay Online.
+  assert.match(src, /loopdesk-cart-drawer__pay-methods/, "methods strip must render");
+  assert.match(src, /\["UPI", "Cards", "Net Banking", "Wallets"\]/, "generic method labels must be present");
+  assert.match(src, /opt\("prepaid", "primary"[\s\S]*?methodsHtml\)/, "methods strip must attach to the Pay Online option only");
+  assert.match(css, /\.loopdesk-cart-drawer__pay-method \{/, "method badge styling must exist");
+});
+
 // Phase 2 (modal-free): with the flag on, BOTH prepaid and COD hand off to
 // native Shopify Checkout - the chosen intent is persisted, then the shared OTP
 // gate runs. The COD-only modal is retired from this path.

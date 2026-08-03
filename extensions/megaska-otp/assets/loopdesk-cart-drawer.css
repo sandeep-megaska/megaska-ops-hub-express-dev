@@ -762,3 +762,5 @@ body.loopdesk-cart-drawer-is-open #loopdesk-cart-drawer-root .loopdesk-cart-draw
 .loopdesk-cart-drawer__pay-copy em.is-more { color:#b45309; font-weight:600; }
 .loopdesk-cart-drawer__pay-amt { display:flex; align-items:center; gap:6px; font-size:15px; font-weight:800; color:#0f172a; white-space:nowrap; }
 .loopdesk-cart-drawer__pay-arrow { font-size:18px; font-weight:700; line-height:1; opacity:.7; }
+.loopdesk-cart-drawer__pay-methods { display:flex; flex-wrap:wrap; gap:4px; margin-top:6px; }
+.loopdesk-cart-drawer__pay-method { font-size:10px; font-weight:700; letter-spacing:.02em; line-height:1; padding:3px 6px; border-radius:5px; background:rgba(255,255,255,.16); color:#e2e8f0; white-space:nowrap; }

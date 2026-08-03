@@ -1704,15 +1704,22 @@
     var prepaidPrice = Math.max(0, base - prepaidSavings);
     // Each option is a CTA button: clicking it proceeds straight to that flow -
     // both prepaid and COD hand off to native Shopify Checkout. No separate button.
-    function opt(key, variant, title, price, sub, subClass) {
+    function opt(key, variant, title, price, sub, subClass, extra) {
       return '<button type="button" class="loopdesk-cart-drawer__pay-option loopdesk-cart-drawer__pay-option--' + variant + '" data-loopdesk-pay-choice="' + key + '">'
-        + '<span class="loopdesk-cart-drawer__pay-copy"><strong>' + title + '</strong>' + (sub ? '<em class="' + (subClass || "") + '">' + sub + '</em>' : '') + '</span>'
+        + '<span class="loopdesk-cart-drawer__pay-copy"><strong>' + title + '</strong>' + (sub ? '<em class="' + (subClass || "") + '">' + sub + '</em>' : '') + (extra || "") + '</span>'
         + '<span class="loopdesk-cart-drawer__pay-amt">' + money(price, cur) + '<span class="loopdesk-cart-drawer__pay-arrow" aria-hidden="true">›</span></span></button>';
     }
+    // Accepted online methods shown under Pay Online. Generic category badges (no
+    // third-party brand marks) so the extension stays self-contained; swap for
+    // official logo assets later if desired.
+    var payMethods = ["UPI", "Cards", "Net Banking", "Wallets"];
+    var methodsHtml = '<span class="loopdesk-cart-drawer__pay-methods" aria-label="Accepted online: ' + payMethods.join(", ") + '">'
+      + payMethods.map(function (m) { return '<span class="loopdesk-cart-drawer__pay-method">' + m + '</span>'; }).join("")
+      + '</span>';
     var saveText = prepaidSavings > 0 ? "Save " + money(prepaidSavings, cur) : "Fast & secure";
     var codText = prepaidSavings > 0 ? money(prepaidSavings, cur) + " more than online" : "Pay at delivery";
     return '<p class="loopdesk-cart-drawer__pay-label">Choose how to pay</p>'
-      + opt("prepaid", "primary", "Pay Online", prepaidPrice, saveText, "is-save")
+      + opt("prepaid", "primary", "Pay Online", prepaidPrice, saveText, "is-save", methodsHtml)
       + opt("cod", "secondary", "Cash on Delivery", base, codText, prepaidSavings > 0 ? "is-more" : "");
   }
 
