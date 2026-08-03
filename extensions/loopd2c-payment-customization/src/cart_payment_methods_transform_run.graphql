@@ -1,0 +1,12 @@
+query CartPaymentMethodsTransformRun {
+  cart {
+    # The shopper's Prepaid/COD choice, stamped by the LoopD2C cart drawer.
+    paymentIntent: attribute(key: "loopd2c_payment_intent") {
+      value
+    }
+  }
+  paymentMethods {
+    id
+    name
+  }
+}

@@ -15,6 +15,8 @@ pub struct Line {
 pub struct Cart {
     pub subtotal: Option<Decimal>,
     pub lines: Vec<Line>,
+    /// The shopper's Prepaid/COD choice from the cart drawer (`loopd2c_payment_intent`).
+    pub payment_intent: Option<String>,
 }
 
 pub struct Allocation<'a> {
@@ -65,7 +67,18 @@ impl Cart {
                 })
             })
             .collect();
-        Self { subtotal, lines }
+        let payment_intent = input
+            .cart()
+            .payment_intent()
+            .as_ref()
+            .and_then(|a| a.value().cloned())
+            .map(|v| v.trim().to_ascii_lowercase())
+            .filter(|v| !v.is_empty());
+        Self {
+            subtotal,
+            lines,
+            payment_intent,
+        }
     }
 }
 
