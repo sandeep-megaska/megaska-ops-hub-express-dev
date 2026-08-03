@@ -312,6 +312,21 @@
   font-weight: 700;
 }
 
+.loopdesk-cart-drawer__delivery {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+.loopdesk-cart-drawer__delivery-icon { flex: 0 0 auto; color: #475569; line-height: 0; }
+.loopdesk-cart-drawer__delivery-copy { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.loopdesk-cart-drawer__delivery-copy strong { font-size: 13px; font-weight: 700; color: #0f172a; overflow-wrap: anywhere; }
+.loopdesk-cart-drawer__delivery-copy em { font-style: normal; font-size: 12px; font-weight: 600; color: #047857; }
+
 .loopdesk-tier-progress { max-width:100%; margin:16px 0; padding:16px; overflow:hidden; border:1px solid #dbe3ee; border-radius:var(--loopdesk-radius, 16px); background:#f8fafc; }
 .loopdesk-tier-progress p, .loopdesk-tier-progress h3 { margin:0; }
 .loopdesk-tier-progress__eyebrow { color:var(--loopdesk-primary, #111827); font-size:15px; font-weight:800; }

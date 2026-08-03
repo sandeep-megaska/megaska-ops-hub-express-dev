@@ -52,6 +52,18 @@ test("payment-choice base is intent-neutral (never double-counts an already-appl
   assert.match(src, /var codBase = payable \+ \(prepaidApplied \? prepaidSavings : 0\)/, "COD base must add prepaid back when it is already applied to the cart total");
 });
 
+test("cart drawer reuses the PDP pincode result to show a delivery estimate", () => {
+  // The product-page 'mg-pincode-widget' caches its Delhivery result under
+  // megaska_delivery_pin_result; the drawer reads it (same domain) and shows a
+  // "Delivering to <city> · Expected by <date>" banner - no re-entry, no API call.
+  assert.match(src, /megaska_delivery_pin_result/, "must read the PDP widget's cached pincode result");
+  assert.match(src, /function renderDeliveryEstimate/, "delivery-estimate renderer must exist");
+  assert.match(src, /\+ renderDeliveryEstimate\(\)/, "must be rendered into the drawer body");
+  assert.match(src, /Delivering to /, "must show the destination");
+  assert.match(src, /Expected by /, "must show the expected delivery date");
+  assert.match(css, /\.loopdesk-cart-drawer__delivery\b/, "delivery banner styling must exist");
+});
+
 test("the You-pay summary labels the prepaid price and states the COD price (choice mode)", () => {
   // Removes the ambiguity between the summary total and the two CTA prices, without
   // touching any discount logic - text/style only, using the same price helper.
