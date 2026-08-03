@@ -64,6 +64,18 @@ test("no separate Express Checkout button in choice mode; nudge suppressed", () 
   assert.match(src, /!config\.cart\.paymentChoiceEnabled\) \? prepaidOfferNudgeText/, "redundant prepaid nudge must be suppressed in choice mode");
 });
 
+test("only the CTA is pinned in the sticky footer; totals/trust/fine-print scroll", () => {
+  // The tall summary was eating the drawer; it now scrolls with the cart while the
+  // payment CTA stays pinned, so more cart content is visible.
+  assert.match(src, /class="loopdesk-cart-drawer__scroll"/, "a scroll wrapper must exist");
+  assert.match(src, /class="loopdesk-cart-drawer__summary"/, "totals/trust/fine-print live in a scrollable summary block");
+  assert.match(css, /\.loopdesk-cart-drawer__scroll \{[\s\S]*?overflow-y: auto/, "the scroll wrapper is the scroll region");
+  const footer = src.match(/<footer class="loopdesk-cart-drawer__footer">[\s\S]*?<\/footer>/);
+  assert.ok(footer, "footer must be present");
+  assert.match(footer[0], /data-loopdesk-payment-choice/, "footer keeps the payment-choice CTA");
+  assert.doesNotMatch(footer[0], /data-loopdesk-cart-subtotal|loopdesk-cart-drawer__microcopy/, "footer must not carry the totals rows or fine print");
+});
+
 test("styles exist for the choice block (primary/secondary CTA buttons)", () => {
   assert.match(css, /\.loopdesk-cart-drawer__pay-option/, "option styling must be present");
   assert.match(css, /\.loopdesk-cart-drawer__pay-option--primary/, "prepaid primary-button styling must be present");

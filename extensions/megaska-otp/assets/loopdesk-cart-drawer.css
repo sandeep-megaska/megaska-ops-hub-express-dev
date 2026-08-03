@@ -104,22 +104,31 @@
   line-height: 1;
 }
 
-.loopdesk-cart-drawer__body {
+.loopdesk-cart-drawer__scroll {
   flex: 1;
   min-width: 0;
   min-height: 0;
   overflow-x: clip;
   overflow-y: auto;
-  padding: 6px 20px 18px;
   overscroll-behavior: contain;
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
 
-.loopdesk-cart-drawer__body::-webkit-scrollbar {
+.loopdesk-cart-drawer__scroll::-webkit-scrollbar {
   display: none;
   width: 0;
   height: 0;
+}
+
+.loopdesk-cart-drawer__body {
+  min-width: 0;
+  padding: 6px 20px 0;
+}
+
+.loopdesk-cart-drawer__summary {
+  min-width: 0;
+  padding: 4px 20px 16px;
 }
 
 .loopdesk-cart-drawer__loading,
@@ -511,7 +520,8 @@
 
   .loopdesk-cart-drawer__header,
   .loopdesk-cart-drawer__footer,
-  .loopdesk-cart-drawer__body {
+  .loopdesk-cart-drawer__body,
+  .loopdesk-cart-drawer__summary {
     padding-left: 16px;
     padding-right: 16px;
   }
