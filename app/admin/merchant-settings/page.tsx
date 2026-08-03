@@ -128,6 +128,7 @@ async function saveMerchantSettings(
           formData.get("expressCheckoutButtonEnabled") === "on",
         viewCartButtonEnabled: formData.get("viewCartButtonEnabled") === "on",
         paymentChoiceEnabled: formData.get("paymentChoiceEnabled") === "on",
+        paymentChoiceCollapsed: formData.get("paymentChoiceCollapsed") === "on",
         customCartTriggerSelector: formData.get("customCartTriggerSelector"),
       },
       account: {
@@ -473,7 +474,8 @@ export default async function MerchantSettingsPage({
             <Check label="Open after add to cart" name="openAfterAddToCart" defaultChecked={settings.cart.openAfterAddToCart} help="Opens LoopD2C drawer after cart add when LoopD2C drawer is active." />
             <Check label="Express checkout button" name="expressCheckoutButtonEnabled" defaultChecked={settings.cart.expressCheckoutButtonEnabled} help="Keeps Express Checkout visible in drawer." />
             <Check label="View cart button" name="viewCartButtonEnabled" defaultChecked={settings.cart.viewCartButtonEnabled} help="Keeps the standard cart link visible." />
-            <Check label="In-drawer Prepaid/COD choice" name="paymentChoiceEnabled" defaultChecked={settings.cart.paymentChoiceEnabled} help="Shopper picks Prepaid or COD in the drawer. Prepaid hands off to Shopify Checkout (disable COD in Shopify payment settings); COD opens the express modal." />
+            <Check label="In-drawer Prepaid/COD choice" name="paymentChoiceEnabled" defaultChecked={settings.cart.paymentChoiceEnabled} help="Shopper picks Prepaid or COD in the drawer. Both finish in native Shopify Checkout (enable native COD in Shopify payment settings); the prepaid discount and COD-hiding are applied by the Shopify Functions." />
+            <Check label="Collapse choice into a Place Order button (test)" name="paymentChoiceCollapsed" defaultChecked={settings.cart.paymentChoiceCollapsed} help="Experiment: show a single Place Order button that reveals the Prepaid/COD options on click, instead of both buttons up front. Requires the in-drawer choice above." />
           </div>
           <Field
             label="Custom cart icon selector (advanced)"

@@ -29,6 +29,7 @@
       expressCheckoutButtonEnabled: true,
       viewCartButtonEnabled: true,
       paymentChoiceEnabled: false,
+      paymentChoiceCollapsed: false,
       nativeDrawerDisabledRequiredMessage: "To use LoopD2C Enhanced Drawer, set your theme cart type to Page in Shopify theme settings.",
       customTriggerSelector: ""
     },
@@ -147,7 +148,7 @@
   var COMBINED_CART_TRIGGER_SELECTOR = CUSTOM_CART_TRIGGER_SELECTOR ? CART_TRIGGER_SELECTOR + "," + CUSTOM_CART_TRIGGER_SELECTOR : CART_TRIGGER_SELECTOR;
   var CART_TRIGGER_KEYWORD_REGEX = /\b(cart|bag|basket|trolley)\b|cart-icon|cart-toggle|cart-trigger|cart-link|cart-count|mini-cart|header__icon--cart|header-cart/;
 
-  var state = { selectedOfferVariants: {}, offerProducts: {}, offerLoading: {}, open: false, loading: false, cart: null, paymentIntent: "", error: "", hostMode: LOOPDESK_HOST_MODE, themeDrawer: null, fallbackReason: "", expressCheckoutLock: false, capability: null, drawerModeActive: false, expectPostAddNavigation: 0, suppressAddReturnIntent: false, neutralizedThemeDrawers: [], bodyLockSnapshot: null, removedThemeBodyClasses: [], cartTriggerTakeovers: [], promotionRuntimeRefresh: { attempts: 0, maxAttempts: 3, inFlight: false, delayedTimer: null, cartNonEmptyAttempted: false } };
+  var state = { selectedOfferVariants: {}, offerProducts: {}, offerLoading: {}, open: false, loading: false, cart: null, paymentIntent: "", payChoiceExpanded: false, error: "", hostMode: LOOPDESK_HOST_MODE, themeDrawer: null, fallbackReason: "", expressCheckoutLock: false, capability: null, drawerModeActive: false, expectPostAddNavigation: 0, suppressAddReturnIntent: false, neutralizedThemeDrawers: [], bodyLockSnapshot: null, removedThemeBodyClasses: [], cartTriggerTakeovers: [], promotionRuntimeRefresh: { attempts: 0, maxAttempts: 3, inFlight: false, delayedTimer: null, cartNonEmptyAttempted: false } };
   var cartTriggerObserver = null;
   var cartTriggerTakeoverTimer = null;
   var suppressNextCartClickUntil = 0;
@@ -687,6 +688,7 @@
         expressCheckoutButtonEnabled: bool(firstDefined(cart.expressCheckoutButtonEnabled, legacy.expressCheckoutButtonEnabled), DEFAULT_CONFIG.cart.expressCheckoutButtonEnabled),
         viewCartButtonEnabled: bool(firstDefined(cart.viewCartButtonEnabled, legacy.viewCartButtonEnabled), DEFAULT_CONFIG.cart.viewCartButtonEnabled),
         paymentChoiceEnabled: bool(firstDefined(cart.paymentChoiceEnabled, legacy.paymentChoiceEnabled), DEFAULT_CONFIG.cart.paymentChoiceEnabled),
+        paymentChoiceCollapsed: bool(firstDefined(cart.paymentChoiceCollapsed, legacy.paymentChoiceCollapsed), DEFAULT_CONFIG.cart.paymentChoiceCollapsed),
         nativeDrawerDisabledRequiredMessage: text(cart.nativeDrawerDisabledRequiredMessage, DEFAULT_CONFIG.cart.nativeDrawerDisabledRequiredMessage),
         customTriggerSelector: text(cart.customTriggerSelector || legacy.customTriggerSelector, DEFAULT_CONFIG.cart.customTriggerSelector)
       },
@@ -1781,6 +1783,14 @@
       + '</span>';
     var saveText = prepaidSavings > 0 ? "Save " + money(prepaidSavings, cur) : "Fast & secure";
     var codText = prepaidSavings > 0 ? money(prepaidSavings, cur) + " more than online" : "Pay at delivery";
+    // Experiment (config.cart.paymentChoiceCollapsed): show one "Place Order"
+    // button first; it expands to the two priced options on click. Reduces the
+    // up-front choice while keeping every benefit one tap away.
+    if (config.cart.paymentChoiceCollapsed && !state.payChoiceExpanded) {
+      return '<button type="button" class="loopdesk-cart-drawer__place-order" data-loopdesk-place-order>'
+        + '<span class="loopdesk-cart-drawer__place-order-copy"><strong>Place Order</strong><em>Prepaid &amp; Cash on Delivery</em></span>'
+        + '<span class="loopdesk-cart-drawer__pay-arrow" aria-hidden="true">›</span></button>';
+    }
     return '<p class="loopdesk-cart-drawer__pay-label">Choose how to pay</p>'
       + opt("prepaid", "primary", "Pay Online", prepaidPrice, saveText, "is-save", methodsHtml)
       + opt("cod", "secondary", "Cash on Delivery", base, codText, prepaidSavings > 0 ? "is-more" : "");
@@ -1908,6 +1918,8 @@
 }
   function setOpen(open) {
     state.hostMode = LOOPDESK_HOST_MODE;
+    // Each fresh open starts collapsed for the Place-Order experiment.
+    if (open && !state.open) state.payChoiceExpanded = false;
     if (open) rememberBodyLockState();
     if (open && !state.open) { try { if (window.LoopDeskAnalytics) window.LoopDeskAnalytics.track("DRAWER_OPEN"); } catch (e) {} }
     state.open = open;
@@ -2172,6 +2184,14 @@
       var button = event.target && event.target.closest && event.target.closest("[data-loopdesk-cart-banner-dismiss]");
       if (!button || !hostRoot.contains(button)) return;
       dismissBanner(button.getAttribute("data-loopdesk-cart-banner-dismiss"));
+      render();
+    });
+    hostRoot.addEventListener("click", function (event) {
+      // Collapsed-CTA experiment: the "Place Order" button expands to reveal the
+      // Prepaid/COD options; it does not proceed to checkout by itself.
+      var placeOrder = event.target && event.target.closest && event.target.closest("[data-loopdesk-place-order]");
+      if (!placeOrder || !hostRoot.contains(placeOrder)) return;
+      state.payChoiceExpanded = true;
       render();
     });
     hostRoot.addEventListener("click", function (event) {

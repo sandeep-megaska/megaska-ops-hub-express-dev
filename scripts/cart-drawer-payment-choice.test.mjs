@@ -112,6 +112,18 @@ test("the Pay Online option lists accepted online methods (self-contained badges
   assert.match(css, /\.loopdesk-cart-drawer__pay-method \{/, "method badge styling must exist");
 });
 
+test("collapsed-CTA experiment: flag-gated Place Order button that expands to the choice", () => {
+  // A default-OFF experiment: one "Place Order" button that reveals the priced
+  // Prepaid/COD options on click, to test whether it reduces drawer confusion.
+  assert.match(src, /paymentChoiceCollapsed: false/, "DEFAULT_CONFIG must default the collapsed flag to false");
+  assert.match(src, /paymentChoiceCollapsed: bool\(firstDefined\(cart\.paymentChoiceCollapsed/, "normalizeConfig must read the collapsed flag");
+  assert.match(src, /if \(config\.cart\.paymentChoiceCollapsed && !state\.payChoiceExpanded\)/, "collapsed mode renders only behind the flag, until expanded");
+  assert.match(src, /data-loopdesk-place-order/, "a Place Order button must render in collapsed mode");
+  assert.match(src, /closest\("\[data-loopdesk-place-order\]"\)[\s\S]*?state\.payChoiceExpanded = true/, "clicking Place Order expands to the options");
+  assert.match(src, /if \(open && !state\.open\) state\.payChoiceExpanded = false/, "each fresh open starts collapsed");
+  assert.match(css, /\.loopdesk-cart-drawer__place-order \{/, "Place Order button styling must exist");
+});
+
 // Phase 2 (modal-free): with the flag on, BOTH prepaid and COD hand off to
 // native Shopify Checkout - the chosen intent is persisted, then the shared OTP
 // gate runs. The COD-only modal is retired from this path.
