@@ -1697,6 +1697,53 @@
   // lets the shopper choose in the drawer (before any checkout). Prepaid price
   // reflects the merchant's prepaid offer; the actual discount is applied by the
   // discount Function at checkout keyed on the loopd2c_payment_intent attribute.
+  // Reuse the pincode the shopper already checked on the product page: the theme's
+  // 'mg-pincode-widget' caches its Delhivery result in localStorage under
+  // megaska_delivery_pin_result ({ pin, city, stateCode, inc, tatDays, isCod }).
+  // The drawer reads it to show "Delivering to <city> · Expected by <date>".
+  // Display-only; hidden until the shopper has checked a pincode.
+  function readDeliveryPinResult() {
+    try {
+      var raw = window.localStorage.getItem("megaska_delivery_pin_result");
+      if (!raw) return null;
+      var data = JSON.parse(raw);
+      if (!data || !/^\d{6}$/.test(String(data.pin || ""))) return null;
+      return data;
+    } catch (e) { return null; }
+  }
+  // Same dispatch-day rule the product-page widget uses (orders placed after noon,
+  // or on a Sunday, ship the next working day) so the drawer date matches the PDP.
+  function deliveryShipDate() {
+    var now = new Date();
+    var ship = new Date(now.getTime());
+    var isSun = function (d) { return d.getDay() === 0; };
+    if (isSun(now)) { while (isSun(ship)) ship.setDate(ship.getDate() + 1); }
+    else if (now.getHours() >= 12) { ship.setDate(ship.getDate() + 1); while (isSun(ship)) ship.setDate(ship.getDate() + 1); }
+    return ship;
+  }
+  function renderDeliveryEstimate() {
+    var data = readDeliveryPinResult();
+    if (!data) return "";
+    var place = escapeHtml(String(data.city || data.inc || "").trim());
+    var stateCode = escapeHtml(String(data.stateCode || "").trim());
+    var pin = escapeHtml(String(data.pin || "").trim());
+    var head = "Delivering to " + (place || ("PIN " + pin)) + (place && stateCode ? " (" + stateCode + ")" : "") + (place && pin ? " · " + pin : "");
+    var eta = "";
+    var tat = Number(data.tatDays);
+    if (tat > 0) {
+      var ship = deliveryShipDate();
+      var d1 = new Date(ship.getTime()); d1.setDate(d1.getDate() + tat);
+      var d2 = new Date(ship.getTime()); d2.setDate(d2.getDate() + tat + 1);
+      var opts = { day: "numeric", month: "short" };
+      eta = "Expected by " + d1.toLocaleDateString("en-IN", opts) + " – " + d2.toLocaleDateString("en-IN", opts);
+    }
+    var sub = [eta, data.isCod ? "COD available" : ""].filter(Boolean).join(" · ");
+    return '<div class="loopdesk-cart-drawer__delivery">'
+      + '<span class="loopdesk-cart-drawer__delivery-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 7h11v8H3V7Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M14 9h4l3 3v3h-7V9Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><circle cx="7" cy="17" r="1.8" stroke="currentColor" stroke-width="1.7"/><circle cx="17.5" cy="17" r="1.8" stroke="currentColor" stroke-width="1.7"/></svg></span>'
+      + '<span class="loopdesk-cart-drawer__delivery-copy"><strong>' + head + '</strong>' + (sub ? '<em>' + sub + '</em>' : '') + '</span>'
+      + '</div>';
+  }
+
   // Intent-neutral Prepaid vs COD prices for the drawer. cart.total_price already
   // reflects the persisted choice (the discount Function applies the prepaid saving
   // to the cart itself when loopd2c_payment_intent=prepaid), so recover a stable COD
@@ -1764,6 +1811,7 @@
   elements.body.innerHTML = state.error
     ? '<div class="loopdesk-cart-drawer__error">We could not load your cart. You can still use the cart page.</div>'
     : renderCartGoalProgress(cart)
+      + renderDeliveryEstimate()
       + renderCartDrawerSlot("BEFORE_CART_LINES", slotContext)
       + renderLines(cart)
       + renderCartDrawerSlot("AFTER_CART_LINES", slotContext)
