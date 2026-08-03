@@ -527,6 +527,42 @@
   to { transform: rotate(360deg); }
 }
 
+.loopdesk-checkout-handoff {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483040;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.55);
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+.loopdesk-checkout-handoff.is-visible { opacity: 1; }
+.loopdesk-checkout-handoff__card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  max-width: min(360px, 80vw);
+  padding: 26px 30px;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.35);
+  text-align: center;
+}
+.loopdesk-checkout-handoff__spinner {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 3px solid #e2e8f0;
+  border-top-color: #0f172a;
+  animation: loopdesk-spin 700ms linear infinite;
+}
+.loopdesk-checkout-handoff__title { font-size: 15px; font-weight: 700; color: #0f172a; }
+.loopdesk-checkout-handoff__sub { font-size: 12px; line-height: 1.4; color: #64748b; }
+
 @media (max-width: 640px) {
   .loopdesk-cart-drawer {
     width: 100vw;

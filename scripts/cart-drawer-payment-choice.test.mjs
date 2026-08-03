@@ -148,6 +148,17 @@ test("each intent labels its OTP trigger source", () => {
   assert.match(src, /var triggerSource = "loopdesk-drawer-" \+ state\.paymentIntent/, "trigger source must reflect the chosen intent");
 });
 
+test("a hand-off overlay bridges the gap until Shopify Checkout paints", () => {
+  // Between the CTA and the checkout page there is a ~1s gap; a full-screen
+  // "Proceeding to secure checkout" overlay reassures the shopper.
+  assert.match(src, /function showCheckoutHandoffOverlay/, "overlay helper must exist");
+  assert.match(src, /Proceeding to secure checkout/, "overlay must show a proceeding message");
+  assert.match(src, /handoffToShopifyCheckout[\s\S]*?showCheckoutHandoffOverlay\(\)/, "the native hand-off must show the overlay");
+  // If the OTP modal opens instead of navigating, the overlay is dropped.
+  assert.match(src, /if \(navigated === false\) hideCheckoutHandoffOverlay\(\)/, "overlay must be hidden when the OTP modal opens instead");
+  assert.match(css, /\.loopdesk-checkout-handoff\b/, "overlay styling must exist");
+});
+
 // OTP verification must gate BOTH flows for logged-out shoppers. Both COD and
 // prepaid hand off through the OTP module (beginGatedShopifyCheckout) before
 // reaching native Shopify Checkout - there is no in-modal gate any more.

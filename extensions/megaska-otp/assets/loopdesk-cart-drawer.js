@@ -1954,6 +1954,38 @@
     restoreLoopDeskBodyLock();
   }
 
+  // Bridge the gap between the checkout CTA and the Shopify Checkout page painting
+  // (persist intent -> OTP session check -> navigate can take ~1s). A full-screen
+  // "Proceeding to secure checkout" overlay reassures the shopper the next page is
+  // loading. Hidden again if the OTP modal opens instead of navigating.
+  function showCheckoutHandoffOverlay(message) {
+    var el = document.getElementById("loopdesk-checkout-handoff");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "loopdesk-checkout-handoff";
+      el.className = "loopdesk-checkout-handoff";
+      el.setAttribute("role", "status");
+      el.setAttribute("aria-live", "polite");
+      el.innerHTML = '<div class="loopdesk-checkout-handoff__card">'
+        + '<span class="loopdesk-checkout-handoff__spinner" aria-hidden="true"></span>'
+        + '<strong class="loopdesk-checkout-handoff__title"></strong>'
+        + '<span class="loopdesk-checkout-handoff__sub">This will just take a moment — please don’t close this window.</span>'
+        + '</div>';
+      (document.body || document.documentElement).appendChild(el);
+    }
+    var title = el.querySelector(".loopdesk-checkout-handoff__title");
+    if (title) title.textContent = message || "Proceeding to secure checkout…";
+    el.hidden = false;
+    // Next frame so the opacity transition runs.
+    window.requestAnimationFrame(function () { el.classList.add("is-visible"); });
+  }
+  function hideCheckoutHandoffOverlay() {
+    var el = document.getElementById("loopdesk-checkout-handoff");
+    if (!el) return;
+    el.classList.remove("is-visible");
+    el.hidden = true;
+  }
+
   function fetchCart() {
     state.loading = true;
     state.error = "";
@@ -2303,6 +2335,7 @@
     // Modal retired: the legacy (flag-off) path now finishes in native Shopify
     // Checkout like the in-drawer choice, instead of opening the express modal.
     debugLog("Shopify checkout handoff started", { source: checkoutSource }, true);
+    showCheckoutHandoffOverlay();
     window.setTimeout(releaseLock, 900);
     window.location.assign("/checkout");
   }
@@ -2325,12 +2358,15 @@
     var triggerSource = "loopdesk-drawer-" + state.paymentIntent;
     debugLog("Shopify checkout hand-off", { source: source || "checkout-intent", intent: state.paymentIntent }, true);
     closeDrawerForCheckoutHandoff();
+    showCheckoutHandoffOverlay();
     var proceeded = false;
     var proceed = function () {
       if (proceeded) return;
       proceeded = true;
       if (window.MegaskaOtp && typeof window.MegaskaOtp.beginGatedShopifyCheckout === "function") {
         Promise.resolve(window.MegaskaOtp.beginGatedShopifyCheckout({ triggerSource: triggerSource }))
+          // false => the OTP modal opened instead of navigating, so drop the overlay.
+          .then(function (navigated) { if (navigated === false) hideCheckoutHandoffOverlay(); })
           .catch(function () { window.location.assign("/checkout"); });
       } else {
         window.location.assign("/checkout");
