@@ -1697,19 +1697,26 @@
   // lets the shopper choose in the drawer (before any checkout). Prepaid price
   // reflects the merchant's prepaid offer; the actual discount is applied by the
   // discount Function at checkout keyed on the loopd2c_payment_intent attribute.
-  function renderPaymentChoice(pricing, cart) {
-    var cur = cart && cart.currency;
+  // Intent-neutral Prepaid vs COD prices for the drawer. cart.total_price already
+  // reflects the persisted choice (the discount Function applies the prepaid saving
+  // to the cart itself when loopd2c_payment_intent=prepaid), so recover a stable COD
+  // base by adding the prepaid saving back when it is currently applied - reading the
+  // attribute off `cart` keeps it in sync with cart.total_price. Display-only; the
+  // Functions remain authoritative at checkout.
+  function choicePrices(pricing, cart) {
     var payable = pricing ? pricing.finalPayableSubtotal : (cart ? cart.total_price : 0);
     var prepaidSavings = prepaidOfferSavingsMinor(pricing ? pricing.merchandiseSubtotal : payable);
-    // The cart total is intent-dependent: when loopd2c_payment_intent=prepaid the
-    // discount Function has already applied the prepaid saving to cart.total_price.
-    // Reconstruct an intent-neutral COD base (tier/coupon only, prepaid removed)
-    // from the SAME cart fetch - reading the attribute off `cart` keeps it in sync
-    // with cart.total_price - so the comparison never double-counts, or depends on,
-    // the currently-persisted choice.
-    var prepaidAppliedNow = String((cart && cart.attributes && cart.attributes.loopd2c_payment_intent) || "").toLowerCase() === "prepaid";
-    var base = payable + (prepaidAppliedNow ? prepaidSavings : 0);
-    var prepaidPrice = Math.max(0, base - prepaidSavings);
+    var prepaidApplied = String((cart && cart.attributes && cart.attributes.loopd2c_payment_intent) || "").toLowerCase() === "prepaid";
+    var codBase = payable + (prepaidApplied ? prepaidSavings : 0);
+    return { codBase: codBase, prepaidPrice: Math.max(0, codBase - prepaidSavings), prepaidSavings: prepaidSavings, prepaidApplied: prepaidApplied };
+  }
+
+  function renderPaymentChoice(pricing, cart) {
+    var cur = cart && cart.currency;
+    var prices = choicePrices(pricing, cart);
+    var prepaidSavings = prices.prepaidSavings;
+    var base = prices.codBase;
+    var prepaidPrice = prices.prepaidPrice;
     // Each option is a CTA button: clicking it proceeds straight to that flow -
     // both prepaid and COD hand off to native Shopify Checkout. No separate button.
     function opt(key, variant, title, price, sub, subClass, extra) {
@@ -1774,6 +1781,28 @@
   if (elements.savingsRow) elements.savingsRow.hidden = !(pricing && pricing.totalSavings > 0);
   if (elements.savings) elements.savings.textContent = pricing ? "-" + money(pricing.totalSavings, cart && cart.currency) : "";
   elements.subtotal.textContent = money(pricing ? pricing.finalPayableSubtotal : (cart ? cart.total_price : 0), cart && cart.currency);
+  // In choice mode the "You pay" total reflects the currently-selected method, so
+  // label which price it is and state the other option's price - otherwise ₹1,042.50
+  // (Pay Online) reads as inconsistent with the ₹1,251.00 COD button. Text only; the
+  // amounts come from the same intent-neutral helper the CTA uses.
+  if (elements.payableLabel && elements.payNote) {
+    if (config.cart.paymentChoiceEnabled && hasItems) {
+      var cp = choicePrices(pricing, cart);
+      var noteCur = cart && cart.currency;
+      if (cp.prepaidApplied) {
+        elements.payableLabel.textContent = "You pay online";
+        elements.payNote.innerHTML = (cp.prepaidSavings > 0 ? '<span class="loopdesk-cart-drawer__pay-note-save">Special prepaid discount applied -' + money(cp.prepaidSavings, noteCur) + '</span> · ' : '') + 'Cash on Delivery ' + money(cp.codBase, noteCur);
+      } else {
+        elements.payableLabel.textContent = "You pay";
+        elements.payNote.innerHTML = 'Pay Online ' + money(cp.prepaidPrice, noteCur) + (cp.prepaidSavings > 0 ? ' · <span class="loopdesk-cart-drawer__pay-note-save">save ' + money(cp.prepaidSavings, noteCur) + '</span> with the prepaid offer' : '');
+      }
+      elements.payNote.hidden = false;
+    } else {
+      elements.payableLabel.textContent = "You pay";
+      elements.payNote.textContent = "";
+      elements.payNote.hidden = true;
+    }
+  }
   if (elements.prepaidNudge) {
     var prepaidSavings = prepaidOfferSavingsMinor(pricing ? pricing.merchandiseSubtotal : (cart ? cart.total_price : 0));
     // The choice block already states the prepaid saving on the "Pay Online"
@@ -2038,7 +2067,7 @@
       '<div class="loopdesk-cart-drawer__scroll">',
       '<div class="loopdesk-cart-drawer__body"></div>',
       '<span data-loopdesk-slot="BEFORE_FOOTER"></span>',
-      '<div class="loopdesk-cart-drawer__summary"><span data-loopdesk-slot="BEFORE_TOTALS"></span><div class="loopdesk-cart-drawer__subtotal"><span>Merchandise subtotal</span><strong data-loopdesk-cart-merchandise-subtotal></strong></div><div class="loopdesk-cart-drawer__subtotal" data-loopdesk-cart-savings-row hidden><span>Total savings</span><strong data-loopdesk-cart-savings></strong></div><div class="loopdesk-cart-drawer__subtotal loopdesk-cart-drawer__payable"><span>You pay</span><strong data-loopdesk-cart-subtotal></strong></div><span data-loopdesk-slot="AFTER_TOTALS"></span><div data-loopdesk-trust-below-totals></div><a class="loopdesk-cart-drawer__view-cart" href="/cart"></a><p class="loopdesk-cart-drawer__microcopy"></p><p class="loopdesk-cart-drawer__powered"></p></div>',
+      '<div class="loopdesk-cart-drawer__summary"><span data-loopdesk-slot="BEFORE_TOTALS"></span><div class="loopdesk-cart-drawer__subtotal"><span>Merchandise subtotal</span><strong data-loopdesk-cart-merchandise-subtotal></strong></div><div class="loopdesk-cart-drawer__subtotal" data-loopdesk-cart-savings-row hidden><span>Total savings</span><strong data-loopdesk-cart-savings></strong></div><div class="loopdesk-cart-drawer__subtotal loopdesk-cart-drawer__payable"><span data-loopdesk-payable-label>You pay</span><strong data-loopdesk-cart-subtotal></strong></div><p class="loopdesk-cart-drawer__pay-note" data-loopdesk-pay-note hidden></p><span data-loopdesk-slot="AFTER_TOTALS"></span><div data-loopdesk-trust-below-totals></div><a class="loopdesk-cart-drawer__view-cart" href="/cart"></a><p class="loopdesk-cart-drawer__microcopy"></p><p class="loopdesk-cart-drawer__powered"></p></div>',
       '</div>',
       '<footer class="loopdesk-cart-drawer__footer"><span data-loopdesk-slot="BEFORE_CHECKOUT"></span><p class="loopdesk-cart-drawer__prepaid-nudge" data-loopdesk-prepaid-nudge hidden></p><div class="loopdesk-cart-drawer__payment-choice" data-loopdesk-payment-choice hidden></div><button type="button" class="loopdesk-cart-drawer__express" data-loopdesk-express-checkout></button><span data-loopdesk-slot="AFTER_CHECKOUT"></span><div data-loopdesk-trust-below-checkout></div></footer>',
       '<span data-loopdesk-slot="AFTER_FOOTER"></span>',
@@ -2073,6 +2102,8 @@
       body: hostRoot.querySelector(".loopdesk-cart-drawer__body"),
       close: hostRoot.querySelector(".loopdesk-cart-drawer__close"),
       subtotal: hostRoot.querySelector("[data-loopdesk-cart-subtotal]"),
+      payableLabel: hostRoot.querySelector("[data-loopdesk-payable-label]"),
+      payNote: hostRoot.querySelector("[data-loopdesk-pay-note]"),
       merchandiseSubtotal: hostRoot.querySelector("[data-loopdesk-cart-merchandise-subtotal]"),
       savingsRow: hostRoot.querySelector("[data-loopdesk-cart-savings-row]"),
       savings: hostRoot.querySelector("[data-loopdesk-cart-savings]"),
