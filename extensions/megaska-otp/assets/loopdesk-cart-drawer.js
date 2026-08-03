@@ -1702,8 +1702,8 @@
     var base = pricing ? pricing.finalPayableSubtotal : (cart ? cart.total_price : 0);
     var prepaidSavings = prepaidOfferSavingsMinor(pricing ? pricing.merchandiseSubtotal : base);
     var prepaidPrice = Math.max(0, base - prepaidSavings);
-    // Each option is a CTA button: clicking it proceeds straight to that flow
-    // (prepaid -> Shopify Checkout, COD -> COD-only modal). No separate button.
+    // Each option is a CTA button: clicking it proceeds straight to that flow -
+    // both prepaid and COD hand off to native Shopify Checkout. No separate button.
     function opt(key, variant, title, price, sub, subClass) {
       return '<button type="button" class="loopdesk-cart-drawer__pay-option loopdesk-cart-drawer__pay-option--' + variant + '" data-loopdesk-pay-choice="' + key + '">'
         + '<span class="loopdesk-cart-drawer__pay-copy"><strong>' + title + '</strong>' + (sub ? '<em class="' + (subClass || "") + '">' + sub + '</em>' : '') + '</span>'
@@ -2081,9 +2081,9 @@
       setPaymentIntent(intent);
       render();
       // The option IS the CTA (there is no separate Express Checkout button in
-      // choice mode): proceed straight to the chosen flow - COD opens the
-      // COD-only modal, prepaid hands off to Shopify Checkout. Guard on a
-      // non-empty, non-busy cart, mirroring interceptCheckout.
+      // choice mode): proceed straight to the chosen flow - both prepaid and COD
+      // hand off to native Shopify Checkout. Guard on a non-empty, non-busy cart,
+      // mirroring interceptCheckout.
       if (!state.cart || Number(state.cart.item_count || 0) <= 0 || state.loading) return;
       openExpressCheckout(intent === "cod" ? "loopdesk-drawer-cod" : "loopdesk-drawer-prepaid");
     });
@@ -2142,24 +2142,22 @@
   }
 
   function openLoopDeskExpressCheckout(source) {
-    // When the merchant has opted into the in-drawer Prepaid/COD choice, prepaid
-    // (and the unset default) goes to Shopify Checkout; only an explicit COD
-    // choice opens the modal. This is the single choke point every checkout
-    // entry funnels through, so the routing holds for the drawer button, checkout
-    // link clicks, and programmatic form/navigation intercepts alike.
+    // Modal-free migration: when the merchant has opted into the in-drawer
+    // Prepaid/COD choice, BOTH options finish in native Shopify Checkout. Prepaid
+    // (and the unset default) and COD alike persist their intent and hand off
+    // through the OTP gate - the COD-only modal is retired here. This is the
+    // single choke point every checkout entry funnels through, so the routing
+    // holds for the drawer button, checkout link clicks, and programmatic
+    // form/navigation intercepts alike.
     var choiceMode = config.cart.paymentChoiceEnabled;
-    if (choiceMode && paymentIntentValue() !== "cod") {
-      handoffPrepaidToShopifyCheckout(source);
+    if (choiceMode) {
+      handoffToShopifyCheckout(paymentIntentValue() === "cod" ? "cod" : "prepaid", source);
       return;
     }
     var readiness = window.LoopDeskConfig && window.LoopDeskConfig.express_checkout;
-    // The COD choice ALWAYS opens the COD-only modal - it needs no payment
-    // provider, and it must never fall back to Shopify Checkout (COD is disabled
-    // there, so the shopper would be stranded). So no Razorpay/readiness gate for
-    // COD. Only the legacy (flag-off) path, which captures prepaid in-modal via
-    // Razorpay, keeps the stricter readiness gate.
-    var codChoice = choiceMode && paymentIntentValue() === "cod";
-    var modalReady = codChoice || Boolean(readiness && readiness.enabled === true && readiness.ready === true && readiness.provider === "razorpay");
+    // Legacy (flag-off) path only: prepaid is captured in-modal via Razorpay, so
+    // it keeps the stricter readiness gate.
+    var modalReady = Boolean(readiness && readiness.enabled === true && readiness.ready === true && readiness.provider === "razorpay");
     if (!modalReady) {
       debugLog("Shopify checkout fallback", { source: source || "checkout-intent", reason: readiness && readiness.ready === false ? "not-ready" : "config-unavailable" }, true);
       window.location.assign("/checkout");
@@ -2180,7 +2178,7 @@
       debugLog("Express modal API present", { source: checkoutSource });
       window.setTimeout(function () {
         try {
-          window.MegaskaExpressCheckout.open({ source: checkoutSource, codOnly: codChoice });
+          window.MegaskaExpressCheckout.open({ source: checkoutSource });
         } finally {
           window.setTimeout(releaseLock, 900);
         }
@@ -2196,24 +2194,26 @@
     openLoopDeskExpressCheckout(source || "checkout-intent");
   }
 
-  // Shopify-Checkout migration: prepaid hands off to Shopify Checkout with the
-  // loopd2c_payment_intent attribute persisted first, so the discount Function
-  // applies there (COD is disabled in the store's payment settings). Logged-out
+  // Modal-free migration: BOTH prepaid and COD hand off to native Shopify
+  // Checkout with the loopd2c_payment_intent attribute persisted first, so the
+  // Functions can key off it there - prepaid gets the discount, COD is kept
+  // visible (and hidden on prepaid) by the payment customization. Logged-out
   // shoppers are gated through OTP (MegaskaOtp.beginGatedShopifyCheckout), which
   // verifies the mobile number and then continues to Shopify Checkout with
   // buyer-identity prefill; already-verified shoppers go straight through. If the
   // OTP module is unavailable we navigate directly so the shopper is never
   // stranded, and a 1.2s guard covers a flaky /cart/update.js write.
-  function handoffPrepaidToShopifyCheckout(source) {
-    state.paymentIntent = "prepaid";
-    debugLog("prepaid Shopify checkout hand-off", { source: source || "checkout-intent" }, true);
+  function handoffToShopifyCheckout(intent, source) {
+    state.paymentIntent = intent === "cod" ? "cod" : "prepaid";
+    var triggerSource = "loopdesk-drawer-" + state.paymentIntent;
+    debugLog("Shopify checkout hand-off", { source: source || "checkout-intent", intent: state.paymentIntent }, true);
     closeDrawerForCheckoutHandoff();
     var proceeded = false;
     var proceed = function () {
       if (proceeded) return;
       proceeded = true;
       if (window.MegaskaOtp && typeof window.MegaskaOtp.beginGatedShopifyCheckout === "function") {
-        Promise.resolve(window.MegaskaOtp.beginGatedShopifyCheckout({ triggerSource: "loopdesk-drawer-prepaid" }))
+        Promise.resolve(window.MegaskaOtp.beginGatedShopifyCheckout({ triggerSource: triggerSource }))
           .catch(function () { window.location.assign("/checkout"); });
       } else {
         window.location.assign("/checkout");
