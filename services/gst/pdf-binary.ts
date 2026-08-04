@@ -19,6 +19,41 @@ function escapePdfText(value: string): string {
   return value.replaceAll("\\", "\\\\").replaceAll("(", "\\(").replaceAll(")", "\\)");
 }
 
+// Helvetica glyph advance widths (per 1000 em, from the AFM metrics). Used to measure
+// strings for accurate right-alignment - a crude average factor under-measures uppercase /
+// digit-heavy text like a GSTIN and lets it spill past the right margin.
+const HELVETICA_WIDTHS: Record<string, number> = (() => {
+  const w: Record<string, number> = {};
+  const put = (chars: string, width: number) => {
+    for (const ch of chars) w[ch] = width;
+  };
+  put(" ", 278);
+  put("0123456789", 556);
+  w.A = 667; w.B = 667; w.C = 722; w.D = 722; w.E = 667; w.F = 611; w.G = 778; w.H = 722;
+  w.I = 278; w.J = 500; w.K = 667; w.L = 556; w.M = 833; w.N = 722; w.O = 778; w.P = 667;
+  w.Q = 778; w.R = 722; w.S = 667; w.T = 611; w.U = 722; w.V = 667; w.W = 944; w.X = 667;
+  w.Y = 667; w.Z = 611;
+  w.a = 556; w.b = 556; w.c = 500; w.d = 556; w.e = 556; w.f = 278; w.g = 556; w.h = 556;
+  w.i = 222; w.j = 222; w.k = 500; w.l = 222; w.m = 833; w.n = 556; w.o = 556; w.p = 556;
+  w.q = 556; w.r = 333; w.s = 500; w.t = 278; w.u = 556; w.v = 500; w.w = 722; w.x = 500;
+  w.y = 500; w.z = 500;
+  put(".,:;'!", 278);
+  w["|"] = 260; w["-"] = 333;
+  put("()[]{}", 333);
+  w["#"] = 556; w["$"] = 556; w["%"] = 889; w["&"] = 667; w["*"] = 389; w["+"] = 584;
+  w["="] = 584; w["?"] = 556; w["@"] = 1015; w["_"] = 556; w["/"] = 278;
+  return w;
+})();
+
+// Bold is a touch wider than regular; over-measuring slightly only nudges right-aligned
+// text left (safe) whereas under-measuring overflows, so we scale rather than carry a
+// second table.
+function measureText(text: string, size: number, bold = false): number {
+  let units = 0;
+  for (const ch of String(text || "")) units += HELVETICA_WIDTHS[ch] ?? 556;
+  return (units / 1000) * size * (bold ? 1.06 : 1);
+}
+
 function wrapText(value: string, maxLen: number): string[] {
   const text = String(value || "").trim();
   if (!text) return [];
@@ -38,9 +73,9 @@ function wrapText(value: string, maxLen: number): string[] {
   return lines;
 }
 
-function drawText(commands: string[], x: number, y: number, text: string, size = 9): void {
+function drawText(commands: string[], x: number, y: number, text: string, size = 9, bold = false): void {
   commands.push("BT");
-  commands.push(`/F1 ${size} Tf`);
+  commands.push(`/${bold ? "F2" : "F1"} ${size} Tf`);
   commands.push(`${x.toFixed(2)} ${y.toFixed(2)} Td`);
   commands.push(`(${escapePdfText(text)}) Tj`);
   commands.push("ET");
@@ -212,9 +247,8 @@ function buildStyledPdf(model: GstInvoiceRenderModel): Buffer {
   const innerLeft = left + 6;
   const cfg = model.templateConfig;
 
-  const textWidth = (text: string, size: number) => String(text || "").length * size * 0.5;
-  const drawRight = (xRight: number, yPos: number, text: string, size = 7) =>
-    drawText(commands, Math.max(innerLeft, xRight - textWidth(text, size)), yPos, text, size);
+  const drawRight = (xRight: number, yPos: number, text: string, size = 7, bold = false) =>
+    drawText(commands, Math.max(innerLeft, xRight - measureText(text, size, bold)), yPos, text, size, bold);
 
   drawBox(commands, margin, margin, contentWidth, pageHeight - margin * 2);
   let y = pageHeight - margin - 6;
@@ -225,10 +259,10 @@ function buildStyledPdf(model: GstInvoiceRenderModel): Buffer {
     }
     y -= 30;
   }
-  drawText(commands, innerLeft, y - 10, `${model.title} | Original for Recipient`, 10);
+  drawText(commands, innerLeft, y - 10, `${model.title} | Original for Recipient`, 10, true);
   drawRight(right - 8, y - 10, `GSTIN: ${model.supplier.gstin || "UNREGISTERED"}`, 8);
   y -= 20;
-  drawText(commands, innerLeft, y - 10, model.supplier.tradeName || model.supplier.name, 9);
+  drawText(commands, innerLeft, y - 10, model.supplier.tradeName || model.supplier.name, 9, true);
   y -= 13;
   drawText(commands, innerLeft, y - 10, `Invoice: ${model.documentNumber} | Date: ${model.documentDate}`, 8);
   drawRight(right - 8, y - 10, `Place of Supply: ${model.placeOfSupply}`, 8);
@@ -245,7 +279,7 @@ function buildStyledPdf(model: GstInvoiceRenderModel): Buffer {
   for (const x of partyX) drawBox(commands, x, partyBottom, partyW, partyH);
   const drawParty = (x: number, title: string, lines: string[]) => {
     let yy = partyTop - 12;
-    drawText(commands, x + 5, yy, title, 8);
+    drawText(commands, x + 5, yy, title, 8, true);
     yy -= 11;
     for (const line of lines) {
       for (const w of wrapText(line, 32)) {
@@ -299,8 +333,8 @@ function buildStyledPdf(model: GstInvoiceRenderModel): Buffer {
   const headerH = 16;
   drawBox(commands, tableLeft, y - headerH, tableWidth, headerH);
   mainCols.forEach((col, i) => {
-    if (col.align === "r") drawRight(colRight(i) - 3, y - 11, col.title, 7.5);
-    else drawText(commands, colX[i] + 3, y - 11, col.title, 7.5);
+    if (col.align === "r") drawRight(colRight(i) - 3, y - 11, col.title, 7.5, true);
+    else drawText(commands, colX[i] + 3, y - 11, col.title, 7.5, true);
   });
   y -= headerH;
 
@@ -350,8 +384,9 @@ function buildStyledPdf(model: GstInvoiceRenderModel): Buffer {
   y -= 10;
   drawBox(commands, totalsX, y - totalsH, totalsW, totalsH);
   let totalY = y - 14;
-  totalLines.forEach((line) => {
-    drawText(commands, totalsX + 8, totalY, line, 8);
+  totalLines.forEach((line, index) => {
+    const isGrandTotal = index === totalLines.length - 1;
+    drawText(commands, totalsX + 8, totalY, line, isGrandTotal ? 9 : 8, isGrandTotal);
     totalY -= 12;
   });
   y -= totalsH + 8;
@@ -387,7 +422,7 @@ function buildStyledPdf(model: GstInvoiceRenderModel): Buffer {
     Buffer.from("2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n", "utf8"),
   ];
   const imageObjects: Buffer[] = [];
-  let nextObjectId = 6;
+  let nextObjectId = 7;
 
   for (const image of images) {
     let smaskRef = "";
@@ -404,9 +439,10 @@ function buildStyledPdf(model: GstInvoiceRenderModel): Buffer {
   }
 
   const xObjects = xObjectEntries.length ? ` /XObject << ${xObjectEntries.join(" ")} >>` : "";
-  objectBuffers.push(Buffer.from(`3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 5 0 R /Resources << /Font << /F1 4 0 R >>${xObjects} >> >> endobj\n`, "utf8"));
+  objectBuffers.push(Buffer.from(`3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 5 0 R /Resources << /Font << /F1 4 0 R /F2 6 0 R >>${xObjects} >> >> endobj\n`, "utf8"));
   objectBuffers.push(Buffer.from("4 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj\n", "utf8"));
   objectBuffers.push(Buffer.from(`5 0 obj << /Length ${Buffer.byteLength(stream, "utf8")} >> stream\n${stream}\nendstream endobj\n`, "utf8"));
+  objectBuffers.push(Buffer.from("6 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >> endobj\n", "utf8"));
   objectBuffers.push(...imageObjects);
 
   const header = Buffer.from("%PDF-1.4\n", "utf8");
