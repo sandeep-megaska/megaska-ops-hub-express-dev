@@ -1,5 +1,6 @@
 import { prisma } from "../db/prisma";
 import { sendCustomerEmail } from "./email";
+import { buildGiftCardCodeText, firstName, formatAmount } from "./gift-card-email-copy";
 
 type StoreCreditEvent = "COD_REFUND_CREDIT" | "MANUAL_CREDIT" | "GOODWILL_CREDIT" | "CHECKOUT_REDEMPTION";
 
@@ -16,16 +17,6 @@ type StoreCreditEmailPayload = {
   walletTransactionId?: string | null;
   sourceId?: string | null;
 };
-
-function formatAmount(amountMinor: number, currency: string) {
-  const amount = (Number(amountMinor || 0) / 100).toFixed(2);
-  return `${currency} ${amount}`;
-}
-
-function firstName(name?: string | null) {
-  return String(name || "").trim().split(/\s+/)[0] || "there";
-}
-
 
 function storeCreditNotificationLog(event: StoreCreditEvent, outcome: "skipped" | "sent" | "failed") {
   if (event === "COD_REFUND_CREDIT") {
@@ -60,6 +51,31 @@ function buildStoreCreditText(payload: StoreCreditEmailPayload) {
 
   lines.push("", "You can use available Store Credit during checkout.", "", "Store Credit Team");
   return lines.join("\n");
+}
+
+// Optional, customer-initiated delivery of the store-credit gift-card code by email.
+export async function sendGiftCardCodeEmail(input: {
+  shopId: string;
+  customerEmail?: string | null;
+  customerName?: string | null;
+  code: string;
+  balanceMinor: number;
+  currency: string;
+}) {
+  // Deliberately no usageContext idempotency key: this is a customer-initiated resend
+  // ("email me my code"), so each request should actually deliver rather than dedupe.
+  return sendCustomerEmail({
+    shopId: input.shopId,
+    to: input.customerEmail,
+    eventType: "STORE_CREDIT",
+    subject: "Your store credit code",
+    text: buildGiftCardCodeText({
+      customerName: input.customerName,
+      code: input.code,
+      balanceMinor: input.balanceMinor,
+      currency: input.currency,
+    }),
+  });
 }
 
 async function logAndSend(payload: StoreCreditEmailPayload) {

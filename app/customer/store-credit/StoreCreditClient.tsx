@@ -8,6 +8,13 @@ type StoreCreditBalance = {
   currency: "INR";
 };
 
+type StoreCreditGiftCard = {
+  present: boolean;
+  code?: string | null;
+  last4?: string;
+  balance?: number;
+};
+
 type StoreCreditTransaction = {
   id: string;
   type: string;
@@ -19,6 +26,8 @@ type StoreCreditTransaction = {
   orderName?: string | null;
   createdAt: string;
 };
+
+type EmailState = { status: "idle" | "sending" | "sent" | "error"; message?: string };
 
 function formatInr(value: number) {
   return new Intl.NumberFormat("en-IN", {
@@ -35,20 +44,25 @@ function formatSignedAmount(transaction: StoreCreditTransaction) {
 
 export default function StoreCreditClient() {
   const [balance, setBalance] = useState<StoreCreditBalance>({ balance: 0, currency: "INR" });
+  const [giftCard, setGiftCard] = useState<StoreCreditGiftCard>({ present: false });
   const [transactions, setTransactions] = useState<StoreCreditTransaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [emailState, setEmailState] = useState<EmailState>({ status: "idle" });
 
   useEffect(() => {
     void (async () => {
       try {
-        const [balanceResponse, transactionsResponse] = await Promise.all([
+        const [balanceResponse, transactionsResponse, giftCardResponse] = await Promise.all([
           fetch("/api/customer/store-credit", { cache: "no-store" }),
           fetch("/api/customer/store-credit/transactions", { cache: "no-store" }),
+          fetch("/api/customer/store-credit/gift-card", { cache: "no-store" }),
         ]);
 
         const balanceData = await balanceResponse.json().catch(() => ({}));
         const transactionsData = await transactionsResponse.json().catch(() => []);
+        const giftCardData = await giftCardResponse.json().catch(() => ({ present: false }));
 
         if (!balanceResponse.ok || !transactionsResponse.ok) {
           if (balanceResponse.status === 401 || transactionsResponse.status === 401) {
@@ -65,6 +79,11 @@ export default function StoreCreditClient() {
           currency: balanceData?.currency === "INR" ? "INR" : "INR",
         });
         setTransactions(Array.isArray(transactionsData) ? transactionsData : []);
+        setGiftCard(
+          giftCardData && giftCardData.present
+            ? { present: true, code: giftCardData.code ?? null, last4: giftCardData.last4, balance: Number(giftCardData.balance || 0) }
+            : { present: false },
+        );
         setLoading(false);
       } catch {
         setError("Unable to load Store Credit right now.");
@@ -73,12 +92,45 @@ export default function StoreCreditClient() {
     })();
   }, []);
 
+  async function copyCode() {
+    if (!giftCard.code) return;
+    try {
+      await navigator.clipboard.writeText(giftCard.code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+    }
+  }
+
+  async function emailCode() {
+    setEmailState({ status: "sending" });
+    try {
+      const res = await fetch("/api/customer/store-credit/gift-card/email", { method: "POST", cache: "no-store" });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data?.ok) {
+        setEmailState({ status: "sent", message: `Sent to ${data.emailedTo || "your email"}.` });
+        return;
+      }
+      const reason = data?.reason;
+      const message =
+        reason === "no_email_on_file"
+          ? "No email is on file for your account."
+          : reason === "no_store_credit_code"
+            ? "No store credit code to send yet."
+            : "Couldn't send the email right now.";
+      setEmailState({ status: "error", message });
+    } catch {
+      setEmailState({ status: "error", message: "Couldn't send the email right now." });
+    }
+  }
+
   return (
     <main style={{ padding: 24, display: "grid", gap: 18, maxWidth: 920, margin: "0 auto", fontFamily: "system-ui, sans-serif" }}>
       <Link href="/apps/loopd2c/account">← Back to dashboard</Link>
       <header>
         <h1>Store Credit</h1>
-        <p>Store Credit can be used for future purchases once checkout redemption is enabled.</p>
+        <p>Spend your store credit at checkout — enter your code in the &ldquo;Gift card&rdquo; field to apply it to any order.</p>
       </header>
 
       {loading ? <p>Loading Store Credit…</p> : null}
@@ -86,9 +138,59 @@ export default function StoreCreditClient() {
 
       {!loading && !error ? (
         <>
+          {giftCard.present && giftCard.code ? (
+            <section style={{ border: "1px solid #cbd5ff", borderRadius: 12, padding: 20, background: "#f4f7ff", display: "grid", gap: 12 }}>
+              <h2 style={{ marginTop: 0, marginBottom: 0 }}>Use your store credit at checkout</h2>
+              <p style={{ margin: 0, color: "#334" }}>
+                {typeof giftCard.balance === "number"
+                  ? `${formatInr(giftCard.balance)} available. `
+                  : ""}
+                Enter this code in the &ldquo;Gift card&rdquo; field on the checkout page:
+              </p>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
+                <code
+                  style={{
+                    fontSize: 20,
+                    fontWeight: 700,
+                    letterSpacing: 1,
+                    padding: "10px 14px",
+                    background: "#fff",
+                    border: "1px dashed #9db0ff",
+                    borderRadius: 8,
+                    fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+                  }}
+                >
+                  {giftCard.code}
+                </code>
+                <button
+                  type="button"
+                  onClick={copyCode}
+                  style={{ padding: "10px 14px", borderRadius: 8, border: "1px solid #4560d8", background: copied ? "#087f23" : "#4560d8", color: "#fff", cursor: "pointer", fontWeight: 600 }}
+                >
+                  {copied ? "Copied ✓" : "Copy code"}
+                </button>
+                <button
+                  type="button"
+                  onClick={emailCode}
+                  disabled={emailState.status === "sending"}
+                  style={{ padding: "10px 14px", borderRadius: 8, border: "1px solid #4560d8", background: "#fff", color: "#4560d8", cursor: emailState.status === "sending" ? "default" : "pointer", fontWeight: 600 }}
+                >
+                  {emailState.status === "sending" ? "Sending…" : "Email me this code"}
+                </button>
+              </div>
+              {emailState.status === "sent" ? <p style={{ margin: 0, color: "#087f23" }}>{emailState.message}</p> : null}
+              {emailState.status === "error" ? <p style={{ margin: 0, color: "#b00020" }}>{emailState.message}</p> : null}
+              <p style={{ margin: 0, fontSize: 13, color: "#667" }}>
+                Your balance stays on this code — reuse it across orders until it runs out.
+              </p>
+            </section>
+          ) : null}
+
           <section style={{ border: "1px solid #ddd", borderRadius: 12, padding: 20, background: "#fafafa" }}>
             <h2 style={{ marginTop: 0 }}>Available Store Credit</h2>
-            <p style={{ fontSize: 34, fontWeight: 700, margin: 0 }}>{formatInr(balance.balance)}</p>
+            <p style={{ fontSize: 34, fontWeight: 700, margin: 0 }}>
+              {giftCard.present && typeof giftCard.balance === "number" ? formatInr(giftCard.balance) : formatInr(balance.balance)}
+            </p>
           </section>
 
           <section style={{ border: "1px solid #ddd", borderRadius: 12, padding: 20 }}>
@@ -124,7 +226,7 @@ export default function StoreCreditClient() {
             <p>Store Credit is issued for approved COD refund settlements and eligible admin-approved refund cases.</p>
             <p>Store Credit:</p>
             <ul>
-              <li>Can be used for future purchases</li>
+              <li>Can be used at checkout — enter your code in the &ldquo;Gift card&rdquo; field</li>
               <li>Cannot be withdrawn as cash</li>
               <li>Cannot be transferred</li>
               <li>Cannot be gifted</li>
