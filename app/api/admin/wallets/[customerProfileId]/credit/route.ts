@@ -53,6 +53,10 @@ export async function POST(req: NextRequest, context: { params: Promise<{ custom
       const { projectCreditToGiftCard } = await import("../../../../../../services/store-credit/gift-card-projection");
       const projection = await projectCreditToGiftCard(result.transaction.id);
       giftCard = projection;
+      // Log the outcome (incl. the failure reason) - a returned failure was previously
+      // invisible: not logged and not shown, so a silent gift-card top-up failure looked
+      // like "nothing happened".
+      console.info("[WALLET ADMIN] gift_card_projection", { customerProfileId, walletTransactionId: result.transaction.id, ...projection });
       if (projection.status === "created") {
         const { notifyGiftCardCodeGenerated } = await import("../../../../../../services/notifications/store-credit");
         notifyGiftCardCodeGenerated({ shopId: shop.id, customerProfileId });
