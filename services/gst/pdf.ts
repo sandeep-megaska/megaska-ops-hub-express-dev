@@ -437,14 +437,24 @@ async function resolveInvoiceLogoForPdf(customUrl: unknown, fallbackPath: string
     }
   }
   if (custom) {
+    // Bounded: a configured logo URL that is slow/unreachable (or a self-referential
+    // app URL that deadlocks in serverless) must not hang the whole PDF render. The abort
+    // must cover the BODY read too - a stalled body (headers arrive, bytes never do) is the
+    // exact failure mode of a self-referential app URL, and reading arrayBuffer() outside the
+    // timeout would hang forever. Clear the timer only after the body is fully read. On timeout
+    // (or any error) we fall through to the local fallback logo below.
+    const logoController = new AbortController();
+    const logoTimer = setTimeout(() => logoController.abort(), 4000);
     try {
-      const response = await fetch(publicAssetUrl(custom), { cache: "no-store" });
+      const response = await fetch(publicAssetUrl(custom), { cache: "no-store", signal: logoController.signal });
       if (response.ok) {
         const mime = response.headers.get("content-type") || "image/png";
         const buffer = Buffer.from(await response.arrayBuffer());
         return { src: `data:${mime};base64,${buffer.toString("base64")}`, configured, resolvedConfiguredAsset: true, usedFallback: false, fallbackResolved: false, sourceType: custom.startsWith("/") ? "local" : "remote" };
       }
-    } catch {}
+    } catch {} finally {
+      clearTimeout(logoTimer);
+    }
   }
 
   const fallback = fileToDataUrl(fallbackPath);
@@ -609,33 +619,30 @@ export async function renderGstPdf(gstDocumentId: string): Promise<GstServiceRes
   }
 
   const model = modelResult.data;
-  type RenderRowKey = keyof GstInvoiceRenderModel["rows"][number];
-  const column = (key: RenderRowKey, label: string, width: number) => ({ key, label, width });
-  const visibleColumns: Array<{ key: RenderRowKey; label: string; width: number }> = [
-    column("lineNumber", "#", 4),
-    ...(model.templateConfig.showSku ? [column("sku", "SKU", 13)] : []),
-    ...(model.templateConfig.showProductTitle ? [column("description", "Item", 27)] : []),
-    ...(model.templateConfig.showVariant ? [column("variant", "Variant", 10)] : []),
-    ...(model.templateConfig.showHsn ? [column("hsn", "HSN", 9)] : []),
-    column("quantity", "Qty", 5),
-    column("taxable", "Taxable", 10),
-    ...(model.templateConfig.showTaxBreakup
-      ? [
-          column("gstRate", "GST%", 6),
-          column("cgst", "CGST", 7),
-          column("sgst", "SGST", 7),
-          column("igst", "IGST", 7),
-        ]
-      : []),
-    column("total", "Total", 9),
-  ];
-  const columnWidthSum = visibleColumns.reduce((sum, column) => sum + column.width, 0);
+  const cfg = model.templateConfig;
+  // De-cramped portrait rows: a wide Item Description that wraps, with SKU / HSN /
+  // variant / per-line tax breakup on a compact sub-line, and only Qty / Taxable / GST% /
+  // Total as aligned numeric columns.
+  const lineMeta = (line: GstInvoiceRenderModel["rows"][number]) => {
+    const parts: string[] = [];
+    if (cfg.showSku && line.sku) parts.push(`SKU: ${line.sku}`);
+    if (cfg.showHsn && line.hsn) parts.push(`HSN: ${line.hsn}`);
+    if (cfg.showVariant && line.variant) parts.push(`Variant: ${line.variant}`);
+    if (cfg.showTaxBreakup) parts.push(`CGST: ${line.cgst}`, `SGST: ${line.sgst}`, `IGST: ${line.igst}`);
+    return parts.join(" · ");
+  };
   const rows = model.rows
-    .map(
-      (line) => `<tr>${visibleColumns
-        .map((column) => `<td>${escapeHtml(String(line[column.key] || ""))}</td>`)
-        .join("")}</tr>`,
-    )
+    .map((line) => {
+      const meta = lineMeta(line);
+      return `<tr>` +
+        `<td>${escapeHtml(line.lineNumber)}</td>` +
+        `<td><div class="item-desc">${escapeHtml(line.description)}</div>${meta ? `<div class="item-meta">${escapeHtml(meta)}</div>` : ""}</td>` +
+        `<td class="num">${escapeHtml(line.quantity)}</td>` +
+        `<td class="num">${escapeHtml(line.taxable)}</td>` +
+        `<td class="num">${escapeHtml(line.gstRate)}%</td>` +
+        `<td class="num">${escapeHtml(line.total)}</td>` +
+        `</tr>`;
+    })
     .join("\n");
 
   const renderParty = (title: string, party: { name: string; gstin?: string; phone?: string; email?: string; lines: string[] }) => `
@@ -649,26 +656,32 @@ export async function renderGstPdf(gstDocumentId: string): Promise<GstServiceRes
 
   const html = `<!doctype html><html><head><meta charset="utf-8" /><title>${escapeHtml(model.documentNumber)}</title>
     <style>
-      @page { size: A4 landscape; margin: 10mm; }
+      /* A4 portrait; the sheet prints on A5 too via the printer's fit-to-page. */
+      @page { size: A4 portrait; margin: 10mm; }
       body { font-family: Arial, sans-serif; color:#111; font-size:9px; margin:0; }
       .topline { display:flex; justify-content:space-between; border-bottom:1px solid #111; padding-bottom:8px; margin-bottom:10px; }
       .meta { text-align:right; }
-      .grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; margin: 10px 0; }
+      .grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin: 10px 0; }
       .block { border:1px solid #ddd; padding:8px; min-height:90px; }
       .header-logo{ display:flex; justify-content:center; align-items:center; margin-bottom:8px; min-height:34px; font-size:16px; font-weight:700; letter-spacing:1px; text-transform:lowercase; }
       .header-logo img{ max-height:32px; max-width:220px; object-fit:contain; }
-      table{ border-collapse:collapse; width:100%; table-layout:fixed; } th,td{ border:1px solid #ddd; padding:3px; vertical-align:top; font-size:8px; } th{ background:#f6f6f6; font-size:7.5px; }
+      /* Line items: a wide Item Description that wraps, with SKU/HSN/tax breakup on a
+         sub-line, instead of squeezing every field into a narrow portrait column. */
+      table{ border-collapse:collapse; width:100%; table-layout:fixed; } th,td{ border:1px solid #ddd; padding:4px; vertical-align:top; font-size:8px; } th{ background:#f6f6f6; font-size:7.5px; }
       td{ word-break:break-word; }
-      .totals{ width:320px; margin-left:auto; margin-top:10px; } .totals td{ border:0; padding:3px 0; }
+      td.num, th.num{ text-align:right; white-space:nowrap; }
+      .item-desc{ font-weight:600; }
+      .item-meta{ margin-top:2px; color:#555; font-size:7px; }
+      .totals{ width:260px; margin-left:auto; margin-top:10px; } .totals td{ border:0; padding:3px 0; }
       .footer-logo{ margin-top:8px; display:flex; justify-content:flex-end; min-height:22px; font-size:12px; font-weight:700; }
       .footer-logo img{ max-height:20px; max-width:140px; object-fit:contain; }
       .print-btn{ margin-bottom:8px; }
       .page{ background:#fff; }
-      /* On screen, render like a centered A4-landscape page with margins so it
-         does not stretch edge-to-edge (and crop) on wide monitors. */
+      /* On screen, render like a centered A4-portrait page with margins so it
+         does not stretch edge-to-edge on wide monitors. */
       @media screen {
         body{ background:#e9e9ee; padding:16px; }
-        .page{ max-width:1120px; margin:0 auto; padding:28px 32px; box-shadow:0 1px 6px rgba(0,0,0,0.18); }
+        .page{ max-width:794px; margin:0 auto; padding:28px 32px; box-shadow:0 1px 6px rgba(0,0,0,0.18); }
       }
       /* Print is unchanged: @page controls the sheet, the wrapper adds nothing. */
       @media print { .print-btn { display:none; } .page{ max-width:none; margin:0; padding:0; box-shadow:none; } }
@@ -684,8 +697,8 @@ export async function renderGstPdf(gstDocumentId: string): Promise<GstServiceRes
       ${renderParty("SUPPLIER", model.supplier)}
     </div>
     <table>
-      <colgroup>${visibleColumns.map((column) => `<col style="width:${((column.width / columnWidthSum) * 100).toFixed(2)}%">`).join("")}</colgroup>
-      <thead><tr>${visibleColumns.map((column) => `<th>${escapeHtml(column.label)}</th>`).join("")}</tr></thead>
+      <colgroup><col style="width:5%"><col style="width:43%"><col style="width:8%"><col style="width:16%"><col style="width:8%"><col style="width:20%"></colgroup>
+      <thead><tr><th>#</th><th>Item Description</th><th class="num">Qty</th><th class="num">Taxable</th><th class="num">GST%</th><th class="num">Total</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
     <table class="totals"><tr><td>Taxable</td><td>${model.totals.taxable}</td></tr>${model.templateConfig.showTaxBreakup ? `<tr><td>CGST</td><td>${model.totals.cgst}</td></tr><tr><td>SGST</td><td>${model.totals.sgst}</td></tr><tr><td>IGST</td><td>${model.totals.igst}</td></tr><tr><td>CESS</td><td>${model.totals.cess}</td></tr>` : ""}<tr><td><strong>Total</strong></td><td><strong>${model.totals.total}</strong></td></tr></table>

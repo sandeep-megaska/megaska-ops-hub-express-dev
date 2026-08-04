@@ -4,6 +4,7 @@ import { renderGstInvoicePdfBuffer } from "../../../../../../services/gst/pdf-bi
 import { getGstDocumentById } from "../../../../../../services/gst/documents";
 import { ShopResolutionError } from "../../../../../../services/shopify/shop";
 import { requireAdminShopFromRequest } from "../../../../../../services/shopify/admin-auth";
+import { StageTimeoutError, withDeadline } from "../../../../../../services/gst/render-deadline";
 
 export const runtime = "nodejs";
 
@@ -26,7 +27,7 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
     }
 
     if (format === "html") {
-      const htmlResult = await renderGstPdf(id);
+      const htmlResult = await withDeadline("Document render", 20000, renderGstPdf(id));
       if (!htmlResult.ok || !htmlResult.data) {
         return NextResponse.json({ ok: false, error: htmlResult.error || "Unable to render document HTML" }, { status: 404 });
       }
@@ -37,7 +38,7 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
     }
 
     if (format === "pdf") {
-      const pdfResult = await renderGstInvoicePdfBuffer(id);
+      const pdfResult = await withDeadline("Document PDF render", 20000, renderGstInvoicePdfBuffer(id));
       if (!pdfResult.ok || !pdfResult.data) {
         return NextResponse.json({ ok: false, error: pdfResult.error || "Unable to generate document PDF" }, { status: 404 });
       }
@@ -52,13 +53,13 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
       });
     }
 
-    const result = await renderGstPdf(id);
+    const result = await withDeadline("Document render", 20000, renderGstPdf(id));
     if (!result.ok || !result.data) {
       return NextResponse.json({ ok: false, error: result.error || "Unable to render PDF payload" }, { status: 404 });
     }
     return NextResponse.json({ ok: true, pdf: result.data });
   } catch (error) {
-    const status = error instanceof ShopResolutionError ? error.status : 500;
+    const status = error instanceof ShopResolutionError ? error.status : error instanceof StageTimeoutError ? 504 : 500;
     return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : "Failed" }, { status });
   }
 }

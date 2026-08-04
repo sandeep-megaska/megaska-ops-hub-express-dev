@@ -5,6 +5,7 @@ import { getGstDocumentById } from "../../../../../../services/gst/documents";
 import { requireAdminShopFromRequest } from "../../../../../../services/shopify/admin-auth";
 import { verifyInvoiceDocumentAccess } from "../../../../../../services/gst/invoice-url-signing";
 import { extensionCorsPreflight, withExtensionCors } from "../../../../../../services/shopify/extension-cors";
+import { StageTimeoutError, withDeadline } from "../../../../../../services/gst/render-deadline";
 
 export const runtime = "nodejs";
 
@@ -57,45 +58,58 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
     );
   }
 
-  if (format === "html") {
-    const htmlResult = await renderGstPdf(id);
-    if (!htmlResult.ok || !htmlResult.data) {
+  try {
+    if (format === "html") {
+      const htmlResult = await withDeadline("Invoice render", 20000, renderGstPdf(id));
+      if (!htmlResult.ok || !htmlResult.data) {
+        return withExtensionCors(
+          NextResponse.json({ ok: false, error: htmlResult.error || "Unable to render invoice HTML" }, { status: 404 }),
+          req,
+        );
+      }
+
       return withExtensionCors(
-        NextResponse.json({ ok: false, error: htmlResult.error || "Unable to render invoice HTML" }, { status: 404 }),
+        new NextResponse(htmlResult.data.html, {
+          status: 200,
+          headers: {
+            "Content-Type": "text/html; charset=utf-8",
+            "Cache-Control": "no-store",
+          },
+        }),
         req,
       );
     }
 
+    const result = await withDeadline("Invoice PDF render", 20000, renderGstInvoicePdfBuffer(id));
+    if (!result.ok || !result.data) {
+      return withExtensionCors(
+        NextResponse.json({ ok: false, error: result.error || "Unable to generate invoice PDF" }, { status: 404 }),
+        req,
+      );
+    }
+
+    const filename = `${result.data.documentNumber || `gst-invoice-${id}`}.pdf`.replace(/[^a-zA-Z0-9._-]+/g, "-");
     return withExtensionCors(
-      new NextResponse(htmlResult.data.html, {
+      new NextResponse(result.data.buffer as BodyInit, {
         status: 200,
         headers: {
-          "Content-Type": "text/html; charset=utf-8",
+          "Content-Type": "application/pdf",
+          "Content-Disposition": `attachment; filename="${filename}"`,
           "Cache-Control": "no-store",
         },
       }),
       req,
     );
+  } catch (error) {
+    // A render stage stalled past its deadline. Return a legible error (naming the stalled
+    // stage) instead of leaving the print/download popup spinning forever.
+    const status = error instanceof StageTimeoutError ? 504 : 500;
+    const message =
+      error instanceof StageTimeoutError
+        ? `${error.stage} did not respond in time. Please retry in a moment.`
+        : error instanceof Error
+          ? error.message
+          : "Unable to render invoice.";
+    return withExtensionCors(NextResponse.json({ ok: false, error: message }, { status }), req);
   }
-
-  const result = await renderGstInvoicePdfBuffer(id);
-  if (!result.ok || !result.data) {
-    return withExtensionCors(
-      NextResponse.json({ ok: false, error: result.error || "Unable to generate invoice PDF" }, { status: 404 }),
-      req,
-    );
-  }
-
-  const filename = `${result.data.documentNumber || `gst-invoice-${id}`}.pdf`.replace(/[^a-zA-Z0-9._-]+/g, "-");
-  return withExtensionCors(
-    new NextResponse(result.data.buffer as BodyInit, {
-      status: 200,
-      headers: {
-        "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="${filename}"`,
-        "Cache-Control": "no-store",
-      },
-    }),
-    req,
-  );
 }
