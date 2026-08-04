@@ -62,8 +62,11 @@ export async function POST(req: NextRequest, context: { params: Promise<{ custom
         notifyGiftCardCodeGenerated({ shopId: shop.id, customerProfileId });
       }
     } catch (error) {
-      console.error("[WALLET ADMIN] gift_card_projection_failed", { customerProfileId, error: error instanceof Error ? error.message : String(error) });
-      giftCard = { status: "failed" };
+      const reason = error instanceof Error ? error.message : String(error);
+      console.error("[WALLET ADMIN] gift_card_projection_failed", { customerProfileId, error: reason });
+      // Carry the thrown message back so the admin UI shows the real reason (a thrown
+      // GraphQL/network error, vs a graceful userError) instead of "unknown reason".
+      giftCard = { status: "failed", reason };
     }
 
     return NextResponse.json({ wallet: result.account, transaction: result.transaction, giftCard });
