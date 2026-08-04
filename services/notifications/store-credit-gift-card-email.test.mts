@@ -8,7 +8,7 @@ test("gift-card code email includes the code, greeting, and formatted balance", 
   assert.match(text, /^Hi Aarav,/);
   assert.ok(text.includes("CWS3-22XE-PK6Q-VRA5"), "must contain the full code");
   assert.ok(text.includes("INR 208.50"), "must show the balance in major units");
-  assert.match(text, /Gift card/i);
+  assert.match(text, /discount code field/i);
 });
 
 test("falls back to a neutral greeting when no name is provided", () => {
