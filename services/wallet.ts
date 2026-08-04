@@ -167,10 +167,10 @@ export async function applyWalletTransaction(input: WalletMutationInput & Wallet
     const transactionId = randomUUID();
     const transactionRows = await tx.$queryRaw<WalletTransactionRow[]>`
       INSERT INTO "WalletTransaction" (
-        "id", "walletAccountId", "customerProfileId", "direction", "transactionType", "amount", "currency",
+        "id", "shopId", "walletAccountId", "customerProfileId", "direction", "transactionType", "amount", "currency",
         "sourceType", "sourceId", "sourceReference", "orderNumber", "reason", "adminNote", "createdByType", "createdById", "createdAt"
       ) VALUES (
-        ${transactionId}, ${wallet.id}, ${input.customerProfileId}, ${input.direction}::"WalletDirection",
+        ${transactionId}, ${shopId}, ${wallet.id}, ${input.customerProfileId}, ${input.direction}::"WalletDirection",
         ${input.transactionType}::"WalletTransactionType", ${input.amount}, ${currency}, ${input.sourceType}::"WalletSourceType",
         ${input.sourceId || null}, ${input.sourceReference || null}, ${input.orderNumber || null}, ${input.reason || null},
         ${input.adminNote || null}, ${input.createdByType}::"WalletActorType", ${input.createdById || null}, NOW()

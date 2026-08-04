@@ -37,6 +37,7 @@ import {
   getOrCreateWalletAccount,
   listWalletTransactions,
 } from "../../../../services/wallet";
+import { readCustomerGiftCard } from "../../../../services/store-credit/gift-card";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -679,6 +680,25 @@ for (const request of exchangeRequests) {
       activeReservedAmount: activeWalletReserved,
     });
 
+    // The customer's store credit is mirrored to a Shopify gift card so it can be spent at
+    // native checkout. Surface its code + live balance so returning customers can grab it
+    // straight from the app-owned dashboard (best-effort - a Shopify hiccup must not fail
+    // the whole dashboard load).
+    let giftCard: { present: boolean; code?: string | null; last4?: string; balanceMinor?: number } = { present: false };
+    try {
+      const card = await readCustomerGiftCard({
+        shopId: shop.id,
+        shopDomain: shop.shopDomain,
+        customerProfileId: customer.id,
+        currency: "INR",
+      });
+      if (card.ok && card.present) {
+        giftCard = { present: true, code: card.code, last4: card.last4, balanceMinor: card.balancePaise };
+      }
+    } catch (error) {
+      console.error("[DASHBOARD] gift_card_read_failed", { error: error instanceof Error ? error.message : String(error) });
+    }
+
     const stats = {
       totalOrders,
       openRequests,
@@ -878,6 +898,7 @@ for (const request of exchangeRequests) {
           0,
         ),
         transactions: walletTransactions,
+        giftCard,
       },
       stats,
       address: shopifyDashboard?.defaultAddress

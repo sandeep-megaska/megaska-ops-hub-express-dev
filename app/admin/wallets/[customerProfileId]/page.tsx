@@ -2,6 +2,7 @@ import { prisma } from "../../../../services/db/prisma";
 import { getOrCreateWalletAccount, listWalletTransactions } from "../../../../services/wallet";
 import { listWalletReservationsForAdmin } from "../../../../services/wallet-reservation";
 import { formatAdminShopResolutionError, resolveAdminShopFromSearchParams } from "../../../../services/shopify/admin-shop-context";
+import { readCustomerGiftCard } from "../../../../services/store-credit/gift-card";
 import WalletOpsControls from "./WalletOpsControls";
 
 export const dynamic = "force-dynamic";
@@ -52,6 +53,21 @@ const transactions = await listWalletTransactions(customer.id, "INR", 200, {
 });
   const reservations = await listWalletReservationsForAdmin(customer.id);
 
+  // The customer's store credit lives on a Shopify gift card - surface it here (live
+  // balance + code + a deep-link into Shopify's gift-card admin) so this page is the
+  // single place an operator can see and reach the actual card. Best-effort.
+  const giftCard = await readCustomerGiftCard({
+    shopId: shop.id,
+    shopDomain: shop.shopDomain,
+    customerProfileId: customer.id,
+    currency: "INR",
+  }).catch(() => ({ ok: false as const, reason: "read_failed" }));
+  const storeHandle = (shop.myshopifyDomain || "").replace(/\.myshopify\.com$/i, "");
+  const giftCardNumericId = giftCard.ok && giftCard.present ? String(giftCard.giftCardId).split("/").pop() || "" : "";
+  const giftCardAdminUrl = storeHandle && giftCardNumericId
+    ? `https://admin.shopify.com/store/${storeHandle}/gift_cards/${giftCardNumericId}`
+    : "";
+
   return (
     <main className="mk-page">
       <header className="mk-page-header">
@@ -78,6 +94,34 @@ const transactions = await listWalletTransactions(customer.id, "INR", 200, {
           <p className="mk-stat-label">Email</p>
           <p className="mk-stat-value" style={{ fontSize: 20 }}>{customer.email || "-"}</p>
         </div>
+      </section>
+
+      <section className="mk-card">
+        <h3 className="mk-section-title">Gift Card (store credit at checkout)</h3>
+        {giftCard.ok && giftCard.present ? (
+          <div className="mk-grid-4">
+            <div className="mk-stat-card">
+              <p className="mk-stat-label">Live balance</p>
+              <p className="mk-stat-value">INR {(giftCard.balancePaise / 100).toFixed(2)}</p>
+            </div>
+            <div className="mk-stat-card">
+              <p className="mk-stat-label">Code</p>
+              <p className="mk-stat-value" style={{ fontSize: 18, fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>{giftCard.code || `••••${giftCard.last4}`}</p>
+            </div>
+            <div className="mk-stat-card">
+              <p className="mk-stat-label">Last 4</p>
+              <p className="mk-stat-value" style={{ fontSize: 20 }}>••••{giftCard.last4}</p>
+            </div>
+            <div className="mk-stat-card">
+              <p className="mk-stat-label">In Shopify</p>
+              <p className="mk-stat-value" style={{ fontSize: 16 }}>
+                {giftCardAdminUrl ? <a href={giftCardAdminUrl} target="_blank" rel="noreferrer" className="mk-link">Open gift card ↗</a> : "—"}
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="mk-empty"><p className="mk-empty-title">No gift card yet</p><p>A gift card is created automatically on the customer&apos;s first store-credit grant.</p></div>
+        )}
       </section>
 
       <WalletOpsControls customerProfileId={customer.id} />

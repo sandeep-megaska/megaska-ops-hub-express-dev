@@ -276,3 +276,12 @@ body.ld-account-scroll-lock { overflow: hidden; }
 #loopdesk-customer-dashboard-root .ld-review-pages { justify-content: center; margin: 14px 0; }
 #loopdesk-customer-dashboard-root .ld-review-awaiting .ld-account-button { justify-self: start; margin-top: 4px; }
 @media (max-width: 560px) { #loopdesk-customer-dashboard-root .ld-review-card { grid-template-columns: 64px minmax(0,1fr); padding: 12px; } #loopdesk-customer-dashboard-root .ld-review-image { width: 64px; height: 64px; } #loopdesk-customer-dashboard-root .ld-review-heading .ld-account-pill { width: fit-content; } }
+
+/* Store-credit gift-card code: the redeemable code the customer pastes at checkout. */
+#loopdesk-customer-dashboard-root .ld-store-credit-code { margin: 14px 0; padding: 14px 16px; border: 1px solid var(--ld-account-line); border-radius: 18px; background: var(--ld-account-soft); display: grid; gap: 8px; }
+#loopdesk-customer-dashboard-root .ld-store-credit-code-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; font-weight: 700; }
+#loopdesk-customer-dashboard-root .ld-store-credit-code-head b { color: var(--ld-account-brand-dark); }
+#loopdesk-customer-dashboard-root .ld-store-credit-code p { margin: 0; }
+#loopdesk-customer-dashboard-root .ld-store-credit-code-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+#loopdesk-customer-dashboard-root .ld-store-credit-code-row code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 18px; font-weight: 700; letter-spacing: 1px; padding: 8px 12px; background: #fff; border: 1px dashed var(--ld-account-brand); border-radius: 10px; color: var(--ld-account-text); overflow-wrap: anywhere; }
+#loopdesk-customer-dashboard-root .ld-store-credit-copy.ld-store-credit-copied { background: var(--ld-account-ok); border-color: var(--ld-account-ok); color: #fff; }

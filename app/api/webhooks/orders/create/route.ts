@@ -12,6 +12,8 @@ import {
 import { normalizeShopDomain } from "../../../../../services/shopify/shop-resolver";
 import { isCanonicalE164, normalizeShopifyPhone } from "../../../../../services/shopify/shopify-phone-normalization";
 import { autoGenerateInvoiceForOrder } from "../../../../../services/gst/auto-invoice";
+import { reconcileGiftCardRedemption } from "../../../../../services/store-credit/gift-card-reconcile";
+import { notifyCheckoutStoreCreditRedeemed } from "../../../../../services/notifications/store-credit";
 
 type ShopifyOrderWebhookPayload = {
   id?: number | string;
@@ -360,6 +362,43 @@ export async function POST(req: NextRequest) {
         error: error instanceof Error ? error.message : "Unknown error",
       });
     }
+  }
+
+  // Gift-card store-credit reconciliation: if the customer spent their store-credit gift
+  // card on this order at native checkout, record the matching CHECKOUT_REDEMPTION debit
+  // so our ledger tracks the card. Isolated + best-effort (must never block order
+  // processing) and self-healing - a miss is picked up on the customer's next order. The
+  // customer is resolved from the trusted, server-corrected verified phone, not a
+  // client-set note attribute.
+  try {
+    if (orderId && shopDomain && verifiedPhone && isCanonicalE164(verifiedPhone)) {
+      const tenant = await prisma.shop.findFirst({ where: { shopDomain }, select: { id: true } });
+      if (tenant) {
+        const profiles = await prisma.customerProfile.findMany({
+          where: { shopId: tenant.id, phoneE164: verifiedPhone },
+          select: { id: true },
+          take: 2,
+        });
+        if (profiles.length === 1) {
+          const reconciled = await reconcileGiftCardRedemption({
+            shopId: tenant.id,
+            shopDomain,
+            customerProfileId: profiles[0].id,
+            orderId,
+            orderNumber: String(payload.name || "").trim() || null,
+          });
+          console.log("[STORE CREDIT REDEMPTION] reconcile", { orderId, status: reconciled.status });
+          if (reconciled.status === "redemption_recorded") {
+            notifyCheckoutStoreCreditRedeemed({ walletTransactionId: reconciled.walletTransactionId });
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error("[STORE CREDIT REDEMPTION] reconcile failed", {
+      orderId,
+      error: error instanceof Error ? error.message : "Unknown error",
+    });
   }
 
   console.log("[WALLET WEBHOOK] order create received", {
