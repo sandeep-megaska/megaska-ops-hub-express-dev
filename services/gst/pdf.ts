@@ -437,19 +437,24 @@ async function resolveInvoiceLogoForPdf(customUrl: unknown, fallbackPath: string
     }
   }
   if (custom) {
+    // Bounded: a configured logo URL that is slow/unreachable (or a self-referential
+    // app URL that deadlocks in serverless) must not hang the whole PDF render. The abort
+    // must cover the BODY read too - a stalled body (headers arrive, bytes never do) is the
+    // exact failure mode of a self-referential app URL, and reading arrayBuffer() outside the
+    // timeout would hang forever. Clear the timer only after the body is fully read. On timeout
+    // (or any error) we fall through to the local fallback logo below.
+    const logoController = new AbortController();
+    const logoTimer = setTimeout(() => logoController.abort(), 4000);
     try {
-      // Bounded: a configured logo URL that is slow/unreachable (or a self-referential
-      // app URL that deadlocks in serverless) must not hang the whole PDF render. On
-      // timeout we fall through to the local fallback logo below.
-      const logoController = new AbortController();
-      const logoTimer = setTimeout(() => logoController.abort(), 4000);
-      const response = await fetch(publicAssetUrl(custom), { cache: "no-store", signal: logoController.signal }).finally(() => clearTimeout(logoTimer));
+      const response = await fetch(publicAssetUrl(custom), { cache: "no-store", signal: logoController.signal });
       if (response.ok) {
         const mime = response.headers.get("content-type") || "image/png";
         const buffer = Buffer.from(await response.arrayBuffer());
         return { src: `data:${mime};base64,${buffer.toString("base64")}`, configured, resolvedConfiguredAsset: true, usedFallback: false, fallbackResolved: false, sourceType: custom.startsWith("/") ? "local" : "remote" };
       }
-    } catch {}
+    } catch {} finally {
+      clearTimeout(logoTimer);
+    }
   }
 
   const fallback = fileToDataUrl(fallbackPath);

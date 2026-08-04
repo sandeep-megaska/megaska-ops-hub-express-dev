@@ -6,6 +6,7 @@ import { generateInvoiceBatch } from "../../../../../services/gst/dispatch-batch
 import { renderGstPdf } from "../../../../../services/gst/pdf";
 import { resolveShopConfig } from "../../../../../services/shopify/shop";
 import { extensionCorsPreflight, withExtensionCors } from "../../../../../services/shopify/extension-cors";
+import { StageTimeoutError, withDeadline } from "../../../../../services/gst/render-deadline";
 
 export const runtime = "nodejs";
 
@@ -17,25 +18,6 @@ function extractShopifyEntityId(gid: string) {
 
 function htmlMessage(title: string, body: string) {
   return `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title></head><body style="font-family:sans-serif;padding:2rem;color:#111;"><h2>${title}</h2><p>${body}</p></body></html>`;
-}
-
-// A user-facing print popup must never spin forever. Every stage that can block on an
-// external system (Shopify sync, invoice generation, render) is raced against a deadline
-// so a stall surfaces as a legible error naming the stalled stage instead of an endless
-// spinner. The per-call fetch timeouts still apply underneath; this is the outer backstop.
-class StageTimeoutError extends Error {
-  constructor(public readonly stage: string, ms: number) {
-    super(`${stage} did not finish within ${Math.round(ms / 1000)}s`);
-    this.name = "StageTimeoutError";
-  }
-}
-
-function withDeadline<T>(stage: string, ms: number, work: Promise<T>): Promise<T> {
-  let timer: ReturnType<typeof setTimeout>;
-  const guard = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new StageTimeoutError(stage, ms)), ms);
-  });
-  return Promise.race([work, guard]).finally(() => clearTimeout(timer)) as Promise<T>;
 }
 
 /**
