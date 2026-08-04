@@ -27,7 +27,6 @@ type StoreCreditTransaction = {
   createdAt: string;
 };
 
-type EmailState = { status: "idle" | "sending" | "sent" | "error"; message?: string };
 
 function formatInr(value: number) {
   return new Intl.NumberFormat("en-IN", {
@@ -49,7 +48,6 @@ export default function StoreCreditClient() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const [emailState, setEmailState] = useState<EmailState>({ status: "idle" });
 
   useEffect(() => {
     void (async () => {
@@ -103,28 +101,6 @@ export default function StoreCreditClient() {
     }
   }
 
-  async function emailCode() {
-    setEmailState({ status: "sending" });
-    try {
-      const res = await fetch("/api/customer/store-credit/gift-card/email", { method: "POST", cache: "no-store" });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok && data?.ok) {
-        setEmailState({ status: "sent", message: `Sent to ${data.emailedTo || "your email"}.` });
-        return;
-      }
-      const reason = data?.reason;
-      const message =
-        reason === "no_email_on_file"
-          ? "No email is on file for your account."
-          : reason === "no_store_credit_code"
-            ? "No store credit code to send yet."
-            : "Couldn't send the email right now.";
-      setEmailState({ status: "error", message });
-    } catch {
-      setEmailState({ status: "error", message: "Couldn't send the email right now." });
-    }
-  }
-
   return (
     <main style={{ padding: 24, display: "grid", gap: 18, maxWidth: 920, margin: "0 auto", fontFamily: "system-ui, sans-serif" }}>
       <Link href="/apps/loopd2c/account">← Back to dashboard</Link>
@@ -169,17 +145,7 @@ export default function StoreCreditClient() {
                 >
                   {copied ? "Copied ✓" : "Copy code"}
                 </button>
-                <button
-                  type="button"
-                  onClick={emailCode}
-                  disabled={emailState.status === "sending"}
-                  style={{ padding: "10px 14px", borderRadius: 8, border: "1px solid #4560d8", background: "#fff", color: "#4560d8", cursor: emailState.status === "sending" ? "default" : "pointer", fontWeight: 600 }}
-                >
-                  {emailState.status === "sending" ? "Sending…" : "Email me this code"}
-                </button>
               </div>
-              {emailState.status === "sent" ? <p style={{ margin: 0, color: "#087f23" }}>{emailState.message}</p> : null}
-              {emailState.status === "error" ? <p style={{ margin: 0, color: "#b00020" }}>{emailState.message}</p> : null}
               <p style={{ margin: 0, fontSize: 13, color: "#667" }}>
                 Your balance stays on this code — reuse it across orders until it runs out.
               </p>

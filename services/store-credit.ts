@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { Prisma } from "../generated/prisma";
 import { prisma } from "./db/prisma";
-import { notifyCodRefundStoreCreditSettled } from "./notifications/store-credit";
+import { notifyCodRefundStoreCreditSettled, notifyGiftCardCodeGenerated } from "./notifications/store-credit";
 
 type StoreCreditActor = {
   type: "SYSTEM" | "ADMIN";
@@ -41,7 +41,8 @@ function normalizeActor(actor: StoreCreditActor | undefined): Required<StoreCred
 // regardless of the gift-card outcome, and a failure leaves a NULL retry marker on the
 // ledger entry (see gift-card-projection). This never throws so it can never turn a
 // successful settlement into a failed API response.
-async function projectSettlementToGiftCard(walletTransactionId: string) {
+async function projectSettlementToGiftCard(walletTransaction: { id: string; shopId: string; customerProfileId: string }) {
+  const walletTransactionId = walletTransaction.id;
   try {
     const { projectCreditToGiftCard } = await import("./store-credit/gift-card-projection");
     const result = await projectCreditToGiftCard(walletTransactionId);
@@ -49,6 +50,10 @@ async function projectSettlementToGiftCard(walletTransactionId: string) {
       console.error("[STORE CREDIT] gift_card_projection_failed", { walletTransactionId, reason: result.reason });
     } else {
       console.info("[STORE CREDIT] gift_card_projection", { walletTransactionId, status: result.status });
+    }
+    // The code was just generated - deliver it to the customer automatically.
+    if (result.status === "created") {
+      notifyGiftCardCodeGenerated({ shopId: walletTransaction.shopId, customerProfileId: walletTransaction.customerProfileId });
     }
     return result;
   } catch (error) {
@@ -306,11 +311,16 @@ export async function settleCodRefundAsStoreCredit(input: SettleCodRefundAsStore
     });
 
     const { logStatus: _logStatus, ...settlement } = result;
-    notifyCodRefundStoreCreditSettled({
-      walletTransactionId: settlement.walletTransaction.id,
-      alreadySettled: settlement.alreadySettled,
-    });
-    const giftCard = await projectSettlementToGiftCard(settlement.walletTransaction.id);
+    const giftCard = await projectSettlementToGiftCard(settlement.walletTransaction);
+    // On the first grant the gift-card code email (sent from the projection) IS the grant
+    // notification, so skip the generic "store credit added" email to avoid a duplicate.
+    // Top-ups and no-card cases still get the generic email.
+    if (giftCard.status !== "created") {
+      notifyCodRefundStoreCreditSettled({
+        walletTransactionId: settlement.walletTransaction.id,
+        alreadySettled: settlement.alreadySettled,
+      });
+    }
     return { ...settlement, giftCard };
   } catch (error) {
     if (!isUniqueConstraintError(error)) {
@@ -327,11 +337,13 @@ export async function settleCodRefundAsStoreCredit(input: SettleCodRefundAsStore
       walletTransactionId: recovered.walletTransaction.id,
       walletAccountId: recovered.walletAccount.id,
     });
-    notifyCodRefundStoreCreditSettled({
-      walletTransactionId: recovered.walletTransaction.id,
-      alreadySettled: recovered.alreadySettled,
-    });
-    const giftCard = await projectSettlementToGiftCard(recovered.walletTransaction.id);
+    const giftCard = await projectSettlementToGiftCard(recovered.walletTransaction);
+    if (giftCard.status !== "created") {
+      notifyCodRefundStoreCreditSettled({
+        walletTransactionId: recovered.walletTransaction.id,
+        alreadySettled: recovered.alreadySettled,
+      });
+    }
     return { ...recovered, giftCard };
   }
 }

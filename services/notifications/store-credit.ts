@@ -53,6 +53,53 @@ function buildStoreCreditText(payload: StoreCreditEmailPayload) {
   return lines.join("\n");
 }
 
+// Automatic delivery of the store-credit gift-card code the moment it is generated (first
+// grant or one-time balance migration), so the customer never has to open the dashboard to
+// find it. Fire-and-forget + best-effort, matching the other notify* helpers; it reuses
+// sendGiftCardCodeEmail and skips quietly when there is no email on file or no code yet.
+async function deliverGiftCardCode(input: { shopId: string; customerProfileId: string }) {
+  const rows = await prisma.$queryRaw<Array<{ email: string | null; fullName: string | null; firstName: string | null; shopDomain: string | null; myshopifyDomain: string | null }>>`
+    SELECT cp."email", cp."fullName", cp."firstName", s."shopDomain", s."myshopifyDomain"
+    FROM "CustomerProfile" cp
+    JOIN "Shop" s ON s."id" = cp."shopId"
+    WHERE cp."id" = ${input.customerProfileId} AND cp."shopId" = ${input.shopId}
+    LIMIT 1
+  `;
+  const row = rows[0];
+  if (!row) {
+    console.info("[STORE CREDIT NOTIFICATION] gift_card_code_skipped", { customerProfileId: input.customerProfileId, reason: "customer-not-found" });
+    return;
+  }
+  if (!row.email) {
+    console.info("[STORE CREDIT NOTIFICATION] gift_card_code_skipped", { customerProfileId: input.customerProfileId, reason: "no-email-on-file" });
+    return;
+  }
+  const shopDomain = row.myshopifyDomain || row.shopDomain || "";
+  const { readCustomerGiftCard } = await import("../store-credit/gift-card");
+  const card = await readCustomerGiftCard({ shopId: input.shopId, shopDomain, customerProfileId: input.customerProfileId, currency: "INR" });
+  if (!card.ok || !card.present || !card.code) {
+    console.info("[STORE CREDIT NOTIFICATION] gift_card_code_skipped", { customerProfileId: input.customerProfileId, reason: "no-code" });
+    return;
+  }
+  const result = await sendGiftCardCodeEmail({
+    shopId: input.shopId,
+    customerEmail: row.email,
+    customerName: row.fullName || row.firstName,
+    code: card.code,
+    balanceMinor: card.balancePaise,
+    currency: "INR",
+  });
+  console.info("[STORE CREDIT NOTIFICATION] gift_card_code", { customerProfileId: input.customerProfileId, outcome: result.skipped ? "skipped" : result.success ? "sent" : "failed" });
+}
+
+// Fire this whenever a customer's store-credit gift-card CODE is newly generated (first
+// grant or migration). Never throws - a notification failure must not affect the grant.
+export function notifyGiftCardCodeGenerated(input: { shopId: string; customerProfileId: string }) {
+  void deliverGiftCardCode(input).catch((error) => {
+    console.error("[STORE CREDIT NOTIFICATION] gift_card_code_failed", { customerProfileId: input.customerProfileId, error: error instanceof Error ? error.message : "Unknown error" });
+  });
+}
+
 // Optional, customer-initiated delivery of the store-credit gift-card code by email.
 export async function sendGiftCardCodeEmail(input: {
   shopId: string;

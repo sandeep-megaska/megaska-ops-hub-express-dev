@@ -37,6 +37,8 @@ export type BackfillDeps = {
   resolveShopDomain?: (shopId: string) => Promise<string | null>;
   credit?: CreditFn;
   markAccountCreditsSynced?: (accountId: string, at: Date) => Promise<void>;
+  // Fired for each migrated account so the customer is emailed their newly generated code.
+  notifyCreated?: (params: { shopId: string; customerProfileId: string }) => void;
   now?: () => Date;
 };
 
@@ -110,6 +112,9 @@ export async function backfillGiftCardsForExistingBalances(
   const resolveShopDomain = deps.resolveShopDomain ?? resolveShopDomainDefault;
   const credit = deps.credit ?? creditDefault;
   const markAccountCreditsSynced = deps.markAccountCreditsSynced ?? markAccountCreditsSyncedDefault;
+  const notifyCreated = deps.notifyCreated ?? ((p) => {
+    void import("../notifications/store-credit").then((m) => m.notifyGiftCardCodeGenerated(p)).catch(() => {});
+  });
   const now = deps.now ?? (() => new Date());
 
   const accounts = await listAccounts({ shopId: params.shopId, limit });
@@ -141,6 +146,7 @@ export async function backfillGiftCardsForExistingBalances(
     }
 
     await markAccountCreditsSynced(account.id, now());
+    notifyCreated({ shopId: account.shopId, customerProfileId: account.customerProfileId });
     created += 1;
     items.push({ accountId: account.id, status: "created", last4: res.last4 });
   }
