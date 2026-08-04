@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { Prisma } from "../generated/prisma";
 import { prisma } from "./db/prisma";
-import { notifyCodRefundStoreCreditSettled } from "./notifications/store-credit";
+import { notifyCodRefundStoreCreditSettled, notifyGiftCardCodeGenerated } from "./notifications/store-credit";
 
 type StoreCreditActor = {
   type: "SYSTEM" | "ADMIN";
@@ -33,6 +33,36 @@ function normalizeActor(actor: StoreCreditActor | undefined): Required<StoreCred
     type: actor?.type || "SYSTEM",
     id: actor?.id || null,
   };
+}
+
+// Mirror a settled COD-refund credit onto the customer's Shopify gift card so the
+// balance is spendable at native checkout. Runs after the ledger transaction has
+// committed and is deliberately best-effort: the refund is settled in our ledger
+// regardless of the gift-card outcome, and a failure leaves a NULL retry marker on the
+// ledger entry (see gift-card-projection). This never throws so it can never turn a
+// successful settlement into a failed API response.
+async function projectSettlementToGiftCard(walletTransaction: { id: string; shopId: string; customerProfileId: string }) {
+  const walletTransactionId = walletTransaction.id;
+  try {
+    const { projectCreditToGiftCard } = await import("./store-credit/gift-card-projection");
+    const result = await projectCreditToGiftCard(walletTransactionId);
+    if (result.status === "failed") {
+      console.error("[STORE CREDIT] gift_card_projection_failed", { walletTransactionId, reason: result.reason });
+    } else {
+      console.info("[STORE CREDIT] gift_card_projection", { walletTransactionId, status: result.status });
+    }
+    // The code was just generated - deliver it to the customer automatically.
+    if (result.status === "created") {
+      notifyGiftCardCodeGenerated({ shopId: walletTransaction.shopId, customerProfileId: walletTransaction.customerProfileId });
+    }
+    return result;
+  } catch (error) {
+    console.error("[STORE CREDIT] gift_card_projection_error", {
+      walletTransactionId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return { status: "failed" as const, reason: "projection_threw" };
+  }
 }
 
 function validateRefundForStoreCredit(refund: {
@@ -281,11 +311,17 @@ export async function settleCodRefundAsStoreCredit(input: SettleCodRefundAsStore
     });
 
     const { logStatus: _logStatus, ...settlement } = result;
-    notifyCodRefundStoreCreditSettled({
-      walletTransactionId: settlement.walletTransaction.id,
-      alreadySettled: settlement.alreadySettled,
-    });
-    return settlement;
+    const giftCard = await projectSettlementToGiftCard(settlement.walletTransaction);
+    // On the first grant the gift-card code email (sent from the projection) IS the grant
+    // notification, so skip the generic "store credit added" email to avoid a duplicate.
+    // Top-ups and no-card cases still get the generic email.
+    if (giftCard.status !== "created") {
+      notifyCodRefundStoreCreditSettled({
+        walletTransactionId: settlement.walletTransaction.id,
+        alreadySettled: settlement.alreadySettled,
+      });
+    }
+    return { ...settlement, giftCard };
   } catch (error) {
     if (!isUniqueConstraintError(error)) {
       console.error("[STORE CREDIT] settlement_failed", {
@@ -301,11 +337,14 @@ export async function settleCodRefundAsStoreCredit(input: SettleCodRefundAsStore
       walletTransactionId: recovered.walletTransaction.id,
       walletAccountId: recovered.walletAccount.id,
     });
-    notifyCodRefundStoreCreditSettled({
-      walletTransactionId: recovered.walletTransaction.id,
-      alreadySettled: recovered.alreadySettled,
-    });
-    return recovered;
+    const giftCard = await projectSettlementToGiftCard(recovered.walletTransaction);
+    if (giftCard.status !== "created") {
+      notifyCodRefundStoreCreditSettled({
+        walletTransactionId: recovered.walletTransaction.id,
+        alreadySettled: recovered.alreadySettled,
+      });
+    }
+    return { ...recovered, giftCard };
   }
 }
 

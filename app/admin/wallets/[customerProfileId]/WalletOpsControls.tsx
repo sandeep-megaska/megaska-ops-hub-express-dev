@@ -33,12 +33,28 @@ export default function WalletOpsControls({ customerProfileId }: Props) {
       return;
     }
 
-    setMessage("Wallet updated successfully. Refresh to view latest ledger.");
+    // Surface the gift-card outcome so a silent top-up failure is visible (credit only;
+    // debit is ledger-only and returns no giftCard).
+    const gc = data?.giftCard as { status?: string; reason?: string } | undefined;
+    let giftMsg = "";
+    if (gc && typeof gc === "object" && gc.status) {
+      if (gc.status === "created") giftMsg = " Gift card created and the code was emailed to the customer.";
+      else if (gc.status === "topped_up") giftMsg = " The customer's gift card was topped up.";
+      else if (gc.status === "already_synced") giftMsg = "";
+      else if (gc.status === "failed") giftMsg = ` ⚠️ But the gift-card top-up FAILED: ${gc.reason || "unknown reason"}. The customer cannot spend this at checkout until it succeeds.`;
+      else giftMsg = ` ⚠️ Gift-card sync did not complete (${gc.status}); it needs a retry.`;
+    }
+
+    setMessage("Wallet updated successfully." + giftMsg + " Refresh to view the latest ledger.");
   }
 
   return (
     <section className="mk-card">
       <h3 className="mk-section-title">Wallet Operations</h3>
+      <p className="mk-page-subtitle" style={{ marginTop: 0 }}>
+        A manual <strong>credit</strong> also tops up the customer&apos;s Shopify gift card, so it is spendable at checkout.
+        A manual <strong>debit</strong> adjusts this ledger only — reduce the gift card itself from Shopify&apos;s gift-card admin.
+      </p>
       <div className="mk-field" style={{ maxWidth: 560 }}>
         <label className="mk-label" htmlFor="wallet-admin-id">Admin ID (optional)</label>
         <input id="wallet-admin-id" className="mk-input" value={adminId} onChange={(event) => setAdminId(event.target.value)} />
