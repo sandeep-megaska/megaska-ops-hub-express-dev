@@ -75,6 +75,19 @@ let cachedRuntimeToken: string | null = null;
 let cachedRuntimeTokenExpiresAt = 0;
 let cachedRuntimeTokenShopDomain = "";
 
+// A GST PDF render blocks on these Shopify Admin calls, so they must never hang the
+// request. Abort after a bounded time; the callers already catch failures and fall back
+// to cached order data.
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs = 8000): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function getRuntimeAdminAccessToken(shopDomain: string) {
   const apiKey = getEnvTrimmed("SHOPIFY_API_KEY");
   const apiSecret = getEnvTrimmed("SHOPIFY_API_SECRET");
@@ -87,7 +100,7 @@ async function getRuntimeAdminAccessToken(shopDomain: string) {
     return cachedRuntimeToken;
   }
 
-  const response = await fetch(`https://${shopDomain}/admin/oauth/access_token`, {
+  const response = await fetchWithTimeout(`https://${shopDomain}/admin/oauth/access_token`, {
     method: "POST",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
@@ -137,7 +150,7 @@ async function gstRuntimeAdminGraphql<T>(
     queryKind: query.includes("mutation") ? "mutation" : "query",
   });
 
-  const response = await fetch(`https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
+  const response = await fetchWithTimeout(`https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

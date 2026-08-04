@@ -438,7 +438,12 @@ async function resolveInvoiceLogoForPdf(customUrl: unknown, fallbackPath: string
   }
   if (custom) {
     try {
-      const response = await fetch(publicAssetUrl(custom), { cache: "no-store" });
+      // Bounded: a configured logo URL that is slow/unreachable (or a self-referential
+      // app URL that deadlocks in serverless) must not hang the whole PDF render. On
+      // timeout we fall through to the local fallback logo below.
+      const logoController = new AbortController();
+      const logoTimer = setTimeout(() => logoController.abort(), 4000);
+      const response = await fetch(publicAssetUrl(custom), { cache: "no-store", signal: logoController.signal }).finally(() => clearTimeout(logoTimer));
       if (response.ok) {
         const mime = response.headers.get("content-type") || "image/png";
         const buffer = Buffer.from(await response.arrayBuffer());
