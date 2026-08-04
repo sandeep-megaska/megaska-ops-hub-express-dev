@@ -28,6 +28,10 @@ function safeSettlementResponse(result: Awaited<ReturnType<typeof settleCodRefun
     walletAccount: result.walletAccount,
     walletTransaction: result.walletTransaction,
     alreadySettled: result.alreadySettled,
+    // Outcome of mirroring the credit onto the customer's Shopify gift card. The refund
+    // is settled in our ledger regardless; a "failed" status here is retried on a later
+    // settlement call or reconciliation pass, not a settlement failure.
+    giftCard: result.giftCard,
   };
 }
 

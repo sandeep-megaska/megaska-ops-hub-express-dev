@@ -1950,6 +1950,10 @@ model WalletTransaction {
   createdByType     WalletActorType
   createdById       String?
   createdAt         DateTime              @default(now())
+  // Set once this CREDIT ledger entry has been mirrored onto the customer's Shopify
+  // gift card (so the balance is spendable at native checkout). Null = not yet synced
+  // or a debit that never syncs; it is the retry marker for the gift-card projection.
+  giftCardSyncedAt  DateTime?
 
   shop                  Shop            @relation(fields: [shopId], references: [id], onDelete: Cascade)
   walletAccount         WalletAccount   @relation(fields: [walletAccountId], references: [id], onDelete: Cascade)
