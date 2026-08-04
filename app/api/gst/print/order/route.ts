@@ -19,6 +19,25 @@ function htmlMessage(title: string, body: string) {
   return `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title></head><body style="font-family:sans-serif;padding:2rem;color:#111;"><h2>${title}</h2><p>${body}</p></body></html>`;
 }
 
+// A user-facing print popup must never spin forever. Every stage that can block on an
+// external system (Shopify sync, invoice generation, render) is raced against a deadline
+// so a stall surfaces as a legible error naming the stalled stage instead of an endless
+// spinner. The per-call fetch timeouts still apply underneath; this is the outer backstop.
+class StageTimeoutError extends Error {
+  constructor(public readonly stage: string, ms: number) {
+    super(`${stage} did not finish within ${Math.round(ms / 1000)}s`);
+    this.name = "StageTimeoutError";
+  }
+}
+
+function withDeadline<T>(stage: string, ms: number, work: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  const guard = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new StageTimeoutError(stage, ms)), ms);
+  });
+  return Promise.race([work, guard]).finally(() => clearTimeout(timer)) as Promise<T>;
+}
+
 /**
  * Absolute origin of this app. The print-action extension runs in a sandbox
  * whose relative URLs resolve against extensions.shopifycdn.com, and its fetch
@@ -60,52 +79,38 @@ export async function GET(req: NextRequest) {
     return fail(400, "Missing order", "No orderId was provided to the print preview.");
   }
 
-  const resolvedShop = await resolveShopConfig(shopDomain || undefined);
-  const resolvedShopId = resolvedShop.id ? String(resolvedShop.id).trim() : null;
-  if (!resolvedShopId) {
-    return fail(400, "Shop not resolved", "Unable to resolve the shop for this order.");
-  }
-
-  let orderImport = await prisma.gstOrderImport.findFirst({
-    where: { shopId: resolvedShopId, shopifyOrderId },
-    select: { id: true },
-  });
-
-  if (!orderImport) {
-    const synced = await syncSingleOrderByShopifyGid({
-      shopifyOrderGid: orderId,
-      shopDomain: resolvedShop.shopDomain,
-    });
-    if (!synced.ok) {
-      return fail(400, "Unable to prepare invoice", synced.error || "Order sync failed.");
+  try {
+    const resolvedShop = await withDeadline("Shop resolution", 10000, resolveShopConfig(shopDomain || undefined));
+    const resolvedShopId = resolvedShop.id ? String(resolvedShop.id).trim() : null;
+    if (!resolvedShopId) {
+      return fail(400, "Shop not resolved", "Unable to resolve the shop for this order.");
     }
-    orderImport = await prisma.gstOrderImport.findFirst({
+
+    let orderImport = await prisma.gstOrderImport.findFirst({
       where: { shopId: resolvedShopId, shopifyOrderId },
       select: { id: true },
     });
-  }
 
-  if (!orderImport) {
-    return fail(404, "Order not found", "This order could not be imported for GST invoicing.");
-  }
-
-  let invoice = await gstDb.gstDocument.findFirst({
-    where: {
-      documentType: "TAX_INVOICE",
-      OR: [{ sourceOrderId: orderImport.id }, { shopifyOrderId }],
-    },
-    orderBy: [{ createdAt: "desc" }],
-    select: { id: true },
-  });
-
-  if (!invoice) {
-    const batch = await generateInvoiceBatch({ shopId: resolvedShopId, orderImportIds: [orderImport.id] });
-    if (!batch.ok || !batch.data || batch.data.generated === 0) {
-      const perOrder = batch.ok ? (batch.data?.results?.[0] as { error?: string } | undefined) : undefined;
-      const error = (batch.ok ? perOrder?.error : batch.error) || "Failed to generate GST invoice";
-      return fail(400, "Unable to generate invoice", error);
+    if (!orderImport) {
+      const synced = await withDeadline(
+        "Shopify order sync",
+        15000,
+        syncSingleOrderByShopifyGid({ shopifyOrderGid: orderId, shopDomain: resolvedShop.shopDomain }),
+      );
+      if (!synced.ok) {
+        return fail(400, "Unable to prepare invoice", synced.error || "Order sync failed.");
+      }
+      orderImport = await prisma.gstOrderImport.findFirst({
+        where: { shopId: resolvedShopId, shopifyOrderId },
+        select: { id: true },
+      });
     }
-    invoice = await gstDb.gstDocument.findFirst({
+
+    if (!orderImport) {
+      return fail(404, "Order not found", "This order could not be imported for GST invoicing.");
+    }
+
+    let invoice = await gstDb.gstDocument.findFirst({
       where: {
         documentType: "TAX_INVOICE",
         OR: [{ sourceOrderId: orderImport.id }, { shopifyOrderId }],
@@ -113,32 +118,64 @@ export async function GET(req: NextRequest) {
       orderBy: [{ createdAt: "desc" }],
       select: { id: true },
     });
-  }
 
-  if (!invoice) {
-    return fail(404, "Invoice not available", "No GST invoice could be found or generated for this order.");
-  }
+    if (!invoice) {
+      const batch = await withDeadline(
+        "Invoice generation",
+        20000,
+        generateInvoiceBatch({ shopId: resolvedShopId, orderImportIds: [orderImport.id] }),
+      );
+      if (!batch.ok || !batch.data || batch.data.generated === 0) {
+        const perOrder = batch.ok ? (batch.data?.results?.[0] as { error?: string } | undefined) : undefined;
+        const error = (batch.ok ? perOrder?.error : batch.error) || "Failed to generate GST invoice";
+        return fail(400, "Unable to generate invoice", error);
+      }
+      invoice = await gstDb.gstDocument.findFirst({
+        where: {
+          documentType: "TAX_INVOICE",
+          OR: [{ sourceOrderId: orderImport.id }, { shopifyOrderId }],
+        },
+        orderBy: [{ createdAt: "desc" }],
+        select: { id: true },
+      });
+    }
 
-  if (wantsJson) {
-    const base = absoluteBase(req);
-    const url =
-      `${base}/api/gst/print/order` +
-      `?orderId=${encodeURIComponent(orderId)}` +
-      `&shop=${encodeURIComponent(shopDomain)}` +
-      `&format=html`;
-    return withExtensionCors(NextResponse.json({ ok: true, url }), req);
-  }
+    if (!invoice) {
+      return fail(404, "Invoice not available", "No GST invoice could be found or generated for this order.");
+    }
 
-  const rendered = await renderGstPdf(invoice.id);
-  if (!rendered.ok || !rendered.data) {
-    return fail(500, "Unable to render invoice", rendered.error || "Rendering failed.");
-  }
+    if (wantsJson) {
+      const base = absoluteBase(req);
+      const url =
+        `${base}/api/gst/print/order` +
+        `?orderId=${encodeURIComponent(orderId)}` +
+        `&shop=${encodeURIComponent(shopDomain)}` +
+        `&format=html`;
+      return withExtensionCors(NextResponse.json({ ok: true, url }), req);
+    }
 
-  return withExtensionCors(
-    new NextResponse(rendered.data.html, {
-      status: 200,
-      headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
-    }),
-    req,
-  );
+    const rendered = await withDeadline("Invoice render", 20000, renderGstPdf(invoice.id));
+    if (!rendered.ok || !rendered.data) {
+      return fail(500, "Unable to render invoice", rendered.error || "Rendering failed.");
+    }
+
+    return withExtensionCors(
+      new NextResponse(rendered.data.html, {
+        status: 200,
+        headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
+      }),
+      req,
+    );
+  } catch (error) {
+    if (error instanceof StageTimeoutError) {
+      // A stage stalled past its deadline. Return a legible error (naming the stalled
+      // stage) instead of leaving the print popup spinning forever.
+      return fail(
+        504,
+        "Invoice is taking too long",
+        `${error.stage} did not respond in time. Please retry in a moment; if it keeps failing, the ${error.stage.toLowerCase()} step is the bottleneck.`,
+      );
+    }
+    return fail(500, "Unable to prepare invoice", error instanceof Error ? error.message : "Unexpected error.");
+  }
 }
