@@ -19,6 +19,41 @@ function escapePdfText(value: string): string {
   return value.replaceAll("\\", "\\\\").replaceAll("(", "\\(").replaceAll(")", "\\)");
 }
 
+// Helvetica glyph advance widths (per 1000 em, from the AFM metrics). Used to measure
+// strings for accurate right-alignment - a crude average factor under-measures uppercase /
+// digit-heavy text like a GSTIN and lets it spill past the right margin.
+const HELVETICA_WIDTHS: Record<string, number> = (() => {
+  const w: Record<string, number> = {};
+  const put = (chars: string, width: number) => {
+    for (const ch of chars) w[ch] = width;
+  };
+  put(" ", 278);
+  put("0123456789", 556);
+  w.A = 667; w.B = 667; w.C = 722; w.D = 722; w.E = 667; w.F = 611; w.G = 778; w.H = 722;
+  w.I = 278; w.J = 500; w.K = 667; w.L = 556; w.M = 833; w.N = 722; w.O = 778; w.P = 667;
+  w.Q = 778; w.R = 722; w.S = 667; w.T = 611; w.U = 722; w.V = 667; w.W = 944; w.X = 667;
+  w.Y = 667; w.Z = 611;
+  w.a = 556; w.b = 556; w.c = 500; w.d = 556; w.e = 556; w.f = 278; w.g = 556; w.h = 556;
+  w.i = 222; w.j = 222; w.k = 500; w.l = 222; w.m = 833; w.n = 556; w.o = 556; w.p = 556;
+  w.q = 556; w.r = 333; w.s = 500; w.t = 278; w.u = 556; w.v = 500; w.w = 722; w.x = 500;
+  w.y = 500; w.z = 500;
+  put(".,:;'!", 278);
+  w["|"] = 260; w["-"] = 333;
+  put("()[]{}", 333);
+  w["#"] = 556; w["$"] = 556; w["%"] = 889; w["&"] = 667; w["*"] = 389; w["+"] = 584;
+  w["="] = 584; w["?"] = 556; w["@"] = 1015; w["_"] = 556; w["/"] = 278;
+  return w;
+})();
+
+// Bold is a touch wider than regular; over-measuring slightly only nudges right-aligned
+// text left (safe) whereas under-measuring overflows, so we scale rather than carry a
+// second table.
+function measureText(text: string, size: number, bold = false): number {
+  let units = 0;
+  for (const ch of String(text || "")) units += HELVETICA_WIDTHS[ch] ?? 556;
+  return (units / 1000) * size * (bold ? 1.06 : 1);
+}
+
 function wrapText(value: string, maxLen: number): string[] {
   const text = String(value || "").trim();
   if (!text) return [];
@@ -38,9 +73,9 @@ function wrapText(value: string, maxLen: number): string[] {
   return lines;
 }
 
-function drawText(commands: string[], x: number, y: number, text: string, size = 9): void {
+function drawText(commands: string[], x: number, y: number, text: string, size = 9, bold = false): void {
   commands.push("BT");
-  commands.push(`/F1 ${size} Tf`);
+  commands.push(`/${bold ? "F2" : "F1"} ${size} Tf`);
   commands.push(`${x.toFixed(2)} ${y.toFixed(2)} Td`);
   commands.push(`(${escapePdfText(text)}) Tj`);
   commands.push("ET");
@@ -199,180 +234,184 @@ function buildStyledPdf(model: GstInvoiceRenderModel): Buffer {
   ].filter((image): image is PdfImage => Boolean(image));
   const headerLogo = images.find((image) => image.name === "ImHeaderLogo") || null;
   const footerLogo = images.find((image) => image.name === "ImFooterLogo") || null;
-  const pageWidth = 842;
-  const pageHeight = 595;
-  const margin = 18;
+  // A4 PORTRAIT. The common part (header, party boxes, totals) keeps its design, just
+  // reflowed to portrait width. The line-item table is redesigned to avoid cramping: a
+  // wide "Item Description" column that wraps, with SKU / HSN / variant / per-line tax
+  // breakup on a compact sub-line instead of one narrow column each.
+  const pageWidth = 595;
+  const pageHeight = 842;
+  const margin = 24;
   const contentWidth = pageWidth - margin * 2;
-  const tableStartX = margin + 4;
+  const left = margin;
   const right = pageWidth - margin;
+  const innerLeft = left + 6;
+  const cfg = model.templateConfig;
+
+  const drawRight = (xRight: number, yPos: number, text: string, size = 7, bold = false) =>
+    drawText(commands, Math.max(innerLeft, xRight - measureText(text, size, bold)), yPos, text, size, bold);
 
   drawBox(commands, margin, margin, contentWidth, pageHeight - margin * 2);
-  if (model.templateConfig.showHeaderLogo && !drawImage(commands, headerLogo, pageWidth / 2 - 110, pageHeight - 38, 220, 28)) {
-    drawText(commands, pageWidth / 2 - 34, pageHeight - 26, "bigonbuy", 10);
+  let y = pageHeight - margin - 6;
+
+  if (cfg.showHeaderLogo) {
+    if (!drawImage(commands, headerLogo, pageWidth / 2 - 90, y - 26, 180, 24)) {
+      drawText(commands, pageWidth / 2 - 28, y - 16, "bigonbuy", 11);
+    }
+    y -= 30;
   }
-  drawText(commands, margin + 8, pageHeight - 40, `${model.title} | Original for Recipient`, 9);
-  drawText(commands, right - 220, pageHeight - 40, `GSTIN: ${model.supplier.gstin || "UNREGISTERED"}`, 8);
-  drawText(commands, margin + 8, pageHeight - 52, `${model.supplier.tradeName || model.supplier.name}`, 9);
-  drawText(commands, margin + 8, pageHeight - 64, `Invoice: ${model.documentNumber} | Date: ${model.documentDate}`, 8);
-  drawText(commands, margin + 8, pageHeight - 75, `Order: ${model.orderNumber} | Order Date: ${model.orderDate}`, 8);
-  drawText(commands, right - 220, pageHeight - 75, `Place of Supply: ${model.placeOfSupply}`, 8);
+  drawText(commands, innerLeft, y - 10, `${model.title} | Original for Recipient`, 10, true);
+  drawRight(right - 8, y - 10, `GSTIN: ${model.supplier.gstin || "UNREGISTERED"}`, 8);
+  y -= 20;
+  drawText(commands, innerLeft, y - 10, model.supplier.tradeName || model.supplier.name, 9, true);
+  y -= 13;
+  drawText(commands, innerLeft, y - 10, `Invoice: ${model.documentNumber} | Date: ${model.documentDate}`, 8);
+  drawRight(right - 8, y - 10, `Place of Supply: ${model.placeOfSupply}`, 8);
+  y -= 12;
+  drawText(commands, innerLeft, y - 10, `Order: ${model.orderNumber} | Order Date: ${model.orderDate}`, 8);
+  y -= 18;
 
-  const boxTop = pageHeight - 88;
-  const boxHeight = 90;
   const boxGap = 8;
-  const boxWidth = (contentWidth - boxGap * 2 - 8) / 3;
-  const firstX = margin + 4;
-  const secondX = firstX + boxWidth + boxGap;
-  const thirdX = secondX + boxWidth + boxGap;
-  const boxY = boxTop - boxHeight;
-  drawBox(commands, firstX, boxY, boxWidth, boxHeight);
-  drawBox(commands, secondX, boxY, boxWidth, boxHeight);
-  drawBox(commands, thirdX, boxY, boxWidth, boxHeight);
-
+  const partyW = (contentWidth - 8 - boxGap * 2) / 3;
+  const partyH = 98;
+  const partyX = [left + 4, left + 4 + partyW + boxGap, left + 4 + (partyW + boxGap) * 2];
+  const partyTop = y;
+  const partyBottom = y - partyH;
+  for (const x of partyX) drawBox(commands, x, partyBottom, partyW, partyH);
   const drawParty = (x: number, title: string, lines: string[]) => {
-    let y = boxTop - 14;
-    drawText(commands, x + 6, y, title, 8);
-    y -= 10;
-    for (const line of lines.slice(0, 6)) {
-      drawText(commands, x + 6, y, line, 7);
-      y -= 9;
-      if (y < boxY + 8) break;
+    let yy = partyTop - 12;
+    drawText(commands, x + 5, yy, title, 8, true);
+    yy -= 11;
+    for (const line of lines) {
+      for (const w of wrapText(line, 32)) {
+        if (yy < partyBottom + 6) return;
+        drawText(commands, x + 5, yy, w, 6.5);
+        yy -= 8;
+      }
     }
   };
-
-  drawParty(firstX, "BILLED TO", [
+  drawParty(partyX[0], "BILLED TO", [
     model.buyer.name || "Customer",
     `GSTIN: ${model.buyer.gstin || "UNREGISTERED"}`,
     ...model.buyer.lines,
     `Phone: ${model.buyer.phone || "-"}`,
     `Email: ${model.buyer.email || "-"}`,
   ]);
-  drawParty(secondX, "SHIP TO", [
+  drawParty(partyX[1], "SHIP TO", [
     model.shipping.name || model.buyer.name || "Customer",
     ...model.shipping.lines,
     `Phone: ${model.shipping.phone || model.buyer.phone || "-"}`,
     `Email: ${model.shipping.email || model.buyer.email || "-"}`,
   ]);
-  drawParty(thirdX, "SUPPLIER", [
+  drawParty(partyX[2], "SUPPLIER", [
     model.supplier.name,
     `GSTIN: ${model.supplier.gstin || "UNREGISTERED"}`,
     ...model.supplier.lines,
     `Phone: ${model.supplier.phone || "-"}`,
     `Email: ${model.supplier.email || "-"}`,
   ]);
+  y = partyBottom - 16;
 
-  const tableTop = boxY - 10;
-  const totalTableWidth = contentWidth - 8;
   type RenderRowKey = keyof GstInvoiceRenderModel["rows"][number];
-  const column = (key: RenderRowKey, title: string, width: number) => ({ key, title, width });
-  const columns: Array<{ key: RenderRowKey; title: string; width: number }> = [
-    column("lineNumber", "#", 0.04),
-    ...(model.templateConfig.showSku ? [column("sku", "SKU", 0.13)] : []),
-    ...(model.templateConfig.showProductTitle ? [column("description", "Item", 0.27)] : []),
-    ...(model.templateConfig.showVariant ? [column("variant", "Variant", 0.1)] : []),
-    ...(model.templateConfig.showHsn ? [column("hsn", "HSN", 0.09)] : []),
-    column("quantity", "Qty", 0.05),
-    column("taxable", "Taxable", 0.1),
-    ...(model.templateConfig.showTaxBreakup
-      ? [
-          column("gstRate", "GST%", 0.06),
-          column("cgst", "CGST", 0.07),
-          column("sgst", "SGST", 0.07),
-          column("igst", "IGST", 0.07),
-        ]
-      : []),
-    column("total", "Total", 0.09),
+  const tableLeft = left + 4;
+  const tableWidth = contentWidth - 8;
+  const mainCols: Array<{ key: RenderRowKey; title: string; w: number; align: "l" | "r" }> = [
+    { key: "lineNumber", title: "#", w: 0.05, align: "l" },
+    { key: "description", title: "Item Description", w: 0.43, align: "l" },
+    { key: "quantity", title: "Qty", w: 0.08, align: "r" },
+    { key: "taxable", title: "Taxable", w: 0.16, align: "r" },
+    { key: "gstRate", title: "GST%", w: 0.08, align: "r" },
+    { key: "total", title: "Total", w: 0.2, align: "r" },
   ];
-  const widthTotal = columns.reduce((sum, column) => sum + column.width, 0);
-  const colWidths = columns.map((column, index) => {
-    const pixels = Math.floor((column.width / widthTotal) * totalTableWidth);
-    if (index !== columns.length - 1) return pixels;
-    const consumed = columns.slice(0, -1).reduce((sum, part) => sum + Math.floor((part.width / widthTotal) * totalTableWidth), 0);
-    return totalTableWidth - consumed;
+  const colX: number[] = [];
+  let acc = tableLeft;
+  for (const col of mainCols) {
+    colX.push(acc);
+    acc += col.w * tableWidth;
+  }
+  const colRight = (i: number) => (i + 1 < mainCols.length ? colX[i + 1] : tableLeft + tableWidth);
+
+  const headerH = 16;
+  drawBox(commands, tableLeft, y - headerH, tableWidth, headerH);
+  mainCols.forEach((col, i) => {
+    if (col.align === "r") drawRight(colRight(i) - 3, y - 11, col.title, 7.5, true);
+    else drawText(commands, colX[i] + 3, y - 11, col.title, 7.5, true);
   });
-  const colTitles = columns.map((column) => column.title);
-  let colX = tableStartX;
-  for (let i = 0; i < colWidths.length; i += 1) {
-    drawBox(commands, colX, tableTop - 14, colWidths[i], 14);
-    drawText(commands, colX + 1.5, tableTop - 10, colTitles[i], 7);
-    colX += colWidths[i];
+  y -= headerH;
+
+  const descChars = Math.max(24, Math.floor((mainCols[1].w * tableWidth) / 3.6));
+  const bottomLimit = 150;
+  for (const row of model.rows) {
+    if (y < bottomLimit) break;
+    const descLines = wrapText(row.description, descChars);
+    const metaParts: string[] = [];
+    if (cfg.showSku && row.sku) metaParts.push(`SKU: ${row.sku}`);
+    if (cfg.showHsn && row.hsn) metaParts.push(`HSN: ${row.hsn}`);
+    if (cfg.showVariant && row.variant) metaParts.push(`Variant: ${row.variant}`);
+    if (cfg.showTaxBreakup) metaParts.push(`CGST: ${row.cgst}`, `SGST: ${row.sgst}`, `IGST: ${row.igst}`);
+    const metaLines = metaParts.length ? wrapText(metaParts.join("    "), Math.floor(tableWidth / 3.2)) : [];
+    const rowHeight = Math.max(1, descLines.length) * 9 + metaLines.length * 8 + 9;
+    if (y - rowHeight < bottomLimit) break;
+    const rowTop = y;
+    const rowBottom = y - rowHeight;
+    drawBox(commands, tableLeft, rowBottom, tableWidth, rowHeight);
+    drawText(commands, colX[0] + 3, rowTop - 10, row.lineNumber, 7.5);
+    let dy = rowTop - 10;
+    for (const w of descLines) {
+      drawText(commands, colX[1] + 3, dy, w, 7.5);
+      dy -= 9;
+    }
+    for (const w of metaLines) {
+      drawText(commands, colX[1] + 3, dy, w, 6.5);
+      dy -= 8;
+    }
+    drawRight(colRight(2) - 3, rowTop - 10, row.quantity, 7.5);
+    drawRight(colRight(3) - 3, rowTop - 10, row.taxable, 7.5);
+    drawRight(colRight(4) - 3, rowTop - 10, `${row.gstRate}%`, 7.5);
+    drawRight(colRight(5) - 3, rowTop - 10, row.total, 7.5);
+    y = rowBottom;
   }
 
-  let currentY = tableTop - 14;
-  for (const row of model.rows.slice(0, 16)) {
-    const rowLines = wrapText(row.description, 44);
-    const skuLines = wrapText(row.sku, 16);
-    const maxLines = Math.max(rowLines.length || 1, skuLines.length || 1);
-    const rowHeight = Math.max(12, maxLines * 8 + 3);
-    currentY -= rowHeight;
-    if (currentY < 120) break;
-    colX = tableStartX;
-    for (let i = 0; i < colWidths.length; i += 1) {
-      drawBox(commands, colX, currentY, colWidths[i], rowHeight);
-      colX += colWidths[i];
-    }
-    const cells = columns.map((column) => String(row[column.key] || ""));
-    colX = tableStartX;
-    for (let i = 0; i < cells.length; i += 1) {
-      drawText(commands, colX + 1.5, currentY + rowHeight - 8, cells[i], 7);
-      colX += colWidths[i];
-    }
-    if (rowLines.length > 1 || skuLines.length > 1) {
-      const xForColumn = (key: RenderRowKey) => {
-        const index = columns.findIndex((column) => column.key === key);
-        if (index < 0) return null;
-        return tableStartX + colWidths.slice(0, index).reduce((sum, width) => sum + width, 0) + 1.5;
-      };
-      const skuX = xForColumn("sku");
-      const itemX = xForColumn("description");
-      if (skuX !== null) {
-        let rowLineY = currentY + rowHeight - 16;
-        for (const text of skuLines.slice(1, 4)) {
-          drawText(commands, skuX, rowLineY, text, 7);
-          rowLineY -= 8;
-        }
-      }
-      if (itemX !== null) {
-        let rowLineY = currentY + rowHeight - 16;
-        for (const text of rowLines.slice(1, 4)) {
-          drawText(commands, itemX, rowLineY, text, 7);
-          rowLineY -= 10;
-        }
-      }
-    }
-  }
-
-  const totalsX = right - 205;
-  const totalsY = currentY - 72;
-  drawBox(commands, totalsX, totalsY, 190, 66);
   const totalLines = [
     `Taxable: ${model.totals.taxable}`,
-    ...(model.templateConfig.showTaxBreakup
+    ...(cfg.showTaxBreakup
       ? [`CGST: ${model.totals.cgst}`, `SGST: ${model.totals.sgst}`, `IGST: ${model.totals.igst}`, `CESS: ${model.totals.cess}`]
       : []),
     `Grand Total: ${model.totals.total}`,
   ];
-  let totalY = totalsY + 54;
-  totalLines.forEach((line) => {
-    drawText(commands, totalsX + 8, totalY, line, 8);
-    totalY -= 9;
+  const totalsW = 220;
+  const totalsX = right - totalsW;
+  const totalsH = totalLines.length * 12 + 10;
+  y -= 10;
+  drawBox(commands, totalsX, y - totalsH, totalsW, totalsH);
+  let totalY = y - 14;
+  totalLines.forEach((line, index) => {
+    const isGrandTotal = index === totalLines.length - 1;
+    drawText(commands, totalsX + 8, totalY, line, isGrandTotal ? 9 : 8, isGrandTotal);
+    totalY -= 12;
   });
+  y -= totalsH + 8;
 
-  if (model.templateConfig.showAmountInWords) {
-    drawText(commands, margin + 8, totalsY - 14, `Amount in Words: ${model.amountInWords}`, 7);
+  if (cfg.showAmountInWords) {
+    for (const w of wrapText(`Amount in Words: ${model.amountInWords}`, 95)) {
+      drawText(commands, innerLeft, y - 9, w, 7);
+      y -= 9;
+    }
   }
-  if (model.templateConfig.showDeclaration && model.declaration) {
-    drawText(commands, margin + 8, totalsY - 25, `Declaration: ${model.declaration}`, 7);
+  if (cfg.showDeclaration && model.declaration) {
+    for (const w of wrapText(`Declaration: ${model.declaration}`, 95)) {
+      drawText(commands, innerLeft, y - 9, w, 7);
+      y -= 9;
+    }
   }
-  if (model.templateConfig.showFooterNote) {
-    drawText(commands, margin + 8, 30, model.footer || "This is a system generated GST document.", 7);
+  if (cfg.showFooterNote) {
+    drawText(commands, innerLeft, margin + 16, model.footer || "This is a system generated GST document.", 7);
   }
-  if (model.templateConfig.showFooterLogo && !drawImage(commands, footerLogo, right - 140, 24, 120, 24)) {
-    drawText(commands, right - 140, 30, model.supplier.tradeName || model.supplier.name, 8);
+  if (cfg.showFooterLogo && !drawImage(commands, footerLogo, right - 120, margin + 8, 110, 22)) {
+    drawText(commands, right - 120, margin + 16, model.supplier.tradeName || model.supplier.name, 8);
   }
   if (model.signature) {
-    drawText(commands, right - 180, 45, `For ${model.supplier.name}`, 7);
-    drawText(commands, right - 180, 34, model.signature, 7);
+    drawText(commands, right - 170, margin + 34, `For ${model.supplier.name}`, 7);
+    drawText(commands, right - 170, margin + 22, model.signature, 7);
   }
 
   const stream = commands.join("\n");
@@ -383,7 +422,7 @@ function buildStyledPdf(model: GstInvoiceRenderModel): Buffer {
     Buffer.from("2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n", "utf8"),
   ];
   const imageObjects: Buffer[] = [];
-  let nextObjectId = 6;
+  let nextObjectId = 7;
 
   for (const image of images) {
     let smaskRef = "";
@@ -400,9 +439,10 @@ function buildStyledPdf(model: GstInvoiceRenderModel): Buffer {
   }
 
   const xObjects = xObjectEntries.length ? ` /XObject << ${xObjectEntries.join(" ")} >>` : "";
-  objectBuffers.push(Buffer.from(`3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 842 595] /Contents 5 0 R /Resources << /Font << /F1 4 0 R >>${xObjects} >> >> endobj\n`, "utf8"));
+  objectBuffers.push(Buffer.from(`3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 5 0 R /Resources << /Font << /F1 4 0 R /F2 6 0 R >>${xObjects} >> >> endobj\n`, "utf8"));
   objectBuffers.push(Buffer.from("4 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj\n", "utf8"));
   objectBuffers.push(Buffer.from(`5 0 obj << /Length ${Buffer.byteLength(stream, "utf8")} >> stream\n${stream}\nendstream endobj\n`, "utf8"));
+  objectBuffers.push(Buffer.from("6 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >> endobj\n", "utf8"));
   objectBuffers.push(...imageObjects);
 
   const header = Buffer.from("%PDF-1.4\n", "utf8");

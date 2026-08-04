@@ -75,6 +75,28 @@ let cachedRuntimeToken: string | null = null;
 let cachedRuntimeTokenExpiresAt = 0;
 let cachedRuntimeTokenShopDomain = "";
 
+// A GST PDF render blocks on these Shopify Admin calls, so they must never hang the
+// request. Abort after a bounded time; the callers already catch failures and fall back
+// to cached order data. The timeout must cover the BODY read too - a stalled response
+// body (headers arrive, bytes never do) would otherwise hang forever if read outside the
+// timer - so this reads the full text under the same abort signal and clears the timer
+// only after the body is consumed.
+async function fetchTextWithTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs = 8000,
+): Promise<{ ok: boolean; status: number; text: string }> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, { ...init, signal: controller.signal });
+    const text = await response.text().catch(() => "");
+    return { ok: response.ok, status: response.status, text };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function getRuntimeAdminAccessToken(shopDomain: string) {
   const apiKey = getEnvTrimmed("SHOPIFY_API_KEY");
   const apiSecret = getEnvTrimmed("SHOPIFY_API_SECRET");
@@ -87,7 +109,7 @@ async function getRuntimeAdminAccessToken(shopDomain: string) {
     return cachedRuntimeToken;
   }
 
-  const response = await fetch(`https://${shopDomain}/admin/oauth/access_token`, {
+  const response = await fetchTextWithTimeout(`https://${shopDomain}/admin/oauth/access_token`, {
     method: "POST",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
@@ -100,7 +122,7 @@ async function getRuntimeAdminAccessToken(shopDomain: string) {
     }),
   });
 
-  const rawText = await response.text().catch(() => "");
+  const rawText = response.text;
   let payload: { access_token?: string; expires_in?: number | string } | null = null;
   try {
     payload = rawText ? (JSON.parse(rawText) as { access_token?: string; expires_in?: number | string }) : null;
@@ -137,7 +159,7 @@ async function gstRuntimeAdminGraphql<T>(
     queryKind: query.includes("mutation") ? "mutation" : "query",
   });
 
-  const response = await fetch(`https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
+  const response = await fetchTextWithTimeout(`https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -146,7 +168,7 @@ async function gstRuntimeAdminGraphql<T>(
     body: JSON.stringify({ query, variables }),
   });
 
-  const rawText = await response.text().catch(() => "");
+  const rawText = response.text;
   let payload: { data?: T; errors?: Array<{ message?: string }> } | null = null;
   try {
     payload = rawText ? (JSON.parse(rawText) as { data?: T; errors?: Array<{ message?: string }> }) : null;
