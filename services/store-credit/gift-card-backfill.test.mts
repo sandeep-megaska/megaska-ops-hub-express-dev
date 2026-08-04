@@ -10,12 +10,13 @@ function acct(overrides = {}) {
 }
 
 function deps(overrides = {}) {
-  const calls: any = { credited: [], marked: [] };
+  const calls: any = { credited: [], marked: [], notified: [] };
   const base = {
     listAccounts: async () => [acct()],
     resolveShopDomain: async () => "shop.myshopify.com",
     credit: async (p: any) => { calls.credited.push(p); return { ok: true, created: true, giftCardId: "gid://shopify/GiftCard/1", last4: "WXYZ" }; },
     markAccountCreditsSynced: async (id: string, at: Date) => { calls.marked.push({ id, at }); },
+    notifyCreated: (p: any) => { calls.notified.push(p); },
     now: () => FIXED_NOW,
     ...overrides,
   };
@@ -29,6 +30,7 @@ test("mints a card for the full balance and marks the account's credits synced",
   assert.equal(calls.credited[0].amountPaise, 15000);
   assert.equal(calls.credited[0].currency, "INR");
   assert.deepEqual(calls.marked, [{ id: "wa_1", at: FIXED_NOW }]);
+  assert.deepEqual(calls.notified, [{ shopId: "shop_1", customerProfileId: "cp_1" }]);
 });
 
 test("skips an account whose shop domain cannot be resolved (no card minted)", async () => {
@@ -47,6 +49,7 @@ test("a failed mint is counted and does NOT mark credits synced", async () => {
   assert.equal(summary.created, 0);
   assert.equal(summary.items[0].reason, "write_gift_cards scope missing");
   assert.equal(calls.marked.length, 0);
+  assert.equal(calls.notified.length, 0);
 });
 
 test("processes a mixed batch and tallies each outcome", async () => {
