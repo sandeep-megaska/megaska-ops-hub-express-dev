@@ -35,6 +35,31 @@ function normalizeActor(actor: StoreCreditActor | undefined): Required<StoreCred
   };
 }
 
+// Mirror a settled COD-refund credit onto the customer's Shopify gift card so the
+// balance is spendable at native checkout. Runs after the ledger transaction has
+// committed and is deliberately best-effort: the refund is settled in our ledger
+// regardless of the gift-card outcome, and a failure leaves a NULL retry marker on the
+// ledger entry (see gift-card-projection). This never throws so it can never turn a
+// successful settlement into a failed API response.
+async function projectSettlementToGiftCard(walletTransactionId: string) {
+  try {
+    const { projectCreditToGiftCard } = await import("./store-credit/gift-card-projection");
+    const result = await projectCreditToGiftCard(walletTransactionId);
+    if (result.status === "failed") {
+      console.error("[STORE CREDIT] gift_card_projection_failed", { walletTransactionId, reason: result.reason });
+    } else {
+      console.info("[STORE CREDIT] gift_card_projection", { walletTransactionId, status: result.status });
+    }
+    return result;
+  } catch (error) {
+    console.error("[STORE CREDIT] gift_card_projection_error", {
+      walletTransactionId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return { status: "failed" as const, reason: "projection_threw" };
+  }
+}
+
 function validateRefundForStoreCredit(refund: {
   id: string;
   shopId: string | null;
@@ -285,7 +310,8 @@ export async function settleCodRefundAsStoreCredit(input: SettleCodRefundAsStore
       walletTransactionId: settlement.walletTransaction.id,
       alreadySettled: settlement.alreadySettled,
     });
-    return settlement;
+    const giftCard = await projectSettlementToGiftCard(settlement.walletTransaction.id);
+    return { ...settlement, giftCard };
   } catch (error) {
     if (!isUniqueConstraintError(error)) {
       console.error("[STORE CREDIT] settlement_failed", {
@@ -305,7 +331,8 @@ export async function settleCodRefundAsStoreCredit(input: SettleCodRefundAsStore
       walletTransactionId: recovered.walletTransaction.id,
       alreadySettled: recovered.alreadySettled,
     });
-    return recovered;
+    const giftCard = await projectSettlementToGiftCard(recovered.walletTransaction.id);
+    return { ...recovered, giftCard };
   }
 }
 
