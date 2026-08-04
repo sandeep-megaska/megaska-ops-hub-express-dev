@@ -18,7 +18,7 @@ export function buildGiftCardCodeText(payload: { customerName?: string | null; c
   return [
     `Hi ${firstName(payload.customerName)},`,
     "",
-    'Here is your store credit code. Enter it in the "Gift card" field at checkout to spend your balance:',
+    "Here is your store credit code. Enter it in the discount code field at checkout to spend your balance:",
     "",
     `    ${payload.code}`,
     "",

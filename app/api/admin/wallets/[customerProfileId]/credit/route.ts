@@ -44,7 +44,25 @@ export async function POST(req: NextRequest, context: { params: Promise<{ custom
       createdById,
     });
 
-    return NextResponse.json({ wallet: result.account, transaction: result.transaction });
+    // Mirror the manual credit onto the customer's Shopify gift card so it is actually
+    // spendable at checkout (create on first grant, top up otherwise). Best-effort and
+    // durably retryable via the same projection the COD-refund settlement uses; a failure
+    // never fails the ledger credit. On a first-time create, email the customer the code.
+    let giftCard: unknown = { status: "skipped" };
+    try {
+      const { projectCreditToGiftCard } = await import("../../../../../../services/store-credit/gift-card-projection");
+      const projection = await projectCreditToGiftCard(result.transaction.id);
+      giftCard = projection;
+      if (projection.status === "created") {
+        const { notifyGiftCardCodeGenerated } = await import("../../../../../../services/notifications/store-credit");
+        notifyGiftCardCodeGenerated({ shopId: shop.id, customerProfileId });
+      }
+    } catch (error) {
+      console.error("[WALLET ADMIN] gift_card_projection_failed", { customerProfileId, error: error instanceof Error ? error.message : String(error) });
+      giftCard = { status: "failed" };
+    }
+
+    return NextResponse.json({ wallet: result.account, transaction: result.transaction, giftCard });
   } catch (error) {
     const status = error instanceof ShopResolutionError ? error.status : 500;
     return NextResponse.json({ error: error instanceof Error ? error.message : "Failed" }, { status });

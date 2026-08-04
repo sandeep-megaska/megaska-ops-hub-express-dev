@@ -21,6 +21,7 @@ export default async function AdminWalletsPage({ searchParams }: Props) {
   }
 
   const q = String(Array.isArray(filters.q) ? filters.q[0] : filters.q || "").trim();
+  const shopDomain = resolved.shopDomain || "";
 
   const wallets = await prisma.$queryRaw<
     Array<{
@@ -34,9 +35,11 @@ export default async function AdminWalletsPage({ searchParams }: Props) {
       firstName: string | null;
       lastName: string | null;
       fullName: string | null;
+      shopifyGiftCardLast4: string | null;
     }>
   >`
     SELECT wa."id", wa."customerProfileId", wa."currency", wa."currentBalance", wa."updatedAt",
+      wa."shopifyGiftCardLast4",
       cp."phoneE164", cp."email", cp."firstName", cp."lastName", cp."fullName"
     FROM "WalletAccount" wa
     JOIN "CustomerProfile" cp ON cp."id" = wa."customerProfileId"
@@ -64,6 +67,7 @@ export default async function AdminWalletsPage({ searchParams }: Props) {
       </header>
 
       <form className="mk-header-actions" style={{ maxWidth: 560 }}>
+        {shopDomain ? <input type="hidden" name="shop" value={shopDomain} /> : null}
         <input className="mk-input" name="q" defaultValue={q} placeholder="Search by phone, name, email" />
         <button type="submit" className="mk-btn mk-btn-primary">Search</button>
       </form>
@@ -73,7 +77,7 @@ export default async function AdminWalletsPage({ searchParams }: Props) {
           <table className="mk-table">
             <thead>
               <tr>
-                {["Customer", "Phone", "Email", "Balance", "Updated", "Action"].map((head) => (
+                {["Customer", "Phone", "Email", "Balance", "Gift card", "Updated", "Action"].map((head) => (
                   <th key={head}>{head}</th>
                 ))}
               </tr>
@@ -85,9 +89,10 @@ export default async function AdminWalletsPage({ searchParams }: Props) {
                   <td>{wallet.phoneE164}</td>
                   <td>{wallet.email || "-"}</td>
                   <td>{wallet.currency} {(wallet.currentBalance / 100).toFixed(2)}</td>
+                  <td>{wallet.shopifyGiftCardLast4 ? `••••${wallet.shopifyGiftCardLast4}` : "—"}</td>
                   <td>{wallet.updatedAt.toISOString().slice(0, 19).replace("T", " ")}</td>
                   <td>
-                    <Link className="mk-btn mk-btn-sm" href={`/admin/wallets/${wallet.customerProfileId}`}>Open</Link>
+                    <Link className="mk-btn mk-btn-sm" href={shopDomain ? `/admin/wallets/${wallet.customerProfileId}?shop=${encodeURIComponent(shopDomain)}` : `/admin/wallets/${wallet.customerProfileId}`}>Open</Link>
                   </td>
                 </tr>
               ))}

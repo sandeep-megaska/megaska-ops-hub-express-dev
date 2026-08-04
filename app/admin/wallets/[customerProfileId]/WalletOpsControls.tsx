@@ -39,6 +39,10 @@ export default function WalletOpsControls({ customerProfileId }: Props) {
   return (
     <section className="mk-card">
       <h3 className="mk-section-title">Wallet Operations</h3>
+      <p className="mk-page-subtitle" style={{ marginTop: 0 }}>
+        A manual <strong>credit</strong> also tops up the customer&apos;s Shopify gift card, so it is spendable at checkout.
+        A manual <strong>debit</strong> adjusts this ledger only — reduce the gift card itself from Shopify&apos;s gift-card admin.
+      </p>
       <div className="mk-field" style={{ maxWidth: 560 }}>
         <label className="mk-label" htmlFor="wallet-admin-id">Admin ID (optional)</label>
         <input id="wallet-admin-id" className="mk-input" value={adminId} onChange={(event) => setAdminId(event.target.value)} />
