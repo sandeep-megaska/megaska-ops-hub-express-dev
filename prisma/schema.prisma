@@ -3029,3 +3029,25 @@ model ShopInstallationEvent {
   @@index([shopId, createdAt])
   @@index([eventType, createdAt])
 }
+
+/// Contact-form submissions from the public marketing WEBSITE (loopdesk-website).
+/// This is deliberately NOT app/merchant data — it is website enquiries, stored in
+/// the shared app database under a clearly-identifiable, website-scoped table name
+/// so it is never confused with Shopify/merchant records. No relation to Shop.
+model WebsiteContactSubmission {
+  id           String   @id @default(uuid())
+  createdAt    DateTime @default(now())
+  name         String
+  email        String
+  company      String?
+  shopDomain   String?
+  enquiryType  String?
+  subject      String?
+  message      String
+  sourceIpHash String?
+  userAgent    String?
+  status       String   @default("NEW")
+
+  @@index([createdAt])
+  @@index([status])
+}
