@@ -186,7 +186,7 @@ function buildReadiness(
   }
 
   if (lines.some((line) => line.mappingStatus !== "MAPPED")) {
-    readinessErrors.push("One or more line items are missing GST product tax mappings");
+    readinessErrors.push("One or more line items have no GST tax profile (SKU-HSN mapping)");
   }
 
   // The former "order amount sanity check" (subtotal+tax vs grand total, or
@@ -226,7 +226,7 @@ function collectUnmappedSkus(lines: LineForReadiness[]): string[] {
 }
 
 function collectMissingMappingMessages(lines: LineForReadiness[]): string[] {
-  return collectUnmappedSkus(lines).map((sku) => `Missing GST mapping for SKU ${sku}`);
+  return collectUnmappedSkus(lines).map((sku) => `No GST tax profile found for SKU ${sku}`);
 }
 
 function parseSnapshot(value: unknown): Record<string, unknown> {

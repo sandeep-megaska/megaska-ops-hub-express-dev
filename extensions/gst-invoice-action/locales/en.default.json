@@ -4,7 +4,6 @@
   "notInvoiced": "No GST invoice has been generated for this order yet.",
   "invoiced": "GST invoice {documentNumber} is ready.",
   "readinessWarning": "This order has {count} unresolved GST issue(s). Generation may fail until they are fixed in the GST app.",
-  "taxMismatch": "Invoice GST (₹{invoiceTax}) does not match the tax charged at checkout (₹{shopifyTax}). Check that this product's GST rate matches your Shopify tax settings.",
   "generateButton": "Generate GST invoice",
   "refreshButton": "Refresh status",
   "generating": "Generating...",
