@@ -1799,7 +1799,7 @@
         + '<span class="loopdesk-cart-drawer__pay-arrow" aria-hidden="true">›</span></button>';
     }
     return '<p class="loopdesk-cart-drawer__pay-label">Choose how to pay</p>'
-      + opt("prepaid", "primary", "Pay Online", prepaidPrice, saveText, "is-save", methodsHtml)
+      + opt("prepaid", "primary", "Pay Now &amp; Save More", prepaidPrice, saveText, "is-save", methodsHtml)
       + opt("cod", "secondary", "Cash on Delivery", base, codText, prepaidSavings > 0 ? "is-more" : "");
   }
 
@@ -1904,7 +1904,6 @@
   elements.trustBelowTotals.innerHTML = renderTrustBadges("BELOW_TOTALS");
   elements.trustBelowCheckout.innerHTML = renderTrustBadges("BELOW_CHECKOUT_BUTTON");
 
-  elements.count.textContent = itemCount ? "(" + itemCount + ")" : "";
   // In choice mode the two Prepaid/COD options ARE the checkout buttons, so the
   // separate Express Checkout button is suppressed.
   elements.express.hidden = !config.cart.expressCheckoutButtonEnabled || paymentChoiceActive();
@@ -2161,7 +2160,7 @@
     return [
       '<div class="loopdesk-cart-drawer__overlay" hidden></div>',
       '<aside class="loopdesk-cart-drawer" aria-hidden="true" aria-label="Cart" role="dialog">',
-      '<header class="loopdesk-cart-drawer__header"><div class="loopdesk-cart-drawer__brand">' + logo + '<div><h2>' + escapeHtml(config.branding.merchantName || config.branding.storeName) + ' <span data-loopdesk-cart-count></span></h2><p>Your bag</p></div></div><button type="button" class="loopdesk-cart-drawer__close" aria-label="Close cart">×</button></header>',
+      '<header class="loopdesk-cart-drawer__header"><div class="loopdesk-cart-drawer__brand">' + logo + '<div><h2>' + escapeHtml(config.branding.merchantName || config.branding.storeName) + '</h2><p>Your bag</p></div></div><button type="button" class="loopdesk-cart-drawer__close" aria-label="Close cart">×</button></header>',
       // Only the checkout CTA is pinned in the sticky footer; the totals, trust
       // badges and fine print scroll with the cart so more cart content is visible.
       '<div class="loopdesk-cart-drawer__scroll">',
@@ -2209,7 +2208,6 @@
       savings: hostRoot.querySelector("[data-loopdesk-cart-savings]"),
       trustBelowTotals: hostRoot.querySelector("[data-loopdesk-trust-below-totals]"),
       trustBelowCheckout: hostRoot.querySelector("[data-loopdesk-trust-below-checkout]"),
-      count: hostRoot.querySelector("[data-loopdesk-cart-count]"),
       express: hostRoot.querySelector(".loopdesk-cart-drawer__express"),
       prepaidNudge: hostRoot.querySelector("[data-loopdesk-prepaid-nudge]"),
       paymentChoice: hostRoot.querySelector("[data-loopdesk-payment-choice]"),
