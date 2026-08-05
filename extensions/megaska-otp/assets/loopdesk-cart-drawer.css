@@ -826,6 +826,8 @@ body.loopdesk-cart-drawer-is-open #loopdesk-cart-drawer-root .loopdesk-cart-draw
 .loopdesk-cart-drawer__pay-option--primary .loopdesk-cart-drawer__pay-copy strong,
 .loopdesk-cart-drawer__pay-option--primary .loopdesk-cart-drawer__pay-amt { color:#fff; }
 .loopdesk-cart-drawer__pay-option--primary .loopdesk-cart-drawer__pay-copy em.is-save { color:#6ee7b7; }
+/* Make the prepaid CTA text stand out so shoppers pick Pay Now over COD. */
+.loopdesk-cart-drawer__pay-option--primary .loopdesk-cart-drawer__pay-copy strong { font-size:16px; font-weight:800; letter-spacing:.3px; text-transform:uppercase; }
 .loopdesk-cart-drawer__pay-option--secondary { background:#fff; border-color:#e2e8f0; }
 .loopdesk-cart-drawer__pay-option--secondary:hover { border-color:#cbd5e1; }
 .loopdesk-cart-drawer__pay-copy { display:flex; flex-direction:column; gap:2px; min-width:0; }
