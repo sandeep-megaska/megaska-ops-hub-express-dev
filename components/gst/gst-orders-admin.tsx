@@ -165,7 +165,8 @@ export function GstOrdersAdmin() {
   const [error, setError] = useState<string>()
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({})
   const printFrameRef = useRef<HTMLIFrameElement | null>(null)
-  const [printHtml, setPrintHtml] = useState<string | null>(null)
+  const printUrlRef = useRef<string | null>(null)
+  const [printPdfUrl, setPrintPdfUrl] = useState<string | null>(null)
   const [isB2cExporting, setIsB2cExporting] = useState(false)
   const [downloadingPdfId, setDownloadingPdfId] = useState<string | null>(null)
   const [b2cExportError, setB2cExportError] = useState<string>()
@@ -281,23 +282,38 @@ export function GstOrdersAdmin() {
     setGeneratingId(null)
   }
 
+  function closePrintPreview() {
+    if (printUrlRef.current) {
+      URL.revokeObjectURL(printUrlRef.current)
+      printUrlRef.current = null
+    }
+    setPrintPdfUrl(null)
+  }
+
   async function onPrintInvoice(invoiceDocumentId: string) {
     setLoading(true)
     setError(undefined)
 
-    const response = await fetch(`/api/gst/invoices/${encodeURIComponent(invoiceDocumentId)}/pdf?format=html`, {
+    // Preview & print the same portrait, multi-page Chromium PDF the Download button
+    // produces. A pre-rendered PDF has fixed A4-portrait pages, so the browser's print
+    // dialog cannot reflow it to landscape or truncate the right margin — unlike the
+    // previous format=html path, which left orientation to the user's print settings.
+    const response = await fetch(`/api/gst/invoices/${encodeURIComponent(invoiceDocumentId)}/pdf?format=chromium`, {
       credentials: 'include',
       cache: 'no-store',
       headers: await adminAuthHeaders(),
     })
-    const html = await response.text().catch(() => '')
-    if (!response.ok || !html) {
+    const blob = response.ok ? await response.blob().catch(() => null) : null
+    if (!response.ok || !blob || !blob.size) {
       setError('Unable to render invoice preview')
       setLoading(false)
       return
     }
 
-    setPrintHtml(html)
+    if (printUrlRef.current) URL.revokeObjectURL(printUrlRef.current)
+    const url = URL.createObjectURL(blob)
+    printUrlRef.current = url
+    setPrintPdfUrl(url)
     setLoading(false)
   }
 
@@ -626,7 +642,7 @@ export function GstOrdersAdmin() {
         )}
       </div>
 
-      {printHtml ? (
+      {printPdfUrl ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="flex h-[90vh] w-full max-w-6xl flex-col rounded-xl bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
@@ -635,12 +651,12 @@ export function GstOrdersAdmin() {
                 <button className="mk-btn mk-btn-sm mk-btn-primary" onClick={() => printFrameRef.current?.contentWindow?.print()}>
                   Print
                 </button>
-                <button className="mk-btn mk-btn-sm" onClick={() => setPrintHtml(null)}>
+                <button className="mk-btn mk-btn-sm" onClick={closePrintPreview}>
                   Close
                 </button>
               </div>
             </div>
-            <iframe ref={printFrameRef} title="GST Invoice" className="h-full w-full" srcDoc={printHtml} />
+            <iframe ref={printFrameRef} title="GST Invoice" className="h-full w-full" src={printPdfUrl} />
           </div>
         </div>
       ) : null}
