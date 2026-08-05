@@ -148,9 +148,12 @@ export async function POST(req: NextRequest) {
           ? (() => {
               const signed = signInvoiceDocumentAccess(String(invoice.id), resolvedShopId);
               const base = `${absoluteBase(req)}/api/gst/invoices/${invoice.id}/pdf`;
+              // format=chromium → real-layout portrait, multi-page PDF (route falls back
+              // to the hand-drawn renderer if Chromium is unavailable). The HMAC signs
+              // only documentId.shopId.exp, so this extra param does not affect access.
               return signed
-                ? `${base}?shopId=${encodeURIComponent(resolvedShopId)}&exp=${signed.exp}&sig=${encodeURIComponent(signed.sig)}`
-                : base;
+                ? `${base}?shopId=${encodeURIComponent(resolvedShopId)}&exp=${signed.exp}&sig=${encodeURIComponent(signed.sig)}&format=chromium`
+                : `${base}?format=chromium`;
             })()
           : null,
         error: generationError,
