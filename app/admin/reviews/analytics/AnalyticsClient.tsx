@@ -1,8 +1,9 @@
 "use client";
 import { useEffect,useState } from "react";
+import { adminAuthHeaders } from "../../../../lib/admin-fetch";
 type Data={metrics:Record<string,{value:number;percentageChange?:number|null;asOf?:string}>;reviewVolumeSeries:{submitted:number;published:number;rejected:number}[]};
 const labels:Record<string,string>={reviewsSubmitted:"Reviews submitted",currentPublishedAverageRating:"Current average rating",requestConversionRate:"Request conversion rate",pendingModeration:"Pending moderation",publicationRate:"Publication rate",mediaReviewRate:"Reviews with media",merchantReplyCoverage:"Merchant reply coverage",failedNotifications:"Failed notifications"};
-export default function AnalyticsClient({shop}:{shop:string}){const [range,setRange]=useState("30"),[data,setData]=useState<Data|null>(null),[error,setError]=useState("");useEffect(()=>{fetch(`/api/admin/reviews/analytics/overview?shop=${encodeURIComponent(shop)}&range=${range}`).then(r=>r.json()).then(x=>x.ok?setData(x):setError(x.error||"Unable to load analytics.")).catch(()=>setError("Unable to load analytics."))},[range,shop]);return (
+export default function AnalyticsClient({shop}:{shop:string}){const [range,setRange]=useState("30"),[data,setData]=useState<Data|null>(null),[error,setError]=useState("");useEffect(()=>{(async()=>{try{const r=await fetch(`/api/admin/reviews/analytics/overview?shop=${encodeURIComponent(shop)}&range=${range}`,{headers:await adminAuthHeaders()});const x=await r.json();x.ok?setData(x):setError(x.error||"Unable to load analytics.")}catch{setError("Unable to load analytics.")}})()},[range,shop]);return (
   <div className="mk-page">
     <div className="mk-page-header">
       <div>
