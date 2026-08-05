@@ -882,12 +882,13 @@ export async function getShopifyCustomerDashboardData(input: {
     options
   );
 
+  // Do not log customer email/phone (PII) — booleans are enough to diagnose.
   console.log("[SHOPIFY DASHBOARD] raw customer result", {
     customerGid,
     shopDomain: input.shopDomain || null,
     foundCustomer: Boolean(data.customer),
-    email: data.customer?.email || null,
-    phone: data.customer?.phone || null,
+    hasEmail: Boolean(data.customer?.email),
+    hasPhone: Boolean(data.customer?.phone),
     numberOfOrders: data.customer?.numberOfOrders ?? null,
     recentOrdersCount: data.customer?.orders?.nodes?.length ?? null,
   });

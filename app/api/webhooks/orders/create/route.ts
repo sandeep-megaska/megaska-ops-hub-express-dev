@@ -45,6 +45,21 @@ type ShopifyOrderWebhookPayload = {
 
 export const runtime = "nodejs";
 
+// Mask PII before it reaches application logs (host log stores are outside the
+// redaction surface and have their own retention).
+function maskEmail(email: string | null | undefined): string | null {
+  const value = String(email || "").trim();
+  if (!value) return null;
+  if (!value.includes("@")) return "***";
+  const [user, domain] = value.split("@");
+  return `${user.slice(0, 1)}***@${domain}`;
+}
+function maskPhone(phone: string | null | undefined): string | null {
+  const value = String(phone || "").trim();
+  if (!value) return null;
+  return value.length <= 4 ? "***" : `***${value.slice(-4)}`;
+}
+
 function getShopifyApiSecret() {
   return String(process.env.SHOPIFY_API_SECRET || "").trim();
 }
@@ -149,7 +164,7 @@ async function backfillMissingOrderEmailFromCustomerProfile(
   if (existingEmail) {
     console.log("[Megaska Order Email Backfill] skipped because email already present", {
       orderId: orderId || null,
-      email: existingEmail,
+      email: maskEmail(existingEmail),
     });
     return;
   }
@@ -174,7 +189,7 @@ async function backfillMissingOrderEmailFromCustomerProfile(
   if (!profileEmail) {
     console.log("[Megaska Order Email Backfill] skipped because CustomerProfile email missing", {
       orderId: orderId || null,
-      phoneE164: normalizedPhone,
+      phoneE164: maskPhone(normalizedPhone),
     });
     return;
   }
@@ -187,8 +202,8 @@ async function backfillMissingOrderEmailFromCustomerProfile(
   console.log("[Megaska Order Email Backfill] attempting Shopify order email backfill", {
     orderId: orderId || null,
     orderGid,
-    phoneE164: normalizedPhone,
-    email: profileEmail,
+    phoneE164: maskPhone(normalizedPhone),
+    email: maskEmail(profileEmail),
   });
 
   const result = await updateShopifyOrderEmail(orderGid, profileEmail, {
@@ -203,7 +218,7 @@ async function backfillMissingOrderEmailFromCustomerProfile(
   console.log("[Megaska Order Email Backfill] success", {
     orderId: orderId || null,
     orderGid,
-    email: result.order?.email || profileEmail,
+    email: maskEmail(result.order?.email || profileEmail),
   });
 }
 
