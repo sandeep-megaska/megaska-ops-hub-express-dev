@@ -26,14 +26,16 @@
   "dependencies": {
     "@prisma/adapter-pg": "^7.6.0",
     "@prisma/client": "^7.6.0",
+    "@sparticuz/chromium": "^149.0.0",
     "dotenv": "^17.4.2",
+    "libphonenumber-js": "^1.12.24",
     "next": "16.2.2",
     "pg": "^8.20.0",
     "prisma": "^7.6.0",
+    "puppeteer-core": "^25.5.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
-    "resend": "^4.8.0",
-    "libphonenumber-js": "^1.12.24"
+    "resend": "^4.8.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
