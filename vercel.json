@@ -4,11 +4,5 @@
       "path": "/api/cron/checkout-recovery",
       "schedule": "*/15 * * * *"
     }
-  ],
-  "functions": {
-    "app/api/gst/invoices/[id]/pdf/route.ts": {
-      "memory": 2048,
-      "maxDuration": 30
-    }
-  }
+  ]
 }

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { renderGstInvoicePdfBuffer } from "../../../../../../services/gst/pdf-binary";
-import { renderGstPdfBinary as renderGstPdfViaChromium } from "../../../../../../services/gst/pdf-chromium";
 import { renderGstPdf } from "../../../../../../services/gst/pdf";
 import { getGstDocumentById } from "../../../../../../services/gst/documents";
 import { requireAdminShopFromRequest } from "../../../../../../services/shopify/admin-auth";
@@ -81,11 +80,7 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
       );
     }
 
-    // POC A/B switch: ?format=chromium renders the same HTML through headless
-    // Chromium (real layout engine) instead of the hand-drawn pdf-binary.ts. Lets
-    // us compare truncation fidelity and cold/warm latency before committing.
-    const renderPdf = format === "chromium" ? renderGstPdfViaChromium : renderGstInvoicePdfBuffer;
-    const result = await withDeadline("Invoice PDF render", 20000, renderPdf(id));
+    const result = await withDeadline("Invoice PDF render", 20000, renderGstInvoicePdfBuffer(id));
     if (!result.ok || !result.data) {
       return withExtensionCors(
         NextResponse.json({ ok: false, error: result.error || "Unable to generate invoice PDF" }, { status: 404 }),
