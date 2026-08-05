@@ -30,7 +30,7 @@ function toInvoiceDraftError(reason: unknown): string {
 
   if (!message) return "Failed to create GST invoice draft";
   if (lc.includes("missing placeofsupplystatecode")) return "missing placeOfSupplyStateCode";
-  if (lc.includes("missing gst mapping") || lc.includes("missing sku mapping")) return "missing SKU mapping";
+  if (lc.includes("missing gst mapping") || lc.includes("missing sku mapping") || lc.includes("no gst tax profile")) return "missing SKU mapping";
   if (lc.includes("template")) return "missing template";
   if (lc.includes("totals") || lc.includes("tax computation")) return `invalid totals: ${message}`;
   if (lc.includes("gst settings") || lc.includes("statecode is required") || lc.includes("unable to resolve")) {

@@ -18,7 +18,7 @@ test('imported + review required increments both imported and notReady', () => {
   const counters = computeSyncCountersForImportedOrder({
     importStatus: 'IMPORTED',
     eligibilityStatus: 'REVIEW_REQUIRED',
-    readinessErrors: ['One or more line items are missing GST product tax mappings'],
+    readinessErrors: ['One or more line items have no GST tax profile (SKU-HSN mapping)'],
   })
 
   assert.equal(counters.imported, 1)
@@ -30,12 +30,12 @@ test('deriveSyncReadinessMetrics surfaces readiness details for per-order payloa
     importStatus: 'IMPORTED',
     eligibilityStatus: 'REVIEW_REQUIRED',
     mappingCompleteness: 50,
-    readinessErrors: ['One or more line items are missing GST product tax mappings'],
+    readinessErrors: ['One or more line items have no GST tax profile (SKU-HSN mapping)'],
     unmappedSkus: ['SKU-1', 'SKU-2'],
     warnings: ['Order imported but requires GST readiness review'],
   })
 
-  assert.deepEqual(readiness.readinessErrors, ['One or more line items are missing GST product tax mappings'])
+  assert.deepEqual(readiness.readinessErrors, ['One or more line items have no GST tax profile (SKU-HSN mapping)'])
   assert.equal(readiness.mappingCompleteness, 50)
   assert.deepEqual(readiness.unmappedSkus, ['SKU-1', 'SKU-2'])
   assert.deepEqual(readiness.warnings, ['Order imported but requires GST readiness review'])
