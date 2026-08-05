@@ -308,7 +308,10 @@ export function GstOrdersAdmin() {
     setError(undefined)
 
     try {
-      const response = await fetch(`/api/gst/invoices/${encodeURIComponent(invoiceDocumentId)}/pdf`, {
+      // format=chromium renders the invoice through headless Chromium's real layout
+      // engine: portrait, multi-page (no dropped line items), matching the Print preview.
+      // The route falls back to the hand-drawn PDF if Chromium is unavailable.
+      const response = await fetch(`/api/gst/invoices/${encodeURIComponent(invoiceDocumentId)}/pdf?format=chromium`, {
         credentials: 'include',
         cache: 'no-store',
         headers: await adminAuthHeaders(),
