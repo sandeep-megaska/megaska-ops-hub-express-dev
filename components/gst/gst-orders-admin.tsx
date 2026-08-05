@@ -286,10 +286,10 @@ export function GstOrdersAdmin() {
     setError(undefined)
 
     try {
-      // format=chromium renders the invoice through headless Chromium's real layout
-      // engine: portrait, multi-page (no dropped line items), matching the Print preview.
-      // The route falls back to the hand-drawn PDF if Chromium is unavailable.
-      const response = await fetch(`/api/gst/invoices/${encodeURIComponent(invoiceDocumentId)}/pdf?format=chromium`, {
+      // Default (hand-drawn) portrait renderer — reliable on serverless. The Chromium
+      // path (?format=chromium) can OOM/crash the Lambda before the route's fallback
+      // runs, which broke the download, so it is intentionally not requested here.
+      const response = await fetch(`/api/gst/invoices/${encodeURIComponent(invoiceDocumentId)}/pdf`, {
         credentials: 'include',
         cache: 'no-store',
         headers: await adminAuthHeaders(),
