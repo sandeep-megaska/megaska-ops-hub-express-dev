@@ -338,15 +338,39 @@ export async function GET(req: NextRequest) {
 
       if (linkedOrderCount === 0) {
         try {
-          const identityCustomerId = await findShopifyCustomerIdByIdentity({
+          // Resolve the real Shopify customer by verified identity. Phone is tried
+          // first (findShopifyCustomerIdByIdentity searches phone-format variants and,
+          // by policy, only falls back to email when NO phone is supplied). Then an
+          // explicit email-only lookup, so a customer whose Shopify record is keyed on
+          // email (no phone captured at guest checkout) is still matched for a
+          // phone-verified OTP profile. The shared resolver's policy is unchanged; we
+          // just consult both identifiers here.
+          const candidateCustomerIds: string[] = [];
+          const byPhone = await findShopifyCustomerIdByIdentity({
             shopDomain: shop.shopDomain,
             phoneE164: customer.phoneE164,
             email: customer.email,
           });
-          if (identityCustomerId && identityCustomerId !== resolvedShopifyCustomerId) {
+          if (byPhone) candidateCustomerIds.push(byPhone);
+          if (customer.email) {
+            const byEmail = await findShopifyCustomerIdByIdentity({
+              shopDomain: shop.shopDomain,
+              phoneE164: null,
+              email: customer.email,
+            });
+            if (byEmail && byEmail !== byPhone) candidateCustomerIds.push(byEmail);
+          }
+
+          for (const candidateCustomerId of candidateCustomerIds) {
+            if (
+              !candidateCustomerId ||
+              candidateCustomerId === resolvedShopifyCustomerId
+            ) {
+              continue;
+            }
             const healed = await getMegaskaCustomerDashboardData({
               shopDomain: shop.shopDomain,
-              customerId: identityCustomerId,
+              customerId: candidateCustomerId,
             });
             const healedOrderCount =
               Number(healed?.totalOrderCount || 0) ||
@@ -355,14 +379,14 @@ export async function GET(req: NextRequest) {
             // customer who legitimately has none is never bound to the wrong record.
             if (healed && healedOrderCount > 0) {
               shopifyDashboard = healed;
-              resolvedShopifyCustomerId = identityCustomerId;
+              resolvedShopifyCustomerId = candidateCustomerId;
               // Persist the correction. A unique-constraint failure here means a
               // duplicate Shopify-ID-only profile already owns this id (a known
               // reconciliation gap); the dashboard still renders this request.
               await prisma.customerProfile
                 .update({
                   where: { id: customer.id },
-                  data: { shopifyCustomerId: identityCustomerId },
+                  data: { shopifyCustomerId: candidateCustomerId },
                 })
                 .catch((persistError) => {
                   console.warn(
@@ -370,7 +394,7 @@ export async function GET(req: NextRequest) {
                     {
                       shopId: shop.id,
                       customerProfileId: customer.id,
-                      healedShopifyCustomerId: identityCustomerId,
+                      healedShopifyCustomerId: candidateCustomerId,
                       error:
                         persistError instanceof Error
                           ? persistError.message
@@ -380,8 +404,10 @@ export async function GET(req: NextRequest) {
                 });
               traceDashboardIdentity("shopify_customer_relinked", identity, {
                 previousShopifyCustomerId: customer.shopifyCustomerId,
-                healedShopifyCustomerId: identityCustomerId,
+                healedShopifyCustomerId: candidateCustomerId,
+                matchedBy: candidateCustomerId === byPhone ? "phone" : "email",
               });
+              break;
             }
           }
         } catch (error) {
