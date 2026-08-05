@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { FunnelChart, ShareBar, DeltaMeta } from "./charts";
+import { adminAuthHeaders } from "../../../lib/admin-fetch";
 
 type Comparison = { value: number; previousValue: number; percentageChange: number | null };
 type Stage = {
@@ -115,10 +116,13 @@ export default function CheckoutAnalyticsClient({ shop }: { shop: string }) {
   useEffect(() => {
     let active = true;
     setAi(null);
-    fetch(`/api/admin/analytics/insights?shop=${encodeURIComponent(shop)}&range=${range}`)
-      .then((r) => r.json())
-      .then((x) => active && x.ok && setAi(x.insight))
-      .catch(() => active && setAi({ enabled: false }));
+    void (async () => {
+      const headers = await adminAuthHeaders();
+      fetch(`/api/admin/analytics/insights?shop=${encodeURIComponent(shop)}&range=${range}`, { headers })
+        .then((r) => r.json())
+        .then((x) => active && x.ok && setAi(x.insight))
+        .catch(() => active && setAi({ enabled: false }));
+    })();
     return () => {
       active = false;
     };
@@ -131,10 +135,12 @@ export default function CheckoutAnalyticsClient({ shop }: { shop: string }) {
     setCarts(null);
     setLogins(null);
     const q = `shop=${encodeURIComponent(shop)}&range=${range}`;
+    void (async () => {
+    const headers = await adminAuthHeaders();
     Promise.all([
-      fetch(`/api/admin/analytics/checkout-funnel?${q}`).then((r) => r.json()),
-      fetch(`/api/admin/analytics/abandoned-carts?${q}`).then((r) => r.json()),
-      fetch(`/api/admin/analytics/logins?${q}`).then((r) => r.json()),
+      fetch(`/api/admin/analytics/checkout-funnel?${q}`, { headers }).then((r) => r.json()),
+      fetch(`/api/admin/analytics/abandoned-carts?${q}`, { headers }).then((r) => r.json()),
+      fetch(`/api/admin/analytics/logins?${q}`, { headers }).then((r) => r.json()),
     ])
       .then(([f, c, l]) => {
         if (!active) return;
@@ -143,6 +149,7 @@ export default function CheckoutAnalyticsClient({ shop }: { shop: string }) {
         if (l.ok) setLogins(l);
       })
       .catch(() => active && setError("Unable to load analytics."));
+    })();
     return () => {
       active = false;
     };

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "../../../../../services/db/prisma";
-import { getShopDomainFromRequest, resolveShopConfig } from "../../../../../services/shopify/shop";
+import type { ShopRow } from "../../../../../services/shopify/shop";
+import { requireAdminShopFromRequest } from "../../../../../services/shopify/admin-auth";
 import { DEFAULT_COD_INFORMATION_TEXT, getExpressCheckoutSettings, parseCodFeeRupeesToPaise, parsePercentValue, parseRupeesToPaise } from "../../../../../services/express-checkout/settings";
 import { resolveExpressCheckoutReadiness, setExpressCheckoutEnabled } from "../../../../../services/express-checkout/readiness";
 import { publishPrepaidOfferMetafield } from "../../../../../services/express-checkout/prepaid-offer-metafield";
@@ -34,14 +35,19 @@ function db() {
   return prisma as unknown as { shopModuleConfig: ShopModuleConfigDelegate };
 }
 
-async function shop(req: NextRequest) {
-  return resolveShopConfig(getShopDomainFromRequest(req));
+// Identify the tenant from a verified App Bridge session token, never from ?shop=.
+async function shop(req: NextRequest): Promise<ShopRow | null> {
+  try {
+    return await requireAdminShopFromRequest(req);
+  } catch {
+    return null;
+  }
 }
 
 
 export async function GET(req: NextRequest) {
   const resolved = await shop(req);
-  if (!resolved.id) return NextResponse.json({ ok: false, error: "Unable to resolve shop" }, { status: 400 });
+  if (!resolved) return NextResponse.json({ ok: false, error: "Unauthorized. Reopen this page from Shopify admin." }, { status: 401 });
   const settings = await getExpressCheckoutSettings(resolved.id);
   const readiness = await resolveExpressCheckoutReadiness(resolved.id);
   return NextResponse.json({ ok: true, settings, readiness, shopDomain: resolved.shopDomain });
@@ -49,7 +55,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const resolved = await shop(req);
-  if (!resolved.id) return NextResponse.json({ ok: false, error: "Unable to resolve shop" }, { status: 400 });
+  if (!resolved) return NextResponse.json({ ok: false, error: "Unauthorized. Reopen this page from Shopify admin." }, { status: 401 });
   const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
   if (!body) return NextResponse.json({ ok: false, error: "Invalid JSON payload" }, { status: 400 });
 

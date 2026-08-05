@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { adminAuthHeaders } from '../../lib/admin-fetch'
 import { buildCodAdvancePreview, DEFAULT_CUSTOMER_MESSAGE, DEFAULT_CUSTOMER_TITLE, parsePercentageToBasisPoints, parseRupeesToPaise } from '../../services/cod-advance/settings-shared'
 
 type AdvanceType = 'FIXED' | 'PERCENTAGE'
@@ -21,7 +22,7 @@ export function CodAdvanceSettingsForm() {
 
   useEffect(() => { void (async () => {
     setLoading(true); setError('')
-    const res = await fetch('/api/admin/cod-advance/settings')
+    const res = await fetch('/api/admin/cod-advance/settings', { headers: await adminAuthHeaders() })
     const data = await res.json().catch(() => ({}))
     if (!res.ok || !data.ok) setError(data.error || 'Failed to load Partial COD settings')
     else if (data.settings) {
@@ -48,7 +49,7 @@ export function CodAdvanceSettingsForm() {
     event.preventDefault(); setSubmitting(true); setError(''); setMessage('')
     try {
       const payload = { enabled: form.enabled, advanceType: form.advanceType, fixedAdvanceAmountPaise: parseRupeesToPaise(form.fixedAdvanceAmountRupees || '0') || 0, percentageBasisPoints: form.advanceType === 'PERCENTAGE' ? parsePercentageToBasisPoints(form.percentage) : null, minimumAdvanceAmountPaise: parseRupeesToPaise(form.minimumAdvanceRupees, { optional: true }), maximumAdvanceAmountPaise: parseRupeesToPaise(form.maximumAdvanceRupees, { optional: true }), minOrderAmountPaise: parseRupeesToPaise(form.minOrderRupees, { optional: true }), maxOrderAmountPaise: parseRupeesToPaise(form.maxOrderRupees, { optional: true }), customerTitle: form.customerTitle.trim() || null, customerMessage: form.customerMessage.trim() || null, version: form.version, shopId: 'browser-supplied-values-are-ignored' }
-      const res = await fetch('/api/admin/cod-advance/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+      const res = await fetch('/api/admin/cod-advance/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json', ...(await adminAuthHeaders()) }, body: JSON.stringify(payload) })
       const data = await res.json().catch(() => ({}))
       if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to save settings')
       const next = { ...form, version: Number(data.settings.version || form.version + 1) }

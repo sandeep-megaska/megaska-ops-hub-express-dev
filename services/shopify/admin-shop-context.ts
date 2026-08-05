@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import type { NextRequest } from "next/server";
-import { getShopByDomain, normalizeShopDomain, type ShopRow } from "./shop";
+import { getShopByDomain, normalizeShopDomain, ShopResolutionError, type ShopRow } from "./shop";
+import { requireAdminShopFromRequest } from "./admin-auth";
 
 export type AdminShopSearchParams = {
   shop?: string | string[];
@@ -240,26 +241,33 @@ export async function resolveAdminShopFromSearchParams(
   };
 }
 
+// SECURITY: /api/admin/** routes are reached only by embedded-admin client fetches,
+// which carry an App Bridge session token. Require and verify that token and derive the
+// shop from its `dest` claim — never trust a client-supplied ?shop= / x-shopify-shop-domain,
+// which a caller could forge to read or mutate another tenant's data. Returns the same
+// AdminShopContext shape (shop: null + error on failure) so existing callers keep their
+// 401 handling unchanged.
 export async function resolveAdminShopFromRequest(
   req: NextRequest,
 ): Promise<AdminShopContext> {
-  const url = new URL(req.url);
-  const params: AdminShopSearchParams = {};
-  url.searchParams.forEach((value, key) => {
-    const existing = params[key];
-    if (Array.isArray(existing)) existing.push(value);
-    else if (existing !== undefined) params[key] = [existing, value];
-    else params[key] = value;
-  });
-
-  const headerShop = normalizeShopDomain(
-    req.headers.get("x-shopify-shop-domain"),
-  );
-  const usedHeaderShop = !params.shop && !params.shopify_shop && Boolean(headerShop);
-  if (usedHeaderShop) params.shop = headerShop;
-
-  return resolveAdminShopFromSearchParams(params, {
-    headerAttempted: Boolean(headerShop),
-    headerResolved: usedHeaderShop,
-  });
+  try {
+    const shop = await requireAdminShopFromRequest(req);
+    return {
+      shop,
+      shopDomain: shop.shopDomain,
+      error: null,
+      hmacVerified: true,
+      resolutionSources: describeResolutionSources({ queryAttempted: false, queryResolved: false }),
+    };
+  } catch (error) {
+    const message = error instanceof ShopResolutionError ? error.message : "Missing or invalid Shopify session token";
+    logAdminShopResolutionFailure("session_token_required", { message });
+    return {
+      shop: null,
+      shopDomain: "",
+      error: "Unauthorized. Reopen this page from Shopify admin.",
+      hmacVerified: false,
+      resolutionSources: describeResolutionSources({ queryAttempted: false, queryResolved: false }),
+    };
+  }
 }
