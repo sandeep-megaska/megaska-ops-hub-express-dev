@@ -7,6 +7,7 @@ import {
   hashSessionToken,
 } from "../../../../services/auth/session";
 import {
+  findShopifyCustomerIdByIdentity,
   isShopifyAdminConfigured,
 } from "../../../../services/shopify/admin";
 import { getMegaskaCustomerDashboardData } from "../../../../services/shopify/dashboard";
@@ -304,22 +305,92 @@ export async function GET(req: NextRequest) {
       resolutionSource: "auth_session_customer_relation",
     });
 
-    // Identity is resolved upstream (OTP/sync/checkout). Dashboard is a consumer only.
-    const resolvedShopifyCustomerId = String(customer.shopifyCustomerId || "").trim();
+    // Identity is normally resolved upstream (OTP/sync/checkout), but the dashboard
+    // must not blindly trust it. OTP-only logins reach here with no shopifyCustomerId,
+    // and profile-complete can bind a profile to a brand-new EMPTY Shopify customer
+    // when a legacy phone-format record was missed. Either way the customer's real
+    // orders are invisible and the dashboard renders "0 orders". So: try the linked
+    // customer first, and if that yields no orders, self-heal by re-resolving the real
+    // Shopify customer from the verified phone/email (variant-aware search) and persist
+    // the corrected link.
+    let resolvedShopifyCustomerId = String(customer.shopifyCustomerId || "").trim();
     let shopifyDashboard = null;
 
-    if (isShopifyAdminConfigured() && resolvedShopifyCustomerId) {
-      try {
-        shopifyDashboard = await getMegaskaCustomerDashboardData({
-          shopDomain: shop.shopDomain,
-          customerId: resolvedShopifyCustomerId,
-        });
-      } catch (error) {
-        console.error("[DASHBOARD SUMMARY] Shopify dashboard fetch failed", {
-          shopId: shop.id,
-          shopDomain: shop.shopDomain,
-          error: error instanceof Error ? error.message : String(error),
-        });
+    if (isShopifyAdminConfigured()) {
+      if (resolvedShopifyCustomerId) {
+        try {
+          shopifyDashboard = await getMegaskaCustomerDashboardData({
+            shopDomain: shop.shopDomain,
+            customerId: resolvedShopifyCustomerId,
+          });
+        } catch (error) {
+          console.error("[DASHBOARD SUMMARY] Shopify dashboard fetch failed", {
+            shopId: shop.id,
+            shopDomain: shop.shopDomain,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+
+      const linkedOrderCount =
+        Number(shopifyDashboard?.totalOrderCount || 0) ||
+        (shopifyDashboard?.recentOrders?.length || 0);
+
+      if (linkedOrderCount === 0) {
+        try {
+          const identityCustomerId = await findShopifyCustomerIdByIdentity({
+            shopDomain: shop.shopDomain,
+            phoneE164: customer.phoneE164,
+            email: customer.email,
+          });
+          if (identityCustomerId && identityCustomerId !== resolvedShopifyCustomerId) {
+            const healed = await getMegaskaCustomerDashboardData({
+              shopDomain: shop.shopDomain,
+              customerId: identityCustomerId,
+            });
+            const healedOrderCount =
+              Number(healed?.totalOrderCount || 0) ||
+              (healed?.recentOrders?.length || 0);
+            // Only relink when the re-resolved customer actually has orders, so a
+            // customer who legitimately has none is never bound to the wrong record.
+            if (healed && healedOrderCount > 0) {
+              shopifyDashboard = healed;
+              resolvedShopifyCustomerId = identityCustomerId;
+              // Persist the correction. A unique-constraint failure here means a
+              // duplicate Shopify-ID-only profile already owns this id (a known
+              // reconciliation gap); the dashboard still renders this request.
+              await prisma.customerProfile
+                .update({
+                  where: { id: customer.id },
+                  data: { shopifyCustomerId: identityCustomerId },
+                })
+                .catch((persistError) => {
+                  console.warn(
+                    "[DASHBOARD SUMMARY] Could not persist healed shopifyCustomerId",
+                    {
+                      shopId: shop.id,
+                      customerProfileId: customer.id,
+                      healedShopifyCustomerId: identityCustomerId,
+                      error:
+                        persistError instanceof Error
+                          ? persistError.message
+                          : String(persistError),
+                    },
+                  );
+                });
+              traceDashboardIdentity("shopify_customer_relinked", identity, {
+                previousShopifyCustomerId: customer.shopifyCustomerId,
+                healedShopifyCustomerId: identityCustomerId,
+              });
+            }
+          }
+        } catch (error) {
+          console.error("[DASHBOARD SUMMARY] Shopify identity self-heal failed", {
+            shopId: shop.id,
+            shopDomain: shop.shopDomain,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
       }
     }
 
