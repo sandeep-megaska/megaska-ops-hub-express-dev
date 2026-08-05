@@ -270,7 +270,7 @@ export async function listDispatchReadyOrders(filters: DispatchFilters): Promise
 
       const readinessErrors = Array.isArray(row.readinessErrors) ? row.readinessErrors : [];
       const readiness = readinessErrors.length === 0 ? "READY" : "NOT_READY";
-      const warnings = unmappedSkus.length > 0 ? ["Missing GST mapping for one or more SKU(s)"] : [];
+      const warnings = unmappedSkus.length > 0 ? ["No GST tax profile found for one or more SKU(s)"] : [];
       const eligibilityStatus = String(row.eligibilityStatus || "");
 
       data.push({
@@ -399,7 +399,7 @@ export async function generateInvoiceBatch(input: BatchGenerateInput) {
         lineErrors.push({
           lineNumber: parseNum(row.lineNumber),
           sku: sku || null,
-          error: mapping.error || `Missing GST mapping for SKU ${sku || `LINE-${String(row.lineNumber || "")}`}`,
+          error: mapping.error || `No GST tax profile found for SKU ${sku || `LINE-${String(row.lineNumber || "")}`}`,
         });
         continue;
       }
@@ -407,7 +407,7 @@ export async function generateInvoiceBatch(input: BatchGenerateInput) {
         lineErrors.push({
           lineNumber: parseNum(row.lineNumber),
           sku: sku || null,
-          error: `Missing GST mapping for SKU ${sku || `LINE-${String(row.lineNumber || "")}`}`,
+          error: `No GST tax profile found for SKU ${sku || `LINE-${String(row.lineNumber || "")}`}`,
         });
         continue;
       }
@@ -435,12 +435,12 @@ export async function generateInvoiceBatch(input: BatchGenerateInput) {
         shippingAddressPresent: Boolean(shippingAddress),
         readinessWarnings: readinessErrors,
         status: "FAILED",
-        error: "Missing SKU mappings",
+        error: "No GST tax profile found for one or more SKUs",
         lineErrors,
-        invoiceGenerationErrorMessage: "Missing SKU mappings",
+        invoiceGenerationErrorMessage: "No GST tax profile found for one or more SKUs",
         invoiceGenerationStackTrace: null,
         gstDocumentCreateAttempted: false,
-        gstDocumentCreateFailureReason: "Invoice draft creation skipped because SKU mappings are missing",
+        gstDocumentCreateFailureReason: "Invoice draft creation skipped because one or more SKUs have no GST tax profile",
       });
       gstPerfLog("gst.generateInvoiceBatch.order", orderStartedAtMs, { orderImportId: id, status: "FAILED", reason: "missing_sku_mappings" });
       continue;

@@ -6,8 +6,6 @@ import { generateInvoiceBatch } from "../../../../../services/gst/dispatch-batch
 import { requireAdminShopFromRequest } from "../../../../../services/shopify/admin-auth";
 import { ShopResolutionError } from "../../../../../services/shopify/shop";
 import { signInvoiceDocumentAccess } from "../../../../../services/gst/invoice-url-signing";
-import { getActiveGstSettings } from "../../../../../services/gst/settings";
-import { reconcileInvoiceTax } from "../../../../../services/gst/tax-reconciliation";
 import { extensionCorsPreflight, withExtensionCors } from "../../../../../services/shopify/extension-cors";
 
 export const runtime = "nodejs";
@@ -126,29 +124,12 @@ export async function POST(req: NextRequest) {
     : null;
   const buyer = snapshot?.buyer && typeof snapshot.buyer === "object" ? (snapshot.buyer as Record<string, unknown>) : null;
 
-  // Reconciliation: the invoice's GST (from the app's HSN mapping) is checked
-  // against the order. For tax-exclusive stores that means comparing the invoice
-  // GST to the tax Shopify charged at checkout; for tax-inclusive stores where
-  // Shopify records no separate tax (e.g. LoopD2C express orders) it means
-  // comparing the invoice grand total to what the customer paid. See
-  // reconcileInvoiceTax. A divergence surfaces a wrong rate before the invoice
-  // ships; tolerance covers rounding only.
-  const toNum = (value: unknown) => {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : 0;
-  };
-  const gstSettingsResult = await getActiveGstSettings({ shopId: resolvedShopId });
-  const priceIncludesTax = gstSettingsResult.ok && gstSettingsResult.data ? gstSettingsResult.data.priceIncludesTax : true;
-  const taxReconciliation = invoice
-    ? reconcileInvoiceTax({
-        invoiceTax:
-          toNum(invoice.cgstAmount) + toNum(invoice.sgstAmount) + toNum(invoice.igstAmount) + toNum(invoice.cessAmount),
-        shopifyTax: toNum(orderImport.orderTaxTotal),
-        invoiceTotal: toNum(invoice.totalAmount),
-        orderTotal: toNum(orderImport.orderGrandTotal),
-        priceIncludesTax,
-      })
-    : null;
+  // The app's SKU/HSN tax mapping is the single source of truth for invoice GST.
+  // The tax Shopify recorded at checkout is intentionally NOT cross-checked here:
+  // on a tax-inclusive store the invoice grand total still equals what the customer
+  // paid, and the merchant's HSN mapping is authoritative for the GST rate. The only
+  // tax-readiness guard is a missing SKU mapping, surfaced via readinessErrors and
+  // the generation error below ("No GST tax profile found for SKU ...").
 
   return withExtensionCors(
     NextResponse.json({
@@ -172,7 +153,6 @@ export async function POST(req: NextRequest) {
                 : base;
             })()
           : null,
-        taxReconciliation,
         error: generationError,
       },
     }),
