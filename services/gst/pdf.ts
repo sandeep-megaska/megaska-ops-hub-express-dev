@@ -421,6 +421,15 @@ type LogoResolutionResult = {
   sourceType: "data" | "blob" | "local" | "remote" | "none";
 };
 
+// A configured (usually remote) logo was previously re-fetched on EVERY render with
+// cache:"no-store" — the dominant PDF-render latency and the cause of the "much delay"
+// merchants saw across both invoice popups. Cache the resolved data URI in-process,
+// keyed by the source URL, so a warm instance fetches each logo at most once per TTL.
+// A changed logo is picked up within the window. Only successful remote resolutions are
+// cached (never fallbacks), so a transient failure is retried on the next render.
+const LOGO_DATA_URL_CACHE_TTL_MS = 30 * 60 * 1000;
+const logoDataUrlCache = new Map<string, { dataUrl: string; expiresAt: number }>();
+
 async function resolveInvoiceLogoForPdf(customUrl: unknown, fallbackPath: string): Promise<LogoResolutionResult> {
   const custom = typeof customUrl === "string" ? customUrl.trim() : "";
   const configured = Boolean(custom);
@@ -437,6 +446,11 @@ async function resolveInvoiceLogoForPdf(customUrl: unknown, fallbackPath: string
     }
   }
   if (custom) {
+    const remoteSourceType = custom.startsWith("/") ? "local" : "remote";
+    const cached = logoDataUrlCache.get(custom);
+    if (cached && cached.expiresAt > Date.now()) {
+      return { src: cached.dataUrl, configured, resolvedConfiguredAsset: true, usedFallback: false, fallbackResolved: false, sourceType: remoteSourceType };
+    }
     // Bounded: a configured logo URL that is slow/unreachable (or a self-referential
     // app URL that deadlocks in serverless) must not hang the whole PDF render. The abort
     // must cover the BODY read too - a stalled body (headers arrive, bytes never do) is the
@@ -450,7 +464,9 @@ async function resolveInvoiceLogoForPdf(customUrl: unknown, fallbackPath: string
       if (response.ok) {
         const mime = response.headers.get("content-type") || "image/png";
         const buffer = Buffer.from(await response.arrayBuffer());
-        return { src: `data:${mime};base64,${buffer.toString("base64")}`, configured, resolvedConfiguredAsset: true, usedFallback: false, fallbackResolved: false, sourceType: custom.startsWith("/") ? "local" : "remote" };
+        const dataUrl = `data:${mime};base64,${buffer.toString("base64")}`;
+        logoDataUrlCache.set(custom, { dataUrl, expiresAt: Date.now() + LOGO_DATA_URL_CACHE_TTL_MS });
+        return { src: dataUrl, configured, resolvedConfiguredAsset: true, usedFallback: false, fallbackResolved: false, sourceType: remoteSourceType };
       }
     } catch {} finally {
       clearTimeout(logoTimer);

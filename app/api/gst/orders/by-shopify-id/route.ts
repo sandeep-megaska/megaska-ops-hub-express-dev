@@ -63,13 +63,18 @@ export async function POST(req: NextRequest) {
     select: { id: true, shopifyOrderName: true, readinessErrors: true, orderTaxTotal: true, orderGrandTotal: true },
   });
 
-  // Re-import when the order is new OR when the caller explicitly asks to
-  // generate/refresh. Without forcing a re-import on refresh, readinessErrors
-  // stay frozen at first-import time, so a SKU/HSN mapping added afterwards
-  // never clears a stale "missing GST mapping" warning and the order looks
-  // stuck. A failed re-sync on an already-imported order is non-fatal - we fall
-  // back to the existing record.
-  if (!orderImport || generate) {
+  // Re-sync from Shopify only when the round-trip can change the outcome:
+  //   - the order has never been imported (we need its data at all), or
+  //   - the caller is (re)generating AND the order still carries readiness
+  //     errors, so a SKU/HSN mapping added in the app since the last import gets
+  //     a chance to clear the stale "missing GST mapping" warning.
+  // A clean, already-imported order — and any refresh of an already-issued
+  // invoice — is NOT re-synced: the last import is authoritative and this extra
+  // live Shopify round-trip on every generate/refresh is what made the popup
+  // slow. A failed re-sync on an already-imported order is non-fatal.
+  const hasReadinessErrors =
+    Array.isArray(orderImport?.readinessErrors) && orderImport.readinessErrors.length > 0;
+  if (!orderImport || (generate && hasReadinessErrors)) {
     const synced = await syncSingleOrderByShopifyGid({
       shopifyOrderGid,
       shopDomain: shop.shopDomain,
@@ -148,6 +153,10 @@ export async function POST(req: NextRequest) {
           ? (() => {
               const signed = signInvoiceDocumentAccess(String(invoice.id), resolvedShopId);
               const base = `${absoluteBase(req)}/api/gst/invoices/${invoice.id}/pdf`;
+              // Default (hand-drawn) portrait renderer — reliable on serverless. The
+              // Chromium path (?format=chromium) is left available on the route but not
+              // requested here: @sparticuz/chromium can OOM/crash the Lambda before the
+              // route's fallback runs, which broke the download. See PR notes.
               return signed
                 ? `${base}?shopId=${encodeURIComponent(resolvedShopId)}&exp=${signed.exp}&sig=${encodeURIComponent(signed.sig)}`
                 : base;

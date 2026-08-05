@@ -1,6 +1,6 @@
 'use client'
 
-import { Fragment, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { Fragment, useEffect, useMemo, useState, type FormEvent } from 'react'
 import {
   generateBatchInvoices,
   listDispatchReadyOrders,
@@ -164,8 +164,6 @@ export function GstOrdersAdmin() {
   const [result, setResult] = useState<unknown>()
   const [error, setError] = useState<string>()
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({})
-  const printFrameRef = useRef<HTMLIFrameElement | null>(null)
-  const [printHtml, setPrintHtml] = useState<string | null>(null)
   const [isB2cExporting, setIsB2cExporting] = useState(false)
   const [downloadingPdfId, setDownloadingPdfId] = useState<string | null>(null)
   const [b2cExportError, setB2cExportError] = useState<string>()
@@ -281,26 +279,6 @@ export function GstOrdersAdmin() {
     setGeneratingId(null)
   }
 
-  async function onPrintInvoice(invoiceDocumentId: string) {
-    setLoading(true)
-    setError(undefined)
-
-    const response = await fetch(`/api/gst/invoices/${encodeURIComponent(invoiceDocumentId)}/pdf?format=html`, {
-      credentials: 'include',
-      cache: 'no-store',
-      headers: await adminAuthHeaders(),
-    })
-    const html = await response.text().catch(() => '')
-    if (!response.ok || !html) {
-      setError('Unable to render invoice preview')
-      setLoading(false)
-      return
-    }
-
-    setPrintHtml(html)
-    setLoading(false)
-  }
-
   async function onDownloadPdf(invoiceDocumentId: string) {
     if (downloadingPdfId) return
     setDownloadingPdfId(invoiceDocumentId)
@@ -308,6 +286,9 @@ export function GstOrdersAdmin() {
     setError(undefined)
 
     try {
+      // Default (hand-drawn) portrait renderer — reliable on serverless. The Chromium
+      // path (?format=chromium) can OOM/crash the Lambda before the route's fallback
+      // runs, which broke the download, so it is intentionally not requested here.
       const response = await fetch(`/api/gst/invoices/${encodeURIComponent(invoiceDocumentId)}/pdf`, {
         credentials: 'include',
         cache: 'no-store',
@@ -565,12 +546,9 @@ export function GstOrdersAdmin() {
                             {generatingId === id ? 'Generating...' : 'Generate Invoice'}
                           </button>
                           {row.invoiceDocumentId ? (
-                            <>
-                              <button className="mk-btn mk-btn-sm" onClick={() => void onPrintInvoice(row.invoiceDocumentId!)}>Print Invoice</button>
-                              <button className="mk-btn mk-btn-sm" onClick={() => onDownloadPdf(row.invoiceDocumentId!)} disabled={Boolean(downloadingPdfId)}>
-                                {downloadingPdfId === row.invoiceDocumentId ? 'Downloading PDF...' : 'Download PDF'}
-                              </button>
-                            </>
+                            <button className="mk-btn mk-btn-sm" onClick={() => onDownloadPdf(row.invoiceDocumentId!)} disabled={Boolean(downloadingPdfId)}>
+                              {downloadingPdfId === row.invoiceDocumentId ? 'Downloading PDF...' : 'Download PDF'}
+                            </button>
                           ) : null}
                         </div>
                       </td>
@@ -622,25 +600,6 @@ export function GstOrdersAdmin() {
           </div>
         )}
       </div>
-
-      {printHtml ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="flex h-[90vh] w-full max-w-6xl flex-col rounded-xl bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
-              <h3 className="text-sm font-semibold text-gray-900">Invoice Preview</h3>
-              <div className="mk-header-actions">
-                <button className="mk-btn mk-btn-sm mk-btn-primary" onClick={() => printFrameRef.current?.contentWindow?.print()}>
-                  Print
-                </button>
-                <button className="mk-btn mk-btn-sm" onClick={() => setPrintHtml(null)}>
-                  Close
-                </button>
-              </div>
-            </div>
-            <iframe ref={printFrameRef} title="GST Invoice" className="h-full w-full" srcDoc={printHtml} />
-          </div>
-        </div>
-      ) : null}
     </div>
   )
 }

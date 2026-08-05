@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { renderGstInvoicePdfBuffer } from "../../../../../../services/gst/pdf-binary";
+import { renderGstPdfBinary as renderGstPdfViaChromium } from "../../../../../../services/gst/pdf-chromium";
 import { renderGstPdf } from "../../../../../../services/gst/pdf";
 import { getGstDocumentById } from "../../../../../../services/gst/documents";
 import { requireAdminShopFromRequest } from "../../../../../../services/shopify/admin-auth";
@@ -80,7 +81,31 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
       );
     }
 
-    const result = await withDeadline("Invoice PDF render", 20000, renderGstInvoicePdfBuffer(id));
+    // ?format=chromium renders the same HTML through headless Chromium (real layout
+    // engine → true multi-page pagination, no portrait truncation and no dropped line
+    // items); default stays on the hand-drawn pdf-binary.ts.
+    //
+    // Chromium can fail to boot on a serverless runtime (cold-start OOM, a bad binary,
+    // a launch timeout). When it does, fall back to the hand-drawn portrait renderer so
+    // the popup still returns a usable PDF instead of an error — a single-page invoice
+    // beats no invoice. Budgets are sized to stay under the route's 30s function limit:
+    // Chromium 18s, then a fast (<1s, no-network) binary fallback with 8s of headroom.
+    let result: Awaited<ReturnType<typeof renderGstInvoicePdfBuffer>> | null = null;
+    if (format === "chromium") {
+      try {
+        result = await withDeadline("Invoice PDF render (Chromium)", 18000, renderGstPdfViaChromium(id));
+      } catch (chromiumError) {
+        console.error("GST invoice Chromium render failed; falling back to hand-drawn PDF", {
+          id,
+          error: chromiumError instanceof Error ? chromiumError.message : String(chromiumError),
+        });
+      }
+      if (!result || !result.ok || !result.data) {
+        result = await withDeadline("Invoice PDF render (fallback)", 8000, renderGstInvoicePdfBuffer(id));
+      }
+    } else {
+      result = await withDeadline("Invoice PDF render", 20000, renderGstInvoicePdfBuffer(id));
+    }
     if (!result.ok || !result.data) {
       return withExtensionCors(
         NextResponse.json({ ok: false, error: result.error || "Unable to generate invoice PDF" }, { status: 404 }),
