@@ -1,14 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getShopDomainFromRequest, resolveShopConfig } from "../../../../../services/shopify/shop";
+import { requireAdminShopFromRequest } from "../../../../../services/shopify/admin-auth";
 import { auditCodAdvance } from "../../../../../services/cod-advance/core";
 import { CodAdvanceSettingsValidationError, getCodAdvanceSettingsForShop, updateCodAdvanceSettingsForShop, type CodAdvanceSettingsInput } from "../../../../../services/cod-advance/settings";
 
 export const runtime = "nodejs";
 
+// Identify the tenant from a verified App Bridge session token, never from ?shop=.
 async function authenticatedShop(req: NextRequest): Promise<{ id: string; shopDomain: string }> {
-  const resolved = await resolveShopConfig(getShopDomainFromRequest(req));
-  if (!resolved.id) throw new CodAdvanceSettingsValidationError(["Unable to resolve shop"]);
-  return { id: resolved.id, shopDomain: resolved.shopDomain };
+  try {
+    const shop = await requireAdminShopFromRequest(req);
+    return { id: shop.id, shopDomain: shop.shopDomain };
+  } catch {
+    throw new CodAdvanceSettingsValidationError(["Unable to resolve shop"]);
+  }
 }
 
 function editableFields(body: Record<string, unknown>): CodAdvanceSettingsInput {

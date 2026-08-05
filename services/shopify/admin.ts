@@ -882,12 +882,13 @@ export async function getShopifyCustomerDashboardData(input: {
     options
   );
 
+  // Do not log customer email/phone (PII) — booleans are enough to diagnose.
   console.log("[SHOPIFY DASHBOARD] raw customer result", {
     customerGid,
     shopDomain: input.shopDomain || null,
     foundCustomer: Boolean(data.customer),
-    email: data.customer?.email || null,
-    phone: data.customer?.phone || null,
+    hasEmail: Boolean(data.customer?.email),
+    hasPhone: Boolean(data.customer?.phone),
     numberOfOrders: data.customer?.numberOfOrders ?? null,
     recentOrdersCount: data.customer?.orders?.nodes?.length ?? null,
   });
@@ -972,8 +973,21 @@ export async function findOrCreateShopifyCustomer(
     }
   }
 
-  if (phone) {
-    const existingByPhone = await findCustomerByQuery(`phone:${phone}`);
+  // Match historical / CSV-imported Shopify customers whose phone is stored in a
+  // non-+E.164 legacy format (e.g. "9945810058", "919945810058"). An exact
+  // "phone:+91…" lookup misses those and creates a duplicate EMPTY customer, which
+  // then surfaces as "0 orders" on the customer dashboard. Search the same format
+  // variants that findShopifyCustomersByPhone uses.
+  const canonicalPhone = isCanonicalE164(input.phoneE164)
+    ? input.phoneE164
+    : normalizeIndianPhoneToE164(input.phoneE164);
+  const phoneVariants = canonicalPhone
+    ? shopifyPhoneSearchVariants(canonicalPhone)
+    : phone
+      ? [phone]
+      : [];
+  for (const variant of phoneVariants) {
+    const existingByPhone = await findCustomerByQuery(`phone:${variant}`);
     if (existingByPhone?.id) {
       return {
         shopifyCustomerId: parseCustomerId(existingByPhone.id),

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { adminAuthHeaders } from "../../../lib/admin-fetch";
 
 // Import/export home for the Review module.
 // Export: a CSV backup / migration-out of every review.
@@ -47,6 +48,30 @@ export default function ReviewImportExportClient({ shop }: { shop: string }) {
   const [error, setError] = useState("");
   const [result, setResult] = useState<ImportResult | null>(null);
 
+  // A plain <a download> can't carry the App Bridge session token the export route
+  // now requires, so fetch it with the token and trigger the download from the blob.
+  async function exportReviews() {
+    setError("");
+    try {
+      const response = await fetch(exportHref, { headers: await adminAuthHeaders() });
+      if (!response.ok) {
+        setError("Export failed.");
+        return;
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = "reviews-export.csv";
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      setError("Export request failed.");
+    }
+  }
+
   async function onFile(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     setResult(null);
@@ -71,7 +96,7 @@ export default function ReviewImportExportClient({ shop }: { shop: string }) {
     try {
       const response = await fetch(`/api/admin/reviews/import?shop=${encodeURIComponent(shop)}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(await adminAuthHeaders()) },
         body: JSON.stringify({ csv, platform, dryRun, defaultStatus, defaultVerified }),
       });
       const payload = await response.json();
@@ -98,9 +123,9 @@ export default function ReviewImportExportClient({ shop }: { shop: string }) {
           body, author, status, merchant reply, and media URLs. Soft-deleted
           reviews are excluded.
         </p>
-        <a href={exportHref} download className="mk-btn mk-btn-primary">
+        <button type="button" onClick={exportReviews} className="mk-btn mk-btn-primary">
           Export reviews (CSV)
-        </a>
+        </button>
       </div>
 
       <div>

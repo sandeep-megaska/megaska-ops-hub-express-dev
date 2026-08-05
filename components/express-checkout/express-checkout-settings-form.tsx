@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { adminAuthHeaders } from '../../lib/admin-fetch'
 
 const DEFAULT_TEXT = 'You need to pay to the delivery agent at the time of delivery. In case of any refund, the refund amount will be issued as store credit which you can utilize for future purchases. However, for card and UPI payments, the refund amount will be directly transferred to your original payment method.'
 
@@ -30,7 +31,7 @@ export function ExpressCheckoutSettingsForm() {
   const [readiness, setReadiness] = useState<{ ready: boolean; expressCheckoutEnabled: boolean; providerConfigured: boolean; providerValidated: boolean; reason: string } | null>(null)
 
   useEffect(() => { (async () => {
-    const res = await fetch('/api/admin/express-checkout/settings')
+    const res = await fetch('/api/admin/express-checkout/settings', { headers: await adminAuthHeaders() })
     const data = await res.json().catch(() => ({}))
     if (data.settings) {
       const prepaid: PrepaidDiscount = data.settings.prepaidDiscount || {}
@@ -52,7 +53,7 @@ export function ExpressCheckoutSettingsForm() {
 
   async function submit(event: React.FormEvent) {
     event.preventDefault(); setLoading(true); setError(''); setMessage('')
-    const res = await fetch('/api/admin/express-checkout/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...form, enabled }) })
+    const res = await fetch('/api/admin/express-checkout/settings', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(await adminAuthHeaders()) }, body: JSON.stringify({ ...form, enabled }) })
     const data = await res.json().catch(() => ({})); setLoading(false)
     if (data.readiness) setReadiness(data.readiness)
     if (!res.ok || !data.ok) { setError(data.error || 'Failed to save settings'); if (data.readiness) setEnabled(data.readiness.expressCheckoutEnabled) }
