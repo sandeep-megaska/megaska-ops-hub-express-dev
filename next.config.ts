@@ -1,6 +1,12 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // puppeteer-core and @sparticuz/chromium must NOT be bundled by Next's server
+  // compiler — @sparticuz/chromium resolves its packed Chromium binary relative to
+  // its own package dir, which bundling destroys, and the attempt breaks the whole
+  // route bundle. Externalizing them makes Next require() them from node_modules at
+  // runtime instead. Only the GST invoice PDF route pulls them in, and lazily.
+  serverExternalPackages: ["puppeteer-core", "@sparticuz/chromium"],
   async headers() {
     return [
       {
