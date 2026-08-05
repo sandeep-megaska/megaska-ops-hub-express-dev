@@ -7,7 +7,9 @@ import {
   findCustomerProfilesForRedaction,
   hasUnmatchablePhoneIdentifier,
   redactAllCustomerProfilesForShop,
+  redactAllCustomerRelatedDataForShop,
   redactCustomerProfiles,
+  redactCustomerRelatedData,
 } from "../../../../services/customers/customer-redaction";
 
 export const runtime = "nodejs";
@@ -95,6 +97,11 @@ async function handleCustomersRedact(rawBody: string, shopDomainHeader: string |
   const identifiers = toIdentifiers(payload.customer);
   const matchedProfiles = await findCustomerProfilesForRedaction(shop.id, identifiers);
   const redactResult = await redactCustomerProfiles(shop.id, matchedProfiles.map((profile) => profile.id));
+  // matchedProfiles still hold the original phone/email in memory (updateMany
+  // above does not mutate them), which the phone/email-keyed downstream tables need.
+  const relatedRedactionCounts = await redactCustomerRelatedData(
+    matchedProfiles.map((profile) => ({ id: profile.id, phoneE164: profile.phoneE164, email: profile.email })),
+  );
 
   const orderIds = (payload.orders_to_redact || []).map((id) => String(id).trim()).filter(Boolean);
   const orderMetafieldResults: Array<{ orderId: string; ok: boolean; error?: string }> = [];
@@ -119,6 +126,7 @@ async function handleCustomersRedact(rawBody: string, shopDomainHeader: string |
         customerIdentifiers: identifiers,
         redactedCustomerProfileIds: matchedProfiles.map((profile) => profile.id),
         redactedCustomerProfileCount: redactResult.count,
+        relatedRedactionCounts,
         phoneMatchSkipped: hasUnmatchablePhoneIdentifier(identifiers),
         ordersToRedact: orderIds,
         orderMetafieldResults,
@@ -130,6 +138,7 @@ async function handleCustomersRedact(rawBody: string, shopDomainHeader: string |
     ok: true,
     shopDomain,
     redactedCustomerProfileCount: redactResult.count,
+    relatedRedactionCounts,
     orderMetafieldResults,
   });
 }
@@ -150,6 +159,7 @@ async function handleShopRedact(rawBody: string, shopDomainHeader: string | null
   }
 
   const redactResult = await redactAllCustomerProfilesForShop(shop.id);
+  const relatedRedactionCounts = await redactAllCustomerRelatedDataForShop(shop.id);
 
   // Raw SQL avoids a generated-Prisma-client field mismatch for the encrypted
   // token columns (matches the pattern already used by app/uninstalled).
@@ -173,11 +183,12 @@ async function handleShopRedact(rawBody: string, shopDomainHeader: string | null
       payload: {
         shopDomain,
         redactedCustomerProfileCount: redactResult.count,
+        relatedRedactionCounts,
       },
     },
   });
 
-  return NextResponse.json({ ok: true, shopDomain, redactedCustomerProfileCount: redactResult.count });
+  return NextResponse.json({ ok: true, shopDomain, redactedCustomerProfileCount: redactResult.count, relatedRedactionCounts });
 }
 
 export async function POST(req: NextRequest) {
