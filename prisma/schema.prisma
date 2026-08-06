@@ -2155,7 +2155,7 @@ model GstSettings {
   defaultCurrency       String               @default("INR")
   priceIncludesTax      Boolean              @default(true)
   einvoiceEnabled       Boolean              @default(false)
-  autoGenerateOnOrderCreate Boolean          @default(false)
+  autoGenerateOnOrderCreate Boolean          @default(true)
   isActive              Boolean              @default(true)
   createdAt             DateTime             @default(now())
   updatedAt             DateTime             @updatedAt

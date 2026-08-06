@@ -126,7 +126,7 @@ async function saveSettings(req: NextRequest) {
     autoGenerateOnOrderCreate:
       typeof body.autoGenerateOnOrderCreate === "boolean"
         ? body.autoGenerateOnOrderCreate
-        : (baseValues?.autoGenerateOnOrderCreate ?? false),
+        : (baseValues?.autoGenerateOnOrderCreate ?? true),
     isActive: typeof body.isActive === "boolean" ? body.isActive : (baseValues?.isActive ?? true),
     numberingConfig: body.numberingConfig !== undefined ? body.numberingConfig : baseValues?.numberingConfig,
   };
