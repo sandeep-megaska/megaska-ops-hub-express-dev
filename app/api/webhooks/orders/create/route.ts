@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
+import { after } from "next/server";
 import { compareMegaskaPhoneIdentity } from "../../../../../services/phone";
 import { prisma } from "../../../../../services/db/prisma";
 import { consumeWalletReservationOnOrder } from "../../../../../services/wallet-reservation";
@@ -251,25 +252,33 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "Invalid JSON body" }, { status: 400 });
   }
 
-  // GST auto-invoicing is an independent concern from the Megaska identity/wallet
-  // reconciliation below and must run for every order regardless of OTP-verification
-  // markers, so it runs first and is fully isolated from that logic's early returns.
-  try {
-    const orderName = String(payload.name || "").trim();
-    if (orderName && shopDomain) {
-      const tenant = await prisma.shop.findFirst({ where: { shopDomain }, select: { id: true } });
-      const gstResult = await autoGenerateInvoiceForOrder({
-        shopId: tenant?.id ?? null,
-        shopDomain,
-        orderName,
-      });
-      console.log("[GST AUTO INVOICE] webhook attempt", { orderName, shopDomain, ...gstResult });
-    }
-  } catch (error) {
-    console.error("[GST AUTO INVOICE] webhook failed", {
-      orderName: String(payload.name || "").trim() || null,
-      shopDomain,
-      error: error instanceof Error ? error.message : "Unknown error",
+  // GST auto-invoicing: pre-generate the invoice the moment the order is created
+  // so it's ready before the merchant opens the GST Invoice popup (the popup then
+  // just displays it). Run it via after() so the (potentially multi-second)
+  // Shopify sync + generation happens AFTER this webhook responds — it never
+  // delays order processing or risks a Shopify webhook retry. Registered up-front,
+  // outside the identity/wallet early-returns below, so it fires for every order;
+  // after() runs even when the handler returns early. The route's maxDuration
+  // (vercel.json) bounds the background work. It is idempotent (skips if an
+  // invoice already exists) and fully isolated (its own try/catch).
+  const gstOrderName = String(payload.name || "").trim();
+  if (gstOrderName && shopDomain) {
+    after(async () => {
+      try {
+        const tenant = await prisma.shop.findFirst({ where: { shopDomain }, select: { id: true } });
+        const gstResult = await autoGenerateInvoiceForOrder({
+          shopId: tenant?.id ?? null,
+          shopDomain,
+          orderName: gstOrderName,
+        });
+        console.log("[GST AUTO INVOICE] webhook attempt", { orderName: gstOrderName, shopDomain, ...gstResult });
+      } catch (error) {
+        console.error("[GST AUTO INVOICE] webhook failed", {
+          orderName: gstOrderName,
+          shopDomain,
+          error: error instanceof Error ? error.message : "Unknown error",
+        });
+      }
     });
   }
 
