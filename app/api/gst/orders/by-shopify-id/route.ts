@@ -31,6 +31,13 @@ export async function OPTIONS(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  // Per-stage timing, surfaced in the response so the slow stage (Shopify re-sync
+  // vs invoice generation vs the rest) is visible in the browser Network tab
+  // without hunting through server logs. Milliseconds; 0 = stage did not run.
+  const reqStartedMs = Date.now();
+  let syncMs = 0;
+  let generateMs = 0;
+
   const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
   if (!body || !body.shopifyOrderGid) {
     return withExtensionCors(
@@ -75,11 +82,13 @@ export async function POST(req: NextRequest) {
   const hasReadinessErrors =
     Array.isArray(orderImport?.readinessErrors) && orderImport.readinessErrors.length > 0;
   if (!orderImport || (generate && hasReadinessErrors)) {
+    const syncStartedMs = Date.now();
     const synced = await syncSingleOrderByShopifyGid({
       shopifyOrderGid,
       shopDomain: shop.shopDomain,
       forceResync: true,
     });
+    syncMs = Date.now() - syncStartedMs;
     if (!synced.ok && !orderImport) {
       return withExtensionCors(
         NextResponse.json({ ok: false, error: synced.error || "Unable to sync order from Shopify" }, { status: 400 }),
@@ -109,7 +118,9 @@ export async function POST(req: NextRequest) {
 
   let generationError: string | null = null;
   if (!invoice && generate) {
+    const generateStartedMs = Date.now();
     const batch = await generateInvoiceBatch({ shopId: resolvedShopId, orderImportIds: [orderImport.id] });
+    generateMs = Date.now() - generateStartedMs;
     if (!batch.ok || !batch.data || batch.data.generated === 0) {
       const perOrder = batch.ok ? (batch.data?.results?.[0] as { error?: string } | undefined) : undefined;
       generationError = (batch.ok ? perOrder?.error : batch.error) || "Failed to generate invoice";
@@ -140,6 +151,8 @@ export async function POST(req: NextRequest) {
     NextResponse.json({
       ok: true,
       data: {
+        // Stage timings (ms) to diagnose popup latency from the Network tab.
+        timings: { totalMs: Date.now() - reqStartedMs, syncMs, generateMs },
         orderName: orderImport.shopifyOrderName,
         orderImportId: orderImport.id,
         readinessErrors: Array.isArray(orderImport.readinessErrors) ? orderImport.readinessErrors : [],

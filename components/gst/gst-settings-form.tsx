@@ -43,7 +43,7 @@ const initialState: SettingsFormState = {
   pan: '',
   stateCode: '',
   priceIncludesTax: true,
-  autoGenerateOnOrderCreate: false,
+  autoGenerateOnOrderCreate: true,
   gstModuleEnabled: true,
   numbering: {
     invoice: defaultDocFormat('INV'),
