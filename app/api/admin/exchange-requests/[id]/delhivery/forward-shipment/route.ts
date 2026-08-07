@@ -3,6 +3,7 @@ import { prisma } from "../../../../../../../services/db/prisma";
 import { canTransitionExchangeStatus } from "../../../../../../../services/exchange/lifecycle";
 import { createDelhiveryForwardShipment, DelhiveryForwardShipmentError } from "../../../../../../../services/logistics/delhivery-forward-shipment";
 import { resolveDelhiveryRuntimeConfig } from "../../../../../../../services/logistics/delhivery-runtime";
+import { resolveExchangeShippingAddress } from "../../../../../../../services/exchange/pickup-address";
 import { ShopResolutionError } from "../../../../../../../services/shopify/shop";
 import { requireAdminShopFromRequest } from "../../../../../../../services/shopify/admin-auth";
 
@@ -57,7 +58,11 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     }
 
     const runtime = await resolveDelhiveryRuntimeConfig(shop.id);
-    const delhiveryResult = await createDelhiveryForwardShipment(request, runtime);
+    const shippingAddress = await resolveExchangeShippingAddress(request);
+    if (!shippingAddress) {
+      return NextResponse.json({ error: "Could not resolve the customer's shipping address from the order." }, { status: 400 });
+    }
+    const delhiveryResult = await createDelhiveryForwardShipment(request, runtime, shippingAddress);
     const nextStatus = resolveNextStatus(request.status, Boolean(delhiveryResult.awb));
 
     const result = await prisma.$transaction(async (tx) => {

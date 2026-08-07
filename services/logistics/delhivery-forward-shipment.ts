@@ -1,22 +1,9 @@
 import type { DelhiveryRuntimeConfig } from "./delhivery-runtime";
+import type { ResolvedShippingAddress } from "../exchange/pickup-address";
 
 type ExchangeRequestForForwardShipment = {
   id: string;
   orderNumber: string | null;
-  customerNameSnapshot: string | null;
-  customerPhoneSnapshot: string | null;
-  customerEmailSnapshot: string | null;
-  customerProfile?: {
-    fullName: string | null;
-    phoneE164: string | null;
-    email: string | null;
-    addressLine1: string | null;
-    addressLine2: string | null;
-    city: string | null;
-    stateProvince: string | null;
-    postalCode: string | null;
-    countryRegion: string | null;
-  } | null;
   items: Array<{
     productTitle: string | null;
     variantTitle: string | null;
@@ -89,14 +76,14 @@ function warehouseValue(names: string[], fallback = "") {
 export function buildDelhiveryForwardShipmentPayload(
   request: ExchangeRequestForForwardShipment,
   pickupLocationName: string,
+  shippingAddress: ResolvedShippingAddress,
 ) {
-  const customer = request.customerProfile;
-  const name = required(request.customerNameSnapshot || customer?.fullName, "Customer name");
-  const phone = required(request.customerPhoneSnapshot || customer?.phoneE164, "Customer phone");
-  const address = required(joinAddress(customer?.addressLine1, customer?.addressLine2), "Customer address");
-  const city = required(customer?.city, "Customer city");
-  const state = required(customer?.stateProvince, "Customer state");
-  const pin = required(customer?.postalCode, "Customer postal code");
+  const name = required(shippingAddress.name, "Customer name");
+  const phone = required(shippingAddress.phone, "Customer phone");
+  const address = required(joinAddress(shippingAddress.address1, shippingAddress.address2), "Customer address");
+  const city = required(shippingAddress.city, "Customer city");
+  const state = required(shippingAddress.state, "Customer state");
+  const pin = required(shippingAddress.pin, "Customer postal code");
   const order = required(request.orderNumber || request.id, "Order number");
   const resolvedPickupName = pickupLocationName || warehouseValue(["DELHIVERY_PICKUP_LOCATION_NAME", "DELHIVERY_WAREHOUSE_NAME"], "Megaska Warehouse");
   const warehouseName = warehouseValue(["DELHIVERY_WAREHOUSE_CONTACT_NAME", "DELHIVERY_WAREHOUSE_NAME", "DELHIVERY_PICKUP_LOCATION_NAME"], resolvedPickupName);
@@ -120,12 +107,12 @@ export function buildDelhiveryForwardShipmentPayload(
         order: `EX-FWD-${order}-${request.id.slice(0, 8)}`,
         name,
         phone,
-        email: clean(request.customerEmailSnapshot || customer?.email) || undefined,
+        email: clean(shippingAddress.email) || undefined,
         add: address,
         city,
         state,
         pin,
-        country: clean(customer?.countryRegion) || "India",
+        country: clean(shippingAddress.country) || "India",
         products_desc: productDescription,
         quantity: totalQuantity,
         payment_mode: "Prepaid",
@@ -192,12 +179,13 @@ export function normalizeDelhiveryForwardShipmentResponse(
 export async function createDelhiveryForwardShipment(
   request: ExchangeRequestForForwardShipment,
   runtime: DelhiveryRuntimeConfig,
+  shippingAddress: ResolvedShippingAddress,
 ): Promise<DelhiveryForwardShipmentResult> {
   if (!runtime.configured) {
     throw new DelhiveryForwardShipmentError(runtime.reason, 503);
   }
 
-  const payload = buildDelhiveryForwardShipmentPayload(request, runtime.pickupLocationName);
+  const payload = buildDelhiveryForwardShipmentPayload(request, runtime.pickupLocationName, shippingAddress);
   const response = await fetch(resolveEndpoint(runtime), {
     method: "POST",
     headers: {
