@@ -4,6 +4,7 @@ import { REVERSE_PICKUP_WINDOW_LOCK_REASON, isWithinReversePickupWindow } from "
 import { canTransitionExchangeStatus } from "../../../../../../../services/exchange/lifecycle";
 import { createDelhiveryReversePickup, DelhiveryReversePickupError } from "../../../../../../../services/logistics/delhivery-reverse-pickup";
 import { resolveDelhiveryRuntimeConfig } from "../../../../../../../services/logistics/delhivery-runtime";
+import { resolveExchangeShippingAddress } from "../../../../../../../services/exchange/pickup-address";
 import { ShopResolutionError } from "../../../../../../../services/shopify/shop";
 import { requireAdminShopFromRequest } from "../../../../../../../services/shopify/admin-auth";
 import { notifyExchangeMilestone } from "../../../../../../../services/notifications/exchange-milestones";
@@ -45,7 +46,11 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     }
 
     const runtime = await resolveDelhiveryRuntimeConfig(shop.id);
-    const delhiveryResult = await createDelhiveryReversePickup(request, runtime);
+    const shippingAddress = await resolveExchangeShippingAddress(request);
+    if (!shippingAddress) {
+      return NextResponse.json({ error: "Could not resolve the customer's shipping address from the order." }, { status: 400 });
+    }
+    const delhiveryResult = await createDelhiveryReversePickup(request, runtime, shippingAddress);
     const nextStatus = canTransitionExchangeStatus(request.status, "PICKUP_SCHEDULED") ? "PICKUP_SCHEDULED" : "PICKUP_PENDING";
 
     const result = await prisma.$transaction(async (tx) => {

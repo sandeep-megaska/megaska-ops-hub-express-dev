@@ -6,6 +6,7 @@ import {
   DelhiveryReversePickupError,
 } from "../logistics/delhivery-reverse-pickup";
 import { resolveDelhiveryRuntimeConfig } from "../logistics/delhivery-runtime";
+import { resolveExchangeShippingAddress } from "./pickup-address";
 import { notifyExchangeMilestone } from "../notifications/exchange-milestones";
 
 // Same eligibility gate the manual admin route uses
@@ -85,9 +86,16 @@ export async function autoCreateReversePickupForRequest(
       return { ok: false, reason: `delhivery-not-configured:${runtime.reason}` };
     }
 
+    // Source the pickup address from the order (GST import snapshot → live
+    // Shopify → profile), since the request/profile often has no address.
+    const shippingAddress = await resolveExchangeShippingAddress(request);
+    if (!shippingAddress) {
+      return { ok: false, reason: "no-shipping-address" };
+    }
+
     // External Delhivery call happens OUTSIDE the transaction (same as the
     // manual route) so a slow/failed courier call never holds a DB transaction.
-    const delhiveryResult = await createDelhiveryReversePickup(request, runtime);
+    const delhiveryResult = await createDelhiveryReversePickup(request, runtime, shippingAddress);
     const nextStatus = canTransitionExchangeStatus(request.status, "PICKUP_SCHEDULED")
       ? "PICKUP_SCHEDULED"
       : "PICKUP_PENDING";
