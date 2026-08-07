@@ -7,15 +7,12 @@
   ],
   "functions": {
     "app/api/gst/invoices/[id]/pdf/route.ts": {
-      "memory": 2048,
       "maxDuration": 30
     },
     "app/api/gst/orders/by-shopify-id/route.ts": {
-      "memory": 1024,
       "maxDuration": 60
     },
     "app/api/webhooks/orders/create/route.ts": {
-      "memory": 1024,
       "maxDuration": 60
     }
   }

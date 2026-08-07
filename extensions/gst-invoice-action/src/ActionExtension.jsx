@@ -3,6 +3,15 @@
 // this environment, even though it reported success with no errors.
 // Everything here is built and updated with plain DOM APIs instead.
 
+async function fetchShopDomain() {
+  const res = await fetch("shopify:admin/api/graphql.json", {
+    method: "POST",
+    body: JSON.stringify({ query: "{ shop { myshopifyDomain } }" }),
+  });
+  const json = await res.json().catch(() => null);
+  return json?.data?.shop?.myshopifyDomain || "";
+}
+
 // The app backend now verifies a Shopify session token and derives the shop
 // from it (it no longer trusts the client-supplied `shop`). Admin UI extensions
 // expose the session token via the global `shopify.idToken()`. Kept defensive so
@@ -27,11 +36,11 @@ async function authHeaders(extra) {
   );
 }
 
-async function fetchOrderStatus({ shopifyOrderGid, generate }) {
+async function fetchOrderStatus({ shopifyOrderGid, shop, generate }) {
   const res = await fetch("/api/gst/orders/by-shopify-id", {
     method: "POST",
     headers: await authHeaders(),
-    body: JSON.stringify({ shopifyOrderGid, generate: Boolean(generate) }),
+    body: JSON.stringify({ shopifyOrderGid, shop, generate: Boolean(generate) }),
   });
   const json = await res.json().catch(() => null);
   if (!res.ok || !json?.ok) {
@@ -57,6 +66,7 @@ export default async () => {
   const { close, data, i18n } = shopify;
 
   let orderStatus = null;
+  let shopDomain = "";
 
   const action = document.createElement("s-admin-action");
   action.heading = i18n.translate("name");
@@ -173,7 +183,8 @@ export default async () => {
   async function loadInitialStatus() {
     try {
       const orderGid = data.selected[0].id;
-      const result = await fetchOrderStatus({ shopifyOrderGid: orderGid, generate: false });
+      shopDomain = await fetchShopDomain();
+      const result = await fetchOrderStatus({ shopifyOrderGid: orderGid, shop: shopDomain, generate: false });
       orderStatus = result;
       renderStatus();
     } catch (error) {
@@ -188,7 +199,7 @@ export default async () => {
     setError(null);
     try {
       const orderGid = data.selected[0].id;
-      const result = await fetchOrderStatus({ shopifyOrderGid: orderGid, generate: true });
+      const result = await fetchOrderStatus({ shopifyOrderGid: orderGid, shop: shopDomain, generate: true });
       if (result.error) setError(result.error);
       orderStatus = result;
       renderStatus();
