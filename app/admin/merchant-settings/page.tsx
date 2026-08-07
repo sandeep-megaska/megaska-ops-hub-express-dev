@@ -233,6 +233,11 @@ async function saveMerchantSettings(
       apiToken: formData.get("delhiveryApiToken"),
       pickupLocation: formData.get("delhiveryPickupLocation"),
       originPincode: formData.get("delhiveryOriginPincode"),
+      warehouseEmail: formData.get("delhiveryWarehouseEmail"),
+      warehousePhone: formData.get("delhiveryWarehousePhone"),
+      warehouseAddress: formData.get("delhiveryWarehouseAddress"),
+      warehouseCity: formData.get("delhiveryWarehouseCity"),
+      warehouseState: formData.get("delhiveryWarehouseState"),
       codEnabled: formData.get("delhiveryCodEnabled") === "on",
       prepaidEnabled: formData.get("delhiveryPrepaidEnabled") === "on",
       serviceabilityCheckEnabled:
@@ -1098,8 +1103,13 @@ export default async function MerchantSettingsPage({
           </label>
           <div className="grid gap-4 md:grid-cols-2">
             <Field label="API Token" name="delhiveryApiToken" type="password" defaultValue={delhivery.apiTokenMasked} help="The token is stored securely, masked after save, and can be replaced by entering a new token." />
-            <Field label="Pickup Location / Warehouse Name" name="delhiveryPickupLocation" defaultValue={delhivery.pickupLocation} help="Delhivery pickup location or warehouse name configured for this merchant." />
-            <Field label="Origin Pincode" name="delhiveryOriginPincode" defaultValue={delhivery.originPincode} help="6-digit origin pincode used as the merchant-level Delhivery origin." />
+            <Field label="Pickup Location / Warehouse Name" name="delhiveryPickupLocation" defaultValue={delhivery.pickupLocation} help="Unique warehouse name. The app auto-registers this warehouse with Delhivery from the details below, so you never need the Delhivery portal." />
+            <Field label="Origin Pincode" name="delhiveryOriginPincode" defaultValue={delhivery.originPincode} help="6-digit origin/warehouse pincode. Also used to register the warehouse with Delhivery." />
+            <Field label="Warehouse Phone" name="delhiveryWarehousePhone" defaultValue={delhivery.warehousePhone} help="Contact phone for the pickup warehouse (used to register it with Delhivery)." />
+            <Field label="Warehouse Email" name="delhiveryWarehouseEmail" type="email" defaultValue={delhivery.warehouseEmail} help="Contact email for the pickup warehouse (optional; used when registering with Delhivery)." />
+            <Field label="Warehouse Address" name="delhiveryWarehouseAddress" defaultValue={delhivery.warehouseAddress} help="Street address of the pickup warehouse." />
+            <Field label="Warehouse City" name="delhiveryWarehouseCity" defaultValue={delhivery.warehouseCity} help="City of the pickup warehouse." />
+            <Field label="Warehouse State" name="delhiveryWarehouseState" defaultValue={delhivery.warehouseState} help="State of the pickup warehouse." />
             <Field label="Default Package Weight" name="delhiveryDefaultPackageWeight" type="number" defaultValue={String(delhivery.defaultPackageWeight)} help="Default package weight used by backend shipping services when needed." />
             <Field label="Default Length" name="delhiveryDefaultLength" type="number" defaultValue={String(delhivery.defaultLength)} help="Default package length." />
             <Field label="Default Breadth" name="delhiveryDefaultBreadth" type="number" defaultValue={String(delhivery.defaultBreadth)} help="Default package breadth." />
