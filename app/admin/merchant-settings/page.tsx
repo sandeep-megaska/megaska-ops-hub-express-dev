@@ -10,6 +10,12 @@ import {
   getDelhiveryAdminConfig,
   updateDelhiveryConfig,
 } from "../../../services/delhivery/config";
+import { resolveDelhiveryRuntimeConfig } from "../../../services/logistics/delhivery-runtime";
+import {
+  ensureDelhiveryWarehouse,
+  DelhiveryWarehouseError,
+  missingWarehouseFields,
+} from "../../../services/logistics/delhivery-warehouse";
 import {
   getRazorpayAdminConfig,
   updateRazorpayConfig,
@@ -44,6 +50,8 @@ type PageProps = {
     embedded?: string;
     saved?: string;
     error?: string;
+    whSync?: string;
+    whSyncError?: string;
   }>;
 };
 
@@ -79,6 +87,87 @@ const SHOP_UNRESOLVED_MESSAGE =
 
 const cardClass = "mk-card";
 const helpClass = "mk-help";
+
+// Map the Delhivery settings form fields to the config patch. Shared by the
+// full "Save settings" submit and the "Sync warehouse with Delhivery" action so
+// the warehouse sync always persists the latest form values before registering.
+function delhiveryPatchFromFormData(formData: FormData) {
+  return {
+    enabled: formData.get("delhiveryEnabled") === "on",
+    environment: formData.get("delhiveryEnvironment"),
+    apiToken: formData.get("delhiveryApiToken"),
+    pickupLocation: formData.get("delhiveryPickupLocation"),
+    originPincode: formData.get("delhiveryOriginPincode"),
+    warehouseEmail: formData.get("delhiveryWarehouseEmail"),
+    warehousePhone: formData.get("delhiveryWarehousePhone"),
+    warehouseAddress: formData.get("delhiveryWarehouseAddress"),
+    warehouseCity: formData.get("delhiveryWarehouseCity"),
+    warehouseState: formData.get("delhiveryWarehouseState"),
+    codEnabled: formData.get("delhiveryCodEnabled") === "on",
+    prepaidEnabled: formData.get("delhiveryPrepaidEnabled") === "on",
+    serviceabilityCheckEnabled:
+      formData.get("delhiveryServiceabilityCheckEnabled") === "on",
+    defaultPackageWeight: formData.get("delhiveryDefaultPackageWeight"),
+    defaultLength: formData.get("delhiveryDefaultLength"),
+    defaultBreadth: formData.get("delhiveryDefaultBreadth"),
+    defaultHeight: formData.get("delhiveryDefaultHeight"),
+  };
+}
+
+// Persist the Delhivery settings from the form, then register (or confirm) the
+// merchant's pickup warehouse with Delhivery so they never have to open the
+// Delhivery portal. Redirects back with a whSync / whSyncError banner.
+async function syncDelhiveryWarehouse(
+  shopId: string,
+  shopDomain: string,
+  formData: FormData,
+) {
+  "use server";
+  const resolved = await resolveAdminShopFromSearchParams({ shop: shopDomain });
+  if (!shopId || !resolved.shop?.id || resolved.shop.id !== shopId) {
+    redirect(
+      `/admin/merchant-settings?shop=${encodeURIComponent(shopDomain)}&error=${encodeURIComponent(SHOP_UNRESOLVED_MESSAGE)}`,
+    );
+  }
+
+  const embeddedContext = embeddedContextFromFormData(formData);
+  embeddedContext.set("shop", shopDomain);
+  embeddedContext.delete("saved");
+  embeddedContext.delete("error");
+  embeddedContext.delete("whSync");
+  embeddedContext.delete("whSyncError");
+  try {
+    // Save the latest form values first so we register the warehouse the
+    // merchant sees on screen, not a stale saved copy.
+    await updateDelhiveryConfig(shopId, delhiveryPatchFromFormData(formData));
+    const runtime = await resolveDelhiveryRuntimeConfig(shopId);
+    if (!runtime.configured) {
+      throw new DelhiveryWarehouseError(runtime.reason, 503);
+    }
+    const missing = missingWarehouseFields(runtime);
+    if (missing.length) {
+      throw new DelhiveryWarehouseError(
+        `Add these Delhivery warehouse details before syncing: ${missing.join(", ")}.`,
+        422,
+      );
+    }
+    const result = await ensureDelhiveryWarehouse(runtime);
+    embeddedContext.set(
+      "whSync",
+      result.created
+        ? `Warehouse "${runtime.warehouse.name}" registered with Delhivery.`
+        : `Warehouse "${runtime.warehouse.name}" is already registered with Delhivery.`,
+    );
+  } catch (error) {
+    const message =
+      error instanceof DelhiveryWarehouseError || error instanceof Error
+        ? error.message
+        : "Could not sync the warehouse with Delhivery.";
+    embeddedContext.set("whSyncError", message);
+  }
+  revalidatePath(`/admin/merchant-settings?shop=${encodeURIComponent(shopDomain)}`);
+  redirect(`/admin/merchant-settings?${embeddedContext.toString()}`);
+}
 
 async function saveMerchantSettings(
   shopId: string,
@@ -227,26 +316,7 @@ async function saveMerchantSettings(
       walletsEnabled: formData.get("razorpayWalletsEnabled") === "on",
       codFallbackEnabled: formData.get("razorpayCodFallbackEnabled") === "on",
     });
-    await updateDelhiveryConfig(shopId, {
-      enabled: formData.get("delhiveryEnabled") === "on",
-      environment: formData.get("delhiveryEnvironment"),
-      apiToken: formData.get("delhiveryApiToken"),
-      pickupLocation: formData.get("delhiveryPickupLocation"),
-      originPincode: formData.get("delhiveryOriginPincode"),
-      warehouseEmail: formData.get("delhiveryWarehouseEmail"),
-      warehousePhone: formData.get("delhiveryWarehousePhone"),
-      warehouseAddress: formData.get("delhiveryWarehouseAddress"),
-      warehouseCity: formData.get("delhiveryWarehouseCity"),
-      warehouseState: formData.get("delhiveryWarehouseState"),
-      codEnabled: formData.get("delhiveryCodEnabled") === "on",
-      prepaidEnabled: formData.get("delhiveryPrepaidEnabled") === "on",
-      serviceabilityCheckEnabled:
-        formData.get("delhiveryServiceabilityCheckEnabled") === "on",
-      defaultPackageWeight: formData.get("delhiveryDefaultPackageWeight"),
-      defaultLength: formData.get("delhiveryDefaultLength"),
-      defaultBreadth: formData.get("delhiveryDefaultBreadth"),
-      defaultHeight: formData.get("delhiveryDefaultHeight"),
-    });
+    await updateDelhiveryConfig(shopId, delhiveryPatchFromFormData(formData));
     await saveMerchantOtpSettings(shopId, {
       otpEnabled: formData.getAll("otpEnabled").at(-1),
       providerMode: formData.get("otpProviderMode"),
@@ -399,6 +469,11 @@ export default async function MerchantSettingsPage({
     resolved.shop.id,
     resolved.shop.shopDomain,
   );
+  const syncWarehouseAction = syncDelhiveryWarehouse.bind(
+    null,
+    resolved.shop.id,
+    resolved.shop.shopDomain,
+  );
   return (
     <main className="mx-auto max-w-5xl px-6 py-8">
       <div className="mk-hero mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
@@ -428,6 +503,16 @@ export default async function MerchantSettingsPage({
       {params.error ? (
         <div className="mk-alert mk-alert-error mb-4">
           {params.error}
+        </div>
+      ) : null}
+      {params.whSync ? (
+        <div className="mk-alert mk-alert-success mb-4">
+          {params.whSync}
+        </div>
+      ) : null}
+      {params.whSyncError ? (
+        <div className="mk-alert mk-alert-error mb-4">
+          {params.whSyncError}
         </div>
       ) : null}
       <form action={saveAction} className="grid gap-6 pb-24">
@@ -1114,6 +1199,18 @@ export default async function MerchantSettingsPage({
             <Field label="Default Length" name="delhiveryDefaultLength" type="number" defaultValue={String(delhivery.defaultLength)} help="Default package length." />
             <Field label="Default Breadth" name="delhiveryDefaultBreadth" type="number" defaultValue={String(delhivery.defaultBreadth)} help="Default package breadth." />
             <Field label="Default Height" name="delhiveryDefaultHeight" type="number" defaultValue={String(delhivery.defaultHeight)} help="Default package height." />
+          </div>
+          <div className="mk-card flex flex-wrap items-center justify-between gap-3 bg-white">
+            <div>
+              <p className="mk-label">Sync warehouse with Delhivery</p>
+              <span className={helpClass}>
+                Saves the Delhivery fields above, then registers this pickup warehouse in your Delhivery account so
+                reverse pickups and replacements work — no need to open the Delhivery portal.
+              </span>
+            </div>
+            <button className="mk-btn mk-btn-primary" type="submit" formAction={syncWarehouseAction}>
+              Sync warehouse with Delhivery
+            </button>
           </div>
         </section>
         <section className="grid gap-4 rounded-2xl border border-gray-200 bg-gray-50 p-6 text-sm text-gray-700 md:grid-cols-2">

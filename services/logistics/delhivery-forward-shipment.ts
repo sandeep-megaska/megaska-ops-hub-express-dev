@@ -1,4 +1,4 @@
-import type { DelhiveryRuntimeConfig } from "./delhivery-runtime";
+import { toDelhiveryPhone, toDelhiveryPincode, type DelhiveryRuntimeConfig } from "./delhivery-runtime";
 import type { ResolvedShippingAddress } from "../exchange/pickup-address";
 import { ensureDelhiveryWarehouse, DelhiveryWarehouseError } from "./delhivery-warehouse";
 
@@ -80,11 +80,11 @@ export function buildDelhiveryForwardShipmentPayload(
   shippingAddress: ResolvedShippingAddress,
 ) {
   const name = required(shippingAddress.name, "Customer name");
-  const phone = required(shippingAddress.phone, "Customer phone");
+  const phone = toDelhiveryPhone(required(shippingAddress.phone, "Customer phone"));
   const address = required(joinAddress(shippingAddress.address1, shippingAddress.address2), "Customer address");
   const city = required(shippingAddress.city, "Customer city");
   const state = required(shippingAddress.state, "Customer state");
-  const pin = required(shippingAddress.pin, "Customer postal code");
+  const pin = toDelhiveryPincode(required(shippingAddress.pin, "Customer postal code"));
   const order = required(request.orderNumber || request.id, "Order number");
   const resolvedPickupName = pickupLocationName || warehouseValue(["DELHIVERY_PICKUP_LOCATION_NAME", "DELHIVERY_WAREHOUSE_NAME"], "Megaska Warehouse");
   const warehouseName = warehouseValue(["DELHIVERY_WAREHOUSE_CONTACT_NAME", "DELHIVERY_WAREHOUSE_NAME", "DELHIVERY_PICKUP_LOCATION_NAME"], resolvedPickupName);
@@ -219,6 +219,12 @@ async function postForwardShipment(
   });
 
   const rawText = await response.text();
+  console.info("[DELHIVERY REPLACEMENT] response", {
+    status: response.status,
+    ok: response.ok,
+    sentPayload: JSON.stringify(payload).slice(0, 1200),
+    body: rawText.slice(0, 800),
+  });
   let rawResponse: unknown = rawText;
   try {
     rawResponse = rawText ? JSON.parse(rawText) : null;

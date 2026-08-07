@@ -1,4 +1,4 @@
-import type { DelhiveryRuntimeConfig } from "./delhivery-runtime";
+import { toDelhiveryPhone, toDelhiveryPincode, type DelhiveryRuntimeConfig } from "./delhivery-runtime";
 import type { ResolvedShippingAddress } from "../exchange/pickup-address";
 import { ensureDelhiveryWarehouse, DelhiveryWarehouseError } from "./delhivery-warehouse";
 
@@ -64,11 +64,11 @@ export function buildDelhiveryReversePickupPayload(
 ) {
   const pickup = required(pickupLocationName, "Delhivery pickup location / warehouse name (set it in Settings → Delhivery)");
   const name = required(shippingAddress.name, "Customer name");
-  const phone = required(shippingAddress.phone, "Customer phone");
+  const phone = toDelhiveryPhone(required(shippingAddress.phone, "Customer phone"));
   const address = required(joinAddress(shippingAddress.address1, shippingAddress.address2), "Customer address");
   const city = required(shippingAddress.city, "Customer city");
   const state = required(shippingAddress.state, "Customer state");
-  const pin = required(shippingAddress.pin, "Customer postal code");
+  const pin = toDelhiveryPincode(required(shippingAddress.pin, "Customer postal code"));
   const order = required(request.orderNumber || request.id, "Order number");
   const productDescription = request.items
     .map((item) => [item.productTitle, item.variantTitle, item.sku].map(clean).filter(Boolean).join(" / "))
@@ -190,6 +190,15 @@ async function postReversePickup(
   });
 
   const rawText = await response.text();
+  // Diagnostics: the exact outgoing payload + raw Delhivery response (order data
+  // only, no API secrets). Lets us see precisely what we sent and what Delhivery
+  // rejected in the Vercel logs when Delhivery returns its generic internal error.
+  console.info("[DELHIVERY REVERSE PICKUP] response", {
+    status: response.status,
+    ok: response.ok,
+    sentPayload: JSON.stringify(payload).slice(0, 1200),
+    body: rawText.slice(0, 800),
+  });
   let rawResponse: unknown = rawText;
   try {
     rawResponse = rawText ? JSON.parse(rawText) : null;
