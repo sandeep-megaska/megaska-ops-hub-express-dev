@@ -208,5 +208,15 @@ export async function createDelhiveryForwardShipment(
     throw new DelhiveryForwardShipmentError(`Delhivery API returned HTTP ${response.status}.`, 502);
   }
 
-  return normalizeDelhiveryForwardShipmentResponse(rawResponse, runtime.trackingUrlTemplate);
+  try {
+    return normalizeDelhiveryForwardShipmentResponse(rawResponse, runtime.trackingUrlTemplate);
+  } catch (error) {
+    if (error instanceof DelhiveryForwardShipmentError && /clientwarehouse|warehouse|matching query does not exist/i.test(error.message)) {
+      throw new DelhiveryForwardShipmentError(
+        `Delhivery has no pickup warehouse named "${runtime.pickupLocationName || "(not set)"}". Register this warehouse in your Delhivery account, then set its exact name in Settings → Delhivery → "Pickup Location / Warehouse Name". (Delhivery said: ${error.message})`,
+        422,
+      );
+    }
+    throw error;
+  }
 }
