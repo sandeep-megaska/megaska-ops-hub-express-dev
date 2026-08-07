@@ -1,5 +1,6 @@
 import type { DelhiveryRuntimeConfig } from "./delhivery-runtime";
 import type { ResolvedShippingAddress } from "../exchange/pickup-address";
+import { ensureDelhiveryWarehouse, DelhiveryWarehouseError } from "./delhivery-warehouse";
 
 type ExchangeRequestForReversePickup = {
   id: string;
@@ -156,6 +157,28 @@ export async function createDelhiveryReversePickup(
   }
 
   const payload = buildDelhiveryReversePickupPayload(request, runtime.pickupLocationName, shippingAddress);
+
+  try {
+    return await postReversePickup(runtime, payload);
+  } catch (error) {
+    // The warehouse isn't registered with Delhivery yet — auto-register it from
+    // the merchant's settings and retry once, so merchants never touch the portal.
+    if (isWarehouseNotFound(error)) {
+      await ensureWarehouseOrThrow(runtime);
+      try {
+        return await postReversePickup(runtime, payload);
+      } catch (retryError) {
+        throw remapWarehouseError(retryError, runtime.pickupLocationName);
+      }
+    }
+    throw remapWarehouseError(error, runtime.pickupLocationName);
+  }
+}
+
+async function postReversePickup(
+  runtime: DelhiveryRuntimeConfig,
+  payload: ReturnType<typeof buildDelhiveryReversePickupPayload>,
+): Promise<DelhiveryReversePickupResult> {
   const response = await fetch(resolveEndpoint(runtime), {
     method: "POST",
     headers: {
@@ -178,10 +201,25 @@ export async function createDelhiveryReversePickup(
     throw new DelhiveryReversePickupError(`Delhivery API returned HTTP ${response.status}.`, 502);
   }
 
+  return normalizeDelhiveryReversePickupResponse(rawResponse, runtime.trackingUrlTemplate);
+}
+
+function isWarehouseNotFound(error: unknown) {
+  return (
+    error instanceof DelhiveryReversePickupError &&
+    /clientwarehouse|warehouse|matching query does not exist/i.test(error.message)
+  );
+}
+
+async function ensureWarehouseOrThrow(runtime: DelhiveryRuntimeConfig) {
   try {
-    return normalizeDelhiveryReversePickupResponse(rawResponse, runtime.trackingUrlTemplate);
+    await ensureDelhiveryWarehouse(runtime);
   } catch (error) {
-    throw remapWarehouseError(error, runtime.pickupLocationName);
+    const statusCode = error instanceof DelhiveryWarehouseError ? error.statusCode : 502;
+    throw new DelhiveryReversePickupError(
+      error instanceof Error ? error.message : "Delhivery warehouse registration failed.",
+      statusCode,
+    );
   }
 }
 

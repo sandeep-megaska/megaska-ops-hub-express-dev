@@ -12,6 +12,16 @@ import { getInternalDelhiveryConfig } from "../delhivery/config";
 //
 // (Razorpay already follows this per-shop pattern via getInternalRazorpayConfig.)
 
+export interface DelhiveryWarehouseDetails {
+  name: string;
+  email: string;
+  phone: string;
+  address: string;
+  city: string;
+  state: string;
+  pin: string;
+}
+
 export interface DelhiveryRuntimeConfig {
   configured: boolean;
   reason: string;
@@ -19,10 +29,12 @@ export interface DelhiveryRuntimeConfig {
   baseUrl: string;
   pickupLocationName: string;
   originPincode: string;
+  warehouse: DelhiveryWarehouseDetails;
   reversePickupPath: string;
   forwardShipmentPath: string;
   trackingPath: string;
   trackingUrlTemplate: string | null;
+  clientWarehouseCreatePath: string;
 }
 
 function env(name: string) {
@@ -35,6 +47,7 @@ function delhiveryPaths() {
     forwardShipmentPath: env("DELHIVERY_FORWARD_SHIPMENT_PATH") || "/api/cmu/create.json",
     trackingPath: env("DELHIVERY_TRACKING_PATH") || "/api/v1/packages/json/",
     trackingUrlTemplate: env("DELHIVERY_TRACKING_URL_TEMPLATE") || null,
+    clientWarehouseCreatePath: env("DELHIVERY_CLIENT_WAREHOUSE_CREATE_PATH") || "/api/backend/clientwarehouse/create/",
   };
 }
 
@@ -68,6 +81,15 @@ export function buildEnvDelhiveryRuntimeConfig(): DelhiveryRuntimeConfig {
     baseUrl,
     pickupLocationName: env("DELHIVERY_PICKUP_LOCATION_NAME") || "Megaska Returns",
     originPincode: env("DELHIVERY_ORIGIN_PINCODE"),
+    warehouse: {
+      name: env("DELHIVERY_PICKUP_LOCATION_NAME") || "Megaska Returns",
+      email: env("DELHIVERY_WAREHOUSE_EMAIL"),
+      phone: env("DELHIVERY_WAREHOUSE_PHONE") || env("DELHIVERY_PICKUP_PHONE"),
+      address: env("DELHIVERY_WAREHOUSE_ADDRESS") || env("DELHIVERY_PICKUP_ADDRESS"),
+      city: env("DELHIVERY_WAREHOUSE_CITY") || env("DELHIVERY_PICKUP_CITY"),
+      state: env("DELHIVERY_WAREHOUSE_STATE") || env("DELHIVERY_PICKUP_STATE"),
+      pin: env("DELHIVERY_ORIGIN_PINCODE") || env("DELHIVERY_WAREHOUSE_PIN"),
+    },
     ...delhiveryPaths(),
   };
 }
@@ -108,6 +130,15 @@ export async function resolveDelhiveryRuntimeConfig(
     // A real merchant's warehouse name must be their own — no platform default.
     pickupLocationName: merchant.pickupLocation || env("DELHIVERY_PICKUP_LOCATION_NAME") || "",
     originPincode: merchant.originPincode || env("DELHIVERY_ORIGIN_PINCODE"),
+    warehouse: {
+      name: merchant.pickupLocation || "",
+      email: merchant.warehouseEmail || "",
+      phone: merchant.warehousePhone || "",
+      address: merchant.warehouseAddress || "",
+      city: merchant.warehouseCity || "",
+      state: merchant.warehouseState || "",
+      pin: merchant.originPincode || "",
+    },
     ...delhiveryPaths(),
   };
 }

@@ -12,6 +12,13 @@ export type DelhiveryConfig = {
   apiTokenEncrypted: string | null;
   pickupLocation: string;
   originPincode: string;
+  // Warehouse registration details (used to auto-create the Delhivery
+  // ClientWarehouse named `pickupLocation`, so merchants never touch the portal).
+  warehouseEmail: string;
+  warehousePhone: string;
+  warehouseAddress: string;
+  warehouseCity: string;
+  warehouseState: string;
   codEnabled: boolean;
   prepaidEnabled: boolean;
   serviceabilityCheckEnabled: boolean;
@@ -82,6 +89,11 @@ export function normalizeDelhiveryConfig(input: unknown): DelhiveryConfig {
     apiTokenEncrypted: text(raw.apiTokenEncrypted, "", 2000) || null,
     pickupLocation: text(raw.pickupLocation ?? raw.warehouseName, "", 120),
     originPincode: pincode(raw.originPincode),
+    warehouseEmail: text(raw.warehouseEmail, "", 254),
+    warehousePhone: text(raw.warehousePhone, "", 20),
+    warehouseAddress: text(raw.warehouseAddress, "", 255),
+    warehouseCity: text(raw.warehouseCity, "", 120),
+    warehouseState: text(raw.warehouseState, "", 120),
     codEnabled: bool(raw.codEnabled, false),
     prepaidEnabled: bool(raw.prepaidEnabled, true),
     serviceabilityCheckEnabled: bool(raw.serviceabilityCheckEnabled, true),
