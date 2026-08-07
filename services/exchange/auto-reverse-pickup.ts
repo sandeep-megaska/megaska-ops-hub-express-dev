@@ -5,6 +5,7 @@ import {
   createDelhiveryReversePickup,
   DelhiveryReversePickupError,
 } from "../logistics/delhivery-reverse-pickup";
+import { resolveDelhiveryRuntimeConfig } from "../logistics/delhivery-runtime";
 import { notifyExchangeMilestone } from "../notifications/exchange-milestones";
 
 // Same eligibility gate the manual admin route uses
@@ -77,9 +78,16 @@ export async function autoCreateReversePickupForRequest(
       };
     }
 
+    // Per-shop Delhivery config (merchant's own token/warehouse), with env
+    // fallback. If the shop hasn't configured Delhivery, don't attempt the call.
+    const runtime = await resolveDelhiveryRuntimeConfig(request.shopId);
+    if (!runtime.configured) {
+      return { ok: false, reason: `delhivery-not-configured:${runtime.reason}` };
+    }
+
     // External Delhivery call happens OUTSIDE the transaction (same as the
     // manual route) so a slow/failed courier call never holds a DB transaction.
-    const delhiveryResult = await createDelhiveryReversePickup(request);
+    const delhiveryResult = await createDelhiveryReversePickup(request, runtime);
     const nextStatus = canTransitionExchangeStatus(request.status, "PICKUP_SCHEDULED")
       ? "PICKUP_SCHEDULED"
       : "PICKUP_PENDING";

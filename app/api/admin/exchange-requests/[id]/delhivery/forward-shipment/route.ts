@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "../../../../../../../services/db/prisma";
 import { canTransitionExchangeStatus } from "../../../../../../../services/exchange/lifecycle";
 import { createDelhiveryForwardShipment, DelhiveryForwardShipmentError } from "../../../../../../../services/logistics/delhivery-forward-shipment";
+import { resolveDelhiveryRuntimeConfig } from "../../../../../../../services/logistics/delhivery-runtime";
 import { ShopResolutionError } from "../../../../../../../services/shopify/shop";
 import { requireAdminShopFromRequest } from "../../../../../../../services/shopify/admin-auth";
 
@@ -55,7 +56,8 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
       return NextResponse.json({ request, shipment: existingForwardShipment, idempotent: true });
     }
 
-    const delhiveryResult = await createDelhiveryForwardShipment(request);
+    const runtime = await resolveDelhiveryRuntimeConfig(shop.id);
+    const delhiveryResult = await createDelhiveryForwardShipment(request, runtime);
     const nextStatus = resolveNextStatus(request.status, Boolean(delhiveryResult.awb));
 
     const result = await prisma.$transaction(async (tx) => {

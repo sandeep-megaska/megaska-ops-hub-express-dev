@@ -1,4 +1,4 @@
-import { getDelhiveryCapabilityState } from "./delhivery";
+import type { DelhiveryRuntimeConfig } from "./delhivery-runtime";
 
 type ExchangeRequestForForwardShipment = {
   id: string;
@@ -62,19 +62,22 @@ function getEnv(name: string) {
   return clean(process.env[name]);
 }
 
-function resolveEndpoint() {
-  const baseUrl = getEnv("DELHIVERY_BASE_URL").replace(/\/+$/, "");
-  const path = getEnv("DELHIVERY_FORWARD_SHIPMENT_PATH") || "/api/cmu/create.json";
+function resolveEndpoint(runtime: DelhiveryRuntimeConfig) {
+  const baseUrl = runtime.baseUrl.replace(/\/+$/, "");
+  const path = runtime.forwardShipmentPath;
   return `${baseUrl}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
-function buildTrackingUrl(awb: string | null) {
+function buildTrackingUrl(awb: string | null, template: string | null) {
   if (!awb) return null;
-  const template = getEnv("DELHIVERY_TRACKING_URL_TEMPLATE");
   if (template) return template.replace("{awb}", encodeURIComponent(awb));
   return `https://www.delhivery.com/track/package/${encodeURIComponent(awb)}`;
 }
 
+// The pickup-location name (per shop) resolves the merchant's registered
+// warehouse address inside Delhivery. The seller_* fields below are optional
+// supplementary metadata and stay env-configurable (platform-level warehouse
+// contact); they are omitted when unset.
 function warehouseValue(names: string[], fallback = "") {
   for (const name of names) {
     const value = getEnv(name);
@@ -83,7 +86,10 @@ function warehouseValue(names: string[], fallback = "") {
   return fallback;
 }
 
-export function buildDelhiveryForwardShipmentPayload(request: ExchangeRequestForForwardShipment) {
+export function buildDelhiveryForwardShipmentPayload(
+  request: ExchangeRequestForForwardShipment,
+  pickupLocationName: string,
+) {
   const customer = request.customerProfile;
   const name = required(request.customerNameSnapshot || customer?.fullName, "Customer name");
   const phone = required(request.customerPhoneSnapshot || customer?.phoneE164, "Customer phone");
@@ -92,8 +98,8 @@ export function buildDelhiveryForwardShipmentPayload(request: ExchangeRequestFor
   const state = required(customer?.stateProvince, "Customer state");
   const pin = required(customer?.postalCode, "Customer postal code");
   const order = required(request.orderNumber || request.id, "Order number");
-  const pickupLocationName = warehouseValue(["DELHIVERY_PICKUP_LOCATION_NAME", "DELHIVERY_WAREHOUSE_NAME"], "Megaska Warehouse");
-  const warehouseName = warehouseValue(["DELHIVERY_WAREHOUSE_CONTACT_NAME", "DELHIVERY_WAREHOUSE_NAME", "DELHIVERY_PICKUP_LOCATION_NAME"], pickupLocationName);
+  const resolvedPickupName = pickupLocationName || warehouseValue(["DELHIVERY_PICKUP_LOCATION_NAME", "DELHIVERY_WAREHOUSE_NAME"], "Megaska Warehouse");
+  const warehouseName = warehouseValue(["DELHIVERY_WAREHOUSE_CONTACT_NAME", "DELHIVERY_WAREHOUSE_NAME", "DELHIVERY_PICKUP_LOCATION_NAME"], resolvedPickupName);
   const warehousePhone = warehouseValue(["DELHIVERY_WAREHOUSE_PHONE", "DELHIVERY_PICKUP_PHONE"]);
   const warehouseAddress = warehouseValue(["DELHIVERY_WAREHOUSE_ADDRESS", "DELHIVERY_PICKUP_ADDRESS"]);
   const warehouseCity = warehouseValue(["DELHIVERY_WAREHOUSE_CITY", "DELHIVERY_PICKUP_CITY"]);
@@ -107,7 +113,7 @@ export function buildDelhiveryForwardShipmentPayload(request: ExchangeRequestFor
 
   return {
     pickup_location: {
-      name: pickupLocationName,
+      name: resolvedPickupName,
     },
     shipments: [
       {
@@ -130,7 +136,7 @@ export function buildDelhiveryForwardShipmentPayload(request: ExchangeRequestFor
         seller_city: warehouseCity || undefined,
         seller_state: warehouseState || undefined,
         seller_pin: warehousePin || undefined,
-        return_name: warehouseName || pickupLocationName,
+        return_name: warehouseName || resolvedPickupName,
         return_phone: warehousePhone || undefined,
         return_add: warehouseAddress || undefined,
         return_city: warehouseCity || undefined,
@@ -154,7 +160,10 @@ function pickFirstString(source: unknown, keys: string[]): string | null {
   return null;
 }
 
-export function normalizeDelhiveryForwardShipmentResponse(rawResponse: unknown): DelhiveryForwardShipmentResult {
+export function normalizeDelhiveryForwardShipmentResponse(
+  rawResponse: unknown,
+  trackingUrlTemplate: string | null,
+): DelhiveryForwardShipmentResult {
   const root = rawResponse && typeof rawResponse === "object" ? (rawResponse as Record<string, unknown>) : {};
   const packages = Array.isArray(root.packages) ? root.packages : Array.isArray(root.Package) ? root.Package : [];
   const firstPackage = packages[0];
@@ -174,24 +183,25 @@ export function normalizeDelhiveryForwardShipmentResponse(rawResponse: unknown):
   return {
     providerReference,
     awb,
-    trackingUrl: buildTrackingUrl(awb),
+    trackingUrl: buildTrackingUrl(awb, trackingUrlTemplate),
     status: awb ? "IN_TRANSIT" : "PENDING",
     rawResponse,
   };
 }
 
-export async function createDelhiveryForwardShipment(request: ExchangeRequestForForwardShipment): Promise<DelhiveryForwardShipmentResult> {
-  const capability = getDelhiveryCapabilityState();
-  if (!capability.configured) {
-    throw new DelhiveryForwardShipmentError(capability.reason, 503);
+export async function createDelhiveryForwardShipment(
+  request: ExchangeRequestForForwardShipment,
+  runtime: DelhiveryRuntimeConfig,
+): Promise<DelhiveryForwardShipmentResult> {
+  if (!runtime.configured) {
+    throw new DelhiveryForwardShipmentError(runtime.reason, 503);
   }
 
-  const token = getEnv("DELHIVERY_API_TOKEN");
-  const payload = buildDelhiveryForwardShipmentPayload(request);
-  const response = await fetch(resolveEndpoint(), {
+  const payload = buildDelhiveryForwardShipmentPayload(request, runtime.pickupLocationName);
+  const response = await fetch(resolveEndpoint(runtime), {
     method: "POST",
     headers: {
-      Authorization: `Token ${token}`,
+      Authorization: `Token ${runtime.apiToken}`,
       Accept: "application/json",
       "Content-Type": "application/x-www-form-urlencoded",
     },
@@ -210,5 +220,5 @@ export async function createDelhiveryForwardShipment(request: ExchangeRequestFor
     throw new DelhiveryForwardShipmentError(`Delhivery API returned HTTP ${response.status}.`, 502);
   }
 
-  return normalizeDelhiveryForwardShipmentResponse(rawResponse);
+  return normalizeDelhiveryForwardShipmentResponse(rawResponse, runtime.trackingUrlTemplate);
 }
