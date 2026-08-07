@@ -1,5 +1,6 @@
 import type { DelhiveryRuntimeConfig } from "./delhivery-runtime";
 import type { ResolvedShippingAddress } from "../exchange/pickup-address";
+import { ensureDelhiveryWarehouse, DelhiveryWarehouseError } from "./delhivery-warehouse";
 
 type ExchangeRequestForForwardShipment = {
   id: string;
@@ -186,6 +187,27 @@ export async function createDelhiveryForwardShipment(
   }
 
   const payload = buildDelhiveryForwardShipmentPayload(request, runtime.pickupLocationName, shippingAddress);
+
+  try {
+    return await postForwardShipment(runtime, payload);
+  } catch (error) {
+    // Auto-register the warehouse from settings and retry once (no portal).
+    if (isWarehouseNotFound(error)) {
+      await ensureWarehouseOrThrow(runtime);
+      try {
+        return await postForwardShipment(runtime, payload);
+      } catch (retryError) {
+        throw remapWarehouseError(retryError, runtime.pickupLocationName);
+      }
+    }
+    throw remapWarehouseError(error, runtime.pickupLocationName);
+  }
+}
+
+async function postForwardShipment(
+  runtime: DelhiveryRuntimeConfig,
+  payload: ReturnType<typeof buildDelhiveryForwardShipmentPayload>,
+): Promise<DelhiveryForwardShipmentResult> {
   const response = await fetch(resolveEndpoint(runtime), {
     method: "POST",
     headers: {
@@ -208,15 +230,36 @@ export async function createDelhiveryForwardShipment(
     throw new DelhiveryForwardShipmentError(`Delhivery API returned HTTP ${response.status}.`, 502);
   }
 
+  return normalizeDelhiveryForwardShipmentResponse(rawResponse, runtime.trackingUrlTemplate);
+}
+
+function isWarehouseNotFound(error: unknown) {
+  return (
+    error instanceof DelhiveryForwardShipmentError &&
+    /clientwarehouse|warehouse|matching query does not exist/i.test(error.message)
+  );
+}
+
+function remapWarehouseError(error: unknown, pickupLocationName: string): DelhiveryForwardShipmentError {
+  if (error instanceof DelhiveryForwardShipmentError && /clientwarehouse|warehouse|matching query does not exist/i.test(error.message)) {
+    return new DelhiveryForwardShipmentError(
+      `Delhivery has no pickup warehouse named "${pickupLocationName || "(not set)"}". Add the warehouse details in Settings → Delhivery so the app can register it. (Delhivery said: ${error.message})`,
+      422,
+    );
+  }
+  return error instanceof DelhiveryForwardShipmentError
+    ? error
+    : new DelhiveryForwardShipmentError(error instanceof Error ? error.message : "Delhivery replacement shipment creation failed.", 502);
+}
+
+async function ensureWarehouseOrThrow(runtime: DelhiveryRuntimeConfig) {
   try {
-    return normalizeDelhiveryForwardShipmentResponse(rawResponse, runtime.trackingUrlTemplate);
+    await ensureDelhiveryWarehouse(runtime);
   } catch (error) {
-    if (error instanceof DelhiveryForwardShipmentError && /clientwarehouse|warehouse|matching query does not exist/i.test(error.message)) {
-      throw new DelhiveryForwardShipmentError(
-        `Delhivery has no pickup warehouse named "${runtime.pickupLocationName || "(not set)"}". Register this warehouse in your Delhivery account, then set its exact name in Settings → Delhivery → "Pickup Location / Warehouse Name". (Delhivery said: ${error.message})`,
-        422,
-      );
-    }
-    throw error;
+    const statusCode = error instanceof DelhiveryWarehouseError ? error.statusCode : 502;
+    throw new DelhiveryForwardShipmentError(
+      error instanceof Error ? error.message : "Delhivery warehouse registration failed.",
+      statusCode,
+    );
   }
 }
