@@ -15,6 +15,23 @@ type RequestResult<T> = {
 // explicitly, matching how the reviews/refunds/exchanges admin clients work.
 // The server reads this query param before the Referer, so resolution becomes
 // deterministic instead of referrer-dependent.
+// App Bridge strips shop/host from the iframe URL once it boots, so by the time
+// a fetch runs, window.location.search may no longer carry ?shop=. The shop is
+// captured synchronously into storage on the initial Admin load (see the
+// context-capture script in app/layout.tsx); fall back to it so requests stay
+// shop-scoped on first render instead of 404-ing until a manual refresh.
+function readStoredShop(): string {
+  try {
+    return String(
+      window.sessionStorage.getItem('megaska:shopify-shop') ||
+        window.localStorage.getItem('megaska:shopify-shop') ||
+        '',
+    ).trim()
+  } catch {
+    return ''
+  }
+}
+
 function withShopParam(path: string): string {
   if (typeof window === 'undefined') return path
 
@@ -25,6 +42,7 @@ function withShopParam(path: string): string {
   } catch {
     shop = ''
   }
+  if (!shop) shop = readStoredShop()
   if (!shop) return path
 
   const queryIndex = path.indexOf('?')
