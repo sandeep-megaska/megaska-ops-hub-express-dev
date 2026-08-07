@@ -1,7 +1,6 @@
-import { toDelhiveryPhone, toDelhiveryPincode, type DelhiveryRuntimeConfig } from "./delhivery-runtime";
+import { toDelhiveryPhone, toDelhiveryPincode, type DelhiveryRuntimeConfig, type DelhiveryWarehouseDetails } from "./delhivery-runtime";
 import type { ResolvedShippingAddress } from "../exchange/pickup-address";
 import { ensureDelhiveryWarehouse, DelhiveryWarehouseError } from "./delhivery-warehouse";
-import { fetchDelhiveryWaybill, DelhiveryWaybillError } from "./delhivery-waybill";
 
 type ExchangeRequestForReversePickup = {
   id: string;
@@ -62,7 +61,7 @@ export function buildDelhiveryReversePickupPayload(
   request: ExchangeRequestForReversePickup,
   pickupLocationName: string,
   shippingAddress: ResolvedShippingAddress,
-  waybill: string,
+  warehouse: DelhiveryWarehouseDetails,
 ) {
   const pickup = required(pickupLocationName, "Delhivery pickup location / warehouse name (set it in Settings → Delhivery)");
   const name = required(shippingAddress.name, "Customer name");
@@ -78,15 +77,24 @@ export function buildDelhiveryReversePickupPayload(
     .join("; ") || "Exchange reverse pickup";
   const totalQuantity = request.items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0) || 1;
 
+  // Per Delhivery's API: a reverse pickup is a normal shipment with
+  // payment_mode "Pickup" — there is NO shipment_type field. With "Pickup", the
+  // consignee fields (name/add/pin/...) are the CUSTOMER (where Delhivery picks
+  // up) and the return_* fields are the merchant WAREHOUSE (where the item is
+  // dropped). Delhivery prioritizes the return address as the delivery point, so
+  // these must be the warehouse — not the customer. The waybill is optional and
+  // auto-generated. When warehouse details aren't set, we omit return_* and let
+  // pickup_location resolve the drop.
+  const warehousePhone = toDelhiveryPhone(warehouse.phone);
+  const warehousePin = toDelhiveryPincode(warehouse.pin);
+  const hasWarehouseAddress = Boolean(clean(warehouse.address));
+
   return {
     pickup_location: {
       name: pickup,
     },
     shipments: [
       {
-        // Reverse pickups don't auto-assign a waybill — Delhivery requires one
-        // from the merchant's master series (fetched before this call).
-        waybill: required(waybill, "Delhivery waybill"),
         order: `EX-${order}-${request.id.slice(0, 8)}`,
         name,
         phone,
@@ -99,13 +107,12 @@ export function buildDelhiveryReversePickupPayload(
         products_desc: productDescription,
         quantity: totalQuantity,
         payment_mode: "Pickup",
-        return_name: name,
-        return_phone: phone,
-        return_add: address,
-        return_city: city,
-        return_state: state,
-        return_pin: pin,
-        shipment_type: "reverse",
+        return_name: hasWarehouseAddress ? (clean(warehouse.name) || pickup) : undefined,
+        return_phone: hasWarehouseAddress ? (warehousePhone || undefined) : undefined,
+        return_add: hasWarehouseAddress ? clean(warehouse.address) : undefined,
+        return_city: hasWarehouseAddress ? (clean(warehouse.city) || undefined) : undefined,
+        return_state: hasWarehouseAddress ? (clean(warehouse.state) || undefined) : undefined,
+        return_pin: hasWarehouseAddress ? (warehousePin || undefined) : undefined,
       },
     ],
   };
@@ -138,8 +145,9 @@ export function normalizeDelhiveryReversePickupResponse(
   const awb = pickFirstString(firstPackage, ["waybill", "awb", "AWB", "tracking_number"]) || pickFirstString(root, ["waybill", "awb", "AWB"]);
   const providerReference = pickFirstString(firstPackage, ["refnum", "reference", "order", "client"])
     || pickFirstString(root, ["refnum", "reference", "order", "client"]);
-  // Delhivery echoes the waybill we sent even on a failed package, so a non-empty
-  // awb alone no longer proves success — check the explicit flags + package status.
+  // A package can carry a waybill (auto-generated) yet still be a failed manifest,
+  // so a non-empty awb alone doesn't prove success — check the explicit success
+  // flag and the per-package status.
   const packageStatus = pickFirstString(firstPackage, ["status"]) || "";
   const packageFailed = /fail/i.test(packageStatus);
   const explicitFailure = root.success === false || root.success === "false" || packageFailed;
@@ -173,22 +181,7 @@ export async function createDelhiveryReversePickup(
     throw new DelhiveryReversePickupError(runtime.reason, 503);
   }
 
-  // Reverse pickups require a pre-fetched waybill from Delhivery's master series;
-  // a blank one fails with "Waybill does not match master waybill pattern".
-  let waybill: string;
-  try {
-    waybill = await fetchDelhiveryWaybill(runtime);
-  } catch (error) {
-    if (error instanceof DelhiveryWaybillError) {
-      throw new DelhiveryReversePickupError(error.message, error.statusCode);
-    }
-    throw new DelhiveryReversePickupError(
-      error instanceof Error ? error.message : "Delhivery waybill fetch failed.",
-      502,
-    );
-  }
-
-  const payload = buildDelhiveryReversePickupPayload(request, runtime.pickupLocationName, shippingAddress, waybill);
+  const payload = buildDelhiveryReversePickupPayload(request, runtime.pickupLocationName, shippingAddress, runtime.warehouse);
 
   try {
     return await postReversePickup(runtime, payload);
