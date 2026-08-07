@@ -1,6 +1,7 @@
 import { toDelhiveryPhone, toDelhiveryPincode, type DelhiveryRuntimeConfig } from "./delhivery-runtime";
 import type { ResolvedShippingAddress } from "../exchange/pickup-address";
 import { ensureDelhiveryWarehouse, DelhiveryWarehouseError } from "./delhivery-warehouse";
+import { fetchDelhiveryWaybill, DelhiveryWaybillError } from "./delhivery-waybill";
 
 type ExchangeRequestForReversePickup = {
   id: string;
@@ -61,6 +62,7 @@ export function buildDelhiveryReversePickupPayload(
   request: ExchangeRequestForReversePickup,
   pickupLocationName: string,
   shippingAddress: ResolvedShippingAddress,
+  waybill: string,
 ) {
   const pickup = required(pickupLocationName, "Delhivery pickup location / warehouse name (set it in Settings → Delhivery)");
   const name = required(shippingAddress.name, "Customer name");
@@ -82,6 +84,9 @@ export function buildDelhiveryReversePickupPayload(
     },
     shipments: [
       {
+        // Reverse pickups don't auto-assign a waybill — Delhivery requires one
+        // from the merchant's master series (fetched before this call).
+        waybill: required(waybill, "Delhivery waybill"),
         order: `EX-${order}-${request.id.slice(0, 8)}`,
         name,
         phone,
@@ -115,6 +120,10 @@ function pickFirstString(source: unknown, keys: string[]): string | null {
       const cleaned = clean(value);
       if (cleaned) return cleaned;
     }
+    if (Array.isArray(value)) {
+      const joined = value.map((entry) => clean(entry)).filter(Boolean).join("; ");
+      if (joined) return joined;
+    }
   }
   return null;
 }
@@ -129,11 +138,19 @@ export function normalizeDelhiveryReversePickupResponse(
   const awb = pickFirstString(firstPackage, ["waybill", "awb", "AWB", "tracking_number"]) || pickFirstString(root, ["waybill", "awb", "AWB"]);
   const providerReference = pickFirstString(firstPackage, ["refnum", "reference", "order", "client"])
     || pickFirstString(root, ["refnum", "reference", "order", "client"]);
-  const success = root.success === true || root.success === "true" || Boolean(awb);
+  // Delhivery echoes the waybill we sent even on a failed package, so a non-empty
+  // awb alone no longer proves success — check the explicit flags + package status.
+  const packageStatus = pickFirstString(firstPackage, ["status"]) || "";
+  const packageFailed = /fail/i.test(packageStatus);
+  const explicitFailure = root.success === false || root.success === "false" || packageFailed;
+  const explicitSuccess = root.success === true || root.success === "true";
+  const success = !explicitFailure && (explicitSuccess || Boolean(awb));
 
   if (!success) {
-    const message = pickFirstString(root, ["error", "message", "rmk"])
-      || pickFirstString(firstPackage, ["error", "message", "remarks", "rmk"])
+    // Prefer the package-level remarks (actionable, e.g. "Waybill does not match
+    // master waybill pattern") over the generic top-level rmk.
+    const message = pickFirstString(firstPackage, ["remarks", "error", "message", "rmk"])
+      || pickFirstString(root, ["error", "message", "rmk"])
       || "Delhivery reverse pickup creation failed.";
     throw new DelhiveryReversePickupError(message, 502);
   }
@@ -156,7 +173,22 @@ export async function createDelhiveryReversePickup(
     throw new DelhiveryReversePickupError(runtime.reason, 503);
   }
 
-  const payload = buildDelhiveryReversePickupPayload(request, runtime.pickupLocationName, shippingAddress);
+  // Reverse pickups require a pre-fetched waybill from Delhivery's master series;
+  // a blank one fails with "Waybill does not match master waybill pattern".
+  let waybill: string;
+  try {
+    waybill = await fetchDelhiveryWaybill(runtime);
+  } catch (error) {
+    if (error instanceof DelhiveryWaybillError) {
+      throw new DelhiveryReversePickupError(error.message, error.statusCode);
+    }
+    throw new DelhiveryReversePickupError(
+      error instanceof Error ? error.message : "Delhivery waybill fetch failed.",
+      502,
+    );
+  }
+
+  const payload = buildDelhiveryReversePickupPayload(request, runtime.pickupLocationName, shippingAddress, waybill);
 
   try {
     return await postReversePickup(runtime, payload);
