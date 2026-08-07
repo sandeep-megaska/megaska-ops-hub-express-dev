@@ -3,6 +3,7 @@ import { prisma } from "../../../../../../../services/db/prisma";
 import { REVERSE_PICKUP_WINDOW_LOCK_REASON, isWithinReversePickupWindow } from "../../../../../../../services/exchange/deadlines";
 import { canTransitionExchangeStatus } from "../../../../../../../services/exchange/lifecycle";
 import { createDelhiveryReversePickup, DelhiveryReversePickupError } from "../../../../../../../services/logistics/delhivery-reverse-pickup";
+import { resolveDelhiveryRuntimeConfig } from "../../../../../../../services/logistics/delhivery-runtime";
 import { ShopResolutionError } from "../../../../../../../services/shopify/shop";
 import { requireAdminShopFromRequest } from "../../../../../../../services/shopify/admin-auth";
 import { notifyExchangeMilestone } from "../../../../../../../services/notifications/exchange-milestones";
@@ -43,7 +44,8 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
       return NextResponse.json({ request, shipment: existingReverseShipment, idempotent: true });
     }
 
-    const delhiveryResult = await createDelhiveryReversePickup(request);
+    const runtime = await resolveDelhiveryRuntimeConfig(shop.id);
+    const delhiveryResult = await createDelhiveryReversePickup(request, runtime);
     const nextStatus = canTransitionExchangeStatus(request.status, "PICKUP_SCHEDULED") ? "PICKUP_SCHEDULED" : "PICKUP_PENDING";
 
     const result = await prisma.$transaction(async (tx) => {

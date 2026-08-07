@@ -1,4 +1,4 @@
-import { getDelhiveryCapabilityState } from "./delhivery";
+import type { DelhiveryRuntimeConfig } from "./delhivery-runtime";
 
 type ExchangeRequestForReversePickup = {
   id: string;
@@ -57,24 +57,22 @@ function joinAddress(...parts: unknown[]) {
   return parts.map(clean).filter(Boolean).join(", ");
 }
 
-function getEnv(name: string) {
-  return clean(process.env[name]);
-}
-
-function resolveEndpoint() {
-  const baseUrl = getEnv("DELHIVERY_BASE_URL").replace(/\/+$/, "");
-  const path = getEnv("DELHIVERY_REVERSE_PICKUP_PATH") || "/api/cmu/create.json";
+function resolveEndpoint(runtime: DelhiveryRuntimeConfig) {
+  const baseUrl = runtime.baseUrl.replace(/\/+$/, "");
+  const path = runtime.reversePickupPath;
   return `${baseUrl}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
-function buildTrackingUrl(awb: string | null) {
+function buildTrackingUrl(awb: string | null, template: string | null) {
   if (!awb) return null;
-  const template = getEnv("DELHIVERY_TRACKING_URL_TEMPLATE");
   if (template) return template.replace("{awb}", encodeURIComponent(awb));
   return `https://www.delhivery.com/track/package/${encodeURIComponent(awb)}`;
 }
 
-export function buildDelhiveryReversePickupPayload(request: ExchangeRequestForReversePickup) {
+export function buildDelhiveryReversePickupPayload(
+  request: ExchangeRequestForReversePickup,
+  pickupLocationName: string,
+) {
   const customer = request.customerProfile;
   const name = required(request.customerNameSnapshot || customer?.fullName, "Customer name");
   const phone = required(request.customerPhoneSnapshot || customer?.phoneE164, "Customer phone");
@@ -91,7 +89,7 @@ export function buildDelhiveryReversePickupPayload(request: ExchangeRequestForRe
 
   return {
     pickup_location: {
-      name: getEnv("DELHIVERY_PICKUP_LOCATION_NAME") || "Megaska Returns",
+      name: pickupLocationName || "Megaska Returns",
     },
     shipments: [
       {
@@ -132,7 +130,10 @@ function pickFirstString(source: unknown, keys: string[]): string | null {
   return null;
 }
 
-export function normalizeDelhiveryReversePickupResponse(rawResponse: unknown): DelhiveryReversePickupResult {
+export function normalizeDelhiveryReversePickupResponse(
+  rawResponse: unknown,
+  trackingUrlTemplate: string | null,
+): DelhiveryReversePickupResult {
   const root = rawResponse && typeof rawResponse === "object" ? (rawResponse as Record<string, unknown>) : {};
   const packages = Array.isArray(root.packages) ? root.packages : Array.isArray(root.Package) ? root.Package : [];
   const firstPackage = packages[0];
@@ -151,24 +152,25 @@ export function normalizeDelhiveryReversePickupResponse(rawResponse: unknown): D
   return {
     providerReference,
     awb,
-    trackingUrl: buildTrackingUrl(awb),
+    trackingUrl: buildTrackingUrl(awb, trackingUrlTemplate),
     status: awb ? "SCHEDULED" : "PENDING",
     rawResponse,
   };
 }
 
-export async function createDelhiveryReversePickup(request: ExchangeRequestForReversePickup): Promise<DelhiveryReversePickupResult> {
-  const capability = getDelhiveryCapabilityState();
-  if (!capability.configured) {
-    throw new DelhiveryReversePickupError(capability.reason, 503);
+export async function createDelhiveryReversePickup(
+  request: ExchangeRequestForReversePickup,
+  runtime: DelhiveryRuntimeConfig,
+): Promise<DelhiveryReversePickupResult> {
+  if (!runtime.configured) {
+    throw new DelhiveryReversePickupError(runtime.reason, 503);
   }
 
-  const token = getEnv("DELHIVERY_API_TOKEN");
-  const payload = buildDelhiveryReversePickupPayload(request);
-  const response = await fetch(resolveEndpoint(), {
+  const payload = buildDelhiveryReversePickupPayload(request, runtime.pickupLocationName);
+  const response = await fetch(resolveEndpoint(runtime), {
     method: "POST",
     headers: {
-      Authorization: `Token ${token}`,
+      Authorization: `Token ${runtime.apiToken}`,
       Accept: "application/json",
       "Content-Type": "application/x-www-form-urlencoded",
     },
@@ -187,5 +189,5 @@ export async function createDelhiveryReversePickup(request: ExchangeRequestForRe
     throw new DelhiveryReversePickupError(`Delhivery API returned HTTP ${response.status}.`, 502);
   }
 
-  return normalizeDelhiveryReversePickupResponse(rawResponse);
+  return normalizeDelhiveryReversePickupResponse(rawResponse, runtime.trackingUrlTemplate);
 }

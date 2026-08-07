@@ -2,6 +2,7 @@ import type { ShipmentStatus, ShipmentTracking } from "../../generated/prisma";
 import { prisma } from "../db/prisma";
 import { canTransitionExchangeStatus } from "./lifecycle";
 import { DelhiveryAdapter, DelhiveryTrackingError } from "../logistics/delhivery-adapter";
+import { resolveDelhiveryRuntimeConfig } from "../logistics/delhivery-runtime";
 import { notifyExchangeMilestone } from "../notifications/exchange-milestones";
 
 // Single source of truth for turning a Delhivery tracking snapshot into a
@@ -105,7 +106,8 @@ export async function syncExchangeShipment(
     throw new DelhiveryTrackingError("Delhivery AWB is required before syncing tracking.", 400);
   }
 
-  const snapshot = await new DelhiveryAdapter().fetchTracking({ awb: shipment.awb });
+  const runtime = await resolveDelhiveryRuntimeConfig(request.shopId);
+  const snapshot = await new DelhiveryAdapter(runtime).fetchTracking({ awb: shipment.awb });
   if (!snapshot) {
     throw new DelhiveryTrackingError("Delhivery tracking is not configured.", 503);
   }
