@@ -1,4 +1,4 @@
-import type { DelhiveryRuntimeConfig } from "./delhivery-runtime";
+import { toDelhiveryPhone, toDelhiveryPincode, type DelhiveryRuntimeConfig } from "./delhivery-runtime";
 
 // Register the merchant's pickup warehouse ("ClientWarehouse") with Delhivery
 // from the details they enter in Settings → Delhivery, so they never have to
@@ -32,17 +32,19 @@ export function missingWarehouseFields(runtime: DelhiveryRuntimeConfig): string[
 
 function buildWarehousePayload(runtime: DelhiveryRuntimeConfig) {
   const w = runtime.warehouse;
+  const phone = toDelhiveryPhone(w.phone);
+  const pin = toDelhiveryPincode(w.pin);
   return {
     name: w.name,
     registered_name: w.name,
     email: clean(w.email) || undefined,
-    phone: w.phone,
+    phone,
     address: w.address,
     city: w.city,
     country: "India",
-    pin: w.pin,
+    pin,
     return_address: w.address,
-    return_pin: w.pin,
+    return_pin: pin,
     return_city: w.city,
     return_state: w.state,
     return_country: "India",
@@ -90,6 +92,12 @@ export async function ensureDelhiveryWarehouse(runtime: DelhiveryRuntimeConfig):
   });
 
   const rawText = await response.text();
+  console.info("[DELHIVERY WAREHOUSE CREATE] response", {
+    status: response.status,
+    ok: response.ok,
+    warehouse: runtime.warehouse.name,
+    body: rawText.slice(0, 800),
+  });
   let data: unknown = rawText;
   try {
     data = rawText ? JSON.parse(rawText) : null;
