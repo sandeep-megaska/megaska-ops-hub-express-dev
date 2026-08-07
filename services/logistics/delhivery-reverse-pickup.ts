@@ -190,11 +190,13 @@ async function postReversePickup(
   });
 
   const rawText = await response.text();
-  // Diagnostics: the raw Delhivery response (contains no secrets). Lets us see
-  // exactly what Delhivery rejected in the Vercel logs.
+  // Diagnostics: the exact outgoing payload + raw Delhivery response (order data
+  // only, no API secrets). Lets us see precisely what we sent and what Delhivery
+  // rejected in the Vercel logs when Delhivery returns its generic internal error.
   console.info("[DELHIVERY REVERSE PICKUP] response", {
     status: response.status,
     ok: response.ok,
+    sentPayload: JSON.stringify(payload).slice(0, 1200),
     body: rawText.slice(0, 800),
   });
   let rawResponse: unknown = rawText;
