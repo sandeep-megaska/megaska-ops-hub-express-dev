@@ -1,3 +1,4 @@
+uid = "b09d87d5-68f3-ea73-3c8c-53be1bccd1f8add193c8"
 # Admin LINK extension (not an action/modal). It adds "GST Invoice" to the order
 # page's More actions menu and navigates the merchant INTO the embedded app at
 # `url` when clicked — Shopify appends the launching store + order id as query
