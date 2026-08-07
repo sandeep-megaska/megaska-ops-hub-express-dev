@@ -79,9 +79,6 @@ export default function RootLayout({
                     <AdminNavLink href="/admin/billing" className="mk-nav-link">
                       Billing
                     </AdminNavLink>
-                    <AdminNavLink href="/admin/express-checkout" className="mk-nav-link">
-                      Express Checkout Settings
-                    </AdminNavLink>
                     <AdminNavLink href="/admin/partial-cod" className="mk-nav-link">
                       Partial COD
                     </AdminNavLink>
