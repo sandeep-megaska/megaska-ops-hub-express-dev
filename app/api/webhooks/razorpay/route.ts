@@ -1,8 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { prisma } from "../../../../services/db/prisma";
 import { verifyRazorpayWebhookSignature } from "../../../../services/exchange/razorpay";
 import { canTransitionExchangeStatus } from "../../../../services/exchange/lifecycle";
 import { sendExchangePaymentReceivedOpsEmail } from "../../../../services/notifications/exchange";
+import { autoCreateReversePickupForRequest } from "../../../../services/exchange/auto-reverse-pickup";
 
 function mapPaymentStatus(event: string) {
   if (event === "payment_link.paid") return "PAID";
@@ -176,6 +177,35 @@ export async function POST(req: NextRequest) {
       requestedSize: payment.request.items[0]?.requestedSize,
       paymentAmountPaise: updatedPayment.amount,
       paymentCurrency: updatedPayment.currency,
+    });
+
+    // Phase 1 automation: auto-create the Delhivery reverse pickup now that the
+    // fee is paid, instead of waiting for an admin to click "Create reverse
+    // pickup". Runs via after() so the (external) courier call happens AFTER this
+    // webhook responds — Razorpay gets a fast 200 and never retries on our
+    // latency. The helper is idempotent and non-throwing: on any Delhivery
+    // failure the request stays at PAYMENT_RECEIVED with its PENDING placeholder
+    // shipment, and the admin button remains the fallback (no regression).
+    const requestIdForPickup = payment.requestId;
+    after(async () => {
+      const result = await autoCreateReversePickupForRequest(requestIdForPickup);
+      if (result.ok && result.awb) {
+        console.info("[EXCHANGE AUTO PICKUP] reverse pickup created", {
+          requestId: requestIdForPickup,
+          awb: result.awb,
+          status: result.status,
+        });
+      } else if (result.ok) {
+        console.info("[EXCHANGE AUTO PICKUP] no action", {
+          requestId: requestIdForPickup,
+          reason: result.reason,
+        });
+      } else {
+        console.warn("[EXCHANGE AUTO PICKUP] not created — manual fallback available", {
+          requestId: requestIdForPickup,
+          reason: result.reason,
+        });
+      }
     });
   } else if (event !== "payment_link.expired" && event !== "payment_link.cancelled" && event !== "payment.failed") {
     console.info("[RAZORPAY WEBHOOK] Unhandled event", { event, paymentLinkId });
