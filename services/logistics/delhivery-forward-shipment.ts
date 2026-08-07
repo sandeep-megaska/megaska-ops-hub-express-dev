@@ -222,6 +222,7 @@ async function postForwardShipment(
   console.info("[DELHIVERY REPLACEMENT] response", {
     status: response.status,
     ok: response.ok,
+    sentPayload: JSON.stringify(payload).slice(0, 1200),
     body: rawText.slice(0, 800),
   });
   let rawResponse: unknown = rawText;
