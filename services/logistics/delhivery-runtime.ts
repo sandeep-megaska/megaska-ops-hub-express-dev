@@ -35,7 +35,6 @@ export interface DelhiveryRuntimeConfig {
   trackingPath: string;
   trackingUrlTemplate: string | null;
   clientWarehouseCreatePath: string;
-  waybillFetchPath: string;
 }
 
 function env(name: string) {
@@ -62,7 +61,6 @@ function delhiveryPaths() {
     trackingPath: env("DELHIVERY_TRACKING_PATH") || "/api/v1/packages/json/",
     trackingUrlTemplate: env("DELHIVERY_TRACKING_URL_TEMPLATE") || null,
     clientWarehouseCreatePath: env("DELHIVERY_CLIENT_WAREHOUSE_CREATE_PATH") || "/api/backend/clientwarehouse/create/",
-    waybillFetchPath: env("DELHIVERY_WAYBILL_FETCH_PATH") || "/waybill/api/bulk/json/",
   };
 }
 
