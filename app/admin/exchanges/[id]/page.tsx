@@ -6,7 +6,7 @@ import {
   resolveShopConfig,
 } from "../../../../services/shopify/shop";
 import ExchangeLifecycleControls from "./ExchangeLifecycleControls";
-import { getDelhiveryCapabilityState } from "../../../../services/logistics/delhivery";
+import { resolveDelhiveryRuntimeConfig } from "../../../../services/logistics/delhivery-runtime";
 import { headers } from "next/headers";
 
 export const dynamic = "force-dynamic";
@@ -79,7 +79,10 @@ export default async function AdminExchangeDetailPage({
   }
 
   const reverseShipment = request.shipments.find((shipment) => shipment.direction === "REVERSE_PICKUP") || null;
-  const delhiveryCapability = getDelhiveryCapabilityState();
+  // Per-shop Delhivery capability (merchant's own credentials). Only expose the
+  // {configured, reason} view to the client — never the resolved API token.
+  const delhiveryRuntime = await resolveDelhiveryRuntimeConfig(shop.id);
+  const delhiveryCapability = { configured: delhiveryRuntime.configured, reason: delhiveryRuntime.reason };
   const forwardShipment = request.shipments.find((shipment) => shipment.direction === "FORWARD_REPLACEMENT") || null;
   const nextTransitions = allowedStatusTransitions[request.status] || [];
 

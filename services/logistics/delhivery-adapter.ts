@@ -1,5 +1,5 @@
 import { CourierProvider, MegaskaOrderStatus } from "../../generated/prisma";
-import { getDelhiveryCapabilityState } from "./delhivery";
+import { buildEnvDelhiveryRuntimeConfig, type DelhiveryRuntimeConfig } from "./delhivery-runtime";
 import type { CourierAdapter, CourierTrackingEvent, CourierTrackingSnapshot } from "./courier-service";
 
 const DELHIVERY_STATUS_MAP: Record<string, MegaskaOrderStatus> = {
@@ -28,13 +28,9 @@ function clean(value: unknown) {
   return String(value || "").trim();
 }
 
-function getEnv(name: string) {
-  return clean(process.env[name]);
-}
-
-function resolveTrackingEndpoint(awb: string) {
-  const baseUrl = getEnv("DELHIVERY_BASE_URL").replace(/\/+$/, "");
-  const path = getEnv("DELHIVERY_TRACKING_PATH") || "/api/v1/packages/json/";
+function resolveTrackingEndpoint(runtime: DelhiveryRuntimeConfig, awb: string) {
+  const baseUrl = runtime.baseUrl.replace(/\/+$/, "");
+  const path = runtime.trackingPath;
   const endpoint = `${baseUrl}${path.startsWith("/") ? path : `/${path}`}`;
   const url = new URL(endpoint);
   if (!url.searchParams.has("waybill") && !url.searchParams.has("awb")) {
@@ -43,9 +39,8 @@ function resolveTrackingEndpoint(awb: string) {
   return url.toString();
 }
 
-function buildTrackingUrl(awb: string | null) {
+function buildTrackingUrl(awb: string | null, template: string | null) {
   if (!awb) return null;
-  const template = getEnv("DELHIVERY_TRACKING_URL_TEMPLATE");
   if (template) return template.replace("{awb}", encodeURIComponent(awb));
   return `https://www.delhivery.com/track/package/${encodeURIComponent(awb)}`;
 }
@@ -100,7 +95,7 @@ export function normalizeDelhiveryRawStatus(rawStatus: string | null): MegaskaOr
   return "IN_TRANSIT";
 }
 
-export function normalizeDelhiveryTrackingResponse(rawResponse: unknown, awb: string | null, providerReference?: string | null): CourierTrackingSnapshot {
+export function normalizeDelhiveryTrackingResponse(rawResponse: unknown, awb: string | null, providerReference?: string | null, trackingUrlTemplate: string | null = null): CourierTrackingSnapshot {
   const shipment = findFirstObjectWithAnyKey(rawResponse, ["Status", "status", "ScanType", "Scan", "Instructions"]) || {};
   const rawStatus = pickFirstString(shipment, ["Status", "status", "ScanType", "Scan", "Instructions", "status_type"]);
   const statusUpdatedAt = parseDate(pickFirstString(shipment, ["StatusDateTime", "status_date_time", "date", "ScanDateTime", "scan_date_time"]));
@@ -122,7 +117,7 @@ export function normalizeDelhiveryTrackingResponse(rawResponse: unknown, awb: st
     provider: CourierProvider.DELHIVERY,
     providerReference: providerReference || null,
     awb,
-    trackingUrl: buildTrackingUrl(awb),
+    trackingUrl: buildTrackingUrl(awb, trackingUrlTemplate),
     normalizedStatus: normalizeDelhiveryRawStatus(rawStatus),
     rawStatus,
     statusUpdatedAt: statusUpdatedAt || new Date(),
@@ -134,15 +129,19 @@ export function normalizeDelhiveryTrackingResponse(rawResponse: unknown, awb: st
 export class DelhiveryAdapter implements CourierAdapter {
   provider = CourierProvider.DELHIVERY;
 
+  // Optional per-shop runtime config; falls back to env for any legacy/no-shop
+  // caller (e.g. a generic CourierService path).
+  constructor(private readonly runtime?: DelhiveryRuntimeConfig) {}
+
   async fetchTracking(input: { awb?: string | null; providerReference?: string | null }): Promise<CourierTrackingSnapshot | null> {
-    const capability = getDelhiveryCapabilityState();
-    if (!capability.configured) return null;
+    const runtime = this.runtime ?? buildEnvDelhiveryRuntimeConfig();
+    if (!runtime.configured) return null;
     const awb = clean(input.awb);
     if (!awb) throw new DelhiveryTrackingError("AWB is required to fetch Delhivery tracking.", 400);
 
-    const response = await fetch(resolveTrackingEndpoint(awb), {
+    const response = await fetch(resolveTrackingEndpoint(runtime, awb), {
       method: "GET",
-      headers: { Authorization: `Token ${getEnv("DELHIVERY_API_TOKEN")}`, Accept: "application/json" },
+      headers: { Authorization: `Token ${runtime.apiToken}`, Accept: "application/json" },
     });
     const rawText = await response.text();
     let rawResponse: unknown = rawText;
@@ -153,6 +152,6 @@ export class DelhiveryAdapter implements CourierAdapter {
     }
 
     if (!response.ok) throw new DelhiveryTrackingError(`Delhivery tracking API returned HTTP ${response.status}.`, 502);
-    return normalizeDelhiveryTrackingResponse(rawResponse, awb, input.providerReference);
+    return normalizeDelhiveryTrackingResponse(rawResponse, awb, input.providerReference, runtime.trackingUrlTemplate);
   }
 }
