@@ -61,6 +61,7 @@ export function buildDelhiveryReversePickupPayload(
   pickupLocationName: string,
   shippingAddress: ResolvedShippingAddress,
 ) {
+  const pickup = required(pickupLocationName, "Delhivery pickup location / warehouse name (set it in Settings → Delhivery)");
   const name = required(shippingAddress.name, "Customer name");
   const phone = required(shippingAddress.phone, "Customer phone");
   const address = required(joinAddress(shippingAddress.address1, shippingAddress.address2), "Customer address");
@@ -76,7 +77,7 @@ export function buildDelhiveryReversePickupPayload(
 
   return {
     pickup_location: {
-      name: pickupLocationName || "Megaska Returns",
+      name: pickup,
     },
     shipments: [
       {
@@ -177,5 +178,24 @@ export async function createDelhiveryReversePickup(
     throw new DelhiveryReversePickupError(`Delhivery API returned HTTP ${response.status}.`, 502);
   }
 
-  return normalizeDelhiveryReversePickupResponse(rawResponse, runtime.trackingUrlTemplate);
+  try {
+    return normalizeDelhiveryReversePickupResponse(rawResponse, runtime.trackingUrlTemplate);
+  } catch (error) {
+    throw remapWarehouseError(error, runtime.pickupLocationName);
+  }
+}
+
+// Turn Delhivery's cryptic "ClientWarehouse matching query does not exist" into
+// an actionable message: the pickup-location name we sent isn't a warehouse
+// registered in the merchant's Delhivery account.
+function remapWarehouseError(error: unknown, pickupLocationName: string): DelhiveryReversePickupError {
+  if (error instanceof DelhiveryReversePickupError && /clientwarehouse|warehouse|matching query does not exist/i.test(error.message)) {
+    return new DelhiveryReversePickupError(
+      `Delhivery has no pickup warehouse named "${pickupLocationName || "(not set)"}". Register this warehouse in your Delhivery account, then set its exact name in Settings → Delhivery → "Pickup Location / Warehouse Name". (Delhivery said: ${error.message})`,
+      422,
+    );
+  }
+  return error instanceof DelhiveryReversePickupError
+    ? error
+    : new DelhiveryReversePickupError(error instanceof Error ? error.message : "Delhivery reverse pickup creation failed.", 502);
 }

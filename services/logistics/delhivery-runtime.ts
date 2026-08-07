@@ -105,7 +105,8 @@ export async function resolveDelhiveryRuntimeConfig(
     reason: buildReason(hasCredentials, enabled),
     apiToken,
     baseUrl,
-    pickupLocationName: merchant.pickupLocation || env("DELHIVERY_PICKUP_LOCATION_NAME") || "Megaska Returns",
+    // A real merchant's warehouse name must be their own — no platform default.
+    pickupLocationName: merchant.pickupLocation || env("DELHIVERY_PICKUP_LOCATION_NAME") || "",
     originPincode: merchant.originPincode || env("DELHIVERY_ORIGIN_PINCODE"),
     ...delhiveryPaths(),
   };
