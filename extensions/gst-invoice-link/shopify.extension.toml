@@ -1,0 +1,15 @@
+api_version = "2026-07"
+
+# Admin LINK extension (not an action/modal). It adds "GST Invoice" to the order
+# page's More actions menu and navigates the merchant INTO the embedded app at
+# `url` when clicked — Shopify appends the launching store + order id as query
+# params. This replaces the old sandboxed admin *action* popup, whose in-iframe
+# round-trips (fetchShopDomain + by-shopify-id) were the source of the delay.
+[[extensions]]
+name = "GST Invoice"
+handle = "gst-invoice-link"
+type = "admin_link"
+
+[[extensions.targeting]]
+target = "admin.order-details.action.link"
+url = "/admin/gst/orders/invoice"
