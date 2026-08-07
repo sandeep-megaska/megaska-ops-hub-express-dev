@@ -5,6 +5,7 @@ import { canTransitionExchangeStatus } from "../../../../../../../services/excha
 import { createDelhiveryReversePickup, DelhiveryReversePickupError } from "../../../../../../../services/logistics/delhivery-reverse-pickup";
 import { ShopResolutionError } from "../../../../../../../services/shopify/shop";
 import { requireAdminShopFromRequest } from "../../../../../../../services/shopify/admin-auth";
+import { notifyExchangeMilestone } from "../../../../../../../services/notifications/exchange-milestones";
 
 const ELIGIBLE_STATUSES = ["PAYMENT_RECEIVED", "APPROVED", "PICKUP_PENDING"];
 
@@ -90,6 +91,9 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
 
       return { request: updatedRequest, shipment };
     });
+
+    // Notify customer + admin that the pickup is scheduled (idempotent).
+    await notifyExchangeMilestone(request.id, result.request.status);
 
     return NextResponse.json(result);
   } catch (error) {

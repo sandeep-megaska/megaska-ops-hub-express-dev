@@ -5,6 +5,7 @@ import {
   createDelhiveryReversePickup,
   DelhiveryReversePickupError,
 } from "../logistics/delhivery-reverse-pickup";
+import { notifyExchangeMilestone } from "../notifications/exchange-milestones";
 
 // Same eligibility gate the manual admin route uses
 // (app/api/admin/exchange-requests/[id]/delhivery/reverse-pickup/route.ts).
@@ -132,6 +133,10 @@ export async function autoCreateReversePickupForRequest(
 
       return upserted;
     });
+
+    // Notify customer + admin that the pickup is scheduled (idempotent per
+    // request+status, so it won't double-fire if tracking sync also reports it).
+    await notifyExchangeMilestone(request.id, nextStatus);
 
     return { ok: true, shipmentId: shipment.id, awb: shipment.awb, status: nextStatus };
   } catch (error) {

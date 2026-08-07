@@ -2,6 +2,7 @@ import type { ShipmentStatus, ShipmentTracking } from "../../generated/prisma";
 import { prisma } from "../db/prisma";
 import { canTransitionExchangeStatus } from "./lifecycle";
 import { DelhiveryAdapter, DelhiveryTrackingError } from "../logistics/delhivery-adapter";
+import { notifyExchangeMilestone } from "../notifications/exchange-milestones";
 
 // Single source of truth for turning a Delhivery tracking snapshot into a
 // ShipmentTracking status + the next exchange-request status. Both the manual
@@ -168,6 +169,13 @@ export async function syncExchangeShipment(
 
     return persisted;
   });
+
+  // Notify customer + admin on an actual status transition. Idempotent per
+  // (request, status), so the 30-min cron and the manual "Sync tracking" button
+  // never double-notify the same milestone.
+  if (changed) {
+    await notifyExchangeMilestone(request.id, nextStatus);
+  }
 
   return {
     shipment: updatedShipment,

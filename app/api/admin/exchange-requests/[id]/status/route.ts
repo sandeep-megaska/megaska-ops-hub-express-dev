@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { prisma } from "../../../../../../services/db/prisma";
 import {
   ShopResolutionError,
@@ -8,10 +8,8 @@ import {
   allowedStatusTransitions,
   canTransitionExchangeStatus,
 } from "../../../../../../services/exchange/lifecycle";
-import {
-  sendExchangeApprovedPaymentRequiredEmail,
-  sendExchangeStatusChangedEmail,
-} from "../../../../../../services/notifications/exchange";
+import { sendExchangeApprovedPaymentRequiredEmail } from "../../../../../../services/notifications/exchange";
+import { notifyExchangeMilestone } from "../../../../../../services/notifications/exchange-milestones";
 import { createReversePickupPaymentLink } from "../../../../../../services/exchange/razorpay";
 import { REVERSE_PICKUP_CURRENCY } from "../../../../../../services/exchange/constants";
 import {
@@ -286,19 +284,12 @@ export async function PATCH(
       }
     }
 
-    void sendExchangeStatusChangedEmail({
-      shopId: updated.shopId || "",
-      requestId: updated.id,
-      orderNumber: updated.orderNumber,
-      status: updated.status,
-      customerName: updated.customerNameSnapshot,
-      customerPhone: updated.customerPhoneSnapshot,
-      customerEmail: updated.customerEmailSnapshot,
-      itemTitle: updated.items[0]?.productTitle,
-      currentSize: updated.items[0]?.currentSize,
-      requestedSize: updated.items[0]?.requestedSize,
-      adminNote: updated.adminNote,
-    });
+    // Phase 3: centralized customer + admin milestone notifications for this
+    // transition. Runs via after() so the external email/WhatsApp calls happen
+    // after the response, and is idempotent per (request, status).
+    const notifiedStatus = updated.status;
+    const notifiedRequestId = updated.id;
+    after(() => notifyExchangeMilestone(notifiedRequestId, notifiedStatus));
 
     return NextResponse.json({ request: updated });
   } catch (error) {

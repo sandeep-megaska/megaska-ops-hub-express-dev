@@ -2,8 +2,8 @@ import { NextRequest, NextResponse, after } from "next/server";
 import { prisma } from "../../../../services/db/prisma";
 import { verifyRazorpayWebhookSignature } from "../../../../services/exchange/razorpay";
 import { canTransitionExchangeStatus } from "../../../../services/exchange/lifecycle";
-import { sendExchangePaymentReceivedOpsEmail } from "../../../../services/notifications/exchange";
 import { autoCreateReversePickupForRequest } from "../../../../services/exchange/auto-reverse-pickup";
+import { notifyExchangeMilestone } from "../../../../services/notifications/exchange-milestones";
 
 function mapPaymentStatus(event: string) {
   if (event === "payment_link.paid") return "PAID";
@@ -118,16 +118,16 @@ export async function POST(req: NextRequest) {
     !isDuplicatePaidWebhook &&
     (payment.status !== status || (status === "PAID" && payment.paymentId !== paymentId));
 
-  const updatedPayment = shouldUpdatePaymentStatus
-    ? await prisma.requestPayment.update({
-        where: { id: payment.id },
-        data: {
-          status: status as never,
-          paymentId,
-          paidAt: status === "PAID" ? payment.paidAt ?? new Date() : payment.paidAt,
-        },
-      })
-    : payment;
+  if (shouldUpdatePaymentStatus) {
+    await prisma.requestPayment.update({
+      where: { id: payment.id },
+      data: {
+        status: status as never,
+        paymentId,
+        paidAt: status === "PAID" ? payment.paidAt ?? new Date() : payment.paidAt,
+      },
+    });
+  }
 
   if (status === "PAID") {
     if (isDuplicatePaidWebhook) {
@@ -165,29 +165,16 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    void sendExchangePaymentReceivedOpsEmail({
-      shopId: payment.request.shopId || "",
-      requestId: payment.request.id,
-      orderNumber: payment.request.orderNumber,
-      status: "PAYMENT_RECEIVED",
-      customerName: payment.request.customerNameSnapshot,
-      customerPhone: payment.request.customerPhoneSnapshot,
-      customerEmail: payment.request.customerEmailSnapshot,
-      currentSize: payment.request.items[0]?.currentSize,
-      requestedSize: payment.request.items[0]?.requestedSize,
-      paymentAmountPaise: updatedPayment.amount,
-      paymentCurrency: updatedPayment.currency,
-    });
-
-    // Phase 1 automation: auto-create the Delhivery reverse pickup now that the
-    // fee is paid, instead of waiting for an admin to click "Create reverse
-    // pickup". Runs via after() so the (external) courier call happens AFTER this
-    // webhook responds — Razorpay gets a fast 200 and never retries on our
-    // latency. The helper is idempotent and non-throwing: on any Delhivery
-    // failure the request stays at PAYMENT_RECEIVED with its PENDING placeholder
-    // shipment, and the admin button remains the fallback (no regression).
+    // Phase 3: notify customer + admin of PAYMENT_RECEIVED, then (Phase 1)
+    // auto-create the Delhivery reverse pickup. Both run via after() so the
+    // external email/WhatsApp/courier calls happen AFTER this webhook responds —
+    // Razorpay gets a fast 200 and never retries on our latency. Both helpers are
+    // idempotent and non-throwing; on any Delhivery failure the request stays at
+    // PAYMENT_RECEIVED with its PENDING placeholder shipment and the admin button
+    // remains the fallback (no regression).
     const requestIdForPickup = payment.requestId;
     after(async () => {
+      await notifyExchangeMilestone(requestIdForPickup, "PAYMENT_RECEIVED");
       const result = await autoCreateReversePickupForRequest(requestIdForPickup);
       if (result.ok && result.awb) {
         console.info("[EXCHANGE AUTO PICKUP] reverse pickup created", {
