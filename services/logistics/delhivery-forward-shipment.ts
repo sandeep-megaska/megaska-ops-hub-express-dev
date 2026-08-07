@@ -144,6 +144,10 @@ function pickFirstString(source: unknown, keys: string[]): string | null {
       const cleaned = clean(value);
       if (cleaned) return cleaned;
     }
+    if (Array.isArray(value)) {
+      const joined = value.map((entry) => clean(entry)).filter(Boolean).join("; ");
+      if (joined) return joined;
+    }
   }
   return null;
 }
@@ -159,11 +163,20 @@ export function normalizeDelhiveryForwardShipmentResponse(
     || pickFirstString(root, ["waybill", "awb", "AWB", "tracking_number"]);
   const providerReference = pickFirstString(firstPackage, ["refnum", "reference", "order", "client", "sort_code"])
     || pickFirstString(root, ["refnum", "reference", "order", "client"]);
-  const success = root.success === true || root.success === "true" || Boolean(awb);
+  // A package can carry a waybill (auto-generated) yet still be a failed manifest,
+  // so a non-empty awb alone doesn't prove success — check the explicit success
+  // flag and the per-package status.
+  const packageStatus = pickFirstString(firstPackage, ["status"]) || "";
+  const packageFailed = /fail/i.test(packageStatus);
+  const explicitFailure = root.success === false || root.success === "false" || packageFailed;
+  const explicitSuccess = root.success === true || root.success === "true";
+  const success = !explicitFailure && (explicitSuccess || Boolean(awb));
 
   if (!success) {
-    const message = pickFirstString(root, ["error", "message", "rmk"])
-      || pickFirstString(firstPackage, ["error", "message", "remarks", "rmk"])
+    // Prefer the package-level remarks (actionable, e.g. "pin not serviceable")
+    // over the generic top-level rmk.
+    const message = pickFirstString(firstPackage, ["remarks", "error", "message", "rmk"])
+      || pickFirstString(root, ["error", "message", "rmk"])
       || "Delhivery replacement shipment creation failed.";
     throw new DelhiveryForwardShipmentError(message, 502);
   }
