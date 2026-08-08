@@ -231,6 +231,10 @@ async function saveMerchantSettings(
         showSecureBadge: formData.get("showSecureBadge") === "on",
         showTrustCopy: formData.get("showTrustCopy") === "on",
       },
+      cancellation: {
+        autoCancelUnfulfilledOnRequest:
+          formData.get("autoCancelUnfulfilledOnRequest") === "on",
+      },
       otpModalBranding: {
         logoUrl: formData.get("otpLogoUrl"),
         logoAlt: formData.get("otpLogoAlt"),
@@ -740,6 +744,16 @@ export default async function MerchantSettingsPage({
             <Check label="Show secure badge" name="showSecureBadge" defaultChecked={settings.checkout.showSecureBadge} />
             <Check label="Show trust copy" name="showTrustCopy" defaultChecked={settings.checkout.showTrustCopy} />
           </div>
+        </section>
+
+        <section id="cancellations" className={`${cardClass} grid gap-5`}>
+          <SectionHeader title="Cancellations" description="Automate cancellation requests that customers raise from their dashboard." />
+          <Check
+            label="Auto-cancel unfulfilled orders on customer request"
+            name="autoCancelUnfulfilledOnRequest"
+            defaultChecked={settings.cancellation.autoCancelUnfulfilledOnRequest}
+            help="When on, a cancellation request for an order that is still unfulfilled is processed automatically — the order is cancelled in Shopify (restocked, and prepaid payments refunded to source), with no admin action needed. The request and refund are still recorded in the dashboard. Fulfilled/shipped orders are never auto-cancelled."
+          />
         </section>
 
 

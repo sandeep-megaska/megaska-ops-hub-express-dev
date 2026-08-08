@@ -65,6 +65,7 @@ export type LoopDeskMerchantSettings = {
     iconSize: number;
   };
   checkout: { showSecureBadge: boolean; showTrustCopy: boolean };
+  cancellation: { autoCancelUnfulfilledOnRequest: boolean };
   otpModalBranding: {
     logoUrl: string | null;
     logoAlt: string;
@@ -651,6 +652,7 @@ export function validateLoopDeskMerchantSettingsPatch(
   const cart = isRecord(raw.cart) ? raw.cart : {};
   const account = isRecord(raw.account) ? raw.account : {};
   const checkout = isRecord(raw.checkout) ? raw.checkout : {};
+  const cancellation = isRecord(raw.cancellation) ? raw.cancellation : {};
   const otpModalBranding = isRecord(raw.otpModalBranding) ? raw.otpModalBranding : {};
   validateText(general.merchantName, "Merchant name", 120);
   validateText(general.supportEmail, "Support email", 254);
@@ -750,6 +752,7 @@ export function validateLoopDeskMerchantSettingsPatch(
   }
   validateBool(checkout.showSecureBadge, "Show secure badge");
   validateBool(checkout.showTrustCopy, "Show trust copy");
+  validateBool(cancellation.autoCancelUnfulfilledOnRequest, "Auto-cancel unfulfilled orders on customer request");
   validateUrl(otpModalBranding.logoUrl, "OTP modal logo URL", { httpsOnly: true });
   validateText(otpModalBranding.logoAlt, "OTP modal logo alt text", 120);
   validateText(otpModalBranding.fallbackBrandText, "OTP modal fallback brand text", 120);
@@ -779,6 +782,7 @@ export function normalizeLoopDeskMerchantSettings(
   const cart = section(raw, "cart");
   const account = section(raw, "account");
   const checkout = section(raw, "checkout");
+  const cancellation = section(raw, "cancellation");
   const otpModalBranding = section(raw, "otpModalBranding");
   const integrations = isRecord(raw.integrations) ? raw.integrations : {};
   const razorpay = isRecord(integrations.razorpay) ? integrations.razorpay : {};
@@ -874,6 +878,9 @@ export function normalizeLoopDeskMerchantSettings(
       showSecureBadge: bool(checkout.showSecureBadge, true),
       showTrustCopy: bool(checkout.showTrustCopy, true),
     },
+    cancellation: {
+      autoCancelUnfulfilledOnRequest: bool(cancellation.autoCancelUnfulfilledOnRequest, false),
+    },
     otpModalBranding: {
       logoUrl: httpsUrl(otpModalBranding.logoUrl),
       logoAlt: text(otpModalBranding.logoAlt, merchantName || storeName, 120),
@@ -932,6 +939,10 @@ export function mergeLoopDeskMerchantSettings(
     checkout: {
       ...current.checkout,
       ...(isRecord(raw.checkout) ? raw.checkout : {}),
+    },
+    cancellation: {
+      ...current.cancellation,
+      ...(isRecord(raw.cancellation) ? raw.cancellation : {}),
     },
     otpModalBranding: {
       ...current.otpModalBranding,
