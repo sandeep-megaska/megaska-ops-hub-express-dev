@@ -7,6 +7,7 @@ import {
   evaluateCancellationEligibility,
 } from "../../../../services/exchange/cancellation";
 import { sendCancellationRequestCreatedEmail } from "../../../../services/notifications/cancellation";
+import { autoCancelUnfulfilledCancellationRequest } from "../../../../services/exchange/auto-cancel";
 import {
   getShopByDomain,
   normalizeShopDomain,
@@ -201,26 +202,41 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    // Auto-cancel unfulfilled orders when the merchant has enabled it. This is
+    // non-throwing: on any failure (setting off, no Shopify order, Shopify
+    // user-error) the request simply stays OPEN for the admin manual flow.
+    const autoCancel = await autoCancelUnfulfilledCancellationRequest(created.id);
+    const finalRequest =
+      (autoCancel.ok
+        ? await prisma.orderActionRequest.findUnique({
+            where: { id: created.id },
+            include: {
+              items: true,
+              payments: { orderBy: { createdAt: "desc" }, take: 1 },
+            },
+          })
+        : null) ?? created;
+
     const createdRefundRequests = await (prisma as any).refundRequest.findMany({
-      where: { orderActionRequestId: created.id },
+      where: { orderActionRequestId: finalRequest.id },
       orderBy: { updatedAt: "desc" },
     });
     const createdOutcome = deriveCancellationOutcome({
-      cancellationStatus: created.status,
-      orderAmountSnapshot: created.orderAmountSnapshot,
+      cancellationStatus: finalRequest.status,
+      orderAmountSnapshot: finalRequest.orderAmountSnapshot,
       refundRequests: createdRefundRequests,
     });
 
     try {
       await sendCancellationRequestCreatedEmail({
-        shopId: created.shopId || "",
-        requestId: created.id,
-        orderNumber: created.orderNumber,
-        status: created.status,
-        customerName: created.customerNameSnapshot,
-        customerPhone: created.customerPhoneSnapshot,
-        customerEmail: created.customerEmailSnapshot,
-        reason: created.reason,
+        shopId: finalRequest.shopId || "",
+        requestId: finalRequest.id,
+        orderNumber: finalRequest.orderNumber,
+        status: finalRequest.status,
+        customerName: finalRequest.customerNameSnapshot,
+        customerPhone: finalRequest.customerPhoneSnapshot,
+        customerEmail: finalRequest.customerEmailSnapshot,
+        reason: finalRequest.reason,
         refundStatusLabel: createdOutcome.refundRequirementLabel,
         customerExplanation: createdOutcome.customerExplanation,
         opsNextStep: createdOutcome.opsNextStep,
@@ -237,10 +253,10 @@ export async function POST(req: NextRequest) {
       NextResponse.json(
         {
           request: {
-            ...created,
+            ...finalRequest,
             cancellationOutcome: deriveCancellationOutcome({
-              cancellationStatus: created.status,
-              orderAmountSnapshot: created.orderAmountSnapshot,
+              cancellationStatus: finalRequest.status,
+              orderAmountSnapshot: finalRequest.orderAmountSnapshot,
               refundRequests: createdRefundRequests,
             }),
           },
