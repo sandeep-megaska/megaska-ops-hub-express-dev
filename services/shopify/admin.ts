@@ -753,6 +753,67 @@ export async function updateShopifyOrderEmail(
   return data.orderUpdate;
 }
 
+export type ShopifyOrderCancelResult = {
+  jobId: string | null;
+  userErrors: Array<{ field?: string[] | null; message: string; code?: string | null }>;
+};
+
+// Cancel an order in Shopify — the same operation as "Cancel order" in the
+// Shopify Admin. `refund: true` refunds the captured amount back to the original
+// payment method (a no-op for an unpaid COD order); `restock: true` returns the
+// line items to inventory. orderCancel is asynchronous: Shopify returns a job and
+// processes the cancel/refund/restock in the background. Synchronous validation
+// problems (e.g. order already cancelled, fulfilled) come back as
+// orderCancelUserErrors, so callers can fall back to the manual admin flow.
+export async function cancelShopifyOrder(
+  orderId: string,
+  args: {
+    reason?: "CUSTOMER" | "DECLINED" | "FRAUD" | "INVENTORY" | "STAFF" | "OTHER";
+    refund: boolean;
+    restock: boolean;
+    notifyCustomer?: boolean;
+    staffNote?: string | null;
+  },
+  options?: AdminRequestOptions
+): Promise<ShopifyOrderCancelResult> {
+  const data = await adminGraphql<{
+    orderCancel: {
+      job?: { id: string; done: boolean } | null;
+      orderCancelUserErrors: Array<{ field?: string[] | null; message: string; code?: string | null }>;
+    };
+  }>(
+    `
+      mutation OrderCancel($orderId: ID!, $reason: OrderCancelReason!, $refund: Boolean!, $restock: Boolean!, $notifyCustomer: Boolean, $staffNote: String) {
+        orderCancel(orderId: $orderId, reason: $reason, refund: $refund, restock: $restock, notifyCustomer: $notifyCustomer, staffNote: $staffNote) {
+          job {
+            id
+            done
+          }
+          orderCancelUserErrors {
+            field
+            message
+            code
+          }
+        }
+      }
+    `,
+    {
+      orderId: resolveOrderGid(orderId),
+      reason: args.reason || "CUSTOMER",
+      refund: args.refund,
+      restock: args.restock,
+      notifyCustomer: args.notifyCustomer ?? true,
+      staffNote: args.staffNote || undefined,
+    },
+    options
+  );
+
+  return {
+    jobId: data.orderCancel.job?.id || null,
+    userErrors: data.orderCancel.orderCancelUserErrors || [],
+  };
+}
+
 export async function getShopifyCustomerDashboardData(input: {
   customerId: string;
   shopDomain?: string | null;
