@@ -90,17 +90,6 @@ async function resolveTrustedFulfillment(input: {
     },
   });
 
-  // TEMP DIAGNOSTIC (logging only): whether the order exists in our local
-  // megaskaOrder table (and its delivery state) vs. falling back to Shopify.
-  // Remove after triage.
-  console.info("[EXCHANGE SUBMIT DEBUG] trusted-fulfillment-source", {
-    orderNumber: input.orderNumber,
-    targetOrderNumber,
-    localOrderFound: Boolean(localOrder),
-    localOrderStatus: localOrder?.status ?? null,
-    localShipmentStatuses: localOrder?.shipments.map((s) => s.normalizedStatus) ?? [],
-  });
-
   if (localOrder) {
     const deliveredShipment = localOrder.shipments.find(
       (shipment) => shipment.normalizedStatus === "DELIVERED",
@@ -212,27 +201,7 @@ export async function POST(req: NextRequest) {
     const preferredReturnMethod =
       preferredReturnMethodRaw === "SELF_SHIP" ? "SELF_SHIP" : "REVERSE_PICKUP";
 
-    // TEMP DIAGNOSTIC (logging only): surfaces exactly why a submission is
-    // rejected (missing fields vs. delivery/eligibility), so we can diagnose
-    // failures without asking the customer for her OTP. Remove after triage.
-    console.info("[EXCHANGE SUBMIT DEBUG] payload", {
-      orderNumber: orderNumber || null,
-      shopifyOrderId,
-      hasProductTitle: Boolean(productTitle),
-      hasRequestedSize: Boolean(requestedSize),
-      requestedSize: requestedSize || null,
-      currentSize,
-      clientFulfillmentStatus: fulfillmentStatus,
-      clientDeliveredAt: body?.deliveredAt ?? null,
-      customerProfileId: customer.id,
-    });
-
     if (!orderNumber || !productTitle || !requestedSize) {
-      console.info("[EXCHANGE SUBMIT DEBUG] rejected: missing-required-fields", {
-        orderNumber: orderNumber || null,
-        hasProductTitle: Boolean(productTitle),
-        hasRequestedSize: Boolean(requestedSize),
-      });
       return withCors(
         req,
         NextResponse.json(
@@ -268,19 +237,6 @@ export async function POST(req: NextRequest) {
       fulfillmentStatus: resolvedFulfillmentStatus,
       windowDays,
       excludedCategories,
-    });
-
-    // TEMP DIAGNOSTIC (logging only): the trusted delivery resolution + the
-    // eligibility verdict. `trustedFound` false means neither a local order nor
-    // a Shopify match was found. Remove after triage.
-    console.info("[EXCHANGE SUBMIT DEBUG] eligibility", {
-      orderNumber,
-      trustedFound: Boolean(trustedFulfillment),
-      resolvedDeliveredAt,
-      resolvedFulfillmentStatus,
-      eligibilityDecision: eligibility.decision,
-      eligibilityBlocked: eligibility.blocked,
-      eligibilityReason: eligibility.reason,
     });
 
     if (eligibility.blocked) {
