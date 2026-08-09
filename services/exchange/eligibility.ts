@@ -8,6 +8,8 @@ type EligibilityInput = {
   reason?: string | null;
   deliveredAt?: string | null;
   fulfillmentStatus?: string | null;
+  /** Days after delivery a request is allowed. Defaults to EXCHANGE_ALLOWED_DAYS_WINDOW. */
+  windowDays?: number;
 };
 
 export type EligibilityDecision = "ELIGIBLE" | "REJECTED" | "REVIEW_REQUIRED";
@@ -137,12 +139,13 @@ export function evaluateExchangeEligibility(input: EligibilityInput) {
   }
 
   if (hasValidDeliveredAt && deliveredAt) {
+    const windowDays = Number.isFinite(input.windowDays) ? Number(input.windowDays) : EXCHANGE_ALLOWED_DAYS_WINDOW;
     const elapsedMs = Date.now() - deliveredAt.getTime();
     const days = elapsedMs / (1000 * 60 * 60 * 24);
-    if (days > EXCHANGE_ALLOWED_DAYS_WINDOW) {
+    if (days > windowDays) {
       return {
         decision: "REJECTED" as const,
-        reason: "Exchange requests are allowed within 2 days of delivery.",
+        reason: `Exchange requests are allowed within ${windowDays} days of delivery.`,
         blocked: true,
         stockReviewMessage: STOCK_REVIEW_MESSAGE,
       };

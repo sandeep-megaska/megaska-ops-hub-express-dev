@@ -26,14 +26,15 @@ import {
 } from "../../../../services/exchange/request-interlocks";
 import { isIssueStatusBlocking } from "../../../../services/exchange/issue";
 import {
-  EXCHANGE_REQUEST_WINDOW_LOCK_REASON,
-  ISSUE_REQUEST_WINDOW_LOCK_REASON,
+  exchangeRequestWindowLockReason,
+  issueRequestWindowLockReason,
   REVERSE_PICKUP_WINDOW_LOCK_REASON,
   getRequestWindowExpiresAt,
   getReversePickupWindowExpiresAt,
   isWithinRequestWindow,
   isWithinReversePickupWindow,
 } from "../../../../services/exchange/deadlines";
+import { getRequestWindowDays } from "../../../../services/loopdesk/merchant-settings";
 import {
   getOrCreateWalletAccount,
   listWalletTransactions,
@@ -861,6 +862,7 @@ for (const request of exchangeRequests) {
       ]),
     );
 
+    const requestWindowDays = await getRequestWindowDays(shop.id);
     const orders = (shopifyDashboard?.recentOrders || []).map((order) => {
       const orderNumber = String(order?.name || "").trim();
       const latestCancellation = latestCancellationByOrder.get(orderNumber);
@@ -886,9 +888,9 @@ for (const request of exchangeRequests) {
       const internalDeliveredAt = findInternalDeliveredAt(tracking);
       const deliveredAt = shopifyDeliveredAt || internalDeliveredAt;
       const hasTrustedDeliveredAt = isValidDateValue(deliveredAt);
-      const requestWindowExpiresAt = getRequestWindowExpiresAt(deliveredAt);
+      const requestWindowExpiresAt = getRequestWindowExpiresAt(deliveredAt, requestWindowDays);
       const reversePickupWindowExpiresAt = getReversePickupWindowExpiresAt(deliveredAt);
-      const withinRequestWindow = isWithinRequestWindow(deliveredAt);
+      const withinRequestWindow = isWithinRequestWindow(deliveredAt, undefined, requestWindowDays);
       const withinReversePickupWindow = isWithinReversePickupWindow(deliveredAt);
       const delivered = hasTrustedDeliveredAt;
       const shippedOrInTransit =
@@ -905,12 +907,12 @@ for (const request of exchangeRequests) {
       const notShipped = !delivered && !shippedOrInTransit;
       const deadlineRequestLockReason = delivered
         ? !deliveredAt || !withinRequestWindow
-          ? EXCHANGE_REQUEST_WINDOW_LOCK_REASON
+          ? exchangeRequestWindowLockReason(requestWindowDays)
           : null
         : null;
       const issueLockReason = delivered
         ? !deliveredAt || !withinRequestWindow
-          ? ISSUE_REQUEST_WINDOW_LOCK_REASON
+          ? issueRequestWindowLockReason(requestWindowDays)
           : null
         : null;
       const reversePickupLockReason = delivered
