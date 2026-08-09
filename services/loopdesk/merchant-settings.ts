@@ -66,6 +66,7 @@ export type LoopDeskMerchantSettings = {
   };
   checkout: { showSecureBadge: boolean; showTrustCopy: boolean };
   cancellation: { autoCancelUnfulfilledOnRequest: boolean };
+  requests: { windowDays: number };
   otpModalBranding: {
     logoUrl: string | null;
     logoAlt: string;
@@ -653,6 +654,7 @@ export function validateLoopDeskMerchantSettingsPatch(
   const account = isRecord(raw.account) ? raw.account : {};
   const checkout = isRecord(raw.checkout) ? raw.checkout : {};
   const cancellation = isRecord(raw.cancellation) ? raw.cancellation : {};
+  const requests = isRecord(raw.requests) ? raw.requests : {};
   const otpModalBranding = isRecord(raw.otpModalBranding) ? raw.otpModalBranding : {};
   validateText(general.merchantName, "Merchant name", 120);
   validateText(general.supportEmail, "Support email", 254);
@@ -753,6 +755,16 @@ export function validateLoopDeskMerchantSettingsPatch(
   validateBool(checkout.showSecureBadge, "Show secure badge");
   validateBool(checkout.showTrustCopy, "Show trust copy");
   validateBool(cancellation.autoCancelUnfulfilledOnRequest, "Auto-cancel unfulfilled orders on customer request");
+  if (
+    requests.windowDays !== undefined &&
+    requests.windowDays !== null &&
+    requests.windowDays !== ""
+  ) {
+    const windowDays = Number(requests.windowDays);
+    if (!Number.isFinite(windowDays) || windowDays < 1 || windowDays > 30) {
+      errors.push("Exchange/issue request window must be between 1 and 30 days.");
+    }
+  }
   validateUrl(otpModalBranding.logoUrl, "OTP modal logo URL", { httpsOnly: true });
   validateText(otpModalBranding.logoAlt, "OTP modal logo alt text", 120);
   validateText(otpModalBranding.fallbackBrandText, "OTP modal fallback brand text", 120);
@@ -783,6 +795,7 @@ export function normalizeLoopDeskMerchantSettings(
   const account = section(raw, "account");
   const checkout = section(raw, "checkout");
   const cancellation = section(raw, "cancellation");
+  const requests = section(raw, "requests");
   const otpModalBranding = section(raw, "otpModalBranding");
   const integrations = isRecord(raw.integrations) ? raw.integrations : {};
   const razorpay = isRecord(integrations.razorpay) ? integrations.razorpay : {};
@@ -881,6 +894,9 @@ export function normalizeLoopDeskMerchantSettings(
     cancellation: {
       autoCancelUnfulfilledOnRequest: bool(cancellation.autoCancelUnfulfilledOnRequest, false),
     },
+    requests: {
+      windowDays: Math.round(numberValue(requests.windowDays, 5, 1, 30)),
+    },
     otpModalBranding: {
       logoUrl: httpsUrl(otpModalBranding.logoUrl),
       logoAlt: text(otpModalBranding.logoAlt, merchantName || storeName, 120),
@@ -943,6 +959,10 @@ export function mergeLoopDeskMerchantSettings(
     cancellation: {
       ...current.cancellation,
       ...(isRecord(raw.cancellation) ? raw.cancellation : {}),
+    },
+    requests: {
+      ...current.requests,
+      ...(isRecord(raw.requests) ? raw.requests : {}),
     },
     otpModalBranding: {
       ...current.otpModalBranding,
@@ -1095,6 +1115,19 @@ export async function getLoopDeskMerchantSettings(shopId: string) {
   ]);
   return normalizeLoopDeskMerchantSettings(stored?.config, defaults);
 }
+
+// Days after delivery in which a customer may raise an exchange or issue request
+// for this shop. Best-effort: falls back to the default (5) if settings can't be
+// read, so the customer-facing flow never hard-fails on a settings lookup.
+export async function getRequestWindowDays(shopId: string): Promise<number> {
+  try {
+    const settings = await getLoopDeskMerchantSettings(shopId);
+    return settings.requests.windowDays;
+  } catch {
+    return 5;
+  }
+}
+
 export async function updateLoopDeskMerchantSettings(
   shopId: string,
   patch: unknown,

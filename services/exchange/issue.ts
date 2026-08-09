@@ -1,3 +1,5 @@
+import { EXCHANGE_ALLOWED_DAYS_WINDOW } from "./constants.ts";
+
 const ISSUE_ACTIVE_STATUSES = ["OPEN", "AWAITING_PAYMENT", "PICKUP_PENDING", "PAYMENT_RECEIVED", "APPROVED", "RETURN_RECEIVED"] as const;
 
 export const ISSUE_ALLOWED_STATUS_TRANSITIONS: Record<string, string[]> = {
@@ -47,6 +49,8 @@ export function evaluateIssueEligibility(input: {
   declaredUnused: boolean;
   declaredUnwashed: boolean;
   declaredTagsIntact: boolean;
+  /** Days after delivery an issue can be reported. Defaults to EXCHANGE_ALLOWED_DAYS_WINDOW. */
+  windowDays?: number;
 }) {
   if (!input.declaredUnused || !input.declaredUnwashed || !input.declaredTagsIntact) {
     return { eligible: false, reason: "Issue requests require unused, unwashed items with tags intact." };
@@ -66,10 +70,11 @@ export function evaluateIssueEligibility(input: {
   }
 
   if (hasValidDeliveredAt && deliveredAt) {
+    const windowDays = Number.isFinite(input.windowDays) ? Number(input.windowDays) : EXCHANGE_ALLOWED_DAYS_WINDOW;
     const elapsedMs = Date.now() - deliveredAt.getTime();
     const elapsedDays = elapsedMs / (1000 * 60 * 60 * 24);
-    if (elapsedDays > 2) {
-      return { eligible: false, reason: "Issue reporting is allowed within 2 days of delivery." };
+    if (elapsedDays > windowDays) {
+      return { eligible: false, reason: `Issue reporting is allowed within ${windowDays} days of delivery.` };
     }
   }
 

@@ -3,6 +3,7 @@ import { withCors, handleOptions } from "../../_lib/cors";
 import { prisma } from "../../../../services/db/prisma";
 import { getAuthenticatedCustomer } from "../../../../services/exchange/auth";
 import { evaluateIssueEligibility } from "../../../../services/exchange/issue";
+import { getRequestWindowDays } from "../../../../services/loopdesk/merchant-settings";
 import { sendIssueRequestCreatedEmail } from "../../../../services/notifications/issue";
 import {
   findActiveRequest,
@@ -139,6 +140,9 @@ export async function POST(req: NextRequest) {
       trustedFulfillment?.fulfillmentStatus ?? fulfillmentStatus;
     const resolvedDeliveredAt = trustedFulfillment?.deliveredAt ?? null;
 
+    const windowDays = session.customer.shopId
+      ? await getRequestWindowDays(session.customer.shopId)
+      : 5;
     const eligibility = evaluateIssueEligibility({
       fulfillmentStatus: resolvedFulfillmentStatus,
       deliveredAt: resolvedDeliveredAt,
@@ -146,6 +150,7 @@ export async function POST(req: NextRequest) {
       declaredUnused,
       declaredUnwashed,
       declaredTagsIntact,
+      windowDays,
     });
 
     if (!eligibility.eligible) {

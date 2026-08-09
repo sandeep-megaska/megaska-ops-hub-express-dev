@@ -1,6 +1,12 @@
 export const REVERSE_PICKUP_FEE_PAISE = 12000;
 export const REVERSE_PICKUP_CURRENCY = "INR";
-export const EXCHANGE_ALLOWED_DAYS_WINDOW = 2;
+// Default number of days after delivery in which a customer may raise an
+// exchange OR an issue request. Merchants can override this per shop
+// (LoopDesk settings → requests.windowDays); this is the fallback default.
+export const EXCHANGE_ALLOWED_DAYS_WINDOW = 5;
+// Guardrails for the merchant-configurable value.
+export const REQUEST_WINDOW_DAYS_MIN = 1;
+export const REQUEST_WINDOW_DAYS_MAX = 30;
 export const REVERSE_PICKUP_ALLOWED_DAYS_WINDOW = 7;
 export const REVERSE_PICKUP_PAYMENT_EXPIRY_DAYS = 2;
 
