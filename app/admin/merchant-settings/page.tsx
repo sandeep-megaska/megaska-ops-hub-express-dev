@@ -235,6 +235,13 @@ async function saveMerchantSettings(
         autoCancelUnfulfilledOnRequest:
           formData.get("autoCancelUnfulfilledOnRequest") === "on",
       },
+      requests: {
+        windowDays: Number(formData.get("requestWindowDays")) || 5,
+        excludedExchangeCategories: String(formData.get("excludedExchangeCategories") || "")
+          .split(/[\n,]/)
+          .map((entry) => entry.trim())
+          .filter(Boolean),
+      },
       otpModalBranding: {
         logoUrl: formData.get("otpLogoUrl"),
         logoAlt: formData.get("otpLogoAlt"),
@@ -753,6 +760,24 @@ export default async function MerchantSettingsPage({
             name="autoCancelUnfulfilledOnRequest"
             defaultChecked={settings.cancellation.autoCancelUnfulfilledOnRequest}
             help="When on, a cancellation request for an order that is still unfulfilled is processed automatically — the order is cancelled in Shopify (restocked, and prepaid payments refunded to source), with no admin action needed. The request and refund are still recorded in the dashboard. Fulfilled/shipped orders are never auto-cancelled."
+          />
+        </section>
+
+        <section id="requests" className={`${cardClass} grid gap-5`}>
+          <SectionHeader title="Exchange & issue requests" description="Control how long after delivery customers can raise exchange and issue requests." />
+          <Field
+            label="Request window (days after delivery)"
+            name="requestWindowDays"
+            type="number"
+            defaultValue={String(settings.requests.windowDays)}
+            help="Number of days after delivery a customer can submit an exchange or issue request (1–30, default 5). Reverse-pickup and cancellation windows are unaffected."
+          />
+          <TextArea
+            label="Categories excluded from exchange"
+            name="excludedExchangeCategories"
+            defaultValue={settings.requests.excludedExchangeCategories.join(", ")}
+            placeholder="bra, bikini, swim bottom, swim cap, saree shapewear"
+            help="Comma- or line-separated keywords. An exchange is blocked when the product title contains any of these (case-insensitive), e.g. hygiene-sensitive swimwear/intimates. Leave blank to allow exchange for all delivered items. Only affects exchange — issue reporting is unaffected."
           />
         </section>
 
