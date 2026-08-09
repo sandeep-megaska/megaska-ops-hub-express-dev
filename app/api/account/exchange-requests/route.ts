@@ -6,7 +6,7 @@ import { getAuthenticatedExchangeCustomer } from "../../../../services/exchange/
 import { evaluateExchangeEligibility } from "../../../../services/exchange/eligibility";
 import { sendExchangeRequestCreatedEmail } from "../../../../services/notifications/exchange";
 import { getMegaskaCustomerDashboardData } from "../../../../services/shopify/dashboard";
-import { getRequestWindowDays } from "../../../../services/loopdesk/merchant-settings";
+import { getExchangeRequestPolicy } from "../../../../services/loopdesk/merchant-settings";
 import {
   findActiveRequest,
   formatRequestLockReason,
@@ -257,7 +257,7 @@ export async function POST(req: NextRequest) {
     const resolvedFulfillmentStatus =
       trustedFulfillment?.fulfillmentStatus ?? fulfillmentStatus;
 
-    const windowDays = await getRequestWindowDays(shop.id);
+    const { windowDays, excludedCategories } = await getExchangeRequestPolicy(shop.id);
     const eligibility = evaluateExchangeEligibility({
       requestedSize,
       currentSize,
@@ -267,6 +267,7 @@ export async function POST(req: NextRequest) {
       deliveredAt: resolvedDeliveredAt,
       fulfillmentStatus: resolvedFulfillmentStatus,
       windowDays,
+      excludedCategories,
     });
 
     // TEMP DIAGNOSTIC (logging only): the trusted delivery resolution + the

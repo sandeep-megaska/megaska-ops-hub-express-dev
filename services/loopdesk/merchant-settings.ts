@@ -8,6 +8,7 @@ import { CART_DRAWER_MODULE_SLOTS, type CartDrawerModulesRuntime, type CartDrawe
 import { type PublicOtpCountryPolicy } from "../settings/otp-country-policy-public.ts";
 import { getPublicOtpCountryPolicy } from "./otp-country-policy-runtime.ts";
 import { resolveExpressCheckoutReadiness, toPublicExpressCheckoutConfig } from "../express-checkout/readiness";
+import { EXCLUDED_CATEGORY_KEYWORDS } from "../exchange/constants.ts";
 
 export const LOOPDESK_RUNTIME_CONFIG_MODULE_KEY = "loopdesk_runtime_config";
 export const CART_INTELLIGENCE_CONFIG_MODULE_KEY = "cart_intelligence_config";
@@ -66,7 +67,7 @@ export type LoopDeskMerchantSettings = {
   };
   checkout: { showSecureBadge: boolean; showTrustCopy: boolean };
   cancellation: { autoCancelUnfulfilledOnRequest: boolean };
-  requests: { windowDays: number };
+  requests: { windowDays: number; excludedExchangeCategories: string[] };
   otpModalBranding: {
     logoUrl: string | null;
     logoAlt: string;
@@ -765,6 +766,15 @@ export function validateLoopDeskMerchantSettingsPatch(
       errors.push("Exchange/issue request window must be between 1 and 30 days.");
     }
   }
+  if (requests.excludedExchangeCategories !== undefined && requests.excludedExchangeCategories !== null) {
+    if (!Array.isArray(requests.excludedExchangeCategories)) {
+      errors.push("Excluded exchange categories must be a list of keywords.");
+    } else if (requests.excludedExchangeCategories.some((entry) => String(entry || "").trim().length > 80)) {
+      errors.push("Each excluded-category keyword must be 80 characters or fewer.");
+    } else if (requests.excludedExchangeCategories.length > 100) {
+      errors.push("At most 100 excluded-category keywords are allowed.");
+    }
+  }
   validateUrl(otpModalBranding.logoUrl, "OTP modal logo URL", { httpsOnly: true });
   validateText(otpModalBranding.logoAlt, "OTP modal logo alt text", 120);
   validateText(otpModalBranding.fallbackBrandText, "OTP modal fallback brand text", 120);
@@ -896,6 +906,17 @@ export function normalizeLoopDeskMerchantSettings(
     },
     requests: {
       windowDays: Math.round(numberValue(requests.windowDays, 5, 1, 30)),
+      // Absent → the built-in hygiene defaults; an explicit array (incl. empty)
+      // is honored so merchants can widen, trim, or clear the exclusions.
+      excludedExchangeCategories: Array.isArray(requests.excludedExchangeCategories)
+        ? Array.from(
+            new Set(
+              requests.excludedExchangeCategories
+                .map((entry) => String(entry || "").trim().toLowerCase())
+                .filter(Boolean),
+            ),
+          )
+        : [...EXCLUDED_CATEGORY_KEYWORDS],
     },
     otpModalBranding: {
       logoUrl: httpsUrl(otpModalBranding.logoUrl),
@@ -1125,6 +1146,23 @@ export async function getRequestWindowDays(shopId: string): Promise<number> {
     return settings.requests.windowDays;
   } catch {
     return 5;
+  }
+}
+
+// Full per-shop exchange-request policy (window + excluded categories) in one
+// read. Best-effort: falls back to the built-in defaults if settings can't be
+// loaded, so the customer flow never hard-fails on a settings lookup.
+export async function getExchangeRequestPolicy(
+  shopId: string,
+): Promise<{ windowDays: number; excludedCategories: string[] }> {
+  try {
+    const settings = await getLoopDeskMerchantSettings(shopId);
+    return {
+      windowDays: settings.requests.windowDays,
+      excludedCategories: settings.requests.excludedExchangeCategories,
+    };
+  } catch {
+    return { windowDays: 5, excludedCategories: [...EXCLUDED_CATEGORY_KEYWORDS] };
   }
 }
 

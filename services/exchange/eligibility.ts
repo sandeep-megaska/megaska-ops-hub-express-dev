@@ -10,6 +10,8 @@ type EligibilityInput = {
   fulfillmentStatus?: string | null;
   /** Days after delivery a request is allowed. Defaults to EXCHANGE_ALLOWED_DAYS_WINDOW. */
   windowDays?: number;
+  /** Lowercased product-title keywords that block exchange. Defaults to EXCLUDED_CATEGORY_KEYWORDS. */
+  excludedCategories?: string[];
 };
 
 export type EligibilityDecision = "ELIGIBLE" | "REJECTED" | "REVIEW_REQUIRED";
@@ -79,7 +81,12 @@ export function evaluateExchangeEligibility(input: EligibilityInput) {
     };
   }
 
-  const isExcludedCategory = EXCLUDED_CATEGORY_KEYWORDS.some((keyword) => combinedText.includes(keyword));
+  const excludedCategories = Array.isArray(input.excludedCategories)
+    ? input.excludedCategories
+    : EXCLUDED_CATEGORY_KEYWORDS;
+  const isExcludedCategory = excludedCategories.some(
+    (keyword) => keyword && combinedText.includes(String(keyword).toLowerCase()),
+  );
   if (isExcludedCategory) {
     return {
       decision: "REJECTED" as const,

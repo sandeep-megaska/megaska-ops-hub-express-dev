@@ -237,6 +237,10 @@ async function saveMerchantSettings(
       },
       requests: {
         windowDays: Number(formData.get("requestWindowDays")) || 5,
+        excludedExchangeCategories: String(formData.get("excludedExchangeCategories") || "")
+          .split(/[\n,]/)
+          .map((entry) => entry.trim())
+          .filter(Boolean),
       },
       otpModalBranding: {
         logoUrl: formData.get("otpLogoUrl"),
@@ -767,6 +771,13 @@ export default async function MerchantSettingsPage({
             type="number"
             defaultValue={String(settings.requests.windowDays)}
             help="Number of days after delivery a customer can submit an exchange or issue request (1–30, default 5). Reverse-pickup and cancellation windows are unaffected."
+          />
+          <TextArea
+            label="Categories excluded from exchange"
+            name="excludedExchangeCategories"
+            defaultValue={settings.requests.excludedExchangeCategories.join(", ")}
+            placeholder="bra, bikini, swim bottom, swim cap, saree shapewear"
+            help="Comma- or line-separated keywords. An exchange is blocked when the product title contains any of these (case-insensitive), e.g. hygiene-sensitive swimwear/intimates. Leave blank to allow exchange for all delivered items. Only affects exchange — issue reporting is unaffected."
           />
         </section>
 

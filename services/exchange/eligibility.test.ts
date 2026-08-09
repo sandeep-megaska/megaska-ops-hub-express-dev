@@ -48,6 +48,29 @@ test("exchange: a custom windowDays overrides the default and appears in the mes
   );
 });
 
+test("exchange: excludedCategories override the built-in hygiene list", () => {
+  const bikini = { ...BASE_EXCHANGE, productTitle: "High Waisted Bikini Set", deliveredAt: daysAgoIso(1) };
+  // Default list excludes "bikini".
+  const blocked = evaluateExchangeEligibility(bikini);
+  assert.equal(blocked.decision, "REJECTED");
+  assert.match(blocked.reason, /excluded from exchange/);
+  // An explicit empty list allows everything.
+  assert.equal(
+    evaluateExchangeEligibility({ ...bikini, excludedCategories: [] }).decision,
+    "ELIGIBLE",
+  );
+  // A custom list blocks a keyword that the default never would.
+  assert.equal(
+    evaluateExchangeEligibility({
+      ...BASE_EXCHANGE,
+      productTitle: "Cotton Summer Dress",
+      deliveredAt: daysAgoIso(1),
+      excludedCategories: ["dress"],
+    }).decision,
+    "REJECTED",
+  );
+});
+
 const BASE_ISSUE = {
   fulfillmentStatus: "delivered",
   declaredUnused: true,
