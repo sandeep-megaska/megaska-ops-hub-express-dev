@@ -488,6 +488,18 @@
     document.body.appendChild(layer);
   }
 
+  function exchangeExcludedReason(productTitle) {
+    var list = window.MEGASKA_EXCHANGE_EXCLUDED_CATEGORIES;
+    if (!Array.isArray(list) || !list.length) return "";
+    var text = String(productTitle || "").toLowerCase();
+    if (!text) return "";
+    var excluded = list.some(function (keyword) {
+      var kw = String(keyword || "").trim().toLowerCase();
+      return kw && text.indexOf(kw) !== -1;
+    });
+    return excluded ? "excluded" : "";
+  }
+
   function renderModal(context) {
     closeModal();
     injectStyles();
@@ -565,6 +577,17 @@
           method === "SELF_SHIP"
             ? "You will ship the item to Megaska after approval. No reverse pickup charge applies."
             : "Reverse pickup has a ₹120 charge. After Megaska approves your exchange, you will receive a Razorpay payment link.";
+      });
+    }
+
+    // If this item is in the merchant's excluded list, tell the customer up
+    // front and disable the form, instead of letting them fill it and hit a
+    // server rejection. The server still enforces this on submit.
+    if (exchangeExcludedReason(context.productTitle)) {
+      showError("This item isn't eligible for exchange. Some categories — like hygiene-sensitive items — can't be exchanged. Please contact support if you think this is a mistake.");
+      ["mk-ex-current-size", "mk-ex-requested-size", "mk-ex-reason", "mk-ex-return-method", "mk-ex-submit"].forEach(function (id) {
+        const el = document.getElementById(id);
+        if (el) el.disabled = true;
       });
     }
   }
