@@ -662,6 +662,7 @@
       text.includes("We couldn't confirm the delivery date for this order. Please contact support for help.") ||
       text.includes("Exchange can be requested only after the order has been delivered") ||
       text.includes("Exchange requests cannot be processed more than") ||
+      text.includes("Exchange requests are allowed within") ||
       text.includes("Requested size is required") ||
       text.includes("Current size and requested size are identical") ||
       text.includes("already have an open exchange request") ||
