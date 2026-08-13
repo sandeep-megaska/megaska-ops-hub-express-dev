@@ -69,9 +69,15 @@ the route so the extraction is unit-tested (`shopify-order-purchase.test.mts`).
    `app/api/webhooks/orders/create/route.ts` fires `sendOrderPurchaseToCapi` via
    `after()` for every order (post-response, isolated, no-op when unconfigured),
    reusing the already-HMAC-verified payload.
-2. Storefront Pixel must send the Purchase `event_id` derived the same way
-   (`sha256("Purchase:" + numericOrderId).slice(0,32)`) so the browser and server
-   copies dedupe.
+2. ~~Storefront Pixel must send the Purchase `event_id` derived the same way.~~
+   **Done** — `extensions/megaska-meta-pixel/` is a Web Pixel extension that fires
+   the Purchase with the shared `event_id`. The contract lives in
+   `services/meta/event-id.ts` and is mirrored by the extension's
+   `src/event-id.js`; `services/meta/event-id.test.mts` runs the extension file
+   against the server and asserts byte-identical ids. **Before enabling, work
+   through the compatibility checklist in the extension README** (remove any other
+   Meta pixel — especially the Facebook & Instagram channel — that fires a
+   Purchase with an id we don't control).
 3. Emit `AddToCart` / `InitiateCheckout` from the existing funnel events
    (`services/analytics/funnel-events`), reusing the same `event_id` the theme
    Pixel sends.

@@ -1,4 +1,5 @@
 import { deterministicEventId, sendCapiEvents, type MetaCapiConfig, type MetaCapiResult, type MetaUserData } from "./capi.ts";
+import { normalizeOrderSourceId } from "./event-id.ts";
 
 // Map a Shopify `orders/create` webhook payload into a Meta CAPI Purchase event.
 //
@@ -90,14 +91,11 @@ function attributeMap(order: ShopifyOrderForCapi): Record<string, string> {
   return map;
 }
 
-/** Numeric order id used as the Pixel/CAPI dedup source. Falls back to the last
- *  path segment of the admin GraphQL id, then the raw id. */
+/** Numeric order id used as the Pixel/CAPI dedup source. Uses the shared
+ *  `normalizeOrderSourceId` so the storefront Pixel derives the identical value
+ *  from its own `checkout.order.id`. Prefers the numeric id, then the GID. */
 export function capiOrderSourceId(order: ShopifyOrderForCapi): string {
-  const numeric = trimmed(order.id);
-  if (numeric) return numeric;
-  const gid = trimmed(order.admin_graphql_api_id);
-  if (gid) return gid.split("/").pop() || gid;
-  return "";
+  return normalizeOrderSourceId(order.id) || normalizeOrderSourceId(order.admin_graphql_api_id);
 }
 
 function buildUserData(order: ShopifyOrderForCapi, opts: OrderPurchaseCapiOptions): MetaUserData {

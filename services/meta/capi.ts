@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { normalizeShopifyPhone } from "../shopify/shopify-phone-normalization.ts";
+import { buildEventIdInput, META_EVENT_ID_LENGTH } from "./event-id.ts";
 
 // Meta (Facebook) Conversions API — server-side conversion signal.
 //
@@ -135,9 +136,9 @@ export function resolveMetaCapiConfig(source: Record<string, string | undefined>
 export function deterministicEventId(eventName: string, sourceId: string): string {
   return crypto
     .createHash("sha256")
-    .update(`${eventName}:${sourceId}`)
+    .update(buildEventIdInput(eventName, sourceId))
     .digest("hex")
-    .slice(0, 32);
+    .slice(0, META_EVENT_ID_LENGTH);
 }
 
 function sha256Hex(value: string): string {

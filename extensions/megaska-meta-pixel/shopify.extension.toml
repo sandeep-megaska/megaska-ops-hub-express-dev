@@ -1,0 +1,22 @@
+api_version = "2026-01"
+
+[[extensions]]
+name = "Megaska Meta Pixel"
+handle = "megaska-meta-pixel"
+type = "web_pixel_extension"
+# strict = runs in a Web Worker sandbox with no page DOM. The Purchase is sent
+# as a direct Meta beacon (facebook.com/tr) rather than via fbevents.js, so it
+# does not need DOM and works in strict. See src/index.js.
+runtime_context = "strict"
+
+  [extensions.settings]
+  type = "object"
+
+    [extensions.settings.fields.pixelId]
+    name = "Meta Pixel ID"
+    description = "The Meta (Facebook) Pixel / dataset ID that the storefront Purchase is sent to. Must be the SAME pixel the server Conversions API posts to (META_PIXEL_ID) for deduplication to work."
+    type = "single_line_text_field"
+
+      [[extensions.settings.fields.pixelId.validations]]
+      name = "min"
+      value = "1"
