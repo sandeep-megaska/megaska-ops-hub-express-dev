@@ -15,6 +15,7 @@ import { autoGenerateInvoiceForOrder } from "../../../../../services/gst/auto-in
 import { reconcileGiftCardRedemption } from "../../../../../services/store-credit/gift-card-reconcile";
 import { notifyCheckoutStoreCreditRedeemed } from "../../../../../services/notifications/store-credit";
 import { verifyShopifyWebhookHmac, describeShopifyWebhookHmac } from "../../../../../services/shopify/webhook-hmac";
+import { sendOrderPurchaseToCapi } from "../../../../../services/meta/shopify-order-purchase";
 
 type ShopifyOrderWebhookPayload = {
   id?: number | string;
@@ -279,6 +280,38 @@ export async function POST(req: NextRequest) {
   let customerProfileId = String(attributes.megaska_customer_profile_id || "").trim();
   const shopifyCustomerId = String(attributes.megaska_shopify_customer_id || "").trim();
   const verificationCompletedAt = String(attributes.megaska_auth_verified_at || "").trim();
+
+  // Meta Conversions API: send a server-side Purchase for EVERY order so Meta's
+  // ad optimization sees conversions the browser Pixel loses to iOS/ITP/ad-
+  // blockers. Runs via after() so it never delays the webhook response or risks
+  // a Shopify retry; fully isolated (own try/catch) and a no-op when CAPI is
+  // unconfigured. The event_id is deterministic from the order id so the Pixel's
+  // Purchase and this one dedupe. Fires for every order — registered outside the
+  // identity/wallet early-returns below — and uses the trusted, server-corrected
+  // verified phone for match quality when available.
+  after(async () => {
+    try {
+      const capiResult = await sendOrderPurchaseToCapi(payload, {
+        verifiedPhone: verifiedPhone || undefined,
+      });
+      if (!capiResult.disabled) {
+        console.log("[Meta CAPI] purchase event", {
+          orderId: String(payload.admin_graphql_api_id || payload.id || "").trim() || null,
+          mapped: capiResult.mapped,
+          ok: capiResult.ok,
+          eventsReceived: capiResult.eventsReceived ?? null,
+          status: capiResult.status ?? null,
+          fbTraceId: capiResult.fbTraceId ?? null,
+          error: capiResult.error ?? null,
+        });
+      }
+    } catch (error) {
+      console.error("[Meta CAPI] purchase event failed", {
+        orderId: String(payload.admin_graphql_api_id || payload.id || "").trim() || null,
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  });
 
   const walletReservationId = String(attributes.megaska_wallet_reservation_id || "").trim();
   const walletDiscountCode = String(attributes.megaska_wallet_discount_code || "").trim();

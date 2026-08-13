@@ -213,10 +213,29 @@ function clampEventTimeSeconds(eventTimeMs: number | undefined, now: number): nu
   return Math.floor(clamped / 1000);
 }
 
+// Meta's custom_data uses snake_case keys. Callers get an ergonomic camelCase
+// API (contentIds, numItems, …); translate the known keys here and pass any
+// other custom keys through untouched so nothing is silently dropped on the wire.
+const CUSTOM_DATA_KEY_MAP: Record<string, string> = {
+  contentIds: "content_ids",
+  contentType: "content_type",
+  numItems: "num_items",
+  orderId: "order_id",
+};
+
+function normalizeCustomData(customData: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(customData)) {
+    if (value === undefined) continue;
+    out[CUSTOM_DATA_KEY_MAP[key] ?? key] = value;
+  }
+  return out;
+}
+
 /** Shape a single event into Meta's server-event schema. Exported for testing
  *  and for callers that want to batch-build before sending. */
 export function buildServerEvent(event: MetaEventInput, now: number = Date.now()): Record<string, unknown> {
-  const customData = event.customData ? { ...event.customData } : undefined;
+  const customData = event.customData ? normalizeCustomData(event.customData) : undefined;
   const payload: Record<string, unknown> = {
     event_name: event.eventName,
     event_time: clampEventTimeSeconds(event.eventTimeMs, now),

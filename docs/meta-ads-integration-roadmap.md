@@ -55,16 +55,28 @@ but lower-impact, and is sequenced later.
 CAPI stays a no-op until both `META_PIXEL_ID` and `META_CAPI_ACCESS_TOKEN` are
 set — matching `isAiConfigured()`'s degrade-gracefully convention.
 
+### Order → Purchase mapping
+
+`services/meta/shopify-order-purchase.ts` maps a Shopify `orders/create` payload
+to a CAPI Purchase and sends it: value/currency from `total_price`, `contents`
+from line items, hashed customer identifiers, the trusted verified phone when
+available, and a deterministic `event_id` from the numeric order id. Kept out of
+the route so the extraction is unit-tested (`shopify-order-purchase.test.mts`).
+
 ### Remaining phase-1 wiring
 
-1. Call `trackPurchase` from the `orders/create` webhook handler (HMAC already
-   verified via `services/shopify/webhook-hmac`), passing the order id as the
-   dedup source and mapping line items → `contents`.
-2. Emit `AddToCart` / `InitiateCheckout` from the existing funnel events
+1. ~~Call the Purchase send from the `orders/create` webhook handler.~~ **Done** —
+   `app/api/webhooks/orders/create/route.ts` fires `sendOrderPurchaseToCapi` via
+   `after()` for every order (post-response, isolated, no-op when unconfigured),
+   reusing the already-HMAC-verified payload.
+2. Storefront Pixel must send the Purchase `event_id` derived the same way
+   (`sha256("Purchase:" + numericOrderId).slice(0,32)`) so the browser and server
+   copies dedupe.
+3. Emit `AddToCart` / `InitiateCheckout` from the existing funnel events
    (`services/analytics/funnel-events`), reusing the same `event_id` the theme
    Pixel sends.
-3. Add `META_*` to `docs/environment-variables.md` and the SaaS env audit.
-4. Verify matched conversions in Events Manager → Test Events using
+4. Add `META_*` to `docs/environment-variables.md` and the SaaS env audit.
+5. Verify matched conversions in Events Manager → Test Events using
    `META_CAPI_TEST_EVENT_CODE`.
 
 ## Later phases
