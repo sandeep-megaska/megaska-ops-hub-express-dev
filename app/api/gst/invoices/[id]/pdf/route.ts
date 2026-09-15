@@ -41,6 +41,9 @@ export async function OPTIONS(req: NextRequest) {
 export async function GET(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;
   const format = req.nextUrl.searchParams.get("format");
+  // Optional per-print override of the template's configured sheet ("auto" | "A4" | "A5").
+  // Anything else falls through to the template setting.
+  const paperSize = req.nextUrl.searchParams.get("paper");
 
   const shopId = await resolveShopForPdf(req, id);
   if (!shopId) {
@@ -61,7 +64,7 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
 
   try {
     if (format === "html") {
-      const htmlResult = await withDeadline("Invoice render", 20000, renderGstPdf(id));
+      const htmlResult = await withDeadline("Invoice render", 20000, renderGstPdf(id, { paperSize }));
       if (!htmlResult.ok || !htmlResult.data) {
         return withExtensionCors(
           NextResponse.json({ ok: false, error: htmlResult.error || "Unable to render invoice HTML" }, { status: 404 }),
@@ -93,7 +96,7 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
     let result: Awaited<ReturnType<typeof renderGstInvoicePdfBuffer>> | null = null;
     if (format === "chromium") {
       try {
-        result = await withDeadline("Invoice PDF render (Chromium)", 18000, renderGstPdfViaChromium(id));
+        result = await withDeadline("Invoice PDF render (Chromium)", 18000, renderGstPdfViaChromium(id, { paperSize }));
       } catch (chromiumError) {
         console.error("GST invoice Chromium render failed; falling back to hand-drawn PDF", {
           id,
@@ -101,10 +104,10 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
         });
       }
       if (!result || !result.ok || !result.data) {
-        result = await withDeadline("Invoice PDF render (fallback)", 8000, renderGstInvoicePdfBuffer(id));
+        result = await withDeadline("Invoice PDF render (fallback)", 8000, renderGstInvoicePdfBuffer(id, { paperSize }));
       }
     } else {
-      result = await withDeadline("Invoice PDF render", 20000, renderGstInvoicePdfBuffer(id));
+      result = await withDeadline("Invoice PDF render", 20000, renderGstInvoicePdfBuffer(id, { paperSize }));
     }
     if (!result.ok || !result.data) {
       return withExtensionCors(

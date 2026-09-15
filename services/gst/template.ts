@@ -27,6 +27,13 @@ const templateDb = gstDb as unknown as TemplateDbClient;
 export const GST_INVOICE_TEMPLATE_PRESETS = ["compact", "detailed", "dispatch"] as const;
 export type GstInvoiceTemplatePreset = (typeof GST_INVOICE_TEMPLATE_PRESETS)[number];
 
+// Sheet the invoice is laid out for. "auto" lets the print dialog's paper selection
+// drive the page box, so an operator who picks A5 gets an A5 layout instead of an A4
+// layout clipped to an A5 sheet. An explicit size pins the page box, which is what
+// server-rendered PDFs (Chromium / hand-drawn) need.
+export const GST_INVOICE_PAPER_SIZES = ["auto", "A4", "A5"] as const;
+export type GstInvoicePaperSize = (typeof GST_INVOICE_PAPER_SIZES)[number];
+
 export type GstInvoiceTemplateFieldOption =
   | "showHeaderLogo"
   | "showFooterLogo"
@@ -41,6 +48,7 @@ export type GstInvoiceTemplateFieldOption =
 
 export type GstInvoiceTemplateConfig = {
   preset: GstInvoiceTemplatePreset;
+  paperSize: GstInvoicePaperSize;
 } & Record<GstInvoiceTemplateFieldOption, boolean>;
 
 export const GST_INVOICE_TEMPLATE_PRESET_LABELS: Record<GstInvoiceTemplatePreset, string> = {
@@ -49,8 +57,15 @@ export const GST_INVOICE_TEMPLATE_PRESET_LABELS: Record<GstInvoiceTemplatePreset
   dispatch: "Dispatch Friendly Invoice",
 };
 
+export const GST_INVOICE_PAPER_SIZE_LABELS: Record<GstInvoicePaperSize, string> = {
+  auto: "Match printer paper (recommended)",
+  A4: "A4 portrait",
+  A5: "A5 portrait",
+};
+
 export const DEFAULT_GST_INVOICE_TEMPLATE_CONFIG: GstInvoiceTemplateConfig = {
   preset: "detailed",
+  paperSize: "auto",
   showHeaderLogo: true,
   showFooterLogo: true,
   showSku: true,
@@ -99,11 +114,19 @@ function isTemplatePreset(value: unknown): value is GstInvoiceTemplatePreset {
   return typeof value === "string" && (GST_INVOICE_TEMPLATE_PRESETS as readonly string[]).includes(value);
 }
 
+export function isGstInvoicePaperSize(value: unknown): value is GstInvoicePaperSize {
+  return typeof value === "string" && (GST_INVOICE_PAPER_SIZES as readonly string[]).includes(value);
+}
+
 export function resolveGstInvoiceTemplateConfig(themeConfig: Record<string, unknown> | null | undefined): GstInvoiceTemplateConfig {
   const source = asObject(themeConfig) || {};
   const rawTemplateConfig = asObject(source.invoiceTemplate) || source;
   const preset = isTemplatePreset(rawTemplateConfig.preset) ? rawTemplateConfig.preset : DEFAULT_GST_INVOICE_TEMPLATE_CONFIG.preset;
   const resolved: GstInvoiceTemplateConfig = { ...PRESET_FIELD_DEFAULTS[preset], preset };
+
+  if (isGstInvoicePaperSize(rawTemplateConfig.paperSize)) {
+    resolved.paperSize = rawTemplateConfig.paperSize;
+  }
 
   for (const key of FIELD_OPTION_KEYS) {
     if (typeof rawTemplateConfig[key] === "boolean") {

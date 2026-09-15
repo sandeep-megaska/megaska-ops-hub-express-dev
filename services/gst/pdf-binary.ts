@@ -1,6 +1,6 @@
 import { inflateSync, deflateSync } from "node:zlib";
-import { buildGstInvoiceRenderModel } from "./pdf";
-import type { GstInvoiceRenderModel } from "./pdf";
+import { buildGstInvoiceRenderModel, resolveGstInvoicePaperSize } from "./pdf";
+import type { GstInvoiceRenderModel, GstPdfRenderOptions } from "./pdf";
 import type { GstServiceResult } from "./types";
 import { gstPerfLog, gstPerfNow } from "./perf";
 
@@ -226,7 +226,15 @@ function drawImage(commands: string[], image: PdfImage | null, x: number, y: num
   commands.push("Q");
   return true;
 }
-function buildStyledPdf(model: GstInvoiceRenderModel): Buffer {
+// A5 is the same A4 layout on a smaller sheet. The drawing code below is written
+// against absolute A4 points, so rather than duplicate every coordinate, the whole
+// content stream is scaled by A5/A4 and the MediaBox shrunk to match — the invoice
+// reaches the sheet edge-to-edge instead of being clipped to the A4 page box.
+const A4_POINTS = { width: 595, height: 842 } as const;
+const A5_POINTS = { width: 420, height: 595 } as const;
+const A5_SCALE = A5_POINTS.width / A4_POINTS.width;
+
+function buildStyledPdf(model: GstInvoiceRenderModel, paperSize: "A4" | "A5" = "A4"): Buffer {
   const commands: string[] = [];
   const images = [
     parsePdfImage("ImHeaderLogo", model.branding.headerLogoSrc),
@@ -414,7 +422,12 @@ function buildStyledPdf(model: GstInvoiceRenderModel): Buffer {
     drawText(commands, right - 170, margin + 22, model.signature, 7);
   }
 
-  const stream = commands.join("\n");
+  // Scale the finished A4 content stream onto the target sheet (a no-op on A4).
+  const scaled = paperSize === "A5";
+  const stream = scaled
+    ? `q\n${A5_SCALE.toFixed(6)} 0 0 ${A5_SCALE.toFixed(6)} 0 0 cm\n${commands.join("\n")}\nQ`
+    : commands.join("\n");
+  const mediaBox = scaled ? A5_POINTS : A4_POINTS;
 
   const xObjectEntries: string[] = [];
   const objectBuffers: Buffer[] = [
@@ -439,7 +452,7 @@ function buildStyledPdf(model: GstInvoiceRenderModel): Buffer {
   }
 
   const xObjects = xObjectEntries.length ? ` /XObject << ${xObjectEntries.join(" ")} >>` : "";
-  objectBuffers.push(Buffer.from(`3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 5 0 R /Resources << /Font << /F1 4 0 R /F2 6 0 R >>${xObjects} >> >> endobj\n`, "utf8"));
+  objectBuffers.push(Buffer.from(`3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 ${mediaBox.width} ${mediaBox.height}] /Contents 5 0 R /Resources << /Font << /F1 4 0 R /F2 6 0 R >>${xObjects} >> >> endobj\n`, "utf8"));
   objectBuffers.push(Buffer.from("4 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj\n", "utf8"));
   objectBuffers.push(Buffer.from(`5 0 obj << /Length ${Buffer.byteLength(stream, "utf8")} >> stream\n${stream}\nendstream endobj\n`, "utf8"));
   objectBuffers.push(Buffer.from("6 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >> endobj\n", "utf8"));
@@ -477,7 +490,10 @@ function buildImageObject(objectId: number, image: Omit<PdfImage, "name" | "smas
   return Buffer.concat([Buffer.from(dictionary, "utf8"), image.data, Buffer.from("\nendstream endobj\n", "utf8")]);
 }
 
-export async function renderGstInvoicePdfBuffer(gstDocumentId: string): Promise<GstServiceResult<{ documentNumber: string; buffer: Buffer }>> {
+export async function renderGstInvoicePdfBuffer(
+  gstDocumentId: string,
+  options: GstPdfRenderOptions = {},
+): Promise<GstServiceResult<{ documentNumber: string; buffer: Buffer }>> {
   const bufferStartedAtMs = gstPerfNow();
   const modelResult = await buildGstInvoiceRenderModel(gstDocumentId);
   if (!modelResult.ok || !modelResult.data) {
@@ -485,7 +501,10 @@ export async function renderGstInvoicePdfBuffer(gstDocumentId: string): Promise<
   }
 
   const model = modelResult.data;
-  const buffer = buildStyledPdf(model);
-  gstPerfLog("gst.pdf.binaryBuffer", bufferStartedAtMs, { gstDocumentId, rowCount: model.rows.length, bytes: buffer.byteLength });
+  // "auto" has no sheet of its own to honour in a generated file — A4 is the fallback,
+  // matching what Chromium does with @page { size: auto }.
+  const paperSize = resolveGstInvoicePaperSize(options.paperSize, model.templateConfig.paperSize) === "A5" ? "A5" : "A4";
+  const buffer = buildStyledPdf(model, paperSize);
+  gstPerfLog("gst.pdf.binaryBuffer", bufferStartedAtMs, { gstDocumentId, rowCount: model.rows.length, bytes: buffer.byteLength, paperSize });
   return { ok: true, data: { documentNumber: model.documentNumber, buffer } };
 }
