@@ -16,6 +16,7 @@
     "dev:repair:customer-identity": "node scripts/dev-repair-customer-profile-duplicate.mjs",
     "typecheck": "tsc --noEmit",
     "test:customer-identity-architecture": "node --test scripts/customer-identity-architecture.test.mjs",
+    "test:gst-invoice-print": "node --test services/gst/invoice-print-layout.test.mts",
     "identity:reconcile": "node scripts/customer-identity-reconcile.mjs",
     "identity:verify": "node scripts/customer-identity-integrity.mjs",
     "identity:merge-known": "node scripts/merge-known-customer-profiles.mjs",

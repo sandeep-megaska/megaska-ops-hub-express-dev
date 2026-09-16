@@ -136,7 +136,12 @@ export async function GET(req: NextRequest) {
       return withExtensionCors(NextResponse.json({ ok: true, url }), req);
     }
 
-    const rendered = await withDeadline("Invoice render", 20000, renderGstPdf(invoice.id));
+    // Optional per-print sheet override ("auto" | "A4" | "A5"); otherwise the template setting.
+    const rendered = await withDeadline(
+      "Invoice render",
+      20000,
+      renderGstPdf(invoice.id, { paperSize: req.nextUrl.searchParams.get("paper") }),
+    );
     if (!rendered.ok || !rendered.data) {
       return fail(500, "Unable to render invoice", rendered.error || "Rendering failed.");
     }

@@ -5,9 +5,15 @@ import { getGstInvoiceById } from "./invoice";
 import { getGstNoteById } from "./notes";
 import { getSingleShopifyOrderForGstSync } from "./shopify-runtime-admin";
 import { getGstStatePrimaryNameByCode, resolveGstStateCode } from "./state-codes";
+import { buildGstInvoiceHtml } from "./invoice-html";
 import type { GstServiceResult } from "./types";
 import { gstPerfLog, gstPerfNow } from "./perf";
-import { resolveGstInvoiceTemplateConfig, type GstInvoiceTemplateConfig } from "./template";
+import {
+  isGstInvoicePaperSize,
+  resolveGstInvoiceTemplateConfig,
+  type GstInvoicePaperSize,
+  type GstInvoiceTemplateConfig,
+} from "./template";
 
 export interface GstPdfRenderPayload {
   gstDocumentId: string;
@@ -17,7 +23,25 @@ export interface GstPdfRenderPayload {
     generatedAt: string;
     renderer: "GST_HTML_RENDERER_V4";
     templateType: "invoice" | "credit_note" | "debit_note";
+    paperSize: GstInvoicePaperSize;
   };
+}
+
+export { buildGstInvoiceHtml, GST_INVOICE_PAPER_GEOMETRY } from "./invoice-html";
+export type { GstInvoicePaperGeometry } from "./invoice-html";
+
+export interface GstPdfRenderOptions {
+  /** Overrides the template's configured paper size for this render only. */
+  paperSize?: GstInvoicePaperSize | string | null;
+}
+
+export function resolveGstInvoicePaperSize(
+  override: GstPdfRenderOptions["paperSize"],
+  configured: GstInvoicePaperSize | undefined,
+): GstInvoicePaperSize {
+  if (isGstInvoicePaperSize(override)) return override;
+  if (isGstInvoicePaperSize(configured)) return configured;
+  return "auto";
 }
 
 export interface GstInvoiceRenderModel {
@@ -82,15 +106,6 @@ export interface GstInvoiceRenderModel {
     footerLogoSrc: string | null;
   };
   templateConfig: GstInvoiceTemplateConfig;
-}
-
-function escapeHtml(value: string): string {
-  return String(value || "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
 }
 
 function asAmount(value: unknown): string {
@@ -390,7 +405,6 @@ function getInvoicePartyDetails(document: Record<string, unknown>): {
   };
 }
 
-
 function inferMimeType(filePath: string): string {
   const ext = path.extname(filePath).toLowerCase();
   if (ext === ".png") return "image/png";
@@ -627,7 +641,10 @@ export async function buildGstInvoiceRenderModel(gstDocumentId: string): Promise
   };
 }
 
-export async function renderGstPdf(gstDocumentId: string): Promise<GstServiceResult<GstPdfRenderPayload>> {
+export async function renderGstPdf(
+  gstDocumentId: string,
+  options: GstPdfRenderOptions = {},
+): Promise<GstServiceResult<GstPdfRenderPayload>> {
   const htmlStartedAtMs = gstPerfNow();
   const modelResult = await buildGstInvoiceRenderModel(gstDocumentId);
   if (!modelResult.ok || !modelResult.data) {
@@ -635,97 +652,10 @@ export async function renderGstPdf(gstDocumentId: string): Promise<GstServiceRes
   }
 
   const model = modelResult.data;
-  const cfg = model.templateConfig;
-  // De-cramped portrait rows: a wide Item Description that wraps, with SKU / HSN /
-  // variant / per-line tax breakup on a compact sub-line, and only Qty / Taxable / GST% /
-  // Total as aligned numeric columns.
-  const lineMeta = (line: GstInvoiceRenderModel["rows"][number]) => {
-    const parts: string[] = [];
-    if (cfg.showSku && line.sku) parts.push(`SKU: ${line.sku}`);
-    if (cfg.showHsn && line.hsn) parts.push(`HSN: ${line.hsn}`);
-    if (cfg.showVariant && line.variant) parts.push(`Variant: ${line.variant}`);
-    if (cfg.showTaxBreakup) parts.push(`CGST: ${line.cgst}`, `SGST: ${line.sgst}`, `IGST: ${line.igst}`);
-    return parts.join(" · ");
-  };
-  const rows = model.rows
-    .map((line) => {
-      const meta = lineMeta(line);
-      return `<tr>` +
-        `<td>${escapeHtml(line.lineNumber)}</td>` +
-        `<td><div class="item-desc">${escapeHtml(line.description)}</div>${meta ? `<div class="item-meta">${escapeHtml(meta)}</div>` : ""}</td>` +
-        `<td class="num">${escapeHtml(line.quantity)}</td>` +
-        `<td class="num">${escapeHtml(line.taxable)}</td>` +
-        `<td class="num">${escapeHtml(line.gstRate)}%</td>` +
-        `<td class="num">${escapeHtml(line.total)}</td>` +
-        `</tr>`;
-    })
-    .join("\n");
+  const paperSize = resolveGstInvoicePaperSize(options.paperSize, model.templateConfig.paperSize);
+  const html = buildGstInvoiceHtml(model, paperSize);
 
-  const renderParty = (title: string, party: { name: string; gstin?: string; phone?: string; email?: string; lines: string[] }) => `
-    <div class="block"><strong>${escapeHtml(title)}</strong>
-      <div>${escapeHtml(party.name)}</div>
-      ${party.gstin ? `<div>GSTIN: ${escapeHtml(party.gstin || "UNREGISTERED")}</div>` : ""}
-      ${party.phone ? `<div>Phone: ${escapeHtml(party.phone)}</div>` : ""}
-      ${party.email ? `<div>Email: ${escapeHtml(party.email)}</div>` : ""}
-      ${party.lines.map((line) => `<div>${escapeHtml(line)}</div>`).join("")}
-    </div>`;
-
-  const html = `<!doctype html><html><head><meta charset="utf-8" /><title>${escapeHtml(model.documentNumber)}</title>
-    <style>
-      /* A4 portrait; the sheet prints on A5 too via the printer's fit-to-page. */
-      @page { size: A4 portrait; margin: 10mm; }
-      body { font-family: Arial, sans-serif; color:#111; font-size:9px; margin:0; }
-      .topline { display:flex; justify-content:space-between; border-bottom:1px solid #111; padding-bottom:8px; margin-bottom:10px; }
-      .meta { text-align:right; }
-      .grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin: 10px 0; }
-      .block { border:1px solid #ddd; padding:8px; min-height:90px; }
-      .header-logo{ display:flex; justify-content:center; align-items:center; margin-bottom:8px; min-height:34px; font-size:16px; font-weight:700; letter-spacing:1px; text-transform:lowercase; }
-      .header-logo img{ max-height:32px; max-width:220px; object-fit:contain; }
-      /* Line items: a wide Item Description that wraps, with SKU/HSN/tax breakup on a
-         sub-line, instead of squeezing every field into a narrow portrait column. */
-      table{ border-collapse:collapse; width:100%; table-layout:fixed; } th,td{ border:1px solid #ddd; padding:4px; vertical-align:top; font-size:8px; } th{ background:#f6f6f6; font-size:7.5px; }
-      td{ word-break:break-word; }
-      td.num, th.num{ text-align:right; white-space:nowrap; }
-      .item-desc{ font-weight:600; }
-      .item-meta{ margin-top:2px; color:#555; font-size:7px; }
-      .totals{ width:260px; margin-left:auto; margin-top:10px; } .totals td{ border:0; padding:3px 0; }
-      .footer-logo{ margin-top:8px; display:flex; justify-content:flex-end; min-height:22px; font-size:12px; font-weight:700; }
-      .footer-logo img{ max-height:20px; max-width:140px; object-fit:contain; }
-      .print-btn{ margin-bottom:8px; }
-      .page{ background:#fff; }
-      /* On screen, render like a centered A4-portrait page with margins so it
-         does not stretch edge-to-edge on wide monitors. */
-      @media screen {
-        body{ background:#e9e9ee; padding:16px; }
-        .page{ max-width:794px; margin:0 auto; padding:28px 32px; box-shadow:0 1px 6px rgba(0,0,0,0.18); }
-      }
-      /* Print is unchanged: @page controls the sheet, the wrapper adds nothing. */
-      @media print { .print-btn { display:none; } .page{ max-width:none; margin:0; padding:0; box-shadow:none; } }
-    </style></head><body><div class="page">
-    <button class="print-btn" onclick="window.print()">Print ${escapeHtml(model.title)}</button>
-    ${model.templateConfig.showHeaderLogo ? `<div class="header-logo">${model.branding.headerLogoSrc ? `<img src="${escapeHtml(model.branding.headerLogoSrc)}" alt="Header logo" />` : "bigonbuy"}</div>` : ""}
-    <div class="topline"><div><div><strong>GSTIN: ${escapeHtml(model.supplier.gstin)}</strong></div><div>${escapeHtml(model.title)}</div><div>Original for Recipient</div></div>
-    <div class="meta"><div><strong>${escapeHtml(model.supplier.tradeName || model.supplier.name)}</strong></div><div>${escapeHtml(model.supplier.name)}</div></div></div>
-    <div class="topline"><div>Invoice No: ${escapeHtml(model.documentNumber)}<br/>Invoice Date: ${escapeHtml(model.documentDate)}<br/>Order: ${escapeHtml(model.orderNumber)}</div><div class="meta">Place of Supply: ${escapeHtml(model.placeOfSupply)}<br/>Order Date: ${escapeHtml(model.orderDate)}</div></div>
-    <div class="grid">
-      ${renderParty("BILLED TO", model.buyer)}
-      ${renderParty("SHIP TO", model.shipping)}
-      ${renderParty("SUPPLIER", model.supplier)}
-    </div>
-    <table>
-      <colgroup><col style="width:5%"><col style="width:43%"><col style="width:8%"><col style="width:16%"><col style="width:8%"><col style="width:20%"></colgroup>
-      <thead><tr><th>#</th><th>Item Description</th><th class="num">Qty</th><th class="num">Taxable</th><th class="num">GST%</th><th class="num">Total</th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table>
-    <table class="totals"><tr><td>Taxable</td><td>${model.totals.taxable}</td></tr>${model.templateConfig.showTaxBreakup ? `<tr><td>CGST</td><td>${model.totals.cgst}</td></tr><tr><td>SGST</td><td>${model.totals.sgst}</td></tr><tr><td>IGST</td><td>${model.totals.igst}</td></tr><tr><td>CESS</td><td>${model.totals.cess}</td></tr>` : ""}<tr><td><strong>Total</strong></td><td><strong>${model.totals.total}</strong></td></tr></table>
-    ${model.templateConfig.showAmountInWords ? `<p><strong>Amount in Words:</strong> ${escapeHtml(model.amountInWords)}</p>` : ""}
-    ${model.templateConfig.showDeclaration && model.declaration ? `<p><strong>Declaration:</strong> ${escapeHtml(model.declaration)}</p>` : ""}
-    ${model.templateConfig.showFooterNote ? `<p>${escapeHtml(model.footer)}</p>` : ""}
-    ${model.templateConfig.showFooterLogo ? `<div class="footer-logo">${model.branding.footerLogoSrc ? `<img src="${escapeHtml(model.branding.footerLogoSrc)}" alt="Footer logo" />` : escapeHtml(model.supplier.tradeName || model.supplier.name)}</div>` : ""}
-    ${model.signature ? `<p style="text-align:right; margin-top:18px;">For ${escapeHtml(model.supplier.name)}<br/><br/>${escapeHtml(model.signature)}</p>` : ""}
-  </div></body></html>`;
-
-  gstPerfLog("gst.pdf.htmlRender", htmlStartedAtMs, { gstDocumentId, rowCount: model.rows.length });
+  gstPerfLog("gst.pdf.htmlRender", htmlStartedAtMs, { gstDocumentId, rowCount: model.rows.length, paperSize });
   return {
     ok: true,
     data: {
@@ -736,6 +666,7 @@ export async function renderGstPdf(gstDocumentId: string): Promise<GstServiceRes
         generatedAt: new Date().toISOString(),
         renderer: "GST_HTML_RENDERER_V4",
         templateType: model.templateType,
+        paperSize,
       },
     },
   };

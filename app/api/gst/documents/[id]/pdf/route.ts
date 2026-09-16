@@ -26,8 +26,11 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
       return NextResponse.json({ ok: false, error: "GST document not found" }, { status: 404 });
     }
 
+    // Optional per-print sheet override ("auto" | "A4" | "A5"); otherwise the template setting.
+    const paperSize = req.nextUrl.searchParams.get("paper");
+
     if (format === "html") {
-      const htmlResult = await withDeadline("Document render", 20000, renderGstPdf(id));
+      const htmlResult = await withDeadline("Document render", 20000, renderGstPdf(id, { paperSize }));
       if (!htmlResult.ok || !htmlResult.data) {
         return NextResponse.json({ ok: false, error: htmlResult.error || "Unable to render document HTML" }, { status: 404 });
       }
@@ -38,7 +41,7 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
     }
 
     if (format === "pdf") {
-      const pdfResult = await withDeadline("Document PDF render", 20000, renderGstInvoicePdfBuffer(id));
+      const pdfResult = await withDeadline("Document PDF render", 20000, renderGstInvoicePdfBuffer(id, { paperSize }));
       if (!pdfResult.ok || !pdfResult.data) {
         return NextResponse.json({ ok: false, error: pdfResult.error || "Unable to generate document PDF" }, { status: 404 });
       }
@@ -53,7 +56,7 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
       });
     }
 
-    const result = await withDeadline("Document render", 20000, renderGstPdf(id));
+    const result = await withDeadline("Document render", 20000, renderGstPdf(id, { paperSize }));
     if (!result.ok || !result.data) {
       return NextResponse.json({ ok: false, error: result.error || "Unable to render PDF payload" }, { status: 404 });
     }

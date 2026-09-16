@@ -6,7 +6,8 @@ import { getDefaultGstTemplate, saveDefaultGstTemplate } from '../../lib/gst-cli
 
 type TemplatePreset = 'compact' | 'detailed' | 'dispatch'
 type FieldOption = 'showHeaderLogo' | 'showFooterLogo' | 'showSku' | 'showVariant' | 'showProductTitle' | 'showHsn' | 'showTaxBreakup' | 'showAmountInWords' | 'showDeclaration' | 'showFooterNote'
-type InvoiceTemplateConfig = Record<FieldOption, boolean> & { preset: TemplatePreset }
+type PaperSize = 'auto' | 'A4' | 'A5'
+type InvoiceTemplateConfig = Record<FieldOption, boolean> & { preset: TemplatePreset; paperSize: PaperSize }
 type ThemeConfig = {
   headerLogoUrl?: string | null
   footerLogoUrl?: string | null
@@ -17,6 +18,12 @@ const PRESETS: Array<{ value: TemplatePreset; label: string; description: string
   { value: 'compact', label: 'Compact GST Invoice', description: 'Condensed layout with compliant invoice essentials.' },
   { value: 'detailed', label: 'Detailed GST Invoice', description: 'Full GST invoice with tax breakup, notes, declaration, and logos.' },
   { value: 'dispatch', label: 'Dispatch Friendly Invoice', description: 'Packing/dispatch focused layout while retaining GST identifiers.' },
+]
+
+const PAPER_SIZES: Array<{ value: PaperSize; label: string; description: string }> = [
+  { value: 'auto', label: 'Match printer paper', description: 'Lays out for whichever sheet is selected in the print dialog. Recommended.' },
+  { value: 'A4', label: 'A4 portrait', description: 'Always lays out for A4, including the emailed and downloaded PDF.' },
+  { value: 'A5', label: 'A5 portrait', description: 'Always lays out for A5 — the usual dispatch/packing-slip sheet.' },
 ]
 
 const FIELD_OPTIONS: Array<{ key: FieldOption; label: string; locked?: boolean }> = [
@@ -34,6 +41,7 @@ const FIELD_OPTIONS: Array<{ key: FieldOption; label: string; locked?: boolean }
 
 const DEFAULT_TEMPLATE_CONFIG: InvoiceTemplateConfig = {
   preset: 'detailed',
+  paperSize: 'auto',
   showHeaderLogo: true,
   showFooterLogo: true,
   showSku: true,
@@ -170,9 +178,22 @@ export function GstTemplateAdmin() {
           <h3 className="mk-section-title" style={{ marginBottom: 0 }}>Preset</h3>
           <div className="grid gap-3 md:grid-cols-3">
             {PRESETS.map((preset) => (
-              <button key={preset.value} type="button" disabled={loading} onClick={() => void saveTemplateConfig(PRESET_DEFAULTS[preset.value])} className={`rounded-xl border p-3 text-left text-sm transition ${invoiceTemplate.preset === preset.value ? 'border-[color:var(--primary)] bg-[color:var(--primary-soft)]' : 'border-[color:var(--line)] hover:border-[color:var(--line-strong)]'}`}>
+              <button key={preset.value} type="button" disabled={loading} onClick={() => void saveTemplateConfig({ ...PRESET_DEFAULTS[preset.value], paperSize: invoiceTemplate.paperSize })} className={`rounded-xl border p-3 text-left text-sm transition ${invoiceTemplate.preset === preset.value ? 'border-[color:var(--primary)] bg-[color:var(--primary-soft)]' : 'border-[color:var(--line)] hover:border-[color:var(--line-strong)]'}`}>
                 <span className="font-semibold">{preset.label}</span>
                 <span className="mt-1 block text-xs text-[color:var(--muted)]">{preset.description}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <h3 className="mk-section-title" style={{ marginBottom: 0 }}>Paper size</h3>
+          <p className="mk-section-subtitle">The sheet the invoice is laid out for. &quot;Match printer paper&quot; keeps A4 and A5 prints correct without any further setting.</p>
+          <div className="grid gap-3 md:grid-cols-3">
+            {PAPER_SIZES.map((paper) => (
+              <button key={paper.value} type="button" disabled={loading} onClick={() => void saveTemplateConfig({ ...invoiceTemplate, paperSize: paper.value })} className={`rounded-xl border p-3 text-left text-sm transition ${invoiceTemplate.paperSize === paper.value ? 'border-[color:var(--primary)] bg-[color:var(--primary-soft)]' : 'border-[color:var(--line)] hover:border-[color:var(--line-strong)]'}`}>
+                <span className="font-semibold">{paper.label}</span>
+                <span className="mt-1 block text-xs text-[color:var(--muted)]">{paper.description}</span>
               </button>
             ))}
           </div>
