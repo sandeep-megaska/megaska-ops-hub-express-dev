@@ -1,5 +1,5 @@
 import type { Browser, Page } from "puppeteer-core";
-import { renderGstPdf } from "./pdf";
+import { GST_INVOICE_PAPER_GEOMETRY, renderGstPdf, type GstPdfRenderOptions } from "./pdf";
 import type { GstServiceResult } from "./types";
 import { gstPerfLog, gstPerfNow } from "./perf";
 
@@ -57,6 +57,8 @@ async function getBrowser(): Promise<Browser> {
       executablePath: opts.executablePath,
       args: opts.args,
       headless: opts.headless,
+      // Per-page viewport is set at render time from the invoice's paper size; this is
+      // only the default for a freshly launched browser.
       defaultViewport: { width: 794, height: 1123 }, // A4 portrait @ ~96dpi
     });
   })();
@@ -72,17 +74,22 @@ async function getBrowser(): Promise<Browser> {
 
 export async function renderGstPdfBinary(
   gstDocumentId: string,
+  options: GstPdfRenderOptions = {},
 ): Promise<GstServiceResult<{ documentNumber: string; buffer: Buffer }>> {
   const startedAtMs = gstPerfNow();
 
   // Reuse the existing HTML renderer verbatim — no template divergence. Logos are
   // already resolved to data URIs (#785), so the page needs no network at all.
-  const htmlResult = await renderGstPdf(gstDocumentId);
+  const htmlResult = await renderGstPdf(gstDocumentId, options);
   if (!htmlResult.ok || !htmlResult.data) {
     return { ok: false, error: htmlResult.error || "GST document not found" };
   }
 
   const { html, documentNumber } = htmlResult.data;
+  // The stylesheet's @page size wins via preferCSSPageSize, but a "auto" sheet has no
+  // size to honour — then this format is what Chromium falls back to, so it has to be
+  // the same sheet the stylesheet laid out for.
+  const paper = GST_INVOICE_PAPER_GEOMETRY[htmlResult.data.metadata.paperSize];
 
   let page: Page | null = null;
   try {
@@ -92,17 +99,20 @@ export async function renderGstPdfBinary(
 
     const renderStartedAtMs = gstPerfNow();
     page = await browser.newPage();
+    // Lay out against the target sheet so the narrow-paper print rules resolve the same
+    // way they do in the merchant's browser.
+    await page.setViewport({ width: paper.screenWidthPx, height: Math.round(paper.screenWidthPx * Math.SQRT2) });
     // Data-URI logos mean "load" fires without waiting on the network.
     await page.setContent(html, { waitUntil: "load", timeout: 15000 });
     const pdf = await page.pdf({
-      format: "A4",
+      format: paper.pdfFormat,
       printBackground: true,
-      preferCSSPageSize: true, // honor the stylesheet's @page { size: A4; margin: 10mm }
+      preferCSSPageSize: true, // honor the stylesheet's @page { size; margin }
     });
-    gstPerfLog("gst.pdf.chromiumRender", renderStartedAtMs, { gstDocumentId });
+    gstPerfLog("gst.pdf.chromiumRender", renderStartedAtMs, { gstDocumentId, paperSize: htmlResult.data.metadata.paperSize });
 
     const buffer = Buffer.from(pdf);
-    gstPerfLog("gst.pdf.chromiumTotal", startedAtMs, { gstDocumentId, bytes: buffer.length });
+    gstPerfLog("gst.pdf.chromiumTotal", startedAtMs, { gstDocumentId, bytes: buffer.length, paperSize: htmlResult.data.metadata.paperSize });
     return { ok: true, data: { documentNumber, buffer } };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : "Chromium PDF render failed" };
