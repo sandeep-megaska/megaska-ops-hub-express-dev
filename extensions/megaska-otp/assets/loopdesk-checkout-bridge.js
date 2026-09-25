@@ -122,6 +122,14 @@ async function continueExpressCheckout(reason) {
     return;
   }
   state.fallbacks += 1;
+  // Express modal retired: never navigate straight to /checkout from here, or a
+  // logged-out shopper skips OTP. Route through the OTP gate, which continues to
+  // Shopify Checkout directly when the session is already verified.
+  if (window.MegaskaOtp && typeof window.MegaskaOtp.beginGatedShopifyCheckout === 'function') {
+    Promise.resolve(window.MegaskaOtp.beginGatedShopifyCheckout({ triggerSource: reason || SOURCE }))
+      .catch(function () { window.location.href = FALLBACK_URL; });
+    return;
+  }
   window.location.href = FALLBACK_URL;
 }
 function open(reason) {
@@ -161,6 +169,11 @@ document.addEventListener('megaska:auth-state-changed', function () {
   if (!intent || intent.type !== 'express_checkout' || !hasMegaskaSessionToken()) return;
   closeLoopDeskDrawer();
   window.setTimeout(function () { continueExpressCheckout(intent.source + '-auth-resume'); }, 250);
+});
+// A dismissed OTP modal abandons the checkout: drop the intent so a later,
+// unrelated login does not auto-resume into checkout.
+document.addEventListener('megaska:otp-cancelled', function () {
+  clearPendingIntent();
 });
 document.addEventListener('click', function (event) {
   var control = findCheckoutControl(event.target);
