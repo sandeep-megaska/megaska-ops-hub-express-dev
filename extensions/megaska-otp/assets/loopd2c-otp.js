@@ -1303,6 +1303,9 @@
     const force = Boolean(opts.force);
 
     if (!force && isBusy()) return false;
+    // Dismissed without verifying: the gated action (e.g. navigate to
+    // /checkout) must not resume on a later, unrelated login.
+    if (reason && reason !== "success") clearPendingAction();
 
     const { modal } = getModalParts();
     state.isOpen = false;
