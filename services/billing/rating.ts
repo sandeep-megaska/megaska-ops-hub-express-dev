@@ -60,7 +60,7 @@ export async function rateBillingPeriod(shopId: string, billingPeriodId: string)
       const claimed = await db.merchantBillingPeriod.updateMany({ where: { id: billingPeriodId, shopId, status: "OPEN" }, data: { status: "RATING" } });
       if (claimed.count !== 1) throw new CommercialRatingError("RATING_IN_PROGRESS");
       log("rating_started", { shopId, billingPeriodId, subscriptionId: period.subscriptionId, pricingPlanCode: plan.code });
-      const events = await db.merchantUsageEvent.findMany({ where: { shopId, status: "RECORDED", provider: { in: ["PLATFORM_TWILIO", "PLATFORM_RESEND", "PLATFORM_MSG91"] }, occurredAt: { gte: period.periodStart, lt: period.periodEnd } }, select: { usageType: true, quantity: true } });
+      const events = await db.merchantUsageEvent.findMany({ where: { shopId, status: "RECORDED", provider: { in: ["PLATFORM_TWILIO", "PLATFORM_RESEND", "PLATFORM_MSG91", "PLATFORM_WHATSAPP"] }, occurredAt: { gte: period.periodStart, lt: period.periodEnd } }, select: { usageType: true, quantity: true } });
       const usage = new Map<string, { quantity: Prisma.Decimal; count: number }>();
       for (const event of events) { const code = usageTypeToFeatureCode[event.usageType]; if (code) { const current = usage.get(code) ?? { quantity: new Prisma.Decimal(0), count: 0 }; current.quantity = current.quantity.plus(decimal(event.quantity)); current.count++; usage.set(code, current); } }
       const activeFeatures = plan.features.filter((feature) => feature.active);
