@@ -244,6 +244,7 @@ enum MerchantUsageProvider {
   PLATFORM_TWILIO
   PLATFORM_RESEND
   PLATFORM_MSG91
+  PLATFORM_WHATSAPP
   MERCHANT_TWILIO
   MERCHANT_RESEND
   MERCHANT_MSG91
@@ -1012,9 +1013,9 @@ model OTPChallenge {
   id            String    @id @default(uuid())
   shopId        String
   phoneE164     String
-  provider      String // twilio, msg91, mock
+  provider      String // twilio, msg91, whatsapp, mock
   providerSid   String?
-  status        String // pending, verified, failed, expired
+  status        String // pending, verified, failed, expired, superseded
   attemptsCount Int       @default(0)
   requestedAt   DateTime  @default(now())
   verifiedAt    DateTime?

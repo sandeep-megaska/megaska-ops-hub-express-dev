@@ -85,3 +85,26 @@ Meta Cloud API config:
 - `WHATSAPP_META_GRAPH_VERSION` (optional; defaults to `v20.0`)
 
 Never expose WhatsApp provider secrets as `NEXT_PUBLIC_*`.
+
+## WhatsApp OTP (storefront login)
+
+Storefront OTP is sent on WhatsApp first (Meta Cloud API authentication
+template, no DLT needed) and falls back to Twilio SMS when the WhatsApp send
+fails. Shoppers can also tap "Get code by SMS" after 30s if the WhatsApp message
+never arrives (e.g. the number is not on WhatsApp). The code is generated,
+hashed and verified by us (4 digits, 5-minute expiry, 5 attempts, 25s resend
+cooldown, 5 sends per 15 minutes per number); Twilio Verify is untouched for
+SMS. Usage is metered as `PLATFORM_WHATSAPP`.
+
+This uses its own dedicated LoopD2C number, separate from the
+`WHATSAPP_META_*` checkout-recovery config:
+- `WHATSAPP_OTP_ENABLED` — must be `true` to switch it on
+- `WHATSAPP_OTP_ACCESS_TOKEN` — system-user token with `whatsapp_business_messaging`
+- `WHATSAPP_OTP_PHONE_NUMBER_ID`
+- `WHATSAPP_OTP_TEMPLATE_NAME` (optional; defaults to `loopd2c_login_otp`)
+- `WHATSAPP_OTP_TEMPLATE_LANGUAGE` (optional; defaults to `en`)
+- `WHATSAPP_OTP_COUNTRY_PREFIXES` (optional; comma-separated, defaults to `+91`)
+- `WHATSAPP_OTP_GRAPH_VERSION` (optional; defaults to `v20.0`)
+
+Template: category **Authentication**, name matching
+`WHATSAPP_OTP_TEMPLATE_NAME`, code delivery **Copy code** button.

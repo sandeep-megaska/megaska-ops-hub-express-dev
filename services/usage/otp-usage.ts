@@ -7,7 +7,7 @@ export function deriveOtpUsageCountryCode(phoneE164?: string | null) {
 export async function recordAcceptedOtpRequestUsage(input: {
   shopId: string;
   challengeId: string;
-  provider: "PLATFORM_TWILIO";
+  provider: "PLATFORM_TWILIO" | "PLATFORM_WHATSAPP";
   providerSid?: string | null;
   phoneE164?: string | null;
   occurredAt?: Date;
@@ -24,6 +24,6 @@ export async function recordAcceptedOtpRequestUsage(input: {
     idempotencyKey: `usage:otp-request:${input.shopId}:${input.challengeId}`,
     countryCode: deriveOtpUsageCountryCode(input.phoneE164),
     occurredAt: input.occurredAt,
-    metadata: { transportProvider: "twilio", providerStatus: "pending", usedFallback: false },
+    metadata: { transportProvider: input.provider === "PLATFORM_WHATSAPP" ? "whatsapp" : "twilio", providerStatus: "pending", usedFallback: false },
   });
 }

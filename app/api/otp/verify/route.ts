@@ -11,6 +11,11 @@ import {
   verifyOtpWithTwilio,
 } from "../../../../services/auth/otp";
 import {
+  WHATSAPP_OTP_MAX_ATTEMPTS,
+  WHATSAPP_OTP_PROVIDER,
+  whatsAppOtpCodeMatches,
+} from "../../../../services/auth/whatsapp-otp";
+import {
   normalizeOtpPhoneForVerification,
   OtpPhonePolicyError,
 } from "../../../../services/auth/otp-phone-policy";
@@ -146,6 +151,69 @@ export async function POST(req: NextRequest) {
           NextResponse.json(
             { error: "Unable to verify OTP right now. Please retry." },
             { status: 503 }
+          )
+        );
+      }
+    } else if (provider === WHATSAPP_OTP_PROVIDER) {
+      // Claim an attempt atomically before comparing, so parallel guesses
+      // cannot exceed the cap on a 4-digit code.
+      const claimed = await prisma.oTPChallenge.updateMany({
+        where: {
+          id: challenge.id,
+          status: "pending",
+          attemptsCount: { lt: WHATSAPP_OTP_MAX_ATTEMPTS },
+        },
+        data: { attemptsCount: { increment: 1 } },
+      });
+
+      if (claimed.count !== 1) {
+        await prisma.oTPChallenge.updateMany({
+          where: { id: challenge.id, status: "pending" },
+          data: { status: "failed" },
+        });
+
+        return withCors(
+          req,
+          NextResponse.json(
+            { error: "Too many incorrect attempts. Please request a new code." },
+            { status: 400 }
+          )
+        );
+      }
+
+      const metadata =
+        challenge.metadata && typeof challenge.metadata === "object"
+          ? (challenge.metadata as Record<string, unknown>)
+          : {};
+      const valid = whatsAppOtpCodeMatches(challenge.id, otpRaw, String(metadata.codeHash ?? ""));
+
+      console.info("[OTP VERIFY WHATSAPP RESULT]", {
+        challengeId: challenge.id,
+        shopId: shop.id,
+        shopDomain: shop.shopDomain,
+        provider,
+        valid,
+        attempt: challenge.attemptsCount + 1,
+      });
+
+      if (!valid) {
+        const exhausted = challenge.attemptsCount + 1 >= WHATSAPP_OTP_MAX_ATTEMPTS;
+        if (exhausted) {
+          await prisma.oTPChallenge.updateMany({
+            where: { id: challenge.id, status: "pending" },
+            data: { status: "failed" },
+          });
+        }
+
+        return withCors(
+          req,
+          NextResponse.json(
+            {
+              error: exhausted
+                ? "Too many incorrect attempts. Please request a new code."
+                : "Invalid or expired OTP",
+            },
+            { status: 400 }
           )
         );
       }

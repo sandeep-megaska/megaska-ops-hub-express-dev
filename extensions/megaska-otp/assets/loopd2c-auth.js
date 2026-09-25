@@ -260,11 +260,13 @@
     );
   }
 
-  async function requestOtp(phone, countryCode) {
+  async function requestOtp(phone, countryCode, options) {
     console.log("[Megaska Auth] OTP request triggered", { endpoint: `${API_BASE}/otp/request` });
+    // channel "sms" skips WhatsApp delivery (the "Get code by SMS" fallback).
+    const channel = options && options.channel === "sms" ? "sms" : undefined;
     return apiFetch("/otp/request", {
       method: "POST",
-      body: JSON.stringify({ phone, countryCode }),
+      body: JSON.stringify(channel ? { phone, countryCode, channel } : { phone, countryCode }),
     });
   }
 
