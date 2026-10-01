@@ -491,6 +491,8 @@
     state.verifying = false;
     state.savingProfile = false;
     state.resendSeconds = 0;
+    state.otpChannel = preservePhone ? state.otpChannel : "";
+    state.smsFallbackAvailable = preservePhone ? state.smsFallbackAvailable : false;
     state.errorMessage = "";
     state.statusMessage = "";
     state.successMessage = "You're in!";
@@ -832,6 +834,9 @@
               <span data-megaska-resend-text>Resend available in 30s</span>
               <button type="button" class="megaska-otp-link" data-megaska-resend disabled>Resend OTP</button>
             </div>
+            <p class="megaska-otp-helper-link-row" data-megaska-sms-fallback-row hidden>
+              <button type="button" class="megaska-otp-link" data-megaska-sms-fallback>Didn't get it on WhatsApp? Get code by SMS</button>
+            </p>
             <p class="megaska-otp-trouble">
               <button type="button" class="megaska-otp-link" data-megaska-edit-phone>Entered wrong number?</button>
             </p>
@@ -972,6 +977,7 @@
       editBtn.addEventListener("click", handleEditPhone);
     });
     modal.querySelector("[data-megaska-resend]").addEventListener("click", handleResend);
+    modal.querySelector("[data-megaska-sms-fallback]").addEventListener("click", handleSmsFallback);
 
     modal.querySelectorAll("[data-megaska-otp-digit]").forEach((input) => {
       input.addEventListener("input", handleOtpInput);
@@ -1075,6 +1081,7 @@
     otpInputs: Array.from(modal.querySelectorAll("[data-megaska-otp-digit]")),
     resendText: modal.querySelector("[data-megaska-resend-text]"),
     resendBtn: modal.querySelector("[data-megaska-resend]"),
+    smsFallbackRow: modal.querySelector("[data-megaska-sms-fallback-row]"),
     profileFirstNameInput: modal.querySelector("[data-megaska-profile-firstname]"),
     profileLastNameInput: modal.querySelector("[data-megaska-profile-lastname]"),
     profileEmailInput: modal.querySelector("[data-megaska-profile-email]"),
@@ -1213,10 +1220,12 @@
     resendText.textContent = "Didn't get the code?";
     resendBtn.disabled = false;
   }
+  updateSmsFallbackUi();
 }
 
   function updateResendUi() {
     const { resendBtn, resendText } = getModalParts();
+    updateSmsFallbackUi();
 
     if (state.step !== "otp") {
       resendBtn.disabled = true;
@@ -1238,6 +1247,27 @@
 
     resendText.textContent = "Didn't get the code?";
     resendBtn.disabled = false;
+    updateSmsFallbackUi();
+  }
+
+  // WhatsApp delivery failures (number not on WhatsApp) surface only
+  // asynchronously at Meta, so offer SMS once the resend window has passed.
+  function updateSmsFallbackUi() {
+    const { smsFallbackRow } = getModalParts();
+    if (!smsFallbackRow) return;
+    smsFallbackRow.hidden = !(
+      state.step === "otp" &&
+      state.otpChannel === "whatsapp" &&
+      state.smsFallbackAvailable &&
+      !state.requesting &&
+      state.resendSeconds <= 0
+    );
+  }
+
+  function applyOtpDeliveryChannel(payload) {
+    state.otpChannel = payload?.channel === "whatsapp" ? "whatsapp" : "sms";
+    state.smsFallbackAvailable = payload?.smsFallbackAvailable === true;
+    state.statusMessage = state.otpChannel === "whatsapp" ? "💬 Code sent on WhatsApp" : "";
   }
 
   function focusPhoneInput() {
@@ -1483,7 +1513,7 @@ function renderSuccessStep(message) {
       const payload = getOtpRequestPayload(otpRequestResponse);
       state.otpRequestPhoneE164 = String(payload?.phoneE164 || payload?.phone || "");
       state.requesting = false;
-      state.statusMessage = "";
+      applyOtpDeliveryChannel(payload);
       renderStep();
       focusOtpInput(0);
     } catch (error) {
@@ -1848,12 +1878,40 @@ async function completeAuthenticatedLogin(sessionCustomer, options) {
       state.requesting = false;
       state.lastRequestedPhone = state.normalizedPhone;
       state.otpDigits = ["", "", "", ""];
+      applyOtpDeliveryChannel(getOtpRequestPayload(otpRequestResponse));
       renderStep();
       focusOtpInput(0);
       startResendTimer();
     } catch (error) {
       state.requesting = false;
       state.errorMessage = error.message || "Could not send OTP. Please try again.";
+      renderStep();
+    }
+  }
+
+  async function handleSmsFallback() {
+    if (!isModalOpen()) return;
+    if (state.requesting || state.otpChannel !== "whatsapp" || !state.normalizedPhone) return;
+
+    state.requesting = true;
+    state.errorMessage = "";
+    renderStep();
+
+    try {
+      const otpRequestResponse = await window.MegaskaAuth.requestOtp(state.otpRequestPhoneInput, state.otpRequestCountryCode, { channel: "sms" });
+      if (!didOtpRequestSucceed(otpRequestResponse)) {
+        throw new Error(getOtpRequestErrorMessage(otpRequestResponse));
+      }
+      state.requesting = false;
+      state.otpDigits = ["", "", "", ""];
+      applyOtpDeliveryChannel(getOtpRequestPayload(otpRequestResponse));
+      if (state.otpChannel === "sms") state.statusMessage = "📱 Code sent by SMS";
+      renderStep();
+      focusOtpInput(0);
+      startResendTimer();
+    } catch (error) {
+      state.requesting = false;
+      state.errorMessage = error.message || "Could not send the SMS code. Please try again.";
       renderStep();
     }
   }

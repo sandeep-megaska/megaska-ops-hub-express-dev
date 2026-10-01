@@ -3,7 +3,7 @@ import { prisma as defaultPrisma } from "../db/prisma.ts";
 import { calculateFeatureRating } from "./rating-core.ts";
 import { usageTypeToFeatureCode } from "./rating.ts";
 
-const PLATFORM_BILLABLE_PROVIDERS = ["PLATFORM_TWILIO", "PLATFORM_RESEND", "PLATFORM_MSG91"];
+const PLATFORM_BILLABLE_PROVIDERS = ["PLATFORM_TWILIO", "PLATFORM_RESEND", "PLATFORM_MSG91", "PLATFORM_WHATSAPP"];
 const ACTIVE_SUBSCRIPTION_STATUSES = ["TRIALING", "ACTIVE", "PAST_DUE"];
 
 type PlanFeature = { id: string; active: boolean; includedQuantity: unknown; overageUnitPrice: unknown; billableFeature: { id: string; code: string; name: string; active: boolean } };

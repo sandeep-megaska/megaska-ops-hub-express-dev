@@ -123,6 +123,7 @@ model Shop {
   identityReconciliationAudits  CustomerIdentityReconciliationAudit[]
   identityMerges                CustomerIdentityMerge[]
   checkoutPricingSnapshots      ShopifyCheckoutPricingSnapshot[]
+  orderCourierShipments         OrderCourierShipment[]
   emailVerificationChallenges   EmailVerificationChallenge[]
 }
 
@@ -244,6 +245,7 @@ enum MerchantUsageProvider {
   PLATFORM_TWILIO
   PLATFORM_RESEND
   PLATFORM_MSG91
+  PLATFORM_WHATSAPP
   MERCHANT_TWILIO
   MERCHANT_RESEND
   MERCHANT_MSG91
@@ -1012,9 +1014,9 @@ model OTPChallenge {
   id            String    @id @default(uuid())
   shopId        String
   phoneE164     String
-  provider      String // twilio, msg91, mock
+  provider      String // twilio, msg91, whatsapp, mock
   providerSid   String?
-  status        String // pending, verified, failed, expired
+  status        String // pending, verified, failed, expired, superseded
   attemptsCount Int       @default(0)
   requestedAt   DateTime  @default(now())
   verifiedAt    DateTime?
@@ -1431,6 +1433,42 @@ model OrderShipment {
 
   @@index([orderId, createdAt])
   @@index([provider, providerReference])
+  @@index([awb])
+}
+
+enum OrderCourierShipmentStatus {
+  CREATING
+  CREATED
+  FAILED
+}
+
+// Outbound courier shipments booked from the admin "Shipments" page, keyed by
+// the Shopify order (not MegaskaOrder, which exists only for known customers).
+// The unique key doubles as the booking lock so an order is never sent twice.
+model OrderCourierShipment {
+  id                String                     @id @default(uuid())
+  shopId            String
+  shopifyOrderId    String
+  shopifyOrderName  String
+  provider          CourierProvider            @default(DELHIVERY)
+  status            OrderCourierShipmentStatus @default(CREATING)
+  awb               String?
+  trackingUrl       String?
+  providerReference String?
+  paymentMode       String // PREPAID | COD
+  codAmountPaise    Int                        @default(0)
+  weightGrams       Int?
+  shippingMode      String?
+  errorMessage      String?
+  rawResponse       Json?
+  attempts          Int                        @default(0)
+  createdAt         DateTime                   @default(now())
+  updatedAt         DateTime                   @updatedAt
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@unique([shopId, shopifyOrderId, provider])
+  @@index([shopId, createdAt])
   @@index([awb])
 }
 
