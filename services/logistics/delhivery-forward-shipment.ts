@@ -155,6 +155,7 @@ function pickFirstString(source: unknown, keys: string[]): string | null {
 export function normalizeDelhiveryForwardShipmentResponse(
   rawResponse: unknown,
   trackingUrlTemplate: string | null,
+  failureFallbackMessage = "Delhivery replacement shipment creation failed.",
 ): DelhiveryForwardShipmentResult {
   const root = rawResponse && typeof rawResponse === "object" ? (rawResponse as Record<string, unknown>) : {};
   const packages = Array.isArray(root.packages) ? root.packages : Array.isArray(root.Package) ? root.Package : [];
@@ -177,7 +178,7 @@ export function normalizeDelhiveryForwardShipmentResponse(
     // over the generic top-level rmk.
     const message = pickFirstString(firstPackage, ["remarks", "error", "message", "rmk"])
       || pickFirstString(root, ["error", "message", "rmk"])
-      || "Delhivery replacement shipment creation failed.";
+      || failureFallbackMessage;
     throw new DelhiveryForwardShipmentError(message, 502);
   }
 
@@ -200,26 +201,47 @@ export async function createDelhiveryForwardShipment(
   }
 
   const payload = buildDelhiveryForwardShipmentPayload(request, runtime.pickupLocationName, shippingAddress);
+  return submitDelhiveryShipmentPayload(runtime, payload);
+}
+
+export type DelhiveryCmuPayload = { pickup_location: { name: string }; shipments: Array<Record<string, unknown>> };
+
+type SubmitOptions = { logTag?: string; failureMessage?: string };
+
+/**
+ * POSTs a CMU (manifest) payload to Delhivery. When Delhivery does not know the
+ * pickup warehouse it is registered from settings and the call retried once.
+ * Shared by exchange replacements and bulk order shipments.
+ */
+export async function submitDelhiveryShipmentPayload(
+  runtime: DelhiveryRuntimeConfig,
+  payload: DelhiveryCmuPayload,
+  options: SubmitOptions = {},
+): Promise<DelhiveryForwardShipmentResult> {
+  if (!runtime.configured) {
+    throw new DelhiveryForwardShipmentError(runtime.reason, 503);
+  }
 
   try {
-    return await postForwardShipment(runtime, payload);
+    return await postForwardShipment(runtime, payload, options);
   } catch (error) {
     // Auto-register the warehouse from settings and retry once (no portal).
     if (isWarehouseNotFound(error)) {
       await ensureWarehouseOrThrow(runtime);
       try {
-        return await postForwardShipment(runtime, payload);
+        return await postForwardShipment(runtime, payload, options);
       } catch (retryError) {
-        throw remapWarehouseError(retryError, runtime.pickupLocationName);
+        throw remapWarehouseError(retryError, runtime.pickupLocationName, options.failureMessage);
       }
     }
-    throw remapWarehouseError(error, runtime.pickupLocationName);
+    throw remapWarehouseError(error, runtime.pickupLocationName, options.failureMessage);
   }
 }
 
 async function postForwardShipment(
   runtime: DelhiveryRuntimeConfig,
-  payload: ReturnType<typeof buildDelhiveryForwardShipmentPayload>,
+  payload: DelhiveryCmuPayload,
+  options: SubmitOptions,
 ): Promise<DelhiveryForwardShipmentResult> {
   const response = await fetch(resolveEndpoint(runtime), {
     method: "POST",
@@ -232,7 +254,7 @@ async function postForwardShipment(
   });
 
   const rawText = await response.text();
-  console.info("[DELHIVERY REPLACEMENT] response", {
+  console.info(options.logTag || "[DELHIVERY REPLACEMENT] response", {
     status: response.status,
     ok: response.ok,
     sentPayload: JSON.stringify(payload).slice(0, 1200),
@@ -249,7 +271,7 @@ async function postForwardShipment(
     throw new DelhiveryForwardShipmentError(`Delhivery API returned HTTP ${response.status}.`, 502);
   }
 
-  return normalizeDelhiveryForwardShipmentResponse(rawResponse, runtime.trackingUrlTemplate);
+  return normalizeDelhiveryForwardShipmentResponse(rawResponse, runtime.trackingUrlTemplate, options.failureMessage);
 }
 
 function isWarehouseNotFound(error: unknown) {
@@ -259,7 +281,11 @@ function isWarehouseNotFound(error: unknown) {
   );
 }
 
-function remapWarehouseError(error: unknown, pickupLocationName: string): DelhiveryForwardShipmentError {
+function remapWarehouseError(
+  error: unknown,
+  pickupLocationName: string,
+  failureMessage = "Delhivery replacement shipment creation failed.",
+): DelhiveryForwardShipmentError {
   if (error instanceof DelhiveryForwardShipmentError && /clientwarehouse|warehouse|matching query does not exist/i.test(error.message)) {
     return new DelhiveryForwardShipmentError(
       `Delhivery has no pickup warehouse named "${pickupLocationName || "(not set)"}". Add the warehouse details in Settings → Delhivery so the app can register it. (Delhivery said: ${error.message})`,
@@ -268,7 +294,7 @@ function remapWarehouseError(error: unknown, pickupLocationName: string): Delhiv
   }
   return error instanceof DelhiveryForwardShipmentError
     ? error
-    : new DelhiveryForwardShipmentError(error instanceof Error ? error.message : "Delhivery replacement shipment creation failed.", 502);
+    : new DelhiveryForwardShipmentError(error instanceof Error ? error.message : failureMessage, 502);
 }
 
 async function ensureWarehouseOrThrow(runtime: DelhiveryRuntimeConfig) {

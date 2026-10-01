@@ -123,6 +123,7 @@ model Shop {
   identityReconciliationAudits  CustomerIdentityReconciliationAudit[]
   identityMerges                CustomerIdentityMerge[]
   checkoutPricingSnapshots      ShopifyCheckoutPricingSnapshot[]
+  orderCourierShipments         OrderCourierShipment[]
   emailVerificationChallenges   EmailVerificationChallenge[]
 }
 
@@ -1432,6 +1433,48 @@ model OrderShipment {
 
   @@index([orderId, createdAt])
   @@index([provider, providerReference])
+  @@index([awb])
+}
+
+enum OrderCourierShipmentStatus {
+  CREATING
+  CREATED
+  FAILED
+}
+
+// Outbound courier shipments booked from the admin "Shipments" page, keyed by
+// the Shopify order (not MegaskaOrder, which exists only for known customers).
+// The unique key doubles as the booking lock so an order is never sent twice.
+model OrderCourierShipment {
+  id                String                     @id @default(uuid())
+  shopId            String
+  shopifyOrderId    String
+  shopifyOrderName  String
+  provider          CourierProvider            @default(DELHIVERY)
+  status            OrderCourierShipmentStatus @default(CREATING)
+  awb               String?
+  trackingUrl       String?
+  providerReference String?
+  paymentMode       String // PREPAID | COD
+  codAmountPaise    Int                        @default(0)
+  weightGrams       Int?
+  shippingMode      String?
+  errorMessage      String?
+  rawResponse       Json?
+  attempts          Int                        @default(0)
+  // Shopify fulfillment (marks the order shipped with the AWB): PENDING |
+  // DONE | FAILED; null when not attempted.
+  shopifyFulfillmentStatus String?
+  shopifyFulfillmentId     String?
+  shopifyFulfillmentError  String?
+  shopifyFulfilledAt       DateTime?
+  createdAt         DateTime                   @default(now())
+  updatedAt         DateTime                   @updatedAt
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@unique([shopId, shopifyOrderId, provider])
+  @@index([shopId, createdAt])
   @@index([awb])
 }
 

@@ -21,6 +21,7 @@ const moduleGroups: ModuleGroup[] = [
     heading: "Orders & fulfilment",
     blurb: "Post-purchase operations across the order lifecycle.",
     cards: [
+      { title: "Shipments", meta: "Bulk-book Delhivery shipments for unfulfilled orders", href: "/admin/shipments" },
       { title: "Exchanges", meta: "Track exchange requests and pending actions", href: "/admin/exchanges" },
       { title: "Cancellations", meta: "Review cancellation requests and statuses", href: "/admin/cancellations" },
       { title: "Refunds", meta: "Process and audit refund requests", href: "/admin/refunds" },

@@ -82,6 +82,9 @@ export default function RootLayout({
                     <AdminNavLink href="/admin/partial-cod" className="mk-nav-link">
                       Partial COD
                     </AdminNavLink>
+                    <AdminNavLink href="/admin/shipments" className="mk-nav-link">
+                      Shipments
+                    </AdminNavLink>
                     <AdminNavLink
                       href="/admin/exchanges"
                       className="mk-nav-link"
