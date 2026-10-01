@@ -167,8 +167,11 @@ test("search query limits to open unshipped orders and drops dates when filterin
 });
 
 test("create options are clamped to sane values", () => {
-  assert.deepEqual(normalizeCreateOptions({ weightGrams: "750", shippingMode: "Express" }), { weightGrams: 750, shippingMode: "Express" });
-  assert.deepEqual(normalizeCreateOptions({ weightGrams: -5, shippingMode: "Teleport" }), { weightGrams: 500, shippingMode: "Surface" });
+  assert.deepEqual(normalizeCreateOptions({ weightGrams: "750", shippingMode: "Express" }), { weightGrams: 750, shippingMode: "Express", markFulfilled: true, notifyCustomer: true });
+  assert.deepEqual(normalizeCreateOptions({ weightGrams: -5, shippingMode: "Teleport" }), { weightGrams: 500, shippingMode: "Surface", markFulfilled: true, notifyCustomer: true });
+  // No customer email when Shopify isn't being updated at all.
+  assert.deepEqual(normalizeCreateOptions({ markFulfilled: false, notifyCustomer: true }), { weightGrams: 500, shippingMode: "Surface", markFulfilled: false, notifyCustomer: false });
+  assert.equal(normalizeCreateOptions({ notifyCustomer: false }).notifyCustomer, false);
 });
 
 test("existing bookings are described, with stale CREATING shown as interrupted", () => {
@@ -182,7 +185,7 @@ test("existing bookings are described, with stale CREATING shown as interrupted"
 
 // ── booking with fakes ─────────────────────────────────────────────────────
 
-type Row = { id: string; shopifyOrderId: string; status: "CREATING" | "CREATED" | "FAILED"; awb: string | null; trackingUrl: string | null; errorMessage: string | null; updatedAt: Date; attempts: number };
+type Row = { id: string; shopifyOrderId: string; status: "CREATING" | "CREATED" | "FAILED"; awb: string | null; trackingUrl: string | null; errorMessage: string | null; updatedAt: Date; attempts: number; shopifyFulfillmentStatus?: string | null; shopifyFulfillmentError?: string | null; shopifyFulfillmentId?: string | null };
 
 function fakeDb(rows: Row[] = [], intents: Array<{ shopifyOrderId: string; codBalanceAmountPaise: number }> = []) {
   let seq = rows.length;
@@ -196,8 +199,13 @@ function fakeDb(rows: Row[] = [], intents: Array<{ shopifyOrderId: string; codBa
         rows.push(row);
         return row;
       },
-      async updateMany({ where }: { where: { id: string } }) {
+      async updateMany({ where, data }: { where: { id: string }; data: Record<string, unknown> }) {
         const row = rows.find((candidate) => candidate.id === where.id);
+        if (data.shopifyFulfillmentStatus === "PENDING") {
+          if (!row || row.shopifyFulfillmentStatus === "DONE" || row.shopifyFulfillmentStatus === "PENDING") return { count: 0 };
+          row.shopifyFulfillmentStatus = "PENDING";
+          return { count: 1 };
+        }
         if (!row || row.status === "CREATED" || (row.status === "CREATING" && Date.now() - row.updatedAt.getTime() < STALE_CREATING_MS)) return { count: 0 };
         row.status = "CREATING";
         row.attempts += 1;
@@ -215,7 +223,8 @@ function fakeDb(rows: Row[] = [], intents: Array<{ shopifyOrderId: string; codBa
 }
 
 const graphqlFor = (nodes: ShopifyShippableOrderNode[]) => async <T,>() => ({ nodes }) as T;
-const options = { weightGrams: 500, shippingMode: "Surface" as const };
+// Booking-only tests leave the Shopify step off; it has its own tests below.
+const options = { weightGrams: 500, shippingMode: "Surface" as const, markFulfilled: false, notifyCustomer: false };
 
 test("books ready orders, records the AWB and skips blocked ones", async () => {
   const db = fakeDb();
@@ -295,4 +304,81 @@ test("a settings error stops the batch instead of failing every order", async ()
   assert.equal(calls, 1);
   assert.deepEqual(results.map((r) => r.outcome), ["failed", "skipped"]);
   assert.match(results[1].outcome === "skipped" ? results[1].error : "", /^Stopped:/);
+});
+
+// ── Shopify fulfillment step ───────────────────────────────────────────────
+
+const withShopify = { ...options, markFulfilled: true, notifyCustomer: true };
+const okSubmit = async () => ({ awb: "AWB1", trackingUrl: "https://t/AWB1", providerReference: null, status: "IN_TRANSIT" as const, rawResponse: {} });
+
+test("marks the order fulfilled in Shopify with the AWB after booking", async () => {
+  const db = fakeDb();
+  const calls: unknown[] = [];
+  const results = await bookOrderShipments({
+    db, shopId: "shop", orderIds: ["gid://shopify/Order/1"], runtime, options: withShopify, graphql: graphqlFor([orderNode()]), submit: okSubmit,
+    fulfill: async (args) => { calls.push(args); return { outcome: "fulfilled", fulfillmentId: "gid://shopify/Fulfillment/9" }; },
+  });
+  assert.deepEqual(calls, [{ orderId: "gid://shopify/Order/1", awb: "AWB1", trackingUrl: "https://t/AWB1", notifyCustomer: true }]);
+  assert.deepEqual(results[0].outcome === "created" && results[0].shopify, { status: "DONE" });
+  assert.equal(db.rows[0].shopifyFulfillmentStatus, "DONE");
+  assert.equal(db.rows[0].shopifyFulfillmentId, "gid://shopify/Fulfillment/9");
+});
+
+test("a Shopify failure keeps the Delhivery booking and can be retried alone", async () => {
+  const db = fakeDb();
+  const first = await bookOrderShipments({
+    db, shopId: "shop", orderIds: ["gid://shopify/Order/1"], runtime, options: withShopify, graphql: graphqlFor([orderNode()]), submit: okSubmit,
+    fulfill: async () => { throw new Error("Access denied"); },
+  });
+  assert.equal(first[0].outcome, "created");
+  assert.equal(first[0].outcome === "created" && first[0].shopify?.status, "FAILED");
+  assert.equal(db.rows[0].status, "CREATED");
+  assert.equal(db.rows[0].shopifyFulfillmentStatus, "FAILED");
+
+  let submits = 0;
+  const retry = await bookOrderShipments({
+    db, shopId: "shop", orderIds: ["gid://shopify/Order/1"], runtime, options: withShopify, graphql: graphqlFor([orderNode()]),
+    submit: async () => { submits += 1; return okSubmit(); },
+    fulfill: async () => ({ outcome: "fulfilled", fulfillmentId: null }),
+  });
+  assert.equal(submits, 0, "never re-books Delhivery");
+  assert.equal(retry[0].outcome, "already_created");
+  assert.equal(retry[0].outcome === "already_created" && retry[0].shopify?.status, "DONE");
+  assert.equal(db.rows[0].shopifyFulfillmentStatus, "DONE");
+});
+
+test("orders booked before fulfillment existed can be backfilled, but never twice", async () => {
+  const booked: Row = { id: "row1", shopifyOrderId: "gid://shopify/Order/1", status: "CREATED", awb: "AWB0", trackingUrl: null, errorMessage: null, updatedAt: new Date(), attempts: 1, shopifyFulfillmentStatus: null };
+  const db = fakeDb([booked]);
+  let fulfils = 0;
+  const run = () => bookOrderShipments({
+    db, shopId: "shop", orderIds: ["gid://shopify/Order/1"], runtime, options: withShopify, graphql: graphqlFor([orderNode()]), submit: okSubmit,
+    fulfill: async () => { fulfils += 1; return { outcome: "fulfilled", fulfillmentId: null }; },
+  });
+  await run();
+  const second = await run();
+  assert.equal(fulfils, 1);
+  assert.equal(second[0].outcome === "already_created" && second[0].shopify?.status, "ALREADY");
+});
+
+test("no AWB yet or Shopify step switched off leaves Shopify alone", async () => {
+  let fulfils = 0;
+  const fulfill = async () => { fulfils += 1; return { outcome: "fulfilled" as const, fulfillmentId: null }; };
+  const noAwb = await bookOrderShipments({
+    db: fakeDb(), shopId: "shop", orderIds: ["gid://shopify/Order/1"], runtime, options: withShopify, graphql: graphqlFor([orderNode()]), fulfill,
+    submit: async () => ({ awb: null, trackingUrl: null, providerReference: "ref", status: "PENDING" as const, rawResponse: {} }),
+  });
+  assert.equal(noAwb[0].outcome === "created" && noAwb[0].shopify?.status, "SKIPPED");
+  const off = await bookOrderShipments({ db: fakeDb(), shopId: "shop", orderIds: ["gid://shopify/Order/1"], runtime, options, graphql: graphqlFor([orderNode()]), submit: okSubmit, fulfill });
+  assert.equal(off[0].outcome === "created" && off[0].shopify, undefined);
+  assert.equal(fulfils, 0);
+});
+
+test("preview reports the Shopify step for booked orders", () => {
+  const now = Date.now();
+  const row = { id: "s", shopifyOrderId: "o", status: "CREATED" as const, awb: "A", trackingUrl: null, errorMessage: null, updatedAt: new Date(now) };
+  assert.deepEqual(describeExistingShipment({ ...row, shopifyFulfillmentStatus: null }, now), { state: "CREATED", awb: "A", trackingUrl: null, shopify: { status: null, error: null } });
+  assert.equal((describeExistingShipment({ ...row, shopifyFulfillmentStatus: "DONE" }, now) as { shopify: { status: string } }).shopify.status, "DONE");
+  const stale = describeExistingShipment({ ...row, shopifyFulfillmentStatus: "PENDING", updatedAt: new Date(now - STALE_CREATING_MS - 1) }, now) as { shopify: { status: string } };
+  assert.equal(stale.shopify.status, "FAILED");
 });

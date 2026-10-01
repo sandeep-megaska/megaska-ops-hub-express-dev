@@ -7,7 +7,7 @@ const CHUNK_SIZE = 10; // matches MAX_ORDERS_PER_CREATE_REQUEST on the server
 
 type ExistingShipment =
   | { state: "NONE" }
-  | { state: "CREATED"; awb: string | null; trackingUrl: string | null }
+  | { state: "CREATED"; awb: string | null; trackingUrl: string | null; shopify: { status: "DONE" | "FAILED" | "PENDING" | null; error: string | null } }
   | { state: "FAILED"; error: string | null }
   | { state: "INTERRUPTED"; error: string }
   | { state: "IN_PROGRESS" };
@@ -33,8 +33,10 @@ type Preview = {
   truncated: boolean;
 };
 
+type ShopifyStep = { status: "DONE" | "ALREADY" | "FAILED" | "SKIPPED"; error?: string };
+
 type CreateResult =
-  | { orderId: string; orderName: string; outcome: "created" | "already_created"; awb: string | null; trackingUrl: string | null }
+  | { orderId: string; orderName: string; outcome: "created" | "already_created"; awb: string | null; trackingUrl: string | null; shopify?: ShopifyStep }
   | { orderId: string; orderName: string; outcome: "skipped" | "failed"; error: string };
 
 function dateInput(daysAgo: number) {
@@ -48,13 +50,26 @@ function rupees(paise: number) {
   return `₹${(paise / 100).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 }
 
-function isSelectable(order: PreviewOrder) {
-  return !order.blockers.length && order.shipment.state !== "CREATED" && order.shipment.state !== "IN_PROGRESS";
+// Booked on Delhivery but not yet marked shipped in Shopify.
+function needsShopifyUpdate(order: PreviewOrder) {
+  return order.shipment.state === "CREATED" && Boolean(order.shipment.awb) && order.shipment.shopify.status !== "DONE" && order.shipment.shopify.status !== "PENDING";
 }
 
-// Fresh orders are preselected; failed or interrupted bookings need a deliberate tick.
+function isSelectable(order: PreviewOrder, markFulfilled: boolean) {
+  if (order.shipment.state === "CREATED") return markFulfilled && needsShopifyUpdate(order);
+  return !order.blockers.length && order.shipment.state !== "IN_PROGRESS";
+}
+
+// Fresh orders are preselected; retries (failed bookings, Shopify updates) need a deliberate tick.
 function isPreselected(order: PreviewOrder) {
-  return isSelectable(order) && order.shipment.state === "NONE";
+  return isSelectable(order, true) && order.shipment.state === "NONE";
+}
+
+function shopifyStepLabel(step: ShopifyStep | undefined) {
+  if (!step) return "Not updated (off)";
+  if (step.status === "DONE") return "Marked shipped";
+  if (step.status === "ALREADY") return "Already shipped";
+  return step.error || (step.status === "FAILED" ? "Update failed" : "Skipped");
 }
 
 export default function ShipmentsClient() {
@@ -66,6 +81,8 @@ export default function ShipmentsClient() {
   const [numberList, setNumberList] = useState("");
   const [weightGrams, setWeightGrams] = useState("500");
   const [shippingMode, setShippingMode] = useState<"Surface" | "Express">("Surface");
+  const [markFulfilled, setMarkFulfilled] = useState(true);
+  const [notifyCustomer, setNotifyCustomer] = useState(true);
 
   const [preview, setPreview] = useState<Preview | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -75,9 +92,16 @@ export default function ShipmentsClient() {
   const [results, setResults] = useState<CreateResult[]>([]);
   const [error, setError] = useState("");
 
-  const selectableOrders = useMemo(() => (preview?.orders || []).filter(isSelectable), [preview]);
+  const selectableOrders = useMemo(() => (preview?.orders || []).filter((order) => isSelectable(order, markFulfilled)), [preview, markFulfilled]);
   const selectedOrders = useMemo(() => (preview?.orders || []).filter((order) => selected.has(order.id)), [preview, selected]);
-  const codTotal = selectedOrders.reduce((sum, order) => sum + (order.payment.ok && order.payment.mode === "COD" ? order.payment.codAmountPaise : 0), 0);
+  // COD only for orders being booked now; Shopify-only retries don't book a parcel.
+  const codTotal = selectedOrders.reduce((sum, order) => sum + (order.shipment.state !== "CREATED" && order.payment.ok && order.payment.mode === "COD" ? order.payment.codAmountPaise : 0), 0);
+  const newSelectedCount = selectedOrders.filter((order) => order.shipment.state !== "CREATED").length;
+  const actionLabel = newSelectedCount === selectedOrders.length
+    ? `Create ${selectedOrders.length} shipment(s)`
+    : newSelectedCount === 0
+      ? `Update ${selectedOrders.length} order(s) in Shopify`
+      : `Process ${selectedOrders.length} order(s)`;
 
   // keepResults: refresh statuses after booking without clearing the results panel.
   async function loadOrders(keepResults = false) {
@@ -112,12 +136,20 @@ export default function ShipmentsClient() {
   async function createShipments() {
     const ids = selectedOrders.map((order) => order.id);
     if (!ids.length) return;
-    const codCount = selectedOrders.filter((order) => order.payment.ok && order.payment.mode === "COD").length;
-    const confirmed = window.confirm(
-      `Book ${ids.length} shipment(s) on Delhivery?\n\n` +
-        `${ids.length - codCount} prepaid, ${codCount} COD (collect ${rupees(codTotal)} in total).\n` +
-        `Weight ${weightGrams} g each, ${shippingMode}.`
+    const newOrders = selectedOrders.filter((order) => order.shipment.state !== "CREATED");
+    const shopifyOnly = ids.length - newOrders.length;
+    const codCount = newOrders.filter((order) => order.payment.ok && order.payment.mode === "COD").length;
+    const lines = [];
+    if (newOrders.length) {
+      lines.push(`Book ${newOrders.length} shipment(s) on Delhivery: ${newOrders.length - codCount} prepaid, ${codCount} COD (collect ${rupees(codTotal)} in total). Weight ${weightGrams} g each, ${shippingMode}.`);
+    }
+    if (shopifyOnly) lines.push(`Mark ${shopifyOnly} already-booked order(s) as shipped in Shopify.`);
+    lines.push(
+      markFulfilled
+        ? `Orders will be marked shipped in Shopify with the AWB${notifyCustomer ? " and customers emailed their tracking link" : " (no customer email)"}.`
+        : "Shopify orders will NOT be marked shipped."
     );
+    const confirmed = window.confirm(`${lines.join("\n\n")}\n\nContinue?`);
     if (!confirmed) return;
 
     setCreating(true);
@@ -131,7 +163,7 @@ export default function ShipmentsClient() {
         const response = await fetch("/api/admin/shipments/orders/create", {
           method: "POST",
           headers: { "content-type": "application/json", ...(await adminAuthHeaders()) },
-          body: JSON.stringify({ orderIds: chunk, weightGrams: Number(weightGrams), shippingMode }),
+          body: JSON.stringify({ orderIds: chunk, weightGrams: Number(weightGrams), shippingMode, markFulfilled, notifyCustomer }),
         });
         const body = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(body?.error || "Shipment creation failed.");
@@ -161,6 +193,7 @@ export default function ShipmentsClient() {
   const allSelected = selectableOrders.length > 0 && selectableOrders.every((order) => selected.has(order.id));
   const createdCount = results.filter((result) => result.outcome === "created").length;
   const failedCount = results.filter((result) => result.outcome === "failed" || result.outcome === "skipped").length;
+  const shopifyFailedCount = results.filter((result) => "awb" in result && (result.shopify?.status === "FAILED" || result.shopify?.status === "SKIPPED")).length;
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
@@ -233,11 +266,12 @@ export default function ShipmentsClient() {
         <section className="mk-card" style={{ display: "grid", gap: 8 }}>
           <h2 className="mk-section-title">
             Booking results: {createdCount} created{failedCount ? `, ${failedCount} not booked` : ""}
+            {shopifyFailedCount ? `, ${shopifyFailedCount} not updated in Shopify` : ""}
           </h2>
           <div className="mk-table-wrap">
             <table className="mk-table">
               <thead>
-                <tr><th>Order</th><th>Result</th><th>AWB / reason</th></tr>
+                <tr><th>Order</th><th>Result</th><th>AWB / reason</th><th>Shopify</th></tr>
               </thead>
               <tbody>
                 {results.map((result) => (
@@ -254,6 +288,13 @@ export default function ShipmentsClient() {
                           ? <a className="mk-link" href={result.trackingUrl} target="_blank" rel="noreferrer">{result.awb || "Track"}</a>
                           : result.awb || "AWB pending"
                         : result.error}
+                    </td>
+                    <td>
+                      {"awb" in result ? (
+                        <span className={result.shopify?.status === "FAILED" ? "mk-help" : undefined} style={result.shopify?.status === "FAILED" ? { color: "#b42318" } : undefined}>
+                          {shopifyStepLabel(result.shopify)}
+                        </span>
+                      ) : "—"}
                     </td>
                   </tr>
                 ))}
@@ -285,13 +326,32 @@ export default function ShipmentsClient() {
                   <option value="Express">Express</option>
                 </select>
               </div>
+              <div style={{ display: "grid", gap: 4 }}>
+                <label className="mk-check" style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <input
+                    type="checkbox"
+                    checked={markFulfilled}
+                    onChange={(event) => {
+                      setMarkFulfilled(event.target.checked);
+                      if (!event.target.checked) {
+                        setSelected((current) => new Set([...current].filter((id) => preview.orders.find((order) => order.id === id)?.shipment.state !== "CREATED")));
+                      }
+                    }}
+                  />
+                  Mark shipped in Shopify with AWB
+                </label>
+                <label className="mk-check" style={{ display: "flex", gap: 6, alignItems: "center", opacity: markFulfilled ? 1 : 0.5 }}>
+                  <input type="checkbox" checked={markFulfilled && notifyCustomer} disabled={!markFulfilled} onChange={(event) => setNotifyCustomer(event.target.checked)} />
+                  Email customers their tracking link
+                </label>
+              </div>
               <button
                 type="button"
                 className="mk-btn mk-btn-success"
                 onClick={createShipments}
                 disabled={creating || loading || !selectedOrders.length || !preview.delhivery.configured || !Number(weightGrams)}
               >
-                {creating && progress ? `Booking ${progress.done}/${progress.total}…` : `Create ${selectedOrders.length} shipment(s)`}
+                {creating && progress ? `Working ${progress.done}/${progress.total}…` : actionLabel}
               </button>
             </div>
           </div>
@@ -322,7 +382,7 @@ export default function ShipmentsClient() {
                 </thead>
                 <tbody>
                   {preview.orders.map((order) => {
-                    const selectable = isSelectable(order);
+                    const selectable = isSelectable(order, markFulfilled);
                     return (
                       <tr key={order.id} style={selectable ? undefined : { opacity: 0.7 }}>
                         <td>
@@ -342,9 +402,18 @@ export default function ShipmentsClient() {
                         </td>
                         <td>
                           {order.shipment.state === "CREATED" ? (
-                            order.shipment.trackingUrl
-                              ? <a className="mk-link" href={order.shipment.trackingUrl} target="_blank" rel="noreferrer">Booked · {order.shipment.awb}</a>
-                              : <span className="mk-badge mk-badge-success">Booked{order.shipment.awb ? ` · ${order.shipment.awb}` : ""}</span>
+                            <>
+                              {order.shipment.trackingUrl
+                                ? <a className="mk-link" href={order.shipment.trackingUrl} target="_blank" rel="noreferrer">Booked · {order.shipment.awb}</a>
+                                : <span className="mk-badge mk-badge-success">Booked{order.shipment.awb ? ` · ${order.shipment.awb}` : ""}</span>}
+                              {order.shipment.shopify.status === "PENDING" ? (
+                                <div className="mk-help">Updating Shopify…</div>
+                              ) : needsShopifyUpdate(order) ? (
+                                <div className="mk-help" style={{ color: "#b42318" }}>
+                                  {order.shipment.shopify.error ? `Shopify not updated: ${order.shipment.shopify.error}` : "Not marked shipped in Shopify yet"} · Tick to update.
+                                </div>
+                              ) : null}
+                            </>
                           ) : order.shipment.state === "IN_PROGRESS" ? (
                             <span className="mk-badge mk-badge-info">Booking…</span>
                           ) : order.blockers.length ? (
