@@ -7,6 +7,7 @@
 import { toDelhiveryPhone, toDelhiveryPincode } from "./delhivery-format.ts";
 import type { DelhiveryRuntimeConfig } from "./delhivery-runtime";
 import type { DelhiveryCmuPayload, DelhiveryForwardShipmentResult } from "./delhivery-forward-shipment";
+import { ShopifyFulfillmentError, fulfillOrderWithTracking, type ShopifyFulfillmentOutcome } from "./shopify-fulfillment.ts";
 
 /** Order not ready to ship, or Delhivery settings incomplete (422 / 503). */
 export class OrderShipmentError extends Error {
@@ -317,11 +318,22 @@ export function buildOrderShipmentPayload(
   };
 }
 
-export function normalizeCreateOptions(input: { weightGrams?: unknown; shippingMode?: unknown }) {
+export type CreateOptions = {
+  weightGrams: number;
+  shippingMode: ShippingMode;
+  // Mark the Shopify order fulfilled with the AWB, and email the customer.
+  markFulfilled: boolean;
+  notifyCustomer: boolean;
+};
+
+export function normalizeCreateOptions(input: { weightGrams?: unknown; shippingMode?: unknown; markFulfilled?: unknown; notifyCustomer?: unknown }): CreateOptions {
   const weight = Math.round(Number(input.weightGrams));
+  const markFulfilled = input.markFulfilled !== false;
   return {
     weightGrams: Number.isFinite(weight) && weight >= 1 && weight <= 50000 ? weight : DEFAULT_WEIGHT_GRAMS,
     shippingMode: (input.shippingMode === "Express" ? "Express" : "Surface") as ShippingMode,
+    markFulfilled,
+    notifyCustomer: markFulfilled && input.notifyCustomer !== false,
   };
 }
 
@@ -395,6 +407,8 @@ type ShipmentRow = {
   trackingUrl: string | null;
   errorMessage: string | null;
   updatedAt: Date;
+  shopifyFulfillmentStatus?: string | null;
+  shopifyFulfillmentError?: string | null;
 };
 
 // Minimal Prisma surface used here, so the booking logic is testable with fakes.
@@ -429,17 +443,87 @@ export async function loadExistingShipments(db: OrderShipmentDb, shopId: string,
 
 export function describeExistingShipment(row: ShipmentRow | undefined, now = Date.now()) {
   if (!row) return { state: "NONE" as const };
-  if (row.status === "CREATED") return { state: "CREATED" as const, awb: row.awb, trackingUrl: row.trackingUrl };
+  if (row.status === "CREATED") {
+    return {
+      state: "CREATED" as const,
+      awb: row.awb,
+      trackingUrl: row.trackingUrl,
+      shopify: { status: describeFulfillmentStatus(row, now), error: row.shopifyFulfillmentError || null },
+    };
+  }
   if (row.status === "FAILED") return { state: "FAILED" as const, error: row.errorMessage };
   return now - row.updatedAt.getTime() > STALE_CREATING_MS
     ? { state: "INTERRUPTED" as const, error: "Booking was interrupted. Check Delhivery for this order before retrying." }
     : { state: "IN_PROGRESS" as const };
 }
 
+// null = not attempted; a PENDING that outlived STALE_CREATING_MS was interrupted.
+function describeFulfillmentStatus(row: ShipmentRow, now: number): "DONE" | "FAILED" | "PENDING" | null {
+  const status = row.shopifyFulfillmentStatus;
+  if (status === "DONE" || status === "FAILED") return status;
+  if (status === "PENDING") return now - row.updatedAt.getTime() > STALE_CREATING_MS ? "FAILED" : "PENDING";
+  return null;
+}
+
+export type ShopifyStepResult = { status: "DONE" | "ALREADY" | "FAILED" | "SKIPPED"; error?: string };
+
 export type OrderShipmentResult =
-  | { orderId: string; orderName: string; outcome: "created"; awb: string | null; trackingUrl: string | null }
-  | { orderId: string; orderName: string; outcome: "already_created"; awb: string | null; trackingUrl: string | null }
+  | { orderId: string; orderName: string; outcome: "created"; awb: string | null; trackingUrl: string | null; shopify?: ShopifyStepResult }
+  | { orderId: string; orderName: string; outcome: "already_created"; awb: string | null; trackingUrl: string | null; shopify?: ShopifyStepResult }
   | { orderId: string; orderName: string; outcome: "skipped" | "failed"; error: string };
+
+type FulfillFn = (input: { orderId: string; awb: string; trackingUrl: string | null; notifyCustomer: boolean }) => Promise<ShopifyFulfillmentOutcome>;
+
+/**
+ * Marks the order shipped in Shopify. Runs after the Delhivery booking is
+ * saved and never undoes it: a failure is recorded on the row so the admin can
+ * retry just this step.
+ */
+async function syncShopifyFulfillment(
+  db: OrderShipmentDb,
+  row: { id: string; orderId: string; awb: string | null; trackingUrl: string | null; fulfillmentStatus: string | null | undefined },
+  options: CreateOptions,
+  fulfill: FulfillFn,
+  now: Date
+): Promise<ShopifyStepResult | undefined> {
+  if (!options.markFulfilled) return undefined;
+  if (row.fulfillmentStatus === "DONE") return { status: "ALREADY" };
+  if (!row.awb) return { status: "SKIPPED", error: "Delhivery hasn't assigned an AWB yet, so Shopify wasn't updated." };
+
+  const claimed = await db.orderCourierShipment.updateMany({
+    where: {
+      id: row.id,
+      OR: [
+        { shopifyFulfillmentStatus: null },
+        { shopifyFulfillmentStatus: "FAILED" },
+        { shopifyFulfillmentStatus: "PENDING", updatedAt: { lt: new Date(now.getTime() - STALE_CREATING_MS) } },
+      ],
+    },
+    data: { shopifyFulfillmentStatus: "PENDING", shopifyFulfillmentError: null },
+  });
+  if (claimed.count !== 1) return { status: "SKIPPED", error: "Shopify update is already done or in progress. Refresh the list." };
+
+  try {
+    const result = await fulfill({ orderId: row.orderId, awb: row.awb, trackingUrl: row.trackingUrl, notifyCustomer: options.notifyCustomer });
+    await db.orderCourierShipment.update({
+      where: { id: row.id },
+      data: {
+        shopifyFulfillmentStatus: "DONE",
+        shopifyFulfillmentId: result.outcome === "fulfilled" ? result.fulfillmentId : null,
+        shopifyFulfillmentError: null,
+        shopifyFulfilledAt: now,
+      },
+    });
+    return { status: result.outcome === "fulfilled" ? "DONE" : "ALREADY" };
+  } catch (error) {
+    const message = error instanceof ShopifyFulfillmentError || error instanceof Error ? error.message : "Shopify fulfillment failed.";
+    await db.orderCourierShipment.update({
+      where: { id: row.id },
+      data: { shopifyFulfillmentStatus: "FAILED", shopifyFulfillmentError: message.slice(0, 1000) },
+    });
+    return { status: "FAILED", error: message };
+  }
+}
 
 function isUniqueViolation(error: unknown) {
   return Boolean(error && typeof error === "object" && (error as { code?: string }).code === "P2002");
@@ -496,8 +580,9 @@ export async function bookOrderShipments(input: {
   orderIds: string[];
   runtime: DelhiveryRuntimeConfig;
   graphql: GraphqlFn;
-  options: { weightGrams: number; shippingMode: ShippingMode };
+  options: CreateOptions;
   submit?: (runtime: DelhiveryRuntimeConfig, payload: DelhiveryCmuPayload) => Promise<DelhiveryForwardShipmentResult>;
+  fulfill?: FulfillFn;
   now?: () => Date;
 }): Promise<OrderShipmentResult[]> {
   const submit = input.submit || (async (runtime, payload) => {
@@ -508,6 +593,7 @@ export async function bookOrderShipments(input: {
     });
   });
   const now = input.now || (() => new Date());
+  const fulfill: FulfillFn = input.fulfill || ((args) => fulfillOrderWithTracking({ graphql: input.graphql, ...args }));
 
   // Re-read from Shopify so payment mode and address are never client-supplied.
   const nodes = await fetchOrderNodesById(input.graphql, input.orderIds);
@@ -524,7 +610,15 @@ export async function bookOrderShipments(input: {
     }
     const existing = existingRows.get(orderId);
     if (existing?.status === "CREATED") {
-      results.push({ orderId, orderName: node.name, outcome: "already_created", awb: existing.awb, trackingUrl: existing.trackingUrl });
+      // Already booked: only the Shopify step may still be outstanding.
+      const shopify = await syncShopifyFulfillment(
+        input.db,
+        { id: existing.id, orderId, awb: existing.awb, trackingUrl: existing.trackingUrl, fulfillmentStatus: existing.shopifyFulfillmentStatus },
+        input.options,
+        fulfill,
+        now()
+      );
+      results.push({ orderId, orderName: node.name, outcome: "already_created", awb: existing.awb, trackingUrl: existing.trackingUrl, shopify });
       continue;
     }
     const order = normalizeShippableOrder(node, codBalances.get(orderId) ?? null);
@@ -560,7 +654,14 @@ export async function bookOrderShipments(input: {
           errorMessage: null,
         },
       });
-      results.push({ orderId, orderName: order.name, outcome: "created", awb: created.awb, trackingUrl: created.trackingUrl });
+      const shopify = await syncShopifyFulfillment(
+        input.db,
+        { id: rowId, orderId, awb: created.awb, trackingUrl: created.trackingUrl, fulfillmentStatus: null },
+        input.options,
+        fulfill,
+        now()
+      );
+      results.push({ orderId, orderName: order.name, outcome: "created", awb: created.awb, trackingUrl: created.trackingUrl, shopify });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Delhivery shipment creation failed.";
       await input.db.orderCourierShipment.update({ where: { id: rowId }, data: { status: "FAILED", errorMessage: message.slice(0, 1000) } });

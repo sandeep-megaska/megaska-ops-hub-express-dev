@@ -1462,6 +1462,12 @@ model OrderCourierShipment {
   errorMessage      String?
   rawResponse       Json?
   attempts          Int                        @default(0)
+  // Shopify fulfillment (marks the order shipped with the AWB): PENDING |
+  // DONE | FAILED; null when not attempted.
+  shopifyFulfillmentStatus String?
+  shopifyFulfillmentId     String?
+  shopifyFulfillmentError  String?
+  shopifyFulfilledAt       DateTime?
   createdAt         DateTime                   @default(now())
   updatedAt         DateTime                   @updatedAt
 
