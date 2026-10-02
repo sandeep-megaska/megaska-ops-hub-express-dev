@@ -1,7 +1,10 @@
-# LoopD2C payment customization — hide COD for prepaid carts
+# LoopD2C payment customization — match checkout to the drawer's payment choice
 
 Hides **Cash on Delivery** at Shopify Checkout when the cart drawer marked the
-cart `loopd2c_payment_intent = prepaid`. This is the enabler for the modal-free
+cart `loopd2c_payment_intent = prepaid`, and hides the **online methods** when it
+marked the cart `cod` (the prepaid offer only applies to prepaid carts, so an
+online method on a COD cart would charge full price). A COD cart where no COD
+method is recognised keeps every method. This is the enabler for the modal-free
 architecture: **both** prepaid and COD complete natively in Shopify Checkout, so
 we can retire the custom COD modal (and its unpaid-draft-order pattern that
 carries app-rejection risk).
@@ -15,7 +18,7 @@ manual payment method (non-Plus stores may hide/reorder/rename manual methods).
 |---|---|---|
 | `loopdesk-discount-function` | `loopd2c_payment_intent` + prepaid-offer metafield | applies the prepaid discount on prepaid carts |
 | `megaska-phone-checkout-validation` | verified-phone attrs | enforces verified phone / blocks COD-at-checkout leaks |
-| **this** | `loopd2c_payment_intent` | **hides COD on prepaid carts** |
+| **this** | `loopd2c_payment_intent` | **hides COD on prepaid carts, online methods on COD carts** |
 
 All three read the same `loopd2c_payment_intent` cart attribute — the payment
 function does NOT need to detect the applied discount (which its input can't see);

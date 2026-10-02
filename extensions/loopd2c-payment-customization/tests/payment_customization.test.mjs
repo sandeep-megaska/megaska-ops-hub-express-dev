@@ -12,8 +12,22 @@ test("prepaid intent hides COD", () => {
   assert.deepEqual(out.operations[0], { paymentMethodHide: { paymentMethodId: cod.id } });
 });
 
-test("cod intent keeps every payment method", () => {
-  const out = cartPaymentMethodsTransformRun({ cart: { paymentIntent: { value: "cod" } }, paymentMethods: [cod, online] });
+test("cod intent hides the online methods", () => {
+  const card = { id: "gid://shopify/PaymentCustomizationPaymentMethod/3", name: "Shopify Payments" };
+  const out = cartPaymentMethodsTransformRun({ cart: { paymentIntent: { value: "cod" } }, paymentMethods: [cod, online, card] });
+  assert.deepEqual(out.operations, [
+    { paymentMethodHide: { paymentMethodId: online.id } },
+    { paymentMethodHide: { paymentMethodId: card.id } },
+  ]);
+});
+
+test("cod intent with no COD method present keeps every method - fail open", () => {
+  const out = cartPaymentMethodsTransformRun({ cart: { paymentIntent: { value: "cod" } }, paymentMethods: [online] });
+  assert.deepEqual(out.operations, []);
+});
+
+test("cod intent with only COD present is a no-op", () => {
+  const out = cartPaymentMethodsTransformRun({ cart: { paymentIntent: { value: "COD" } }, paymentMethods: [cod] });
   assert.deepEqual(out.operations, []);
 });
 
