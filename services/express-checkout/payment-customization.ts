@@ -1,9 +1,11 @@
-// Auto-registers the LoopD2C payment customization (hide COD on prepaid carts)
-// so merchants never need to run an Admin GraphQL mutation by hand. Mirrors how
-// the promotions module creates its automatic discount from a Function.
+// Auto-registers the LoopD2C payment customization (hide COD on prepaid carts,
+// online methods on COD carts) so merchants never need to run an Admin GraphQL
+// mutation by hand. Mirrors how the promotions module creates its automatic
+// discount from a Function.
 //
-// The customization is inert unless a cart carries loopd2c_payment_intent=prepaid
+// The customization is inert unless a cart carries loopd2c_payment_intent
 // (only set by the in-drawer choice), so creating it is safe for every shop.
+// The title below is the lookup key for existing installs - don't rename it.
 
 export const PAYMENT_CUSTOMIZATION_TITLE = "LoopD2C — hide COD on prepaid" as const;
 // apiType Shopify reports for a cart.payment-methods.transform.run function.
