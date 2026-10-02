@@ -40,6 +40,9 @@
     enabled: true,
     cartOwnershipMode: "fallback"
   };
+  // Read before LoopDeskConfig is overwritten with the normalized (defaulted) config below.
+  var loadTimeCart = window.LoopDeskConfig && window.LoopDeskConfig.cart;
+  var paymentChoiceKnownAtLoad = Boolean(loadTimeCart && typeof loadTimeCart === "object" && typeof loadTimeCart.paymentChoiceEnabled === "boolean");
   var config = normalizeConfig(window.LoopDeskConfig || window.LOOPDESK_CART_DRAWER_CONFIG || window.LoopDeskCartDrawerConfig || {});
   window.LoopDeskConfig = Object.assign({}, window.LoopDeskConfig || {}, config);
   // `config` is normalized once, at load. But some cart settings — notably
@@ -53,9 +56,41 @@
     try {
       config = normalizeConfig(window.LoopDeskConfig || {});
       window.LoopDeskConfig = Object.assign({}, window.LoopDeskConfig || {}, config);
+      paymentChoiceSettled = true;
+      cachePaymentChoiceFlags();
       if (document.getElementById(ROOT_ID)) render();
     } catch (e) {}
   });
+
+  // Until the runtime config lands we don't know whether the Prepaid/COD choice
+  // or the legacy Express Checkout button is the CTA, so neither is shown - that
+  // stops the legacy button flashing before the choice replaces it. The last
+  // known flags are cached so later page views render the right CTA at once,
+  // and a timeout falls back to the load-time config if the fetch never lands.
+  var PAYMENT_CHOICE_CACHE_KEY = "loopdesk:payment-choice:v1";
+  var paymentChoiceSettled = paymentChoiceKnownAtLoad;
+  function cachePaymentChoiceFlags() {
+    try {
+      window.localStorage.setItem(PAYMENT_CHOICE_CACHE_KEY, JSON.stringify({ enabled: Boolean(config.cart.paymentChoiceEnabled), collapsed: Boolean(config.cart.paymentChoiceCollapsed) }));
+    } catch (_error) {}
+  }
+  if (!paymentChoiceSettled) {
+    try {
+      var cachedChoice = JSON.parse(window.localStorage.getItem(PAYMENT_CHOICE_CACHE_KEY) || "null");
+      if (isPlainObject(cachedChoice) && typeof cachedChoice.enabled === "boolean") {
+        config.cart.paymentChoiceEnabled = cachedChoice.enabled;
+        config.cart.paymentChoiceCollapsed = Boolean(cachedChoice.collapsed);
+        paymentChoiceSettled = true;
+      }
+    } catch (_error) {}
+  }
+  if (!paymentChoiceSettled) {
+    window.setTimeout(function () {
+      if (paymentChoiceSettled) return;
+      paymentChoiceSettled = true;
+      try { if (document.getElementById(ROOT_ID)) render(); } catch (e) {}
+    }, 3000);
+  }
   window.LOOPDESK_CART_DRAWER_CONFIG = Object.assign({}, window.LOOPDESK_CART_DRAWER_CONFIG || {}, {
     enabled: config.enabled,
     drawerMode: config.cart.drawerMode,
@@ -1906,7 +1941,7 @@
 
   // In choice mode the two Prepaid/COD options ARE the checkout buttons, so the
   // separate Express Checkout button is suppressed.
-  elements.express.hidden = !config.cart.expressCheckoutButtonEnabled || paymentChoiceActive();
+  elements.express.hidden = !config.cart.expressCheckoutButtonEnabled || paymentChoiceActive() || !paymentChoiceSettled;
   elements.express.disabled = !hasItems || state.loading || state.expressCheckoutLock;
   elements.express.setAttribute("aria-disabled", elements.express.disabled ? "true" : "false");
   elements.express.classList.toggle("is-loading", state.expressCheckoutLock);
@@ -1984,6 +2019,20 @@
     el.classList.remove("is-visible");
     el.hidden = true;
   }
+
+  // Back from Shopify Checkout restores this page from the back/forward cache
+  // exactly as it was left: overlay up, CTA locked. Clear both so the page the
+  // shopper returns to is usable straight away, and refresh the cart in case
+  // checkout changed it.
+  window.addEventListener("pageshow", function (event) {
+    if (!event.persisted) return;
+    hideCheckoutHandoffOverlay();
+    if (state.expressCheckoutLock) {
+      state.expressCheckoutLock = false;
+      if (document.getElementById(ROOT_ID)) render();
+    }
+    if (document.getElementById(ROOT_ID)) fetchCart();
+  });
 
   function fetchCart() {
     state.loading = true;
@@ -2168,7 +2217,7 @@
       '<span data-loopdesk-slot="BEFORE_FOOTER"></span>',
       '<div class="loopdesk-cart-drawer__summary"><span data-loopdesk-slot="BEFORE_TOTALS"></span><div class="loopdesk-cart-drawer__subtotal"><span>Merchandise subtotal</span><strong data-loopdesk-cart-merchandise-subtotal></strong></div><div class="loopdesk-cart-drawer__subtotal" data-loopdesk-cart-savings-row hidden><span>Total savings</span><strong data-loopdesk-cart-savings></strong></div><div class="loopdesk-cart-drawer__subtotal loopdesk-cart-drawer__payable"><span data-loopdesk-payable-label>You pay</span><strong data-loopdesk-cart-subtotal></strong></div><p class="loopdesk-cart-drawer__pay-note" data-loopdesk-pay-note hidden></p><span data-loopdesk-slot="AFTER_TOTALS"></span><div data-loopdesk-trust-below-totals></div><a class="loopdesk-cart-drawer__view-cart" href="/cart"></a><p class="loopdesk-cart-drawer__microcopy"></p><p class="loopdesk-cart-drawer__powered"></p></div>',
       '</div>',
-      '<footer class="loopdesk-cart-drawer__footer"><span data-loopdesk-slot="BEFORE_CHECKOUT"></span><p class="loopdesk-cart-drawer__prepaid-nudge" data-loopdesk-prepaid-nudge hidden></p><div class="loopdesk-cart-drawer__payment-choice" data-loopdesk-payment-choice hidden></div><button type="button" class="loopdesk-cart-drawer__express" data-loopdesk-express-checkout></button><span data-loopdesk-slot="AFTER_CHECKOUT"></span><div data-loopdesk-trust-below-checkout></div></footer>',
+      '<footer class="loopdesk-cart-drawer__footer"><span data-loopdesk-slot="BEFORE_CHECKOUT"></span><p class="loopdesk-cart-drawer__prepaid-nudge" data-loopdesk-prepaid-nudge hidden></p><div class="loopdesk-cart-drawer__payment-choice" data-loopdesk-payment-choice hidden></div><button type="button" class="loopdesk-cart-drawer__express" data-loopdesk-express-checkout hidden></button><span data-loopdesk-slot="AFTER_CHECKOUT"></span><div data-loopdesk-trust-below-checkout></div></footer>',
       '<span data-loopdesk-slot="AFTER_FOOTER"></span>',
       '</aside>',
     ].join("");
