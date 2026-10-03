@@ -918,3 +918,6 @@ body.loopdesk-cart-drawer-is-open #loopdesk-cart-drawer-root .loopdesk-cart-draw
 .loopdesk-cart-drawer__place-order .loopdesk-cart-drawer__pay-arrow { color:#fff; }
 .loopdesk-cart-drawer__pay-methods { display:flex; flex-wrap:wrap; gap:4px; margin-top:6px; }
 .loopdesk-cart-drawer__pay-method { font-size:10px; font-weight:700; letter-spacing:.02em; line-height:1; padding:3px 6px; border-radius:5px; background:rgba(255,255,255,.16); color:#e2e8f0; white-space:nowrap; }
+
+/* Reassurance under the Prepaid / COD buttons. */
+.loopdesk-cart-drawer__pay-switch { margin:8px 2px 0; color:#64748b; font-size:11.5px; line-height:1.4; text-align:center; }

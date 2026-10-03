@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { dispatchManualCheckoutRecovery } from "../../../../services/whatsapp/manual-recovery-dispatch";
+import { runPrepaidCodRecovery } from "../../../../services/checkout-recovery/prepaid-cod-recovery.ts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,7 +23,17 @@ async function run(req: NextRequest) {
   try {
     const summary = await dispatchManualCheckoutRecovery();
     console.info("[CHECKOUT RECOVERY] cron_dispatch_completed", summary);
-    return NextResponse.json({ ok: true, ...summary }, { headers: { "Cache-Control": "no-store" } });
+    // Native Shopify Checkout: offer COD to shoppers who abandoned a prepaid
+    // checkout. Isolated so a failure here never affects the dispatch above.
+    let prepaidCod: Awaited<ReturnType<typeof runPrepaidCodRecovery>> | { error: string };
+    try {
+      prepaidCod = await runPrepaidCodRecovery({});
+      console.info("[CHECKOUT RECOVERY] prepaid_cod_completed", prepaidCod);
+    } catch (error) {
+      prepaidCod = { error: "Prepaid COD recovery failed." };
+      console.error("[CHECKOUT RECOVERY] prepaid_cod_failed", { error: error instanceof Error ? error.message : String(error) });
+    }
+    return NextResponse.json({ ok: true, ...summary, prepaidCod }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     console.error("[CHECKOUT RECOVERY] cron_dispatch_failed", {
       error: error instanceof Error ? error.message : String(error),
