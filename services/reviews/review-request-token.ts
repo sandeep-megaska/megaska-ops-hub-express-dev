@@ -43,12 +43,35 @@ export async function issueReviewRequestToken(input: { reviewRequestId: string; 
   return updated.count === 1 ? { ok: true as const, token: generated.token, expiresAt: generated.expiresAt } : { ok: false as const, reason: "REQUEST_NOT_ELIGIBLE" as const };
 }
 
+// The write-review page is served through the Shopify app proxy, so the base URL
+// is the storefront proxy root (e.g. https://store.com/apps/loopd2c) and the page
+// path is appended to it, never replacing it.
+export const REVIEW_SUBMISSION_PROXY_ROOT = "/apps/loopd2c";
+
 export function buildReviewSubmissionUrl(input: { baseUrl: string; token: string }) {
   const url = new URL(input.baseUrl);
-  url.pathname = "/customer/reviews/write";
+  url.pathname = `${url.pathname.replace(/\/+$/, "")}/customer/reviews/write`;
   url.search = "";
+  url.hash = "";
   url.searchParams.set("token", input.token);
   return url.toString();
+}
+
+function storefrontHost(domain: string | null | undefined): string | null {
+  const host = String(domain ?? "").trim().replace(/^https?:\/\//i, "").replace(/\/.*$/, "").toLowerCase();
+  return /^[a-z0-9.-]+\.[a-z]{2,}$/.test(host) ? host : null;
+}
+
+// REVIEW_SUBMISSION_BASE_URL overrides the link base for every shop (useful for
+// staging); otherwise each shop's own storefront domain is used.
+export function resolveReviewSubmissionBaseUrl(
+  shop: { primaryDomain?: string | null; shopDomain?: string | null },
+  override = process.env.REVIEW_SUBMISSION_BASE_URL,
+): string | null {
+  const configured = String(override ?? "").trim();
+  if (configured) return configured;
+  const host = storefrontHost(shop.primaryDomain) ?? storefrontHost(shop.shopDomain);
+  return host ? `https://${host}${REVIEW_SUBMISSION_PROXY_ROOT}` : null;
 }
 
 export async function consumeReviewRequestToken(input: { reviewRequestId: string; reviewId: string; consumedAt?: Date; db?: Db }): Promise<ReviewRequestTokenConsumeResult> {
