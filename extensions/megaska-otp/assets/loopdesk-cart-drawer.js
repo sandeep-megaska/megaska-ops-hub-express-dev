@@ -1967,7 +1967,10 @@
     }
     return '<p class="loopdesk-cart-drawer__pay-label">Choose how to pay</p>'
       + opt("prepaid", "primary", "Pay Now &amp; Save More", prepaidPrice, saveText, "is-save", methodsHtml)
-      + opt("cod", "secondary", "Cash on Delivery", base, codText, prepaidSavings > 0 ? "is-more" : "");
+      + opt("cod", "secondary", "Cash on Delivery", base, codText, prepaidSavings > 0 ? "is-more" : "")
+      // Shopify Checkout cannot switch a prepaid-priced order to COD, so say plainly
+      // that the choice can be changed here before paying.
+      + (prepaidSavings > 0 ? '<p class="loopdesk-cart-drawer__pay-switch">Changed your mind at payment? Come back to your bag and choose Cash on Delivery anytime before paying.</p>' : "");
   }
 
  function render() {
