@@ -183,7 +183,7 @@
   var COMBINED_CART_TRIGGER_SELECTOR = CUSTOM_CART_TRIGGER_SELECTOR ? CART_TRIGGER_SELECTOR + "," + CUSTOM_CART_TRIGGER_SELECTOR : CART_TRIGGER_SELECTOR;
   var CART_TRIGGER_KEYWORD_REGEX = /\b(cart|bag|basket|trolley)\b|cart-icon|cart-toggle|cart-trigger|cart-link|cart-count|mini-cart|header__icon--cart|header-cart/;
 
-  var state = { selectedOfferVariants: {}, offerProducts: {}, offerLoading: {}, open: false, loading: false, cart: null, paymentIntent: "", payChoiceExpanded: false, error: "", hostMode: LOOPDESK_HOST_MODE, themeDrawer: null, fallbackReason: "", expressCheckoutLock: false, capability: null, drawerModeActive: false, expectPostAddNavigation: 0, suppressAddReturnIntent: false, neutralizedThemeDrawers: [], bodyLockSnapshot: null, removedThemeBodyClasses: [], cartTriggerTakeovers: [], promotionRuntimeRefresh: { attempts: 0, maxAttempts: 3, inFlight: false, delayedTimer: null, cartNonEmptyAttempted: false } };
+  var state = { selectedOfferVariants: {}, offerProducts: {}, offerLoading: {}, lineProducts: {}, lineProductLoading: {}, lineNotice: "", couponOpen: false, open: false, loading: false, cart: null, paymentIntent: "", payChoiceExpanded: false, error: "", hostMode: LOOPDESK_HOST_MODE, themeDrawer: null, fallbackReason: "", expressCheckoutLock: false, capability: null, drawerModeActive: false, expectPostAddNavigation: 0, suppressAddReturnIntent: false, neutralizedThemeDrawers: [], bodyLockSnapshot: null, removedThemeBodyClasses: [], cartTriggerTakeovers: [], promotionRuntimeRefresh: { attempts: 0, maxAttempts: 3, inFlight: false, delayedTimer: null, cartNonEmptyAttempted: false } };
   var cartTriggerObserver = null;
   var cartTriggerTakeoverTimer = null;
   var suppressNextCartClickUntil = 0;
@@ -1466,12 +1466,38 @@
     return '<div class="loopdesk-cart-drawer__offer-savings"><span>' + money(original, cart.currency) + '</span><strong>' + money(finalPrice, cart.currency) + '</strong><em>' + money(original - finalPrice, cart.currency) + '</em></div>';
   }
 
-  function variantPriceHtml(variant, cart) {
+  // Unit price the shopper pays for an offer variant once the rule's reward applies
+  // (minor units), mirroring the discount Function. Supports the canonical reward
+  // ({method, configuration.value}) and the legacy one ({type, value}).
+  function offerUnitPriceMinor(rule, variant) {
+    var price = Math.max(0, Number(variant && variant.price || 0));
+    var reward = rule && rule.reward || {};
+    var method = String(reward.method || reward.type || "").toLowerCase();
+    var raw = reward.configuration && reward.configuration.value != null ? reward.configuration.value : reward.value;
+    var value = Number(raw);
+    if (!Number.isFinite(value) || value < 0) return price;
+    if (method === "fixed_price") return Math.min(price, centsFromDecimal(value));
+    if (method === "fixed_amount" || method === "fixed_amount_off") return Math.max(0, price - centsFromDecimal(value));
+    if (method === "percentage" || method === "percentage_off") return value > 0 && value <= 100 ? Math.max(0, Math.round(price * (100 - value) / 100)) : price;
+    return price;
+  }
+
+  // The struck-through reference is the variant's own selling price - what the
+  // shopper would pay without the offer - never an inflated compare-at price.
+  function variantPriceHtml(variant, cart, rule) {
     var price = Number(variant && variant.price || 0);
-    var compareAt = Number(variant && variant.compare_at_price || 0);
+    var offerPrice = offerUnitPriceMinor(rule, variant);
     return '<span class="loopdesk-cart-drawer__offer-price">' +
-      (compareAt > price ? '<s>' + money(compareAt, cart && cart.currency) + '</s>' : '') +
-      '<strong>' + money(price, cart && cart.currency) + '</strong></span>';
+      (offerPrice < price ? '<s>' + money(price, cart && cart.currency) + '</s>' : '') +
+      '<strong>' + money(offerPrice, cart && cart.currency) + '</strong></span>';
+  }
+
+  function offerButtonLabel(rule, variant, cart) {
+    var priceText = money(offerUnitPriceMinor(rule, variant), cart && cart.currency);
+    var cta = String(rule && rule.presentation && rule.presentation.ctaText || "").trim();
+    // A merchant label with its own amount can go stale; the computed price wins.
+    if (!cta || /\d/.test(cta)) return "Add for " + priceText;
+    return cta + " · " + priceText;
   }
 
   function renderOfferCard(rule, cart) {
@@ -1488,10 +1514,10 @@
       presentation.heading ? '<h3>' + escapeHtml(presentation.heading) + '</h3>' : '',
       productTitle ? '<div class="loopdesk-cart-drawer__offer-product-title">' + escapeHtml(productTitle) + '</div>' : '',
       selectedVariantTitle ? '<div class="loopdesk-cart-drawer__offer-variant-title">' + escapeHtml(selectedVariantTitle) + '</div>' : '',
-      selected ? variantPriceHtml(selected, cart) : '',
+      selected ? variantPriceHtml(selected, cart, rule) : '',
       presentation.customerMessage ? '<p>' + escapeHtml(presentation.customerMessage) + '</p>' : '',
-      variants.length ? '<select data-loopdesk-offer-variant data-loopdesk-offer-rule="' + escapeHtml(rule.ruleId) + '">' + variants.map(function (variant) { return '<option value="' + escapeHtml(variant.id) + '" ' + (selected && String(selected.id) === String(variant.id) ? 'selected' : '') + ' ' + (variant.available === false ? 'disabled' : '') + '>' + escapeHtml((variant.title && variant.title !== "Default Title" ? variant.title + " — " : "") + money(variant.price, cart.currency)) + '</option>'; }).join('') + '</select>' : '',
-      presentation.ctaText ? '<button type="button" data-loopdesk-add-offer data-loopdesk-offer-rule="' + escapeHtml(rule.ruleId) + '" ' + (!selected ? 'disabled' : '') + '>' + escapeHtml(presentation.ctaText) + '</button>' : '',
+      variants.length > 1 ? '<select data-loopdesk-offer-variant data-loopdesk-offer-rule="' + escapeHtml(rule.ruleId) + '" aria-label="Choose option">' + variants.map(function (variant) { return '<option value="' + escapeHtml(variant.id) + '" ' + (selected && String(selected.id) === String(variant.id) ? 'selected' : '') + ' ' + (variant.available === false ? 'disabled' : '') + '>' + escapeHtml((variant.title && variant.title !== "Default Title" ? variant.title + " — " : "") + money(offerUnitPriceMinor(rule, variant), cart.currency)) + '</option>'; }).join('') + '</select>' : '',
+      '<button type="button" data-loopdesk-add-offer data-loopdesk-offer-rule="' + escapeHtml(rule.ruleId) + '" ' + (!selected ? 'disabled' : '') + '>' + escapeHtml(selected ? offerButtonLabel(rule, selected, cart) : (presentation.ctaText || "Add")) + '</button>',
       offerConfirmationHtml(cart, rule), '</article>'].join('');
   }
 
@@ -1501,20 +1527,112 @@
     return rules.map(function (rule) { return renderOfferCard(rule, cart); }).join('');
   }
 
+  // Options that never differ within a product (e.g. fabric) add noise to a line.
+  var HIDDEN_LINE_OPTION = /^(fabric|material)$/i;
+  var SIZE_OPTION = /size/i;
+
+  function lineVariantText(item, hideSize) {
+    var options = Array.isArray(item && item.options_with_values) ? item.options_with_values : null;
+    if (!options) return item.variant_title && item.variant_title !== "Default Title" ? item.variant_title : "";
+    return options.filter(function (option) {
+      var name = String(option && option.name || "").trim();
+      var value = String(option && option.value || "").trim();
+      if (!value || value === "Default Title" || HIDDEN_LINE_OPTION.test(name)) return false;
+      return !(hideSize && SIZE_OPTION.test(name));
+    }).map(function (option) { return String(option.value).trim(); }).join(" / ");
+  }
+
+  function canChangeLineSize(item) {
+    return Boolean(item && item.handle && !isPromotionLineForAnyRule(item) && Array.isArray(item.options_with_values) &&
+      item.options_with_values.some(function (option) { return SIZE_OPTION.test(String(option && option.name || "")); }));
+  }
+
+  function ensureLineProducts(cart) {
+    (cart && cart.items || []).forEach(function (item) {
+      var handle = item && item.handle;
+      if (!canChangeLineSize(item) || state.lineProducts[handle] || state.lineProductLoading[handle]) return;
+      state.lineProductLoading[handle] = true;
+      fetch('/products/' + encodeURIComponent(handle) + '.js', { credentials: 'same-origin', headers: { Accept: 'application/json' } })
+        .then(function (response) { if (!response.ok) throw new Error('Product unavailable'); return response.json(); })
+        .then(function (product) { state.lineProducts[handle] = product; })
+        .catch(function () { state.lineProducts[handle] = { variants: [], options: [] }; })
+        .finally(function () { state.lineProductLoading[handle] = false; render(); });
+    });
+  }
+
+  // Sibling variants that differ from the line's variant only in size.
+  function lineSizeChoices(item) {
+    var product = state.lineProducts[item && item.handle];
+    if (!product || !Array.isArray(product.variants) || !Array.isArray(product.options)) return null;
+    var sizeIndex = -1;
+    product.options.forEach(function (option, index) {
+      var name = typeof option === "string" ? option : option && option.name;
+      if (sizeIndex < 0 && SIZE_OPTION.test(String(name || ""))) sizeIndex = index;
+    });
+    if (sizeIndex < 0) return null;
+    var current = product.variants.filter(function (variant) { return String(variant.id) === String(item.variant_id); })[0];
+    if (!current || !Array.isArray(current.options)) return null;
+    var choices = product.variants.filter(function (variant) {
+      return Array.isArray(variant.options) && variant.options.every(function (value, index) { return index === sizeIndex || value === current.options[index]; });
+    });
+    return choices.length > 1 ? { sizeIndex: sizeIndex, current: current, choices: choices } : null;
+  }
+
+  function lineSizeSelectHtml(item, index) {
+    var info = lineSizeChoices(item);
+    if (!info) return "";
+    return '<label class="loopdesk-cart-drawer__size"><span>Size</span><select data-loopdesk-line-size data-loopdesk-line="' + index + '" aria-label="Change size">' +
+      info.choices.map(function (variant) {
+        var isCurrent = String(variant.id) === String(info.current.id);
+        var soldOut = variant.available === false && !isCurrent;
+        return '<option value="' + escapeHtml(variant.id) + '"' + (isCurrent ? ' selected' : '') + (soldOut ? ' disabled' : '') + '>' + escapeHtml(variant.options[info.sizeIndex] + (soldOut ? ' (sold out)' : '')) + '</option>';
+      }).join('') + '</select></label>';
+  }
+
+  // Swap a line to another size: add the new variant with the same quantity and
+  // properties, then remove the old line. The cart is re-read afterwards so the
+  // drawer always shows Shopify's truth, even if one of the two calls failed.
+  function changeLineSize(index, variantId) {
+    var item = state.cart && state.cart.items && state.cart.items[index];
+    if (!item || String(item.variant_id) === String(variantId)) return;
+    state.loading = true;
+    state.lineNotice = "";
+    render();
+    var headers = { "Content-Type": "application/json", Accept: "application/json" };
+    return fetch("/cart/add.js", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: headers,
+      body: JSON.stringify({ items: [{ id: Number(variantId), quantity: Number(item.quantity) || 1, properties: promotionLineProperties(item) }] })
+    }).then(function (response) {
+      if (!response.ok) throw new Error("Size unavailable");
+      return fetch("/cart/change.js", { method: "POST", credentials: "same-origin", headers: headers, body: JSON.stringify({ id: item.key, quantity: 0 }) });
+    }).then(function (response) {
+      if (!response.ok) throw new Error("Cart update failed");
+    }).catch(function () {
+      state.lineNotice = "That size could not be updated. Please try again.";
+    }).then(function () { return fetchCart(); })
+      .finally(function () { state.loading = false; render(); });
+  }
+
   function renderLines(cart) {
     if (state.loading) return '<div class="loopdesk-cart-drawer__loading"><span></span>' + escapeHtml(config.labels.loadingText) + '</div>';
     if (!cart || !cart.items || cart.items.length === 0) {
       return '<div class="loopdesk-cart-drawer__empty"><strong>Your cart is empty</strong><span>Add something you love and come back for express checkout.</span></div>';
     }
 
-    return cart.items.map(function (item, index) {
-      var variant = item.variant_title && item.variant_title !== "Default Title" ? '<div class="loopdesk-cart-drawer__variant">' + escapeHtml(item.variant_title) + "</div>" : "";
+    ensureLineProducts(cart);
+    var notice = state.lineNotice ? '<p class="loopdesk-cart-drawer__line-notice" role="status">' + escapeHtml(state.lineNotice) + '</p>' : '';
+    return notice + cart.items.map(function (item, index) {
+      var sizeSelect = canChangeLineSize(item) ? lineSizeSelectHtml(item, index) : "";
+      var variantText = lineVariantText(item, Boolean(sizeSelect));
+      var variant = variantText ? '<div class="loopdesk-cart-drawer__variant">' + escapeHtml(variantText) + "</div>" : "";
       var image = getItemImage(item);
       return [
         '<article class="loopdesk-cart-drawer__line" data-loopdesk-line-key="' + escapeHtml(item.key) + '">',
         '<div class="loopdesk-cart-drawer__image-wrap">' + (image ? '<img class="loopdesk-cart-drawer__image" src="' + escapeHtml(image) + '" alt="' + escapeHtml(item.product_title || item.title) + '" loading="lazy">' : '<div class="loopdesk-cart-drawer__image loopdesk-cart-drawer__image--placeholder"></div>') + '</div>',
         '<div class="loopdesk-cart-drawer__line-main">',
-        '<div class="loopdesk-cart-drawer__line-top"><div><div class="loopdesk-cart-drawer__title">' + escapeHtml(item.product_title || item.title) + "</div>" + variant + '</div><div class="loopdesk-cart-drawer__price">' + money(item.final_line_price, cart.currency) + lineSavingsHtml(item, cart) + '</div></div>',
+        '<div class="loopdesk-cart-drawer__line-top"><div><div class="loopdesk-cart-drawer__title">' + escapeHtml(item.product_title || item.title) + "</div>" + variant + sizeSelect + '</div><div class="loopdesk-cart-drawer__price">' + money(item.final_line_price, cart.currency) + lineSavingsHtml(item, cart) + '</div></div>',
         '<div class="loopdesk-cart-drawer__line-actions"><div class="loopdesk-cart-drawer__qty" aria-label="Quantity controls"><button type="button" data-loopdesk-qty="decrease" data-loopdesk-line="' + index + '">−</button><span>' + escapeHtml(item.quantity) + '</span><button type="button" data-loopdesk-qty="increase" data-loopdesk-line="' + index + '">+</button></div><button type="button" class="loopdesk-cart-drawer__remove" data-loopdesk-remove data-loopdesk-line="' + index + '">Remove</button></div>',
         "</div>",
         "</article>",
@@ -1666,7 +1784,10 @@
       : code
         ? '<p class="loopdesk-cart-drawer__coupon-status" data-state="success"><strong>' + escapeHtml(code) + ' applied</strong>' + (savings > 0 ? " · Total savings " + escapeHtml(money(savings, cart && cart.currency)) : "") + ' <button type="button" class="loopdesk-cart-drawer__coupon-remove" data-loopdesk-coupon-remove>Remove</button></p>'
         : '<p class="loopdesk-cart-drawer__coupon-status" aria-live="polite"></p>';
-    return '<section class="loopdesk-cart-drawer__coupon" data-loopdesk-coupon><h3 class="loopdesk-cart-drawer__coupon-title">Have a coupon?</h3><form data-loopdesk-coupon-form><div class="loopdesk-cart-drawer__coupon-row"><input class="loopdesk-cart-drawer__coupon-input" name="code" type="text" autocomplete="off" placeholder="Enter coupon code" value="' + escapeHtml(code) + '"><button class="loopdesk-cart-drawer__coupon-button" type="submit"' + (state.couponBusy ? " disabled" : "") + ">Apply</button></div></form>" + status + "</section>";
+    // Collapsed by default: an open code field sends shoppers off-site to hunt for
+    // codes. It opens when a code is applied, a status is showing, or on request.
+    var open = Boolean(state.couponOpen || code || transient);
+    return '<details class="loopdesk-cart-drawer__coupon" data-loopdesk-coupon' + (open ? ' open' : '') + '><summary class="loopdesk-cart-drawer__coupon-title">Have a coupon?</summary><form data-loopdesk-coupon-form><div class="loopdesk-cart-drawer__coupon-row"><input class="loopdesk-cart-drawer__coupon-input" name="code" type="text" autocomplete="off" placeholder="Enter coupon code" value="' + escapeHtml(code) + '"><button class="loopdesk-cart-drawer__coupon-button" type="submit"' + (state.couponBusy ? " disabled" : "") + ">Apply</button></div></form>" + status + "</details>";
   }
 
   function readCartFresh() {
@@ -1795,9 +1916,20 @@
     return Boolean(config.cart.paymentChoiceEnabled || config.cart.paymentChoiceCollapsed);
   }
 
+  // Base for the prepaid preview: merchandise after line-level discounts (an add-on
+  // sold at a promotional price counts at that price) and before order-level
+  // discounts - the same base the discount Function uses at checkout. The prepaid
+  // order discount itself never changes items_subtotal_price, so the preview stays
+  // stable whether or not the prepaid intent is currently applied.
+  function prepaidBaseMinor(pricing, cart) {
+    var items = Number(cart && cart.items_subtotal_price);
+    if (Number.isFinite(items) && items >= 0) return items;
+    return pricing ? pricing.merchandiseSubtotal : (cart ? cart.total_price : 0);
+  }
+
   function choicePrices(pricing, cart) {
     var payable = pricing ? pricing.finalPayableSubtotal : (cart ? cart.total_price : 0);
-    var prepaidSavings = prepaidOfferSavingsMinor(pricing ? pricing.merchandiseSubtotal : payable);
+    var prepaidSavings = prepaidOfferSavingsMinor(prepaidBaseMinor(pricing, cart));
     var prepaidApplied = String((cart && cart.attributes && cart.attributes.loopd2c_payment_intent) || "").toLowerCase() === "prepaid";
     var codBase = payable + (prepaidApplied ? prepaidSavings : 0);
     return { codBase: codBase, prepaidPrice: Math.max(0, codBase - prepaidSavings), prepaidSavings: prepaidSavings, prepaidApplied: prepaidApplied };
@@ -1830,7 +1962,7 @@
     // up-front choice while keeping every benefit one tap away.
     if (config.cart.paymentChoiceCollapsed && !state.payChoiceExpanded) {
       return '<button type="button" class="loopdesk-cart-drawer__place-order" data-loopdesk-place-order>'
-        + '<span class="loopdesk-cart-drawer__place-order-copy"><strong>Place Order</strong><em>Prepaid &amp; Cash on Delivery</em></span>'
+        + '<span class="loopdesk-cart-drawer__place-order-copy"><strong>Checkout</strong><em>' + (prepaidSavings > 0 ? 'Pay online &amp; save ' + money(prepaidSavings, cur) + ' · or Cash on Delivery' : 'Pay online or Cash on Delivery') + '</em></span>'
         + '<span class="loopdesk-cart-drawer__pay-arrow" aria-hidden="true">›</span></button>';
     }
     return '<p class="loopdesk-cart-drawer__pay-label">Choose how to pay</p>'
@@ -1849,6 +1981,9 @@
   if (elements.root) elements.root.classList.toggle("loopdesk-cart-drawer--open", state.open);
   document.documentElement.classList.toggle("loopdesk-cart-drawer-is-open", state.open);
   if (document.body) document.body.classList.toggle("loopdesk-cart-drawer-is-open", state.open);
+
+  var bagCount = elements.root && elements.root.querySelector("[data-loopdesk-bag-count]");
+  if (bagCount) bagCount.textContent = hasItems ? "Your bag · " + itemCount + (itemCount === 1 ? " item" : " items") : "Your bag";
 
   var pricing = promotionPricing(cart);
   if (pricing && pricing.warnings && pricing.warnings.length) debugLog("pricing diagnostics", { warnings: pricing.warnings, totalSavings: pricing.totalSavings, finalPayable: pricing.finalPayableSubtotal, cartFingerprint: pricing.cartFingerprint });
@@ -1895,7 +2030,9 @@
         elements.payNote.innerHTML = (cp.prepaidSavings > 0 ? '<span class="loopdesk-cart-drawer__pay-note-save">Special prepaid discount applied -' + money(cp.prepaidSavings, noteCur) + '</span> · ' : '') + 'Cash on Delivery ' + money(cp.codBase, noteCur);
       } else {
         elements.payableLabel.textContent = "You pay";
-        elements.payNote.innerHTML = 'Pay Online ' + money(cp.prepaidPrice, noteCur) + (cp.prepaidSavings > 0 ? ' · <span class="loopdesk-cart-drawer__pay-note-save">save ' + money(cp.prepaidSavings, noteCur) + '</span> with the prepaid offer' : '');
+        elements.payNote.innerHTML = cp.prepaidSavings > 0
+          ? '<span class="loopdesk-cart-drawer__pay-note-offer"><strong>Pay online: ' + money(cp.prepaidPrice, noteCur) + '</strong><span class="loopdesk-cart-drawer__pay-note-save">You save ' + money(cp.prepaidSavings, noteCur) + '</span></span><span class="loopdesk-cart-drawer__pay-note-alt">or Cash on Delivery ' + money(cp.codBase, noteCur) + '</span>'
+          : 'Pay online or Cash on Delivery';
       }
       elements.payNote.hidden = false;
     } else {
@@ -1905,7 +2042,7 @@
     }
   }
   if (elements.prepaidNudge) {
-    var prepaidSavings = prepaidOfferSavingsMinor(pricing ? pricing.merchandiseSubtotal : (cart ? cart.total_price : 0));
+    var prepaidSavings = prepaidOfferSavingsMinor(prepaidBaseMinor(pricing, cart));
     // The choice block already states the prepaid saving on the "Pay Online"
     // button, so the standalone nudge would be redundant in choice mode.
     var prepaidText = (prepaidSavings > 0 && !paymentChoiceActive()) ? prepaidOfferNudgeText(prepaidSavings, cart && cart.currency) : "";
@@ -2100,6 +2237,8 @@
     if (couponRemove) { event.preventDefault(); return removeCoupon(); }
     var qtyButton = event.target && event.target.closest && event.target.closest("[data-loopdesk-qty]");
     var removeButton = event.target && event.target.closest && event.target.closest("[data-loopdesk-remove]");
+    var sizeSelect = event.target && event.target.closest && event.target.closest("[data-loopdesk-line-size]");
+    if (sizeSelect) { if (event.type === "change") changeLineSize(Number(sizeSelect.getAttribute("data-loopdesk-line")), sizeSelect.value); return; }
     var select = event.target && event.target.closest && event.target.closest("[data-loopdesk-offer-variant]");
     var addOffer = event.target && event.target.closest && event.target.closest("[data-loopdesk-add-offer]");
     if (select) { state.selectedOfferVariants[select.getAttribute("data-loopdesk-offer-rule")] = select.value; if (event.type === "change") render(); return; }
@@ -2209,7 +2348,7 @@
     return [
       '<div class="loopdesk-cart-drawer__overlay" hidden></div>',
       '<aside class="loopdesk-cart-drawer" aria-hidden="true" aria-label="Cart" role="dialog">',
-      '<header class="loopdesk-cart-drawer__header"><div class="loopdesk-cart-drawer__brand">' + logo + '<div><h2>' + escapeHtml(config.branding.merchantName || config.branding.storeName) + '</h2><p>Your bag</p></div></div><button type="button" class="loopdesk-cart-drawer__close" aria-label="Close cart">×</button></header>',
+      '<header class="loopdesk-cart-drawer__header"><div class="loopdesk-cart-drawer__brand">' + logo + '<div><h2>' + escapeHtml(config.branding.merchantName || config.branding.storeName) + '</h2><p data-loopdesk-bag-count>Your bag</p></div></div><button type="button" class="loopdesk-cart-drawer__close" aria-label="Close cart">×</button></header>',
       // Only the checkout CTA is pinned in the sticky footer; the totals, trust
       // badges and fine print scroll with the cart so more cart content is visible.
       '<div class="loopdesk-cart-drawer__scroll">',
@@ -2304,6 +2443,10 @@
     if (elements.body) {
       elements.body.addEventListener("click", handleDrawerAction);
       elements.body.addEventListener("change", handleDrawerAction);
+      // `toggle` does not bubble; capture it to remember the coupon box state across re-renders.
+      elements.body.addEventListener("toggle", function (event) {
+        if (event.target && event.target.matches && event.target.matches("[data-loopdesk-coupon]")) state.couponOpen = event.target.open;
+      }, true);
       elements.body.addEventListener("submit", function (event) {
         var form = event.target && event.target.closest && event.target.closest("[data-loopdesk-coupon-form]");
         if (!form) return;

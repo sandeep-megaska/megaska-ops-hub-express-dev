@@ -73,6 +73,24 @@ pub fn candidate(
     })
 }
 
+/// The total amount a product candidate takes off `quantity` units of `line`,
+/// mirroring `candidate`. Order-level discounts apply after product discounts,
+/// so this is needed to compute order amounts from the subtotal the shopper
+/// actually pays for merchandise.
+pub fn discount_total(rule: &FunctionRule, line: &Line, quantity: i64) -> Option<Decimal> {
+    if quantity <= 0 {
+        return None;
+    }
+    let (method, configured_value, _, _) = rule.reward.executable_product()?;
+    let value = Decimal::parse(configured_value)?;
+    let per_unit = match method {
+        RewardMethod::Percentage => line.unit_amount.mul_percent(&value)?,
+        RewardMethod::FixedAmount => value.min_with(&line.unit_amount),
+        RewardMethod::FixedPrice => line.unit_amount.sub(&value)?,
+    };
+    per_unit.mul_int(quantity)
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct ResolvedOrderRewardCandidate {
     pub source_rule_id: String,
