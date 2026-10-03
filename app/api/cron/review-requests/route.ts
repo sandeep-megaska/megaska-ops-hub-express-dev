@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "../../../../services/db/prisma.ts";
+import { ingestRecentlyDeliveredOrders } from "../../../../services/reviews/review-delivered-order-ingestion.ts";
 import { evaluateAndApplyReviewRequestEligibility } from "../../../../services/reviews/review-eligibility.ts";
 import {
   expireReviewRequests,
@@ -9,10 +10,11 @@ import {
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 const PROMOTE_BATCH = 100;
 const SEND_BATCH = 25;
+const INGEST_BATCH = 20;
 const DEFAULT_MAX_DELIVERY_AGE_DAYS = 30;
 
 // Vercel Cron invokes this on a schedule (see vercel.json) and, when CRON_SECRET
@@ -65,11 +67,16 @@ async function run(req: NextRequest) {
   const deliveredAfter = new Date(now.getTime() - maxDeliveryAgeDays() * 86_400_000);
   try {
     const recovered = await recoverStaleScheduledReviewRequests({ now });
+    const ingested = await ingestRecentlyDeliveredOrders({ now, maxAgeDays: maxDeliveryAgeDays(), maxOrders: INGEST_BATCH });
     const promoted = await promoteWaitingRequests(now);
     const processed = await processDueReviewRequests({ now, limit: SEND_BATCH, deliveredAfter });
     const expired = await expireReviewRequests({ now });
     const summary = {
       recovered: recovered.recovered,
+      deliveredOrdersIngested: ingested.ingested,
+      deliveredOrdersDeferred: ingested.deferred,
+      deliveredOrdersSkippedNoCustomer: ingested.skippedNoCustomer,
+      deliveredOrderFailures: ingested.failed,
       promoted: promoted.eligible,
       promoteFailures: promoted.failed,
       scanned: processed.scanned,
