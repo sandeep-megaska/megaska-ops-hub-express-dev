@@ -17,6 +17,7 @@ function node(overrides: Record<string, unknown> = {}) {
   return {
     id: "gid://shopify/AbandonedCheckout/1",
     createdAt: minutesAgo(45),
+    updatedAt: minutesAgo(45),
     completedAt: null,
     abandonedCheckoutUrl: "https://megaska.com/checkouts/abc/recover",
     customAttributes: [{ key: "loopd2c_payment_intent", value: "prepaid" }, { key: "megaska_phone_verified", value: "true" }],
@@ -37,8 +38,8 @@ test("skips COD carts, unverified phones, too fresh or old, completed, already o
   const skipped = [
     node({ customAttributes: [{ key: "loopd2c_payment_intent", value: "cod" }, { key: "megaska_phone_verified", value: "true" }] }),
     node({ customAttributes: [{ key: "loopd2c_payment_intent", value: "prepaid" }] }),
-    node({ createdAt: minutesAgo(10) }),
-    node({ createdAt: minutesAgo(60 * 25) }),
+    node({ createdAt: minutesAgo(10), updatedAt: minutesAgo(10) }),
+    node({ createdAt: minutesAgo(60 * 25), updatedAt: minutesAgo(60 * 25) }),
     node({ completedAt: minutesAgo(5) }),
     node({ customer: { firstName: "A", defaultEmailAddress: { emailAddress: "a@example.com" }, lastOrder: { createdAt: minutesAgo(20) } } }),
     node({ customer: { firstName: "A", defaultEmailAddress: null, lastOrder: null } }),
@@ -102,4 +103,22 @@ test("run is opt-in, sends once per checkout and records only accepted sends", a
   const second = await runPrepaidCodRecovery({ now }, { env, db, listCheckouts, sendEmail });
   assert.deepEqual({ sent: second.sent, alreadySent: second.alreadySent }, { sent: 1, alreadySent: 1 });
   assert.deepEqual(sent, ["gid://shopify/AbandonedCheckout/1", "gid://shopify/AbandonedCheckout/2"]);
+});
+
+test("a reused checkout counts from its last activity and gets one email per day", () => {
+  // Shopify reuses one abandoned checkout for a returning shopper: created days
+  // ago, updated 40 minutes ago. Older orders before this session do not count.
+  const reused = node({
+    createdAt: minutesAgo(60 * 24 * 4),
+    updatedAt: minutesAgo(40),
+    customer: { firstName: "S", defaultEmailAddress: { emailAddress: "s@example.com" }, lastOrder: { createdAt: minutesAgo(60 * 24 * 15) } },
+  });
+  const [candidate] = selectPrepaidCodCandidates([reused], now);
+  assert.ok(candidate);
+  assert.equal(candidate.dedupeKey, `gid://shopify/AbandonedCheckout/1@${minutesAgo(40).slice(0, 10)}`);
+  // Still active (updated 10 minutes ago): wait.
+  assert.equal(selectPrepaidCodCandidates([node({ createdAt: minutesAgo(60 * 24 * 4), updatedAt: minutesAgo(10) })], now).length, 0);
+  // Ordered after the session started: skip.
+  const bought = node({ updatedAt: minutesAgo(40), customer: { firstName: "S", defaultEmailAddress: { emailAddress: "s@example.com" }, lastOrder: { createdAt: minutesAgo(35) } } });
+  assert.equal(selectPrepaidCodCandidates([bought], now).length, 0);
 });
