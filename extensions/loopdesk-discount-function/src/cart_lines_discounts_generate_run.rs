@@ -48,6 +48,7 @@ pub fn run(
     let cart = eligibility::Cart::from_input(&input);
     let mut candidates = Vec::new();
     let mut claimed = std::collections::BTreeSet::new();
+    let mut product_discount_total = Decimal::zero();
     if product_enabled {
         for rule in &cfg.rules {
             if !rule.is_executable() || !eligibility::conditions_met(rule, &cart) {
@@ -58,6 +59,13 @@ pub fn run(
                 if let Some(candidate) =
                     rewards::candidate(rule, allocation.line, allocation.quantity)
                 {
+                    if let Some(amount) =
+                        rewards::discount_total(rule, allocation.line, allocation.quantity)
+                    {
+                        product_discount_total = product_discount_total
+                            .add(&amount)
+                            .unwrap_or(product_discount_total);
+                    }
                     claimed.insert(allocation.line.id.clone());
                     candidates.push(candidate);
                 }
@@ -79,6 +87,14 @@ pub fn run(
                 cfg.rules.iter().filter(|rule| rule.is_executable()),
                 subtotal,
             );
+            // Shopify applies order discounts after product discounts, and the cart
+            // subtotal in the input does not include the product discounts this run
+            // creates. Fixed order amounts must use the merchandise total after them,
+            // otherwise an add-on sold at a fixed price is discounted again at its
+            // full price.
+            let order_base = subtotal
+                .saturating_sub(&product_discount_total)
+                .unwrap_or_else(|| subtotal.clone());
             // Prepaid ("Pay Online") discount: applied only when the drawer marked
             // the cart prepaid (`loopd2c_payment_intent`), and sourced from the
             // tamper-proof shop metafield - never from a customer-supplied amount.
@@ -90,7 +106,7 @@ pub fn run(
                     .map(|m| m.value().as_str())
                     .filter(|v| !v.trim().is_empty())
                     .and_then(prepaid::parse)
-                    .and_then(|offer| prepaid::discount_amount(&offer, subtotal))
+                    .and_then(|offer| prepaid::discount_amount(&offer, &order_base))
             } else {
                 None
             };
@@ -101,7 +117,7 @@ pub fn run(
                 // deterministically off the same subtotal.
                 let tier_amount = tier
                     .as_ref()
-                    .and_then(|order| subtotal.mul_percent(&order.percentage))
+                    .and_then(|order| order_base.mul_percent(&order.percentage))
                     .unwrap_or_else(Decimal::zero);
                 let total = tier_amount.add(&prepaid_amount).unwrap_or(prepaid_amount);
                 if let Some(amount) = total.to_shopify_decimal() {
