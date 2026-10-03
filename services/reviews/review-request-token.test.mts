@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildReviewSubmissionUrl, consumeReviewRequestToken, createReviewRequestToken, hashReviewRequestToken, issueReviewRequestToken, normalizeReviewRequestToken } from "./review-request-token.ts";
+import { buildReviewSubmissionUrl, consumeReviewRequestToken, createReviewRequestToken, hashReviewRequestToken, issueReviewRequestToken, normalizeReviewRequestToken, resolveReviewSubmissionBaseUrl } from "./review-request-token.ts";
 
 const now = new Date("2026-07-18T00:00:00.000Z");
 
@@ -21,7 +21,7 @@ test("supports custom expiry and builds token-only review URL", () => {
   const token = createReviewRequestToken({ now, expiresAt });
   assert.equal(token.expiresAt, expiresAt);
   const url = new URL(buildReviewSubmissionUrl({ baseUrl: "https://example.com/apps/loopd2c", token: token.token }));
-  assert.equal(url.pathname, "/customer/reviews/write");
+  assert.equal(url.pathname, "/apps/loopd2c/customer/reviews/write");
   assert.equal(url.searchParams.get("token"), token.token);
   assert.equal(url.searchParams.has("shopId"), false);
   assert.equal(url.searchParams.has("orderId"), false);
@@ -46,4 +46,18 @@ test("consume is atomic and rejects second use", async () => {
   assert.deepEqual(calls[0].where, { id: "rr", tokenConsumedAt: null, tokenRevokedAt: null });
   assert.equal(calls[0].data.submittedReviewId, "review");
   assert.equal(calls[0].data.status, "SUBMITTED");
+});
+
+test("review URL keeps a bare host working and ignores a trailing slash", () => {
+  const token = createReviewRequestToken({ now });
+  assert.equal(new URL(buildReviewSubmissionUrl({ baseUrl: "https://example.com", token: token.token })).pathname, "/customer/reviews/write");
+  assert.equal(new URL(buildReviewSubmissionUrl({ baseUrl: "https://example.com/apps/loopd2c/", token: token.token })).pathname, "/apps/loopd2c/customer/reviews/write");
+});
+
+test("review URL base defaults to the shop storefront app proxy", () => {
+  assert.equal(resolveReviewSubmissionBaseUrl({ primaryDomain: "megaska.com", shopDomain: "x.myshopify.com" }, ""), "https://megaska.com/apps/loopd2c");
+  assert.equal(resolveReviewSubmissionBaseUrl({ primaryDomain: "https://www.megaska.com/", shopDomain: null }, ""), "https://www.megaska.com/apps/loopd2c");
+  assert.equal(resolveReviewSubmissionBaseUrl({ primaryDomain: null, shopDomain: "x.myshopify.com" }, ""), "https://x.myshopify.com/apps/loopd2c");
+  assert.equal(resolveReviewSubmissionBaseUrl({ primaryDomain: null, shopDomain: null }, ""), null);
+  assert.equal(resolveReviewSubmissionBaseUrl({ primaryDomain: "megaska.com" }, "https://staging.example.com/apps/loopd2c"), "https://staging.example.com/apps/loopd2c");
 });
