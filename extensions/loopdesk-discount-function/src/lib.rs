@@ -396,4 +396,34 @@ mod tests {
         let ProductDiscountCandidateTarget::CartLine(target) = &candidate.targets[0];
         assert_eq!(target.quantity, Some(1));
     }
+
+    #[test]
+    fn discount_total_mirrors_each_reward_type() {
+        let line = offer_line(1, "7"); // unit price 20.00
+        let fixed_price = rule(RewardType::FixedPrice, "15", 1);
+        assert_eq!(rewards::discount_total(&fixed_price, &line, 1), Decimal::parse("5"));
+        let fixed_amount = rule(RewardType::FixedAmountOff, "5.50", 1);
+        assert_eq!(rewards::discount_total(&fixed_amount, &line, 2), Decimal::parse("11"));
+        let oversized = rule(RewardType::FixedAmountOff, "50", 1);
+        assert_eq!(rewards::discount_total(&oversized, &line, 1), Decimal::parse("20"));
+        let percentage = rule(RewardType::PercentageOff, "10", 1);
+        assert_eq!(rewards::discount_total(&percentage, &line, 3), Decimal::parse("6"));
+        assert_eq!(rewards::discount_total(&percentage, &line, 0), None);
+    }
+
+    #[test]
+    fn prepaid_amount_uses_merchandise_after_product_discounts() {
+        // Burkini 1795 + swim cap 280 sold at a fixed 150 (130 off): the 15% prepaid
+        // discount must be taken from 1945, not from the undiscounted 2075.
+        let subtotal = Decimal::parse("2075.00").unwrap();
+        let product_discounts = Decimal::parse("130.00").unwrap();
+        let base = subtotal.saturating_sub(&product_discounts).unwrap();
+        let offer = crate::prepaid::parse(r#"{"schemaVersion":1,"type":"PERCENTAGE","percent":"15"}"#).unwrap();
+        assert_eq!(
+            crate::prepaid::discount_amount(&offer, &base).unwrap().to_shopify(),
+            Decimal::parse("291.75").unwrap().to_shopify()
+        );
+        assert_eq!(Decimal::parse("10").unwrap().saturating_sub(&Decimal::parse("25").unwrap()), Some(Decimal::zero()));
+        assert_eq!(Decimal::parse("1.5").unwrap().mul_int(3), Decimal::parse("4.5"));
+    }
 }

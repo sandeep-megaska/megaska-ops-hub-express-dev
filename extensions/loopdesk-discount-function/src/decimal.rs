@@ -116,6 +116,28 @@ impl Decimal {
         })
     }
 
+    /// `self` * `factor` for a non-negative whole-number factor (e.g. a quantity).
+    pub fn mul_int(&self, factor: i64) -> Option<Self> {
+        if self.neg || factor < 0 {
+            return None;
+        }
+        Some(Self {
+            neg: false,
+            units: self.units.checked_mul(i128::from(factor))?,
+        })
+    }
+
+    /// `self` - `other`, floored at zero, for non-negative decimals.
+    pub fn saturating_sub(&self, other: &Self) -> Option<Self> {
+        if self.neg || other.neg {
+            return None;
+        }
+        Some(Self {
+            neg: false,
+            units: (self.units - other.units).max(0),
+        })
+    }
+
     /// The smaller of two non-negative decimals (named to avoid clashing with
     /// the `Ord::min` provided method, which takes its args by value).
     pub fn min_with(&self, other: &Self) -> Self {
