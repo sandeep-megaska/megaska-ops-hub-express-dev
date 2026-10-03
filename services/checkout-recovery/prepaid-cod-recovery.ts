@@ -28,6 +28,7 @@ const ABANDONED_CHECKOUTS_QUERY = `query PrepaidAbandonedCheckouts($query: Strin
     nodes {
       id
       createdAt
+      updatedAt
       completedAt
       abandonedCheckoutUrl
       customAttributes { key value }
@@ -41,6 +42,7 @@ const ABANDONED_CHECKOUTS_QUERY = `query PrepaidAbandonedCheckouts($query: Strin
 type AbandonedCheckoutNode = {
   id?: string | null;
   createdAt?: string | null;
+  updatedAt?: string | null;
   completedAt?: string | null;
   abandonedCheckoutUrl?: string | null;
   customAttributes?: Array<{ key?: string | null; value?: string | null }> | null;
@@ -56,6 +58,10 @@ export type RecoveryItem = { variantId: number; quantity: number };
 
 export type PrepaidCodCandidate = {
   checkoutId: string;
+  // One recovery per checkout per day of last activity: Shopify reuses the same
+  // abandoned checkout when a returning shopper comes back, so the checkout id
+  // alone would allow only one email ever.
+  dedupeKey: string;
   email: string;
   firstName: string | null;
   abandonedCheckoutUrl: string | null;
@@ -76,20 +82,25 @@ function numericId(gid: string | null | undefined): number | null {
 }
 
 // An abandoned checkout qualifies when the drawer marked it prepaid, the shopper
-// verified their phone through the OTP gate, it has been idle long enough, and
-// the customer has not ordered since it was created.
+// verified their phone through the OTP gate, it has been idle long enough since
+// its last activity, and the customer has not ordered since that activity began.
+// Idle time is measured from updatedAt, not createdAt: Shopify reuses one
+// abandoned checkout for a returning shopper and only bumps updatedAt.
 export function selectPrepaidCodCandidates(nodes: AbandonedCheckoutNode[], now: Date): PrepaidCodCandidate[] {
   const candidates: PrepaidCodCandidate[] = [];
   for (const node of nodes) {
     if (!node?.id || node.completedAt) continue;
     const createdAt = node.createdAt ? new Date(node.createdAt).getTime() : NaN;
-    if (!Number.isFinite(createdAt)) continue;
-    const age = now.getTime() - createdAt;
+    const updatedAt = node.updatedAt ? new Date(node.updatedAt).getTime() : createdAt;
+    if (!Number.isFinite(createdAt) || !Number.isFinite(updatedAt)) continue;
+    const age = now.getTime() - updatedAt;
     if (age < MIN_AGE_MS || age > MAX_AGE_MS) continue;
     if (attribute(node, "loopd2c_payment_intent").toLowerCase() !== "prepaid") continue;
     if (attribute(node, "megaska_phone_verified").toLowerCase() !== "true") continue;
     const lastOrderAt = node.customer?.lastOrder?.createdAt ? new Date(node.customer.lastOrder.createdAt).getTime() : NaN;
-    if (Number.isFinite(lastOrderAt) && lastOrderAt >= createdAt) continue;
+    // An order after this checkout session began means the shopper already bought.
+    const sessionStart = Math.max(createdAt, updatedAt - MAX_AGE_MS);
+    if (Number.isFinite(lastOrderAt) && lastOrderAt >= sessionStart) continue;
     const email = String(node.customer?.defaultEmailAddress?.emailAddress ?? "").trim().toLowerCase();
     if (!EMAIL.test(email)) continue;
     const items = (node.lineItems?.nodes ?? [])
@@ -99,6 +110,7 @@ export function selectPrepaidCodCandidates(nodes: AbandonedCheckoutNode[], now: 
     if (!items.length) continue;
     candidates.push({
       checkoutId: node.id,
+      dedupeKey: `${node.id}@${new Date(updatedAt).toISOString().slice(0, 10)}`,
       email,
       firstName: String(node.customer?.firstName ?? "").trim() || null,
       abandonedCheckoutUrl: node.abandonedCheckoutUrl ?? null,
@@ -112,12 +124,13 @@ export async function listAbandonedCheckouts(
   input: { shopDomain: string; now: Date },
   graphql: Graphql = defaultGraphql,
 ): Promise<AbandonedCheckoutNode[]> {
+  // updated_at, not created_at: a reused checkout keeps its original created_at.
   const since = new Date(input.now.getTime() - MAX_AGE_MS).toISOString();
   const nodes: AbandonedCheckoutNode[] = [];
   let after: string | null = null;
   for (let page = 0; page < 5; page += 1) {
     const data: { abandonedCheckouts: { nodes: AbandonedCheckoutNode[]; pageInfo: { hasNextPage: boolean; endCursor: string | null } } } =
-      await graphql(ABANDONED_CHECKOUTS_QUERY, { query: `created_at:>='${since}'`, after }, { shopDomain: input.shopDomain });
+      await graphql(ABANDONED_CHECKOUTS_QUERY, { query: `updated_at:>='${since}'`, after }, { shopDomain: input.shopDomain });
     nodes.push(...(data.abandonedCheckouts?.nodes ?? []));
     if (!data.abandonedCheckouts?.pageInfo?.hasNextPage) break;
     after = data.abandonedCheckouts.pageInfo.endCursor;
@@ -204,7 +217,7 @@ type RecoveryDb = {
   };
 };
 
-type SendEmail = (input: { shopId: string; to: string; subject: string; text: string; checkoutId: string }) => Promise<{ sent: boolean }>;
+type SendEmail = (input: { shopId: string; to: string; subject: string; text: string; checkoutId: string; dedupeKey: string }) => Promise<{ sent: boolean }>;
 
 const defaultSendEmail: SendEmail = async (input) => {
   const { sendCustomerEmail } = await import("../notifications/resend.ts");
@@ -214,7 +227,7 @@ const defaultSendEmail: SendEmail = async (input) => {
     eventType: "CHECKOUT_RECOVERY",
     subject: input.subject,
     text: input.text,
-    usageContext: { sourceType: "PREPAID_COD_RECOVERY", sourceId: input.checkoutId, idempotencyKey: `prepaid-cod-recovery:${input.checkoutId}` },
+    usageContext: { sourceType: "PREPAID_COD_RECOVERY", sourceId: input.checkoutId, idempotencyKey: `prepaid-cod-recovery:${input.dedupeKey}` },
   });
   return { sent: !result.skipped && result.success === true };
 };
@@ -253,7 +266,7 @@ export async function runPrepaidCodRecovery(
     const host = String(shop.primaryDomain || shop.shopDomain).replace(/^https?:\/\//i, "").replace(/\/.*$/, "");
     for (const candidate of candidates) {
       if (budget <= 0) break;
-      const existing = await db.auditEvent.findFirst({ where: { eventType: PREPAID_COD_RECOVERY_EVENT, entityType: ENTITY_TYPE, entityId: candidate.checkoutId }, select: { id: true } });
+      const existing = await db.auditEvent.findFirst({ where: { eventType: PREPAID_COD_RECOVERY_EVENT, entityType: ENTITY_TYPE, entityId: candidate.dedupeKey }, select: { id: true } });
       if (existing) { summary.alreadySent += 1; continue; }
       budget -= 1;
       const token = createCodRecoveryToken({ shopId: shop.id, checkoutId: candidate.checkoutId, items: candidate.items, now }, secret);
@@ -264,10 +277,10 @@ export async function runPrepaidCodRecovery(
         onlineLink: candidate.abandonedCheckoutUrl,
       });
       try {
-        const result = await sendEmail({ shopId: shop.id, to: candidate.email, subject: email.subject, text: email.text, checkoutId: candidate.checkoutId });
+        const result = await sendEmail({ shopId: shop.id, to: candidate.email, subject: email.subject, text: email.text, checkoutId: candidate.checkoutId, dedupeKey: candidate.dedupeKey });
         if (!result.sent) { summary.failed += 1; continue; }
         // Recorded only after an accepted send; a failed send is retried next run.
-        await db.auditEvent.create({ data: { actorType: "system", eventType: PREPAID_COD_RECOVERY_EVENT, entityType: ENTITY_TYPE, entityId: candidate.checkoutId, payload: { shopId: shop.id, channel: "EMAIL" } } });
+        await db.auditEvent.create({ data: { actorType: "system", eventType: PREPAID_COD_RECOVERY_EVENT, entityType: ENTITY_TYPE, entityId: candidate.dedupeKey, payload: { shopId: shop.id, channel: "EMAIL", checkoutId: candidate.checkoutId } } });
         summary.sent += 1;
       } catch {
         summary.failed += 1;

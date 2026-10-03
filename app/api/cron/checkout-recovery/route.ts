@@ -20,26 +20,31 @@ async function run(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "Not found" }, { status: 404 });
   }
   console.info("[CHECKOUT RECOVERY] cron_dispatch_started");
+  // The two recovery paths are independent: a failure in one never stops the other.
+  let summary: Awaited<ReturnType<typeof dispatchManualCheckoutRecovery>> | null = null;
+  let dispatchFailed = false;
   try {
-    const summary = await dispatchManualCheckoutRecovery();
+    summary = await dispatchManualCheckoutRecovery();
     console.info("[CHECKOUT RECOVERY] cron_dispatch_completed", summary);
-    // Native Shopify Checkout: offer COD to shoppers who abandoned a prepaid
-    // checkout. Isolated so a failure here never affects the dispatch above.
-    let prepaidCod: Awaited<ReturnType<typeof runPrepaidCodRecovery>> | { error: string };
-    try {
-      prepaidCod = await runPrepaidCodRecovery({});
-      console.info("[CHECKOUT RECOVERY] prepaid_cod_completed", prepaidCod);
-    } catch (error) {
-      prepaidCod = { error: "Prepaid COD recovery failed." };
-      console.error("[CHECKOUT RECOVERY] prepaid_cod_failed", { error: error instanceof Error ? error.message : String(error) });
-    }
-    return NextResponse.json({ ok: true, ...summary, prepaidCod }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
+    dispatchFailed = true;
     console.error("[CHECKOUT RECOVERY] cron_dispatch_failed", {
       error: error instanceof Error ? error.message : String(error),
     });
-    return NextResponse.json({ ok: false, error: "Recovery dispatch failed." }, { status: 500 });
   }
+  // Native Shopify Checkout: offer COD to shoppers who abandoned a prepaid checkout.
+  let prepaidCod: Awaited<ReturnType<typeof runPrepaidCodRecovery>> | { error: string };
+  try {
+    prepaidCod = await runPrepaidCodRecovery({});
+    console.info("[CHECKOUT RECOVERY] prepaid_cod_completed", prepaidCod);
+  } catch (error) {
+    prepaidCod = { error: "Prepaid COD recovery failed." };
+    console.error("[CHECKOUT RECOVERY] prepaid_cod_failed", { error: error instanceof Error ? error.message : String(error) });
+  }
+  if (dispatchFailed) {
+    return NextResponse.json({ ok: false, error: "Recovery dispatch failed.", prepaidCod }, { status: 500 });
+  }
+  return NextResponse.json({ ok: true, ...summary, prepaidCod }, { headers: { "Cache-Control": "no-store" } });
 }
 
 export const GET = run;
