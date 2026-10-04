@@ -203,7 +203,7 @@ export function buildCodRecoveryEmail(input: { shopName: string; firstName: stri
     input.codLink,
   ];
   if (input.onlineLink) lines.push("", "Or finish paying online and keep your prepaid discount:", input.onlineLink);
-  lines.push("", "Free size exchange on every order.", "", `— ${input.shopName}`);
+  lines.push("", `— ${input.shopName}`);
   return { subject: "Pay on delivery? Your order is one tap away", text: lines.join("\n") };
 }
 
