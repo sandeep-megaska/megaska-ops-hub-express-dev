@@ -49,7 +49,66 @@ test("payment-choice base is intent-neutral (never double-counts an already-appl
   // the COD base rather than subtracting prepaid a second time.
   assert.match(src, /function choicePrices\(pricing, cart\)/, "shared intent-neutral price helper must exist");
   assert.match(src, /cart\.attributes && cart\.attributes\.loopd2c_payment_intent\)[\s\S]*?=== "prepaid"/, "must read the current intent from the same cart fetch");
-  assert.match(src, /var codBase = payable \+ \(prepaidApplied \? prepaidSavings : 0\)/, "COD base must add prepaid back when it is already applied to the cart total");
+  assert.match(src, /var codBase = payable \+ appliedPrepaid;/, "COD base must add back only the prepaid discount actually on the cart");
+});
+
+// Load the pure price helpers out of the drawer source so they can be exercised
+// against real cart.js shapes.
+function loadChoicePrices(offer) {
+  const pick = (name) => {
+    const start = src.indexOf(`function ${name}(`);
+    let depth = 0;
+    for (let i = src.indexOf("{", start); i < src.length; i++) {
+      if (src[i] === "{") depth++;
+      else if (src[i] === "}" && --depth === 0) return src.slice(start, i + 1);
+    }
+    throw new Error(`${name} not found`);
+  };
+  const body = ["prepaidOfferSavingsMinor", "prepaidBaseMinor", "appliedPrepaidDiscountMinor", "choicePrices"].map(pick).join("\n");
+  return new Function("window", `${body}; return choicePrices;`)({ LoopDeskConfig: { prepaidOffer: offer } });
+}
+const offer15 = { enabled: true, type: "PERCENTAGE", value: 15 };
+
+test("prepaid intent without the discount on the cart does not inflate the COD price", () => {
+  // Live bug: a ₹490 cart marked prepaid but with no prepaid discount applied by
+  // Shopify showed COD ₹563.50 (490 + 73.50).
+  const choicePrices = loadChoicePrices(offer15);
+  const cart = { attributes: { loopd2c_payment_intent: "prepaid" }, items_subtotal_price: 49000, total_price: 49000, cart_level_discount_applications: [], items: [{ discount_allocations: [] }] };
+  const prices = choicePrices(null, cart);
+  assert.equal(prices.codBase, 49000);
+  assert.equal(prices.prepaidPrice, 41650);
+  assert.equal(prices.prepaidSavings, 7350);
+  assert.equal(prices.prepaidApplied, false);
+});
+
+test("prepaid discount applied by Shopify is added back once for the COD price", () => {
+  const choicePrices = loadChoicePrices(offer15);
+  const cart = {
+    attributes: { loopd2c_payment_intent: "prepaid" }, items_subtotal_price: 49000, total_price: 41650,
+    cart_level_discount_applications: [{ type: "automatic", title: "LoopD2C prepaid + order promotion", total_allocated_amount: 7350 }],
+    items: [{ discount_allocations: [{ amount: 7350, discount_application: { title: "LoopD2C prepaid + order promotion" } }] }],
+  };
+  const prices = choicePrices(null, cart);
+  assert.equal(prices.codBase, 49000);
+  assert.equal(prices.prepaidPrice, 41650);
+  assert.equal(prices.prepaidApplied, true);
+});
+
+test("applied prepaid discount is read from line allocations when cart-level data is missing", () => {
+  const choicePrices = loadChoicePrices(offer15);
+  const cart = {
+    attributes: { loopd2c_payment_intent: "prepaid" }, items_subtotal_price: 49000, total_price: 41650,
+    items: [{ discount_allocations: [{ amount: 7350, discount_application: { title: "LoopD2C prepaid + order promotion" } }] }],
+  };
+  assert.equal(choicePrices(null, cart).codBase, 49000);
+});
+
+test("COD intent never adds a prepaid saving back", () => {
+  const choicePrices = loadChoicePrices(offer15);
+  const cart = { attributes: { loopd2c_payment_intent: "cod" }, items_subtotal_price: 49000, total_price: 49000, items: [] };
+  const prices = choicePrices(null, cart);
+  assert.equal(prices.codBase, 49000);
+  assert.equal(prices.prepaidPrice, 41650);
 });
 
 test("cart drawer reuses the PDP pincode result to show a delivery estimate", () => {

@@ -1927,11 +1927,37 @@
     return pricing ? pricing.merchandiseSubtotal : (cart ? cart.total_price : 0);
   }
 
+  // Amount of the Function's prepaid order discount actually present on the cart
+  // (its title is "LoopD2C prepaid + order promotion"), in minor units. The
+  // loopd2c_payment_intent attribute alone is not proof: Shopify may not have
+  // applied the discount to this cart, and adding the saving back would then
+  // inflate the COD price above the real cart total.
+  function appliedPrepaidDiscountMinor(cart) {
+    var isPrepaid = function (title) { return /prepaid/i.test(String(title || "")); };
+    var levels = Array.isArray(cart && cart.cart_level_discount_applications) ? cart.cart_level_discount_applications : [];
+    var total = levels.reduce(function (sum, application) {
+      return sum + (isPrepaid(application && application.title) ? Math.max(0, Math.round(Number(application.total_allocated_amount) || 0)) : 0);
+    }, 0);
+    if (total > 0) return total;
+    (Array.isArray(cart && cart.items) ? cart.items : []).forEach(function (item) {
+      var allocations = Array.isArray(item && item.discount_allocations) ? item.discount_allocations : [];
+      allocations.forEach(function (allocation) {
+        var app = allocation && allocation.discount_application || {};
+        if (isPrepaid(app.title || allocation.title)) total += Math.max(0, Math.round(Number(allocation.amount) || 0));
+      });
+    });
+    return total;
+  }
+
   function choicePrices(pricing, cart) {
     var payable = pricing ? pricing.finalPayableSubtotal : (cart ? cart.total_price : 0);
     var prepaidSavings = prepaidOfferSavingsMinor(prepaidBaseMinor(pricing, cart));
-    var prepaidApplied = String((cart && cart.attributes && cart.attributes.loopd2c_payment_intent) || "").toLowerCase() === "prepaid";
-    var codBase = payable + (prepaidApplied ? prepaidSavings : 0);
+    var intentPrepaid = String((cart && cart.attributes && cart.attributes.loopd2c_payment_intent) || "").toLowerCase() === "prepaid";
+    // The applied discount may also carry an order-tier share, so add back at
+    // most the prepaid saving itself.
+    var appliedPrepaid = intentPrepaid ? Math.min(prepaidSavings, appliedPrepaidDiscountMinor(cart)) : 0;
+    var prepaidApplied = appliedPrepaid > 0;
+    var codBase = payable + appliedPrepaid;
     return { codBase: codBase, prepaidPrice: Math.max(0, codBase - prepaidSavings), prepaidSavings: prepaidSavings, prepaidApplied: prepaidApplied };
   }
 
