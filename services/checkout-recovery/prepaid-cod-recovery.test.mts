@@ -69,6 +69,16 @@ test("email offers COD first and keeps the online link", () => {
   assert.match(email.text, /^Hi Asha,/);
   assert.ok(email.text.indexOf("Cash on Delivery") < email.text.indexOf("finish paying online"));
   assert.ok(email.text.includes("switch-cod?t=x"));
+  assert.ok(email.html.includes('href="https://megaska.com/apps/loopd2c/checkout/switch-cod?t=x"'));
+  assert.ok(email.html.indexOf("Pay on delivery") < email.html.indexOf("Pay online"));
+});
+
+test("HTML email escapes shop and customer names", () => {
+  const email = buildCodRecoveryEmail({ shopName: "A&B <Shop>", firstName: "<img src=x>", codLink: "https://x.test/c?a=1&b=2", onlineLink: null, storeUrl: "https://x.test" });
+  assert.ok(!email.html.includes("<img src=x>"));
+  assert.ok(email.html.includes("A&amp;B &lt;Shop&gt;"));
+  assert.ok(email.html.includes('href="https://x.test/c?a=1&amp;b=2"'));
+  assert.ok(!email.html.includes("Pay online"));
 });
 
 test("run is opt-in, sends once per checkout and records only accepted sends", async () => {
@@ -87,10 +97,11 @@ test("run is opt-in, sends once per checkout and records only accepted sends", a
   };
   const listCheckouts = async () => [node(), node({ id: "gid://shopify/AbandonedCheckout/2" })];
   let failSecond = true;
-  const sendEmail = async (input: { checkoutId: string; text: string }) => {
+  const sendEmail = async (input: { checkoutId: string; text: string; html?: string }) => {
     if (input.checkoutId.endsWith("/2") && failSecond) return { sent: false };
     sent.push(input.checkoutId);
     assert.ok(input.text.includes("https://megaska.com/apps/loopd2c/checkout/switch-cod?t="));
+    assert.ok(input.html?.includes("https://megaska.com/apps/loopd2c/checkout/switch-cod?t="));
     return { sent: true };
   };
 

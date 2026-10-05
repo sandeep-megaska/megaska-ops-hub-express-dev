@@ -192,7 +192,13 @@ export function verifyCodRecoveryToken(
 
 // ---- Email ----
 
-export function buildCodRecoveryEmail(input: { shopName: string; firstName: string | null; codLink: string; onlineLink: string | null }) {
+function escapeHtml(value: string) {
+  return value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char] as string);
+}
+
+// Plain text plus a simple HTML part. A text-only email with long bare links,
+// sent under a store name, is what spam filters most often flag.
+export function buildCodRecoveryEmail(input: { shopName: string; firstName: string | null; codLink: string; onlineLink: string | null; storeUrl?: string | null }) {
   const greeting = input.firstName ? `Hi ${input.firstName},` : "Hi,";
   const lines = [
     greeting,
@@ -204,7 +210,32 @@ export function buildCodRecoveryEmail(input: { shopName: string; firstName: stri
   ];
   if (input.onlineLink) lines.push("", "Or finish paying online and keep your prepaid discount:", input.onlineLink);
   lines.push("", `— ${input.shopName}`);
-  return { subject: "Pay on delivery? Your order is one tap away", text: lines.join("\n") };
+
+  const shop = escapeHtml(input.shopName);
+  const button = (href: string, label: string, primary: boolean) =>
+    `<a href="${escapeHtml(href)}" style="display:inline-block;padding:13px 22px;border-radius:8px;font-weight:600;font-size:15px;text-decoration:none;${primary ? "background:#111111;color:#ffffff;" : "background:#ffffff;color:#111111;border:1px solid #d4d4d4;"}">${label}</a>`;
+  const storeLink = input.storeUrl
+    ? `<a href="${escapeHtml(input.storeUrl)}" style="color:#666666;">${escapeHtml(input.storeUrl.replace(/^https?:\/\//, ""))}</a>`
+    : shop;
+  const html = [
+    `<!doctype html><html><body style="margin:0;padding:0;background:#f6f6f6;">`,
+    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f6f6f6;padding:24px 12px;"><tr><td align="center">`,
+    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#ffffff;border-radius:12px;font-family:Arial,Helvetica,sans-serif;color:#111111;">`,
+    `<tr><td style="padding:28px 28px 8px;font-size:20px;font-weight:700;letter-spacing:0.04em;">${shop}</td></tr>`,
+    `<tr><td style="padding:8px 28px 0;font-size:15px;line-height:1.6;">`,
+    `<p style="margin:0 0 12px;">${escapeHtml(greeting)}</p>`,
+    `<p style="margin:0 0 12px;">Your ${shop} order is still waiting for you.</p>`,
+    `<p style="margin:0 0 20px;">Prefer to pay when it arrives? Place the same order with Cash on Delivery.</p>`,
+    `</td></tr>`,
+    `<tr><td style="padding:0 28px 12px;">${button(input.codLink, "Pay on delivery", true)}</td></tr>`,
+    input.onlineLink
+      ? `<tr><td style="padding:4px 28px 0;font-size:14px;line-height:1.6;color:#444444;"><p style="margin:12px 0;">Or finish paying online and keep your prepaid discount.</p>${button(input.onlineLink, "Pay online", false)}</td></tr>`
+      : "",
+    `<tr><td style="padding:24px 28px 28px;font-size:12px;line-height:1.6;color:#666666;">You are receiving this because you started a checkout at ${storeLink}. Reply to this email if you have any questions.</td></tr>`,
+    `</table></td></tr></table></body></html>`,
+  ].join("");
+
+  return { subject: "Pay on delivery? Your order is one tap away", text: lines.join("\n"), html };
 }
 
 // ---- Run ----
@@ -217,7 +248,7 @@ type RecoveryDb = {
   };
 };
 
-type SendEmail = (input: { shopId: string; to: string; subject: string; text: string; checkoutId: string; dedupeKey: string }) => Promise<{ sent: boolean }>;
+type SendEmail = (input: { shopId: string; to: string; subject: string; text: string; html?: string; checkoutId: string; dedupeKey: string }) => Promise<{ sent: boolean }>;
 
 const defaultSendEmail: SendEmail = async (input) => {
   const { sendCustomerEmail } = await import("../notifications/resend.ts");
@@ -227,6 +258,7 @@ const defaultSendEmail: SendEmail = async (input) => {
     eventType: "CHECKOUT_RECOVERY",
     subject: input.subject,
     text: input.text,
+    html: input.html,
     usageContext: { sourceType: "PREPAID_COD_RECOVERY", sourceId: input.checkoutId, idempotencyKey: `prepaid-cod-recovery:${input.dedupeKey}` },
   });
   return { sent: !result.skipped && result.success === true };
@@ -275,9 +307,10 @@ export async function runPrepaidCodRecovery(
         firstName: candidate.firstName,
         codLink: `https://${host}/apps/loopd2c/checkout/switch-cod?t=${encodeURIComponent(token)}`,
         onlineLink: candidate.abandonedCheckoutUrl,
+        storeUrl: `https://${host}`,
       });
       try {
-        const result = await sendEmail({ shopId: shop.id, to: candidate.email, subject: email.subject, text: email.text, checkoutId: candidate.checkoutId, dedupeKey: candidate.dedupeKey });
+        const result = await sendEmail({ shopId: shop.id, to: candidate.email, subject: email.subject, text: email.text, html: email.html, checkoutId: candidate.checkoutId, dedupeKey: candidate.dedupeKey });
         if (!result.sent) { summary.failed += 1; continue; }
         // Recorded only after an accepted send; a failed send is retried next run.
         await db.auditEvent.create({ data: { actorType: "system", eventType: PREPAID_COD_RECOVERY_EVENT, entityType: ENTITY_TYPE, entityId: candidate.dedupeKey, payload: { shopId: shop.id, channel: "EMAIL", checkoutId: candidate.checkoutId } } });
