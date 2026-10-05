@@ -235,6 +235,19 @@ test("customer emails route by shop display name and remain tenant isolated", as
   assert.equal(calls[1].reply_to, undefined);
 });
 
+test("customer emails send an optional HTML part alongside the text", async () => {
+  const restore = withEnv({ RESEND_API_KEY: "key", CUSTOMER_NOTIFICATION_FROM_EMAIL: "customers@example.com" });
+  const client = db();
+  await saveMerchantNotificationSettings("shop-a", { ...base, senderDisplayName: "Alpha Store" }, client);
+  const calls: Array<Record<string, unknown>> = [];
+  await sendCustomerEmail({ shopId: "shop-a", to: "a@example.com", eventType: "CHECKOUT_RECOVERY", subject: "S", text: "plain", html: "<p>rich</p>" }, { db: client, fetchImpl: fetchOk(calls) });
+  await sendCustomerEmail({ shopId: "shop-a", to: "a@example.com", eventType: "CHECKOUT_RECOVERY", subject: "S", text: "plain" }, { db: client, fetchImpl: fetchOk(calls) });
+  restore();
+  assert.equal(calls[0].text, "plain");
+  assert.equal(calls[0].html, "<p>rich</p>");
+  assert.equal(calls[1].html, undefined);
+});
+
 test("customer emails honor global and customer-specific disable switches", async () => {
   const client = db();
   await saveMerchantNotificationSettings("shop-a", { ...base, emailEnabled: false }, client);

@@ -31,6 +31,8 @@ export type SendCustomerEmailInput = {
   eventType: CustomerEmailEventType;
   subject: string;
   text: string;
+  /** Optional HTML part; the text part is always sent alongside it. */
+  html?: string;
   attachments?: CustomerEmailAttachment[];
   usageContext?: NotificationUsageContext;
 };
@@ -364,6 +366,7 @@ export async function sendCustomerEmail(input: SendCustomerEmailInput, deps: Sen
       subject,
       text,
     };
+    if (input.html) body.html = input.html;
     const replyTo = normalizeReplyTo(settings.replyToEmail);
     if (replyTo) body.reply_to = replyTo;
     if (input.attachments?.length) body.attachments = input.attachments;
