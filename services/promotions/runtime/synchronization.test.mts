@@ -163,3 +163,28 @@ test("unchanged manual retry verifies current state without republishing", async
   assert.equal(log.filter((call) => call.query.includes("metafieldsSet")).length, writesAfterFirst);
   assert.equal(first.ok && second.ok && first.configurationHash, second.ok && second.configurationHash);
 });
+
+test("sync refuses a config over Shopify's 10,000-byte Function metafield limit and keeps the published one", async () => {
+  // Shopify drops larger metafield values from Function input, which silently
+  // disabled every promotion and the prepaid discount.
+  const productGids = Array.from({ length: 300 }, (_, i) => `gid://shopify/Product/${8680600000000 + i}`);
+  const functionPayload = {
+    schemaVersion: 1,
+    ruleId: "rule-1",
+    status: "ACTIVE",
+    priority: 0,
+    trigger: { type: "COLLECTION", matchMode: "ANY", minimumQuantity: 1, minimumCartSubtotal: null, sourceGroups: [{ sourceReferenceId: "ref-1", sourceType: "COLLECTION", sourceGid: "gid://shopify/Collection/1", productGids, unresolved: false }] },
+    offer: { productGid: "gid://shopify/Product/999", handle: "offer-product" },
+    reward: { type: "FIXED_AMOUNT_OFF", value: "150", maximumQuantity: 1 },
+  };
+  const database = db();
+  database.promotionRule = { findMany: async () => [{ id: "rule-1", status: "ACTIVE", priority: 0, currentCompilation: { version: 1, status: "READY", functionPayload } }] };
+  const log: any[] = [];
+
+  const result = await synchronizePromotionFunctionConfiguration({ shopId: "shop-1" }, { database, graphql: graphql(log) as any, clock: { now: () => new Date("2026-07-12T00:00:00Z") } });
+
+  assert.equal(result.ok, false);
+  assert.equal(log.some((c) => c.query.includes("metafieldsSet")), false, "an oversized config must not replace the published one");
+  assert.equal(database.state.lastErrorCode, "sync_configuration_too_large");
+  assert.match(database.state.lastErrorMessage, /10000/);
+});

@@ -26,31 +26,31 @@ pub fn run(
     if !product_enabled && !order_enabled {
         return empty_result();
     }
-    let Some(raw) = input
+    // The promotion config is optional: when it is missing (e.g. Shopify drops
+    // metafield values over 10,000 bytes from Function input), malformed or has no
+    // rules, promotions are skipped but the prepaid discount still applies.
+    let cfg = input
         .discount()
         .configuration()
         .as_ref()
         .map(|m| m.value().as_str())
         .filter(|v| !v.trim().is_empty())
-    else {
-        return empty_result();
-    };
-    let Ok(cfg) = config::parse_config(raw) else {
-        return empty_result();
-    };
-    if cfg.schema_version != 1
-        || cfg.configuration_version == 0
-        || cfg.configuration_hash.trim().is_empty()
-        || cfg.rules.is_empty()
-    {
-        return empty_result();
-    }
+        .and_then(|raw| config::parse_config(raw).ok())
+        .filter(|cfg| {
+            cfg.schema_version == 1
+                && cfg.configuration_version != 0
+                && !cfg.configuration_hash.trim().is_empty()
+                && !cfg.rules.is_empty()
+        });
+    let rules: &[config::FunctionRule] = cfg.as_ref().map(|c| c.rules.as_slice()).unwrap_or(&[]);
+    // Order tiers need the v2 contract; the prepaid discount does not.
+    let order_tiers_enabled = cfg.as_ref().is_some_and(|c| c.function_contract_version == 2);
     let cart = eligibility::Cart::from_input(&input);
     let mut candidates = Vec::new();
     let mut claimed = std::collections::BTreeSet::new();
     let mut product_discount_total = Decimal::zero();
     if product_enabled {
-        for rule in &cfg.rules {
+        for rule in rules {
             if !rule.is_executable() || !eligibility::conditions_met(rule, &cart) {
                 continue;
             }
@@ -81,12 +81,16 @@ pub fn run(
             },
         ));
     }
-    if order_enabled && cfg.function_contract_version == 2 {
+    if order_enabled {
         if let Some(subtotal) = cart.subtotal.as_ref() {
-            let tier = rewards::resolve_order_candidate(
-                cfg.rules.iter().filter(|rule| rule.is_executable()),
-                subtotal,
-            );
+            let tier = if order_tiers_enabled {
+                rewards::resolve_order_candidate(
+                    rules.iter().filter(|rule| rule.is_executable()),
+                    subtotal,
+                )
+            } else {
+                None
+            };
             // Shopify applies order discounts after product discounts, and the cart
             // subtotal in the input does not include the product discounts this run
             // creates. Fixed order amounts must use the merchandise total after them,
