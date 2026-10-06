@@ -268,3 +268,44 @@ test("summary shows no discount row when nothing comes off the order", () => {
   assert.equal(summary.subtotal, 133800);
   assert.equal(summary.discounts, 0);
 });
+
+function loadRepin(rules) {
+  const pick = (name) => {
+    const start = src.indexOf(`function ${name}(`);
+    let depth = 0;
+    for (let i = src.indexOf("{", start); i < src.length; i++) {
+      if (src[i] === "{") depth++;
+      else if (src[i] === "}" && --depth === 0) return src.slice(start, i + 1);
+    }
+    throw new Error(`${name} not found`);
+  };
+  const names = ["promotionLineProperties", "isPromotionLineForAnyRule", "isScheduleActive", "productGidFromId", "ruleTriggerProductGids", "quantityForProductGids", "triggerQuantity", "triggerMatches", "stalePromotionLineUpdates"];
+  return new Function("config", `${names.map(pick).join("\n")}; return stalePromotionLineUpdates;`)({ promotions: { rules } });
+}
+const skortRule = (version, status = "ACTIVE") => ({
+  ruleId: "rule-skort", status, schedule: {}, compilation: { status: "READY", version },
+  trigger: { matchMode: "ANY", minimumQuantity: 1, sourceGroups: [{ productGids: ["gid://shopify/Product/100"] }] },
+  offer: { productGid: "gid://shopify/Product/200" },
+});
+const cartWith = (lineVersion) => ({ items: [
+  { key: "a", product_id: 100, quantity: 1, properties: {} },
+  { key: "b", product_id: 200, quantity: 1, properties: { _loopdesk_promotion_rule_id: "rule-skort", _loopdesk_promotion_compilation_version: lineVersion } },
+] });
+
+test("an offer line added under an older promotion version is re-pinned to the current one", () => {
+  // Archiving the swim cap republished the skort rule as v11; a skort added under v10
+  // lost its 150 off at checkout and the drawer offered it again.
+  const updates = loadRepin([skortRule(11)])(cartWith("10"));
+  assert.equal(updates.length, 1);
+  assert.equal(updates[0].key, "b");
+  assert.equal(updates[0].properties._loopdesk_promotion_compilation_version, "11");
+  assert.equal(updates[0].properties._loopdesk_promotion_rule_id, "rule-skort");
+});
+
+test("re-pinning never downgrades, and skips paused rules or a broken trigger", () => {
+  assert.equal(loadRepin([skortRule(11)])(cartWith("11")).length, 0, "current line is left alone");
+  assert.equal(loadRepin([skortRule(9)])(cartWith("10")).length, 0, "stale storefront config must not downgrade");
+  assert.equal(loadRepin([skortRule(11, "PAUSED")])(cartWith("10")).length, 0, "paused rule is not re-pinned");
+  const noTrigger = { items: [cartWith("10").items[1]] };
+  assert.equal(loadRepin([skortRule(11)])(noTrigger).length, 0, "offer without its trigger product is not re-pinned");
+});
