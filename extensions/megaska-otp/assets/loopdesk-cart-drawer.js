@@ -183,7 +183,7 @@
   var COMBINED_CART_TRIGGER_SELECTOR = CUSTOM_CART_TRIGGER_SELECTOR ? CART_TRIGGER_SELECTOR + "," + CUSTOM_CART_TRIGGER_SELECTOR : CART_TRIGGER_SELECTOR;
   var CART_TRIGGER_KEYWORD_REGEX = /\b(cart|bag|basket|trolley)\b|cart-icon|cart-toggle|cart-trigger|cart-link|cart-count|mini-cart|header__icon--cart|header-cart/;
 
-  var state = { selectedOfferVariants: {}, offerProducts: {}, offerLoading: {}, lineProducts: {}, lineProductLoading: {}, lineNotice: "", couponOpen: false, open: false, loading: false, cart: null, paymentIntent: "", payChoiceExpanded: false, error: "", hostMode: LOOPDESK_HOST_MODE, themeDrawer: null, fallbackReason: "", expressCheckoutLock: false, capability: null, drawerModeActive: false, expectPostAddNavigation: 0, suppressAddReturnIntent: false, neutralizedThemeDrawers: [], bodyLockSnapshot: null, removedThemeBodyClasses: [], cartTriggerTakeovers: [], promotionRuntimeRefresh: { attempts: 0, maxAttempts: 3, inFlight: false, delayedTimer: null, cartNonEmptyAttempted: false } };
+  var state = { selectedOfferVariants: {}, offerProducts: {}, offerLoading: {}, lineProducts: {}, lineProductLoading: {}, lineNotice: "", repinnedPromotionLines: {}, couponOpen: false, open: false, loading: false, cart: null, paymentIntent: "", payChoiceExpanded: false, error: "", hostMode: LOOPDESK_HOST_MODE, themeDrawer: null, fallbackReason: "", expressCheckoutLock: false, capability: null, drawerModeActive: false, expectPostAddNavigation: 0, suppressAddReturnIntent: false, neutralizedThemeDrawers: [], bodyLockSnapshot: null, removedThemeBodyClasses: [], cartTriggerTakeovers: [], promotionRuntimeRefresh: { attempts: 0, maxAttempts: 3, inFlight: false, delayedTimer: null, cartNonEmptyAttempted: false } };
   var cartTriggerObserver = null;
   var cartTriggerTakeoverTimer = null;
   var suppressNextCartClickUntil = 0;
@@ -829,6 +829,7 @@
     window.LoopDeskConfig = Object.assign({}, window.LoopDeskConfig || {}, config, { promotions: normalizedPromotions });
     if (state.cart) ensureOfferProducts(eligiblePromotionRules(state.cart));
     render();
+    if (state.cart && stalePromotionLineUpdates(state.cart).length) fetchCart();
   }
 
   function refreshPromotionRuntime(reason) {
@@ -1395,6 +1396,50 @@
     return groups.length > 0 && groups.every(function (group) {
       return quantityForProductGids(cart, Array.isArray(group.productGids) ? group.productGids : []) >= minimum;
     });
+  }
+
+  // Offer lines carry the compilation version they were added under, and the
+  // discount Function only honours the current one. Editing a promotion (or
+  // archiving another, which republishes) bumps the version, so a shopper who
+  // already added the offer would silently pay full price at checkout while the
+  // drawer offered it again. Re-pin such lines to the current version while the
+  // rule is still live and its trigger still matches.
+  function stalePromotionLineUpdates(cart) {
+    var rules = config.promotions && Array.isArray(config.promotions.rules) ? config.promotions.rules : [];
+    var updates = [];
+    (cart && Array.isArray(cart.items) ? cart.items : []).forEach(function (item) {
+      var props = promotionLineProperties(item);
+      var ruleId = String(props._loopdesk_promotion_rule_id || "");
+      if (!ruleId) return;
+      var rule = rules.filter(function (candidate) { return candidate && String(candidate.ruleId) === ruleId; })[0];
+      if (!rule || rule.status !== "ACTIVE" || !rule.compilation || rule.compilation.status !== "READY" || !isScheduleActive(rule)) return;
+      var version = String(rule.compilation.version || "");
+      // Only move forward: a cached storefront config that is older than the line
+      // must never downgrade it.
+      if (!(Number(version) > Number(props._loopdesk_promotion_compilation_version || 0))) return;
+      if (rule.offer && rule.offer.productGid && productGidFromId(item.product_id) !== rule.offer.productGid) return;
+      if (!triggerMatches(cart, rule)) return;
+      var next = {};
+      Object.keys(props).forEach(function (key) { next[key] = props[key]; });
+      next._loopdesk_promotion_compilation_version = version;
+      updates.push({ key: item.key, quantity: Number(item.quantity) || 1, properties: next, marker: item.key + "@" + version });
+    });
+    return updates;
+  }
+
+  function repinStalePromotionLines(cart) {
+    var updates = stalePromotionLineUpdates(cart).filter(function (update) {
+      if (state.repinnedPromotionLines[update.marker]) return false;
+      state.repinnedPromotionLines[update.marker] = true;
+      return true;
+    });
+    if (!updates.length || typeof window.fetch !== "function") return Promise.resolve(false);
+    var headers = { "Content-Type": "application/json", Accept: "application/json" };
+    return updates.reduce(function (chain, update) {
+      return chain.then(function () {
+        return fetch("/cart/change.js", { method: "POST", credentials: "same-origin", headers: headers, body: JSON.stringify({ id: update.key, quantity: update.quantity, properties: update.properties }) });
+      });
+    }, Promise.resolve()).then(function () { return true; }, function () { return true; });
   }
 
   function rewardQuantityInCart(cart, rule) {
@@ -2221,7 +2266,16 @@
         if (!response.ok) throw new Error("Cart request failed");
         return response.json();
       })
-      .then(function (cart) { state.cart = cart; maybeRefreshPromotionsForCart(cart); })
+      .then(function (cart) {
+        state.cart = cart;
+        maybeRefreshPromotionsForCart(cart);
+        return repinStalePromotionLines(cart).then(function (changed) {
+          if (!changed) return;
+          return fetch("/cart.js", { credentials: "same-origin", headers: { Accept: "application/json" } })
+            .then(function (response) { return response.ok ? response.json() : null; })
+            .then(function (fresh) { if (fresh) state.cart = fresh; });
+        });
+      })
       .catch(function (error) {
         state.error = error && error.message ? error.message : "Cart request failed";
       })
