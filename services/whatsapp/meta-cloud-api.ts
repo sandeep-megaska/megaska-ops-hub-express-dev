@@ -86,6 +86,13 @@ export class MetaCloudApiWhatsAppProvider implements WhatsAppProvider {
 
       const messageId = data?.messages?.[0]?.id || null;
       logMetaEvent("meta_template_send_success", input, { messageId });
+      // Show automated messages (reminders, exchange updates) in the inbox thread.
+      try {
+        const { recordOutboundMessage } = await import("./inbox.ts");
+        await recordOutboundMessage({ shopId: input.shopId, businessPhoneNumberId: sender.phoneNumberId, toPhone: input.toPhone, waMessageId: messageId, type: "template", body: `Template: ${input.templateName}`, templateName: input.templateName });
+      } catch {
+        // The send succeeded; the inbox record is best-effort.
+      }
       return { provider: this.name, success: true, messageId };
     } catch (error) {
       logMetaEvent("meta_template_send_failed", input, {
