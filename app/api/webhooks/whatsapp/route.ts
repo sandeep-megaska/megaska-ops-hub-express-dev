@@ -8,7 +8,9 @@ export const runtime = "nodejs";
 // Meta WhatsApp Cloud API webhook (subscribe the app to the WABA's "messages"
 // field and point it here). GET answers Meta's verification challenge with
 // WHATSAPP_META_WEBHOOK_VERIFY_TOKEN; POST is signed with the Meta app secret
-// (WHATSAPP_META_APP_SECRET) in X-Hub-Signature-256.
+// in X-Hub-Signature-256. WHATSAPP_META_APP_SECRET may list several secrets
+// (comma-separated) when numbers live in different Meta apps. Opt-outs are
+// recorded against the business number that received the reply.
 //
 // Handled: STOP / "Stop promotions" style replies record an opt-out that
 // checkout-recovery sends respect; START records an opt-in. Failed delivery
@@ -33,7 +35,7 @@ type WhatsAppWebhookStatus = {
 
 type WhatsAppWebhookPayload = {
   object?: string;
-  entry?: Array<{ changes?: Array<{ field?: string; value?: { messages?: WhatsAppWebhookMessage[]; statuses?: WhatsAppWebhookStatus[] } }> }>;
+  entry?: Array<{ changes?: Array<{ field?: string; value?: { metadata?: { phone_number_id?: string }; messages?: WhatsAppWebhookMessage[]; statuses?: WhatsAppWebhookStatus[] } }> }>;
 };
 
 function messageText(message: WhatsAppWebhookMessage) {
@@ -48,9 +50,10 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const rawBody = await request.text();
-  const appSecret = String(process.env.WHATSAPP_META_APP_SECRET || "").trim();
-  if (!verifyMetaSignature(rawBody, request.headers.get("x-hub-signature-256"), appSecret)) {
-    console.warn("[WHATSAPP] webhook_signature_invalid", { hasAppSecret: Boolean(appSecret) });
+  const appSecrets = String(process.env.WHATSAPP_META_APP_SECRET || "").split(",").map((value) => value.trim()).filter(Boolean);
+  const signature = request.headers.get("x-hub-signature-256");
+  if (!appSecrets.some((secret) => verifyMetaSignature(rawBody, signature, secret))) {
+    console.warn("[WHATSAPP] webhook_signature_invalid", { appSecrets: appSecrets.length });
     return new NextResponse("Unauthorized", { status: 401 });
   }
 
@@ -64,10 +67,11 @@ export async function POST(request: NextRequest) {
   for (const entry of payload.entry || []) {
     for (const change of entry.changes || []) {
       if (change.field !== "messages") continue;
+      const businessNumberId = String(change.value?.metadata?.phone_number_id || "");
       for (const message of change.value?.messages || []) {
         const action = consentKeyword(messageText(message));
-        if (!action || !message.from) continue;
-        await recordWhatsAppConsent(message.from, action, { source: "whatsapp_webhook", messageId: message.id || null, messageType: message.type || null });
+        if (!action || !message.from || !businessNumberId) continue;
+        await recordWhatsAppConsent(message.from, businessNumberId, action, { source: "whatsapp_webhook", messageId: message.id || null, messageType: message.type || null });
         console.log("[WHATSAPP] consent_recorded", { action, messageId: message.id || null });
       }
       for (const status of change.value?.statuses || []) {

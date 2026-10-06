@@ -37,6 +37,11 @@ import {
 } from "../../../services/settings/merchant-otp";
 import { OTP_COUNTRY_CATALOG } from "../../../services/settings/otp-country-catalog";
 import OtpCountryPolicyField from "./OtpCountryPolicyField";
+import {
+  checkMerchantWhatsApp,
+  getMerchantWhatsAppAdmin,
+  saveMerchantWhatsApp,
+} from "../../../services/settings/merchant-whatsapp";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -52,6 +57,8 @@ type PageProps = {
     error?: string;
     whSync?: string;
     whSyncError?: string;
+    waNotice?: string;
+    waError?: string;
   }>;
 };
 
@@ -167,6 +174,48 @@ async function syncDelhiveryWarehouse(
   }
   revalidatePath(`/admin/merchant-settings?shop=${encodeURIComponent(shopDomain)}`);
   redirect(`/admin/merchant-settings?${embeddedContext.toString()}`);
+}
+
+// WhatsApp has its own form: the merchant's own Business number (Meta Cloud API).
+async function whatsAppFormAction(
+  shopId: string,
+  shopDomain: string,
+  formData: FormData,
+) {
+  "use server";
+  const resolved = await resolveAdminShopFromSearchParams({ shop: shopDomain });
+  if (!shopId || !resolved.shop?.id || resolved.shop.id !== shopId) {
+    redirect(`/admin/merchant-settings?shop=${encodeURIComponent(shopDomain)}&error=${encodeURIComponent(SHOP_UNRESOLVED_MESSAGE)}`);
+  }
+  const embeddedContext = embeddedContextFromFormData(formData);
+  embeddedContext.set("shop", shopDomain);
+  for (const key of ["saved", "error", "whSync", "whSyncError", "waNotice", "waError"]) embeddedContext.delete(key);
+  try {
+    await saveMerchantWhatsApp(shopId, {
+      enabled: formData.get("waEnabled"),
+      displayPhoneNumber: formData.get("waDisplayPhoneNumber"),
+      phoneNumberId: formData.get("waPhoneNumberId"),
+      businessAccountId: formData.get("waBusinessAccountId"),
+      accessToken: formData.get("waAccessToken"),
+      templateLanguage: formData.get("waTemplateLanguage"),
+      otpEnabled: formData.get("waOtpEnabled"),
+      otpTemplateName: formData.get("waOtpTemplateName"),
+      recoveryEnabled: formData.get("waRecoveryEnabled"),
+      recoveryFirstTemplate: formData.get("waRecoveryFirstTemplate"),
+      recoveryReminderTemplate: formData.get("waRecoveryReminderTemplate"),
+      exchangeEnabled: formData.get("waExchangeEnabled"),
+    });
+    if (formData.get("waIntent") === "check") {
+      const result = await checkMerchantWhatsApp(shopId);
+      embeddedContext.set(result.ok ? "waNotice" : "waError", result.message);
+    } else {
+      embeddedContext.set("waNotice", "WhatsApp settings saved.");
+    }
+  } catch (error) {
+    embeddedContext.set("waError", error instanceof Error ? error.message : "Could not save WhatsApp settings.");
+  }
+  revalidatePath(`/admin/merchant-settings?shop=${encodeURIComponent(shopDomain)}`);
+  redirect(`/admin/merchant-settings?${embeddedContext.toString()}#whatsapp`);
 }
 
 async function saveMerchantSettings(
@@ -465,14 +514,19 @@ export default async function MerchantSettingsPage({
         </div>
       </main>
     );
-  const [settings, cartIntelligence, delhivery, razorpay, notificationSettings, otpSettings] = await Promise.all([
+  const [settings, cartIntelligence, delhivery, razorpay, notificationSettings, otpSettings, whatsApp] = await Promise.all([
     getLoopDeskMerchantSettings(resolved.shop.id),
     getCartIntelligenceSettings(resolved.shop.id),
     getDelhiveryAdminConfig(resolved.shop.id),
     getRazorpayAdminConfig(resolved.shop.id),
     getMerchantNotificationSettings(resolved.shop.id),
     getMerchantOtpSettings(resolved.shop.id),
+    getMerchantWhatsAppAdmin(resolved.shop.id),
   ]);
+  const whatsAppAction = whatsAppFormAction.bind(null, resolved.shop.id, resolved.shop.shopDomain);
+  const otpChannel = whatsApp.enabled && whatsApp.otpEnabled
+    ? `your WhatsApp number${whatsApp.displayPhoneNumber ? ` (${whatsApp.displayPhoneNumber})` : ""}`
+    : whatsApp.platformOtpAvailable ? "the LoopD2C WhatsApp number" : "SMS only (no WhatsApp number available)";
   const platformTwilio = getPlatformTwilioConfigurationStatus();
   const shopParam = encodeURIComponent(resolved.shop.shopDomain);
   const saveAction = saveMerchantSettings.bind(
@@ -1269,6 +1323,45 @@ export default async function MerchantSettingsPage({
           </button>
           <button className="mk-btn mk-btn-primary" type="submit">
             Save Merchant Settings
+          </button>
+        </div>
+      </form>
+      <form id="whatsapp" action={whatsAppAction} className={`${cardClass} mt-6 grid gap-5`}>
+        {embeddedContextHiddenInputs(params).map(([key, value]) => <input key={key} type="hidden" name={`embeddedContext:${key}`} value={value} />)}
+        <SectionHeader
+          title="WhatsApp"
+          description="Connect your own WhatsApp Business number (Meta WhatsApp Cloud API). With it, login codes, abandoned-checkout reminders and exchange updates go out under your brand. Without it, only login codes are sent on WhatsApp, from the LoopD2C number; everything else stays on email and SMS."
+        />
+        {params.waNotice ? <div className="mk-alert mk-alert-success">{params.waNotice}</div> : null}
+        {params.waError ? <div className="mk-alert mk-alert-error">{params.waError}</div> : null}
+        <p className={helpClass}>
+          Login codes currently go out from: <strong>{otpChannel}</strong>.
+          {whatsApp.lastCheckedAt ? ` Last connection check (${new Date(whatsApp.lastCheckedAt).toLocaleString("en-IN")}): ${whatsApp.lastCheckMessage || whatsApp.lastCheckStatus}.` : ""}
+        </p>
+        <div className="grid gap-4 md:grid-cols-2">
+          <Check label="Use my WhatsApp number" name="waEnabled" defaultChecked={whatsApp.enabled} help="Master switch. Off sends nothing from your number." />
+          <Field label="WhatsApp number (display)" name="waDisplayPhoneNumber" defaultValue={whatsApp.displayPhoneNumber} placeholder="+91 96393 90404" help="For your reference only." />
+          <Field label="Phone number ID" name="waPhoneNumberId" defaultValue={whatsApp.phoneNumberId} placeholder="1234567890123456" help="Meta → WhatsApp → API setup → Phone number ID (not the phone number)." />
+          <Field label="WhatsApp Business Account ID" name="waBusinessAccountId" defaultValue={whatsApp.businessAccountId} help="Optional; shown on the same API setup page." />
+          <Field label="Access token" name="waAccessToken" type="password" defaultValue={whatsApp.accessTokenMasked} help="Permanent system-user token with whatsapp_business_messaging. Stored encrypted, never shown again; enter a new value to replace it." />
+          <Field label="Template language" name="waTemplateLanguage" defaultValue={whatsApp.templateLanguage} placeholder="en" help="Language code your templates were approved in, e.g. en or en_US." />
+        </div>
+        <div className="grid gap-4 md:grid-cols-2">
+          <Check label="Login codes (OTP)" name="waOtpEnabled" defaultChecked={whatsApp.otpEnabled} help="Send login codes from your number. Off: the LoopD2C number is used." />
+          <Field label="OTP template" name="waOtpTemplateName" defaultValue={whatsApp.otpTemplateName} help="Authentication template with a Copy code button." />
+          <Check label="Abandoned-checkout reminders" name="waRecoveryEnabled" defaultChecked={whatsApp.recoveryEnabled} help="At most two per checkout: 15–30 minutes after it is abandoned, and 24 hours later if still not ordered." />
+          <div className="grid gap-4">
+            <Field label="First reminder template" name="waRecoveryFirstTemplate" defaultValue={whatsApp.recoveryFirstTemplate} />
+            <Field label="Second reminder template" name="waRecoveryReminderTemplate" defaultValue={whatsApp.recoveryReminderTemplate} help="Both need one URL button: https://<your store>/apps/loopd2c/checkout/bag?t={{1}}" />
+          </div>
+          <Check label="Exchange updates" name="waExchangeEnabled" defaultChecked={whatsApp.exchangeEnabled} help="Send exchange status updates (exchange_approved, exchange_pickup_scheduled …) from your number." />
+        </div>
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          <button className="mk-btn" type="submit" name="waIntent" value="check">
+            Save &amp; check connection
+          </button>
+          <button className="mk-btn mk-btn-primary" type="submit" name="waIntent" value="save">
+            Save WhatsApp settings
           </button>
         </div>
       </form>

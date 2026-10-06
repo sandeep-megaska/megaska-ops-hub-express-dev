@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "crypto";
 import { prisma } from "../db/prisma.ts";
 import { isWhatsAppOptedOut } from "./consent.ts";
+import { resolveWhatsAppSender } from "./sender.ts";
 import { sendTemplateMessage, WHATSAPP_PROVIDER_META_CLOUD_API } from "./index.ts";
 
 const RECOVERY_LINK_PREFIX = "/apps/loopd2c/checkout/recover?t=";
@@ -163,7 +164,13 @@ export async function dispatchRecoveryMessage(candidate: RecoveryDispatchCandida
     return { ok: true, sent: false, suppressed: true, reason: "whatsapp_recovery_disabled" };
   }
 
-  if (isCustomerOptedOut(candidate) || (await isWhatsAppOptedOut(phone))) {
+  const sender = await resolveWhatsAppSender(candidate.shopId, "recovery");
+  if (!sender) {
+    logRecovery("dispatch_suppressed", { ...context, reason: "no_merchant_whatsapp_number" });
+    return { ok: true, sent: false, suppressed: true, reason: "no_merchant_whatsapp_number" };
+  }
+
+  if (isCustomerOptedOut(candidate) || (await isWhatsAppOptedOut(phone, sender.phoneNumberId))) {
     logRecovery("dispatch_suppressed", { ...context, reason: "customer_opted_out" });
     return { ok: true, sent: false, suppressed: true, reason: "customer_opted_out" };
   }
@@ -191,6 +198,7 @@ export async function dispatchRecoveryMessage(candidate: RecoveryDispatchCandida
     const recoveryLink = `${RECOVERY_LINK_PREFIX}${encodeURIComponent(token)}`;
     const templateName = RECOVERY_TEMPLATES[candidate.recoveryType];
     const result = await sendTemplateMessage({
+      sender,
       shopId: candidate.shopId,
       checkoutIntentId: candidate.checkoutIntentId,
       recoveryType: candidate.recoveryType,

@@ -1,8 +1,10 @@
 // Server-only WhatsApp OTP transport (Meta WhatsApp Cloud API, authentication
 // template). Unlike Twilio Verify, the code is generated, stored (hashed) and
-// checked by us; Meta only delivers it. Kept separate from the checkout-recovery
-// WhatsApp config because OTP runs on its own dedicated LoopD2C number.
+// checked by us; Meta only delivers it. The sending number is chosen per shop
+// (see services/whatsapp/sender.ts): the shop's own number, else the shared
+// LoopD2C platform number.
 import crypto from "node:crypto";
+import { resolveWhatsAppSender, type WhatsAppSender, type WhatsAppSenderSource } from "../whatsapp/sender.ts";
 
 export const WHATSAPP_OTP_PROVIDER = "whatsapp";
 export const WHATSAPP_OTP_LENGTH = 4; // must match OTP_LENGTH in loopd2c-otp.js
@@ -38,6 +40,30 @@ export function getWhatsAppOtpConfig(env: NodeJS.ProcessEnv = process.env): What
     graphVersion: String(env.WHATSAPP_OTP_GRAPH_VERSION || "v20.0").trim().replace(/^\/+|\/+$/g, ""),
     countryPrefixes,
   };
+}
+
+// Per-shop OTP config: the shop's own WhatsApp number when it has one with OTP
+// switched on, otherwise the shared LoopD2C platform number (WHATSAPP_OTP_* env).
+// `enabled` is false when neither is available, so the shop gets SMS.
+export type ShopWhatsAppOtp = { config: WhatsAppOtpConfig; source: WhatsAppSenderSource | null };
+
+export function otpConfigFromSender(sender: WhatsAppSender | null, base: WhatsAppOtpConfig = getWhatsAppOtpConfig()): ShopWhatsAppOtp {
+  if (!sender) return { config: { ...base, enabled: false }, source: null };
+  return {
+    config: {
+      ...base,
+      enabled: true,
+      accessToken: sender.accessToken,
+      phoneNumberId: sender.phoneNumberId,
+      templateName: sender.templates.otp || base.templateName,
+      languageCode: sender.languageCode || base.languageCode,
+    },
+    source: sender.source,
+  };
+}
+
+export async function resolveShopWhatsAppOtp(shopId: string): Promise<ShopWhatsAppOtp> {
+  return otpConfigFromSender(await resolveWhatsAppSender(shopId, "otp"));
 }
 
 export function isWhatsAppOtpEligible(phoneE164: string, config: WhatsAppOtpConfig = getWhatsAppOtpConfig()) {

@@ -31,6 +31,9 @@ export type WhatsAppTemplateComponent = {
 };
 
 export type SendTemplateMessageInput = {
+  // The number to send from (see sender.ts). Required: there is no global
+  // fallback, so one shop's message can never go out from another's number.
+  sender: { accessToken: string; phoneNumberId: string } | null;
   toPhone: string;
   templateName: string;
   languageCode: string;

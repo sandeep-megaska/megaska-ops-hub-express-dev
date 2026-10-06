@@ -1,6 +1,8 @@
 import { prisma } from "../db/prisma.ts";
 
-// WhatsApp marketing/recovery consent, keyed by phone number. Stored as
+// WhatsApp marketing/recovery consent, keyed by the business number the
+// customer replied to (Meta phone_number_id) plus the customer's phone, so a
+// STOP sent to one store's number only stops that store's messages. Stored as
 // AuditEvents so opt-outs and opt-ins keep a full history; the latest event
 // wins. Opt-outs arrive from the WhatsApp webhook (a customer replying STOP or
 // tapping Meta's "Stop promotions" button).
@@ -36,8 +38,14 @@ export function consentKeyword(text: string | null | undefined): "opt_out" | "op
   return null;
 }
 
-export async function recordWhatsAppConsent(phone: string, action: "opt_out" | "opt_in", payload: Record<string, unknown>, db: ConsentDb = prisma as unknown as ConsentDb) {
+function consentEntityId(senderPhoneNumberId: string, phone: string | null | undefined) {
   const contact = normalizeWhatsAppPhone(phone);
+  const sender = String(senderPhoneNumberId || "").trim();
+  return contact && sender ? `${sender}:${contact}` : null;
+}
+
+export async function recordWhatsAppConsent(phone: string, senderPhoneNumberId: string, action: "opt_out" | "opt_in", payload: Record<string, unknown>, db: ConsentDb = prisma as unknown as ConsentDb) {
+  const contact = consentEntityId(senderPhoneNumberId, phone);
   if (!contact) return false;
   await db.auditEvent.create({
     data: { actorType: "customer", eventType: action === "opt_out" ? WHATSAPP_OPT_OUT_EVENT : WHATSAPP_OPT_IN_EVENT, entityType: ENTITY_TYPE, entityId: contact, payload: payload as never },
@@ -45,8 +53,8 @@ export async function recordWhatsAppConsent(phone: string, action: "opt_out" | "
   return true;
 }
 
-export async function isWhatsAppOptedOut(phone: string | null | undefined, db: ConsentDb = prisma as unknown as ConsentDb) {
-  const contact = normalizeWhatsAppPhone(phone);
+export async function isWhatsAppOptedOut(phone: string | null | undefined, senderPhoneNumberId: string, db: ConsentDb = prisma as unknown as ConsentDb) {
+  const contact = consentEntityId(senderPhoneNumberId, phone);
   if (!contact) return false;
   const latest = await db.auditEvent.findFirst({
     where: { entityType: ENTITY_TYPE, entityId: contact, eventType: { in: [WHATSAPP_OPT_OUT_EVENT, WHATSAPP_OPT_IN_EVENT] } },

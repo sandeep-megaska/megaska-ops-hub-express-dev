@@ -19,7 +19,7 @@ test("STOP-style replies opt out and START opts back in; ordinary chat is ignore
   for (const text of ["Please stop by tomorrow", "size?", "", null]) assert.equal(consentKeyword(text as string), null);
 });
 
-test("the latest consent event decides whether a contact is opted out", async () => {
+test("the latest consent event decides, per business number", async () => {
   const events: any[] = [];
   const db = {
     auditEvent: {
@@ -27,11 +27,14 @@ test("the latest consent event decides whether a contact is opted out", async ()
       findFirst: async ({ where }: any) => [...events].reverse().find((e) => e.entityType === where.entityType && e.entityId === where.entityId && where.eventType.in.includes(e.eventType)) || null,
     },
   };
-  assert.equal(await isWhatsAppOptedOut("9639390404", db), false);
-  await recordWhatsAppConsent("+91 96393 90404", "opt_out", { source: "test" }, db);
-  assert.equal(await isWhatsAppOptedOut("919639390404", db), true);
-  await recordWhatsAppConsent("9639390404", "opt_in", { source: "test" }, db);
-  assert.equal(await isWhatsAppOptedOut("9639390404", db), false);
+  const MEGASKA = "111111111111111";
+  const OTHER = "222222222222222";
+  assert.equal(await isWhatsAppOptedOut("9639390404", MEGASKA, db), false);
+  await recordWhatsAppConsent("+91 96393 90404", MEGASKA, "opt_out", { source: "test" }, db);
+  assert.equal(await isWhatsAppOptedOut("919639390404", MEGASKA, db), true);
+  assert.equal(await isWhatsAppOptedOut("919639390404", OTHER, db), false, "STOP to one store does not stop another");
+  await recordWhatsAppConsent("9639390404", MEGASKA, "opt_in", { source: "test" }, db);
+  assert.equal(await isWhatsAppOptedOut("9639390404", MEGASKA, db), false);
 });
 
 test("webhook signature must match the app secret over the raw body", () => {

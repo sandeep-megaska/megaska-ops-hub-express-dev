@@ -103,6 +103,7 @@ model Shop {
   promotionRuntimeSyncState     PromotionRuntimeSyncState?
   merchantNotificationSettings  MerchantNotificationSettings?
   merchantOtpSettings           MerchantOtpSettings?
+  merchantWhatsAppAccount       MerchantWhatsAppAccount?
   merchantUsageEvents           MerchantUsageEvent[]
   merchantSubscription          MerchantSubscription?
   merchantBillingPeriods        MerchantBillingPeriod[]
@@ -249,6 +250,7 @@ enum MerchantUsageProvider {
   MERCHANT_TWILIO
   MERCHANT_RESEND
   MERCHANT_MSG91
+  MERCHANT_WHATSAPP
   INTERNAL
 }
 
@@ -685,6 +687,39 @@ model MerchantOtpSettings {
   msg91Settings  MerchantMsg91Settings?
 
   @@index([shopId])
+}
+
+// A merchant's own WhatsApp Business number (Meta Cloud API). When present and
+// enabled, OTP, abandoned-checkout recovery and exchange updates are sent from
+// it. Without one, only OTP is sent, from the shared LoopD2C platform number
+// (WHATSAPP_OTP_* env); other WhatsApp automation is not sent for that shop.
+model MerchantWhatsAppAccount {
+  id     String @id @default(uuid())
+  shopId String @unique
+
+  enabled              Boolean @default(false)
+  displayPhoneNumber   String?
+  phoneNumberId        String
+  businessAccountId    String?
+  accessTokenEncrypted String
+  accessTokenMasked    String?
+  templateLanguage     String  @default("en")
+
+  otpEnabled               Boolean @default(true)
+  otpTemplateName          String  @default("loopd2c_login_otp")
+  recoveryEnabled          Boolean @default(false)
+  recoveryFirstTemplate    String  @default("checkout_recovery")
+  recoveryReminderTemplate String  @default("checkout_recovery_reminder")
+  exchangeEnabled          Boolean @default(false)
+
+  lastCheckedAt     DateTime?
+  lastCheckStatus   String?
+  lastCheckMessage  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
 }
 
 model MerchantTwilioSettings {
