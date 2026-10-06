@@ -5,15 +5,15 @@ import { requireShopFromAppProxy } from "../../../../../services/shopify/app-pro
 
 export const dynamic = "force-dynamic";
 
-// Opened from the prepaid -> COD recovery email: rebuilds the abandoned bag as a
-// Cash on Delivery bag and opens the drawer (see rebuild-bag-page.ts).
+// Opened from the WhatsApp recovery message button: rebuilds the abandoned bag
+// and opens the drawer with both payment options (see rebuild-bag-page.ts).
 export async function GET(request: NextRequest) {
   try {
     const shop = await requireShopFromAppProxy(request);
     const verified = verifyCodRecoveryToken(request.nextUrl.searchParams.get("t") || "", { shopId: shop.id, now: new Date() });
-    if (!verified) return liquidResponse(expiredPage("cod"));
-    return liquidResponse(rebuildBagPage(verified.items, "cod"));
+    if (!verified) return liquidResponse(expiredPage("bag"));
+    return liquidResponse(rebuildBagPage(verified.items, "bag"));
   } catch {
-    return liquidResponse(expiredPage("cod"));
+    return liquidResponse(expiredPage("bag"));
   }
 }

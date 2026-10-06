@@ -44,16 +44,16 @@ test("webhook signature must match the app secret over the raw body", () => {
   assert.equal(verifyMetaSignature(body, null, "secret"), false);
 });
 
-test("checkout recovery sends nothing unless WHATSAPP_RECOVERY_ENABLED=true", async () => {
-  const previous = process.env.WHATSAPP_RECOVERY_ENABLED;
-  delete process.env.WHATSAPP_RECOVERY_ENABLED;
+test("legacy intent recovery sends nothing unless WHATSAPP_INTENT_RECOVERY_ENABLED=true", async () => {
+  const previous = process.env.WHATSAPP_INTENT_RECOVERY_ENABLED;
+  delete process.env.WHATSAPP_INTENT_RECOVERY_ENABLED;
   try {
     assert.equal(isWhatsAppRecoveryEnabled(), false);
     const result = await dispatchRecoveryMessage({ shopId: "shop-1", checkoutIntentId: "intent-1", recoveryType: "CHECKOUT_ABANDONMENT", phone: "+919639390404" });
     assert.deepEqual(result, { ok: true, sent: false, suppressed: true, reason: "whatsapp_recovery_disabled" });
-    process.env.WHATSAPP_RECOVERY_ENABLED = "true";
+    process.env.WHATSAPP_INTENT_RECOVERY_ENABLED = "true";
     assert.equal(isWhatsAppRecoveryEnabled(), true);
   } finally {
-    if (previous === undefined) delete process.env.WHATSAPP_RECOVERY_ENABLED; else process.env.WHATSAPP_RECOVERY_ENABLED = previous;
+    if (previous === undefined) delete process.env.WHATSAPP_INTENT_RECOVERY_ENABLED; else process.env.WHATSAPP_INTENT_RECOVERY_ENABLED = previous;
   }
 });
