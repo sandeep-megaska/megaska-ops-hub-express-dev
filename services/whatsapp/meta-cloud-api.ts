@@ -1,9 +1,5 @@
-import {
-  SendTemplateMessageInput,
-  SendTemplateMessageResult,
-  WhatsAppProvider,
-  WHATSAPP_PROVIDER_META_CLOUD_API,
-} from "./types";
+import type { SendTemplateMessageInput, SendTemplateMessageResult, WhatsAppProvider } from "./types.ts";
+import { WHATSAPP_PROVIDER_META_CLOUD_API } from "./types.ts";
 
 type MetaCloudApiConfig = {
   accessToken: string;

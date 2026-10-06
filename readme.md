@@ -83,6 +83,21 @@ Meta Cloud API config:
 - `WHATSAPP_META_BUSINESS_ACCOUNT_ID`
 - `WHATSAPP_META_WEBHOOK_VERIFY_TOKEN`
 - `WHATSAPP_META_GRAPH_VERSION` (optional; defaults to `v20.0`)
+- `WHATSAPP_META_APP_SECRET` — Meta app secret; verifies `X-Hub-Signature-256` on
+  the webhook. Without it every webhook POST is rejected.
+- `WHATSAPP_RECOVERY_ENABLED` — must be `true` for checkout-recovery sends.
+  Setting the credentials alone sends nothing.
+- `WHATSAPP_RECOVERY_TEMPLATE_LANGUAGE` (optional; defaults to `en`)
+
+Webhook: `https://<app-host>/api/webhooks/whatsapp` (subscribe the `messages`
+field). Verification uses `WHATSAPP_META_WEBHOOK_VERIFY_TOKEN`. Replies such as
+STOP / "Stop promotions" record an opt-out (AuditEvent `whatsapp.opt_out`,
+keyed by phone) that recovery sends respect; START opts back in. Failed
+delivery statuses are logged.
+
+Recovery templates `checkout_recovery` and `payment_recovery` need a URL button
+`https://<store-domain>/apps/loopd2c/checkout/recover?t={{1}}`; only the token
+is sent as the button parameter.
 
 Never expose WhatsApp provider secrets as `NEXT_PUBLIC_*`.
 
