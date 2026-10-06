@@ -64,13 +64,16 @@ function fakeDb(events: any[] = []) {
     },
   };
 }
-const env = { WHATSAPP_RECOVERY_ENABLED: "true", WHATSAPP_RECOVERY_SHOPS: "bigonbuy-fashions.myshopify.com", CHECKOUT_RECOVERY_SIGNING_SECRET: SECRET };
+const env = { CHECKOUT_RECOVERY_SIGNING_SECRET: SECRET };
+const account: any = { shopId: "shop-1", enabled: true, recoveryEnabled: true, phoneNumberId: "111111111111111" };
+const sender: any = { source: "MERCHANT", accessToken: "token", phoneNumberId: "111111111111111", languageCode: "en", templates: { recoveryFirst: "checkout_recovery", recoveryReminder: "checkout_recovery_reminder" } };
+const accounts = { listAccounts: async () => [account], senderFor: () => sender };
 
 test("run sends the first message with a signed bag-link token and records it", async () => {
   const db = fakeDb();
   const sends: any[] = [];
   const summary = await runWhatsAppCheckoutRecovery({ now: new Date(T0 + 20 * MIN) }, {
-    db: db as any, env, listCheckouts: async () => [node()] as any, isOptedOut: async () => false,
+    ...accounts, db: db as any, env, listCheckouts: async () => [node()] as any, isOptedOut: async () => false,
     sendTemplate: async (input) => { sends.push(input); return { success: true, messageId: "wamid.1" }; },
   });
   assert.equal(summary.sentFirst, 1);
@@ -83,21 +86,33 @@ test("run sends the first message with a signed bag-link token and records it", 
   // The next cron run 15 minutes later sends nothing more.
   const again = await runWhatsAppCheckoutRecovery({ now: new Date(T0 + 35 * MIN) }, {
     db: { ...db, auditEvent: { ...db.auditEvent, findMany: async () => db.events.map((e: any) => ({ ...e, createdAt: new Date(T0 + 20 * MIN) })) } } as any,
-    env, listCheckouts: async () => [node()] as any, isOptedOut: async () => false,
+    ...accounts, env, listCheckouts: async () => [node()] as any, isOptedOut: async () => false,
     sendTemplate: async () => { throw new Error("must not send"); },
   });
   assert.equal(again.sentFirst + again.sentReminder, 0);
 });
 
-test("run sends nothing when disabled or the customer opted out, and retries a failed send", async () => {
-  const off = await runWhatsAppCheckoutRecovery({ now: new Date(T0 + 20 * MIN) }, { db: fakeDb() as any, env: { ...env, WHATSAPP_RECOVERY_ENABLED: "" }, listCheckouts: async () => [node()] as any, sendTemplate: async () => { throw new Error("no"); } });
-  assert.equal(off.enabled, false);
+test("run sends nothing without a shop number with recovery on, or when the customer opted out, and retries a failed send", async () => {
+  const none = await runWhatsAppCheckoutRecovery({ now: new Date(T0 + 20 * MIN) }, { db: fakeDb() as any, env, listAccounts: async () => [], listCheckouts: async () => [node()] as any, sendTemplate: async () => { throw new Error("no"); } });
+  assert.equal(none.shops, 0);
 
-  const optedOut = await runWhatsAppCheckoutRecovery({ now: new Date(T0 + 20 * MIN) }, { db: fakeDb() as any, env, listCheckouts: async () => [node()] as any, isOptedOut: async () => true, sendTemplate: async () => { throw new Error("no"); } });
+  const noSecret = await runWhatsAppCheckoutRecovery({ now: new Date(T0 + 20 * MIN) }, { ...accounts, db: fakeDb() as any, env: {}, listCheckouts: async () => [node()] as any, sendTemplate: async () => { throw new Error("no"); } });
+  assert.equal(noSecret.enabled, false);
+
+  let optOutCheckedFor = "";
+  const optedOut = await runWhatsAppCheckoutRecovery({ now: new Date(T0 + 20 * MIN) }, { ...accounts, db: fakeDb() as any, env, listCheckouts: async () => [node()] as any, isOptedOut: async (_phone, senderId) => { optOutCheckedFor = senderId; return true; }, sendTemplate: async () => { throw new Error("no"); } });
   assert.equal(optedOut.skippedOptOut, 1);
+  assert.equal(optOutCheckedFor, "111111111111111", "opt-out is checked against the shop's own number");
 
   const db = fakeDb();
-  const failed = await runWhatsAppCheckoutRecovery({ now: new Date(T0 + 20 * MIN) }, { db: db as any, env, listCheckouts: async () => [node()] as any, isOptedOut: async () => false, sendTemplate: async () => ({ success: false }) });
+  const failed = await runWhatsAppCheckoutRecovery({ now: new Date(T0 + 20 * MIN) }, { ...accounts, db: db as any, env, listCheckouts: async () => [node()] as any, isOptedOut: async () => false, sendTemplate: async () => ({ success: false }) });
   assert.equal(failed.failed, 1);
   assert.equal(db.events.length, 0, "nothing recorded, so the next run retries");
+});
+
+test("run sends from the shop's own number", async () => {
+  const sends: any[] = [];
+  await runWhatsAppCheckoutRecovery({ now: new Date(T0 + 20 * MIN) }, { ...accounts, db: fakeDb() as any, env, listCheckouts: async () => [node()] as any, isOptedOut: async () => false, sendTemplate: async (input) => { sends.push(input); return { success: true }; } });
+  assert.equal(sends[0].sender.phoneNumberId, "111111111111111");
+  assert.equal(sends[0].sender.source, "MERCHANT");
 });

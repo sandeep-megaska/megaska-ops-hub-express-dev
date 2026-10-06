@@ -2,9 +2,6 @@ import type { SendTemplateMessageInput, SendTemplateMessageResult, WhatsAppProvi
 import { WHATSAPP_PROVIDER_META_CLOUD_API } from "./types.ts";
 
 type MetaCloudApiConfig = {
-  accessToken: string;
-  phoneNumberId: string;
-  businessAccountId: string;
   webhookVerifyToken: string;
   graphVersion: string;
 };
@@ -16,23 +13,14 @@ type MetaMessageResponse = {
 
 function readMetaConfig(): MetaCloudApiConfig {
   return {
-    accessToken: String(process.env.WHATSAPP_META_ACCESS_TOKEN || "").trim(),
-    phoneNumberId: String(process.env.WHATSAPP_META_PHONE_NUMBER_ID || "").trim(),
-    businessAccountId: String(process.env.WHATSAPP_META_BUSINESS_ACCOUNT_ID || "").trim(),
     webhookVerifyToken: String(process.env.WHATSAPP_META_WEBHOOK_VERIFY_TOKEN || "").trim(),
     graphVersion: String(process.env.WHATSAPP_META_GRAPH_VERSION || "v20.0").trim(),
   };
 }
 
-function assertSendConfig(config: MetaCloudApiConfig) {
-  if (!config.accessToken || !config.phoneNumberId) {
-    throw new Error("Meta WhatsApp Cloud API send config is missing");
-  }
-}
-
-function graphMessagesUrl(config: MetaCloudApiConfig) {
+function graphMessagesUrl(config: MetaCloudApiConfig, phoneNumberId: string) {
   const version = config.graphVersion.replace(/^\/+|\/+$/g, "");
-  return `https://graph.facebook.com/${version}/${config.phoneNumberId}/messages`;
+  return `https://graph.facebook.com/${version}/${phoneNumberId}/messages`;
 }
 
 function buildTemplateComponents(input: SendTemplateMessageInput) {
@@ -64,23 +52,24 @@ export class MetaCloudApiWhatsAppProvider implements WhatsAppProvider {
 
   async sendTemplateMessage(input: SendTemplateMessageInput): Promise<SendTemplateMessageResult> {
     const config = readMetaConfig();
+    const sender = input.sender;
     logMetaEvent("meta_template_send_attempt", input, {
-      hasPhoneNumberId: Boolean(config.phoneNumberId),
+      hasSender: Boolean(sender?.accessToken && sender?.phoneNumberId),
       graphVersion: config.graphVersion,
     });
 
     try {
-      assertSendConfig(config);
+      if (!sender?.accessToken || !sender.phoneNumberId) throw new Error("No WhatsApp sender for this shop");
       const components = buildTemplateComponents(input);
-      const response = await fetch(graphMessagesUrl(config), {
+      const response = await fetch(graphMessagesUrl(config, sender.phoneNumberId), {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${config.accessToken}`,
+          Authorization: `Bearer ${sender.accessToken}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
           messaging_product: "whatsapp",
-          to: input.toPhone,
+          to: input.toPhone.replace(/^\+/, ""),
           type: "template",
           template: {
             name: input.templateName,

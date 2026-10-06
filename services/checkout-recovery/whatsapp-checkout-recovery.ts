@@ -4,15 +4,19 @@
 //   1. "first"    — once the checkout has been idle 15 minutes. The cron runs
 //                   every 15 minutes, so it lands 15–30 minutes after the shopper left.
 //   2. "reminder" — 24 hours after the first, if they still have not ordered.
-// On top of that a phone gets at most two recovery messages in any 7 days, so a
-// shopper who abandons several checkouts is not messaged more.
+// On top of that a phone gets at most two recovery messages from a shop in any 7
+// days, so a shopper who abandons several checkouts is not messaged more.
 //
 // Only checkouts whose phone was verified by the OTP gate qualify, the shopper
 // must not have ordered since the checkout began, and a WhatsApp opt-out (STOP)
 // stops everything. The link rebuilds the same bag in the storefront drawer,
 // where the shopper picks Pay online or Cash on Delivery.
+//
+// Runs only for shops with their own WhatsApp number and recovery switched on
+// (MerchantWhatsAppAccount), and always sends from that shop's own number.
 
 import { createCodRecoveryToken, type RecoveryItem } from "./prepaid-cod-recovery.ts";
+import { listRecoveryWhatsAppAccounts, merchantSender, type MerchantWhatsAppAccountRow, type WhatsAppSender } from "../whatsapp/sender.ts";
 
 type Graphql = <T>(query: string, variables?: Record<string, unknown>, options?: { shopDomain?: string | null }) => Promise<T>;
 
@@ -151,11 +155,12 @@ type RecoveryDb = {
   };
 };
 
-type SendTemplate = (input: { shopId: string; toPhone: string; templateName: string; languageCode: string; token: string; checkoutId: string }) => Promise<{ success: boolean; messageId?: string | null }>;
+type SendTemplate = (input: { sender: WhatsAppSender; shopId: string; toPhone: string; templateName: string; languageCode: string; token: string; checkoutId: string }) => Promise<{ success: boolean; messageId?: string | null }>;
 
 const defaultSendTemplate: SendTemplate = async (input) => {
   const { sendTemplateMessage } = await import("../whatsapp/index.ts");
   return sendTemplateMessage({
+    sender: input.sender,
     shopId: input.shopId,
     toPhone: input.toPhone,
     templateName: input.templateName,
@@ -166,7 +171,7 @@ const defaultSendTemplate: SendTemplate = async (input) => {
   });
 };
 
-const defaultIsOptedOut = async (phone: string) => (await import("../whatsapp/consent.ts")).isWhatsAppOptedOut(phone);
+const defaultIsOptedOut = async (phone: string, senderPhoneNumberId: string) => (await import("../whatsapp/consent.ts")).isWhatsAppOptedOut(phone, senderPhoneNumberId);
 
 export type WhatsAppRecoverySummary = { enabled: boolean; shops: number; candidates: number; sentFirst: number; sentReminder: number; skippedOptOut: number; failed: number };
 
@@ -175,33 +180,37 @@ function eventStep(event: RecoveryEvent): RecoveryStep | null {
   return step === "first" || step === "reminder" ? step : null;
 }
 
-// Opt-in: WHATSAPP_RECOVERY_ENABLED=true, the shop listed in WHATSAPP_RECOVERY_SHOPS
-// (comma-separated myshopify domains), and CHECKOUT_RECOVERY_SIGNING_SECRET set.
+// Runs for every shop whose own WhatsApp number has recovery switched on
+// (admin: Merchant Settings → WhatsApp). CHECKOUT_RECOVERY_SIGNING_SECRET
+// (32+ chars) signs the bag links.
 export async function runWhatsAppCheckoutRecovery(
   input: { now?: Date; maxSends?: number },
-  dependencies: { db?: RecoveryDb; listCheckouts?: typeof listRecentAbandonedCheckouts; sendTemplate?: SendTemplate; isOptedOut?: (phone: string) => Promise<boolean>; env?: Record<string, string | undefined> } = {},
+  dependencies: { db?: RecoveryDb; listAccounts?: () => Promise<MerchantWhatsAppAccountRow[]>; senderFor?: (account: MerchantWhatsAppAccountRow) => WhatsAppSender | null; listCheckouts?: typeof listRecentAbandonedCheckouts; sendTemplate?: SendTemplate; isOptedOut?: (phone: string, senderPhoneNumberId: string) => Promise<boolean>; env?: Record<string, string | undefined> } = {},
 ): Promise<WhatsAppRecoverySummary> {
   const now = input.now ?? new Date();
   const env = dependencies.env ?? process.env;
   const secret = String(env.CHECKOUT_RECOVERY_SIGNING_SECRET ?? "").trim();
-  const allowed = String(env.WHATSAPP_RECOVERY_SHOPS ?? "").split(",").map((value) => value.trim().toLowerCase()).filter(Boolean);
-  const enabled = String(env.WHATSAPP_RECOVERY_ENABLED ?? "").trim() === "true" && secret.length >= 32 && allowed.length > 0;
-  const summary: WhatsAppRecoverySummary = { enabled, shops: 0, candidates: 0, sentFirst: 0, sentReminder: 0, skippedOptOut: 0, failed: 0 };
-  if (!enabled) return summary;
+  const summary: WhatsAppRecoverySummary = { enabled: secret.length >= 32, shops: 0, candidates: 0, sentFirst: 0, sentReminder: 0, skippedOptOut: 0, failed: 0 };
+  if (!summary.enabled) return summary;
 
-  const templates: Record<RecoveryStep, string> = {
-    first: String(env.WHATSAPP_RECOVERY_TEMPLATE_FIRST || "checkout_recovery").trim(),
-    reminder: String(env.WHATSAPP_RECOVERY_TEMPLATE_REMINDER || "checkout_recovery_reminder").trim(),
-  };
-  const languageCode = String(env.WHATSAPP_RECOVERY_TEMPLATE_LANGUAGE || "en").trim();
+  const accounts = await (dependencies.listAccounts ?? listRecoveryWhatsAppAccounts)();
+  if (!accounts.length) return summary;
+  const senderFor = dependencies.senderFor ?? ((account: MerchantWhatsAppAccountRow) => merchantSender(account));
   const db = dependencies.db ?? ((await import("../db/prisma.ts")).prisma as unknown as RecoveryDb);
   const listCheckouts = dependencies.listCheckouts ?? listRecentAbandonedCheckouts;
   const sendTemplate = dependencies.sendTemplate ?? defaultSendTemplate;
   const isOptedOut = dependencies.isOptedOut ?? defaultIsOptedOut;
   let budget = input.maxSends ?? 30;
 
-  const shops = await db.shop.findMany({ where: { shopDomain: { in: allowed } }, select: { id: true, shopDomain: true } });
+  const shops = await db.shop.findMany({ where: { id: { in: accounts.map((account) => account.shopId) } }, select: { id: true, shopDomain: true } });
   for (const shop of shops) {
+    const account = accounts.find((row) => row.shopId === shop.id);
+    const sender = account ? senderFor(account) : null;
+    if (!sender) { summary.failed += 1; continue; }
+    const templates: Record<RecoveryStep, string> = {
+      first: sender.templates.recoveryFirst || "checkout_recovery",
+      reminder: sender.templates.recoveryReminder || "checkout_recovery_reminder",
+    };
     summary.shops += 1;
     let checkouts: WhatsAppRecoveryCheckout[];
     try {
@@ -216,7 +225,7 @@ export async function runWhatsAppCheckoutRecovery(
     // Everything sent to these phones in the last 7 days, in one query.
     const phones = [...new Set(checkouts.map((checkout) => checkout.phone))];
     const recent = await db.auditEvent.findMany({
-      where: { eventType: WHATSAPP_RECOVERY_EVENT, entityType: ENTITY_TYPE, createdAt: { gte: new Date(now.getTime() - PHONE_WINDOW_MS) }, OR: phones.map((phone) => ({ payload: { path: ["phone"], equals: phone } })) },
+      where: { eventType: WHATSAPP_RECOVERY_EVENT, entityType: ENTITY_TYPE, createdAt: { gte: new Date(now.getTime() - PHONE_WINDOW_MS) }, AND: [{ payload: { path: ["shopId"], equals: shop.id } }, { OR: phones.map((phone) => ({ payload: { path: ["phone"], equals: phone } })) }] },
       select: { entityId: true, createdAt: true, payload: true },
     });
     const sendsByPhone = new Map<string, number>();
@@ -233,11 +242,11 @@ export async function runWhatsAppCheckoutRecovery(
         .filter((record): record is SentRecord => record.step !== null);
       const step = dueStep(checkout, sent, sendsByPhone.get(checkout.phone) ?? 0, now.getTime());
       if (!step) continue;
-      if (await isOptedOut(checkout.phone)) { summary.skippedOptOut += 1; continue; }
+      if (await isOptedOut(checkout.phone, sender.phoneNumberId)) { summary.skippedOptOut += 1; continue; }
       budget -= 1;
       const token = createCodRecoveryToken({ shopId: shop.id, checkoutId: checkout.checkoutId, items: checkout.items, now }, secret);
       try {
-        const result = await sendTemplate({ shopId: shop.id, toPhone: checkout.phone, templateName: templates[step], languageCode, token, checkoutId: checkout.checkoutId });
+        const result = await sendTemplate({ sender, shopId: shop.id, toPhone: checkout.phone, templateName: templates[step], languageCode: sender.languageCode, token, checkoutId: checkout.checkoutId });
         if (!result.success) { summary.failed += 1; continue; }
         // Recorded only after Meta accepted the message; a failed send is retried next run.
         await db.auditEvent.create({ data: { actorType: "system", eventType: WHATSAPP_RECOVERY_EVENT, entityType: ENTITY_TYPE, entityId: checkout.checkoutId, payload: { shopId: shop.id, step, phone: checkout.phone, templateName: templates[step], messageId: result.messageId ?? null } } });
