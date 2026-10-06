@@ -8,10 +8,13 @@ const RECOVERY_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const RECENT_RECOVERY_SUPPRESSION_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_LANGUAGE_CODE = "en";
 
-// Recovery messages go out only when explicitly enabled: setting the Meta
-// credentials (shared with exchange updates) must not start sending on its own.
+// Legacy recovery for LoopD2C express-checkout intents (the in-drawer checkout
+// modal). The live store hands off to native Shopify Checkout, whose WhatsApp
+// recovery is services/checkout-recovery/whatsapp-checkout-recovery.ts. This one
+// only sends when explicitly enabled, so setting the Meta credentials (shared
+// with exchange updates) never starts it on its own.
 export function isWhatsAppRecoveryEnabled() {
-  return String(process.env.WHATSAPP_RECOVERY_ENABLED || "").trim() === "true";
+  return String(process.env.WHATSAPP_INTENT_RECOVERY_ENABLED || "").trim() === "true";
 }
 
 function recoveryLanguageCode(candidate: { languageCode?: string | null }) {
