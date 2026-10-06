@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyMetaWebhookChallenge } from "../../../../services/whatsapp";
 import { consentKeyword, recordWhatsAppConsent } from "../../../../services/whatsapp/consent";
+import { applyStatusUpdates, recordInboundMessages, type WebhookValue } from "../../../../services/whatsapp/inbox";
 import { verifyMetaSignature } from "../../../../services/whatsapp/webhook-signature";
 
 export const runtime = "nodejs";
@@ -12,10 +13,11 @@ export const runtime = "nodejs";
 // (comma-separated) when numbers live in different Meta apps. Opt-outs are
 // recorded against the business number that received the reply.
 //
-// Handled: STOP / "Stop promotions" style replies record an opt-out that
-// checkout-recovery sends respect; START records an opt-in. Failed delivery
-// statuses are logged. Everything else is acknowledged and left to the
-// WhatsApp Business app, where the team reads and answers chats.
+// Handled: every customer message is stored in the LoopD2C WhatsApp inbox
+// (Admin → WhatsApp Inbox) for shops whose own number received it; STOP /
+// "Stop promotions" style replies also record an opt-out that checkout-recovery
+// sends respect, START an opt-in; delivery statuses update the inbox ticks and
+// failures are logged.
 
 type WhatsAppWebhookMessage = {
   from?: string;
@@ -73,6 +75,12 @@ export async function POST(request: NextRequest) {
         if (!action || !message.from || !businessNumberId) continue;
         await recordWhatsAppConsent(message.from, businessNumberId, action, { source: "whatsapp_webhook", messageId: message.id || null, messageType: message.type || null });
         console.log("[WHATSAPP] consent_recorded", { action, messageId: message.id || null });
+      }
+      try {
+        await recordInboundMessages(change.value as WebhookValue);
+        await applyStatusUpdates(change.value as WebhookValue);
+      } catch (error) {
+        console.error("[WHATSAPP] inbox_store_failed", { error: error instanceof Error ? error.message : String(error) });
       }
       for (const status of change.value?.statuses || []) {
         if (status.status !== "failed") continue;

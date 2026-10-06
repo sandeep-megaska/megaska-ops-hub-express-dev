@@ -106,6 +106,9 @@ export default function RootLayout({
                     <AdminNavLink href="/admin/issues" className="mk-nav-link">
                       Issues
                     </AdminNavLink>
+                    <AdminNavLink href="/admin/whatsapp" className="mk-nav-link">
+                      WhatsApp Inbox
+                    </AdminNavLink>
                     <AdminNavLink
                       href="/admin/installation-wizard"
                       className="mk-nav-link"

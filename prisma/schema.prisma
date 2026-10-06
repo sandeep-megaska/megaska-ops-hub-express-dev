@@ -104,6 +104,7 @@ model Shop {
   merchantNotificationSettings  MerchantNotificationSettings?
   merchantOtpSettings           MerchantOtpSettings?
   merchantWhatsAppAccount       MerchantWhatsAppAccount?
+  whatsAppConversations         WhatsAppConversation[]
   merchantUsageEvents           MerchantUsageEvent[]
   merchantSubscription          MerchantSubscription?
   merchantBillingPeriods        MerchantBillingPeriod[]
@@ -720,6 +721,49 @@ model MerchantWhatsAppAccount {
   updatedAt DateTime @updatedAt
 
   shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+}
+
+// WhatsApp inbox: one conversation per (shop's business number, customer).
+// Inbound messages arrive through the WhatsApp webhook; replies are sent from
+// the admin inbox. Free-form replies are only allowed within 24 hours of the
+// customer's last message (lastInboundAt), per WhatsApp rules.
+model WhatsAppConversation {
+  id                    String    @id @default(uuid())
+  shopId                String
+  businessPhoneNumberId String
+  contactPhone          String
+  contactName           String?
+  lastMessageAt         DateTime  @default(now())
+  lastMessagePreview    String?
+  lastInboundAt         DateTime?
+  unreadCount           Int       @default(0)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  shop     Shop              @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  messages WhatsAppMessage[]
+
+  @@unique([businessPhoneNumberId, contactPhone])
+  @@index([shopId, lastMessageAt])
+}
+
+model WhatsAppMessage {
+  id             String    @id @default(uuid())
+  conversationId String
+  direction      String // INBOUND | OUTBOUND
+  waMessageId    String?   @unique
+  type           String    @default("text")
+  body           String?
+  mediaId        String?
+  templateName   String?
+  status         String? // OUTBOUND: sent | delivered | read | failed
+  errorMessage   String?
+  sentByEmail    String?
+  createdAt      DateTime  @default(now())
+
+  conversation WhatsAppConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
 }
 
 model MerchantTwilioSettings {
