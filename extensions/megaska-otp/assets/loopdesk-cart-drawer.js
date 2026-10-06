@@ -1949,6 +1949,17 @@
     return total;
   }
 
+  // Summary rows that add up with the lines above them: each line already shows
+  // its price after line-level discounts (an add-on offer at its offer price), so
+  // the subtotal is the sum of those lines and "Discounts" is only what comes off
+  // the order on top (prepaid, order tiers, order coupons).
+  function summaryAmounts(pricing, cart) {
+    var payable = pricing ? pricing.finalPayableSubtotal : (cart ? Number(cart.total_price) || 0 : 0);
+    var items = Number(cart && cart.items_subtotal_price);
+    var subtotal = Number.isFinite(items) && items >= payable ? items : (pricing ? pricing.merchandiseSubtotal : payable);
+    return { subtotal: subtotal, discounts: Math.max(0, subtotal - payable), payable: payable };
+  }
+
   function choicePrices(pricing, cart) {
     var payable = pricing ? pricing.finalPayableSubtotal : (cart ? cart.total_price : 0);
     var prepaidSavings = prepaidOfferSavingsMinor(prepaidBaseMinor(pricing, cart));
@@ -2042,9 +2053,10 @@
       + renderCartDrawerSlot("AFTER_COUPON", slotContext)
       + '</span>';
 
-  if (elements.merchandiseSubtotal) elements.merchandiseSubtotal.textContent = money(pricing ? pricing.merchandiseSubtotal : 0, cart && cart.currency);
-  if (elements.savingsRow) elements.savingsRow.hidden = !(pricing && pricing.totalSavings > 0);
-  if (elements.savings) elements.savings.textContent = pricing ? "-" + money(pricing.totalSavings, cart && cart.currency) : "";
+  var summary = summaryAmounts(pricing, cart);
+  if (elements.merchandiseSubtotal) elements.merchandiseSubtotal.textContent = money(summary.subtotal, cart && cart.currency);
+  if (elements.savingsRow) elements.savingsRow.hidden = !(summary.discounts > 0);
+  if (elements.savings) elements.savings.textContent = "-" + money(summary.discounts, cart && cart.currency);
   elements.subtotal.textContent = money(pricing ? pricing.finalPayableSubtotal : (cart ? cart.total_price : 0), cart && cart.currency);
   // In choice mode the "You pay" total reflects the currently-selected method, so
   // label which price it is and state the other option's price - otherwise ₹1,042.50
@@ -2383,7 +2395,7 @@
       '<div class="loopdesk-cart-drawer__scroll">',
       '<div class="loopdesk-cart-drawer__body"></div>',
       '<span data-loopdesk-slot="BEFORE_FOOTER"></span>',
-      '<div class="loopdesk-cart-drawer__summary"><span data-loopdesk-slot="BEFORE_TOTALS"></span><div class="loopdesk-cart-drawer__subtotal"><span>Merchandise subtotal</span><strong data-loopdesk-cart-merchandise-subtotal></strong></div><div class="loopdesk-cart-drawer__subtotal" data-loopdesk-cart-savings-row hidden><span>Total savings</span><strong data-loopdesk-cart-savings></strong></div><div class="loopdesk-cart-drawer__subtotal loopdesk-cart-drawer__payable"><span data-loopdesk-payable-label>You pay</span><strong data-loopdesk-cart-subtotal></strong></div><p class="loopdesk-cart-drawer__pay-note" data-loopdesk-pay-note hidden></p><span data-loopdesk-slot="AFTER_TOTALS"></span><div data-loopdesk-trust-below-totals></div><a class="loopdesk-cart-drawer__view-cart" href="/cart"></a><p class="loopdesk-cart-drawer__microcopy"></p><p class="loopdesk-cart-drawer__powered"></p></div>',
+      '<div class="loopdesk-cart-drawer__summary"><span data-loopdesk-slot="BEFORE_TOTALS"></span><div class="loopdesk-cart-drawer__subtotal"><span>Subtotal</span><strong data-loopdesk-cart-merchandise-subtotal></strong></div><div class="loopdesk-cart-drawer__subtotal" data-loopdesk-cart-savings-row hidden><span>Discounts</span><strong data-loopdesk-cart-savings></strong></div><div class="loopdesk-cart-drawer__subtotal loopdesk-cart-drawer__payable"><span data-loopdesk-payable-label>You pay</span><strong data-loopdesk-cart-subtotal></strong></div><p class="loopdesk-cart-drawer__pay-note" data-loopdesk-pay-note hidden></p><span data-loopdesk-slot="AFTER_TOTALS"></span><div data-loopdesk-trust-below-totals></div><a class="loopdesk-cart-drawer__view-cart" href="/cart"></a><p class="loopdesk-cart-drawer__microcopy"></p><p class="loopdesk-cart-drawer__powered"></p></div>',
       '</div>',
       '<footer class="loopdesk-cart-drawer__footer"><span data-loopdesk-slot="BEFORE_CHECKOUT"></span><p class="loopdesk-cart-drawer__prepaid-nudge" data-loopdesk-prepaid-nudge hidden></p><div class="loopdesk-cart-drawer__payment-choice" data-loopdesk-payment-choice hidden></div><button type="button" class="loopdesk-cart-drawer__express" data-loopdesk-express-checkout hidden></button><span data-loopdesk-slot="AFTER_CHECKOUT"></span><div data-loopdesk-trust-below-checkout></div></footer>',
       '<span data-loopdesk-slot="AFTER_FOOTER"></span>',

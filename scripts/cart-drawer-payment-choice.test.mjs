@@ -64,8 +64,9 @@ function loadChoicePrices(offer) {
     }
     throw new Error(`${name} not found`);
   };
-  const body = ["prepaidOfferSavingsMinor", "prepaidBaseMinor", "appliedPrepaidDiscountMinor", "choicePrices"].map(pick).join("\n");
-  return new Function("window", `${body}; return choicePrices;`)({ LoopDeskConfig: { prepaidOffer: offer } });
+  const body = ["prepaidOfferSavingsMinor", "prepaidBaseMinor", "appliedPrepaidDiscountMinor", "choicePrices", "summaryAmounts"].map(pick).join("\n");
+  const fns = new Function("window", `${body}; return { choicePrices, summaryAmounts };`)({ LoopDeskConfig: { prepaidOffer: offer } });
+  return Object.assign(fns.choicePrices, { summaryAmounts: fns.summaryAmounts });
 }
 const offer15 = { enabled: true, type: "PERCENTAGE", value: 15 };
 
@@ -247,4 +248,23 @@ test("OTP module exposes a session-gated Shopify Checkout hand-off with prefill"
   assert.match(otp, /gateState\.authenticated && gateState\.verifiedPhonePresent/, "must gate on the verified session state");
   assert.match(otp, /continueToCheckoutFromPendingAction\(gateState\.customer/, "authed path must continue with prefill");
   assert.match(otp, /setPendingAction\(\{ type: "navigate", url: "\/checkout" \}\)/, "unauthed path must queue the navigate resume");
+});
+
+test("summary subtotal matches the line prices shown (offer price, not the original price)", () => {
+  // Rash guard 998 + skort offer at 340 (490 - 150), prepaid 15% of 1338 = 200.70.
+  // The summary previously showed "Merchandise subtotal 1,488" above lines that add to 1,338.
+  const { summaryAmounts } = loadChoicePrices(offer15);
+  const cart = { attributes: { loopd2c_payment_intent: "prepaid" }, original_total_price: 148800, items_subtotal_price: 133800, total_price: 113730 };
+  const summary = summaryAmounts({ finalPayableSubtotal: 113730, merchandiseSubtotal: 148800 }, cart);
+  assert.equal(summary.subtotal, 133800);
+  assert.equal(summary.discounts, 20070);
+  assert.equal(summary.subtotal - summary.discounts, summary.payable);
+});
+
+test("summary shows no discount row when nothing comes off the order", () => {
+  const { summaryAmounts } = loadChoicePrices(offer15);
+  const cart = { attributes: { loopd2c_payment_intent: "cod" }, original_total_price: 148800, items_subtotal_price: 133800, total_price: 133800 };
+  const summary = summaryAmounts({ finalPayableSubtotal: 133800, merchandiseSubtotal: 148800 }, cart);
+  assert.equal(summary.subtotal, 133800);
+  assert.equal(summary.discounts, 0);
 });
