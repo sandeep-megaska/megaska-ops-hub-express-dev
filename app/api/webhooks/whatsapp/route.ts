@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyMetaWebhookChallenge } from "../../../../services/whatsapp";
+import { checkMetaWebhookChallenge } from "../../../../services/whatsapp";
 import { consentKeyword, recordWhatsAppConsent } from "../../../../services/whatsapp/consent";
 import { applyStatusUpdates, recordInboundMessages, type WebhookValue } from "../../../../services/whatsapp/inbox";
 import { verifyMetaSignature } from "../../../../services/whatsapp/webhook-signature";
@@ -45,9 +45,12 @@ function messageText(message: WhatsAppWebhookMessage) {
 }
 
 export async function GET(request: NextRequest) {
-  const challenge = verifyMetaWebhookChallenge(request.nextUrl.searchParams);
-  if (!challenge) return new NextResponse("Forbidden", { status: 403 });
-  return new NextResponse(challenge, { status: 200, headers: { "Content-Type": "text/plain" } });
+  const result = checkMetaWebhookChallenge(request.nextUrl.searchParams);
+  if (!result.ok) {
+    console.warn("[WHATSAPP] webhook_verification_failed", { reason: result.reason, vercelEnv: process.env.VERCEL_ENV || null });
+    return new NextResponse(`Forbidden: ${result.reason}`, { status: 403, headers: { "Content-Type": "text/plain" } });
+  }
+  return new NextResponse(result.challenge, { status: 200, headers: { "Content-Type": "text/plain" } });
 }
 
 export async function POST(request: NextRequest) {

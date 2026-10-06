@@ -9,7 +9,7 @@ export type {
   WhatsAppTemplateComponent,
   WhatsAppTemplateComponentParameter,
 } from "./types.ts";
-export { MetaCloudApiWhatsAppProvider, verifyMetaWebhookChallenge } from "./meta-cloud-api.ts";
+export { MetaCloudApiWhatsAppProvider, checkMetaWebhookChallenge, verifyMetaWebhookChallenge } from "./meta-cloud-api.ts";
 export { WHATSAPP_PROVIDER_META_CLOUD_API } from "./types.ts";
 
 export function getWhatsAppProvider(): WhatsAppProvider {

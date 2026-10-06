@@ -104,15 +104,27 @@ export class MetaCloudApiWhatsAppProvider implements WhatsAppProvider {
   }
 }
 
-export function verifyMetaWebhookChallenge(searchParams: URLSearchParams): string | null {
+export type MetaWebhookChallengeResult =
+  | { ok: true; challenge: string }
+  | { ok: false; reason: "verify_token_not_configured" | "not_a_subscribe_request" | "verify_token_mismatch" };
+
+// Checks Meta's webhook verification GET. The failure reason is safe to
+// return to the caller (it never echoes either token) and tells whoever is
+// setting up the webhook whether the server is missing
+// WHATSAPP_META_WEBHOOK_VERIFY_TOKEN or the value entered in Meta differs.
+export function checkMetaWebhookChallenge(searchParams: URLSearchParams): MetaWebhookChallengeResult {
   const config = readMetaConfig();
   const mode = searchParams.get("hub.mode");
-  const token = searchParams.get("hub.verify_token");
+  const token = String(searchParams.get("hub.verify_token") || "").trim();
   const challenge = searchParams.get("hub.challenge");
 
-  if (mode === "subscribe" && token && token === config.webhookVerifyToken && challenge) {
-    return challenge;
-  }
+  if (!config.webhookVerifyToken) return { ok: false, reason: "verify_token_not_configured" };
+  if (mode !== "subscribe" || !challenge) return { ok: false, reason: "not_a_subscribe_request" };
+  if (token !== config.webhookVerifyToken) return { ok: false, reason: "verify_token_mismatch" };
+  return { ok: true, challenge };
+}
 
-  return null;
+export function verifyMetaWebhookChallenge(searchParams: URLSearchParams): string | null {
+  const result = checkMetaWebhookChallenge(searchParams);
+  return result.ok ? result.challenge : null;
 }
