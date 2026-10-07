@@ -39,6 +39,8 @@ export type MerchantWhatsAppAccountRow = {
   recoveryFirstTemplate: string;
   recoveryReminderTemplate: string;
   exchangeEnabled: boolean;
+  aiMode?: string | null;
+  aiKnowledge?: string | null;
   lastCheckedAt?: Date | null;
   lastCheckStatus?: string | null;
   lastCheckMessage?: string | null;
