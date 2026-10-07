@@ -130,6 +130,8 @@ export type StoreContext = {
   // Every product type in the catalog with its count, so "do you have X?" is
   // never answered "no" just because the search missed it.
   catalogOverview?: string[];
+  // Store data that could not be read (shown in the admin preview, never to customers).
+  readErrors?: string[];
   orders: Array<{ name: string; placedOn: string; status: string; payment: string; items: string; tracking: string | null; total: string }>;
 };
 
@@ -277,4 +279,20 @@ export function catalogOverview(items: Array<Pick<CatalogItem, "productType">>):
     counts.set(type, (counts.get(type) ?? 0) + 1);
   }
   return [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([type, count]) => `${type} (${count})`);
+}
+
+// What the assistant looked at for a preview answer, for the admin to check.
+export type AssistantPreviewSeen = { searchTerms: string; products: string; catalog: string; orders: string; problems: string };
+
+export function describeSeen(context: StoreContext, searchTerms: string[]): AssistantPreviewSeen {
+  const total = (context.catalogOverview ?? []).reduce((sum, entry) => sum + Number(entry.match(/\((\d+)\)$/)?.[1] ?? 0), 0);
+  return {
+    searchTerms: searchTerms.join(", ") || "—",
+    products: context.products.map((product) => `${product.title}${product.colors ? ` [${product.colors}]` : ""}${product.sizes ? ` (${product.sizes})` : ""}`).join(" · ") || "none matched",
+    catalog: total ? `${total} products: ${(context.catalogOverview ?? []).join(", ")}` : "no products read",
+    orders: context.orders.length ? context.orders.map((order) => `${order.name} ${order.status}`).join(" · ") : "none",
+    problems: (context.readErrors ?? [])
+      .map((error) => (error.startsWith("policies:") ? "shop policies (LoopD2C has no permission to read them; put the key facts in store notes)" : error))
+      .join(" | "),
+  };
 }
