@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { dispatchManualCheckoutRecovery } from "../../../../services/whatsapp/manual-recovery-dispatch";
 import { runPrepaidCodRecovery } from "../../../../services/checkout-recovery/prepaid-cod-recovery.ts";
+import { runWhatsAppCheckoutRecovery } from "../../../../services/checkout-recovery/whatsapp-checkout-recovery.ts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -41,10 +42,19 @@ async function run(req: NextRequest) {
     prepaidCod = { error: "Prepaid COD recovery failed." };
     console.error("[CHECKOUT RECOVERY] prepaid_cod_failed", { error: error instanceof Error ? error.message : String(error) });
   }
-  if (dispatchFailed) {
-    return NextResponse.json({ ok: false, error: "Recovery dispatch failed.", prepaidCod }, { status: 500 });
+  // Native Shopify Checkout: WhatsApp reminders (at most two per abandoned checkout).
+  let whatsapp: Awaited<ReturnType<typeof runWhatsAppCheckoutRecovery>> | { error: string };
+  try {
+    whatsapp = await runWhatsAppCheckoutRecovery({});
+    console.info("[CHECKOUT RECOVERY] whatsapp_recovery_completed", whatsapp);
+  } catch (error) {
+    whatsapp = { error: "WhatsApp recovery failed." };
+    console.error("[CHECKOUT RECOVERY] whatsapp_recovery_failed", { error: error instanceof Error ? error.message : String(error) });
   }
-  return NextResponse.json({ ok: true, ...summary, prepaidCod }, { headers: { "Cache-Control": "no-store" } });
+  if (dispatchFailed) {
+    return NextResponse.json({ ok: false, error: "Recovery dispatch failed.", prepaidCod, whatsapp }, { status: 500 });
+  }
+  return NextResponse.json({ ok: true, ...summary, prepaidCod, whatsapp }, { headers: { "Cache-Control": "no-store" } });
 }
 
 export const GET = run;

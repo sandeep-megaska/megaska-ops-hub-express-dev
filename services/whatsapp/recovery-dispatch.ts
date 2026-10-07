@@ -1,11 +1,26 @@
 import { createHash, randomBytes } from "crypto";
-import { prisma } from "../db/prisma";
-import { sendTemplateMessage, WHATSAPP_PROVIDER_META_CLOUD_API } from "./index";
+import { prisma } from "../db/prisma.ts";
+import { isWhatsAppOptedOut } from "./consent.ts";
+import { resolveWhatsAppSender } from "./sender.ts";
+import { sendTemplateMessage, WHATSAPP_PROVIDER_META_CLOUD_API } from "./index.ts";
 
 const RECOVERY_LINK_PREFIX = "/apps/loopd2c/checkout/recover?t=";
 const RECOVERY_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const RECENT_RECOVERY_SUPPRESSION_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_LANGUAGE_CODE = "en";
+
+// Legacy recovery for LoopD2C express-checkout intents (the in-drawer checkout
+// modal). The live store hands off to native Shopify Checkout, whose WhatsApp
+// recovery is services/checkout-recovery/whatsapp-checkout-recovery.ts. This one
+// only sends when explicitly enabled, so setting the Meta credentials (shared
+// with exchange updates) never starts it on its own.
+export function isWhatsAppRecoveryEnabled() {
+  return String(process.env.WHATSAPP_INTENT_RECOVERY_ENABLED || "").trim() === "true";
+}
+
+function recoveryLanguageCode(candidate: { languageCode?: string | null }) {
+  return candidate.languageCode || String(process.env.WHATSAPP_RECOVERY_TEMPLATE_LANGUAGE || "").trim() || DEFAULT_LANGUAGE_CODE;
+}
 
 const RECOVERY_TEMPLATES = {
   CHECKOUT_ABANDONMENT: "checkout_recovery",
@@ -144,7 +159,18 @@ export async function dispatchRecoveryMessage(candidate: RecoveryDispatchCandida
     return { ok: false, sent: false, reason: "missing_required_candidate_fields" };
   }
 
-  if (isCustomerOptedOut(candidate)) {
+  if (!isWhatsAppRecoveryEnabled()) {
+    logRecovery("dispatch_suppressed", { ...context, reason: "whatsapp_recovery_disabled" });
+    return { ok: true, sent: false, suppressed: true, reason: "whatsapp_recovery_disabled" };
+  }
+
+  const sender = await resolveWhatsAppSender(candidate.shopId, "recovery");
+  if (!sender) {
+    logRecovery("dispatch_suppressed", { ...context, reason: "no_merchant_whatsapp_number" });
+    return { ok: true, sent: false, suppressed: true, reason: "no_merchant_whatsapp_number" };
+  }
+
+  if (isCustomerOptedOut(candidate) || (await isWhatsAppOptedOut(phone, sender.phoneNumberId))) {
     logRecovery("dispatch_suppressed", { ...context, reason: "customer_opted_out" });
     return { ok: true, sent: false, suppressed: true, reason: "customer_opted_out" };
   }
@@ -172,13 +198,16 @@ export async function dispatchRecoveryMessage(candidate: RecoveryDispatchCandida
     const recoveryLink = `${RECOVERY_LINK_PREFIX}${encodeURIComponent(token)}`;
     const templateName = RECOVERY_TEMPLATES[candidate.recoveryType];
     const result = await sendTemplateMessage({
+      sender,
       shopId: candidate.shopId,
       checkoutIntentId: candidate.checkoutIntentId,
       recoveryType: candidate.recoveryType,
       toPhone: phone,
       templateName,
-      languageCode: candidate.languageCode || DEFAULT_LANGUAGE_CODE,
-      variables: [recoveryLink],
+      languageCode: recoveryLanguageCode(candidate),
+      // The templates carry a URL button "https://<store>/apps/loopd2c/checkout/recover?t={{1}}";
+      // only the token is sent, because WhatsApp cannot link a relative path in the body.
+      components: [{ type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: token }] }],
     });
 
     if (!result.success) throw new Error("whatsapp_provider_send_failed");

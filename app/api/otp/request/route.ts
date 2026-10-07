@@ -10,8 +10,11 @@ import {
   generateWhatsAppOtpCode,
   hashWhatsAppOtpCode,
   isWhatsAppOtpEligible,
+  resolveShopWhatsAppOtp,
   sendOtpWithWhatsApp,
+  type WhatsAppOtpConfig,
 } from "../../../../services/auth/whatsapp-otp";
+import type { WhatsAppSenderSource } from "../../../../services/whatsapp/sender";
 import {
   OtpPhonePolicyError,
   resolveOtpPhoneForShop,
@@ -141,8 +144,11 @@ async function createWhatsAppChallenge(
   shopId: string,
   phoneE164: string,
   expiresAt: Date,
-  smsFallbackAvailable: boolean
+  smsFallbackAvailable: boolean,
+  otpConfig: WhatsAppOtpConfig,
+  senderSource: WhatsAppSenderSource
 ) {
+  const usageProvider = senderSource === "MERCHANT" ? "MERCHANT_WHATSAPP" : "PLATFORM_WHATSAPP";
   const challengeId = crypto.randomUUID();
   const code = generateWhatsAppOtpCode();
 
@@ -165,6 +171,7 @@ async function createWhatsAppChallenge(
       expiresAt,
       metadata: {
         mode: WHATSAPP_OTP_PROVIDER,
+        sender: senderSource,
         codeHash: hashWhatsAppOtpCode(challengeId, code),
       },
     },
@@ -172,7 +179,7 @@ async function createWhatsAppChallenge(
 
   let messageId: string | null;
   try {
-    ({ messageId } = await sendOtpWithWhatsApp(phoneE164, code));
+    ({ messageId } = await sendOtpWithWhatsApp(phoneE164, code, otpConfig));
   } catch (error) {
     await prisma.oTPChallenge
       .update({ where: { id: challengeId }, data: { status: "failed" } })
@@ -188,7 +195,7 @@ async function createWhatsAppChallenge(
     await recordAcceptedOtpRequestUsage({
       shopId,
       challengeId,
-      provider: "PLATFORM_WHATSAPP",
+      provider: usageProvider,
       providerSid: messageId,
       phoneE164,
     });
@@ -198,7 +205,7 @@ async function createWhatsAppChallenge(
       shopId,
       sourceType: "OTP_CHALLENGE",
       sourceId: challengeId,
-      provider: "PLATFORM_WHATSAPP",
+      provider: usageProvider,
       errorName: error instanceof Error ? error.name : "UnknownError",
     });
   }
@@ -246,7 +253,8 @@ export async function POST(req: NextRequest) {
     // WhatsApp first (no DLT, far cheaper than SMS). The shopper can still ask
     // for SMS explicitly (channel: "sms") when the WhatsApp code never arrives.
     const smsRequested = body?.channel === "sms";
-    if (!otpBlocked && !smsRequested && isWhatsAppOtpEligible(phoneE164)) {
+    const whatsAppOtp = otpBlocked || smsRequested ? null : await resolveShopWhatsAppOtp(shop.id);
+    if (whatsAppOtp?.source && isWhatsAppOtpEligible(phoneE164, whatsAppOtp.config)) {
       const retryAfterSeconds = await getWhatsAppOtpRateLimit(shop.id, phoneE164);
       if (retryAfterSeconds > 0) {
         return withCors(
@@ -267,7 +275,9 @@ export async function POST(req: NextRequest) {
           shop.id,
           phoneE164,
           expiresAt,
-          resolution.available
+          resolution.available,
+          whatsAppOtp.config,
+          whatsAppOtp.source
         );
         return withCors(req, response);
       } catch (whatsAppError) {

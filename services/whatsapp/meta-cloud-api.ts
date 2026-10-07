@@ -1,14 +1,7 @@
-import {
-  SendTemplateMessageInput,
-  SendTemplateMessageResult,
-  WhatsAppProvider,
-  WHATSAPP_PROVIDER_META_CLOUD_API,
-} from "./types";
+import type { SendTemplateMessageInput, SendTemplateMessageResult, WhatsAppProvider } from "./types.ts";
+import { WHATSAPP_PROVIDER_META_CLOUD_API } from "./types.ts";
 
 type MetaCloudApiConfig = {
-  accessToken: string;
-  phoneNumberId: string;
-  businessAccountId: string;
   webhookVerifyToken: string;
   graphVersion: string;
 };
@@ -20,23 +13,14 @@ type MetaMessageResponse = {
 
 function readMetaConfig(): MetaCloudApiConfig {
   return {
-    accessToken: String(process.env.WHATSAPP_META_ACCESS_TOKEN || "").trim(),
-    phoneNumberId: String(process.env.WHATSAPP_META_PHONE_NUMBER_ID || "").trim(),
-    businessAccountId: String(process.env.WHATSAPP_META_BUSINESS_ACCOUNT_ID || "").trim(),
     webhookVerifyToken: String(process.env.WHATSAPP_META_WEBHOOK_VERIFY_TOKEN || "").trim(),
     graphVersion: String(process.env.WHATSAPP_META_GRAPH_VERSION || "v20.0").trim(),
   };
 }
 
-function assertSendConfig(config: MetaCloudApiConfig) {
-  if (!config.accessToken || !config.phoneNumberId) {
-    throw new Error("Meta WhatsApp Cloud API send config is missing");
-  }
-}
-
-function graphMessagesUrl(config: MetaCloudApiConfig) {
+function graphMessagesUrl(config: MetaCloudApiConfig, phoneNumberId: string) {
   const version = config.graphVersion.replace(/^\/+|\/+$/g, "");
-  return `https://graph.facebook.com/${version}/${config.phoneNumberId}/messages`;
+  return `https://graph.facebook.com/${version}/${phoneNumberId}/messages`;
 }
 
 function buildTemplateComponents(input: SendTemplateMessageInput) {
@@ -68,23 +52,24 @@ export class MetaCloudApiWhatsAppProvider implements WhatsAppProvider {
 
   async sendTemplateMessage(input: SendTemplateMessageInput): Promise<SendTemplateMessageResult> {
     const config = readMetaConfig();
+    const sender = input.sender;
     logMetaEvent("meta_template_send_attempt", input, {
-      hasPhoneNumberId: Boolean(config.phoneNumberId),
+      hasSender: Boolean(sender?.accessToken && sender?.phoneNumberId),
       graphVersion: config.graphVersion,
     });
 
     try {
-      assertSendConfig(config);
+      if (!sender?.accessToken || !sender.phoneNumberId) throw new Error("No WhatsApp sender for this shop");
       const components = buildTemplateComponents(input);
-      const response = await fetch(graphMessagesUrl(config), {
+      const response = await fetch(graphMessagesUrl(config, sender.phoneNumberId), {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${config.accessToken}`,
+          Authorization: `Bearer ${sender.accessToken}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
           messaging_product: "whatsapp",
-          to: input.toPhone,
+          to: input.toPhone.replace(/^\+/, ""),
           type: "template",
           template: {
             name: input.templateName,
@@ -101,6 +86,13 @@ export class MetaCloudApiWhatsAppProvider implements WhatsAppProvider {
 
       const messageId = data?.messages?.[0]?.id || null;
       logMetaEvent("meta_template_send_success", input, { messageId });
+      // Show automated messages (reminders, exchange updates) in the inbox thread.
+      try {
+        const { recordOutboundMessage } = await import("./inbox.ts");
+        await recordOutboundMessage({ shopId: input.shopId, businessPhoneNumberId: sender.phoneNumberId, toPhone: input.toPhone, waMessageId: messageId, type: "template", body: `Template: ${input.templateName}`, templateName: input.templateName });
+      } catch {
+        // The send succeeded; the inbox record is best-effort.
+      }
       return { provider: this.name, success: true, messageId };
     } catch (error) {
       logMetaEvent("meta_template_send_failed", input, {
@@ -112,15 +104,27 @@ export class MetaCloudApiWhatsAppProvider implements WhatsAppProvider {
   }
 }
 
-export function verifyMetaWebhookChallenge(searchParams: URLSearchParams): string | null {
+export type MetaWebhookChallengeResult =
+  | { ok: true; challenge: string }
+  | { ok: false; reason: "verify_token_not_configured" | "not_a_subscribe_request" | "verify_token_mismatch" };
+
+// Checks Meta's webhook verification GET. The failure reason is safe to
+// return to the caller (it never echoes either token) and tells whoever is
+// setting up the webhook whether the server is missing
+// WHATSAPP_META_WEBHOOK_VERIFY_TOKEN or the value entered in Meta differs.
+export function checkMetaWebhookChallenge(searchParams: URLSearchParams): MetaWebhookChallengeResult {
   const config = readMetaConfig();
   const mode = searchParams.get("hub.mode");
-  const token = searchParams.get("hub.verify_token");
+  const token = String(searchParams.get("hub.verify_token") || "").trim();
   const challenge = searchParams.get("hub.challenge");
 
-  if (mode === "subscribe" && token && token === config.webhookVerifyToken && challenge) {
-    return challenge;
-  }
+  if (!config.webhookVerifyToken) return { ok: false, reason: "verify_token_not_configured" };
+  if (mode !== "subscribe" || !challenge) return { ok: false, reason: "not_a_subscribe_request" };
+  if (token !== config.webhookVerifyToken) return { ok: false, reason: "verify_token_mismatch" };
+  return { ok: true, challenge };
+}
 
-  return null;
+export function verifyMetaWebhookChallenge(searchParams: URLSearchParams): string | null {
+  const result = checkMetaWebhookChallenge(searchParams);
+  return result.ok ? result.challenge : null;
 }

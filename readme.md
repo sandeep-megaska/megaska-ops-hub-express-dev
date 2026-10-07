@@ -70,41 +70,88 @@ Provider selection behavior:
 
 Never expose OTP provider secrets as `NEXT_PUBLIC_*`.
 
-## WhatsApp provider environment variables
+## WhatsApp (Meta WhatsApp Cloud API)
 
-The WhatsApp provider foundation uses Meta WhatsApp Cloud API and keeps credentials server-side only.
+Which number sends what (`services/whatsapp/sender.ts`):
 
-Provider:
-- `META_CLOUD_API`
+| Message | Shop with its own number | Shop without one |
+|---|---|---|
+| Login code (OTP) | the shop's number | the LoopD2C platform number |
+| Abandoned-checkout reminders | the shop's number | not sent |
+| Exchange updates | the shop's number | not sent |
 
-Meta Cloud API config:
-- `WHATSAPP_META_ACCESS_TOKEN`
-- `WHATSAPP_META_PHONE_NUMBER_ID`
-- `WHATSAPP_META_BUSINESS_ACCOUNT_ID`
-- `WHATSAPP_META_WEBHOOK_VERIFY_TOKEN`
-- `WHATSAPP_META_GRAPH_VERSION` (optional; defaults to `v20.0`)
+The platform number only ever sends authentication (OTP) messages, so no store's
+marketing or order updates go out under LoopD2C's name or another store's.
+There is no global fallback: every send names its sender.
 
-Never expose WhatsApp provider secrets as `NEXT_PUBLIC_*`.
+### A shop's own number
 
-## WhatsApp OTP (storefront login)
+Merchant Settings → **WhatsApp** (stored in `MerchantWhatsAppAccount`, token
+encrypted with `TOKEN_ENCRYPTION_KEY`): phone number ID, WhatsApp Business
+Account ID, permanent system-user token, template language, and toggles for
+OTP, abandoned-checkout reminders and exchange updates. **Save & check
+connection** makes a read-only Graph call and shows the number's name and
+quality rating. Own-number OTP is metered as `MERCHANT_WHATSAPP` (not billed).
 
-Storefront OTP is sent on WhatsApp first (Meta Cloud API authentication
-template, no DLT needed) and falls back to Twilio SMS when the WhatsApp send
-fails. Shoppers can also tap "Get code by SMS" after 30s if the WhatsApp message
-never arrives (e.g. the number is not on WhatsApp). The code is generated,
-hashed and verified by us (4 digits, 5-minute expiry, 5 attempts, 25s resend
-cooldown, 5 sends per 15 minutes per number); Twilio Verify is untouched for
-SMS. Usage is metered as `PLATFORM_WHATSAPP`.
+### LoopD2C platform number (OTP for shops without their own number)
 
-This uses its own dedicated LoopD2C number, separate from the
-`WHATSAPP_META_*` checkout-recovery config:
-- `WHATSAPP_OTP_ENABLED` — must be `true` to switch it on
+- `WHATSAPP_OTP_ENABLED` — must be `true`
 - `WHATSAPP_OTP_ACCESS_TOKEN` — system-user token with `whatsapp_business_messaging`
 - `WHATSAPP_OTP_PHONE_NUMBER_ID`
 - `WHATSAPP_OTP_TEMPLATE_NAME` (optional; defaults to `loopd2c_login_otp`)
 - `WHATSAPP_OTP_TEMPLATE_LANGUAGE` (optional; defaults to `en`)
-- `WHATSAPP_OTP_COUNTRY_PREFIXES` (optional; comma-separated, defaults to `+91`)
+- `WHATSAPP_OTP_COUNTRY_PREFIXES` (optional; comma-separated, defaults to `+91`; applies to every sender)
 - `WHATSAPP_OTP_GRAPH_VERSION` (optional; defaults to `v20.0`)
 
-Template: category **Authentication**, name matching
-`WHATSAPP_OTP_TEMPLATE_NAME`, code delivery **Copy code** button.
+Metered as `PLATFORM_WHATSAPP`.
+
+### OTP behaviour
+
+WhatsApp first (authentication template, no DLT), Twilio SMS fallback when the
+send fails; shoppers can tap "Get code by SMS" after 30s. The code is generated,
+hashed and verified by us (4 digits, 5-minute expiry, 5 attempts, 25s resend
+cooldown, 5 sends per 15 minutes per number). Template: category
+**Authentication**, code delivery **Copy code** button.
+
+### Webhook (opt-outs)
+
+`https://<app-host>/api/webhooks/whatsapp`, subscribed to `messages`.
+- `WHATSAPP_META_WEBHOOK_VERIFY_TOKEN` — answers Meta's verification challenge
+- `WHATSAPP_META_APP_SECRET` — Meta app secret(s), comma-separated when numbers
+  live in different apps; verifies `X-Hub-Signature-256`. Without it every POST
+  is rejected.
+- `WHATSAPP_META_GRAPH_VERSION` (optional; defaults to `v20.0`)
+
+STOP / "Stop promotions" record an opt-out for the business number that
+received it (AuditEvent `whatsapp.opt_out`, `<phone_number_id>:<customer>`), so
+a STOP to one store does not stop another; START opts back in.
+
+### Abandoned-checkout reminders (native Shopify Checkout)
+
+`services/checkout-recovery/whatsapp-checkout-recovery.ts`, run by the 15-minute
+checkout-recovery cron for shops whose own number has reminders switched on.
+Reads Shopify abandoned checkouts whose phone was verified by the OTP gate
+(`megaska_verified_phone`) and sends **at most two messages per checkout**: the
+first once it has been idle 15 minutes (15–30 minutes after the shopper left;
+skipped if it cannot go out within 6 hours) and a reminder 24 hours after the
+first if they still have not ordered (dropped after 30 hours). A phone gets at
+most two reminders from a shop in any 7 days. Opted-out numbers are skipped.
+Needs `CHECKOUT_RECOVERY_SIGNING_SECRET` (32+ chars, shared with the COD email).
+
+Both templates need one URL button
+`https://<store-domain>/apps/loopd2c/checkout/bag?t={{1}}`; only the token is
+sent. The link rebuilds the bag and opens the drawer with Pay online and COD.
+
+`WHATSAPP_INTENT_RECOVERY_ENABLED` — legacy recovery for LoopD2C express-checkout
+intents (in-drawer checkout modal); off unless `true`, own number only.
+
+### Exchange updates
+
+Templates `exchange_approved`, `exchange_payment_received`,
+`exchange_pickup_scheduled`, `exchange_pickup_completed`, `exchange_item_received`,
+`exchange_replacement_processing`, `exchange_replacement_shipped`,
+`exchange_completed`, `exchange_rejected` (override names with
+`WHATSAPP_TEMPLATE_EXCHANGE_<STATUS>`), sent from the shop's own number when
+exchange updates are switched on.
+
+Never expose WhatsApp secrets as `NEXT_PUBLIC_*`.

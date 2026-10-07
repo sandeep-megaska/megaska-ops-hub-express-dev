@@ -2,6 +2,7 @@ import { prisma } from "../db/prisma";
 import { EXCHANGE_STATUS_DESCRIPTIONS } from "../exchange/lifecycle";
 import { sendCustomerEmail, sendOpsAlert } from "./email";
 import { sendTemplateMessage } from "../whatsapp";
+import { resolveWhatsAppSender } from "../whatsapp/sender";
 
 // Centralized customer + admin notifications for exchange status milestones.
 //
@@ -14,8 +15,8 @@ import { sendTemplateMessage } from "../whatsapp";
 //
 // Channels:
 //   - Customer email  (Resend, respects the merchant's notification settings)
-//   - Customer WhatsApp (Meta Cloud API, pre-approved templates — gated behind
-//     EXCHANGE_WHATSAPP_ENABLED and skipped gracefully if not configured)
+//   - Customer WhatsApp (Meta Cloud API, pre-approved templates — only from the
+//     shop's own number with exchange updates switched on; skipped otherwise)
 //   - Admin/ops email (every milestone, so the team has a full audit trail)
 
 interface MilestoneContext {
@@ -170,10 +171,6 @@ const MILESTONES: Record<string, MilestoneDefinition> = {
   },
 };
 
-function whatsappEnabled() {
-  return String(process.env.EXCHANGE_WHATSAPP_ENABLED || "").trim().toLowerCase() === "true";
-}
-
 function resolveWhatsappTemplate(key: string, fallback: string) {
   const override = String(process.env[`WHATSAPP_TEMPLATE_EXCHANGE_${key}`] || "").trim();
   return override || fallback;
@@ -261,15 +258,18 @@ export async function notifyExchangeMilestone(requestId: string, status: string)
       }
     }
 
-    // Customer WhatsApp (best-effort, gated + graceful)
-    if (definition.whatsapp && whatsappEnabled() && ctx.customerPhone) {
+    // Customer WhatsApp: only from the shop's own number with exchange updates
+    // switched on (Merchant Settings → WhatsApp); best-effort and graceful.
+    const whatsappSender = definition.whatsapp && ctx.customerPhone && shopId ? await resolveWhatsAppSender(shopId, "exchange") : null;
+    if (definition.whatsapp && whatsappSender && ctx.customerPhone) {
       const templateName = resolveWhatsappTemplate(definition.whatsapp.key, definition.whatsapp.defaultTemplate);
       if (templateName) {
         await sendTemplateMessage({
+          sender: whatsappSender,
           shopId,
           toPhone: ctx.customerPhone,
           templateName,
-          languageCode: String(process.env.WHATSAPP_TEMPLATE_LANGUAGE || "en").trim() || "en",
+          languageCode: whatsappSender.languageCode,
           variables: definition.whatsapp.variables(ctx),
         }).catch((error) => {
           console.warn("[EXCHANGE MILESTONE] whatsapp send threw", {
