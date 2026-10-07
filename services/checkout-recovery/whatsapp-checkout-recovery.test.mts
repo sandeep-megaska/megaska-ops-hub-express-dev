@@ -116,3 +116,20 @@ test("run sends from the shop's own number", async () => {
   assert.equal(sends[0].sender.phoneNumberId, "111111111111111");
   assert.equal(sends[0].sender.source, "MERCHANT");
 });
+
+test("a shopper with two open checkouts gets one message, for the most recent checkout", async () => {
+  const older = node({ id: "gid://shopify/AbandonedCheckout/1", createdAt: new Date(T0 - 7 * 24 * HOUR).toISOString(), updatedAt: new Date(T0 - 30 * MIN).toISOString() });
+  const newer = node({ id: "gid://shopify/AbandonedCheckout/2", updatedAt: new Date(T0).toISOString() });
+  assert.deepEqual(selectRecoverableCheckouts([older, newer] as any).map((c) => c.checkoutId), ["gid://shopify/AbandonedCheckout/2"]);
+
+  const sends: any[] = [];
+  const summary = await runWhatsAppCheckoutRecovery({ now: new Date(T0 + 20 * MIN) }, { ...accounts, db: fakeDb() as any, env, listCheckouts: async () => [newer, older] as any, isOptedOut: async () => false, sendTemplate: async (input) => { sends.push(input); return { success: true }; } });
+  assert.equal(summary.sentFirst, 1);
+  assert.equal(sends[0].checkoutId, "gid://shopify/AbandonedCheckout/2");
+});
+
+test("no new first message within 24 hours of another recovery message to the same phone", async () => {
+  const earlier = [{ eventType: WHATSAPP_RECOVERY_EVENT, entityId: "gid://shopify/AbandonedCheckout/9", createdAt: new Date(T0 - 2 * HOUR), payload: { shopId: "shop-1", step: "first", phone: "919639390404" } }];
+  const summary = await runWhatsAppCheckoutRecovery({ now: new Date(T0 + 20 * MIN) }, { ...accounts, db: fakeDb(earlier) as any, env, listCheckouts: async () => [node()] as any, isOptedOut: async () => false, sendTemplate: async () => { throw new Error("must not send"); } });
+  assert.equal(summary.sentFirst, 0);
+});
