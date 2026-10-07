@@ -24,12 +24,15 @@ export default async function WhatsAppInboxPage({ searchParams }: { searchParams
     );
   }
 
-  const [account, conversations] = await Promise.all([
-    prisma.merchantWhatsAppAccount.findUnique({ where: { shopId: shop.id }, select: { enabled: true, displayPhoneNumber: true } }).catch(() => null),
-    prisma.whatsAppConversation.findMany({ where: { shopId: shop.id }, orderBy: { lastMessageAt: "desc" }, take: 200 }).catch(() => []),
+  const filter = params.filter === "team" ? "team" : "all";
+  const [account, conversations, needsTeam] = await Promise.all([
+    prisma.merchantWhatsAppAccount.findUnique({ where: { shopId: shop.id }, select: { enabled: true, displayPhoneNumber: true, aiMode: true } }).catch(() => null),
+    prisma.whatsAppConversation.findMany({ where: { shopId: shop.id, ...(filter === "team" ? { needsHuman: true } : {}) }, orderBy: { lastMessageAt: "desc" }, take: 200 }).catch(() => []),
+    prisma.whatsAppConversation.count({ where: { shopId: shop.id, needsHuman: true } }).catch(() => 0),
   ]);
   const shopParam = `shop=${encodeURIComponent(shop.shopDomain)}`;
   const unread = conversations.reduce((sum, conversation) => sum + conversation.unreadCount, 0);
+  const aiMode = account?.enabled ? String(account.aiMode || "OFF") : "OFF";
 
   return (
     <div className="mk-page">
@@ -42,6 +45,9 @@ export default async function WhatsAppInboxPage({ searchParams }: { searchParams
           </p>
         </div>
         <div className="mk-header-actions">
+          <Link className="mk-btn" href={`/admin/whatsapp/assistant?${shopParam}`}>
+            AI assistant: {aiMode === "AUTO" ? "answering" : aiMode === "DRAFT" ? "suggesting" : "off"}
+          </Link>
           <Link className="mk-btn" href={`/admin/merchant-settings?${shopParam}#whatsapp`}>WhatsApp settings</Link>
         </div>
       </div>
@@ -56,6 +62,10 @@ export default async function WhatsAppInboxPage({ searchParams }: { searchParams
 
       <section className="mk-card">
         <h2 className="mk-section-title">Conversations {unread ? <span className="mk-badge mk-badge-warning">{unread} unread</span> : null}</h2>
+        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+          <Link className={`mk-btn mk-btn-sm${filter === "all" ? " mk-btn-primary" : ""}`} href={`/admin/whatsapp?${shopParam}`}>All</Link>
+          <Link className={`mk-btn mk-btn-sm${filter === "team" ? " mk-btn-primary" : ""}`} href={`/admin/whatsapp?${shopParam}&filter=team`}>Needs your team{needsTeam ? ` (${needsTeam})` : ""}</Link>
+        </div>
         <div className="mk-table-wrap">
           <table className="mk-table">
             <thead>
@@ -69,7 +79,7 @@ export default async function WhatsAppInboxPage({ searchParams }: { searchParams
             </thead>
             <tbody>
               {conversations.length === 0 ? (
-                <tr><td colSpan={5}>No WhatsApp conversations yet.</td></tr>
+                <tr><td colSpan={5}>{filter === "team" ? "No chats waiting for your team." : "No WhatsApp conversations yet."}</td></tr>
               ) : (
                 conversations.map((conversation) => {
                   const open = isWithinCustomerWindow(conversation.lastInboundAt);
@@ -78,6 +88,7 @@ export default async function WhatsAppInboxPage({ searchParams }: { searchParams
                       <td>
                         {conversation.contactName || `+${conversation.contactPhone}`}
                         {conversation.contactName ? <div className="mk-help">+{conversation.contactPhone}</div> : null}
+                        {conversation.needsHuman ? <div><span className="mk-badge mk-badge-warning">Needs your team</span></div> : conversation.aiDraft ? <div><span className="mk-badge mk-badge-info">🤖 Reply suggested</span></div> : null}
                       </td>
                       <td style={{ maxWidth: 360, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{conversation.lastMessagePreview || "—"}</td>
                       <td>{formatWhen(conversation.lastMessageAt)}</td>

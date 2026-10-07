@@ -145,6 +145,27 @@ sent. The link rebuilds the bag and opens the drawer with Pay online and COD.
 `WHATSAPP_INTENT_RECOVERY_ENABLED` — legacy recovery for LoopD2C express-checkout
 intents (in-drawer checkout modal); off unless `true`, own number only.
 
+### AI assistant (inbound chats)
+
+LoopD2C → WhatsApp Inbox → **AI assistant** (`/admin/whatsapp/assistant`).
+Modes per shop (`MerchantWhatsAppAccount.aiMode`): `OFF`, `DRAFT` (suggested
+reply in the chat, a person sends it) and `AUTO` (answers on its own). It runs
+after the webhook responds (`next/server` `after`), waits 4s so a burst of
+messages gets one answer, shows WhatsApp's typing indicator, then asks OpenAI
+(`OPENAI_API_KEY`; model `OPENAI_WHATSAPP_MODEL` → `OPENAI_MODEL` →
+`gpt-4o-mini`) with facts read live from Shopify: matching products (price,
+sizes in stock, link), the customer's last 3 orders by phone (status,
+tracking), shop policies when `read_legal_policies` is granted, and the
+merchant's store notes (`aiKnowledge`). Rules: only quote those facts, no
+invented prices/offers/urgency, never ask for OTP/card/UPI details.
+Complaints, refunds, exchanges, photos/voice notes, low confidence (< 0.6) or
+AI failure: one holding message (AUTO), the chat is flagged "Needs your team"
+and the team is emailed. Limits: 6 AI replies per chat per hour, 300 per shop
+per day. A team reply clears the flag and pauses the assistant in that chat for
+12 hours. In AUTO the "new chat" email is replaced by the handoff email.
+Logic and prompt: `services/whatsapp/assistant/` (`policy.ts` is pure and
+unit-tested).
+
 ### Exchange updates
 
 Templates `exchange_approved`, `exchange_payment_received`,

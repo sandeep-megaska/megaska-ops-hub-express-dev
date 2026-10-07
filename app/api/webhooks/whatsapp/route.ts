@@ -1,11 +1,14 @@
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 import { checkMetaWebhookChallenge } from "../../../../services/whatsapp";
 import { consentKeyword, recordWhatsAppConsent } from "../../../../services/whatsapp/consent";
 import { applyStatusUpdates, recordInboundMessages, type WebhookValue } from "../../../../services/whatsapp/inbox";
+import { runWhatsAppAssistant } from "../../../../services/whatsapp/assistant/run";
 import { recordOtpDeliveryStatuses } from "../../../../services/whatsapp/otp-delivery";
 import { verifyMetaSignature } from "../../../../services/whatsapp/webhook-signature";
 
 export const runtime = "nodejs";
+// The AI assistant answers after the response is sent (see `after` below).
+export const maxDuration = 60;
 
 // Meta WhatsApp Cloud API webhook (subscribe the app to the WABA's "messages"
 // field and point it here). GET answers Meta's verification challenge with
@@ -15,7 +18,8 @@ export const runtime = "nodejs";
 // recorded against the business number that received the reply.
 //
 // Handled: every customer message is stored in the LoopD2C WhatsApp inbox
-// (Admin → WhatsApp Inbox) for shops whose own number received it; STOP /
+// (Admin → WhatsApp Inbox) for shops whose own number received it, and the
+// shop's AI assistant (if switched on) answers or drafts a reply; STOP /
 // "Stop promotions" style replies also record an opt-out that checkout-recovery
 // sends respect, START an opt-in; delivery statuses update the inbox ticks and
 // failures are logged.
@@ -81,7 +85,12 @@ export async function POST(request: NextRequest) {
         console.log("[WHATSAPP] consent_recorded", { action, messageId: message.id || null });
       }
       try {
-        await recordInboundMessages(change.value as WebhookValue);
+        await recordInboundMessages(change.value as WebhookValue, {
+          // AI assistant (Merchant WhatsApp → AI assistant), after Meta has its 200.
+          onStored: (stored) => after(() => runWhatsAppAssistant(stored)
+            .then((result) => console.info("[WHATSAPP ASSISTANT] run", { conversationId: stored.conversationId, ...result }))
+            .catch((error) => console.error("[WHATSAPP ASSISTANT] run_failed", { conversationId: stored.conversationId, error: error instanceof Error ? error.message : String(error) }))),
+        });
         await applyStatusUpdates(change.value as WebhookValue);
         await recordOtpDeliveryStatuses(change.value as WebhookValue);
       } catch (error) {

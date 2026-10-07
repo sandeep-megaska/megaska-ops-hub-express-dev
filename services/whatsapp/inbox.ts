@@ -10,7 +10,8 @@ import { normalizeWhatsAppPhone } from "./consent.ts";
 import { merchantSender, type MerchantWhatsAppAccountRow, type WhatsAppSender } from "./sender.ts";
 
 export const CUSTOMER_WINDOW_MS = 24 * 60 * 60 * 1000;
-// A new message after this much quiet emails the team (a "new chat" alert).
+// A new message after this much quiet emails the team (a "new chat" alert),
+// unless the AI assistant answers chats on its own (AUTO); it emails on handoff.
 export const NEW_CHAT_ALERT_GAP_MS = 2 * 60 * 60 * 1000;
 const MAX_TEXT = 4096;
 
@@ -106,7 +107,7 @@ function inboxUrl(shopDomain: string, conversationId: string) {
 }
 
 // Stores the customer messages in one webhook change. Returns how many were stored.
-export async function recordInboundMessages(value: WebhookValue, deps: { db?: InboxDb; alert?: AlertFn; now?: Date } = {}) {
+export async function recordInboundMessages(value: WebhookValue, deps: { db?: InboxDb; alert?: AlertFn; now?: Date; onStored?: (stored: { shopId: string; conversationId: string; waMessageId: string }) => void } = {}) {
   const businessPhoneNumberId = String(value.metadata?.phone_number_id || "");
   const messages = value.messages || [];
   if (!businessPhoneNumberId || !messages.length) return 0;
@@ -134,11 +135,13 @@ export async function recordInboundMessages(value: WebhookValue, deps: { db?: In
     try {
       await db.whatsAppMessage.create({ data: { conversationId: conversation.id, direction: "INBOUND", waMessageId: message.id, type: content.type, body: content.body.slice(0, MAX_TEXT), mediaId: content.mediaId, createdAt: at } });
       stored += 1;
+      deps.onStored?.({ shopId: account.shopId, conversationId: conversation.id, waMessageId: message.id });
     } catch {
       continue; // duplicate delivery raced us
     }
     const quietFor = previous?.lastInboundAt ? at.getTime() - new Date(previous.lastInboundAt).getTime() : Infinity;
-    if (quietFor >= NEW_CHAT_ALERT_GAP_MS) {
+    // With the assistant answering on its own, the team is emailed when it hands a chat over instead.
+    if (quietFor >= NEW_CHAT_ALERT_GAP_MS && String(account.aiMode || "").toUpperCase() !== "AUTO") {
       const shop = await db.shop.findUnique({ where: { id: account.shopId }, select: { id: true, shopDomain: true } });
       const who = conversation.contactName || profileName || `+${contactPhone}`;
       await alert({
@@ -171,7 +174,7 @@ export async function applyStatusUpdates(value: WebhookValue, deps: { db?: Inbox
 
 // Records a message LoopD2C sent (inbox reply or automated template) in the thread.
 export async function recordOutboundMessage(
-  input: { shopId: string; businessPhoneNumberId: string; toPhone: string; waMessageId: string | null; type: string; body: string; templateName?: string | null; sentByEmail?: string | null; now?: Date },
+  input: { shopId: string; businessPhoneNumberId: string; toPhone: string; waMessageId: string | null; type: string; body: string; templateName?: string | null; sentByEmail?: string | null; sentByAi?: boolean; now?: Date },
   deps: { db?: InboxDb } = {},
 ) {
   const contactPhone = normalizeWhatsAppPhone(input.toPhone);
@@ -183,7 +186,7 @@ export async function recordOutboundMessage(
     create: { shopId: input.shopId, businessPhoneNumberId: input.businessPhoneNumberId, contactPhone, lastMessageAt: at, lastMessagePreview: input.body.slice(0, 200) },
     update: { lastMessageAt: at, lastMessagePreview: input.body.slice(0, 200) },
   });
-  await db.whatsAppMessage.create({ data: { conversationId: conversation.id, direction: "OUTBOUND", waMessageId: input.waMessageId, type: input.type, body: input.body.slice(0, MAX_TEXT), templateName: input.templateName ?? null, status: "sent", sentByEmail: input.sentByEmail ?? null, createdAt: at } });
+  await db.whatsAppMessage.create({ data: { conversationId: conversation.id, direction: "OUTBOUND", waMessageId: input.waMessageId, type: input.type, body: input.body.slice(0, MAX_TEXT), templateName: input.templateName ?? null, status: "sent", sentByEmail: input.sentByEmail ?? null, ...(input.sentByAi ? { sentByAi: true } : {}), createdAt: at } });
 }
 
 export class InboxReplyError extends Error {
@@ -204,8 +207,12 @@ async function senderForShop(db: InboxDb, shopId: string, businessPhoneNumberId:
   return sender;
 }
 
-// Sends a free-form text reply from the admin inbox.
-export async function sendInboxReply(input: { shopId: string; conversationId: string; text: string; sentByEmail?: string | null; now?: Date }, deps: { db?: InboxDb; fetcher?: Fetcher } = {}) {
+// Sends a free-form text message in a conversation (inside the 24-hour window)
+// and records it. Used by inbox replies and by the AI assistant.
+export async function sendConversationText(
+  input: { shopId: string; conversationId: string; text: string; sentByEmail?: string | null; sentByAi?: boolean; now?: Date },
+  deps: { db?: InboxDb; fetcher?: Fetcher } = {},
+) {
   const text = String(input.text || "").trim();
   if (!text) throw new InboxReplyError("Type a message first.");
   if (text.length > MAX_TEXT) throw new InboxReplyError(`Messages can be at most ${MAX_TEXT} characters.`);
@@ -223,7 +230,24 @@ export async function sendInboxReply(input: { shopId: string; conversationId: st
   });
   const data = (await response.json().catch(() => null)) as { messages?: Array<{ id?: string }>; error?: { message?: string } } | null;
   if (!response.ok) throw new InboxReplyError(`WhatsApp did not accept the message: ${data?.error?.message || `HTTP ${response.status}`}`);
-  await recordOutboundMessage({ shopId: input.shopId, businessPhoneNumberId: sender.phoneNumberId, toPhone: conversation.contactPhone, waMessageId: data?.messages?.[0]?.id || null, type: "text", body: text, sentByEmail: input.sentByEmail, now: input.now }, { db });
+  await recordOutboundMessage({ shopId: input.shopId, businessPhoneNumberId: sender.phoneNumberId, toPhone: conversation.contactPhone, waMessageId: data?.messages?.[0]?.id || null, type: "text", body: text, sentByEmail: input.sentByEmail, sentByAi: input.sentByAi, now: input.now }, { db });
+  return conversation;
+}
+
+// Pause after a team member replies: the AI assistant stays out of the chat.
+export const TEAM_REPLY_AI_PAUSE_MS = 12 * 60 * 60 * 1000;
+
+// Sends a free-form text reply from the admin inbox. A team member replying
+// takes the chat over: the handoff is cleared, any AI draft is dropped and the
+// AI assistant pauses in this chat for 12 hours.
+export async function sendInboxReply(input: { shopId: string; conversationId: string; text: string; sentByEmail?: string | null; now?: Date }, deps: { db?: InboxDb; fetcher?: Fetcher } = {}) {
+  const db = deps.db ?? (await defaultDb());
+  const conversation = await sendConversationText(input, { ...deps, db });
+  const now = input.now ?? new Date();
+  await db.whatsAppConversation.update({
+    where: { id: conversation.id },
+    data: { needsHuman: false, handoffReason: null, aiDraft: null, aiDraftAt: null, aiPausedUntil: new Date(now.getTime() + TEAM_REPLY_AI_PAUSE_MS) },
+  }).catch(() => undefined);
 }
 
 // Clears the unread count and sends a read receipt (blue ticks) for the latest customer message.
@@ -243,6 +267,22 @@ export async function markConversationRead(input: { shopId: string; conversation
     });
   } catch {
     // Read receipts are best-effort.
+  }
+}
+
+// Blue ticks plus WhatsApp's "typing…" bubble on the customer's message while
+// the assistant prepares an answer. Best-effort; shows for up to 25 seconds.
+export async function showTypingIndicator(input: { shopId: string; businessPhoneNumberId: string; waMessageId: string }, deps: { db?: InboxDb; fetcher?: Fetcher } = {}) {
+  try {
+    const db = deps.db ?? (await defaultDb());
+    const sender = await senderForShop(db, input.shopId, input.businessPhoneNumberId);
+    await (deps.fetcher ?? fetch)(`https://graph.facebook.com/${graphVersion()}/${sender.phoneNumberId}/messages`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${sender.accessToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ messaging_product: "whatsapp", status: "read", message_id: input.waMessageId, typing_indicator: { type: "text" } }),
+    });
+  } catch {
+    // Cosmetic only.
   }
 }
 

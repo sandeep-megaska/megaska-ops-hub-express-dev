@@ -1,0 +1,74 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { assistantGate, buildUserPrompt, decideOutcome, DEFAULT_HOLDING_MESSAGE, normalizeAssistantMode, parseAssistantResult, productSearchTerms, type AssistantGateInput } from "./policy.ts";
+
+const NOW = new Date("2026-10-07T08:00:00Z");
+const gateInput = (overrides: Partial<AssistantGateInput> = {}): AssistantGateInput => ({
+  mode: "AUTO", aiConfigured: true, message: { type: "text", body: "Is the black swim dress available in XL?" }, isConsentKeyword: false,
+  conversation: { needsHuman: false, aiPausedUntil: null }, newerInboundExists: false, aiRepliesLastHour: 0, shopAiRepliesLastDay: 0, now: NOW, ...overrides,
+});
+
+test("assistant answers ordinary text questions when switched on", () => {
+  assert.deepEqual(assistantGate(gateInput()), { action: "respond" });
+  assert.equal(assistantGate(gateInput({ mode: "OFF" })).action, "skip");
+  assert.equal(assistantGate(gateInput({ aiConfigured: false })).action, "skip");
+});
+
+test("assistant stays out when the team owns the chat, a newer message is coming, or it is a STOP", () => {
+  assert.equal(assistantGate(gateInput({ conversation: { needsHuman: true, aiPausedUntil: null } })).action, "skip");
+  assert.equal(assistantGate(gateInput({ conversation: { needsHuman: false, aiPausedUntil: new Date(NOW.getTime() + 60_000) } })).action, "skip");
+  assert.equal(assistantGate(gateInput({ conversation: { needsHuman: false, aiPausedUntil: new Date(NOW.getTime() - 60_000) } })).action, "respond");
+  assert.equal(assistantGate(gateInput({ newerInboundExists: true })).action, "skip");
+  assert.equal(assistantGate(gateInput({ isConsentKeyword: true })).action, "skip");
+});
+
+test("photos and voice notes, and chats that run away, go to the team", () => {
+  assert.equal(assistantGate(gateInput({ message: { type: "image", body: "📷 Photo" } })).action, "handoff");
+  assert.equal(assistantGate(gateInput({ message: { type: "audio", body: "🎤 Voice message" } })).action, "handoff");
+  assert.equal(assistantGate(gateInput({ aiRepliesLastHour: 6 })).action, "handoff");
+  assert.equal(assistantGate(gateInput({ shopAiRepliesLastDay: 300 })).action, "skip");
+});
+
+test("model output is validated; anything malformed becomes a handoff", () => {
+  assert.equal(parseAssistantResult(null), null);
+  const empty = parseAssistantResult({ reply: "", confidence: 0.9 });
+  assert.equal(empty?.needsHuman, true);
+  const ok = parseAssistantResult({ reply: "Yes, XL is in stock: ₹1,195", intent: "product", needs_human: false, confidence: 1.7 });
+  assert.equal(ok?.confidence, 1);
+  assert.equal(ok?.needsHuman, false);
+  assert.equal(parseAssistantResult({ reply: "x", confidence: "high" })?.confidence, 0);
+});
+
+test("AUTO sends confident answers, holds and hands over otherwise; DRAFT never sends", () => {
+  const answer = { reply: "Yes, XL is in stock.", intent: "product", needsHuman: false, handoffReason: null, confidence: 0.9 };
+  assert.deepEqual(decideOutcome("AUTO", answer), { kind: "send", text: "Yes, XL is in stock.", handoff: false });
+  const unsure = decideOutcome("AUTO", { ...answer, confidence: 0.4 });
+  assert.equal(unsure.kind, "send");
+  assert.equal(unsure.kind === "send" && unsure.text, DEFAULT_HOLDING_MESSAGE, "an unsure answer is never sent in the AI's words");
+  assert.equal(unsure.kind === "send" && unsure.handoff, true);
+  const complaint = decideOutcome("AUTO", { ...answer, reply: "Sorry about that! Our team will help you shortly.", needsHuman: true, handoffReason: "Damaged item" });
+  assert.deepEqual(complaint, { kind: "send", text: "Sorry about that! Our team will help you shortly.", handoff: true, reason: "Damaged item" });
+  assert.deepEqual(decideOutcome("DRAFT", answer), { kind: "draft", text: "Yes, XL is in stock.", handoff: false, reason: null });
+  assert.equal(decideOutcome("DRAFT", { ...answer, reply: "" }).kind, "handoff_only");
+});
+
+test("mode values are normalized", () => {
+  assert.equal(normalizeAssistantMode("auto"), "AUTO");
+  assert.equal(normalizeAssistantMode("something"), "OFF");
+  assert.equal(normalizeAssistantMode(null), "OFF");
+});
+
+test("catalog search uses the customer's own words, not filler", () => {
+  assert.deepEqual(productSearchTerms([{ from: "customer", text: "Hi, do you have a black swim dress in XL? price kya hai" }, { from: "store", text: "burkini" }]), ["black", "swim", "dress"]);
+});
+
+test("prompt carries only the store's facts and the recent chat", () => {
+  const prompt = buildUserPrompt(
+    { storeName: "Megaska", storeUrl: "https://megaska.com", policies: [], merchantNotes: "Delivery in 3-7 days.", products: [{ title: "Swim Dress", url: "https://megaska.com/products/swim-dress", price: "₹1195", sizes: "M, L", inStock: true, description: "" }], orders: [] },
+    [{ from: "customer", text: "XL available?" }],
+  );
+  assert.match(prompt, /MERCHANT NOTES:\nDelivery in 3-7 days\./);
+  assert.match(prompt, /Swim Dress \| ₹1195 \| in stock \| sizes available: M, L \| https:\/\/megaska\.com\/products\/swim-dress/);
+  assert.match(prompt, /ORDERS: none found/);
+  assert.match(prompt, /Customer: XL available\?$/);
+});
