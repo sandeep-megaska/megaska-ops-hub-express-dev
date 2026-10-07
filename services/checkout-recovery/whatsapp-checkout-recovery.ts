@@ -36,6 +36,8 @@ export const REMINDER_MAX_DELAY_MS = 30 * HOUR;
 const LOOKBACK_MS = 48 * HOUR;
 export const PHONE_WINDOW_MS = 7 * 24 * HOUR;
 export const MAX_MESSAGES_PER_PHONE = 2;
+// A new "first" message never follows another recovery message to the same phone this soon.
+export const PHONE_FIRST_MESSAGE_GAP_MS = 24 * HOUR;
 const MAX_ITEMS = 20;
 
 const ABANDONED_CHECKOUTS_QUERY = `query WhatsAppAbandonedCheckouts($query: String!, $after: String) {
@@ -94,8 +96,19 @@ export function normalizePhone(phone: string | null | undefined): string | null 
 }
 
 // Abandoned, OTP-verified checkouts with a phone and items, where the shopper
-// has not ordered since the checkout began.
+// has not ordered since the checkout began. One checkout per phone (the most
+// recently updated): a shopper with two open checkouts gets one message
+// thread, not one per checkout.
 export function selectRecoverableCheckouts(nodes: AbandonedCheckoutNode[]): WhatsAppRecoveryCheckout[] {
+  const latestByPhone = new Map<string, WhatsAppRecoveryCheckout>();
+  for (const checkout of eligibleCheckouts(nodes)) {
+    const current = latestByPhone.get(checkout.phone);
+    if (!current || checkout.updatedAt > current.updatedAt) latestByPhone.set(checkout.phone, checkout);
+  }
+  return [...latestByPhone.values()];
+}
+
+function eligibleCheckouts(nodes: AbandonedCheckoutNode[]): WhatsAppRecoveryCheckout[] {
   const out: WhatsAppRecoveryCheckout[] = [];
   for (const node of nodes) {
     if (!node?.id || node.completedAt) continue;
@@ -229,9 +242,11 @@ export async function runWhatsAppCheckoutRecovery(
       select: { entityId: true, createdAt: true, payload: true },
     });
     const sendsByPhone = new Map<string, number>();
+    const lastSentByPhone = new Map<string, number>();
     for (const event of recent) {
       const phone = String((event.payload as { phone?: unknown } | null)?.phone ?? "");
       sendsByPhone.set(phone, (sendsByPhone.get(phone) ?? 0) + 1);
+      lastSentByPhone.set(phone, Math.max(lastSentByPhone.get(phone) ?? 0, new Date(event.createdAt).getTime()));
     }
 
     for (const checkout of checkouts) {
@@ -242,6 +257,7 @@ export async function runWhatsAppCheckoutRecovery(
         .filter((record): record is SentRecord => record.step !== null);
       const step = dueStep(checkout, sent, sendsByPhone.get(checkout.phone) ?? 0, now.getTime());
       if (!step) continue;
+      if (step === "first" && now.getTime() - (lastSentByPhone.get(checkout.phone) ?? 0) < PHONE_FIRST_MESSAGE_GAP_MS) continue;
       if (await isOptedOut(checkout.phone, sender.phoneNumberId)) { summary.skippedOptOut += 1; continue; }
       budget -= 1;
       const token = createCodRecoveryToken({ shopId: shop.id, checkoutId: checkout.checkoutId, items: checkout.items, now }, secret);
@@ -251,6 +267,7 @@ export async function runWhatsAppCheckoutRecovery(
         // Recorded only after Meta accepted the message; a failed send is retried next run.
         await db.auditEvent.create({ data: { actorType: "system", eventType: WHATSAPP_RECOVERY_EVENT, entityType: ENTITY_TYPE, entityId: checkout.checkoutId, payload: { shopId: shop.id, step, phone: checkout.phone, templateName: templates[step], messageId: result.messageId ?? null } } });
         sendsByPhone.set(checkout.phone, (sendsByPhone.get(checkout.phone) ?? 0) + 1);
+        lastSentByPhone.set(checkout.phone, now.getTime());
         if (step === "first") summary.sentFirst += 1; else summary.sentReminder += 1;
       } catch {
         summary.failed += 1;
