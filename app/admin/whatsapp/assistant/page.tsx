@@ -21,8 +21,8 @@ const MODES = [
 const KNOWLEDGE_PLACEHOLDER = `Write what your team would tell a customer. For example:
 - Delivery: 3–7 working days across India. Free shipping above ₹999.
 - COD available. Prepaid orders get 15% off automatically at checkout.
-- Exchanges: within 7 days of delivery for size issues, unused with tags. Start at megaska.com/pages/returns-exchange
-- Size help: our swimwear runs true to size; between sizes, pick the larger one. Size chart on every product page.
+- Exchanges: within 7 days of delivery for size issues, unused with tags. Start from your account → Orders.
+- Size help: our products run true to size; between sizes, pick the larger one. Size chart on every product page.
 - Support hours: Mon–Sat 10am–7pm IST.`;
 
 function back(shopDomain: string, extra: Record<string, string> = {}) {
