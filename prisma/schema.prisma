@@ -713,6 +713,11 @@ model MerchantWhatsAppAccount {
   recoveryReminderTemplate String  @default("checkout_recovery_reminder")
   exchangeEnabled          Boolean @default(false)
 
+  // AI assistant for inbound chats: OFF | DRAFT (suggests replies in the
+  // inbox) | AUTO (answers on its own, hands off to the team when unsure).
+  aiMode      String  @default("OFF")
+  aiKnowledge String? // merchant notes/FAQ the assistant may quote
+
   lastCheckedAt     DateTime?
   lastCheckStatus   String?
   lastCheckMessage  String?
@@ -737,6 +742,13 @@ model WhatsAppConversation {
   lastMessagePreview    String?
   lastInboundAt         DateTime?
   unreadCount           Int       @default(0)
+  // AI assistant state: a chat the assistant handed to the team, a pause
+  // after a team member replies, and the latest suggested reply (DRAFT mode).
+  needsHuman            Boolean   @default(false)
+  handoffReason         String?
+  aiPausedUntil         DateTime?
+  aiDraft               String?
+  aiDraftAt             DateTime?
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
@@ -759,6 +771,7 @@ model WhatsAppMessage {
   status         String? // OUTBOUND: sent | delivered | read | failed
   errorMessage   String?
   sentByEmail    String?
+  sentByAi       Boolean   @default(false)
   createdAt      DateTime  @default(now())
 
   conversation WhatsAppConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
