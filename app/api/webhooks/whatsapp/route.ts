@@ -2,6 +2,7 @@ import { after, NextRequest, NextResponse } from "next/server";
 import { checkMetaWebhookChallenge } from "../../../../services/whatsapp";
 import { consentKeyword, recordWhatsAppConsent } from "../../../../services/whatsapp/consent";
 import { applyStatusUpdates, recordInboundMessages, type WebhookValue } from "../../../../services/whatsapp/inbox";
+import { handleCodConfirmationReply, parseCodPayload } from "../../../../services/orders/whatsapp-cod-confirmation";
 import { runWhatsAppAssistant } from "../../../../services/whatsapp/assistant/run";
 import { recordOtpDeliveryStatuses } from "../../../../services/whatsapp/otp-delivery";
 import { verifyMetaSignature } from "../../../../services/whatsapp/webhook-signature";
@@ -84,13 +85,21 @@ export async function POST(request: NextRequest) {
         await recordWhatsAppConsent(message.from, businessNumberId, action, { source: "whatsapp_webhook", messageId: message.id || null, messageType: message.type || null });
         console.log("[WHATSAPP] consent_recorded", { action, messageId: message.id || null });
       }
+      // Confirm / Cancel taps on a COD confirmation are handled here, not by the AI assistant.
+      const codReplies = (change.value?.messages || []).filter((message) => message.id && message.from && parseCodPayload(message.button?.payload));
+      const codReplyIds = new Set(codReplies.map((message) => message.id));
       try {
         await recordInboundMessages(change.value as WebhookValue, {
           // AI assistant (Merchant WhatsApp → AI assistant), after Meta has its 200.
-          onStored: (stored) => after(() => runWhatsAppAssistant(stored)
+          onStored: (stored) => codReplyIds.has(stored.waMessageId) ? undefined : after(() => runWhatsAppAssistant(stored)
             .then((result) => console.info("[WHATSAPP ASSISTANT] run", { conversationId: stored.conversationId, ...result }))
             .catch((error) => console.error("[WHATSAPP ASSISTANT] run_failed", { conversationId: stored.conversationId, error: error instanceof Error ? error.message : String(error) }))),
         });
+        for (const message of codReplies) {
+          const result = await handleCodConfirmationReply({ businessPhoneNumberId: businessNumberId, fromPhone: String(message.from), payload: String(message.button?.payload) })
+            .catch((error) => ({ handled: true, outcome: `failed: ${error instanceof Error ? error.message.slice(0, 200) : String(error)}` }));
+          console.info("[COD CONFIRMATION] reply", { messageId: message.id, outcome: result.outcome });
+        }
         await applyStatusUpdates(change.value as WebhookValue);
         await recordOtpDeliveryStatuses(change.value as WebhookValue);
       } catch (error) {

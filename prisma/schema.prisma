@@ -712,6 +712,10 @@ model MerchantWhatsAppAccount {
   recoveryFirstTemplate    String  @default("checkout_recovery")
   recoveryReminderTemplate String  @default("checkout_recovery_reminder")
   exchangeEnabled          Boolean @default(false)
+  // COD order confirmation: a Utility template with Confirm / Cancel buttons
+  // after each cash-on-delivery order (services/orders/whatsapp-cod-confirmation.ts).
+  codConfirmEnabled        Boolean @default(false)
+  codConfirmTemplate       String  @default("cod_order_confirmation")
 
   // AI assistant for inbound chats: OFF | DRAFT (suggests replies in the
   // inbox) | AUTO (answers on its own, hands off to the team when unsure).
