@@ -1,26 +1,66 @@
 // Store facts for the WhatsApp assistant, read live from Shopify for each
 // question: the shop name and domain, its policies (when the app may read
-// them), catalog products matching the conversation, and the recent orders of
+// them), catalog products matching the conversation (ranked locally over the
+// cached catalog), and the recent orders of
 // the customer behind this WhatsApp number. Every part is best-effort: a
 // failed read just leaves that section empty, and the assistant then hands
 // the question to the team instead of guessing.
 
-import type { StoreContext } from "./policy.ts";
+import { catalogOverview, rankCatalog, type CatalogItem, type StoreContext } from "./policy.ts";
 
 type Graphql = <T>(query: string, variables?: Record<string, unknown>, options?: { shopDomain?: string | null }) => Promise<T>;
 
 const SHOP_QUERY = `query AssistantShop { shop { name primaryDomain { url } } }`;
 // Needs read_legal_policies; skipped quietly when the app was not granted it.
 const POLICIES_QUERY = `query AssistantPolicies { shop { shopPolicies { type title body } } }`;
-const PRODUCTS_QUERY = `query AssistantProducts($query: String!) {
-  products(first: 5, query: $query, sortKey: RELEVANCE) {
-    nodes {
-      title handle onlineStoreUrl description totalInventory
+// The whole active catalog (titles, types, tags, colour options), cached per
+// shop for 10 minutes and ranked locally: Shopify's product search matches
+// words too literally ("swimsuits" misses "swimsuit", colours live in options).
+const CATALOG_QUERY = `query AssistantCatalog($after: String) {
+  products(first: 100, after: $after, query: "status:active") {
+    nodes { id title productType tags options { name optionValues { name } } }
+    pageInfo { hasNextPage endCursor }
+  }
+}`;
+const PRODUCT_DETAILS_QUERY = `query AssistantProductDetails($ids: [ID!]!) {
+  nodes(ids: $ids) {
+    ... on Product {
+      id title handle onlineStoreUrl description
       priceRangeV2 { minVariantPrice { amount currencyCode } maxVariantPrice { amount currencyCode } }
-      variants(first: 30) { nodes { title availableForSale selectedOptions { name value } } }
+      variants(first: 40) { nodes { title availableForSale selectedOptions { name value } } }
     }
   }
 }`;
+const CATALOG_TTL_MS = 10 * 60 * 1000;
+const CATALOG_MAX_PAGES = 5;
+const catalogCache = new Map<string, { at: number; items: CatalogItem[] }>();
+
+type CatalogNode = { id?: string | null; title?: string | null; productType?: string | null; tags?: string[] | null; options?: Array<{ name?: string | null; optionValues?: Array<{ name?: string | null }> | null }> | null };
+
+export function catalogItemFromNode(node: CatalogNode): CatalogItem | null {
+  if (!node?.id || !node.title) return null;
+  const colors = (node.options ?? []).filter((option) => /colou?r/i.test(option?.name || "")).flatMap((option) => (option.optionValues ?? []).map((value) => value?.name || "")).filter(Boolean);
+  return { id: node.id, title: node.title, productType: node.productType || "", tags: node.tags ?? [], colors };
+}
+
+async function loadCatalog(shopDomain: string, graphql: Graphql, now = Date.now()): Promise<CatalogItem[]> {
+  const cached = catalogCache.get(shopDomain);
+  if (cached && now - cached.at < CATALOG_TTL_MS) return cached.items;
+  const items: CatalogItem[] = [];
+  let after: string | null = null;
+  for (let page = 0; page < CATALOG_MAX_PAGES; page += 1) {
+    const data: { products?: { nodes?: CatalogNode[]; pageInfo?: { hasNextPage?: boolean; endCursor?: string | null } } } = await graphql(CATALOG_QUERY, { after }, { shopDomain });
+    for (const node of data.products?.nodes ?? []) {
+      const item = catalogItemFromNode(node);
+      if (item) items.push(item);
+    }
+    if (!data.products?.pageInfo?.hasNextPage) break;
+    after = data.products.pageInfo.endCursor ?? null;
+  }
+  catalogCache.set(shopDomain, { at: now, items });
+  return items;
+}
+
 const ORDERS_QUERY = `query AssistantOrders($query: String!) {
   customers(first: 1, query: $query) {
     nodes {
@@ -93,14 +133,18 @@ export function productFromNode(node: ProductNode, storeUrl: string | null): Sto
   const min = rupees(node.priceRangeV2?.minVariantPrice);
   const max = rupees(node.priceRangeV2?.maxVariantPrice);
   const sizes: string[] = [];
+  const colors: string[] = [];
   for (const variant of node.variants?.nodes ?? []) {
     if (!variant?.availableForSale) continue;
-    const size = (variant.selectedOptions ?? []).find((option) => /size/i.test(option?.name || ""))?.value || variant.title || "";
+    const options = variant.selectedOptions ?? [];
+    const color = options.find((option) => /colou?r/i.test(option?.name || ""))?.value || "";
+    if (color && !colors.includes(color)) colors.push(color);
+    const size = options.find((option) => /size/i.test(option?.name || ""))?.value || (options.length ? "" : variant.title) || "";
     if (size && size !== "Default Title" && !sizes.includes(size)) sizes.push(size);
   }
   const inStock = (node.variants?.nodes ?? []).some((variant) => variant?.availableForSale);
   const url = node.onlineStoreUrl || (storeUrl && node.handle ? `${storeUrl.replace(/\/$/, "")}/products/${node.handle}` : null);
-  return { title: node.title, url, price: min && max && min !== max ? `${min}–${max}` : min, sizes: sizes.join(", "), inStock, description: stripHtml(node.description).slice(0, 300) };
+  return { title: node.title, url, price: min && max && min !== max ? `${min}–${max}` : min, sizes: sizes.join(", "), ...(colors.length ? { colors: colors.join(", ") } : {}), inStock, description: stripHtml(node.description).slice(0, 300) };
 }
 
 export function orderFromNode(node: OrderNode): StoreContext["orders"][number] | null {
@@ -122,11 +166,6 @@ export function orderFromNode(node: OrderNode): StoreContext["orders"][number] |
   };
 }
 
-function productSearchQuery(terms: string[]) {
-  const words = terms.map((term) => term.replace(/[^a-z0-9-]/gi, "")).filter(Boolean);
-  return words.length ? `status:active AND (${words.join(" OR ")})` : "status:active";
-}
-
 export async function loadStoreContext(
   input: { shopDomain: string; contactPhone: string; searchTerms: string[]; merchantNotes: string | null },
   graphql: Graphql = defaultGraphql,
@@ -145,7 +184,12 @@ export async function loadStoreContext(
       const data = await graphql<{ shop?: { shopPolicies?: Array<{ title?: string; body?: string }> } }>(POLICIES_QUERY, {}, options);
       return (data.shop?.shopPolicies ?? []).map((policy) => ({ title: policy.title || "Policy", body: stripHtml(policy.body) })).filter((policy) => policy.body);
     }, [] as StoreContext["policies"]),
-    safe(async () => (await graphql<{ products?: { nodes?: ProductNode[] } }>(PRODUCTS_QUERY, { query: productSearchQuery(input.searchTerms) }, options)).products?.nodes ?? [], [] as ProductNode[]),
+    safe(async () => {
+      const catalog = await loadCatalog(input.shopDomain, graphql);
+      const ids = rankCatalog(catalog, input.searchTerms);
+      const details = ids.length ? (await graphql<{ nodes?: Array<ProductNode & { id?: string } | null> }>(PRODUCT_DETAILS_QUERY, { ids }, options)).nodes ?? [] : [];
+      return { overview: catalogOverview(catalog), nodes: ids.map((id) => details.find((node) => node?.id === id)).filter((node): node is ProductNode => Boolean(node)) };
+    }, { overview: [] as string[], nodes: [] as ProductNode[] }),
     safe(async () => {
       const data = await graphql<{ customers?: { nodes?: Array<{ orders?: { nodes?: OrderNode[] } }> } }>(ORDERS_QUERY, { query: `phone:+${input.contactPhone.replace(/\D/g, "")}` }, options);
       return data.customers?.nodes?.[0]?.orders?.nodes ?? [];
@@ -158,7 +202,8 @@ export async function loadStoreContext(
     storeUrl,
     policies,
     merchantNotes: input.merchantNotes,
-    products: products.map((node) => productFromNode(node, storeUrl)).filter((product): product is StoreContext["products"][number] => Boolean(product)),
+    products: products.nodes.map((node) => productFromNode(node, storeUrl)).filter((product): product is StoreContext["products"][number] => Boolean(product)),
+    catalogOverview: products.overview,
     orders: orders.map(orderFromNode).filter((order): order is StoreContext["orders"][number] => Boolean(order)),
   };
 }

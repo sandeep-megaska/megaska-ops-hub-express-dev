@@ -72,9 +72,18 @@ export type AssistantResult = {
 };
 
 // Validates the model's JSON. Anything malformed becomes a handoff, never a send.
+// WhatsApp shows markdown links and **bold** literally; rewrite them.
+export function toWhatsAppText(text: string) {
+  return text
+    .replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g, (_, label: string, url: string) => (label.trim() === url ? url : `${label.trim()}: ${url}`))
+    .replace(/\*\*([^*\n]+)\*\*/g, "*$1*")
+    .replace(/^#{1,6}\s+/gm, "")
+    .trim();
+}
+
 export function parseAssistantResult(raw: Record<string, unknown> | null): AssistantResult | null {
   if (!raw || typeof raw !== "object") return null;
-  const reply = typeof raw.reply === "string" ? raw.reply.trim().slice(0, MAX_REPLY_CHARS) : "";
+  const reply = typeof raw.reply === "string" ? toWhatsAppText(raw.reply).slice(0, MAX_REPLY_CHARS) : "";
   const confidence = Number(raw.confidence);
   return {
     reply,
@@ -117,7 +126,10 @@ export type StoreContext = {
   storeUrl: string | null;
   policies: Array<{ title: string; body: string }>;
   merchantNotes: string | null;
-  products: Array<{ title: string; url: string | null; price: string; sizes: string; inStock: boolean; description: string }>;
+  products: Array<{ title: string; url: string | null; price: string; sizes: string; colors?: string; inStock: boolean; description: string }>;
+  // Every product type in the catalog with its count, so "do you have X?" is
+  // never answered "no" just because the search missed it.
+  catalogOverview?: string[];
   orders: Array<{ name: string; placedOn: string; status: string; payment: string; items: string; tracking: string | null; total: string }>;
 };
 
@@ -134,7 +146,9 @@ export function buildSystemPrompt(storeName: string) {
     "- Never ask for or accept OTPs, passwords, card numbers, CVV or UPI PINs.",
     "- Complaints, damaged/wrong/missing items, refunds, return or exchange requests, cancellations, payment taken but no order, address changes, delivery problems, or an upset customer: reply with one or two short, warm lines saying the team will help shortly (you may quote the relevant policy fact), and set needs_human to true.",
     "- Orders: only discuss orders listed under ORDERS; they belong to this WhatsApp number. Give status and the tracking link if present. If ORDERS is empty and they ask about an order, ask for the order number and set needs_human to true.",
-    "- Products: recommend at most 3, only from PRODUCTS, with their link and price. If a size is out of stock say so plainly.",
+    "- Products: recommend at most 3, only from PRODUCTS, with their link and price. If a size or colour is out of stock say so plainly.",
+    "- Never say the store does not have or sell something unless CATALOG OVERVIEW clearly has no such kind of product. If PRODUCTS has no good match, say you will check and set needs_human to true.",
+    "- Links: write the plain URL on its own (WhatsApp does not support [text](url) markdown).",
     "- Sizing: use size information in the facts; if it is not there, ask their usual size or hand over to the team.",
     "",
     "Style: reply in the customer's language and script (English, Hindi, Hinglish, Malayalam, Tamil, …). Warm, plain and short: at most 5 short lines. WhatsApp formatting only (*bold* sparingly), at most one emoji. No greeting block or signature on follow-up messages.",
@@ -158,9 +172,10 @@ export function buildUserPrompt(context: StoreContext, chat: ChatLine[]) {
   if (context.merchantNotes?.trim()) sections.push(`MERCHANT NOTES:\n${clip(context.merchantNotes, MAX_KNOWLEDGE_CHARS)}`);
   sections.push(
     context.products.length
-      ? `PRODUCTS (matching the conversation):\n${context.products.map((product) => `- ${product.title} | ${product.price} | ${product.inStock ? "in stock" : "out of stock"}${product.sizes ? ` | sizes available: ${product.sizes}` : ""}${product.url ? ` | ${product.url}` : ""}${product.description ? `\n  ${clip(product.description, 300)}` : ""}`).join("\n")}`
-      : "PRODUCTS: none matched the conversation.",
+      ? `PRODUCTS (best matches for the conversation):\n${context.products.map((product) => `- ${product.title} | ${product.price} | ${product.inStock ? "in stock" : "out of stock"}${product.colors ? ` | colours available: ${product.colors}` : ""}${product.sizes ? ` | sizes available: ${product.sizes}` : ""}${product.url ? ` | ${product.url}` : ""}${product.description ? `\n  ${clip(product.description, 300)}` : ""}`).join("\n")}`
+      : "PRODUCTS: no product matched the customer's words.",
   );
+  if (context.catalogOverview?.length) sections.push(`CATALOG OVERVIEW (product types in the store):\n${context.catalogOverview.join(", ")}`);
   sections.push(
     context.orders.length
       ? `ORDERS (this customer's recent orders):\n${context.orders.map((order) => `- ${order.name} placed ${order.placedOn} | ${order.status} | payment: ${order.payment} | ${order.total} | items: ${order.items}${order.tracking ? ` | tracking: ${order.tracking}` : ""}`).join("\n")}`
@@ -171,17 +186,95 @@ export function buildUserPrompt(context: StoreContext, chat: ChatLine[]) {
   return sections.join("\n\n");
 }
 
-const STOPWORDS = new Set("the and for you your have has with this that what when where which from are was were can could would will please pls plz want need any some about there here hai hain kya aur kaise kitna kitne mujhe chahiye price cost size sizes available stock order delivery hello thanks thank okay yes".split(" "));
+const STOPWORDS = new Set("the and for you your have has with this that what when where which from are was were can could would will please pls plz want need any some about there here hai hain kya aur kaise kitna kitne mujhe chahiye price cost size sizes available stock order delivery hello thanks thank okay yes options option show tell more other something looking also only get got does did dont don".split(" "));
+
+// "swimsuits" → "swimsuit", "dresses" → "dress", "bikinis" → "bikini".
+export function stemWord(word: string) {
+  if (word.length > 5 && word.endsWith("ies")) return `${word.slice(0, -3)}y`;
+  if (word.length > 4 && /(ss|sh|ch|x)es$/.test(word)) return word.slice(0, -2);
+  if (word.length > 3 && word.endsWith("s") && !word.endsWith("ss")) return word.slice(0, -1);
+  return word;
+}
+
+// Shopper words → words stores use in titles and tags (apparel-wide, not store-specific).
+const SYNONYMS: Record<string, string[]> = {
+  cover: ["coverage", "modest", "burkini", "full"],
+  covered: ["coverage", "modest", "burkini"],
+  coverage: ["modest", "burkini"],
+  modest: ["coverage", "burkini"],
+  burkini: ["modest", "coverage"],
+  burqini: ["burkini", "modest"],
+  swimsuit: ["swimwear", "swimming", "swim"],
+  swimwear: ["swimsuit", "swim"],
+  costume: ["swimming", "swimsuit"],
+  swimming: ["swimsuit", "swimwear"],
+  dress: ["swimdress", "frock"],
+  swimdress: ["dress", "frock"],
+  frock: ["dress", "swimdress"],
+  legging: ["leggings", "pants"],
+  pant: ["pants", "leggings"],
+  bra: ["bra"],
+  bikini: ["bikini"],
+  kid: ["kids", "girls"],
+  girl: ["girls", "kids"],
+  navy: ["navy", "blue"],
+  maroon: ["wine"],
+  wine: ["maroon"],
+};
 
 // Words from the customer's recent messages used to search the catalog.
-export function productSearchTerms(chat: ChatLine[], max = 4): string[] {
+export function productSearchTerms(chat: ChatLine[], max = 8): string[] {
   const text = chat.filter((line) => line.from === "customer").slice(-3).map((line) => line.text).join(" ").toLowerCase();
   const words = text.match(/[a-z][a-z-]{2,}/g) ?? [];
   const terms: string[] = [];
-  for (const word of words) {
+  for (const raw of words) {
+    if (STOPWORDS.has(raw)) continue;
+    const word = stemWord(raw);
     if (STOPWORDS.has(word) || terms.includes(word)) continue;
     terms.push(word);
     if (terms.length >= max) break;
   }
   return terms;
+}
+
+export type CatalogItem = { id: string; title: string; productType: string; tags: string[]; colors: string[] };
+
+function words(text: string) {
+  return (text.toLowerCase().match(/[a-z0-9]+/g) ?? []).map(stemWord);
+}
+
+// Ranks catalog products by how many of the customer's words (and their
+// synonyms) appear in the title, type, tags and colour options. Title and
+// colour hits count double. Returns ids, best first.
+export function rankCatalog(items: CatalogItem[], terms: string[], max = 6): string[] {
+  if (!terms.length) return [];
+  const scored = items.map((item) => {
+    const title = new Set(words(item.title));
+    const colors = new Set(item.colors.flatMap(words));
+    const rest = new Set([...words(item.productType), ...item.tags.flatMap(words)]);
+    let score = 0;
+    let matchedTerms = 0;
+    for (const term of terms) {
+      const variants = [term, ...(SYNONYMS[term] ?? []).map(stemWord)];
+      let best = 0;
+      for (const variant of variants) {
+        const weight = variant === term ? 1 : 0.6;
+        if (title.has(variant) || colors.has(variant)) best = Math.max(best, 2 * weight);
+        else if (rest.has(variant)) best = Math.max(best, 1 * weight);
+      }
+      if (best > 0) matchedTerms += 1;
+      score += best;
+    }
+    return { id: item.id, score: score + matchedTerms };
+  });
+  return scored.filter((entry) => entry.score > 0).sort((a, b) => b.score - a.score).slice(0, max).map((entry) => entry.id);
+}
+
+export function catalogOverview(items: Array<Pick<CatalogItem, "productType">>): string[] {
+  const counts = new Map<string, number>();
+  for (const item of items) {
+    const type = item.productType.trim() || "Other";
+    counts.set(type, (counts.get(type) ?? 0) + 1);
+  }
+  return [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([type, count]) => `${type} (${count})`);
 }
