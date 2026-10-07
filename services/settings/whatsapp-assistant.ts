@@ -3,7 +3,7 @@
 import { prisma } from "../db/prisma.ts";
 import { isAiConfigured } from "../ai/openai-client.ts";
 import { askAssistant, assistantModel } from "../whatsapp/assistant/run.ts";
-import { MAX_KNOWLEDGE_CHARS, normalizeAssistantMode, type AssistantMode, type AssistantResult } from "../whatsapp/assistant/policy.ts";
+import { describeSeen, MAX_KNOWLEDGE_CHARS, normalizeAssistantMode, productSearchTerms, type AssistantMode, type AssistantPreviewSeen, type AssistantResult } from "../whatsapp/assistant/policy.ts";
 
 export class WhatsAppAssistantSettingsError extends Error {
   constructor(message: string) { super(message); this.name = "WhatsAppAssistantSettingsError"; }
@@ -53,16 +53,17 @@ export async function saveWhatsAppAssistant(shopId: string, input: { mode: unkno
 
 // Answers a sample question with the current notes and live store data, as
 // the assistant would. Sends nothing to anyone.
-export async function previewWhatsAppAssistant(input: { shopDomain: string; knowledge: string | null; question: string; testPhone?: string | null }): Promise<AssistantResult | null> {
+export async function previewWhatsAppAssistant(input: { shopDomain: string; knowledge: string | null; question: string; testPhone?: string | null }): Promise<{ result: AssistantResult | null; seen: AssistantPreviewSeen }> {
   const question = String(input.question || "").trim().slice(0, 500);
   if (!question) throw new WhatsAppAssistantSettingsError("Type a question to try.");
   if (!isAiConfigured()) throw new WhatsAppAssistantSettingsError("AI is not configured on the server (OPENAI_API_KEY).");
   const phone = String(input.testPhone || "").replace(/\D/g, "");
-  const { result } = await askAssistant({
+  const chat = [{ from: "customer" as const, text: question }];
+  const { result, context } = await askAssistant({
     shopDomain: input.shopDomain,
     contactPhone: phone.length === 10 ? `91${phone}` : phone || "0",
     merchantNotes: input.knowledge,
-    chat: [{ from: "customer", text: question }],
+    chat,
   });
-  return result;
+  return { result, seen: describeSeen(context, productSearchTerms(chat)) };
 }

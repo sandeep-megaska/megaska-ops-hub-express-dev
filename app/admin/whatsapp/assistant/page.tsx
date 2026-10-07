@@ -53,9 +53,10 @@ async function previewAction(shopDomain: string, formData: FormData) {
   let target: string;
   try {
     const settings = await getWhatsAppAssistantAdmin(resolved.shop.id);
-    const result = await previewWhatsAppAssistant({ shopDomain: resolved.shop.shopDomain, knowledge: settings.knowledge || null, question, testPhone });
+    const { result, seen } = await previewWhatsAppAssistant({ shopDomain: resolved.shop.shopDomain, knowledge: settings.knowledge || null, question, testPhone });
+    const seenParams = { sTerms: seen.searchTerms, sProducts: seen.products.slice(0, 600), sCatalog: seen.catalog.slice(0, 400), sOrders: seen.orders.slice(0, 200), sProblems: seen.problems.slice(0, 300) };
     target = result
-      ? back(shopDomain, { q: question, tp: testPhone, a: result.reply || "(no reply)", intent: result.intent, conf: result.confidence.toFixed(2), human: result.needsHuman ? "1" : "0", why: result.handoffReason || "" }) + "#try"
+      ? back(shopDomain, { q: question, tp: testPhone, a: result.reply || "(no reply)", intent: result.intent, conf: result.confidence.toFixed(2), human: result.needsHuman ? "1" : "0", why: result.handoffReason || "", ...seenParams }) + "#try"
       : back(shopDomain, { q: question, error: "The AI did not return an answer. Try again." }) + "#try";
   } catch (error) {
     target = back(shopDomain, { q: question, error: error instanceof Error ? error.message : "Preview failed." }) + "#try";
@@ -136,6 +137,16 @@ export default async function WhatsAppAssistantPage({ searchParams }: { searchPa
               Topic: {value("intent") || "—"} · confidence {value("conf") || "—"} ·{" "}
               {handedOver ? <span className="mk-badge mk-badge-warning">would hand over to your team{value("why") ? `: ${value("why")}` : ""}</span> : <span className="mk-badge mk-badge-success">would answer</span>}
             </div>
+            <details className="mk-help">
+              <summary>What the assistant looked at</summary>
+              <div style={{ display: "grid", gap: 4, marginTop: 6 }}>
+                <div><strong>Searched for:</strong> {value("sTerms") || "—"}</div>
+                <div><strong>Matching products:</strong> {value("sProducts") || "—"}</div>
+                <div><strong>Catalog read:</strong> {value("sCatalog") || "—"}</div>
+                <div><strong>Orders for the test mobile:</strong> {value("sOrders") || "—"}</div>
+                {value("sProblems") ? <div style={{ color: "#b91c1c" }}><strong>Could not read:</strong> {value("sProblems")}</div> : null}
+              </div>
+            </details>
           </div>
         ) : null}
       </form>

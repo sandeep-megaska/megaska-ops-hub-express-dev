@@ -171,26 +171,29 @@ export async function loadStoreContext(
   graphql: Graphql = defaultGraphql,
 ): Promise<StoreContext> {
   const options = { shopDomain: input.shopDomain };
-  const safe = async <T>(run: () => Promise<T>, fallback: T): Promise<T> => {
+  const readErrors: string[] = [];
+  const safe = async <T>(section: string, run: () => Promise<T>, fallback: T): Promise<T> => {
     try { return await run(); } catch (error) {
-      console.warn("[WHATSAPP ASSISTANT] store_context_read_failed", { shopDomain: input.shopDomain, error: error instanceof Error ? error.message.slice(0, 200) : String(error) });
+      const message = error instanceof Error ? error.message.slice(0, 200) : String(error);
+      console.warn("[WHATSAPP ASSISTANT] store_context_read_failed", { shopDomain: input.shopDomain, section, error: message });
+      readErrors.push(`${section}: ${message}`);
       return fallback;
     }
   };
 
   const [shop, policies, products, orders] = await Promise.all([
-    safe(async () => (await graphql<{ shop?: { name?: string; primaryDomain?: { url?: string } } }>(SHOP_QUERY, {}, options)).shop ?? null, null),
-    safe(async () => {
+    safe("shop", async () => (await graphql<{ shop?: { name?: string; primaryDomain?: { url?: string } } }>(SHOP_QUERY, {}, options)).shop ?? null, null),
+    safe("policies", async () => {
       const data = await graphql<{ shop?: { shopPolicies?: Array<{ title?: string; body?: string }> } }>(POLICIES_QUERY, {}, options);
       return (data.shop?.shopPolicies ?? []).map((policy) => ({ title: policy.title || "Policy", body: stripHtml(policy.body) })).filter((policy) => policy.body);
     }, [] as StoreContext["policies"]),
-    safe(async () => {
+    safe("products", async () => {
       const catalog = await loadCatalog(input.shopDomain, graphql);
       const ids = rankCatalog(catalog, input.searchTerms);
       const details = ids.length ? (await graphql<{ nodes?: Array<ProductNode & { id?: string } | null> }>(PRODUCT_DETAILS_QUERY, { ids }, options)).nodes ?? [] : [];
       return { overview: catalogOverview(catalog), nodes: ids.map((id) => details.find((node) => node?.id === id)).filter((node): node is ProductNode => Boolean(node)) };
     }, { overview: [] as string[], nodes: [] as ProductNode[] }),
-    safe(async () => {
+    safe("orders", async () => {
       const data = await graphql<{ customers?: { nodes?: Array<{ orders?: { nodes?: OrderNode[] } }> } }>(ORDERS_QUERY, { query: `phone:+${input.contactPhone.replace(/\D/g, "")}` }, options);
       return data.customers?.nodes?.[0]?.orders?.nodes ?? [];
     }, [] as OrderNode[]),
@@ -204,6 +207,7 @@ export async function loadStoreContext(
     merchantNotes: input.merchantNotes,
     products: products.nodes.map((node) => productFromNode(node, storeUrl)).filter((product): product is StoreContext["products"][number] => Boolean(product)),
     catalogOverview: products.overview,
+    readErrors,
     orders: orders.map(orderFromNode).filter((order): order is StoreContext["orders"][number] => Boolean(order)),
   };
 }

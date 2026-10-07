@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { catalogOverview, productSearchTerms, rankCatalog, stemWord, toWhatsAppText, type CatalogItem } from "./policy.ts";
+import { catalogOverview, describeSeen, productSearchTerms, rankCatalog, stemWord, toWhatsAppText, type CatalogItem } from "./policy.ts";
 import { catalogItemFromNode, productFromNode } from "./store-context.ts";
 
 // A slice of a real swimwear catalog (titles, types, tags and colour options as in Shopify).
@@ -55,4 +55,11 @@ test("colour options and in-stock colours are read from Shopify", () => {
   ] } }, "https://megaska.com");
   assert.equal(product?.colors, "Black");
   assert.equal(product?.sizes, "M");
+});
+
+test("admin preview summary shows what was searched, matched and read", () => {
+  const seen = describeSeen({ storeName: "S", storeUrl: null, policies: [], merchantNotes: null, products: [{ title: "Burkini", url: null, price: "₹1", sizes: "M", colors: "Black", inStock: true, description: "" }], orders: [], catalogOverview: ["Swimwears (4)", "Bikini Sets (1)"], readErrors: ["policies: Access denied"] }, ["black", "cover"]);
+  assert.equal(seen.catalog, "5 products: Swimwears (4), Bikini Sets (1)");
+  assert.equal(seen.products, "Burkini [Black] (M)");
+  assert.match(seen.problems, /no permission/);
 });
