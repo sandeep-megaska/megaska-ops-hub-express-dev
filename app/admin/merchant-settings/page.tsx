@@ -206,6 +206,7 @@ async function whatsAppFormAction(
       exchangeEnabled: formData.get("waExchangeEnabled"),
       codConfirmEnabled: formData.get("waCodConfirmEnabled"),
       codConfirmTemplate: formData.get("waCodConfirmTemplate"),
+      shippingUpdatesEnabled: formData.get("waShippingUpdatesEnabled"),
     });
     if (formData.get("waIntent") === "check") {
       const result = await checkMerchantWhatsApp(shopId);
@@ -1358,6 +1359,7 @@ export default async function MerchantSettingsPage({
           </div>
           <Check label="Exchange updates" name="waExchangeEnabled" defaultChecked={whatsApp.exchangeEnabled} help="Send exchange status updates (exchange_approved, exchange_pickup_scheduled …) from your number." />
           <Check label="COD order confirmation" name="waCodConfirmEnabled" defaultChecked={whatsApp.codConfirmEnabled} help="A few minutes after each cash-on-delivery order, ask the customer to Confirm or Cancel. Confirmed orders are tagged cod-confirmed; cancel requests are tagged cod-cancel-requested and sent to your inbox; no reply in 12 hours is tagged cod-no-response so you can call before shipping." />
+          <Check label="Shipping updates" name="waShippingUpdatesEnabled" defaultChecked={whatsApp.shippingUpdatesEnabled} help="From your courier tracking in Shopify: shipped (with tracking link), out for delivery (with the COD amount to keep ready), delivery attempt failed (customer can reply to arrange another attempt) and delivered. Sent 8 am–9 pm IST only. Needs Utility templates order_shipped, order_out_for_delivery, order_delivery_attempt_failed and order_delivered." />
           <Field label="COD confirmation template" name="waCodConfirmTemplate" defaultValue={whatsApp.codConfirmTemplate} help="Utility template. Body: {{1}} customer first name, {{2}} order number, {{3}} order total. Two Quick reply buttons, in this order: Confirm order, Cancel order." />
         </div>
         <div className="flex flex-wrap items-center justify-end gap-3">
