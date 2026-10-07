@@ -21,7 +21,7 @@ export type WhatsAppSender = {
   phoneNumberId: string;
   languageCode: string;
   // Template names for the purpose being sent.
-  templates: { otp?: string; recoveryFirst?: string; recoveryReminder?: string };
+  templates: { otp?: string; recoveryFirst?: string; recoveryReminder?: string; codConfirm?: string };
 };
 
 export type MerchantWhatsAppAccountRow = {
@@ -39,6 +39,8 @@ export type MerchantWhatsAppAccountRow = {
   recoveryFirstTemplate: string;
   recoveryReminderTemplate: string;
   exchangeEnabled: boolean;
+  codConfirmEnabled?: boolean;
+  codConfirmTemplate?: string;
   aiMode?: string | null;
   aiKnowledge?: string | null;
   lastCheckedAt?: Date | null;
@@ -78,6 +80,16 @@ export async function listRecoveryWhatsAppAccounts(db?: AccountDb): Promise<Merc
   }
 }
 
+// Shops whose own number sends COD order confirmations.
+export async function listCodConfirmationAccounts(db?: AccountDb): Promise<MerchantWhatsAppAccountRow[]> {
+  try {
+    return await (db ?? (await defaultDb())).merchantWhatsAppAccount.findMany({ where: { enabled: true, codConfirmEnabled: true } });
+  } catch (error) {
+    console.warn("[WHATSAPP SENDER] cod_confirmation_accounts_lookup_failed", { error: error instanceof Error ? error.message : String(error) });
+    return [];
+  }
+}
+
 export function platformOtpSender(env: Record<string, string | undefined> = process.env): WhatsAppSender | null {
   const accessToken = String(env.WHATSAPP_OTP_ACCESS_TOKEN || "").trim();
   const phoneNumberId = String(env.WHATSAPP_OTP_PHONE_NUMBER_ID || "").trim();
@@ -101,7 +113,7 @@ export function merchantSender(account: MerchantWhatsAppAccountRow | null, decry
     accessToken,
     phoneNumberId: account.phoneNumberId,
     languageCode: account.templateLanguage || "en",
-    templates: { otp: account.otpTemplateName, recoveryFirst: account.recoveryFirstTemplate, recoveryReminder: account.recoveryReminderTemplate },
+    templates: { otp: account.otpTemplateName, recoveryFirst: account.recoveryFirstTemplate, recoveryReminder: account.recoveryReminderTemplate, codConfirm: account.codConfirmTemplate || "cod_order_confirmation" },
   };
 }
 
@@ -143,6 +155,8 @@ export type MerchantWhatsAppAdminView = {
   recoveryFirstTemplate: string;
   recoveryReminderTemplate: string;
   exchangeEnabled: boolean;
+  codConfirmEnabled: boolean;
+  codConfirmTemplate: string;
   lastCheckedAt: string | null;
   lastCheckStatus: string | null;
   lastCheckMessage: string | null;
@@ -164,6 +178,8 @@ export function toAdminView(account: MerchantWhatsAppAccountRow | null, env: Rec
     recoveryFirstTemplate: account?.recoveryFirstTemplate ?? "checkout_recovery",
     recoveryReminderTemplate: account?.recoveryReminderTemplate ?? "checkout_recovery_reminder",
     exchangeEnabled: account?.exchangeEnabled ?? false,
+    codConfirmEnabled: account?.codConfirmEnabled ?? false,
+    codConfirmTemplate: account?.codConfirmTemplate ?? "cod_order_confirmation",
     lastCheckedAt: account?.lastCheckedAt ? new Date(account.lastCheckedAt).toISOString() : null,
     lastCheckStatus: account?.lastCheckStatus ?? null,
     lastCheckMessage: account?.lastCheckMessage ?? null,
@@ -196,6 +212,7 @@ export function buildMerchantWhatsAppUpdate(
     otpTemplateName: text(input.otpTemplateName) || "loopd2c_login_otp",
     recoveryFirstTemplate: text(input.recoveryFirstTemplate) || "checkout_recovery",
     recoveryReminderTemplate: text(input.recoveryReminderTemplate) || "checkout_recovery_reminder",
+    codConfirmTemplate: text(input.codConfirmTemplate) || "cod_order_confirmation",
   };
 
   if (!phoneNumberId) throw new MerchantWhatsAppValidationError("Phone number ID is required.");
@@ -226,6 +243,7 @@ export function buildMerchantWhatsAppUpdate(
     otpEnabled: flag(input.otpEnabled),
     recoveryEnabled: flag(input.recoveryEnabled),
     exchangeEnabled: flag(input.exchangeEnabled),
+    codConfirmEnabled: flag(input.codConfirmEnabled),
     ...templates,
   };
 }

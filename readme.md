@@ -145,6 +145,22 @@ sent. The link rebuilds the bag and opens the drawer with Pay online and COD.
 `WHATSAPP_INTENT_RECOVERY_ENABLED` — legacy recovery for LoopD2C express-checkout
 intents (in-drawer checkout modal); off unless `true`, own number only.
 
+### COD order confirmation
+
+`services/orders/whatsapp-cod-confirmation.ts`, switched on per shop
+(Merchant Settings → WhatsApp → COD order confirmation). The 15-minute
+checkout-recovery cron asks each new cash-on-delivery order (3 minutes to 6
+hours old, unshipped, not cancelled) once, from the shop's own number, with a
+**Utility** template (default `cod_order_confirmation`): body `{{1}}` first
+name, `{{2}}` order number, `{{3}}` total; two Quick reply buttons, Confirm
+order then Cancel order (payloads `codc:confirm|cancel:<order id>`). The
+webhook handles the taps (only from a phone on that order): Confirm → tag
+`cod-confirmed` + thank-you; Cancel → tag `cod-cancel-requested`, chat flagged
+for the team, email; nothing is cancelled automatically. No reply in 12 hours →
+tag `cod-no-response` (no second message). Events: AuditEvent
+`WHATSAPP_COD_CONFIRMATION_SENT` / `_RESPONSE` on the order. Admin:
+`/admin/whatsapp/cod`.
+
 ### AI assistant (inbound chats)
 
 LoopD2C → WhatsApp Inbox → **AI assistant** (`/admin/whatsapp/assistant`).

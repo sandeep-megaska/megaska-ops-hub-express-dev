@@ -48,6 +48,7 @@ export default async function WhatsAppInboxPage({ searchParams }: { searchParams
           <Link className="mk-btn" href={`/admin/whatsapp/assistant?${shopParam}`}>
             AI assistant: {aiMode === "AUTO" ? "answering" : aiMode === "DRAFT" ? "suggesting" : "off"}
           </Link>
+          <Link className="mk-btn" href={`/admin/whatsapp/cod?${shopParam}`}>COD confirmations</Link>
           <Link className="mk-btn" href={`/admin/merchant-settings?${shopParam}#whatsapp`}>WhatsApp settings</Link>
         </div>
       </div>

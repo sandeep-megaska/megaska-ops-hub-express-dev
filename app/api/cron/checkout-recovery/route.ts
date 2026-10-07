@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { dispatchManualCheckoutRecovery } from "../../../../services/whatsapp/manual-recovery-dispatch";
 import { runPrepaidCodRecovery } from "../../../../services/checkout-recovery/prepaid-cod-recovery.ts";
 import { runWhatsAppCheckoutRecovery } from "../../../../services/checkout-recovery/whatsapp-checkout-recovery.ts";
+import { runWhatsAppCodConfirmation } from "../../../../services/orders/whatsapp-cod-confirmation.ts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -51,10 +52,19 @@ async function run(req: NextRequest) {
     whatsapp = { error: "WhatsApp recovery failed." };
     console.error("[CHECKOUT RECOVERY] whatsapp_recovery_failed", { error: error instanceof Error ? error.message : String(error) });
   }
-  if (dispatchFailed) {
-    return NextResponse.json({ ok: false, error: "Recovery dispatch failed.", prepaidCod, whatsapp }, { status: 500 });
+  // COD orders: ask the customer to confirm or cancel on WhatsApp; tag silent ones after 12 hours.
+  let codConfirmation: Awaited<ReturnType<typeof runWhatsAppCodConfirmation>> | { error: string };
+  try {
+    codConfirmation = await runWhatsAppCodConfirmation({});
+    console.info("[CHECKOUT RECOVERY] cod_confirmation_completed", codConfirmation);
+  } catch (error) {
+    codConfirmation = { error: "COD confirmation failed." };
+    console.error("[CHECKOUT RECOVERY] cod_confirmation_failed", { error: error instanceof Error ? error.message : String(error) });
   }
-  return NextResponse.json({ ok: true, ...summary, prepaidCod, whatsapp }, { headers: { "Cache-Control": "no-store" } });
+  if (dispatchFailed) {
+    return NextResponse.json({ ok: false, error: "Recovery dispatch failed.", prepaidCod, whatsapp, codConfirmation }, { status: 500 });
+  }
+  return NextResponse.json({ ok: true, ...summary, prepaidCod, whatsapp, codConfirmation }, { headers: { "Cache-Control": "no-store" } });
 }
 
 export const GET = run;
