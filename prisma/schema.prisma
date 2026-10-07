@@ -716,6 +716,9 @@ model MerchantWhatsAppAccount {
   // after each cash-on-delivery order (services/orders/whatsapp-cod-confirmation.ts).
   codConfirmEnabled        Boolean @default(false)
   codConfirmTemplate       String  @default("cod_order_confirmation")
+  // Shipped / out for delivery / delivery attempt failed / delivered updates
+  // from Shopify fulfillment tracking (services/orders/whatsapp-shipping-updates.ts).
+  shippingUpdatesEnabled   Boolean @default(false)
 
   // AI assistant for inbound chats: OFF | DRAFT (suggests replies in the
   // inbox) | AUTO (answers on its own, hands off to the team when unsure).

@@ -41,6 +41,7 @@ export type MerchantWhatsAppAccountRow = {
   exchangeEnabled: boolean;
   codConfirmEnabled?: boolean;
   codConfirmTemplate?: string;
+  shippingUpdatesEnabled?: boolean;
   aiMode?: string | null;
   aiKnowledge?: string | null;
   lastCheckedAt?: Date | null;
@@ -76,6 +77,16 @@ export async function listRecoveryWhatsAppAccounts(db?: AccountDb): Promise<Merc
     return await (db ?? (await defaultDb())).merchantWhatsAppAccount.findMany({ where: { enabled: true, recoveryEnabled: true } });
   } catch (error) {
     console.warn("[WHATSAPP SENDER] recovery_accounts_lookup_failed", { error: error instanceof Error ? error.message : String(error) });
+    return [];
+  }
+}
+
+// Shops whose own number sends shipped / delivered updates.
+export async function listShippingUpdateAccounts(db?: AccountDb): Promise<MerchantWhatsAppAccountRow[]> {
+  try {
+    return await (db ?? (await defaultDb())).merchantWhatsAppAccount.findMany({ where: { enabled: true, shippingUpdatesEnabled: true } });
+  } catch (error) {
+    console.warn("[WHATSAPP SENDER] shipping_update_accounts_lookup_failed", { error: error instanceof Error ? error.message : String(error) });
     return [];
   }
 }
@@ -157,6 +168,7 @@ export type MerchantWhatsAppAdminView = {
   exchangeEnabled: boolean;
   codConfirmEnabled: boolean;
   codConfirmTemplate: string;
+  shippingUpdatesEnabled: boolean;
   lastCheckedAt: string | null;
   lastCheckStatus: string | null;
   lastCheckMessage: string | null;
@@ -180,6 +192,7 @@ export function toAdminView(account: MerchantWhatsAppAccountRow | null, env: Rec
     exchangeEnabled: account?.exchangeEnabled ?? false,
     codConfirmEnabled: account?.codConfirmEnabled ?? false,
     codConfirmTemplate: account?.codConfirmTemplate ?? "cod_order_confirmation",
+    shippingUpdatesEnabled: account?.shippingUpdatesEnabled ?? false,
     lastCheckedAt: account?.lastCheckedAt ? new Date(account.lastCheckedAt).toISOString() : null,
     lastCheckStatus: account?.lastCheckStatus ?? null,
     lastCheckMessage: account?.lastCheckMessage ?? null,
@@ -244,6 +257,7 @@ export function buildMerchantWhatsAppUpdate(
     recoveryEnabled: flag(input.recoveryEnabled),
     exchangeEnabled: flag(input.exchangeEnabled),
     codConfirmEnabled: flag(input.codConfirmEnabled),
+    shippingUpdatesEnabled: flag(input.shippingUpdatesEnabled),
     ...templates,
   };
 }

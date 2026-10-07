@@ -3,6 +3,7 @@ import { dispatchManualCheckoutRecovery } from "../../../../services/whatsapp/ma
 import { runPrepaidCodRecovery } from "../../../../services/checkout-recovery/prepaid-cod-recovery.ts";
 import { runWhatsAppCheckoutRecovery } from "../../../../services/checkout-recovery/whatsapp-checkout-recovery.ts";
 import { runWhatsAppCodConfirmation } from "../../../../services/orders/whatsapp-cod-confirmation.ts";
+import { runWhatsAppShippingUpdates } from "../../../../services/orders/whatsapp-shipping-updates.ts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -61,10 +62,19 @@ async function run(req: NextRequest) {
     codConfirmation = { error: "COD confirmation failed." };
     console.error("[CHECKOUT RECOVERY] cod_confirmation_failed", { error: error instanceof Error ? error.message : String(error) });
   }
-  if (dispatchFailed) {
-    return NextResponse.json({ ok: false, error: "Recovery dispatch failed.", prepaidCod, whatsapp, codConfirmation }, { status: 500 });
+  // Shipped / out for delivery / failed attempt / delivered updates from Shopify tracking.
+  let shippingUpdates: Awaited<ReturnType<typeof runWhatsAppShippingUpdates>> | { error: string };
+  try {
+    shippingUpdates = await runWhatsAppShippingUpdates({});
+    console.info("[CHECKOUT RECOVERY] shipping_updates_completed", shippingUpdates);
+  } catch (error) {
+    shippingUpdates = { error: "Shipping updates failed." };
+    console.error("[CHECKOUT RECOVERY] shipping_updates_failed", { error: error instanceof Error ? error.message : String(error) });
   }
-  return NextResponse.json({ ok: true, ...summary, prepaidCod, whatsapp, codConfirmation }, { headers: { "Cache-Control": "no-store" } });
+  if (dispatchFailed) {
+    return NextResponse.json({ ok: false, error: "Recovery dispatch failed.", prepaidCod, whatsapp, codConfirmation, shippingUpdates }, { status: 500 });
+  }
+  return NextResponse.json({ ok: true, ...summary, prepaidCod, whatsapp, codConfirmation, shippingUpdates }, { headers: { "Cache-Control": "no-store" } });
 }
 
 export const GET = run;

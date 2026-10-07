@@ -161,6 +161,21 @@ tag `cod-no-response` (no second message). Events: AuditEvent
 `WHATSAPP_COD_CONFIRMATION_SENT` / `_RESPONSE` on the order. Admin:
 `/admin/whatsapp/cod`.
 
+### Shipping updates
+
+`services/orders/whatsapp-shipping-updates.ts`, switched on per shop
+(Merchant Settings → WhatsApp → Shipping updates), run by the 15-minute
+checkout-recovery cron, 8 am–9 pm IST only. Source: the courier tracking events
+on the Shopify fulfillment (CONFIRMED, IN_TRANSIT, OUT_FOR_DELIVERY, DELIVERED).
+Utility templates, fixed names: `order_shipped` ({{1}} name, {{2}} order,
+{{3}} courier, {{4}} tracking link) on the first IN_TRANSIT;
+`order_out_for_delivery` ({{1}}, {{2}}, {{3}} amount to pay, e.g. "₹1,195
+(Cash on Delivery)" or "nothing, it's already paid"); `order_delivery_attempt_failed`
+({{1}}, {{2}}) when OUT_FOR_DELIVERY is followed by IN_TRANSIT again (at most two
+per order); `order_delivered` ({{1}}, {{2}}). One message per order per run, the
+most advanced step wins; events older than 24 h (12 h for out for delivery) are
+not announced. AuditEvent `WHATSAPP_SHIPPING_UPDATE_SENT` (step + key) per order.
+
 ### AI assistant (inbound chats)
 
 LoopD2C → WhatsApp Inbox → **AI assistant** (`/admin/whatsapp/assistant`).
