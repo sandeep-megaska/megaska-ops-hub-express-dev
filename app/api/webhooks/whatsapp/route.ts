@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { checkMetaWebhookChallenge } from "../../../../services/whatsapp";
 import { consentKeyword, recordWhatsAppConsent } from "../../../../services/whatsapp/consent";
 import { applyStatusUpdates, recordInboundMessages, type WebhookValue } from "../../../../services/whatsapp/inbox";
+import { recordOtpDeliveryStatuses } from "../../../../services/whatsapp/otp-delivery";
 import { verifyMetaSignature } from "../../../../services/whatsapp/webhook-signature";
 
 export const runtime = "nodejs";
@@ -82,6 +83,7 @@ export async function POST(request: NextRequest) {
       try {
         await recordInboundMessages(change.value as WebhookValue);
         await applyStatusUpdates(change.value as WebhookValue);
+        await recordOtpDeliveryStatuses(change.value as WebhookValue);
       } catch (error) {
         console.error("[WHATSAPP] inbox_store_failed", { error: error instanceof Error ? error.message : String(error) });
       }
