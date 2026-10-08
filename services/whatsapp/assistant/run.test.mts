@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { runWhatsAppAssistant } from "./run.ts";
+import { cardProducts, runWhatsAppAssistant } from "./run.ts";
 import { orderFromNode, productFromNode } from "./store-context.ts";
 
 const NOW = new Date("2026-10-07T08:00:00Z");
@@ -209,4 +209,43 @@ test("shop in chat: a browsing customer gets the reply and then the catalog", as
   off.deps.sendCatalog = async (input: any) => { offCatalogs.push(input); };
   await runWhatsAppAssistant({ shopId: "shop-1", conversationId: "c1", waMessageId: "wamid.1" }, off.deps);
   assert.equal(offCatalogs.length, 0, "not sent when shop in chat is off");
+});
+
+
+test("product cards: named products are matched (in stock, no duplicates) and sent after a short reply", async () => {
+  const product = (title: string, inStock = true) => ({ id: `gid://shopify/Product/${title.length}`, title, url: null, price: "₹929", sizes: "S, M", inStock, description: "" });
+  const products = [product("Camouflage Bikini Set"), product("Sporty Bikini Set"), product("Old Bikini", false)];
+  assert.deepEqual(cardProducts(["camouflage bikini set", "Camouflage Bikini Set", "Old Bikini", "Sporty"], products as any).map((entry) => entry.title), ["Camouflage Bikini Set", "Sporty Bikini Set"]);
+
+  const base = setup({ aiReply: { reply: "Here are our bikini sets 👇 Pick your size, add to cart and tap Place order.", intent: "product", needs_human: false, confidence: 0.9, show_products: ["Camouflage Bikini Set"], cards_title: "Bikini sets" } });
+  base.deps.db.merchantWhatsAppAccount.findUnique = async () => ({ shopId: "shop-1", enabled: true, aiMode: "AUTO", aiKnowledge: null, shopInChatEnabled: true });
+  base.deps.loadContext = async () => ({ storeName: "Megaska", storeUrl: null, policies: [], merchantNotes: null, orders: [], products });
+  const cards: any[] = [];
+  let system = "";
+  const complete = base.deps.complete;
+  base.deps.complete = async (input: any) => { system = input.system; return complete(input); };
+  base.deps.sendProductCards = async (input: any) => { cards.push(input); };
+  base.deps.sendCatalog = async () => { throw new Error("catalog should not be sent"); };
+  await runWhatsAppAssistant({ shopId: "shop-1", conversationId: "c1", waMessageId: "wamid.1" }, base.deps);
+  assert.equal(base.sent.length, 1);
+  assert.equal(cards[0].header, "Bikini sets");
+  assert.deepEqual(cards[0].products.map((entry: any) => entry.title), ["Camouflage Bikini Set"]);
+  assert.match(system, /show_products/);
+  assert.match(system, /NO product links/);
+});
+
+test("a second quick message that arrived while the model was thinking gets the reply, not the first", async () => {
+  const later = new Date(NOW.getTime() + 6000);
+  const base = setup({ messages: [{ id: "m1", direction: "INBOUND", waMessageId: "wamid.1", type: "text", body: "Bangalore", createdAt: NOW }] });
+  let calls = 0;
+  const findMany = base.deps.db.whatsAppMessage.findMany;
+  base.deps.db.whatsAppMessage.findMany = async (args: any) => {
+    calls += 1;
+    if (args?.where?.direction === "INBOUND") return [{ id: "m2", direction: "INBOUND", waMessageId: "wamid.2", type: "text", body: "560004 pin code", createdAt: later }];
+    return findMany(args);
+  };
+  const result = await runWhatsAppAssistant({ shopId: "shop-1", conversationId: "c1", waMessageId: "wamid.1" }, base.deps);
+  assert.deepEqual(result, { status: "skipped", outcome: "superseded_by_newer_message" });
+  assert.equal(base.sent.length, 0);
+  assert.ok(calls >= 2);
 });

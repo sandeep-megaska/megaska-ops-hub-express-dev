@@ -728,6 +728,7 @@ model MerchantWhatsAppAccount {
   shopInChatEnabled        Boolean @default(false) // WhatsApp catalog carts → Shopify bag link; AI may send the catalog
   adConversionsEnabled     Boolean @default(false) // report WhatsApp-ad purchases to Meta (Conversions API for Business Messaging)
   capiDatasetId            String? // Meta dataset of the WhatsApp Business Account (looked up on first use)
+  catalogId                String? // Meta catalog connected to the number (entered, or looked up on first use)
 
   // AI assistant for inbound chats: OFF | DRAFT (suggests replies in the
   // inbox) | AUTO (answers on its own, hands off to the team when unsure).

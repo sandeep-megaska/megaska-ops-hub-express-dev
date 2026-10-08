@@ -194,3 +194,93 @@ export async function sendCatalogMessage(input: { shopId: string; conversationId
     sentByAi: true,
   });
 }
+
+// ---------------------------------------------------------------------------
+// Product cards: the products the assistant recommends, sent as a WhatsApp
+// product list (photo, price, add to cart) instead of text links.
+
+// Meta catalogs synced by Shopify's Facebook & Instagram channel identify each
+// variant as shopify_<country>_<product id>_<variant id>.
+export function retailerIdFor(productGid: string, variantGid: string, country = "IN") {
+  const product = String(productGid).match(/(\d+)$/)?.[1];
+  const variant = String(variantGid).match(/(\d+)$/)?.[1];
+  return product && variant ? `shopify_${country}_${product}_${variant}` : null;
+}
+
+export type CardProduct = { id?: string; title: string; variants?: Array<{ id: string; size: string; color: string; available: boolean }> };
+
+const clipText = (value: string, max: number) => (value.length > max ? `${value.slice(0, max - 1).trimEnd()}…` : value);
+
+// One section per product with its in-stock variants (sizes / colours), so the
+// size is chosen by the item added; at most 10 sections and 30 items.
+export function productListMessage(input: { catalogId: string; header: string; products: CardProduct[]; country?: string }) {
+  const sections: Array<{ title: string; product_items: Array<{ product_retailer_id: string }> }> = [];
+  let items = 0;
+  for (const product of input.products.slice(0, 10)) {
+    if (!product.id) continue;
+    const retailerIds = (product.variants ?? []).filter((variant) => variant.available)
+      .map((variant) => retailerIdFor(product.id as string, variant.id, input.country))
+      .filter((id): id is string => Boolean(id))
+      .slice(0, 30 - items);
+    if (!retailerIds.length) continue;
+    items += retailerIds.length;
+    sections.push({ title: clipText(product.title, 24), product_items: retailerIds.map((id) => ({ product_retailer_id: id })) });
+    if (items >= 30) break;
+  }
+  if (!sections.length) return null;
+  return {
+    type: "product_list",
+    header: { type: "text", text: clipText(input.header || "Our picks for you", 60) },
+    body: { text: "Tap a product for photos and price, pick your size, add to cart and tap Place order. We'll send you a link to check out." },
+    action: { catalog_id: input.catalogId, sections },
+  };
+}
+
+// The catalog connected to the WhatsApp Business Account.
+export async function resolveCatalogId(input: { wabaId: string; accessToken: string }, fetcher: typeof fetch = fetch) {
+  const version = String(process.env.WHATSAPP_META_GRAPH_VERSION || "v20.0").trim();
+  const response = await fetcher(`https://graph.facebook.com/${version}/${encodeURIComponent(input.wabaId)}/product_catalogs`, { headers: { Authorization: `Bearer ${input.accessToken}` }, cache: "no-store" });
+  const data = (await response.json().catch(() => null)) as { data?: Array<{ id?: string }>; error?: { message?: string } } | null;
+  const id = data?.data?.[0]?.id;
+  if (!response.ok || !id) throw new Error(`No catalog found for the WhatsApp Business Account: ${data?.error?.message || `HTTP ${response.status}`}`);
+  return String(id);
+}
+
+type CardsDb = { merchantWhatsAppAccount: { findUnique(args: unknown): Promise<{ shopId: string; enabled: boolean; phoneNumberId: string; accessTokenEncrypted: string; businessAccountId: string | null; catalogId?: string | null; templateLanguage: string } | null>; update(args: unknown): Promise<unknown> } };
+type SendInteractive = (input: { shopId: string; conversationId: string; interactive: Record<string, unknown>; inboxBody: string; sentByAi?: boolean }) => Promise<unknown>;
+
+// Sends product cards; when they cannot be sent (no catalog id, products not in
+// the Meta catalog) falls back to opening the whole catalog.
+export async function sendProductCards(
+  input: { shopId: string; conversationId: string; header: string; products: CardProduct[] },
+  deps: { db?: CardsDb; send?: SendInteractive; fetcher?: typeof fetch; decrypt?: (value: string) => string | null } = {},
+): Promise<"cards" | "catalog" | "failed"> {
+  const send: SendInteractive = deps.send ?? (async (message) => (await import("./inbox.ts")).sendConversationInteractive(message));
+  try {
+    const db = deps.db ?? ((await import("../db/prisma.ts")).prisma as unknown as CardsDb);
+    const account = await db.merchantWhatsAppAccount.findUnique({ where: { shopId: input.shopId } });
+    let catalogId = account?.catalogId || null;
+    if (!catalogId && account?.businessAccountId) {
+      const { merchantSender } = await import("./sender.ts");
+      const sender = merchantSender(account as never, deps.decrypt);
+      if (sender) {
+        catalogId = await resolveCatalogId({ wabaId: account.businessAccountId, accessToken: sender.accessToken }, deps.fetcher);
+        await db.merchantWhatsAppAccount.update({ where: { shopId: input.shopId }, data: { catalogId } });
+      }
+    }
+    const message = catalogId ? productListMessage({ catalogId, header: input.header, products: input.products }) : null;
+    if (message) {
+      await send({ shopId: input.shopId, conversationId: input.conversationId, interactive: message, inboxBody: `🛍️ Product cards: ${input.products.map((product) => product.title).join(", ").slice(0, 300)}`, sentByAi: true });
+      return "cards";
+    }
+  } catch (error) {
+    console.warn("[WHATSAPP SHOP] product_cards_failed", { conversationId: input.conversationId, error: error instanceof Error ? error.message.slice(0, 300) : String(error) });
+  }
+  try {
+    await sendCatalogMessage({ shopId: input.shopId, conversationId: input.conversationId }, { send });
+    return "catalog";
+  } catch (error) {
+    console.error("[WHATSAPP SHOP] catalog_fallback_failed", { conversationId: input.conversationId, error: error instanceof Error ? error.message.slice(0, 300) : String(error) });
+    return "failed";
+  }
+}
