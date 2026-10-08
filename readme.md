@@ -230,6 +230,21 @@ tagged with the cart attribute `loopd2c_source=whatsapp_cart`. Sold-out items ar
 named; unmatched carts become a SOFT handoff. AuditEvent `WHATSAPP_CART_LINK_SENT`.
 The AI assistant may set `show_catalog` to send a `catalog_message` after its reply.
 
+### Click-to-WhatsApp ads (attribution + Conversions API)
+
+The webhook's `referral` on a message (first message after an ad tap) is stored
+on the conversation (`adSourceId`, `adHeadline`, `adBody`, `adCtwaClid`,
+`adReferredAt`; latest ad wins). The AI assistant is told about an ad clicked in
+the last 3 days. `services/whatsapp/ad-attribution.ts`, called from the
+orders/create webhook (after()): an order whose phone matches a chat with an ad
+click in the 7 days before is recorded as AuditEvent `WHATSAPP_AD_ORDER` (shown
+under WhatsApp → Ads, per ad: chats, orders, revenue). With Merchant Settings →
+WhatsApp → Report WhatsApp ad sales to Meta, it is also sent as a Purchase to the
+WABA's Meta dataset (`GET/POST /{waba}/dataset`, cached in `capiDatasetId`;
+`POST /{dataset}/events`, action_source business_messaging, messaging_channel
+whatsapp, user_data whatsapp_business_account_id + ctwa_clid). The token needs
+`whatsapp_business_manage_events`.
+
 ### AI assistant (inbound chats)
 
 LoopD2C → WhatsApp Inbox → **AI assistant** (`/admin/whatsapp/assistant`).

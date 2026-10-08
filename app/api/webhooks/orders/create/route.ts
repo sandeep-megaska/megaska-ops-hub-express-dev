@@ -42,6 +42,9 @@ type ShopifyOrderWebhookPayload = {
     title?: string;
   }>;
   name?: string;
+  created_at?: string;
+  total_price?: string;
+  currency?: string;
 };
 
 export const runtime = "nodejs";
@@ -266,6 +269,31 @@ export async function POST(req: NextRequest) {
           shopDomain,
           error: error instanceof Error ? error.message : "Unknown error",
         });
+      }
+    });
+  }
+
+  // Click-to-WhatsApp ads: attribute the order to the ad that brought this
+  // phone to WhatsApp (and report the sale to Meta when switched on).
+  const adOrderId = String(payload.admin_graphql_api_id || payload.id || "").trim();
+  if (adOrderId && shopDomain) {
+    after(async () => {
+      try {
+        const { recordWhatsAppAdOrder } = await import("../../../../../services/whatsapp/ad-attribution");
+        const result = await recordWhatsAppAdOrder({
+          shopDomain,
+          order: {
+            id: adOrderId,
+            name: String(payload.name || ""),
+            createdAt: payload.created_at ? new Date(payload.created_at) : new Date(),
+            total: Number(payload.total_price) || 0,
+            currency: String(payload.currency || "INR"),
+            phones: [payload.phone, payload.shipping_address?.phone, payload.billing_address?.phone, payload.customer?.phone].filter((phone): phone is string => Boolean(phone)),
+          },
+        });
+        if (result.outcome !== "not_from_ad") console.info("[WHATSAPP ADS] order", { order: payload.name, ...result });
+      } catch (error) {
+        console.error("[WHATSAPP ADS] order_attribution_failed", { order: payload.name, error: error instanceof Error ? error.message : String(error) });
       }
     });
   }

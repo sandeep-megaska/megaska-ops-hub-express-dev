@@ -27,7 +27,14 @@ import {
 export const ASSISTANT_DEBOUNCE_MS = 4000;
 const HOUR = 60 * 60 * 1000;
 
-type Conversation = { id: string; shopId: string; businessPhoneNumberId: string; contactPhone: string; contactName: string | null; needsHuman: boolean; handoffKind?: string | null; aiPausedUntil: Date | null };
+type Conversation = { id: string; shopId: string; businessPhoneNumberId: string; contactPhone: string; contactName: string | null; needsHuman: boolean; handoffKind?: string | null; aiPausedUntil: Date | null; adHeadline?: string | null; adBody?: string | null; adReferredAt?: Date | null };
+
+// What the assistant is told about the ad behind a chat (ads clicked in the last 3 days).
+export function adContextFor(conversation: Pick<Conversation, "adHeadline" | "adBody" | "adReferredAt">, now: Date) {
+  if (!conversation.adReferredAt || now.getTime() - new Date(conversation.adReferredAt).getTime() > 3 * 24 * HOUR) return null;
+  const parts = [conversation.adHeadline ? `"${conversation.adHeadline}"` : null, conversation.adBody ? `(${conversation.adBody})` : null].filter(Boolean);
+  return parts.length ? parts.join(" ") : "(no ad text)";
+}
 type Message = { id: string; direction: string; waMessageId: string | null; type: string; body: string | null; sentByAi?: boolean; createdAt: Date };
 
 export type AssistantDb = {
@@ -89,10 +96,11 @@ export function chatLines(messages: Message[]): ChatLine[] {
 
 // Asks the model and returns the parsed answer (null when AI is unavailable or failed).
 export async function askAssistant(
-  input: { shopDomain: string; contactPhone: string; merchantNotes: string | null; chat: ChatLine[]; backInStock?: boolean; shopInChat?: boolean },
+  input: { shopDomain: string; contactPhone: string; merchantNotes: string | null; chat: ChatLine[]; backInStock?: boolean; shopInChat?: boolean; adContext?: string | null },
   deps: Pick<AssistantDeps, "complete" | "loadContext"> = {},
 ): Promise<{ result: AssistantResult | null; context: StoreContext }> {
   const context = await (deps.loadContext ?? defaults.loadContext)({ shopDomain: input.shopDomain, contactPhone: input.contactPhone, searchTerms: productSearchTerms(input.chat), merchantNotes: input.merchantNotes });
+  if (input.adContext) context.adContext = input.adContext;
   const raw = await (deps.complete ?? defaults.complete)({ system: buildSystemPrompt(context.storeName, { backInStock: input.backInStock, shopInChat: input.shopInChat }), user: buildUserPrompt(context, input.chat) });
   return { result: parseAssistantResult(raw), context };
 }
@@ -175,7 +183,7 @@ export async function runWhatsAppAssistant(input: { shopId: string; conversation
   const backInStock = Boolean(account?.backInStockEnabled);
   const shopInChat = Boolean(account?.shopInChatEnabled);
   try {
-    ({ result, context } = await askAssistant({ shopDomain: shop.shopDomain, contactPhone: conversation.contactPhone, merchantNotes: account?.aiKnowledge ?? null, chat: chatLines(recent), backInStock, shopInChat }, deps));
+    ({ result, context } = await askAssistant({ shopDomain: shop.shopDomain, contactPhone: conversation.contactPhone, merchantNotes: account?.aiKnowledge ?? null, chat: chatLines(recent), backInStock, shopInChat, adContext: adContextFor(conversation, at) }, deps));
   } catch (error) {
     console.error("[WHATSAPP ASSISTANT] ai_failed", { conversationId: conversation.id, error: error instanceof Error ? error.message.slice(0, 200) : String(error) });
   }
