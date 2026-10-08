@@ -725,6 +725,7 @@ model MerchantWhatsAppAccount {
   secondOrderEnabled       Boolean @default(false)
   secondOrderDelayDays     Int     @default(21)
   secondOrderOffer         String? // real, current offer line for the nudge (never invented)
+  shopInChatEnabled        Boolean @default(false) // WhatsApp catalog carts → Shopify bag link; AI may send the catalog
 
   // AI assistant for inbound chats: OFF | DRAFT (suggests replies in the
   // inbox) | AUTO (answers on its own, hands off to the team when unsure).

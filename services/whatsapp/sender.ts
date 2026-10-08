@@ -47,6 +47,7 @@ export type MerchantWhatsAppAccountRow = {
   secondOrderEnabled?: boolean;
   secondOrderDelayDays?: number;
   secondOrderOffer?: string | null;
+  shopInChatEnabled?: boolean;
   aiMode?: string | null;
   aiKnowledge?: string | null;
   lastCheckedAt?: Date | null;
@@ -190,6 +191,7 @@ export type MerchantWhatsAppAdminView = {
   secondOrderEnabled: boolean;
   secondOrderDelayDays: number;
   secondOrderOffer: string;
+  shopInChatEnabled: boolean;
   lastCheckedAt: string | null;
   lastCheckStatus: string | null;
   lastCheckMessage: string | null;
@@ -219,6 +221,7 @@ export function toAdminView(account: MerchantWhatsAppAccountRow | null, env: Rec
     secondOrderEnabled: account?.secondOrderEnabled ?? false,
     secondOrderDelayDays: account?.secondOrderDelayDays ?? DEFAULT_SECOND_ORDER_DELAY_DAYS,
     secondOrderOffer: account?.secondOrderOffer ?? "",
+    shopInChatEnabled: account?.shopInChatEnabled ?? false,
     lastCheckedAt: account?.lastCheckedAt ? new Date(account.lastCheckedAt).toISOString() : null,
     lastCheckStatus: account?.lastCheckStatus ?? null,
     lastCheckMessage: account?.lastCheckMessage ?? null,
@@ -297,6 +300,7 @@ export function buildMerchantWhatsAppUpdate(
     secondOrderEnabled,
     secondOrderDelayDays,
     secondOrderOffer: secondOrderOffer || null,
+    shopInChatEnabled: flag(input.shopInChatEnabled),
     ...templates,
   };
 }
