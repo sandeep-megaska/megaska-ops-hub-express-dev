@@ -325,7 +325,7 @@ export async function handleCodConfirmationReply(
   const shipped = Boolean(order.displayFulfillmentStatus && order.displayFulfillmentStatus !== "UNFULFILLED");
   await reply(shipped ? COD_REPLIES.alreadyShippedCancel(name) : COD_REPLIES.cancelRequested(name));
   if (conversation) {
-    await db.whatsAppConversation.update({ where: { id: conversation.id }, data: { needsHuman: true, handoffReason: `COD order ${name}: customer asked to cancel` } }).catch(() => undefined);
+    await db.whatsAppConversation.update({ where: { id: conversation.id }, data: { needsHuman: true, handoffKind: "HARD", handoffReason: `COD order ${name}: customer asked to cancel` } }).catch(() => undefined);
   }
   const who = conversation?.contactName || `+${fromPhone}`;
   await alert({

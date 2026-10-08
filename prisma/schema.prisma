@@ -752,6 +752,9 @@ model WhatsAppConversation {
   // AI assistant state: a chat the assistant handed to the team, a pause
   // after a team member replies, and the latest suggested reply (DRAFT mode).
   needsHuman            Boolean   @default(false)
+  // SOFT: the assistant keeps answering other questions; HARD (or null, for
+  // older rows): it stays quiet until the team replies or resolves the chat.
+  handoffKind           String?
   handoffReason         String?
   aiPausedUntil         DateTime?
   aiDraft               String?

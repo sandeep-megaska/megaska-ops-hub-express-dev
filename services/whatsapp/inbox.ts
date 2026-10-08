@@ -246,7 +246,7 @@ export async function sendInboxReply(input: { shopId: string; conversationId: st
   const now = input.now ?? new Date();
   await db.whatsAppConversation.update({
     where: { id: conversation.id },
-    data: { needsHuman: false, handoffReason: null, aiDraft: null, aiDraftAt: null, aiPausedUntil: new Date(now.getTime() + TEAM_REPLY_AI_PAUSE_MS) },
+    data: { needsHuman: false, handoffKind: null, handoffReason: null, aiDraft: null, aiDraftAt: null, aiPausedUntil: new Date(now.getTime() + TEAM_REPLY_AI_PAUSE_MS) },
   }).catch(() => undefined);
 }
 
