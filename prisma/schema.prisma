@@ -127,6 +127,7 @@ model Shop {
   checkoutPricingSnapshots      ShopifyCheckoutPricingSnapshot[]
   orderCourierShipments         OrderCourierShipment[]
   emailVerificationChallenges   EmailVerificationChallenge[]
+  backInStockRequests BackInStockRequest[]
 }
 
 model EmailVerificationChallenge {
@@ -719,6 +720,11 @@ model MerchantWhatsAppAccount {
   // Shipped / out for delivery / delivery attempt failed / delivered updates
   // from Shopify fulfillment tracking (services/orders/whatsapp-shipping-updates.ts).
   shippingUpdatesEnabled   Boolean @default(false)
+  backInStockEnabled       Boolean @default(false)
+  reviewRequestsEnabled    Boolean @default(false)
+  secondOrderEnabled       Boolean @default(false)
+  secondOrderDelayDays     Int     @default(21)
+  secondOrderOffer         String? // real, current offer line for the nudge (never invented)
 
   // AI assistant for inbound chats: OFF | DRAFT (suggests replies in the
   // inbox) | AUTO (answers on its own, hands off to the team when unsure).
@@ -3196,4 +3202,32 @@ model WebsiteContactSubmission {
 
   @@index([createdAt])
   @@index([status])
+}
+
+// A customer asked on WhatsApp to be told when a sold-out product (or one size
+// / colour of it) is back. Checked by the 15-minute cron; one message each.
+model BackInStockRequest {
+  id           String    @id @default(uuid())
+  shopId       String
+  phone        String // digits with country code, no +
+  customerName String?
+  productId    String
+  variantId    String?
+  key          String // variantId, or productId|size|colour
+  productTitle String
+  variantTitle String?
+  optionSize   String? // when no single variant was picked: any variant with this size …
+  optionColor  String? // … and/or colour counts
+  productUrl   String?
+  source       String    @default("WHATSAPP_AI")
+  status       String    @default("WAITING") // WAITING | NOTIFIED | CANCELLED | EXPIRED
+  messageId    String?
+  notifiedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@unique([shopId, phone, key])
+  @@index([shopId, status])
 }

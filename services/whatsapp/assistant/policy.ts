@@ -112,7 +112,18 @@ export type AssistantResult = {
   handoffKind: HandoffKind;
   handoffReason: string | null;
   confidence: number;
+  // The customer asked to be told when a sold-out product / size / colour is back.
+  restockRequest?: { product: string; size: string | null; color: string | null } | null;
 };
+
+function restockRequestFrom(value: unknown): AssistantResult["restockRequest"] {
+  if (!value || typeof value !== "object") return null;
+  const raw = value as Record<string, unknown>;
+  const product = typeof raw.product === "string" ? raw.product.trim().slice(0, 300) : "";
+  if (!product) return null;
+  const optional = (entry: unknown) => (typeof entry === "string" && entry.trim() && !/^(null|any|none)$/i.test(entry.trim()) ? entry.trim().slice(0, 60) : null);
+  return { product, size: optional(raw.size), color: optional(raw.color) ?? optional(raw.colour) };
+}
 
 // Validates the model's JSON. Anything malformed becomes a handoff, never a send.
 // WhatsApp shows markdown links and **bold** literally; rewrite them.
@@ -139,6 +150,7 @@ export function parseAssistantResult(raw: Record<string, unknown> | null): Assis
     handoffKind,
     handoffReason: typeof raw.handoff_reason === "string" && raw.handoff_reason.trim() ? raw.handoff_reason.trim().slice(0, 200) : null,
     confidence: Number.isFinite(confidence) ? Math.min(1, Math.max(0, confidence)) : 0,
+    restockRequest: restockRequestFrom(raw.restock_request),
   };
 }
 
@@ -186,7 +198,20 @@ export type StoreContext = {
   storeUrl: string | null;
   policies: Array<{ title: string; body: string }>;
   merchantNotes: string | null;
-  products: Array<{ title: string; url: string | null; price: string; sizes: string; colors?: string; inStock: boolean; description: string }>;
+  products: Array<{
+    id?: string;
+    title: string;
+    url: string | null;
+    price: string;
+    sizes: string;
+    colors?: string;
+    // Sizes (or colours) that exist but cannot be bought right now.
+    soldOut?: string;
+    inStock: boolean;
+    description: string;
+    // Variant ids and options, used to save back-in-stock requests (not shown to the model).
+    variants?: Array<{ id: string; size: string; color: string; available: boolean }>;
+  }>;
   // Every product type in the catalog with its count, so "do you have X?" is
   // never answered "no" just because the search missed it.
   catalogOverview?: string[];
@@ -197,7 +222,7 @@ export type StoreContext = {
 
 export type ChatLine = { from: "customer" | "store"; text: string };
 
-export function buildSystemPrompt(storeName: string) {
+export function buildSystemPrompt(storeName: string, options: { backInStock?: boolean } = {}) {
   return [
     `You are the WhatsApp assistant of ${storeName}, an Indian online store. You reply to customers on WhatsApp for the store team.`,
     "",
@@ -216,12 +241,15 @@ export function buildSystemPrompt(storeName: string) {
     "- Never say the store does not have or sell something unless CATALOG OVERVIEW clearly has no such kind of product. If PRODUCTS has no good match, say you will check and set needs_human to true.",
     "- Links: write the plain URL on its own (WhatsApp does not support [text](url) markdown).",
     "- Sizing: only map body measurements (bust, waist, hip, height) to a size when a size chart with measurements is in the facts. Otherwise do not guess: point them to the size chart on the product page, ask their usual size, or hand over with handoff_kind \"soft\".",
+    ...(options.backInStock ? [
+      "- Sold out: when a product, size or colour the customer wants is sold out, say so plainly and offer to WhatsApp them as soon as it is back in stock. When they ask to be told or agree (\"yes\", \"notify me\", \"haan\"), set restock_request to {\"product\": the exact product title from PRODUCTS, \"size\": the size or null, \"color\": the colour or null} and confirm you will message them here when it is back. Never promise or guess a restock date.",
+    ] : []),
     "- Yes/no questions: answer with the correct word first (\"No, …\" / \"Nahi, …\" when the answer is no). Never start with yes (\"Haan\") and then say the opposite.",
     "",
     "Style: reply in the customer's language and script (English, Hindi, Hinglish, Malayalam, Tamil, …). Warm, plain and short: at most 5 short lines. WhatsApp formatting only (*bold* sparingly), at most one emoji. No greeting block or signature on follow-up messages.",
     "If the message is only a greeting, greet back and say you can help with products, sizes and orders.",
     "",
-    'Return JSON only: {"reply": string, "intent": "greeting"|"product"|"size"|"order_status"|"policy"|"complaint"|"return_exchange"|"other", "needs_human": boolean, "handoff_kind": "soft"|"hard"|null, "handoff_reason": string|null, "confidence": number between 0 and 1 = how fully the facts support your reply}.',
+    `Return JSON only: {"reply": string, "intent": "greeting"|"product"|"size"|"order_status"|"policy"|"complaint"|"return_exchange"|"other", "needs_human": boolean, "handoff_kind": "soft"|"hard"|null, "handoff_reason": string|null, "confidence": number between 0 and 1 = how fully the facts support your reply${options.backInStock ? ', "restock_request": {"product": string, "size": string|null, "color": string|null}|null' : ""}}.`,
   ].join("\n");
 }
 
@@ -244,7 +272,7 @@ export function buildUserPrompt(context: StoreContext, chat: ChatLine[], now: Da
   if (context.merchantNotes?.trim()) sections.push(`MERCHANT NOTES:\n${clip(context.merchantNotes, MAX_KNOWLEDGE_CHARS)}`);
   sections.push(
     context.products.length
-      ? `PRODUCTS (best matches for the conversation):\n${context.products.map((product) => `- ${product.title} | ${product.price} | ${product.inStock ? "in stock" : "out of stock"}${product.colors ? ` | colours available: ${product.colors}` : ""}${product.sizes ? ` | sizes available: ${product.sizes}` : ""}${product.url ? ` | ${product.url}` : ""}${product.description ? `\n  ${clip(product.description, 300)}` : ""}`).join("\n")}`
+      ? `PRODUCTS (best matches for the conversation):\n${context.products.map((product) => `- ${product.title} | ${product.price} | ${product.inStock ? "in stock" : "out of stock"}${product.colors ? ` | colours available: ${product.colors}` : ""}${product.sizes ? ` | sizes available: ${product.sizes}` : ""}${product.soldOut ? ` | sold out: ${product.soldOut}` : ""}${product.url ? ` | ${product.url}` : ""}${product.description ? `\n  ${clip(product.description, 300)}` : ""}`).join("\n")}`
       : "PRODUCTS: no product matched the customer's words.",
   );
   if (context.catalogOverview?.length) sections.push(`CATALOG OVERVIEW (product types in the store):\n${context.catalogOverview.join(", ")}`);

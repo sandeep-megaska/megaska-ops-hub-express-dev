@@ -27,7 +27,7 @@ const PRODUCT_DETAILS_QUERY = `query AssistantProductDetails($ids: [ID!]!) {
     ... on Product {
       id title handle onlineStoreUrl description
       priceRangeV2 { minVariantPrice { amount currencyCode } maxVariantPrice { amount currencyCode } }
-      variants(first: 40) { nodes { title availableForSale selectedOptions { name value } } }
+      variants(first: 40) { nodes { id title availableForSale selectedOptions { name value } } }
     }
   }
 }`;
@@ -78,13 +78,14 @@ const ORDERS_QUERY = `query AssistantOrders($query: String!) {
 
 type Money = { amount?: string | null; currencyCode?: string | null } | null | undefined;
 type ProductNode = {
+  id?: string | null;
   title?: string | null;
   handle?: string | null;
   onlineStoreUrl?: string | null;
   description?: string | null;
   totalInventory?: number | null;
   priceRangeV2?: { minVariantPrice?: Money; maxVariantPrice?: Money } | null;
-  variants?: { nodes?: Array<{ title?: string | null; availableForSale?: boolean | null; selectedOptions?: Array<{ name?: string | null; value?: string | null }> | null }> | null } | null;
+  variants?: { nodes?: Array<{ id?: string | null; title?: string | null; availableForSale?: boolean | null; selectedOptions?: Array<{ name?: string | null; value?: string | null }> | null }> | null } | null;
 };
 type OrderNode = {
   name?: string | null;
@@ -134,17 +135,35 @@ export function productFromNode(node: ProductNode, storeUrl: string | null): Sto
   const max = rupees(node.priceRangeV2?.maxVariantPrice);
   const sizes: string[] = [];
   const colors: string[] = [];
+  const variants: Array<{ id: string; size: string; color: string; available: boolean }> = [];
   for (const variant of node.variants?.nodes ?? []) {
-    if (!variant?.availableForSale) continue;
-    const options = variant.selectedOptions ?? [];
+    const options = variant?.selectedOptions ?? [];
     const color = options.find((option) => /colou?r/i.test(option?.name || ""))?.value || "";
+    const rawSize = options.find((option) => /size/i.test(option?.name || ""))?.value || (options.length ? "" : variant?.title) || "";
+    const size = rawSize === "Default Title" ? "" : rawSize;
+    if (variant?.id) variants.push({ id: variant.id, size, color, available: Boolean(variant.availableForSale) });
+    if (!variant?.availableForSale) continue;
     if (color && !colors.includes(color)) colors.push(color);
-    const size = options.find((option) => /size/i.test(option?.name || ""))?.value || (options.length ? "" : variant.title) || "";
-    if (size && size !== "Default Title" && !sizes.includes(size)) sizes.push(size);
+    if (size && !sizes.includes(size)) sizes.push(size);
   }
-  const inStock = (node.variants?.nodes ?? []).some((variant) => variant?.availableForSale);
+  // Sizes that exist but no colour of them can be bought; or, without sizes, sold-out colours.
+  const soldOutSizes = [...new Set(variants.map((variant) => variant.size).filter((size) => size && !sizes.includes(size)))];
+  const soldOutColors = [...new Set(variants.map((variant) => variant.color).filter((color) => color && !colors.includes(color)))];
+  const soldOut = [...soldOutSizes, ...soldOutColors].join(", ");
+  const inStock = variants.length ? variants.some((variant) => variant.available) : (node.variants?.nodes ?? []).some((variant) => variant?.availableForSale);
   const url = node.onlineStoreUrl || (storeUrl && node.handle ? `${storeUrl.replace(/\/$/, "")}/products/${node.handle}` : null);
-  return { title: node.title, url, price: min && max && min !== max ? `${min}–${max}` : min, sizes: sizes.join(", "), ...(colors.length ? { colors: colors.join(", ") } : {}), inStock, description: stripHtml(node.description).slice(0, 300) };
+  return {
+    ...(node.id ? { id: node.id } : {}),
+    title: node.title,
+    url,
+    price: min && max && min !== max ? `${min}–${max}` : min,
+    sizes: sizes.join(", "),
+    ...(colors.length ? { colors: colors.join(", ") } : {}),
+    ...(soldOut ? { soldOut } : {}),
+    inStock,
+    description: stripHtml(node.description).slice(0, 300),
+    ...(variants.length ? { variants } : {}),
+  };
 }
 
 export function orderFromNode(node: OrderNode): StoreContext["orders"][number] | null {
@@ -190,7 +209,7 @@ export async function loadStoreContext(
     safe("products", async () => {
       const catalog = await loadCatalog(input.shopDomain, graphql);
       const ids = rankCatalog(catalog, input.searchTerms);
-      const details = ids.length ? (await graphql<{ nodes?: Array<ProductNode & { id?: string } | null> }>(PRODUCT_DETAILS_QUERY, { ids }, options)).nodes ?? [] : [];
+      const details = ids.length ? (await graphql<{ nodes?: Array<ProductNode | null> }>(PRODUCT_DETAILS_QUERY, { ids }, options)).nodes ?? [] : [];
       return { overview: catalogOverview(catalog), nodes: ids.map((id) => details.find((node) => node?.id === id)).filter((node): node is ProductNode => Boolean(node)) };
     }, { overview: [] as string[], nodes: [] as ProductNode[] }),
     safe("orders", async () => {

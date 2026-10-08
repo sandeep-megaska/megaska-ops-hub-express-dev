@@ -4,6 +4,8 @@ import { runPrepaidCodRecovery } from "../../../../services/checkout-recovery/pr
 import { runWhatsAppCheckoutRecovery } from "../../../../services/checkout-recovery/whatsapp-checkout-recovery.ts";
 import { runWhatsAppCodConfirmation } from "../../../../services/orders/whatsapp-cod-confirmation.ts";
 import { runWhatsAppShippingUpdates } from "../../../../services/orders/whatsapp-shipping-updates.ts";
+import { runWhatsAppSecondOrderNudges } from "../../../../services/orders/whatsapp-second-order.ts";
+import { runWhatsAppBackInStock } from "../../../../services/whatsapp/back-in-stock.ts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -71,10 +73,28 @@ async function run(req: NextRequest) {
     shippingUpdates = { error: "Shipping updates failed." };
     console.error("[CHECKOUT RECOVERY] shipping_updates_failed", { error: error instanceof Error ? error.message : String(error) });
   }
-  if (dispatchFailed) {
-    return NextResponse.json({ ok: false, error: "Recovery dispatch failed.", prepaidCod, whatsapp, codConfirmation, shippingUpdates }, { status: 500 });
+  // Sold-out items customers asked about on WhatsApp: tell them once they are back.
+  let backInStock: Awaited<ReturnType<typeof runWhatsAppBackInStock>> | { error: string };
+  try {
+    backInStock = await runWhatsAppBackInStock({});
+    console.info("[CHECKOUT RECOVERY] back_in_stock_completed", backInStock);
+  } catch (error) {
+    backInStock = { error: "Back-in-stock alerts failed." };
+    console.error("[CHECKOUT RECOVERY] back_in_stock_failed", { error: error instanceof Error ? error.message : String(error) });
   }
-  return NextResponse.json({ ok: true, ...summary, prepaidCod, whatsapp, codConfirmation, shippingUpdates }, { headers: { "Cache-Control": "no-store" } });
+  // First-time customers, some weeks after delivery: one invitation to come back.
+  let secondOrder: Awaited<ReturnType<typeof runWhatsAppSecondOrderNudges>> | { error: string };
+  try {
+    secondOrder = await runWhatsAppSecondOrderNudges({});
+    console.info("[CHECKOUT RECOVERY] second_order_completed", secondOrder);
+  } catch (error) {
+    secondOrder = { error: "Second-order nudges failed." };
+    console.error("[CHECKOUT RECOVERY] second_order_failed", { error: error instanceof Error ? error.message : String(error) });
+  }
+  if (dispatchFailed) {
+    return NextResponse.json({ ok: false, error: "Recovery dispatch failed.", prepaidCod, whatsapp, codConfirmation, shippingUpdates, backInStock, secondOrder }, { status: 500 });
+  }
+  return NextResponse.json({ ok: true, ...summary, prepaidCod, whatsapp, codConfirmation, shippingUpdates, backInStock, secondOrder }, { headers: { "Cache-Control": "no-store" } });
 }
 
 export const GET = run;

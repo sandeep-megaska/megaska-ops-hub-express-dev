@@ -122,3 +122,11 @@ test("the model knows the time in India and the self-service and support-hours r
   assert.match(system, /no emoji at all/);
   assert.match(system, /support hours/);
 });
+
+test("restock requests from the model are cleaned up; junk is ignored", () => {
+  const parsed = parseAssistantResult({ reply: "Done!", intent: "product", needs_human: false, confidence: 0.9, restock_request: { product: " Swim Dress ", size: "XL", colour: "Navy" } })!;
+  assert.deepEqual(parsed.restockRequest, { product: "Swim Dress", size: "XL", color: "Navy" });
+  assert.deepEqual(parseAssistantResult({ reply: "Ok", intent: "product", confidence: 0.9, restock_request: { product: "Dress", size: "any", color: "null" } })!.restockRequest, { product: "Dress", size: null, color: null });
+  assert.equal(parseAssistantResult({ reply: "Ok", intent: "product", confidence: 0.9, restock_request: { size: "XL" } })!.restockRequest, null);
+  assert.equal(parseAssistantResult({ reply: "Ok", intent: "product", confidence: 0.9 })!.restockRequest, null);
+});

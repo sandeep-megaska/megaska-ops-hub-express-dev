@@ -176,6 +176,45 @@ per order); `order_delivered` ({{1}}, {{2}}). One message per order per run, the
 most advanced step wins; events older than 24 h (12 h for out for delivery) are
 not announced. AuditEvent `WHATSAPP_SHIPPING_UPDATE_SENT` (step + key) per order.
 
+### Back-in-stock alerts
+
+`services/whatsapp/back-in-stock.ts`, switched on per shop (Merchant Settings →
+WhatsApp → Back-in-stock alerts). The AI assistant sees each product's sold-out
+sizes/colours; when a customer asks to be told (or agrees to the offer) it returns
+`restock_request`, which is matched to the product/variant it was shown and saved
+as a `BackInStockRequest` (unique per shop + phone + variant, or product|size|colour).
+Unmatched requests become a SOFT handoff. The 15-minute cron checks waiting
+requests with one `nodes(ids)` query per shop and sends the template
+`back_in_stock` ({{1}} first name, {{2}} product and size/colour, {{3}} product
+link opening the variant, with utm_source=whatsapp) once, 9 am–9 pm IST; opted-out
+numbers are cancelled, requests expire after 60 days. Admin: WhatsApp → Back in stock
+(who is waiting for what).
+
+### Review requests on WhatsApp
+
+`services/reviews/review-whatsapp.ts`, hooked into the automatic review-request
+pipeline (`review-request-processor.ts`, hourly `review-requests` cron). Needs
+Reviews → automatic requests on, plus Merchant Settings → WhatsApp → Review
+requests on WhatsApp. A due, still-eligible request is sent as the template
+`review_request` ({{1}} first name, {{2}} product (size), {{3}} review link with
+the request token) to the customer's verified phone (or the order's phone), once
+per order; other lines of that order, customers without a phone and opted-out
+numbers fall back to email. Each send is a WHATSAPP `ProductReviewRequestDeliveryAttempt`,
+so reviews from it are sourced REVIEW_REQUEST_WHATSAPP. The WhatsApp path has its
+own toggle and is not gated by `REVIEW_REQUEST_DELIVERY_ENABLED` (that env var
+still gates email).
+
+### Second-order nudge
+
+`services/orders/whatsapp-second-order.ts`, switched on per shop with a delay
+(7–90 days after delivery, default 21) and the merchant's own offer line (required;
+sent as written). 15-minute cron, 11 am–7 pm IST. Shopify orders delivered
+delay…delay+7 days ago whose customer has exactly one order, not cancelled,
+refunded or returned; skipped when the customer's chat is waiting on the team or
+they opted out. Marketing template `second_order_nudge` ({{1}} first name, {{2}}
+product bought, {{3}} store link with utm_medium=second_order, {{4}} offer line).
+Once per customer: AuditEvent `WHATSAPP_SECOND_ORDER_NUDGE_SENT` on the Shopify customer.
+
 ### AI assistant (inbound chats)
 
 LoopD2C → WhatsApp Inbox → **AI assistant** (`/admin/whatsapp/assistant`).
