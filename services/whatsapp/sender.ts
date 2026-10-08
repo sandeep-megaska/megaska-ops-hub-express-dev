@@ -282,7 +282,8 @@ export function buildMerchantWhatsAppUpdate(
   }
   if (!accessTokenEncrypted) throw new MerchantWhatsAppValidationError("Access token is required.");
 
-  const catalogId = text(input.catalogId);
+  // Accept a pasted "Catalog ID: 1234 5678…" as well as the bare number.
+  const catalogId = (text(input.catalogId).match(/\d{6,25}/g) ?? []).sort((a, b) => b.length - a.length)[0] ?? (text(input.catalogId) ? "x" : "");
   if (catalogId && !NUMERIC_ID.test(catalogId)) throw new MerchantWhatsAppValidationError("Meta catalog ID must be the numeric ID from Commerce Manager.");
   if (flag(input.adConversionsEnabled) && !businessAccountId) throw new MerchantWhatsAppValidationError("Reporting WhatsApp ad sales to Meta needs the WhatsApp Business Account ID.");
   const secondOrderEnabled = flag(input.secondOrderEnabled);

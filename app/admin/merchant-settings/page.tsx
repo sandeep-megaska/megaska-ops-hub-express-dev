@@ -65,24 +65,32 @@ type PageProps = {
 
 type EmbeddedContextInput = { shop?: string; host?: string; embedded?: string; saved?: string | null; error?: string | null };
 
+// Shopify signs the admin URL it opens (hmac over every query parameter). Those
+// signature parameters must not be carried into the page we redirect to after a
+// save: the redirect adds its own notice/error parameters, the signature no
+// longer matches, and the page refuses to load ("Invalid Shopify admin
+// signature"). The shop is resolved from the `shop` parameter instead.
+const SHOPIFY_SIGNATURE_PARAMS = new Set(["hmac", "signature", "timestamp", "id_token", "session", "locale"]);
+
 function embeddedContextFromFormData(formData: FormData) {
   const params = new URLSearchParams();
   for (const [key, value] of formData.entries()) {
     if (!key.startsWith("embeddedContext:")) continue;
     const paramKey = key.slice("embeddedContext:".length);
+    if (SHOPIFY_SIGNATURE_PARAMS.has(paramKey)) continue;
     if (typeof value === "string" && value) params.set(paramKey, value);
   }
   return params;
 }
 
 function embeddedContextHiddenInputs(params: EmbeddedContextInput) {
-  return Object.entries(params).filter((entry): entry is [string, string] => Boolean(entry[1]));
+  return Object.entries(params).filter((entry): entry is [string, string] => typeof entry[1] === "string" && Boolean(entry[1]) && !SHOPIFY_SIGNATURE_PARAMS.has(entry[0]));
 }
 
 function withEmbeddedContext(pathname: string, params: EmbeddedContextInput, overrides: EmbeddedContextInput = {}) {
   const next = new URLSearchParams();
   for (const [key, value] of Object.entries({ ...params, ...overrides })) {
-    if (value === null || value === undefined || value === "") continue;
+    if (value === null || value === undefined || value === "" || SHOPIFY_SIGNATURE_PARAMS.has(key)) continue;
     next.set(key, value);
   }
   const query = next.toString();

@@ -113,3 +113,12 @@ test("reporting ad sales to Meta needs the WhatsApp Business Account ID", () => 
   assert.throws(() => buildMerchantWhatsAppUpdate({ ...input, adConversionsEnabled: "on" }, null, encrypt), MerchantWhatsAppValidationError);
   assert.equal(buildMerchantWhatsAppUpdate({ ...input, businessAccountId: "1619844212877837", adConversionsEnabled: "on" }, null, encrypt).adConversionsEnabled, true);
 });
+
+test("the Meta catalog id can be pasted with its label or from a Commerce Manager link", () => {
+  const encrypt = (value: string) => `enc:${value}`;
+  const input = { enabled: "on", phoneNumberId: "111111111111111", accessToken: "EAAG" + "x".repeat(40), templateLanguage: "en" };
+  assert.equal(buildMerchantWhatsAppUpdate({ ...input, catalogId: " Catalog ID: 1234567890123456 " }, null, encrypt).catalogId, "1234567890123456");
+  assert.equal(buildMerchantWhatsAppUpdate({ ...input, catalogId: "https://business.facebook.com/commerce/catalogs/1234567890123456/products?business_id=99" }, null, encrypt).catalogId, "1234567890123456");
+  assert.equal(buildMerchantWhatsAppUpdate({ ...input, catalogId: "" }, null, encrypt).catalogId, null);
+  assert.throws(() => buildMerchantWhatsAppUpdate({ ...input, catalogId: "my catalog" }, null, encrypt), MerchantWhatsAppValidationError);
+});
