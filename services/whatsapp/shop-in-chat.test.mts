@@ -4,7 +4,7 @@ import test from "node:test";
 import { verifyCodRecoveryToken } from "../checkout-recovery/prepaid-cod-recovery.ts";
 import { rebuildBagPage } from "../checkout-recovery/rebuild-bag-page.ts";
 import { describeInbound } from "./inbox.ts";
-import { cartLinesFromOrder, handleWhatsAppCatalogOrder, productListMessage, resolveCatalogId, retailerIdFor, sendCatalogMessage, sendProductCards, variantIdFromRetailerId } from "./shop-in-chat.ts";
+import { cartLinesFromOrder, handleCartSizeChoice, handleFromRetailerId, handleWhatsAppCatalogOrder, parseSizeReply, productListMessage, productPathRetailerId, variantLabels, resolveCatalogId, retailerIdFor, sendCatalogMessage, sendProductCards, variantIdFromRetailerId } from "./shop-in-chat.ts";
 
 const SECRET = "s".repeat(40);
 const NOW = new Date("2026-10-09T06:00:00Z");
@@ -131,4 +131,66 @@ test("when cards cannot be sent the whole catalog opens instead", async () => {
   const result = await sendProductCards({ shopId: "s1", conversationId: "c1", header: "x", products: [cardProduct("81", "Bikini", [["S", true]])] }, { db, send: async (message) => { if (first) { first = false; throw new Error("(#131009) Product not found in catalog"); } sent.push(message); } });
   assert.equal(result, "catalog");
   assert.equal(sent[0].interactive.type, "catalog_message");
+});
+
+
+test("website-built catalog ids point at a product page", () => {
+  assert.equal(handleFromRetailerId("/products/waisted-adjustable-side-ties#product"), "waisted-adjustable-side-ties");
+  assert.equal(handleFromRetailerId("https://megaska.com/products/Front-Zip?variant=1"), "front-zip");
+  assert.equal(handleFromRetailerId("shopify_IN_1_2"), null);
+  assert.equal(productPathRetailerId("https://megaska.com/products/waisted-adjustable-side-ties-2"), "/products/waisted-adjustable-side-ties-2#product");
+  assert.deepEqual(variantLabels([
+    { title: "S / Multicolor / Polyester", selectedOptions: [{ name: "Size", value: "S" }, { name: "Color", value: "Multicolor" }, { name: "Fabric", value: "Polyester" }] },
+    { title: "M / Multicolor / Polyester", selectedOptions: [{ name: "Size", value: "M" }, { name: "Color", value: "Multicolor" }, { name: "Fabric", value: "Polyester" }] },
+  ]), ["S", "M"], "only the option that differs");
+});
+
+test("cards for a website-built catalog: one item per in-stock product", () => {
+  const message: any = productListMessage({ catalogId: "530391062743407", header: "Swim bottoms", format: "product_path", products: [
+    { title: "Side Ties Bottom", url: "https://megaska.com/products/waisted-adjustable-side-ties", inStock: true },
+    { title: "Side Ties Bottom", url: "https://megaska.com/products/waisted-adjustable-side-ties-2", inStock: true },
+    { title: "Sold out", url: "https://megaska.com/products/old", inStock: false },
+  ] });
+  assert.deepEqual(message.action.sections, [{ title: "Swim bottoms", product_items: [{ product_retailer_id: "/products/waisted-adjustable-side-ties#product" }, { product_retailer_id: "/products/waisted-adjustable-side-ties-2#product" }] }]);
+  assert.match(message.body.text, /ask your size/);
+});
+
+function sizeSetup() {
+  const events: any[] = [];
+  const sent: string[] = [];
+  const interactive: any[] = [];
+  const db: any = {
+    merchantWhatsAppAccount: { findUnique: async () => ({ enabled: true, shopInChatEnabled: true }) },
+    whatsAppConversation: { findFirst: async () => ({ id: "c1", shopId: "s1", contactPhone: "919876543210", contactName: "Asha" }), update: async () => undefined },
+    shop: { findUnique: async () => ({ id: "s1", shopDomain: "shop.myshopify.com", primaryDomain: "megaska.com" }) },
+    auditEvent: { create: async (args: any) => { events.push(args.data); }, findFirst: async () => (events.length ? { payload: events[events.length - 1].payload } : null) },
+  };
+  const graphql = async (_query: string, variables: any) => {
+    assert.match(variables.query, /handle:"waisted-adjustable-side-ties"/);
+    return { products: { nodes: [{ handle: "waisted-adjustable-side-ties", title: "Side Ties Swim Bottom", status: "ACTIVE", variants: { nodes: [
+      { id: "gid://shopify/ProductVariant/51", title: "S / Multicolor", availableForSale: true, selectedOptions: [{ name: "Size", value: "S" }, { name: "Color", value: "Multicolor" }] },
+      { id: "gid://shopify/ProductVariant/52", title: "M / Multicolor", availableForSale: true, selectedOptions: [{ name: "Size", value: "M" }, { name: "Color", value: "Multicolor" }] },
+      { id: "gid://shopify/ProductVariant/53", title: "L / Multicolor", availableForSale: false, selectedOptions: [{ name: "Size", value: "L" }, { name: "Color", value: "Multicolor" }] },
+    ] } }] } };
+  };
+  const deps: any = { db, graphql, secret: SECRET, sendText: async (input: any) => { sent.push(input.text); }, sendInteractive: async (input: any) => { interactive.push(input.interactive); }, alert: async () => undefined };
+  return { deps, events, sent, interactive };
+}
+
+test("a cart from a website-built catalog asks the size, then sends the bag link", async () => {
+  const { deps, sent, interactive } = sizeSetup();
+  const asked = await handleWhatsAppCatalogOrder({ shopId: "s1", conversationId: "c1", waMessageId: "wamid.ABC", items: [{ product_retailer_id: "/products/waisted-adjustable-side-ties#product", quantity: 1 }], now: NOW }, deps);
+  assert.equal(asked.outcome, "size_asked");
+  assert.equal(interactive[0].type, "list");
+  assert.deepEqual(interactive[0].action.sections[0].rows.map((row: any) => row.title), ["S", "M"], "only sizes in stock");
+  const replyId = interactive[0].action.sections[0].rows[1].id;
+  assert.deepEqual(parseSizeReply(replyId), { cartKey: "wamid.ABC", variantId: 52 });
+
+  const done = await handleCartSizeChoice({ shopId: "s1", conversationId: "c1", replyId, now: NOW }, deps);
+  assert.equal(done.outcome, "link_sent");
+  assert.match(sent[0], /• Side Ties Swim Bottom \(M\)/);
+  const token = decodeURIComponent(sent[0].match(/bag\?t=(\S+)/)![1]);
+  assert.deepEqual(verifyCodRecoveryToken(token, { shopId: "s1", now: NOW }, SECRET), { checkoutId: "wa:wamid.ABC", items: [{ variantId: 52, quantity: 1 }] });
+
+  assert.equal((await handleCartSizeChoice({ shopId: "s1", conversationId: "c1", replyId, now: NOW }, deps)).outcome, "expired", "a second tap does not send another link");
 });
