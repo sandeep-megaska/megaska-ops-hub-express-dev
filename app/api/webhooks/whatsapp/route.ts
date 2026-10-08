@@ -4,7 +4,7 @@ import { consentKeyword, recordWhatsAppConsent } from "../../../../services/what
 import { applyStatusUpdates, recordInboundMessages, type WebhookValue } from "../../../../services/whatsapp/inbox";
 import { handleCodConfirmationReply, parseCodPayload } from "../../../../services/orders/whatsapp-cod-confirmation";
 import { runWhatsAppAssistant } from "../../../../services/whatsapp/assistant/run";
-import { handleWhatsAppCatalogOrder, type CatalogOrderItem } from "../../../../services/whatsapp/shop-in-chat";
+import { handleCartSizeChoice, handleWhatsAppCatalogOrder, parseSizeReply, type CatalogOrderItem } from "../../../../services/whatsapp/shop-in-chat";
 import { recordOtpDeliveryStatuses } from "../../../../services/whatsapp/otp-delivery";
 import { verifyMetaSignature } from "../../../../services/whatsapp/webhook-signature";
 
@@ -32,7 +32,7 @@ type WhatsAppWebhookMessage = {
   type?: string;
   text?: { body?: string };
   button?: { text?: string; payload?: string };
-  interactive?: { button_reply?: { title?: string; id?: string } };
+  interactive?: { button_reply?: { title?: string; id?: string }; list_reply?: { title?: string; id?: string } };
   order?: { catalog_id?: string; product_items?: CatalogOrderItem[] };
 };
 
@@ -91,11 +91,15 @@ export async function POST(request: NextRequest) {
       const codReplies = (change.value?.messages || []).filter((message) => message.id && message.from && parseCodPayload(message.button?.payload));
       const codReplyIds = new Set(codReplies.map((message) => message.id));
       // Carts sent from the WhatsApp catalog ("Place order") become a Shopify bag link.
+      // "Which size?" answers for a catalog cart.
+      const sizeChoices = new Map((change.value?.messages || []).filter((message) => message.id && parseSizeReply(message.interactive?.list_reply?.id)).map((message) => [String(message.id), String(message.interactive?.list_reply?.id)]));
       const catalogOrders = new Map((change.value?.messages || []).filter((message) => message.type === "order" && message.id).map((message) => [String(message.id), message.order?.product_items ?? []]));
       try {
         await recordInboundMessages(change.value as WebhookValue, {
           // AI assistant (Merchant WhatsApp → AI assistant), after Meta has its 200.
-          onStored: (stored) => codReplyIds.has(stored.waMessageId) ? undefined : catalogOrders.has(stored.waMessageId) ? after(() => handleWhatsAppCatalogOrder({ ...stored, items: catalogOrders.get(stored.waMessageId) ?? [] })
+          onStored: (stored) => codReplyIds.has(stored.waMessageId) ? undefined : sizeChoices.has(stored.waMessageId) ? after(() => handleCartSizeChoice({ shopId: stored.shopId, conversationId: stored.conversationId, replyId: sizeChoices.get(stored.waMessageId) as string })
+            .then((result) => console.info("[WHATSAPP SHOP] size_choice", { conversationId: stored.conversationId, ...result }))
+            .catch((error) => console.error("[WHATSAPP SHOP] size_choice_failed", { conversationId: stored.conversationId, error: error instanceof Error ? error.message : String(error) }))) : catalogOrders.has(stored.waMessageId) ? after(() => handleWhatsAppCatalogOrder({ ...stored, items: catalogOrders.get(stored.waMessageId) ?? [] })
             .then((result) => console.info("[WHATSAPP SHOP] order", { conversationId: stored.conversationId, ...result }))
             .catch((error) => console.error("[WHATSAPP SHOP] order_failed", { conversationId: stored.conversationId, error: error instanceof Error ? error.message : String(error) }))) : after(() => runWhatsAppAssistant(stored)
             .then((result) => console.info("[WHATSAPP ASSISTANT] run", { conversationId: stored.conversationId, ...result }))

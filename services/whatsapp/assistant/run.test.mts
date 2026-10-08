@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { cardProducts, runWhatsAppAssistant } from "./run.ts";
+import { cardProducts, cardsLeadText, runWhatsAppAssistant } from "./run.ts";
 import { orderFromNode, productFromNode } from "./store-context.ts";
 
 const NOW = new Date("2026-10-07T08:00:00Z");
@@ -248,4 +248,10 @@ test("a second quick message that arrived while the model was thinking gets the 
   assert.deepEqual(result, { status: "skipped", outcome: "superseded_by_newer_message" });
   assert.equal(base.sent.length, 0);
   assert.ok(calls >= 2);
+});
+
+test("the reply above product cards is cut to a short lead-in", () => {
+  const long = "Here are our swim bottoms you might like:\n1. High Waisted Bottom - ₹495\n   https://megaska.com/products/a\n2. Another - ₹495\n   https://megaska.com/products/b";
+  assert.equal(cardsLeadText(long), "Here are our swim bottoms you might like 👇\nTap a product, add it to your cart and tap Place order. We'll ask your size and send a link to check out.");
+  assert.equal(cardsLeadText("Here are our bikini sets 👇"), "Here are our bikini sets 👇");
 });

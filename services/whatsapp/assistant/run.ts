@@ -85,6 +85,15 @@ const defaults = {
   sendProductCards: async (input: { shopId: string; conversationId: string; header: string; products: StoreContext["products"] }) => (await import("../shop-in-chat.ts")).sendProductCards(input),
 };
 
+// The reply above product cards: its first line (no links or price lists), then
+// how to order. Models tend to list the products again despite the instructions.
+export function cardsLeadText(reply: string) {
+  const lines = reply.split("\n").map((line) => line.trim()).filter(Boolean);
+  if (lines.length <= 2 && !/https?:\/\//.test(reply)) return reply;
+  const first = (lines.find((line) => !/https?:\/\//.test(line) && !/^\d+[.)]/.test(line)) || "Here you go").replace(/[:：]\s*$/, "").slice(0, 160);
+  return `${first} 👇\nTap a product, add it to your cart and tap Place order. We'll ask your size and send a link to check out.`;
+}
+
 // Products the assistant named for cards, matched to the ones it was shown (in stock, no duplicates).
 export function cardProducts(titles: string[], products: StoreContext["products"]) {
   const norm = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
@@ -226,6 +235,10 @@ export async function runWhatsAppAssistant(input: { shopId: string; conversation
     return { status: "skipped", outcome: "superseded_by_newer_message" };
   }
 
+  // Product cards follow the reply: keep the reply itself to a short lead-in.
+  const cards = shopInChat && result.showProducts?.length ? cardProducts(result.showProducts, context?.products ?? []) : [];
+  if (cards.length && result.reply) result = { ...result, reply: cardsLeadText(result.reply) };
+
   const outcome = decideOutcome(mode, result);
   console.info("[WHATSAPP ASSISTANT] outcome", { conversationId: conversation.id, mode, kind: outcome.kind, intent: result.intent, confidence: result.confidence, needsHuman: result.needsHuman, handoffKind: result.handoffKind });
   if (outcome.kind === "draft") {
@@ -248,7 +261,6 @@ export async function runWhatsAppAssistant(input: { shopId: string; conversation
     await handOver("The assistant's reply could not be sent", null, "SOFT");
     return { status: "handoff", outcome: "send_failed", intent: result.intent };
   }
-  const cards = shopInChat && result.showProducts?.length ? cardProducts(result.showProducts, context?.products ?? []) : [];
   if (cards.length) {
     await (deps.sendProductCards ?? defaults.sendProductCards)({ shopId: input.shopId, conversationId: conversation.id, header: result.cardsTitle || "Our picks for you", products: cards })
       .catch((error) => console.error("[WHATSAPP ASSISTANT] cards_send_failed", { conversationId: conversation.id, error: error instanceof Error ? error.message.slice(0, 200) : String(error) }));
