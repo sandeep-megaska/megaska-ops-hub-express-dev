@@ -207,6 +207,11 @@ async function whatsAppFormAction(
       codConfirmEnabled: formData.get("waCodConfirmEnabled"),
       codConfirmTemplate: formData.get("waCodConfirmTemplate"),
       shippingUpdatesEnabled: formData.get("waShippingUpdatesEnabled"),
+      backInStockEnabled: formData.get("waBackInStockEnabled"),
+      reviewRequestsEnabled: formData.get("waReviewRequestsEnabled"),
+      secondOrderEnabled: formData.get("waSecondOrderEnabled"),
+      secondOrderDelayDays: formData.get("waSecondOrderDelayDays"),
+      secondOrderOffer: formData.get("waSecondOrderOffer"),
     });
     if (formData.get("waIntent") === "check") {
       const result = await checkMerchantWhatsApp(shopId);
@@ -1361,6 +1366,13 @@ export default async function MerchantSettingsPage({
           <Check label="COD order confirmation" name="waCodConfirmEnabled" defaultChecked={whatsApp.codConfirmEnabled} help="A few minutes after each cash-on-delivery order, ask the customer to Confirm or Cancel. Confirmed orders are tagged cod-confirmed; cancel requests are tagged cod-cancel-requested and sent to your inbox; no reply in 12 hours is tagged cod-no-response so you can call before shipping." />
           <Check label="Shipping updates" name="waShippingUpdatesEnabled" defaultChecked={whatsApp.shippingUpdatesEnabled} help="From your courier tracking in Shopify: shipped (with tracking link), out for delivery (with the COD amount to keep ready), delivery attempt failed (customer can reply to arrange another attempt) and delivered. Sent 8 am–9 pm IST only. Needs Utility templates order_shipped, order_out_for_delivery, order_delivery_attempt_failed and order_delivered." />
           <Field label="COD confirmation template" name="waCodConfirmTemplate" defaultValue={whatsApp.codConfirmTemplate} help="Utility template. Body: {{1}} customer first name, {{2}} order number, {{3}} order total. Two Quick reply buttons, in this order: Confirm order, Cancel order." />
+          <Check label="Back-in-stock alerts" name="waBackInStockEnabled" defaultChecked={whatsApp.backInStockEnabled} help="When a customer asks the AI assistant about a sold-out product or size, it offers to message them when it is back; the request is saved and they get one WhatsApp as soon as Shopify shows it in stock again (9 am–9 pm IST). See who is waiting under WhatsApp → Back in stock. Needs the template back_in_stock: {{1}} first name, {{2}} product (and size/colour), {{3}} product link." />
+          <Check label="Review requests on WhatsApp" name="waReviewRequestsEnabled" defaultChecked={whatsApp.reviewRequestsEnabled} help="Send the automatic review requests (Reviews → automatic requests, after the exchange window) on WhatsApp instead of email; email is still used when there is no phone number. One message per order. Needs the template review_request: {{1}} first name, {{2}} product, {{3}} review link." />
+          <Check label="Second-order nudge" name="waSecondOrderEnabled" defaultChecked={whatsApp.secondOrderEnabled} help="One message to first-time customers some days after delivery, if they have not ordered again, have no open issue, refund or return, and have not opted out. Needs the Marketing template second_order_nudge: {{1}} first name, {{2}} product they bought, {{3}} store link, {{4}} your offer line." />
+          <div className="grid gap-4">
+            <Field label="Second-order nudge: days after delivery" name="waSecondOrderDelayDays" type="number" defaultValue={String(whatsApp.secondOrderDelayDays)} help="7 to 90. 21 suits swimwear: long enough to have used it." />
+            <Field label="Second-order nudge: offer line" name="waSecondOrderOffer" defaultValue={whatsApp.secondOrderOffer} placeholder="Prepaid orders get 15% off at checkout." help="A real offer that is live on your store right now. It is sent as written; never add a deadline or discount you do not actually run." />
+          </div>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-3">
           <button className="mk-btn" type="submit" name="waIntent" value="check">

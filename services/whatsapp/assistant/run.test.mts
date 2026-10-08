@@ -138,3 +138,55 @@ test("a second SOFT 'let me check' in an already flagged chat sends the reply bu
   assert.deepEqual(sent, ["Let me check that with the team."]);
   assert.equal(alerts.length + updates.length, 0);
 });
+
+function restockSetup(aiReply: any, backInStockEnabled = true) {
+  const base = setup({ aiReply });
+  const saved: any[] = [];
+  base.deps.db.merchantWhatsAppAccount.findUnique = async () => ({ shopId: "shop-1", enabled: true, aiMode: "AUTO", aiKnowledge: null, backInStockEnabled });
+  base.deps.loadContext = async () => ({
+    storeName: "Megaska", storeUrl: "https://megaska.com", policies: [], merchantNotes: null, orders: [],
+    products: [productFromNode({ id: "gid://shopify/Product/1", title: "Swim Dress", handle: "swim-dress", variants: { nodes: [
+      { id: "gid://shopify/ProductVariant/11", title: "M", availableForSale: true, selectedOptions: [{ name: "Size", value: "M" }] },
+      { id: "gid://shopify/ProductVariant/12", title: "XL", availableForSale: false, selectedOptions: [{ name: "Size", value: "XL" }] },
+    ] } } as any, "https://megaska.com")],
+  });
+  let system = "";
+  const complete = base.deps.complete;
+  base.deps.complete = async (input: any) => { system = input.system; return complete(input); };
+  base.deps.saveRestock = async (input: any) => { saved.push(input); };
+  return { ...base, saved, system: () => system };
+}
+
+test("back in stock: the customer's 'notify me' is saved against the sold-out size", async () => {
+  const { deps, sent, saved, system } = restockSetup({ reply: "Done! We'll WhatsApp you here as soon as XL is back.", intent: "product", needs_human: false, confidence: 0.9, restock_request: { product: "Swim Dress", size: "XL", color: null } });
+  const result = await runWhatsAppAssistant({ shopId: "shop-1", conversationId: "c1", waMessageId: "wamid.1" }, deps);
+  assert.equal(result.status, "sent");
+  assert.deepEqual(sent, ["Done! We'll WhatsApp you here as soon as XL is back."]);
+  assert.equal(saved.length, 1);
+  assert.equal(saved[0].phone, "919539180257");
+  assert.equal(saved[0].target.variantId, "gid://shopify/ProductVariant/12");
+  assert.equal(saved[0].target.variantTitle, "Size XL");
+  assert.match(system(), /restock_request/);
+});
+
+test("back in stock: an alert the shop cannot set up goes to the team; switched off, nothing is saved", async () => {
+  const unmatched = restockSetup({ reply: "Sure, we'll let you know!", intent: "product", needs_human: false, confidence: 0.9, restock_request: { product: "Bikini Set", size: "S", color: null } });
+  await runWhatsAppAssistant({ shopId: "shop-1", conversationId: "c1", waMessageId: "wamid.1" }, unmatched.deps);
+  assert.equal(unmatched.saved.length, 0);
+  assert.equal(unmatched.updates[0].handoffKind, "SOFT");
+  assert.match(unmatched.updates[0].handoffReason, /Back-in-stock request not matched to a product: Bikini Set/);
+
+  const off = restockSetup({ reply: "OK", intent: "product", needs_human: false, confidence: 0.9, restock_request: { product: "Swim Dress", size: "XL", color: null } }, false);
+  await runWhatsAppAssistant({ shopId: "shop-1", conversationId: "c1", waMessageId: "wamid.1" }, off.deps);
+  assert.equal(off.saved.length, 0);
+  assert.doesNotMatch(off.system(), /restock_request/);
+});
+
+test("the assistant sees which sizes are sold out", () => {
+  const product = productFromNode({ id: "p", title: "Swim Dress", handle: "d", variants: { nodes: [
+    { id: "v1", title: "M", availableForSale: true, selectedOptions: [{ name: "Size", value: "M" }] },
+    { id: "v2", title: "XL", availableForSale: false, selectedOptions: [{ name: "Size", value: "XL" }] },
+  ] } } as any, "https://megaska.com");
+  assert.equal(product?.sizes, "M");
+  assert.equal(product?.soldOut, "XL");
+});

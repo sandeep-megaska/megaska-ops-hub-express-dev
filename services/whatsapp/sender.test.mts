@@ -92,3 +92,17 @@ test("OTP send config uses the chosen number, its template and language; no send
   assert.equal(none.source, null);
   assert.equal(isWhatsAppOtpEligible("+919639390404", none.config), false);
 });
+
+test("growth message settings: second-order nudge needs a real offer line and a sensible delay", () => {
+  const encrypt = (value: string) => `enc:${value}`;
+  const input = { enabled: "on", phoneNumberId: "111111111111111", accessToken: "EAAG" + "x".repeat(40), templateLanguage: "en" };
+  const saved = buildMerchantWhatsAppUpdate({ ...input, backInStockEnabled: "on", reviewRequestsEnabled: "on", secondOrderEnabled: "on", secondOrderDelayDays: "28", secondOrderOffer: "  Prepaid orders   get 15% off at checkout. " }, null, encrypt);
+  assert.equal(saved.backInStockEnabled, true);
+  assert.equal(saved.reviewRequestsEnabled, true);
+  assert.equal(saved.secondOrderDelayDays, 28);
+  assert.equal(saved.secondOrderOffer, "Prepaid orders get 15% off at checkout.");
+  assert.equal(buildMerchantWhatsAppUpdate(input, null, encrypt).secondOrderDelayDays, 21, "default");
+  assert.throws(() => buildMerchantWhatsAppUpdate({ ...input, secondOrderEnabled: "on" }, null, encrypt), MerchantWhatsAppValidationError, "offer line required when on");
+  assert.throws(() => buildMerchantWhatsAppUpdate({ ...input, secondOrderDelayDays: "3" }, null, encrypt), MerchantWhatsAppValidationError);
+  assert.equal(toAdminView(null).secondOrderDelayDays, 21);
+});

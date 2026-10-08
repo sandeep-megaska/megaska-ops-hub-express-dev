@@ -42,6 +42,11 @@ export type MerchantWhatsAppAccountRow = {
   codConfirmEnabled?: boolean;
   codConfirmTemplate?: string;
   shippingUpdatesEnabled?: boolean;
+  backInStockEnabled?: boolean;
+  reviewRequestsEnabled?: boolean;
+  secondOrderEnabled?: boolean;
+  secondOrderDelayDays?: number;
+  secondOrderOffer?: string | null;
   aiMode?: string | null;
   aiKnowledge?: string | null;
   lastCheckedAt?: Date | null;
@@ -87,6 +92,17 @@ export async function listShippingUpdateAccounts(db?: AccountDb): Promise<Mercha
     return await (db ?? (await defaultDb())).merchantWhatsAppAccount.findMany({ where: { enabled: true, shippingUpdatesEnabled: true } });
   } catch (error) {
     console.warn("[WHATSAPP SENDER] shipping_update_accounts_lookup_failed", { error: error instanceof Error ? error.message : String(error) });
+    return [];
+  }
+}
+
+// Shops whose own number sends one of the growth messages (back-in-stock,
+// review requests, second-order nudges).
+export async function listWhatsAppAccountsWith(flag: "backInStockEnabled" | "reviewRequestsEnabled" | "secondOrderEnabled", db?: AccountDb): Promise<MerchantWhatsAppAccountRow[]> {
+  try {
+    return await (db ?? (await defaultDb())).merchantWhatsAppAccount.findMany({ where: { enabled: true, [flag]: true } });
+  } catch (error) {
+    console.warn("[WHATSAPP SENDER] accounts_lookup_failed", { flag, error: error instanceof Error ? error.message : String(error) });
     return [];
   }
 }
@@ -169,6 +185,11 @@ export type MerchantWhatsAppAdminView = {
   codConfirmEnabled: boolean;
   codConfirmTemplate: string;
   shippingUpdatesEnabled: boolean;
+  backInStockEnabled: boolean;
+  reviewRequestsEnabled: boolean;
+  secondOrderEnabled: boolean;
+  secondOrderDelayDays: number;
+  secondOrderOffer: string;
   lastCheckedAt: string | null;
   lastCheckStatus: string | null;
   lastCheckMessage: string | null;
@@ -193,6 +214,11 @@ export function toAdminView(account: MerchantWhatsAppAccountRow | null, env: Rec
     codConfirmEnabled: account?.codConfirmEnabled ?? false,
     codConfirmTemplate: account?.codConfirmTemplate ?? "cod_order_confirmation",
     shippingUpdatesEnabled: account?.shippingUpdatesEnabled ?? false,
+    backInStockEnabled: account?.backInStockEnabled ?? false,
+    reviewRequestsEnabled: account?.reviewRequestsEnabled ?? false,
+    secondOrderEnabled: account?.secondOrderEnabled ?? false,
+    secondOrderDelayDays: account?.secondOrderDelayDays ?? DEFAULT_SECOND_ORDER_DELAY_DAYS,
+    secondOrderOffer: account?.secondOrderOffer ?? "",
     lastCheckedAt: account?.lastCheckedAt ? new Date(account.lastCheckedAt).toISOString() : null,
     lastCheckStatus: account?.lastCheckStatus ?? null,
     lastCheckMessage: account?.lastCheckMessage ?? null,
@@ -200,6 +226,7 @@ export function toAdminView(account: MerchantWhatsAppAccountRow | null, env: Rec
   };
 }
 
+export const DEFAULT_SECOND_ORDER_DELAY_DAYS = 21;
 const TEMPLATE_NAME = /^[a-z0-9_]{1,512}$/;
 const LANGUAGE = /^[a-z]{2,3}(_[A-Z]{2})?$/;
 const NUMERIC_ID = /^\d{6,25}$/;
@@ -245,6 +272,13 @@ export function buildMerchantWhatsAppUpdate(
   }
   if (!accessTokenEncrypted) throw new MerchantWhatsAppValidationError("Access token is required.");
 
+  const secondOrderEnabled = flag(input.secondOrderEnabled);
+  const delayText = text(input.secondOrderDelayDays);
+  const secondOrderDelayDays = delayText ? Number(delayText) : DEFAULT_SECOND_ORDER_DELAY_DAYS;
+  if (!Number.isInteger(secondOrderDelayDays) || secondOrderDelayDays < 7 || secondOrderDelayDays > 90) throw new MerchantWhatsAppValidationError("Second-order nudge: days after delivery must be a whole number from 7 to 90.");
+  const secondOrderOffer = text(input.secondOrderOffer).replace(/\s+/g, " ").slice(0, 200);
+  if (secondOrderEnabled && !secondOrderOffer) throw new MerchantWhatsAppValidationError("Second-order nudge: enter the offer line customers will see (a real, current offer, e.g. \"Prepaid orders get 15% off at checkout.\").");
+
   return {
     enabled: flag(input.enabled),
     displayPhoneNumber: displayPhoneNumber || null,
@@ -258,6 +292,11 @@ export function buildMerchantWhatsAppUpdate(
     exchangeEnabled: flag(input.exchangeEnabled),
     codConfirmEnabled: flag(input.codConfirmEnabled),
     shippingUpdatesEnabled: flag(input.shippingUpdatesEnabled),
+    backInStockEnabled: flag(input.backInStockEnabled),
+    reviewRequestsEnabled: flag(input.reviewRequestsEnabled),
+    secondOrderEnabled,
+    secondOrderDelayDays,
+    secondOrderOffer: secondOrderOffer || null,
     ...templates,
   };
 }
