@@ -34,30 +34,50 @@ export function rebuildBagPage(items: Array<{ variantId: number; quantity: numbe
   const payload = JSON.stringify(items.map((item) => ({ id: item.variantId, quantity: item.quantity })));
   const intent = mode === "cod" ? "cod" : "";
   const ready = mode === "cod" ? "Your bag is ready. Tap Cash on Delivery to place your order." : "Your bag is ready. Choose Pay online or Cash on Delivery to place your order.";
+  // Shopify answers 409 Conflict when cart requests overlap, and the cart drawer
+  // reloads /cart.js after every cart change it sees. So the bag is rebuilt with
+  // the page's own fetch (captured here, before the deferred drawer script wraps
+  // it), one request at a time, and the drawer is opened once at the end. If its
+  // first load still hit a conflict, it is reopened (up to 3 times) before
+  // falling back to the cart page.
   const script = `<script>
 (function () {
   var items = ${payload};
   var status = document.getElementById("loopd2c-bag-status");
-  function post(url, body) {
-    return fetch(url, { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify(body || {}) })
-      .then(function (response) { if (!response.ok) throw new Error(url); return response.json(); });
+  var nativeFetch = window.fetch.bind(window);
+  function wait(ms) { return new Promise(function (resolve) { setTimeout(resolve, ms); }); }
+  function post(url, body, attempt) {
+    attempt = attempt || 0;
+    return nativeFetch(url, { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify(body || {}) })
+      .then(function (response) {
+        if ((response.status === 409 || response.status === 429) && attempt < 3) return wait(400 * (attempt + 1)).then(function () { return post(url, body, attempt + 1); });
+        if (!response.ok) throw new Error(url);
+        return response.json();
+      });
   }
-  function openDrawer(attempt) {
-    if (window.LoopDeskCartController && typeof window.LoopDeskCartController.open === "function") {
-      window.LoopDeskCartController.open();
-      if (status) status.textContent = ${JSON.stringify(ready)};
+  function drawerError(controller) {
+    try { return Boolean(controller.getState && controller.getState().error); } catch (error) { return false; }
+  }
+  function openDrawer(ready, waited, reopened) {
+    var controller = window.LoopDeskCartController;
+    if (!controller || typeof controller.open !== "function") {
+      if (waited > 40) { window.location.href = "/cart"; return; }
+      setTimeout(function () { openDrawer(ready, waited + 1, reopened); }, 150);
       return;
     }
-    if (attempt > 40) { window.location.href = "/cart"; return; }
-    setTimeout(function () { openDrawer(attempt + 1); }, 150);
+    Promise.resolve(controller.open()).then(function () {
+      if (!drawerError(controller)) { if (status) status.textContent = ready; return; }
+      if (reopened >= 3) { window.location.href = "/cart"; return; }
+      setTimeout(function () { openDrawer(ready, waited, reopened + 1); }, 700);
+    }, function () { window.location.href = "/cart"; });
   }
   post("/cart/clear.js")
     .then(function () { return post("/cart/add.js", { items: items }); })
     .then(function () { return post("/cart/update.js", { attributes: ${JSON.stringify({ loopd2c_payment_intent: intent, ...(options.source ? { loopd2c_source: options.source } : {}) })} }); })
-    .then(function () { openDrawer(0); })
-    .catch(function () {
+    .then(function () { return wait(250); })
+    .then(function () { openDrawer(${JSON.stringify(ready)}, 0, 0); }, function () {
       if (status) status.textContent = "Some items may be out of stock. Please check your bag.";
-      openDrawer(0);
+      openDrawer("Some items may be out of stock. Please check your bag.", 0, 0);
     });
 })();
 </script>`;
