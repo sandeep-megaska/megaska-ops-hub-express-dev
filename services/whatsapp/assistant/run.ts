@@ -56,6 +56,7 @@ export type AssistantDeps = {
   alert?: (input: { shopId: string; subject: string; text: string }) => Promise<unknown>;
   saveRestock?: (input: { shopId: string; phone: string; customerName: string | null; target: RestockTarget }) => Promise<unknown>;
   sendCatalog?: (input: { shopId: string; conversationId: string }) => Promise<unknown>;
+  sendProductCards?: (input: { shopId: string; conversationId: string; header: string; products: StoreContext["products"] }) => Promise<unknown>;
 };
 
 export type AssistantRunResult = { status: string; outcome?: string; intent?: string };
@@ -81,7 +82,20 @@ const defaults = {
   },
   saveRestock: async (input: { shopId: string; phone: string; customerName: string | null; target: RestockTarget }) => (await import("../back-in-stock.ts")).saveBackInStockRequest(input),
   sendCatalog: async (input: { shopId: string; conversationId: string }) => (await import("../shop-in-chat.ts")).sendCatalogMessage(input),
+  sendProductCards: async (input: { shopId: string; conversationId: string; header: string; products: StoreContext["products"] }) => (await import("../shop-in-chat.ts")).sendProductCards(input),
 };
+
+// Products the assistant named for cards, matched to the ones it was shown (in stock, no duplicates).
+export function cardProducts(titles: string[], products: StoreContext["products"]) {
+  const norm = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const picked: StoreContext["products"] = [];
+  for (const title of titles) {
+    const match = products.find((product) => norm(product.title) === norm(title) && product.inStock && !picked.includes(product))
+      ?? products.find((product) => norm(product.title).includes(norm(title)) && product.inStock && !picked.includes(product));
+    if (match) picked.push(match);
+  }
+  return picked.slice(0, 3);
+}
 
 function inboxLink(shopDomain: string, conversationId: string) {
   const base = String(process.env.APP_BASE_URL || "").trim().replace(/\/$/, "");
@@ -205,6 +219,13 @@ export async function runWhatsAppAssistant(input: { shopId: string; conversation
     }
   }
 
+  // Customers often send two or three short messages in a row: if another one
+  // arrived while the model was thinking, its own run answers all of them.
+  const latestNow = (await db.whatsAppMessage.findMany({ where: { conversationId: conversation.id, direction: "INBOUND" }, orderBy: { createdAt: "desc" }, take: 1 }))[0];
+  if (latestNow && latestNow.waMessageId && latestNow.waMessageId !== input.waMessageId && latestNow.direction === "INBOUND") {
+    return { status: "skipped", outcome: "superseded_by_newer_message" };
+  }
+
   const outcome = decideOutcome(mode, result);
   console.info("[WHATSAPP ASSISTANT] outcome", { conversationId: conversation.id, mode, kind: outcome.kind, intent: result.intent, confidence: result.confidence, needsHuman: result.needsHuman, handoffKind: result.handoffKind });
   if (outcome.kind === "draft") {
@@ -227,7 +248,11 @@ export async function runWhatsAppAssistant(input: { shopId: string; conversation
     await handOver("The assistant's reply could not be sent", null, "SOFT");
     return { status: "handoff", outcome: "send_failed", intent: result.intent };
   }
-  if (shopInChat && result.showCatalog) {
+  const cards = shopInChat && result.showProducts?.length ? cardProducts(result.showProducts, context?.products ?? []) : [];
+  if (cards.length) {
+    await (deps.sendProductCards ?? defaults.sendProductCards)({ shopId: input.shopId, conversationId: conversation.id, header: result.cardsTitle || "Our picks for you", products: cards })
+      .catch((error) => console.error("[WHATSAPP ASSISTANT] cards_send_failed", { conversationId: conversation.id, error: error instanceof Error ? error.message.slice(0, 200) : String(error) }));
+  } else if (shopInChat && (result.showCatalog || result.showProducts?.length)) {
     await (deps.sendCatalog ?? defaults.sendCatalog)({ shopId: input.shopId, conversationId: conversation.id })
       .catch((error) => console.error("[WHATSAPP ASSISTANT] catalog_send_failed", { conversationId: conversation.id, error: error instanceof Error ? error.message.slice(0, 200) : String(error) }));
   }

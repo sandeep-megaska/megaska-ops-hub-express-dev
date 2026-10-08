@@ -50,6 +50,7 @@ export type MerchantWhatsAppAccountRow = {
   shopInChatEnabled?: boolean;
   adConversionsEnabled?: boolean;
   capiDatasetId?: string | null;
+  catalogId?: string | null;
   aiMode?: string | null;
   aiKnowledge?: string | null;
   lastCheckedAt?: Date | null;
@@ -195,6 +196,7 @@ export type MerchantWhatsAppAdminView = {
   secondOrderOffer: string;
   shopInChatEnabled: boolean;
   adConversionsEnabled: boolean;
+  catalogId: string;
   lastCheckedAt: string | null;
   lastCheckStatus: string | null;
   lastCheckMessage: string | null;
@@ -226,6 +228,7 @@ export function toAdminView(account: MerchantWhatsAppAccountRow | null, env: Rec
     secondOrderOffer: account?.secondOrderOffer ?? "",
     shopInChatEnabled: account?.shopInChatEnabled ?? false,
     adConversionsEnabled: account?.adConversionsEnabled ?? false,
+    catalogId: account?.catalogId ?? "",
     lastCheckedAt: account?.lastCheckedAt ? new Date(account.lastCheckedAt).toISOString() : null,
     lastCheckStatus: account?.lastCheckStatus ?? null,
     lastCheckMessage: account?.lastCheckMessage ?? null,
@@ -279,6 +282,8 @@ export function buildMerchantWhatsAppUpdate(
   }
   if (!accessTokenEncrypted) throw new MerchantWhatsAppValidationError("Access token is required.");
 
+  const catalogId = text(input.catalogId);
+  if (catalogId && !NUMERIC_ID.test(catalogId)) throw new MerchantWhatsAppValidationError("Meta catalog ID must be the numeric ID from Commerce Manager.");
   if (flag(input.adConversionsEnabled) && !businessAccountId) throw new MerchantWhatsAppValidationError("Reporting WhatsApp ad sales to Meta needs the WhatsApp Business Account ID.");
   const secondOrderEnabled = flag(input.secondOrderEnabled);
   const delayText = text(input.secondOrderDelayDays);
@@ -307,6 +312,7 @@ export function buildMerchantWhatsAppUpdate(
     secondOrderOffer: secondOrderOffer || null,
     shopInChatEnabled: flag(input.shopInChatEnabled),
     adConversionsEnabled: flag(input.adConversionsEnabled),
+    catalogId: catalogId || null,
     ...templates,
   };
 }

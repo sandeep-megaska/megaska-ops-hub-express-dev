@@ -228,7 +228,7 @@ from `createCodRecoveryToken`, checkout id `wa:<message id>`, needs
 CHECKOUT_RECOVERY_SIGNING_SECRET). The bag opens with exactly those items and is
 tagged with the cart attribute `loopd2c_source=whatsapp_cart`. Sold-out items are
 named; unmatched carts become a SOFT handoff. AuditEvent `WHATSAPP_CART_LINK_SENT`.
-The AI assistant may set `show_catalog` to send a `catalog_message` after its reply.
+The AI assistant names products to show (`show_products`, up to 3, plus `cards_title`): they are sent after its short reply as a `product_list` (one section per product, its in-stock variants as items, retailer ids `shopify_IN_<product>_<variant>` as the Shopify channel syncs them, catalog id from settings or `GET /{waba}/product_catalogs`, cached). If cards cannot be sent it falls back to a `catalog_message`; `show_catalog` opens the whole catalog. A run whose message was followed by another before the reply is ready is skipped (the newer message's run answers both).
 
 ### Click-to-WhatsApp ads (attribution + Conversions API)
 
