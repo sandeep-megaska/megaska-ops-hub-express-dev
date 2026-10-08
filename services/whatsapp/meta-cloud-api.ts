@@ -23,6 +23,18 @@ function graphMessagesUrl(config: MetaCloudApiConfig, phoneNumberId: string) {
   return `https://graph.facebook.com/${version}/${phoneNumberId}/messages`;
 }
 
+// Inbox text for a template send: its name plus the values filled in (order
+// number, tracking link, amount …), so the team and the AI assistant can see
+// what the customer was actually told.
+export function templateInboxText(input: Pick<SendTemplateMessageInput, "templateName" | "variables" | "components">) {
+  const fromComponents = (input.components ?? [])
+    .filter((component) => component.type === "body")
+    .flatMap((component) => (component.parameters ?? []).map((parameter) => (parameter as { text?: unknown }).text))
+    .filter((text): text is string => typeof text === "string" && Boolean(text.trim()));
+  const values = (input.variables?.length ? input.variables : fromComponents).map((value) => String(value).trim()).filter(Boolean);
+  return values.length ? `Template: ${input.templateName} · ${values.join(" · ")}`.slice(0, 1000) : `Template: ${input.templateName}`;
+}
+
 function buildTemplateComponents(input: SendTemplateMessageInput) {
   if (input.components?.length) return input.components;
   if (!input.variables?.length) return undefined;
@@ -89,7 +101,7 @@ export class MetaCloudApiWhatsAppProvider implements WhatsAppProvider {
       // Show automated messages (reminders, exchange updates) in the inbox thread.
       try {
         const { recordOutboundMessage } = await import("./inbox.ts");
-        await recordOutboundMessage({ shopId: input.shopId, businessPhoneNumberId: sender.phoneNumberId, toPhone: input.toPhone, waMessageId: messageId, type: "template", body: `Template: ${input.templateName}`, templateName: input.templateName });
+        await recordOutboundMessage({ shopId: input.shopId, businessPhoneNumberId: sender.phoneNumberId, toPhone: input.toPhone, waMessageId: messageId, type: "template", body: templateInboxText(input), templateName: input.templateName });
       } catch {
         // The send succeeded; the inbox record is best-effort.
       }

@@ -27,6 +27,25 @@ export function normalizeAssistantMode(value: unknown): AssistantMode {
 }
 
 const ANSWERABLE_TYPES = new Set(["text", "button", "interactive"]);
+// Emoji reactions and stickers are a nod, not a question: no reply, no handoff.
+const SILENT_TYPES = new Set(["reaction", "sticker"]);
+
+const ACKNOWLEDGEMENTS = new Set([
+  "ok", "okay", "okk", "okkk", "k", "kk", "okie", "oki", "ok thanks", "ok thank you", "ok thanku", "okay thanks", "ok ji", "okay ji",
+  "thanks", "thank you", "thank u", "thanku", "thankyou", "thx", "ty", "tq", "thanks a lot", "thank you so much", "many thanks",
+  "done", "fine", "great", "good", "nice", "sure", "noted", "alright", "all right", "cool", "perfect", "got it", "received",
+  "ji", "ji ok", "theek hai", "thik hai", "theek h", "thik h", "accha", "achha", "acha", "haan", "haa", "hmm", "hm", "shukriya", "dhanyavad",
+]);
+
+// "Ok", "Thanks", "👍", "Theek hai" … closes a thread; answering it is just noise.
+export function isAcknowledgement(text: string | null | undefined) {
+  const raw = String(text ?? "").trim();
+  if (!raw) return false;
+  const withoutEmoji = raw.replace(/[\p{Extended_Pictographic}\p{Emoji_Modifier}\u200d\ufe0f]/gu, "").trim();
+  if (!withoutEmoji) return true; // emoji only
+  const normalized = withoutEmoji.toLowerCase().replace(/[.!,]+/g, " ").replace(/\s+/g, " ").trim();
+  return ACKNOWLEDGEMENTS.has(normalized);
+}
 
 // How a chat is handed to the team:
 //   HARD – complaints, refunds/returns/exchanges/cancellations, photos, damaged
@@ -52,6 +71,9 @@ export type AssistantGateInput = {
   isConsentKeyword: boolean;
   conversation: { needsHuman: boolean; handoffKind?: string | null; aiPausedUntil: Date | null };
   newerInboundExists: boolean;
+  // The store's last message asked something ("Shall I share options?"), so a
+  // short "ok" / "haan" is an answer, not a sign-off.
+  lastStoreMessageAskedQuestion?: boolean;
   aiRepliesLastHour: number;
   shopAiRepliesLastDay: number;
   now: Date;
@@ -75,6 +97,8 @@ export function assistantGate(input: AssistantGateInput): AssistantGate {
   }
   if (input.aiRepliesLastHour >= MAX_AI_REPLIES_PER_CHAT_PER_HOUR) return { action: "handoff", reason: "Many messages in a short time", handoffKind: "HARD" };
   if (input.shopAiRepliesLastDay >= MAX_AI_REPLIES_PER_SHOP_PER_DAY) return { action: "skip", reason: "daily_limit" };
+  if (SILENT_TYPES.has(input.message.type)) return { action: "skip", reason: "reaction_or_sticker" };
+  if (ANSWERABLE_TYPES.has(input.message.type) && !input.lastStoreMessageAskedQuestion && isAcknowledgement(input.message.body)) return { action: "skip", reason: "acknowledgement" };
   // Photos, voice notes, documents: a person should look at them.
   if (!ANSWERABLE_TYPES.has(input.message.type)) return { action: "handoff", reason: `Customer sent a ${input.message.type}`, handoffKind: "HARD" };
   if (!input.message.body.trim()) return { action: "skip", reason: "empty_message" };

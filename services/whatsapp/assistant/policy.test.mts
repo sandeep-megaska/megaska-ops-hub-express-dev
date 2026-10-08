@@ -92,3 +92,13 @@ test("handoff kind: requests about refunds/complaints are always HARD; 'let me c
   const policyQuestion = parseAssistantResult({ reply: "Refunds are processed within 10 business days.", intent: "policy", needs_human: false, confidence: 0.9 });
   assert.equal(policyQuestion?.needsHuman, false, "a question about the refund policy is answered, not handed over");
 });
+
+test("'Ok', 'Thanks', 'Theek hai', emoji, reactions and stickers get no reply and no handoff", () => {
+  for (const body of ["Ok", "ok.", "Okay thanks", "Thank you!", "theek hai", "👍", "🙏🙏", "Thanks 😊"]) {
+    assert.deepEqual(assistantGate(gateInput({ message: { type: "text", body } })), { action: "skip", reason: "acknowledgement" }, body);
+  }
+  assert.equal(assistantGate(gateInput({ message: { type: "reaction", body: "Reacted 👍" } })).action, "skip");
+  assert.equal(assistantGate(gateInput({ message: { type: "sticker", body: "Sticker" } })).action, "skip");
+  assert.equal(assistantGate(gateInput({ message: { type: "text", body: "Ok but when will it arrive?" } })).action, "respond");
+  assert.equal(assistantGate(gateInput({ message: { type: "text", body: "ok" }, lastStoreMessageAskedQuestion: true })).action, "respond", "an answer to our question");
+});

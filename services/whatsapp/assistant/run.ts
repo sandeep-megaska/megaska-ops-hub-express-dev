@@ -120,6 +120,7 @@ export async function runWhatsAppAssistant(input: { shopId: string; conversation
     isConsentKeyword: Boolean(consentKeyword(trigger.body)),
     conversation: { needsHuman: conversation.needsHuman, handoffKind: conversation.handoffKind ?? null, aiPausedUntil: conversation.aiPausedUntil },
     newerInboundExists: Boolean(latestInbound && latestInbound.waMessageId !== input.waMessageId),
+    lastStoreMessageAskedQuestion: /\?\s*\S{0,3}\s*$/.test(String([...recent].filter((message) => message.direction === "OUTBOUND" && message.createdAt <= trigger.createdAt).pop()?.body ?? "")),
     aiRepliesLastHour,
     shopAiRepliesLastDay,
     now: at,
