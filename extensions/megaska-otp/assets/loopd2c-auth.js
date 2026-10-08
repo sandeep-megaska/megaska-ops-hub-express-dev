@@ -220,12 +220,20 @@
       data = { ok: true, sent: true };
       jsonOk = true;
     } else {
-      throw new Error("Empty server response");
+      const emptyError = new Error("Empty server response");
+      emptyError.status = response.status;
+      emptyError.gateway = true;
+      throw emptyError;
     }
   }
 
   if (hasBody && !jsonOk) {
-    throw new Error("Unexpected server response");
+    // An HTML/text body comes from the Shopify app proxy or the host (timeout or
+    // crash page), not from the API, which always answers JSON.
+    const gatewayError = new Error("Unexpected server response");
+    gatewayError.status = response.status;
+    gatewayError.gateway = true;
+    throw gatewayError;
   }
 
   if (!response.ok) {
@@ -264,10 +272,32 @@
     console.log("[Megaska Auth] OTP request triggered", { endpoint: `${API_BASE}/otp/request` });
     // channel "sms" skips WhatsApp delivery (the "Get code by SMS" fallback).
     const channel = options && options.channel === "sms" ? "sms" : undefined;
-    return apiFetch("/otp/request", {
+    const send = () => apiFetch("/otp/request", {
       method: "POST",
       body: JSON.stringify(channel ? { phone, countryCode, channel } : { phone, countryCode }),
     });
+    try {
+      return await send();
+    } catch (error) {
+      // A gateway error page (timeout or crash on the way) does not mean the code
+      // was not sent: the request may have finished after the proxy gave up. Try
+      // once more; if that is refused as "too soon", the first code is on its way.
+      const gatewayFailure = error && (error.gateway || [502, 503, 504].includes(Number(error.status)) && !error.code);
+      if (!gatewayFailure) throw error;
+      console.warn("[Megaska OTP] gateway error on send, retrying once", { status: error.status || null });
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      try {
+        return await send();
+      } catch (retryError) {
+        if (retryError && retryError.code === "OTP_RATE_LIMITED") {
+          return { ok: true, sent: true, success: true, otpSent: true, recoveredFromGatewayError: true };
+        }
+        if (retryError && retryError.gateway) {
+          throw new Error("We could not reach the login service. Please check your connection and try again.");
+        }
+        throw retryError;
+      }
+    }
   }
 
   async function checkPincode(pincode) {
