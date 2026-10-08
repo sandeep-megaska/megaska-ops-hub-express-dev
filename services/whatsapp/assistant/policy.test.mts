@@ -40,15 +40,16 @@ test("model output is validated; anything malformed becomes a handoff", () => {
 });
 
 test("AUTO sends confident answers, holds and hands over otherwise; DRAFT never sends", () => {
-  const answer = { reply: "Yes, XL is in stock.", intent: "product", needsHuman: false, handoffReason: null, confidence: 0.9 };
+  const answer = { reply: "Yes, XL is in stock.", intent: "product", needsHuman: false, handoffKind: "SOFT" as const, handoffReason: null, confidence: 0.9 };
   assert.deepEqual(decideOutcome("AUTO", answer), { kind: "send", text: "Yes, XL is in stock.", handoff: false });
   const unsure = decideOutcome("AUTO", { ...answer, confidence: 0.4 });
   assert.equal(unsure.kind, "send");
   assert.equal(unsure.kind === "send" && unsure.text, DEFAULT_HOLDING_MESSAGE, "an unsure answer is never sent in the AI's words");
   assert.equal(unsure.kind === "send" && unsure.handoff, true);
-  const complaint = decideOutcome("AUTO", { ...answer, reply: "Sorry about that! Our team will help you shortly.", needsHuman: true, handoffReason: "Damaged item" });
-  assert.deepEqual(complaint, { kind: "send", text: "Sorry about that! Our team will help you shortly.", handoff: true, reason: "Damaged item" });
-  assert.deepEqual(decideOutcome("DRAFT", answer), { kind: "draft", text: "Yes, XL is in stock.", handoff: false, reason: null });
+  assert.equal(unsure.kind === "send" && unsure.handoff && unsure.handoffKind, "SOFT", "unsure answers are checked by the team, the assistant keeps going");
+  const complaint = decideOutcome("AUTO", { ...answer, reply: "Sorry about that! Our team will help you shortly.", needsHuman: true, handoffKind: "HARD", handoffReason: "Damaged item" });
+  assert.deepEqual(complaint, { kind: "send", text: "Sorry about that! Our team will help you shortly.", handoff: true, reason: "Damaged item", handoffKind: "HARD" });
+  assert.deepEqual(decideOutcome("DRAFT", answer), { kind: "draft", text: "Yes, XL is in stock.", handoff: false, reason: null, handoffKind: "SOFT" });
   assert.equal(decideOutcome("DRAFT", { ...answer, reply: "" }).kind, "handoff_only");
 });
 
@@ -71,4 +72,23 @@ test("prompt carries only the store's facts and the recent chat", () => {
   assert.match(prompt, /Swim Dress \| ₹1195 \| in stock \| sizes available: M, L \| https:\/\/megaska\.com\/products\/swim-dress/);
   assert.match(prompt, /ORDERS: none found/);
   assert.match(prompt, /Customer: XL available\?$/);
+});
+
+test("SOFT handoff keeps the assistant answering; HARD (or an older flag without a kind) silences it", () => {
+  assert.equal(assistantGate(gateInput({ conversation: { needsHuman: true, handoffKind: "SOFT", aiPausedUntil: null } })).action, "respond");
+  assert.equal(assistantGate(gateInput({ conversation: { needsHuman: true, handoffKind: "HARD", aiPausedUntil: null } })).action, "skip");
+  assert.equal(assistantGate(gateInput({ conversation: { needsHuman: true, handoffKind: null, aiPausedUntil: null } })).action, "skip");
+  const photo = assistantGate(gateInput({ message: { type: "image", body: "📷 Photo" } }));
+  assert.equal(photo.action === "handoff" && photo.handoffKind, "HARD");
+});
+
+test("handoff kind: requests about refunds/complaints are always HARD; 'let me check' can be SOFT", () => {
+  assert.equal(parseAssistantResult({ reply: "I'll check with the team.", intent: "product", needs_human: true, handoff_kind: "soft", confidence: 0.8 })?.handoffKind, "SOFT");
+  assert.equal(parseAssistantResult({ reply: "Sorry! Team will help.", intent: "complaint", needs_human: true, handoff_kind: "soft", confidence: 0.8 })?.handoffKind, "HARD", "the model cannot soften a complaint");
+  assert.equal(parseAssistantResult({ reply: "Team will help.", intent: "other", needs_human: true, confidence: 0.8 })?.handoffKind, "HARD", "no kind given: safe default");
+  const returnRequest = parseAssistantResult({ reply: "Our team will arrange it.", intent: "return_exchange", needs_human: false, confidence: 0.9 });
+  assert.equal(returnRequest?.needsHuman, true);
+  assert.equal(returnRequest?.handoffKind, "HARD");
+  const policyQuestion = parseAssistantResult({ reply: "Refunds are processed within 10 business days.", intent: "policy", needs_human: false, confidence: 0.9 });
+  assert.equal(policyQuestion?.needsHuman, false, "a question about the refund policy is answered, not handed over");
 });

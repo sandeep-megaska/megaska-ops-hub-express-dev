@@ -47,7 +47,7 @@ test("AUTO: a complaint gets one holding message, the chat is flagged for the te
   const result = await runWhatsAppAssistant({ shopId: "shop-1", conversationId: "c1", waMessageId: "wamid.1" }, deps);
   assert.equal(result.status, "handoff");
   assert.deepEqual(sent, ["So sorry! Our team will sort this out shortly."]);
-  assert.deepEqual(updates[0], { needsHuman: true, handoffReason: "Damaged item" });
+  assert.deepEqual(updates[0], { needsHuman: true, handoffKind: "HARD", handoffReason: "Damaged item" });
   assert.match(alerts[0].subject, /Sandeep needs a reply/);
 });
 
@@ -104,4 +104,37 @@ test("store data is turned into plain facts: sizes in stock, prices, order statu
   assert.equal(order?.payment, "cash on delivery");
   assert.equal(order?.tracking, "https://track.example/123");
   assert.equal(order?.items, "1× Swim Dress (L)");
+});
+
+test("last night's chat: after a SOFT 'let me check' handoff, the refund policy question is still answered, with no second email", async () => {
+  const { deps, sent, alerts, updates } = setup({
+    conversation: { needsHuman: true, handoffKind: "SOFT" },
+    messages: [{ id: "m9", direction: "INBOUND", waMessageId: "wamid.9", type: "text", body: "What is refund policy", createdAt: NOW }],
+    aiReply: { reply: "Refunds are processed within 10 business days to your original payment method once we receive the item.", intent: "policy", needs_human: false, confidence: 0.9 },
+  });
+  const result = await runWhatsAppAssistant({ shopId: "shop-1", conversationId: "c1", waMessageId: "wamid.9" }, deps);
+  assert.equal(result.status, "sent");
+  assert.equal(sent.length, 1);
+  assert.equal(alerts.length, 0);
+  assert.equal(updates.length, 0, "the earlier SOFT flag stays for the team");
+});
+
+test("a SOFT chat that turns into a complaint is raised to HARD and the team is emailed", async () => {
+  const { deps, alerts, updates } = setup({
+    conversation: { needsHuman: true, handoffKind: "SOFT" },
+    aiReply: { reply: "So sorry! Our team will sort this out.", intent: "complaint", needs_human: true, handoff_kind: "hard", confidence: 0.9 },
+  });
+  await runWhatsAppAssistant({ shopId: "shop-1", conversationId: "c1", waMessageId: "wamid.1" }, deps);
+  assert.equal(updates[0].handoffKind, "HARD");
+  assert.equal(alerts.length, 1);
+});
+
+test("a second SOFT 'let me check' in an already flagged chat sends the reply but no second email", async () => {
+  const { deps, sent, alerts, updates } = setup({
+    conversation: { needsHuman: true, handoffKind: "SOFT" },
+    aiReply: { reply: "Let me check that with the team.", intent: "product", needs_human: true, handoff_kind: "soft", confidence: 0.8 },
+  });
+  await runWhatsAppAssistant({ shopId: "shop-1", conversationId: "c1", waMessageId: "wamid.1" }, deps);
+  assert.deepEqual(sent, ["Let me check that with the team."]);
+  assert.equal(alerts.length + updates.length, 0);
 });
