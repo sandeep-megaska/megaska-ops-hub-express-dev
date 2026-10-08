@@ -26,7 +26,9 @@ export function expiredPage(mode: RebuildMode) {
   );
 }
 
-export function rebuildBagPage(items: Array<{ variantId: number; quantity: number }>, mode: RebuildMode) {
+// `source` (a fixed code, e.g. "whatsapp_cart") is saved as the cart attribute
+// loopd2c_source, so orders placed from that bag can be counted.
+export function rebuildBagPage(items: Array<{ variantId: number; quantity: number }>, mode: RebuildMode, options: { source?: "whatsapp_cart" } = {}) {
   // Only numeric variant ids and quantities reach the script (validated when the
   // token is verified), so JSON.stringify output is safe to inline.
   const payload = JSON.stringify(items.map((item) => ({ id: item.variantId, quantity: item.quantity })));
@@ -51,7 +53,7 @@ export function rebuildBagPage(items: Array<{ variantId: number; quantity: numbe
   }
   post("/cart/clear.js")
     .then(function () { return post("/cart/add.js", { items: items }); })
-    .then(function () { return post("/cart/update.js", { attributes: { loopd2c_payment_intent: ${JSON.stringify(intent)} } }); })
+    .then(function () { return post("/cart/update.js", { attributes: ${JSON.stringify({ loopd2c_payment_intent: intent, ...(options.source ? { loopd2c_source: options.source } : {}) })} }); })
     .then(function () { openDrawer(0); })
     .catch(function () {
       if (status) status.textContent = "Some items may be out of stock. Please check your bag.";

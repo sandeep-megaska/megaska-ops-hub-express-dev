@@ -31,6 +31,8 @@ export type InboundMessage = {
   location?: { latitude?: number; longitude?: number; name?: string; address?: string };
   contacts?: Array<{ name?: { formatted_name?: string } }>;
   reaction?: { emoji?: string };
+  // A cart sent from the WhatsApp catalog ("Place order").
+  order?: { catalog_id?: string; text?: string; product_items?: Array<{ product_retailer_id?: string; quantity?: number | string; item_price?: number | string; currency?: string }> };
 };
 
 export type WebhookValue = {
@@ -55,6 +57,13 @@ export function describeInbound(message: InboundMessage): { type: string; body: 
     case "location": return { type, body: `📍 ${[message.location?.name, message.location?.address].filter(Boolean).join(", ") || `${message.location?.latitude}, ${message.location?.longitude}`}`, mediaId: null };
     case "contacts": return { type, body: `👤 ${message.contacts?.[0]?.name?.formatted_name || "Contact card"}`, mediaId: null };
     case "reaction": return { type, body: `Reacted ${message.reaction?.emoji || ""}`.trim(), mediaId: null };
+    case "order": {
+      const items = message.order?.product_items ?? [];
+      const units = items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+      const total = items.reduce((sum, item) => sum + (Number(item.item_price) || 0) * (Number(item.quantity) || 0), 0);
+      const currency = items[0]?.currency === "INR" || !items[0]?.currency ? "₹" : `${items[0].currency} `;
+      return { type, body: `🛒 Cart from catalog: ${units} item${units === 1 ? "" : "s"}${total ? ` · ${currency}${total.toLocaleString("en-IN")}` : ""}${message.order?.text ? ` · "${message.order.text}"` : ""}`, mediaId: null };
+    }
     default: return { type, body: `Unsupported message (${type})`, mediaId: null };
   }
 }
@@ -231,6 +240,28 @@ export async function sendConversationText(
   const data = (await response.json().catch(() => null)) as { messages?: Array<{ id?: string }>; error?: { message?: string } } | null;
   if (!response.ok) throw new InboxReplyError(`WhatsApp did not accept the message: ${data?.error?.message || `HTTP ${response.status}`}`);
   await recordOutboundMessage({ shopId: input.shopId, businessPhoneNumberId: sender.phoneNumberId, toPhone: conversation.contactPhone, waMessageId: data?.messages?.[0]?.id || null, type: "text", body: text, sentByEmail: input.sentByEmail, sentByAi: input.sentByAi, now: input.now }, { db });
+  return conversation;
+}
+
+// Sends a WhatsApp interactive message (catalog, product list …) in an open
+// chat. `inboxBody` is what the team sees in the inbox for it.
+export async function sendConversationInteractive(
+  input: { shopId: string; conversationId: string; interactive: Record<string, unknown>; inboxBody: string; sentByAi?: boolean; now?: Date },
+  deps: { db?: InboxDb; fetcher?: Fetcher } = {},
+) {
+  const db = deps.db ?? (await defaultDb());
+  const conversation = await db.whatsAppConversation.findFirst({ where: { id: input.conversationId, shopId: input.shopId } });
+  if (!conversation) throw new InboxReplyError("Conversation not found.");
+  if (!isWithinCustomerWindow(conversation.lastInboundAt, input.now)) throw new InboxReplyError("More than 24 hours since the customer's last message.");
+  const sender = await senderForShop(db, input.shopId, conversation.businessPhoneNumberId);
+  const response = await (deps.fetcher ?? fetch)(`https://graph.facebook.com/${graphVersion()}/${sender.phoneNumberId}/messages`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${sender.accessToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ messaging_product: "whatsapp", recipient_type: "individual", to: conversation.contactPhone, type: "interactive", interactive: input.interactive }),
+  });
+  const data = (await response.json().catch(() => null)) as { messages?: Array<{ id?: string }>; error?: { message?: string } } | null;
+  if (!response.ok) throw new InboxReplyError(`WhatsApp did not accept the message: ${data?.error?.message || `HTTP ${response.status}`}`);
+  await recordOutboundMessage({ shopId: input.shopId, businessPhoneNumberId: sender.phoneNumberId, toPhone: conversation.contactPhone, waMessageId: data?.messages?.[0]?.id || null, type: "interactive", body: input.inboxBody, sentByAi: input.sentByAi, now: input.now }, { db });
   return conversation;
 }
 

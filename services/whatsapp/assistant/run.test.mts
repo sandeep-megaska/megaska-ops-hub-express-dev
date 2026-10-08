@@ -190,3 +190,23 @@ test("the assistant sees which sizes are sold out", () => {
   assert.equal(product?.sizes, "M");
   assert.equal(product?.soldOut, "XL");
 });
+
+test("shop in chat: a browsing customer gets the reply and then the catalog", async () => {
+  const base = setup({ aiReply: { reply: "Here are our styles! Pick your size, add to cart and tap Place order.", intent: "product", needs_human: false, confidence: 0.9, show_catalog: true } });
+  const catalogs: any[] = [];
+  let system = "";
+  base.deps.db.merchantWhatsAppAccount.findUnique = async () => ({ shopId: "shop-1", enabled: true, aiMode: "AUTO", aiKnowledge: null, shopInChatEnabled: true });
+  const complete = base.deps.complete;
+  base.deps.complete = async (input: any) => { system = input.system; return complete(input); };
+  base.deps.sendCatalog = async (input: any) => { catalogs.push(input); };
+  await runWhatsAppAssistant({ shopId: "shop-1", conversationId: "c1", waMessageId: "wamid.1" }, base.deps);
+  assert.equal(base.sent.length, 1);
+  assert.deepEqual(catalogs, [{ shopId: "shop-1", conversationId: "c1" }]);
+  assert.match(system, /show_catalog/);
+
+  const off = setup({ aiReply: { reply: "Here!", intent: "product", needs_human: false, confidence: 0.9, show_catalog: true } });
+  const offCatalogs: any[] = [];
+  off.deps.sendCatalog = async (input: any) => { offCatalogs.push(input); };
+  await runWhatsAppAssistant({ shopId: "shop-1", conversationId: "c1", waMessageId: "wamid.1" }, off.deps);
+  assert.equal(offCatalogs.length, 0, "not sent when shop in chat is off");
+});

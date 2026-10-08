@@ -114,6 +114,8 @@ export type AssistantResult = {
   confidence: number;
   // The customer asked to be told when a sold-out product / size / colour is back.
   restockRequest?: { product: string; size: string | null; color: string | null } | null;
+  // Open the shop's WhatsApp catalog in the chat after the reply.
+  showCatalog?: boolean;
 };
 
 function restockRequestFrom(value: unknown): AssistantResult["restockRequest"] {
@@ -151,6 +153,7 @@ export function parseAssistantResult(raw: Record<string, unknown> | null): Assis
     handoffReason: typeof raw.handoff_reason === "string" && raw.handoff_reason.trim() ? raw.handoff_reason.trim().slice(0, 200) : null,
     confidence: Number.isFinite(confidence) ? Math.min(1, Math.max(0, confidence)) : 0,
     restockRequest: restockRequestFrom(raw.restock_request),
+    showCatalog: raw.show_catalog === true,
   };
 }
 
@@ -222,7 +225,7 @@ export type StoreContext = {
 
 export type ChatLine = { from: "customer" | "store"; text: string };
 
-export function buildSystemPrompt(storeName: string, options: { backInStock?: boolean } = {}) {
+export function buildSystemPrompt(storeName: string, options: { backInStock?: boolean; shopInChat?: boolean } = {}) {
   return [
     `You are the WhatsApp assistant of ${storeName}, an Indian online store. You reply to customers on WhatsApp for the store team.`,
     "",
@@ -244,12 +247,15 @@ export function buildSystemPrompt(storeName: string, options: { backInStock?: bo
     ...(options.backInStock ? [
       "- Sold out: when a product, size or colour the customer wants is sold out, say so plainly and offer to WhatsApp them as soon as it is back in stock. When they ask to be told or agree (\"yes\", \"notify me\", \"haan\"), set restock_request to {\"product\": the exact product title from PRODUCTS, \"size\": the size or null, \"color\": the colour or null} and confirm you will message them here when it is back. Never promise or guess a restock date.",
     ] : []),
+    ...(options.shopInChat ? [
+      "- Shopping in the chat: when the customer wants to browse, see more styles, buy, or asks how to order on WhatsApp, set show_catalog to true; the store's catalog opens in the chat right after your reply. In the reply say they can pick their size, add to cart and tap Place order to get a checkout link (pay online or Cash on Delivery). Do not set it for order-status, complaint or policy questions.",
+    ] : []),
     "- Yes/no questions: answer with the correct word first (\"No, …\" / \"Nahi, …\" when the answer is no). Never start with yes (\"Haan\") and then say the opposite.",
     "",
     "Style: reply in the customer's language and script (English, Hindi, Hinglish, Malayalam, Tamil, …). Warm, plain and short: at most 5 short lines. WhatsApp formatting only (*bold* sparingly), at most one emoji. No greeting block or signature on follow-up messages.",
     "If the message is only a greeting, greet back and say you can help with products, sizes and orders.",
     "",
-    `Return JSON only: {"reply": string, "intent": "greeting"|"product"|"size"|"order_status"|"policy"|"complaint"|"return_exchange"|"other", "needs_human": boolean, "handoff_kind": "soft"|"hard"|null, "handoff_reason": string|null, "confidence": number between 0 and 1 = how fully the facts support your reply${options.backInStock ? ', "restock_request": {"product": string, "size": string|null, "color": string|null}|null' : ""}}.`,
+    `Return JSON only: {"reply": string, "intent": "greeting"|"product"|"size"|"order_status"|"policy"|"complaint"|"return_exchange"|"other", "needs_human": boolean, "handoff_kind": "soft"|"hard"|null, "handoff_reason": string|null, "confidence": number between 0 and 1 = how fully the facts support your reply${options.backInStock ? ', "restock_request": {"product": string, "size": string|null, "color": string|null}|null' : ""}${options.shopInChat ? ', "show_catalog": boolean' : ""}}.`,
   ].join("\n");
 }
 

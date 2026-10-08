@@ -31,7 +31,7 @@ type Conversation = { id: string; shopId: string; businessPhoneNumberId: string;
 type Message = { id: string; direction: string; waMessageId: string | null; type: string; body: string | null; sentByAi?: boolean; createdAt: Date };
 
 export type AssistantDb = {
-  merchantWhatsAppAccount: { findUnique(args: unknown): Promise<{ shopId: string; enabled: boolean; aiMode?: string | null; aiKnowledge?: string | null; backInStockEnabled?: boolean } | null> };
+  merchantWhatsAppAccount: { findUnique(args: unknown): Promise<{ shopId: string; enabled: boolean; aiMode?: string | null; aiKnowledge?: string | null; backInStockEnabled?: boolean; shopInChatEnabled?: boolean } | null> };
   shop: { findUnique(args: unknown): Promise<{ id: string; shopDomain: string } | null> };
   whatsAppConversation: { findFirst(args: unknown): Promise<Conversation | null>; update(args: unknown): Promise<unknown> };
   whatsAppMessage: { findMany(args: unknown): Promise<Message[]>; count(args: unknown): Promise<number> };
@@ -48,6 +48,7 @@ export type AssistantDeps = {
   typing?: (input: { shopId: string; businessPhoneNumberId: string; waMessageId: string }) => Promise<unknown>;
   alert?: (input: { shopId: string; subject: string; text: string }) => Promise<unknown>;
   saveRestock?: (input: { shopId: string; phone: string; customerName: string | null; target: RestockTarget }) => Promise<unknown>;
+  sendCatalog?: (input: { shopId: string; conversationId: string }) => Promise<unknown>;
 };
 
 export type AssistantRunResult = { status: string; outcome?: string; intent?: string };
@@ -72,6 +73,7 @@ const defaults = {
     return sendOpsAlert({ shopId: input.shopId, eventType: "GENERAL", subject: input.subject, text: input.text });
   },
   saveRestock: async (input: { shopId: string; phone: string; customerName: string | null; target: RestockTarget }) => (await import("../back-in-stock.ts")).saveBackInStockRequest(input),
+  sendCatalog: async (input: { shopId: string; conversationId: string }) => (await import("../shop-in-chat.ts")).sendCatalogMessage(input),
 };
 
 function inboxLink(shopDomain: string, conversationId: string) {
@@ -87,11 +89,11 @@ export function chatLines(messages: Message[]): ChatLine[] {
 
 // Asks the model and returns the parsed answer (null when AI is unavailable or failed).
 export async function askAssistant(
-  input: { shopDomain: string; contactPhone: string; merchantNotes: string | null; chat: ChatLine[]; backInStock?: boolean },
+  input: { shopDomain: string; contactPhone: string; merchantNotes: string | null; chat: ChatLine[]; backInStock?: boolean; shopInChat?: boolean },
   deps: Pick<AssistantDeps, "complete" | "loadContext"> = {},
 ): Promise<{ result: AssistantResult | null; context: StoreContext }> {
   const context = await (deps.loadContext ?? defaults.loadContext)({ shopDomain: input.shopDomain, contactPhone: input.contactPhone, searchTerms: productSearchTerms(input.chat), merchantNotes: input.merchantNotes });
-  const raw = await (deps.complete ?? defaults.complete)({ system: buildSystemPrompt(context.storeName, { backInStock: input.backInStock }), user: buildUserPrompt(context, input.chat) });
+  const raw = await (deps.complete ?? defaults.complete)({ system: buildSystemPrompt(context.storeName, { backInStock: input.backInStock, shopInChat: input.shopInChat }), user: buildUserPrompt(context, input.chat) });
   return { result: parseAssistantResult(raw), context };
 }
 
@@ -171,8 +173,9 @@ export async function runWhatsAppAssistant(input: { shopId: string; conversation
   let result: AssistantResult | null = null;
   let context: StoreContext | null = null;
   const backInStock = Boolean(account?.backInStockEnabled);
+  const shopInChat = Boolean(account?.shopInChatEnabled);
   try {
-    ({ result, context } = await askAssistant({ shopDomain: shop.shopDomain, contactPhone: conversation.contactPhone, merchantNotes: account?.aiKnowledge ?? null, chat: chatLines(recent), backInStock }, deps));
+    ({ result, context } = await askAssistant({ shopDomain: shop.shopDomain, contactPhone: conversation.contactPhone, merchantNotes: account?.aiKnowledge ?? null, chat: chatLines(recent), backInStock, shopInChat }, deps));
   } catch (error) {
     console.error("[WHATSAPP ASSISTANT] ai_failed", { conversationId: conversation.id, error: error instanceof Error ? error.message.slice(0, 200) : String(error) });
   }
@@ -215,6 +218,10 @@ export async function runWhatsAppAssistant(input: { shopId: string; conversation
     console.error("[WHATSAPP ASSISTANT] reply_send_failed", { conversationId: conversation.id, error: error instanceof Error ? error.message.slice(0, 200) : String(error) });
     await handOver("The assistant's reply could not be sent", null, "SOFT");
     return { status: "handoff", outcome: "send_failed", intent: result.intent };
+  }
+  if (shopInChat && result.showCatalog) {
+    await (deps.sendCatalog ?? defaults.sendCatalog)({ shopId: input.shopId, conversationId: conversation.id })
+      .catch((error) => console.error("[WHATSAPP ASSISTANT] catalog_send_failed", { conversationId: conversation.id, error: error instanceof Error ? error.message.slice(0, 200) : String(error) }));
   }
   // Answered: nothing new for the team in this chat (unless an earlier SOFT handoff still waits for them).
   if (!conversation.needsHuman) await db.whatsAppConversation.update({ where: { id: conversation.id }, data: { unreadCount: 0 } }).catch(() => undefined);
