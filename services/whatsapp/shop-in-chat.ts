@@ -5,8 +5,11 @@
 // WhatsApp cart and tap "Place order". Meta sends that cart as an `order`
 // message. Here each catalog item is matched to its Shopify variant (Meta
 // catalogs synced by Shopify use retailer ids like shopify_IN_<product>_<variant>;
-// plain variant ids and SKUs work too), checked for stock, and the customer gets
-// one reply with the signed bag link (/apps/loopd2c/checkout/bag): it opens the
+// plain variant ids and SKUs work too). Catalogs built from the website (one
+// item per product, retailer id "/products/<handle>#product") carry no size: the
+// customer is asked "Which size?" with a tap-to-choose list per product first.
+// Everything is checked for stock, and the customer gets one reply with the
+// signed bag link (/apps/loopd2c/checkout/bag): it opens the
 // store with exactly those items in the Shopify cart and the bag drawer open, to
 // pay online or choose Cash on Delivery. Orders placed from it carry the cart
 // attribute loopd2c_source=whatsapp_cart.
@@ -77,6 +80,33 @@ const SKU_QUERY = `query WhatsAppCartSkus($query: String!) {
   productVariants(first: 20, query: $query) { nodes { id title sku availableForSale product { title status } } }
 }`;
 
+const PRODUCTS_BY_HANDLE_QUERY = `query WhatsAppCartProducts($query: String!) {
+  products(first: 20, query: $query) { nodes { handle title status variants(first: 50) { nodes { id title availableForSale selectedOptions { name value } } } } }
+}`;
+
+// Product handle from a website-built catalog id ("/products/<handle>#product",
+// or a full product URL), else null.
+export function handleFromRetailerId(retailerId: string | null | undefined) {
+  const match = String(retailerId || "").match(/\/products\/([^/?#\s]+)/i);
+  if (!match) return null;
+  try { return decodeURIComponent(match[1]).toLowerCase(); } catch { return match[1].toLowerCase(); }
+}
+
+export type SizeOption = { variantId: number; label: string };
+export type PendingLine = { retailerId: string; quantity: number; productTitle: string; options: SizeOption[] };
+type ProductNode = { handle?: string | null; title?: string | null; status?: string | null; variants?: { nodes?: Array<{ id?: string | null; title?: string | null; availableForSale?: boolean | null; selectedOptions?: Array<{ name?: string | null; value?: string | null }> | null }> | null } | null };
+
+// Short labels for a product's variants: only the option values that differ
+// between variants ("S", "M" … rather than "S / Multicolor / Polyester").
+export function variantLabels(variants: Array<{ title?: string | null; selectedOptions?: Array<{ name?: string | null; value?: string | null }> | null }>) {
+  const names = [...new Set(variants.flatMap((variant) => (variant.selectedOptions ?? []).map((option) => option?.name || "")))].filter(Boolean);
+  const varying = names.filter((name) => new Set(variants.map((variant) => (variant.selectedOptions ?? []).find((option) => option?.name === name)?.value || "")).size > 1);
+  return variants.map((variant) => {
+    const values = varying.map((name) => (variant.selectedOptions ?? []).find((option) => option?.name === name)?.value || "").filter(Boolean);
+    return (values.join(" / ") || (variant.title && variant.title !== "Default Title" ? variant.title : "One size")).slice(0, 24);
+  });
+}
+
 const numericId = (gid: string | null | undefined) => Number(String(gid || "").match(/(\d+)$/)?.[1] ?? NaN);
 const lineTitle = (node: VariantNode) => {
   const product = node.product?.title || "Item";
@@ -84,7 +114,31 @@ const lineTitle = (node: VariantNode) => {
 };
 
 export async function resolveCartLines(shopDomain: string, lines: Array<{ retailerId: string; quantity: number }>, graphql: Graphql) {
-  const byId = lines.map((line) => ({ ...line, variantId: variantIdFromRetailerId(line.retailerId) }));
+  const resolved: ResolvedLine[] = [];
+  const pending: PendingLine[] = [];
+  let unmatched = 0;
+
+  // Website-built catalogs: one item per product, the size is asked for.
+  const productLines = lines.map((line) => ({ ...line, handle: handleFromRetailerId(line.retailerId) })).filter((line) => line.handle);
+  if (productLines.length) {
+    const query = [...new Set(productLines.map((line) => line.handle as string))].map((handle) => `handle:"${handle.replace(/["\\]/g, "")}"`).join(" OR ");
+    const products = (await graphql<{ products?: { nodes?: ProductNode[] } }>(PRODUCTS_BY_HANDLE_QUERY, { query }, { shopDomain })).products?.nodes ?? [];
+    for (const line of productLines) {
+      const product = products.find((node) => String(node.handle || "").toLowerCase() === line.handle);
+      if (!product?.title) { unmatched += 1; continue; }
+      const active = !product.status || product.status === "ACTIVE";
+      const variants = product.variants?.nodes ?? [];
+      const labels = variantLabels(variants);
+      const options = variants.map((variant, index) => ({ variantId: numericId(variant.id), label: labels[index], available: active && Boolean(variant.availableForSale) })).filter((option) => Number.isSafeInteger(option.variantId));
+      const inStock = options.filter((option) => option.available);
+      if (!inStock.length) { resolved.push({ retailerId: line.retailerId, variantId: options[0]?.variantId ?? 0, quantity: line.quantity, title: product.title, available: false }); continue; }
+      if (inStock.length === 1) { resolved.push({ retailerId: line.retailerId, variantId: inStock[0].variantId, quantity: line.quantity, title: inStock[0].label === "One size" ? product.title : `${product.title} (${inStock[0].label})`, available: true }); continue; }
+      pending.push({ retailerId: line.retailerId, quantity: line.quantity, productTitle: product.title, options: inStock.slice(0, 10).map(({ variantId, label }) => ({ variantId, label })) });
+    }
+  }
+
+  const variantLines = lines.filter((line) => !handleFromRetailerId(line.retailerId));
+  const byId = variantLines.map((line) => ({ ...line, variantId: variantIdFromRetailerId(line.retailerId) }));
   const ids = byId.filter((line) => line.variantId).map((line) => `gid://shopify/ProductVariant/${line.variantId}`);
   const skus = byId.filter((line) => !line.variantId).map((line) => line.retailerId);
   const nodes: VariantNode[] = [];
@@ -93,34 +147,56 @@ export async function resolveCartLines(shopDomain: string, lines: Array<{ retail
     const query = skus.map((sku) => `sku:"${sku.replace(/["\\]/g, "")}"`).join(" OR ");
     nodes.push(...((await graphql<{ productVariants?: { nodes?: VariantNode[] } }>(SKU_QUERY, { query }, { shopDomain })).productVariants?.nodes ?? []));
   }
-  const resolved: ResolvedLine[] = [];
-  let unmatched = 0;
   for (const line of byId) {
     const node = line.variantId ? nodes.find((entry) => numericId(entry.id) === line.variantId) : nodes.find((entry) => entry.sku && entry.sku === line.retailerId);
     if (!node?.id) { unmatched += 1; continue; }
     resolved.push({ retailerId: line.retailerId, variantId: numericId(node.id), quantity: line.quantity, title: lineTitle(node), available: Boolean(node.availableForSale) && (!node.product?.status || node.product.status === "ACTIVE") });
   }
-  return { resolved, unmatched };
+  return { resolved, unmatched, pending };
+}
+
+// "Which size?" for one product of the cart: a tap-to-choose list.
+export const SIZE_REPLY_PREFIX = "wsz:";
+export function sizeQuestionMessage(cartKey: string, line: PendingLine) {
+  return {
+    type: "list",
+    body: { text: `Which size would you like for *${line.productTitle}*${line.quantity > 1 ? ` (× ${line.quantity})` : ""}? Check the size chart on the product page if you're unsure.`.slice(0, 1024) },
+    action: {
+      button: "Choose size",
+      sections: [{ title: "Sizes in stock", rows: line.options.slice(0, 10).map((option) => ({ id: `${SIZE_REPLY_PREFIX}${cartKey}:${option.variantId}`.slice(0, 200), title: option.label.slice(0, 24) })) }],
+    },
+  };
+}
+
+export function parseSizeReply(id: string | null | undefined) {
+  const match = String(id || "").match(/^wsz:(.+):(\d+)$/);
+  return match ? { cartKey: match[1], variantId: Number(match[2]) } : null;
 }
 
 type OrderDb = {
   whatsAppConversation: { findFirst(args: unknown): Promise<{ id: string; shopId: string; contactPhone: string; contactName: string | null } | null>; update(args: unknown): Promise<unknown> };
   merchantWhatsAppAccount: { findUnique(args: unknown): Promise<{ enabled: boolean; shopInChatEnabled?: boolean } | null> };
   shop: { findUnique(args: unknown): Promise<{ id: string; shopDomain: string; primaryDomain: string | null } | null> };
-  auditEvent: { create(args: unknown): Promise<unknown> };
+  auditEvent: { create(args: unknown): Promise<unknown>; findFirst?(args: unknown): Promise<{ payload: unknown } | null> };
 };
 
-export type CartOrderResult = { outcome: "link_sent" | "all_sold_out" | "unmatched" | "disabled" | "not_configured" | "conversation_missing" | "failed"; items?: number };
+export const CART_SELECTION_EVENT = "WHATSAPP_CART_SIZE_SELECTION";
+type CartState = { shopId: string; conversationId: string; resolved: ResolvedLine[]; pending: PendingLine[]; unmatched: number; done?: boolean };
+
+export type CartOrderResult = { outcome: "link_sent" | "size_asked" | "all_sold_out" | "unmatched" | "disabled" | "not_configured" | "conversation_missing" | "failed" | "expired" | "invalid_choice"; items?: number };
+
+type CartDeps = {
+  db?: OrderDb;
+  graphql?: Graphql;
+  secret?: string | null;
+  sendText?: (input: { shopId: string; conversationId: string; text: string }) => Promise<unknown>;
+  sendInteractive?: (input: { shopId: string; conversationId: string; interactive: Record<string, unknown>; inboxBody: string; sentByAi?: boolean }) => Promise<unknown>;
+  alert?: (input: { shopId: string; subject: string; text: string }) => Promise<unknown>;
+};
 
 export async function handleWhatsAppCatalogOrder(
   input: { shopId: string; conversationId: string; waMessageId: string; items: CatalogOrderItem[]; now?: Date },
-  deps: {
-    db?: OrderDb;
-    graphql?: Graphql;
-    secret?: string | null;
-    sendText?: (input: { shopId: string; conversationId: string; text: string }) => Promise<unknown>;
-    alert?: (input: { shopId: string; subject: string; text: string }) => Promise<unknown>;
-  } = {},
+  deps: CartDeps = {},
 ): Promise<CartOrderResult> {
   const now = input.now ?? new Date();
   const db = deps.db ?? ((await import("../db/prisma.ts")).prisma as unknown as OrderDb);
@@ -148,14 +224,35 @@ export async function handleWhatsAppCatalogOrder(
   const lines = cartLinesFromOrder(input.items);
   const graphql = deps.graphql ?? (async (query, variables, options) => ((await import("../shopify/admin.ts")).adminGraphql as Graphql)(query, variables, options));
   let resolved: ResolvedLine[] = [];
+  let pending: PendingLine[] = [];
   let unmatched = lines.length;
   try {
-    ({ resolved, unmatched } = await resolveCartLines(shop.shopDomain, lines, graphql));
+    ({ resolved, unmatched, pending } = await resolveCartLines(shop.shopDomain, lines, graphql));
   } catch (error) {
     console.error("[WHATSAPP SHOP] variant_lookup_failed", { shopId: input.shopId, error: error instanceof Error ? error.message : String(error) });
   }
-  console.info("[WHATSAPP SHOP] catalog_cart", { conversationId: conversation.id, retailerIds: lines.map((line) => line.retailerId).slice(0, 10), matched: resolved.length, unmatched });
+  console.info("[WHATSAPP SHOP] catalog_cart", { conversationId: conversation.id, retailerIds: lines.map((line) => line.retailerId).slice(0, 10), matched: resolved.length, needsSize: pending.length, unmatched });
 
+  if (pending.length) {
+    // Ask for the size of the first product; the answers come back as list replies.
+    const state: CartState = { shopId: input.shopId, conversationId: conversation.id, resolved, pending, unmatched };
+    await db.auditEvent.create({ data: { actorType: "system", eventType: CART_SELECTION_EVENT, entityType: "WhatsAppCartSelection", entityId: input.waMessageId, payload: state } });
+    const sendInteractive = deps.sendInteractive ?? (async (message) => (await import("./inbox.ts")).sendConversationInteractive(message));
+    await sendInteractive({ shopId: input.shopId, conversationId: conversation.id, interactive: sizeQuestionMessage(input.waMessageId, pending[0]), inboxBody: `📏 Size asked: ${pending[0].productTitle}`, sentByAi: true });
+    return { outcome: "size_asked", items: resolved.length + pending.length };
+  }
+  return finishCart({ shopId: input.shopId, conversationId: conversation.id, cartKey: input.waMessageId, resolved, unmatched, lines, shop, secret, now }, { ...deps, db, sendText, flagForTeam });
+}
+
+async function finishCart(
+  input: { shopId: string; conversationId: string; cartKey: string; resolved: ResolvedLine[]; unmatched: number; lines: Array<{ retailerId: string }>; shop: { shopDomain: string; primaryDomain: string | null }; secret: string; now: Date },
+  deps: { db: OrderDb; sendText: (input: { shopId: string; conversationId: string; text: string }) => Promise<unknown>; flagForTeam: (reason: string) => Promise<void> },
+): Promise<CartOrderResult> {
+  const { resolved, unmatched, lines, shop, secret, now } = input;
+  const conversation = { id: input.conversationId };
+  const sendText = deps.sendText;
+  const flagForTeam = deps.flagForTeam;
+  const db = deps.db;
   const available = resolved.filter((line) => line.available);
   if (!resolved.length) {
     await sendText({ shopId: input.shopId, conversationId: conversation.id, text: "Thanks for your order! Our team will check your cart and reply here shortly." }).catch(() => undefined);
@@ -168,7 +265,7 @@ export async function handleWhatsAppCatalogOrder(
   }
 
   const { createCodRecoveryToken } = await import("../checkout-recovery/prepaid-cod-recovery.ts");
-  const token = createCodRecoveryToken({ shopId: input.shopId, checkoutId: `wa:${input.waMessageId}`, items: available.map((line) => ({ variantId: line.variantId, quantity: line.quantity })), now }, secret);
+  const token = createCodRecoveryToken({ shopId: input.shopId, checkoutId: `wa:${input.cartKey}`, items: available.map((line) => ({ variantId: line.variantId, quantity: line.quantity })), now }, secret);
   const link = bagLink(shop.primaryDomain || shop.shopDomain, token);
   try {
     await sendText({ shopId: input.shopId, conversationId: conversation.id, text: cartReplyText({ lines: resolved, unmatched, link }) });
@@ -178,13 +275,13 @@ export async function handleWhatsAppCatalogOrder(
     return { outcome: "failed" };
   }
   if (unmatched) await flagForTeam(`Part of a WhatsApp catalog cart could not be matched (${unmatched} item${unmatched === 1 ? "" : "s"}); the rest was sent as a bag link.`);
-  await db.auditEvent.create({ data: { actorType: "system", eventType: CART_LINK_SENT_EVENT, entityType: "WhatsAppConversation", entityId: conversation.id, payload: { shopId: input.shopId, waMessageId: input.waMessageId, items: available.map((line) => ({ variantId: line.variantId, quantity: line.quantity, title: line.title })), soldOut: resolved.length - available.length, unmatched } } }).catch(() => undefined);
+  await db.auditEvent.create({ data: { actorType: "system", eventType: CART_LINK_SENT_EVENT, entityType: "WhatsAppConversation", entityId: conversation.id, payload: { shopId: input.shopId, waMessageId: input.cartKey, items: available.map((line) => ({ variantId: line.variantId, quantity: line.quantity, title: line.title })), soldOut: resolved.length - available.length, unmatched } } }).catch(() => undefined);
   return { outcome: "link_sent", items: available.length };
 }
 
 // Opens the shop's WhatsApp catalog in the chat (only inside the 24-hour window).
 export async function sendCatalogMessage(input: { shopId: string; conversationId: string; text?: string }, deps: { send?: (input: { shopId: string; conversationId: string; interactive: Record<string, unknown>; inboxBody: string; sentByAi?: boolean }) => Promise<unknown> } = {}) {
-  const body = (input.text || "Browse our collection here. Pick your size, add to cart and tap Place order. We'll send you a link to check out.").slice(0, 1024);
+  const body = (input.text || "Browse our collection here. Add what you like to your cart and tap Place order. We'll confirm your size and send a link to check out.").slice(0, 1024);
   const send = deps.send ?? (async (message) => (await import("./inbox.ts")).sendConversationInteractive(message));
   return send({
     shopId: input.shopId,
@@ -207,16 +304,30 @@ export function retailerIdFor(productGid: string, variantGid: string, country = 
   return product && variant ? `shopify_${country}_${product}_${variant}` : null;
 }
 
-export type CardProduct = { id?: string; title: string; variants?: Array<{ id: string; size: string; color: string; available: boolean }> };
+export type CardProduct = { id?: string; title: string; url?: string | null; inStock?: boolean; variants?: Array<{ id: string; size: string; color: string; available: boolean }> };
+
+// How the Meta catalog names its items:
+//   product_path    – catalogs built from the website: one item per product, "/products/<handle>#product"
+//   shopify_variant – Shopify's Facebook & Instagram channel: one item per variant
+export type CatalogItemFormat = "product_path" | "shopify_variant";
+
+export function productPathRetailerId(url: string | null | undefined) {
+  const handle = handleFromRetailerId(url);
+  return handle ? `/products/${handle}#product` : null;
+}
 
 const clipText = (value: string, max: number) => (value.length > max ? `${value.slice(0, max - 1).trimEnd()}…` : value);
 
-// One section per product with its in-stock variants (sizes / colours), so the
-// size is chosen by the item added; at most 10 sections and 30 items.
-export function productListMessage(input: { catalogId: string; header: string; products: CardProduct[]; country?: string }) {
+// shopify_variant: one section per product with its in-stock variants, so the
+// size is chosen by the item added. product_path: one section with one item per
+// product (the size is asked when the cart arrives). At most 10 sections, 30 items.
+export function productListMessage(input: { catalogId: string; header: string; products: CardProduct[]; country?: string; format?: CatalogItemFormat }) {
   const sections: Array<{ title: string; product_items: Array<{ product_retailer_id: string }> }> = [];
   let items = 0;
-  for (const product of input.products.slice(0, 10)) {
+  if (input.format === "product_path") {
+    const ids = [...new Set(input.products.filter((product) => product.inStock !== false).map((product) => productPathRetailerId(product.url)).filter((id): id is string => Boolean(id)))].slice(0, 30);
+    if (ids.length) sections.push({ title: clipText(input.header || "Our picks", 24), product_items: ids.map((id) => ({ product_retailer_id: id })) });
+  } else for (const product of input.products.slice(0, 10)) {
     if (!product.id) continue;
     const retailerIds = (product.variants ?? []).filter((variant) => variant.available)
       .map((variant) => retailerIdFor(product.id as string, variant.id, input.country))
@@ -231,7 +342,7 @@ export function productListMessage(input: { catalogId: string; header: string; p
   return {
     type: "product_list",
     header: { type: "text", text: clipText(input.header || "Our picks for you", 60) },
-    body: { text: "Tap a product for photos and price, pick your size, add to cart and tap Place order. We'll send you a link to check out." },
+    body: { text: input.format === "product_path" ? "Tap a product for photos and price, add it to your cart and tap Place order. We'll ask your size and send a link to check out." : "Tap a product for photos and price, pick your size, add to cart and tap Place order. We'll send you a link to check out." },
     action: { catalog_id: input.catalogId, sections },
   };
 }
@@ -268,10 +379,16 @@ export async function sendProductCards(
         await db.merchantWhatsAppAccount.update({ where: { shopId: input.shopId }, data: { catalogId } });
       }
     }
-    const message = catalogId ? productListMessage({ catalogId, header: input.header, products: input.products }) : null;
-    if (message) {
-      await send({ shopId: input.shopId, conversationId: input.conversationId, interactive: message, inboxBody: `🛍️ Product cards: ${input.products.map((product) => product.title).join(", ").slice(0, 300)}`, sentByAi: true });
-      return "cards";
+    // Try the website (one item per product) naming first, then Shopify's channel naming.
+    for (const format of ["product_path", "shopify_variant"] as const) {
+      const message = catalogId ? productListMessage({ catalogId, header: input.header, products: input.products, format }) : null;
+      if (!message) continue;
+      try {
+        await send({ shopId: input.shopId, conversationId: input.conversationId, interactive: message, inboxBody: `🛍️ Product cards: ${input.products.map((product) => product.title).join(", ").slice(0, 300)}`, sentByAi: true });
+        return "cards";
+      } catch (error) {
+        console.warn("[WHATSAPP SHOP] product_cards_rejected", { conversationId: input.conversationId, format, error: error instanceof Error ? error.message.slice(0, 300) : String(error) });
+      }
     }
   } catch (error) {
     console.warn("[WHATSAPP SHOP] product_cards_failed", { conversationId: input.conversationId, error: error instanceof Error ? error.message.slice(0, 300) : String(error) });
@@ -283,4 +400,40 @@ export async function sendProductCards(
     console.error("[WHATSAPP SHOP] catalog_fallback_failed", { conversationId: input.conversationId, error: error instanceof Error ? error.message.slice(0, 300) : String(error) });
     return "failed";
   }
+}
+
+// The customer tapped a size in the "Which size?" list.
+export async function handleCartSizeChoice(
+  input: { shopId: string; conversationId: string; replyId: string; now?: Date },
+  deps: CartDeps = {},
+): Promise<CartOrderResult> {
+  const now = input.now ?? new Date();
+  const choice = parseSizeReply(input.replyId);
+  if (!choice) return { outcome: "invalid_choice" };
+  const db = deps.db ?? ((await import("../db/prisma.ts")).prisma as unknown as OrderDb);
+  const sendText = deps.sendText ?? (async (send) => (await import("./inbox.ts")).sendConversationText({ ...send, sentByAi: true }));
+  const latest = await db.auditEvent.findFirst?.({ where: { eventType: CART_SELECTION_EVENT, entityType: "WhatsAppCartSelection", entityId: choice.cartKey }, orderBy: { createdAt: "desc" }, select: { payload: true } });
+  const state = (latest?.payload ?? null) as CartState | null;
+  if (!state || state.shopId !== input.shopId || state.conversationId !== input.conversationId || state.done || !state.pending?.length) {
+    await sendText({ shopId: input.shopId, conversationId: input.conversationId, text: "That cart was already sent. To order again, add the items to your cart and tap Place order." }).catch(() => undefined);
+    return { outcome: "expired" };
+  }
+  const [current, ...rest] = state.pending;
+  const option = current.options.find((entry) => entry.variantId === choice.variantId);
+  if (!option) return { outcome: "invalid_choice" };
+  const resolved = [...state.resolved, { retailerId: current.retailerId, variantId: option.variantId, quantity: current.quantity, title: option.label === "One size" ? current.productTitle : `${current.productTitle} (${option.label})`, available: true }];
+  const next: CartState = { ...state, resolved, pending: rest, done: rest.length === 0 };
+  await db.auditEvent.create({ data: { actorType: "system", eventType: CART_SELECTION_EVENT, entityType: "WhatsAppCartSelection", entityId: choice.cartKey, payload: next } });
+  if (rest.length) {
+    const sendInteractive = deps.sendInteractive ?? (async (message) => (await import("./inbox.ts")).sendConversationInteractive(message));
+    await sendInteractive({ shopId: input.shopId, conversationId: input.conversationId, interactive: sizeQuestionMessage(choice.cartKey, rest[0]), inboxBody: `📏 Size asked: ${rest[0].productTitle}`, sentByAi: true });
+    return { outcome: "size_asked", items: resolved.length };
+  }
+  const shop = await db.shop.findUnique({ where: { id: input.shopId }, select: { id: true, shopDomain: true, primaryDomain: true } });
+  const secret = deps.secret !== undefined ? deps.secret : (await import("../checkout-recovery/prepaid-cod-recovery.ts")).signingSecret();
+  if (!shop || !secret) return { outcome: "not_configured" };
+  const flagForTeam = async (reason: string) => {
+    await db.whatsAppConversation.update({ where: { id: input.conversationId }, data: { needsHuman: true, handoffKind: "SOFT", handoffReason: reason.slice(0, 200) } });
+  };
+  return finishCart({ shopId: input.shopId, conversationId: input.conversationId, cartKey: choice.cartKey, resolved, unmatched: state.unmatched, lines: [], shop, secret, now }, { db, sendText, flagForTeam });
 }
