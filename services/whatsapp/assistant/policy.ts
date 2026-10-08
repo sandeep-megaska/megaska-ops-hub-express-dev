@@ -116,6 +116,10 @@ export type AssistantResult = {
   restockRequest?: { product: string; size: string | null; color: string | null } | null;
   // Open the shop's WhatsApp catalog in the chat after the reply.
   showCatalog?: boolean;
+  // Exact titles of products to send as WhatsApp product cards after the reply.
+  showProducts?: string[];
+  // Short heading for those cards ("Bikini sets").
+  cardsTitle?: string | null;
 };
 
 function restockRequestFrom(value: unknown): AssistantResult["restockRequest"] {
@@ -154,6 +158,8 @@ export function parseAssistantResult(raw: Record<string, unknown> | null): Assis
     confidence: Number.isFinite(confidence) ? Math.min(1, Math.max(0, confidence)) : 0,
     restockRequest: restockRequestFrom(raw.restock_request),
     showCatalog: raw.show_catalog === true,
+    showProducts: Array.isArray(raw.show_products) ? raw.show_products.filter((title): title is string => typeof title === "string" && Boolean(title.trim())).map((title) => title.trim().slice(0, 300)).slice(0, 5) : [],
+    cardsTitle: typeof raw.cards_title === "string" && raw.cards_title.trim() ? raw.cards_title.trim().slice(0, 60) : null,
   };
 }
 
@@ -250,14 +256,15 @@ export function buildSystemPrompt(storeName: string, options: { backInStock?: bo
       "- Sold out: when a product, size or colour the customer wants is sold out, say so plainly and offer to WhatsApp them as soon as it is back in stock. When they ask to be told or agree (\"yes\", \"notify me\", \"haan\"), set restock_request to {\"product\": the exact product title from PRODUCTS, \"size\": the size or null, \"color\": the colour or null} and confirm you will message them here when it is back. Never promise or guess a restock date.",
     ] : []),
     ...(options.shopInChat ? [
-      "- Shopping in the chat: when the customer wants to browse, see more styles, buy, or asks how to order on WhatsApp, set show_catalog to true; the store's catalog opens in the chat right after your reply. In the reply say they can pick their size, add to cart and tap Place order to get a checkout link (pay online or Cash on Delivery). Do not set it for order-status, complaint or policy questions.",
+      "- Showing products in the chat: when you recommend or the customer asks to see products (a category, a style, \"show me …\"), put the exact titles from PRODUCTS (up to 3, in-stock, no duplicates) in show_products and a 1–3 word heading in cards_title (e.g. \"Bikini sets\"). They are sent right after your reply as product cards with photos, prices and sizes that the customer can add to a cart and order. Then keep your reply to one or two short lines with NO product links or price lists, e.g. \"Here are our bikini sets 👇 Pick your size, add to cart and tap Place order.\"",
+      "- When the customer wants to browse everything or asks how to order on WhatsApp (no specific products), set show_catalog to true instead; the whole catalog opens in the chat. Never set show_products or show_catalog for order-status, complaint or policy questions.",
     ] : []),
     "- Yes/no questions: answer with the correct word first (\"No, …\" / \"Nahi, …\" when the answer is no). Never start with yes (\"Haan\") and then say the opposite.",
     "",
     "Style: reply in the customer's language and script (English, Hindi, Hinglish, Malayalam, Tamil, …). Warm, plain and short: at most 5 short lines. WhatsApp formatting only (*bold* sparingly), at most one emoji. No greeting block or signature on follow-up messages.",
     "If the message is only a greeting, greet back and say you can help with products, sizes and orders.",
     "",
-    `Return JSON only: {"reply": string, "intent": "greeting"|"product"|"size"|"order_status"|"policy"|"complaint"|"return_exchange"|"other", "needs_human": boolean, "handoff_kind": "soft"|"hard"|null, "handoff_reason": string|null, "confidence": number between 0 and 1 = how fully the facts support your reply${options.backInStock ? ', "restock_request": {"product": string, "size": string|null, "color": string|null}|null' : ""}${options.shopInChat ? ', "show_catalog": boolean' : ""}}.`,
+    `Return JSON only: {"reply": string, "intent": "greeting"|"product"|"size"|"order_status"|"policy"|"complaint"|"return_exchange"|"other", "needs_human": boolean, "handoff_kind": "soft"|"hard"|null, "handoff_reason": string|null, "confidence": number between 0 and 1 = how fully the facts support your reply${options.backInStock ? ', "restock_request": {"product": string, "size": string|null, "color": string|null}|null' : ""}${options.shopInChat ? ', "show_products": string[], "cards_title": string|null, "show_catalog": boolean' : ""}}.`,
   ].join("\n");
 }
 

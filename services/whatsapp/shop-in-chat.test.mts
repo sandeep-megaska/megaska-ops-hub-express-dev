@@ -4,7 +4,7 @@ import test from "node:test";
 import { verifyCodRecoveryToken } from "../checkout-recovery/prepaid-cod-recovery.ts";
 import { rebuildBagPage } from "../checkout-recovery/rebuild-bag-page.ts";
 import { describeInbound } from "./inbox.ts";
-import { cartLinesFromOrder, handleWhatsAppCatalogOrder, sendCatalogMessage, variantIdFromRetailerId } from "./shop-in-chat.ts";
+import { cartLinesFromOrder, handleWhatsAppCatalogOrder, productListMessage, resolveCatalogId, retailerIdFor, sendCatalogMessage, sendProductCards, variantIdFromRetailerId } from "./shop-in-chat.ts";
 
 const SECRET = "s".repeat(40);
 const NOW = new Date("2026-10-09T06:00:00Z");
@@ -95,4 +95,40 @@ test("the catalog message opens the shop's catalog", async () => {
   assert.equal(sentMessage.interactive.type, "catalog_message");
   assert.equal(sentMessage.interactive.action.name, "catalog_message");
   assert.equal(sentMessage.inboxBody, "🛍️ Catalog sent");
+});
+
+
+const cardProduct = (id: string, title: string, sizes: Array<[string, boolean]>) => ({ id: `gid://shopify/Product/${id}`, title, variants: sizes.map(([size, available], index) => ({ id: `gid://shopify/ProductVariant/${id}${index}`, size, color: "", available })) });
+
+test("product cards: one section per product with its in-stock sizes, as Shopify-synced catalog ids", () => {
+  assert.equal(retailerIdFor("gid://shopify/Product/81", "gid://shopify/ProductVariant/440"), "shopify_IN_81_440");
+  const message: any = productListMessage({ catalogId: "999", header: "Bikini sets", products: [cardProduct("81", "High Waisted Two Piece Bikini Set Camouflage Print", [["S", true], ["M", false], ["L", true]]), cardProduct("82", "Sold Out Set", [["M", false]])] });
+  assert.equal(message.type, "product_list");
+  assert.equal(message.action.catalog_id, "999");
+  assert.equal(message.header.text, "Bikini sets");
+  assert.equal(message.action.sections.length, 1, "products with nothing in stock are left out");
+  assert.equal(message.action.sections[0].title.length <= 24, true);
+  assert.deepEqual(message.action.sections[0].product_items, [{ product_retailer_id: "shopify_IN_81_810" }, { product_retailer_id: "shopify_IN_81_812" }]);
+  assert.equal(productListMessage({ catalogId: "999", header: "x", products: [cardProduct("82", "Sold Out Set", [["M", false]])] }), null);
+});
+
+test("the catalog id is looked up once from the WhatsApp Business Account", async () => {
+  const fetcher = (async () => ({ ok: true, json: async () => ({ data: [{ id: "777" }] }) })) as any;
+  assert.equal(await resolveCatalogId({ wabaId: "1", accessToken: "t" }, fetcher), "777");
+  const updates: any[] = [];
+  const sent: any[] = [];
+  const db: any = { merchantWhatsAppAccount: { findUnique: async () => ({ shopId: "s1", enabled: true, phoneNumberId: "pn", accessTokenEncrypted: "e", businessAccountId: "1", catalogId: null, templateLanguage: "en" }), update: async (args: any) => { updates.push(args.data); } } };
+  const result = await sendProductCards({ shopId: "s1", conversationId: "c1", header: "Bikini sets", products: [cardProduct("81", "Bikini", [["S", true]])] }, { db, fetcher, decrypt: () => "token", send: async (message) => { sent.push(message); } });
+  assert.equal(result, "cards");
+  assert.deepEqual(updates[0], { catalogId: "777" });
+  assert.equal(sent[0].interactive.type, "product_list");
+});
+
+test("when cards cannot be sent the whole catalog opens instead", async () => {
+  const sent: any[] = [];
+  const db: any = { merchantWhatsAppAccount: { findUnique: async () => ({ shopId: "s1", enabled: true, phoneNumberId: "pn", accessTokenEncrypted: "e", businessAccountId: null, catalogId: "999", templateLanguage: "en" }), update: async () => undefined } };
+  let first = true;
+  const result = await sendProductCards({ shopId: "s1", conversationId: "c1", header: "x", products: [cardProduct("81", "Bikini", [["S", true]])] }, { db, send: async (message) => { if (first) { first = false; throw new Error("(#131009) Product not found in catalog"); } sent.push(message); } });
+  assert.equal(result, "catalog");
+  assert.equal(sent[0].interactive.type, "catalog_message");
 });
