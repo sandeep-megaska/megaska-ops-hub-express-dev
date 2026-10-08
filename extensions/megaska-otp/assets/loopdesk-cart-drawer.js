@@ -2257,16 +2257,33 @@
     if (document.getElementById(ROOT_ID)) fetchCart();
   });
 
+  // Shopify answers 409 Conflict (or 429) when cart requests overlap, e.g. a
+  // reload started while the theme or a page script is still changing the cart.
+  // Those are retried after a short pause instead of showing the error.
+  function getCartJson(attempt) {
+    return fetch("/cart.js", { credentials: "same-origin", headers: { Accept: "application/json" } })
+      .then(function (response) {
+        if ((response.status === 409 || response.status === 429) && attempt < 3) {
+          return new Promise(function (resolve) { window.setTimeout(resolve, 300 * (attempt + 1)); })
+            .then(function () { return getCartJson(attempt + 1); });
+        }
+        if (!response.ok) throw new Error("Cart request failed");
+        return response.json();
+      });
+  }
+
+  var cartFetchSequence = 0;
+
   function fetchCart() {
+    // Overlapping reloads: only the newest one updates the drawer, so an older
+    // request that failed cannot replace a good cart with the error.
+    var sequence = ++cartFetchSequence;
     state.loading = true;
     state.error = "";
     render();
-    return fetch("/cart.js", { credentials: "same-origin", headers: { Accept: "application/json" } })
-      .then(function (response) {
-        if (!response.ok) throw new Error("Cart request failed");
-        return response.json();
-      })
+    return getCartJson(0)
       .then(function (cart) {
+        if (sequence !== cartFetchSequence) return;
         state.cart = cart;
         maybeRefreshPromotionsForCart(cart);
         return repinStalePromotionLines(cart).then(function (changed) {
@@ -2277,9 +2294,14 @@
         });
       })
       .catch(function (error) {
+        if (sequence !== cartFetchSequence) return;
         state.error = error && error.message ? error.message : "Cart request failed";
       })
-      .finally(function () { state.loading = false; render(); });
+      .finally(function () {
+        if (sequence !== cartFetchSequence) return;
+        state.loading = false;
+        render();
+      });
   }
 
   function refreshAndMaybeOpen(open) {
