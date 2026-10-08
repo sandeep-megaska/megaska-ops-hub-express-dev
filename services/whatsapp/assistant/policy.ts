@@ -221,6 +221,8 @@ export type StoreContext = {
   // Store data that could not be read (shown in the admin preview, never to customers).
   readErrors?: string[];
   orders: Array<{ name: string; placedOn: string; status: string; payment: string; items: string; tracking: string | null; total: string }>;
+  // The Click-to-WhatsApp ad this customer came from (recently), if any.
+  adContext?: string | null;
 };
 
 export type ChatLine = { from: "customer" | "store"; text: string };
@@ -272,6 +274,7 @@ export function buildUserPrompt(context: StoreContext, chat: ChatLine[], now: Da
   const sections: string[] = [];
   sections.push(`STORE: ${context.storeName}${context.storeUrl ? ` (${context.storeUrl})` : ""}`);
   sections.push(`NOW: ${formatIndiaNow(now)} (India time)`);
+  if (context.adContext) sections.push(`AD: the customer came to WhatsApp from our ad ${clip(context.adContext, 400)}. Their first questions are likely about what it showed.`);
   if (context.policies.length) {
     sections.push(`POLICIES:\n${context.policies.map((policy) => `## ${policy.title}\n${clip(policy.body, 1500)}`).join("\n")}`);
   }

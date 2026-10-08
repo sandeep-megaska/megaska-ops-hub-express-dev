@@ -48,6 +48,8 @@ export type MerchantWhatsAppAccountRow = {
   secondOrderDelayDays?: number;
   secondOrderOffer?: string | null;
   shopInChatEnabled?: boolean;
+  adConversionsEnabled?: boolean;
+  capiDatasetId?: string | null;
   aiMode?: string | null;
   aiKnowledge?: string | null;
   lastCheckedAt?: Date | null;
@@ -192,6 +194,7 @@ export type MerchantWhatsAppAdminView = {
   secondOrderDelayDays: number;
   secondOrderOffer: string;
   shopInChatEnabled: boolean;
+  adConversionsEnabled: boolean;
   lastCheckedAt: string | null;
   lastCheckStatus: string | null;
   lastCheckMessage: string | null;
@@ -222,6 +225,7 @@ export function toAdminView(account: MerchantWhatsAppAccountRow | null, env: Rec
     secondOrderDelayDays: account?.secondOrderDelayDays ?? DEFAULT_SECOND_ORDER_DELAY_DAYS,
     secondOrderOffer: account?.secondOrderOffer ?? "",
     shopInChatEnabled: account?.shopInChatEnabled ?? false,
+    adConversionsEnabled: account?.adConversionsEnabled ?? false,
     lastCheckedAt: account?.lastCheckedAt ? new Date(account.lastCheckedAt).toISOString() : null,
     lastCheckStatus: account?.lastCheckStatus ?? null,
     lastCheckMessage: account?.lastCheckMessage ?? null,
@@ -275,6 +279,7 @@ export function buildMerchantWhatsAppUpdate(
   }
   if (!accessTokenEncrypted) throw new MerchantWhatsAppValidationError("Access token is required.");
 
+  if (flag(input.adConversionsEnabled) && !businessAccountId) throw new MerchantWhatsAppValidationError("Reporting WhatsApp ad sales to Meta needs the WhatsApp Business Account ID.");
   const secondOrderEnabled = flag(input.secondOrderEnabled);
   const delayText = text(input.secondOrderDelayDays);
   const secondOrderDelayDays = delayText ? Number(delayText) : DEFAULT_SECOND_ORDER_DELAY_DAYS;
@@ -301,6 +306,7 @@ export function buildMerchantWhatsAppUpdate(
     secondOrderDelayDays,
     secondOrderOffer: secondOrderOffer || null,
     shopInChatEnabled: flag(input.shopInChatEnabled),
+    adConversionsEnabled: flag(input.adConversionsEnabled),
     ...templates,
   };
 }

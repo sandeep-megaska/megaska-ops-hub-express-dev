@@ -106,3 +106,10 @@ test("growth message settings: second-order nudge needs a real offer line and a 
   assert.throws(() => buildMerchantWhatsAppUpdate({ ...input, secondOrderDelayDays: "3" }, null, encrypt), MerchantWhatsAppValidationError);
   assert.equal(toAdminView(null).secondOrderDelayDays, 21);
 });
+
+test("reporting ad sales to Meta needs the WhatsApp Business Account ID", () => {
+  const encrypt = (value: string) => `enc:${value}`;
+  const input = { enabled: "on", phoneNumberId: "111111111111111", accessToken: "EAAG" + "x".repeat(40), templateLanguage: "en" };
+  assert.throws(() => buildMerchantWhatsAppUpdate({ ...input, adConversionsEnabled: "on" }, null, encrypt), MerchantWhatsAppValidationError);
+  assert.equal(buildMerchantWhatsAppUpdate({ ...input, businessAccountId: "1619844212877837", adConversionsEnabled: "on" }, null, encrypt).adConversionsEnabled, true);
+});

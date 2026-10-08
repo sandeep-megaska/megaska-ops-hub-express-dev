@@ -50,6 +50,7 @@ export default async function WhatsAppInboxPage({ searchParams }: { searchParams
           </Link>
           <Link className="mk-btn" href={`/admin/whatsapp/cod?${shopParam}`}>COD confirmations</Link>
           <Link className="mk-btn" href={`/admin/whatsapp/restock?${shopParam}`}>Back in stock</Link>
+          <Link className="mk-btn" href={`/admin/whatsapp/ads?${shopParam}`}>Ads</Link>
           <Link className="mk-btn" href={`/admin/merchant-settings?${shopParam}#whatsapp`}>WhatsApp settings</Link>
         </div>
       </div>
