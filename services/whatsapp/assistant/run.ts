@@ -13,10 +13,12 @@ import {
   buildUserPrompt,
   decideOutcome,
   normalizeAssistantMode,
+  normalizeHandoffKind,
   parseAssistantResult,
   productSearchTerms,
   type AssistantMode,
   type AssistantResult,
+  type HandoffKind,
   type ChatLine,
   type StoreContext,
 } from "./policy.ts";
@@ -24,7 +26,7 @@ import {
 export const ASSISTANT_DEBOUNCE_MS = 4000;
 const HOUR = 60 * 60 * 1000;
 
-type Conversation = { id: string; shopId: string; businessPhoneNumberId: string; contactPhone: string; contactName: string | null; needsHuman: boolean; aiPausedUntil: Date | null };
+type Conversation = { id: string; shopId: string; businessPhoneNumberId: string; contactPhone: string; contactName: string | null; needsHuman: boolean; handoffKind?: string | null; aiPausedUntil: Date | null };
 type Message = { id: string; direction: string; waMessageId: string | null; type: string; body: string | null; sentByAi?: boolean; createdAt: Date };
 
 export type AssistantDb = {
@@ -116,8 +118,9 @@ export async function runWhatsAppAssistant(input: { shopId: string; conversation
     aiConfigured: await (deps.aiConfigured ?? defaults.aiConfigured)(),
     message: { type: trigger.type, body: trigger.body || "" },
     isConsentKeyword: Boolean(consentKeyword(trigger.body)),
-    conversation: { needsHuman: conversation.needsHuman, aiPausedUntil: conversation.aiPausedUntil },
+    conversation: { needsHuman: conversation.needsHuman, handoffKind: conversation.handoffKind ?? null, aiPausedUntil: conversation.aiPausedUntil },
     newerInboundExists: Boolean(latestInbound && latestInbound.waMessageId !== input.waMessageId),
+    lastStoreMessageAskedQuestion: /\?\s*\S{0,3}\s*$/.test(String([...recent].filter((message) => message.direction === "OUTBOUND" && message.createdAt <= trigger.createdAt).pop()?.body ?? "")),
     aiRepliesLastHour,
     shopAiRepliesLastDay,
     now: at,
@@ -130,12 +133,24 @@ export async function runWhatsAppAssistant(input: { shopId: string; conversation
   const alert = deps.alert ?? defaults.alert;
   const who = conversation.contactName || `+${conversation.contactPhone}`;
 
-  const handOver = async (reason: string, holdingText: string | null) => {
+  // Flags the chat for the team. A chat already flagged is not re-announced
+  // (no second holding message or email) unless this raises it from SOFT to HARD.
+  const alreadyFlagged = conversation.needsHuman;
+  const flaggedKind: HandoffKind | null = alreadyFlagged ? normalizeHandoffKind(conversation.handoffKind) : null;
+  const handOver = async (reason: string, holdingText: string | null, kind: HandoffKind) => {
+    const escalates = !alreadyFlagged || (flaggedKind === "SOFT" && kind === "HARD");
+    if (!escalates) {
+      if (mode === "AUTO" && holdingText && kind === "SOFT") {
+        // The assistant's own "I'll check" reply is still worth sending in a SOFT chat.
+        await sendText({ shopId: input.shopId, conversationId: conversation.id, text: holdingText }).catch(() => undefined);
+      }
+      return;
+    }
     if (mode === "AUTO" && holdingText) {
       await sendText({ shopId: input.shopId, conversationId: conversation.id, text: holdingText }).catch((error) =>
         console.error("[WHATSAPP ASSISTANT] holding_send_failed", { conversationId: conversation.id, error: error instanceof Error ? error.message.slice(0, 200) : String(error) }));
     }
-    await db.whatsAppConversation.update({ where: { id: conversation.id }, data: { needsHuman: true, handoffReason: reason.slice(0, 200) } });
+    await db.whatsAppConversation.update({ where: { id: conversation.id }, data: { needsHuman: true, handoffKind: kind, handoffReason: reason.slice(0, 200) } });
     await alert({
       shopId: input.shopId,
       subject: `WhatsApp: ${who} needs a reply from the team`,
@@ -144,7 +159,7 @@ export async function runWhatsAppAssistant(input: { shopId: string; conversation
   };
 
   if (gate.action === "handoff") {
-    await handOver(gate.reason, mode === "AUTO" ? "Thanks! A member of our team will look at this and reply here shortly. 🙏" : null);
+    await handOver(gate.reason, mode === "AUTO" ? "Thanks! A member of our team will look at this and reply here shortly. 🙏" : null, gate.handoffKind);
     return { status: "handoff", outcome: gate.reason };
   }
 
@@ -157,33 +172,33 @@ export async function runWhatsAppAssistant(input: { shopId: string; conversation
     console.error("[WHATSAPP ASSISTANT] ai_failed", { conversationId: conversation.id, error: error instanceof Error ? error.message.slice(0, 200) : String(error) });
   }
   if (!result) {
-    await handOver("The AI assistant was unavailable", mode === "AUTO" ? "Thanks for your message! A member of our team will reply here shortly. 🙏" : null);
+    await handOver("The AI assistant was unavailable", mode === "AUTO" ? "Thanks for your message! A member of our team will reply here shortly. 🙏" : null, "SOFT");
     return { status: "handoff", outcome: "ai_unavailable" };
   }
 
   const outcome = decideOutcome(mode, result);
-  console.info("[WHATSAPP ASSISTANT] outcome", { conversationId: conversation.id, mode, kind: outcome.kind, intent: result.intent, confidence: result.confidence, needsHuman: result.needsHuman });
+  console.info("[WHATSAPP ASSISTANT] outcome", { conversationId: conversation.id, mode, kind: outcome.kind, intent: result.intent, confidence: result.confidence, needsHuman: result.needsHuman, handoffKind: result.handoffKind });
   if (outcome.kind === "draft") {
     await db.whatsAppConversation.update({ where: { id: conversation.id }, data: { aiDraft: outcome.text, aiDraftAt: at } });
-    if (outcome.handoff) await handOver(outcome.reason || "Assistant suggests a team member replies", null);
+    if (outcome.handoff) await handOver(outcome.reason || "Assistant suggests a team member replies", null, outcome.handoffKind);
     return { status: "drafted", outcome: outcome.handoff ? "draft_handoff" : "draft", intent: result.intent };
   }
   if (outcome.kind === "handoff_only") {
-    await handOver(outcome.reason, null);
+    await handOver(outcome.reason, null, outcome.handoffKind);
     return { status: "handoff", outcome: "no_reply", intent: result.intent };
   }
   if (outcome.handoff) {
-    await handOver(outcome.reason, outcome.text);
+    await handOver(outcome.reason, outcome.text, outcome.handoffKind);
     return { status: "handoff", outcome: "sent_holding", intent: result.intent };
   }
   try {
     await sendText({ shopId: input.shopId, conversationId: conversation.id, text: outcome.text });
   } catch (error) {
     console.error("[WHATSAPP ASSISTANT] reply_send_failed", { conversationId: conversation.id, error: error instanceof Error ? error.message.slice(0, 200) : String(error) });
-    await handOver("The assistant's reply could not be sent", null);
+    await handOver("The assistant's reply could not be sent", null, "SOFT");
     return { status: "handoff", outcome: "send_failed", intent: result.intent };
   }
-  // Answered: nothing for the team to read in this chat.
-  await db.whatsAppConversation.update({ where: { id: conversation.id }, data: { unreadCount: 0 } }).catch(() => undefined);
+  // Answered: nothing new for the team in this chat (unless an earlier SOFT handoff still waits for them).
+  if (!conversation.needsHuman) await db.whatsAppConversation.update({ where: { id: conversation.id }, data: { unreadCount: 0 } }).catch(() => undefined);
   return { status: "sent", outcome: "answered", intent: result.intent };
 }

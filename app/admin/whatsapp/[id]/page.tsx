@@ -21,9 +21,9 @@ async function chatControlAction(conversationId: string, shopDomain: string, for
   if (!resolved.shop?.id) redirect(`${back}&error=${encodeURIComponent("Unable to resolve shop.")}`);
   const intent = String(formData.get("intent") || "");
   const data =
-    intent === "resolve" ? { needsHuman: false, handoffReason: null }
+    intent === "resolve" ? { needsHuman: false, handoffKind: null, handoffReason: null }
       : intent === "pause_ai" ? { aiPausedUntil: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), aiDraft: null, aiDraftAt: null }
-        : intent === "resume_ai" ? { aiPausedUntil: null, needsHuman: false, handoffReason: null }
+        : intent === "resume_ai" ? { aiPausedUntil: null, needsHuman: false, handoffKind: null, handoffReason: null }
           : intent === "discard_draft" ? { aiDraft: null, aiDraftAt: null }
             : null;
   if (data) await prisma.whatsAppConversation.updateMany({ where: { id: conversationId, shopId: resolved.shop.id }, data });
@@ -98,7 +98,10 @@ export default async function WhatsAppConversationPage({ params, searchParams }:
           {conversation.needsHuman ? (
             <>
               <span className="mk-badge mk-badge-warning">Needs your team</span>
-              <span className="mk-help">{conversation.handoffReason || "The AI assistant handed this chat over."}</span>
+              <span className="mk-help">
+                {conversation.handoffReason || "The AI assistant handed this chat over."}
+                {conversation.handoffKind === "SOFT" ? " The assistant keeps answering the customer's other questions." : " The assistant stays quiet until you reply or mark it resolved."}
+              </span>
               <button className="mk-btn mk-btn-sm" type="submit" name="intent" value="resolve">Mark resolved</button>
             </>
           ) : null}

@@ -27,14 +27,53 @@ export function normalizeAssistantMode(value: unknown): AssistantMode {
 }
 
 const ANSWERABLE_TYPES = new Set(["text", "button", "interactive"]);
+// Emoji reactions and stickers are a nod, not a question: no reply, no handoff.
+const SILENT_TYPES = new Set(["reaction", "sticker"]);
+
+const ACKNOWLEDGEMENTS = new Set([
+  "ok", "okay", "okk", "okkk", "k", "kk", "okie", "oki", "ok thanks", "ok thank you", "ok thanku", "okay thanks", "ok ji", "okay ji",
+  "thanks", "thank you", "thank u", "thanku", "thankyou", "thx", "ty", "tq", "thanks a lot", "thank you so much", "many thanks",
+  "done", "fine", "great", "good", "nice", "sure", "noted", "alright", "all right", "cool", "perfect", "got it", "received",
+  "ji", "ji ok", "theek hai", "thik hai", "theek h", "thik h", "accha", "achha", "acha", "haan", "haa", "hmm", "hm", "shukriya", "dhanyavad",
+]);
+
+// "Ok", "Thanks", "👍", "Theek hai" … closes a thread; answering it is just noise.
+export function isAcknowledgement(text: string | null | undefined) {
+  const raw = String(text ?? "").trim();
+  if (!raw) return false;
+  const withoutEmoji = raw.replace(/[\p{Extended_Pictographic}\p{Emoji_Modifier}\u200d\ufe0f]/gu, "").trim();
+  if (!withoutEmoji) return true; // emoji only
+  const normalized = withoutEmoji.toLowerCase().replace(/[.!,]+/g, " ").replace(/\s+/g, " ").trim();
+  return ACKNOWLEDGEMENTS.has(normalized);
+}
+
+// How a chat is handed to the team:
+//   HARD – complaints, refunds/returns/exchanges/cancellations, photos, damaged
+//          items, AI failure loops: the assistant goes quiet until the team
+//          replies or marks it resolved, so it never talks over them.
+//   SOFT – "let me check" questions (availability, sizing it cannot answer,
+//          unknown facts): the team is told, but the assistant keeps answering
+//          the customer's other questions.
+// Chats flagged before this distinction existed (no kind) count as HARD.
+export type HandoffKind = "SOFT" | "HARD";
+
+export function normalizeHandoffKind(value: unknown): HandoffKind {
+  return String(value ?? "").toUpperCase() === "SOFT" ? "SOFT" : "HARD";
+}
+
+// Intents that always need a person, whatever the model says.
+const HARD_INTENTS = new Set(["complaint", "return_exchange", "cancellation", "refund_request"]);
 
 export type AssistantGateInput = {
   mode: AssistantMode;
   aiConfigured: boolean;
   message: { type: string; body: string };
   isConsentKeyword: boolean;
-  conversation: { needsHuman: boolean; aiPausedUntil: Date | null };
+  conversation: { needsHuman: boolean; handoffKind?: string | null; aiPausedUntil: Date | null };
   newerInboundExists: boolean;
+  // The store's last message asked something ("Shall I share options?"), so a
+  // short "ok" / "haan" is an answer, not a sign-off.
+  lastStoreMessageAskedQuestion?: boolean;
   aiRepliesLastHour: number;
   shopAiRepliesLastDay: number;
   now: Date;
@@ -42,7 +81,7 @@ export type AssistantGateInput = {
 
 export type AssistantGate =
   | { action: "respond" }
-  | { action: "handoff"; reason: string }
+  | { action: "handoff"; reason: string; handoffKind: HandoffKind }
   | { action: "skip"; reason: string };
 
 // Whether the assistant should look at this customer message at all.
@@ -51,14 +90,17 @@ export function assistantGate(input: AssistantGateInput): AssistantGate {
   if (!input.aiConfigured) return { action: "skip", reason: "ai_not_configured" };
   if (input.isConsentKeyword) return { action: "skip", reason: "consent_keyword" };
   if (input.newerInboundExists) return { action: "skip", reason: "newer_message_pending" };
-  if (input.conversation.needsHuman) return { action: "skip", reason: "already_with_team" };
+  // A HARD handoff silences the assistant; after a SOFT one it keeps answering.
+  if (input.conversation.needsHuman && normalizeHandoffKind(input.conversation.handoffKind) === "HARD") return { action: "skip", reason: "already_with_team" };
   if (input.conversation.aiPausedUntil && new Date(input.conversation.aiPausedUntil).getTime() > input.now.getTime()) {
     return { action: "skip", reason: "team_replied_recently" };
   }
-  if (input.aiRepliesLastHour >= MAX_AI_REPLIES_PER_CHAT_PER_HOUR) return { action: "handoff", reason: "Many messages in a short time" };
+  if (input.aiRepliesLastHour >= MAX_AI_REPLIES_PER_CHAT_PER_HOUR) return { action: "handoff", reason: "Many messages in a short time", handoffKind: "HARD" };
   if (input.shopAiRepliesLastDay >= MAX_AI_REPLIES_PER_SHOP_PER_DAY) return { action: "skip", reason: "daily_limit" };
+  if (SILENT_TYPES.has(input.message.type)) return { action: "skip", reason: "reaction_or_sticker" };
+  if (ANSWERABLE_TYPES.has(input.message.type) && !input.lastStoreMessageAskedQuestion && isAcknowledgement(input.message.body)) return { action: "skip", reason: "acknowledgement" };
   // Photos, voice notes, documents: a person should look at them.
-  if (!ANSWERABLE_TYPES.has(input.message.type)) return { action: "handoff", reason: `Customer sent a ${input.message.type}` };
+  if (!ANSWERABLE_TYPES.has(input.message.type)) return { action: "handoff", reason: `Customer sent a ${input.message.type}`, handoffKind: "HARD" };
   if (!input.message.body.trim()) return { action: "skip", reason: "empty_message" };
   return { action: "respond" };
 }
@@ -67,6 +109,7 @@ export type AssistantResult = {
   reply: string;
   intent: string;
   needsHuman: boolean;
+  handoffKind: HandoffKind;
   handoffReason: string | null;
   confidence: number;
 };
@@ -85,10 +128,15 @@ export function parseAssistantResult(raw: Record<string, unknown> | null): Assis
   if (!raw || typeof raw !== "object") return null;
   const reply = typeof raw.reply === "string" ? toWhatsAppText(raw.reply).slice(0, MAX_REPLY_CHARS) : "";
   const confidence = Number(raw.confidence);
+  const intent = typeof raw.intent === "string" ? raw.intent.trim().slice(0, 40) || "other" : "other";
+  const needsHuman = raw.needs_human === true || !reply || HARD_INTENTS.has(intent);
+  // A request (not a question) about refunds, returns, complaints … is always HARD.
+  const handoffKind: HandoffKind = !reply || HARD_INTENTS.has(intent) ? "HARD" : normalizeHandoffKind(raw.handoff_kind ?? "HARD");
   return {
     reply,
-    intent: typeof raw.intent === "string" ? raw.intent.trim().slice(0, 40) || "other" : "other",
-    needsHuman: raw.needs_human === true || !reply,
+    intent,
+    needsHuman,
+    handoffKind,
     handoffReason: typeof raw.handoff_reason === "string" && raw.handoff_reason.trim() ? raw.handoff_reason.trim().slice(0, 200) : null,
     confidence: Number.isFinite(confidence) ? Math.min(1, Math.max(0, confidence)) : 0,
   };
@@ -98,24 +146,24 @@ export const DEFAULT_HOLDING_MESSAGE = "Thanks for your message! A member of our
 
 export type AssistantOutcome =
   | { kind: "send"; text: string; handoff: false }
-  | { kind: "send"; text: string; handoff: true; reason: string }
-  | { kind: "draft"; text: string; handoff: boolean; reason: string | null }
-  | { kind: "handoff_only"; reason: string };
+  | { kind: "send"; text: string; handoff: true; reason: string; handoffKind: HandoffKind }
+  | { kind: "draft"; text: string; handoff: boolean; reason: string | null; handoffKind: HandoffKind }
+  | { kind: "handoff_only"; reason: string; handoffKind: HandoffKind };
 
 // What to do with the model's answer in each mode.
 export function decideOutcome(mode: AssistantMode, result: AssistantResult): AssistantOutcome {
   const reason = result.handoffReason || (result.needsHuman ? "Assistant could not answer" : "Assistant was not sure");
   if (mode === "DRAFT") {
-    if (!result.reply) return { kind: "handoff_only", reason };
-    return { kind: "draft", text: result.reply, handoff: result.needsHuman, reason: result.needsHuman ? reason : null };
+    if (!result.reply) return { kind: "handoff_only", reason, handoffKind: "HARD" };
+    return { kind: "draft", text: result.reply, handoff: result.needsHuman, reason: result.needsHuman ? reason : null, handoffKind: result.handoffKind };
   }
   if (result.needsHuman) {
     // The model was asked to write only an acknowledgement in this case.
-    return { kind: "send", text: result.reply || DEFAULT_HOLDING_MESSAGE, handoff: true, reason };
+    return { kind: "send", text: result.reply || DEFAULT_HOLDING_MESSAGE, handoff: true, reason, handoffKind: result.handoffKind };
   }
   if (result.confidence < MIN_AUTO_CONFIDENCE) {
-    // Not sure enough to send its own words: hold and hand over.
-    return { kind: "send", text: DEFAULT_HOLDING_MESSAGE, handoff: true, reason };
+    // Not sure enough to send its own words: hold and let the team check.
+    return { kind: "send", text: DEFAULT_HOLDING_MESSAGE, handoff: true, reason, handoffKind: "SOFT" };
   }
   return { kind: "send", text: result.reply, handoff: false };
 }
@@ -146,17 +194,20 @@ export function buildSystemPrompt(storeName: string) {
     "- Never invent or change prices, discounts, offers, coupon codes, stock, sizes, delivery dates, policies or order details. Quote prices exactly as given.",
     "- Never create urgency or scarcity (no 'only few left', 'hurry', 'offer ends soon') unless MERCHANT NOTES state it as a fact.",
     "- Never ask for or accept OTPs, passwords, card numbers, CVV or UPI PINs.",
-    "- Complaints, damaged/wrong/missing items, refunds, return or exchange requests, cancellations, payment taken but no order, address changes, delivery problems, or an upset customer: reply with one or two short, warm lines saying the team will help shortly (you may quote the relevant policy fact), and set needs_human to true.",
+    "- Requests that need a person: a complaint, damaged/wrong/missing item, asking for a refund, return, exchange or cancellation of their order, payment taken but no order, address change, a delivery problem, or an upset customer. Reply with one or two short, warm lines saying the team will help shortly (you may quote the relevant policy fact), set needs_human to true and handoff_kind to \"hard\".",
+    "- A general question ABOUT a policy (\"what is your refund policy?\", \"do you allow exchange?\") is not a request: answer it from the facts (intent policy) without needs_human.",
+    "- When you cannot answer from the facts (availability you cannot see, unknown details): say you will check with the team, set needs_human to true and handoff_kind to \"soft\". Keep answering the customer's other questions normally in later messages.",
     "- Orders: only discuss orders listed under ORDERS; they belong to this WhatsApp number. Give status and the tracking link if present. If ORDERS is empty and they ask about an order, ask for the order number and set needs_human to true.",
     "- Products: recommend at most 3, only from PRODUCTS, with their link and price. If a size or colour is out of stock say so plainly.",
     "- Never say the store does not have or sell something unless CATALOG OVERVIEW clearly has no such kind of product. If PRODUCTS has no good match, say you will check and set needs_human to true.",
     "- Links: write the plain URL on its own (WhatsApp does not support [text](url) markdown).",
-    "- Sizing: use size information in the facts; if it is not there, ask their usual size or hand over to the team.",
+    "- Sizing: only map body measurements (bust, waist, hip, height) to a size when a size chart with measurements is in the facts. Otherwise do not guess: point them to the size chart on the product page, ask their usual size, or hand over with handoff_kind \"soft\".",
+    "- Yes/no questions: answer with the correct word first (\"No, …\" / \"Nahi, …\" when the answer is no). Never start with yes (\"Haan\") and then say the opposite.",
     "",
     "Style: reply in the customer's language and script (English, Hindi, Hinglish, Malayalam, Tamil, …). Warm, plain and short: at most 5 short lines. WhatsApp formatting only (*bold* sparingly), at most one emoji. No greeting block or signature on follow-up messages.",
     "If the message is only a greeting, greet back and say you can help with products, sizes and orders.",
     "",
-    'Return JSON only: {"reply": string, "intent": "greeting"|"product"|"size"|"order_status"|"policy"|"complaint"|"return_exchange"|"other", "needs_human": boolean, "handoff_reason": string|null, "confidence": number between 0 and 1 = how fully the facts support your reply}.',
+    'Return JSON only: {"reply": string, "intent": "greeting"|"product"|"size"|"order_status"|"policy"|"complaint"|"return_exchange"|"other", "needs_human": boolean, "handoff_kind": "soft"|"hard"|null, "handoff_reason": string|null, "confidence": number between 0 and 1 = how fully the facts support your reply}.',
   ].join("\n");
 }
 
