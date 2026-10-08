@@ -144,6 +144,17 @@ export function parseAssistantResult(raw: Record<string, unknown> | null): Assis
 
 export const DEFAULT_HOLDING_MESSAGE = "Thanks for your message! A member of our team will get back to you here shortly. 🙏";
 
+// A smiley under "sorry about your delivery" reads as mocking: hard handoffs
+// (complaints, refunds, cancellations) go out without emoji.
+export function stripEmoji(text: string) {
+  return text
+    .replace(/[\p{Extended_Pictographic}\p{Emoji_Modifier}\u200d\ufe0f]/gu, "")
+    .replace(/[ \t]+([.!?,])/g, "$1")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/[ \t]+$/gm, "")
+    .trim();
+}
+
 export type AssistantOutcome =
   | { kind: "send"; text: string; handoff: false }
   | { kind: "send"; text: string; handoff: true; reason: string; handoffKind: HandoffKind }
@@ -159,7 +170,8 @@ export function decideOutcome(mode: AssistantMode, result: AssistantResult): Ass
   }
   if (result.needsHuman) {
     // The model was asked to write only an acknowledgement in this case.
-    return { kind: "send", text: result.reply || DEFAULT_HOLDING_MESSAGE, handoff: true, reason, handoffKind: result.handoffKind };
+    const text = result.reply || DEFAULT_HOLDING_MESSAGE;
+    return { kind: "send", text: result.handoffKind === "HARD" ? stripEmoji(text) || stripEmoji(DEFAULT_HOLDING_MESSAGE) : text, handoff: true, reason, handoffKind: result.handoffKind };
   }
   if (result.confidence < MIN_AUTO_CONFIDENCE) {
     // Not sure enough to send its own words: hold and let the team check.
@@ -194,7 +206,9 @@ export function buildSystemPrompt(storeName: string) {
     "- Never invent or change prices, discounts, offers, coupon codes, stock, sizes, delivery dates, policies or order details. Quote prices exactly as given.",
     "- Never create urgency or scarcity (no 'only few left', 'hurry', 'offer ends soon') unless MERCHANT NOTES state it as a fact.",
     "- Never ask for or accept OTPs, passwords, card numbers, CVV or UPI PINs.",
-    "- Requests that need a person: a complaint, damaged/wrong/missing item, asking for a refund, return, exchange or cancellation of their order, payment taken but no order, address change, a delivery problem, or an upset customer. Reply with one or two short, warm lines saying the team will help shortly (you may quote the relevant policy fact), set needs_human to true and handoff_kind to \"hard\".",
+    "- Requests that need a person: a complaint, damaged/wrong/missing item, asking for a refund, return, exchange or cancellation of their order, payment taken but no order, address change, a delivery problem, or an upset customer. Reply with one or two short, warm lines saying the team will help (you may quote the relevant policy fact). If MERCHANT NOTES say the customer can do it themselves (for example cancel, exchange or report an issue from their account), give those steps too. Set needs_human to true and handoff_kind to \"hard\".",
+    "- Upset customer, complaint or apology: no emoji at all; acknowledge the specific problem in plain words.",
+    "- Reply times: if MERCHANT NOTES give support hours and NOW is outside them, say the team will reply when they are back (quote the hours) instead of \"shortly\".",
     "- A general question ABOUT a policy (\"what is your refund policy?\", \"do you allow exchange?\") is not a request: answer it from the facts (intent policy) without needs_human.",
     "- When you cannot answer from the facts (availability you cannot see, unknown details): say you will check with the team, set needs_human to true and handoff_kind to \"soft\". Keep answering the customer's other questions normally in later messages.",
     "- Orders: only discuss orders listed under ORDERS; they belong to this WhatsApp number. Give status and the tracking link if present. If ORDERS is empty and they ask about an order, ask for the order number and set needs_human to true.",
@@ -216,9 +230,14 @@ function clip(value: string, max: number) {
   return text.length > max ? `${text.slice(0, max)}…` : text;
 }
 
-export function buildUserPrompt(context: StoreContext, chat: ChatLine[]) {
+export function formatIndiaNow(now: Date) {
+  return now.toLocaleString("en-IN", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: true, timeZone: "Asia/Kolkata" });
+}
+
+export function buildUserPrompt(context: StoreContext, chat: ChatLine[], now: Date = new Date()) {
   const sections: string[] = [];
   sections.push(`STORE: ${context.storeName}${context.storeUrl ? ` (${context.storeUrl})` : ""}`);
+  sections.push(`NOW: ${formatIndiaNow(now)} (India time)`);
   if (context.policies.length) {
     sections.push(`POLICIES:\n${context.policies.map((policy) => `## ${policy.title}\n${clip(policy.body, 1500)}`).join("\n")}`);
   }
