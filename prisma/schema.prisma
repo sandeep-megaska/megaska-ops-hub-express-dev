@@ -726,6 +726,8 @@ model MerchantWhatsAppAccount {
   secondOrderDelayDays     Int     @default(21)
   secondOrderOffer         String? // real, current offer line for the nudge (never invented)
   shopInChatEnabled        Boolean @default(false) // WhatsApp catalog carts → Shopify bag link; AI may send the catalog
+  adConversionsEnabled     Boolean @default(false) // report WhatsApp-ad purchases to Meta (Conversions API for Business Messaging)
+  capiDatasetId            String? // Meta dataset of the WhatsApp Business Account (looked up on first use)
 
   // AI assistant for inbound chats: OFF | DRAFT (suggests replies in the
   // inbox) | AUTO (answers on its own, hands off to the team when unsure).
@@ -766,6 +768,12 @@ model WhatsAppConversation {
   aiPausedUntil         DateTime?
   aiDraft               String?
   aiDraftAt             DateTime?
+  // Latest Click-to-WhatsApp ad that brought this customer (webhook referral).
+  adSourceId            String?
+  adHeadline            String?
+  adBody                String?
+  adCtwaClid            String?
+  adReferredAt          DateTime?
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 

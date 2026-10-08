@@ -87,6 +87,11 @@ export default async function WhatsAppConversationPage({ params, searchParams }:
           <p className="mk-page-subtitle">
             +{conversation.contactPhone} · <a href={`https://wa.me/${conversation.contactPhone}`} target="_blank" rel="noopener noreferrer">wa.me link</a>
           </p>
+          {conversation.adReferredAt ? (
+            <p className="mk-help" style={{ marginTop: 4 }}>
+              <span className="mk-badge mk-badge-neutral">From ad</span> {conversation.adHeadline ? `"${conversation.adHeadline}"` : conversation.adSourceId ? `Ad ${conversation.adSourceId}` : "Click-to-WhatsApp ad"} · {formatWhen(conversation.adReferredAt as Date)}
+            </p>
+          ) : null}
         </div>
         <div className="mk-header-actions">
           <Link className="mk-btn" href={`/admin/whatsapp?${shopParam}`}>Back to inbox</Link>

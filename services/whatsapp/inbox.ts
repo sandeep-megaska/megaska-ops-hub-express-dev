@@ -32,6 +32,8 @@ export type InboundMessage = {
   contacts?: Array<{ name?: { formatted_name?: string } }>;
   reaction?: { emoji?: string };
   // A cart sent from the WhatsApp catalog ("Place order").
+  // Set on the first message after a Click-to-WhatsApp ad tap.
+  referral?: { source_url?: string; source_id?: string; source_type?: string; headline?: string; body?: string; ctwa_clid?: string };
   order?: { catalog_id?: string; text?: string; product_items?: Array<{ product_retailer_id?: string; quantity?: number | string; item_price?: number | string; currency?: string }> };
 };
 
@@ -41,6 +43,21 @@ export type WebhookValue = {
   messages?: InboundMessage[];
   statuses?: Array<{ id?: string; status?: string; errors?: Array<{ code?: number; title?: string; message?: string }> }>;
 };
+
+// The ad behind a chat, from the message's referral (Click-to-WhatsApp ads only).
+export function adReferralFields(message: InboundMessage, at: Date) {
+  const referral = message.referral;
+  if (!referral || (referral.source_type && referral.source_type !== "ad")) return null;
+  const clip = (value: string | undefined, max: number) => (value && value.trim() ? value.trim().slice(0, max) : null);
+  if (!referral.source_id && !referral.ctwa_clid) return null;
+  return {
+    adSourceId: clip(referral.source_id, 64),
+    adHeadline: clip(referral.headline, 200),
+    adBody: clip(referral.body, 500),
+    adCtwaClid: clip(referral.ctwa_clid, 500),
+    adReferredAt: at,
+  };
+}
 
 // Text shown in the inbox for any message type, plus the media id when there is one.
 export function describeInbound(message: InboundMessage): { type: string; body: string; mediaId: string | null } {
@@ -135,11 +152,12 @@ export async function recordInboundMessages(value: WebhookValue, deps: { db?: In
     const at = message.timestamp ? new Date(Number(message.timestamp) * 1000) : deps.now ?? new Date();
     const profileName = value.contacts?.find((contact) => normalizeWhatsAppPhone(contact.wa_id) === contactPhone)?.profile?.name || null;
     const content = describeInbound(message);
+    const ad = adReferralFields(message, at) ?? {};
     const previous = await db.whatsAppConversation.findUnique({ where: { businessPhoneNumberId_contactPhone: { businessPhoneNumberId, contactPhone } } });
     const conversation = await db.whatsAppConversation.upsert({
       where: { businessPhoneNumberId_contactPhone: { businessPhoneNumberId, contactPhone } },
-      create: { shopId: account.shopId, businessPhoneNumberId, contactPhone, contactName: profileName, lastMessageAt: at, lastMessagePreview: content.body.slice(0, 200), lastInboundAt: at, unreadCount: 1 },
-      update: { ...(profileName ? { contactName: profileName } : {}), lastMessageAt: at, lastMessagePreview: content.body.slice(0, 200), lastInboundAt: at, unreadCount: { increment: 1 } },
+      create: { shopId: account.shopId, businessPhoneNumberId, contactPhone, contactName: profileName, lastMessageAt: at, lastMessagePreview: content.body.slice(0, 200), lastInboundAt: at, unreadCount: 1, ...ad },
+      update: { ...(profileName ? { contactName: profileName } : {}), lastMessageAt: at, lastMessagePreview: content.body.slice(0, 200), lastInboundAt: at, unreadCount: { increment: 1 }, ...ad },
     });
     try {
       await db.whatsAppMessage.create({ data: { conversationId: conversation.id, direction: "INBOUND", waMessageId: message.id, type: content.type, body: content.body.slice(0, MAX_TEXT), mediaId: content.mediaId, createdAt: at } });
