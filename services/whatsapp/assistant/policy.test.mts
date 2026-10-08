@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { assistantGate, buildUserPrompt, decideOutcome, DEFAULT_HOLDING_MESSAGE, normalizeAssistantMode, parseAssistantResult, productSearchTerms, type AssistantGateInput } from "./policy.ts";
+import { assistantGate, buildSystemPrompt, buildUserPrompt, decideOutcome, DEFAULT_HOLDING_MESSAGE, stripEmoji, normalizeAssistantMode, parseAssistantResult, productSearchTerms, type AssistantGateInput } from "./policy.ts";
 
 const NOW = new Date("2026-10-07T08:00:00Z");
 const gateInput = (overrides: Partial<AssistantGateInput> = {}): AssistantGateInput => ({
@@ -101,4 +101,24 @@ test("'Ok', 'Thanks', 'Theek hai', emoji, reactions and stickers get no reply an
   assert.equal(assistantGate(gateInput({ message: { type: "sticker", body: "Sticker" } })).action, "skip");
   assert.equal(assistantGate(gateInput({ message: { type: "text", body: "Ok but when will it arrive?" } })).action, "respond");
   assert.equal(assistantGate(gateInput({ message: { type: "text", body: "ok" }, lastStoreMessageAskedQuestion: true })).action, "respond", "an answer to our question");
+});
+
+test("complaint handoffs go out without emoji; soft holds keep their tone", () => {
+  const hard = decideOutcome("AUTO", parseAssistantResult({ reply: "I'm sorry to hear about the delivery experience. Our team will assist you with this. 😊", intent: "complaint", needs_human: true, handoff_kind: "hard", confidence: 0.9 })!);
+  assert.equal(hard.kind === "send" ? hard.text : "", "I'm sorry to hear about the delivery experience. Our team will assist you with this.");
+  const empty = decideOutcome("AUTO", parseAssistantResult({ reply: "", intent: "complaint", needs_human: true, handoff_kind: "hard", confidence: 0.9 })!);
+  assert.equal(empty.kind === "send" ? empty.text : "", stripEmoji(DEFAULT_HOLDING_MESSAGE));
+  assert.ok(!/\p{Extended_Pictographic}/u.test(empty.kind === "send" ? empty.text : "x🙂"));
+  const soft = decideOutcome("AUTO", parseAssistantResult({ reply: "Let me check that with the team 😊", intent: "product", needs_human: true, handoff_kind: "soft", confidence: 0.9 })!);
+  assert.equal(soft.kind === "send" ? soft.text : "", "Let me check that with the team 😊");
+  assert.equal(stripEmoji("Done 👍🏽 !"), "Done!");
+});
+
+test("the model knows the time in India and the self-service and support-hours rules", () => {
+  const prompt = buildUserPrompt({ storeName: "Shop", storeUrl: null, policies: [], merchantNotes: null, products: [], orders: [] }, [{ from: "customer", text: "hi" }], new Date("2026-10-08T15:30:00Z"));
+  assert.match(prompt, /NOW: .*9:00 pm.*\(India time\)/i);
+  const system = buildSystemPrompt("Shop");
+  assert.match(system, /do it themselves/);
+  assert.match(system, /no emoji at all/);
+  assert.match(system, /support hours/);
 });
