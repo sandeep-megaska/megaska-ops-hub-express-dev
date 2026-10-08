@@ -142,7 +142,7 @@ export async function listAbandonedCheckouts(
 
 type TokenPayload = { s: string; c: string; i: Array<[number, number]>; e: number };
 
-function signingSecret(env: Record<string, string | undefined> = process.env): string | null {
+export function signingSecret(env: Record<string, string | undefined> = process.env): string | null {
   const secret = String(env.CHECKOUT_RECOVERY_SIGNING_SECRET ?? "").trim();
   return secret.length >= 32 ? secret : null;
 }

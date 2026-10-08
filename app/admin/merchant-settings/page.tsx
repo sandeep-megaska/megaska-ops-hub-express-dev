@@ -212,6 +212,7 @@ async function whatsAppFormAction(
       secondOrderEnabled: formData.get("waSecondOrderEnabled"),
       secondOrderDelayDays: formData.get("waSecondOrderDelayDays"),
       secondOrderOffer: formData.get("waSecondOrderOffer"),
+      shopInChatEnabled: formData.get("waShopInChatEnabled"),
     });
     if (formData.get("waIntent") === "check") {
       const result = await checkMerchantWhatsApp(shopId);
@@ -1368,6 +1369,7 @@ export default async function MerchantSettingsPage({
           <Field label="COD confirmation template" name="waCodConfirmTemplate" defaultValue={whatsApp.codConfirmTemplate} help="Utility template. Body: {{1}} customer first name, {{2}} order number, {{3}} order total. Two Quick reply buttons, in this order: Confirm order, Cancel order." />
           <Check label="Back-in-stock alerts" name="waBackInStockEnabled" defaultChecked={whatsApp.backInStockEnabled} help="When a customer asks the AI assistant about a sold-out product or size, it offers to message them when it is back; the request is saved and they get one WhatsApp as soon as Shopify shows it in stock again (9 am–9 pm IST). See who is waiting under WhatsApp → Back in stock. Needs the template back_in_stock: {{1}} first name, {{2}} product (and size/colour), {{3}} product link." />
           <Check label="Review requests on WhatsApp" name="waReviewRequestsEnabled" defaultChecked={whatsApp.reviewRequestsEnabled} help="Send the automatic review requests (Reviews → automatic requests, after the exchange window) on WhatsApp instead of email; email is still used when there is no phone number. One message per order. Needs the template review_request: {{1}} first name, {{2}} product, {{3}} review link." />
+          <Check label="Shop in chat (WhatsApp catalog)" name="waShopInChatEnabled" defaultChecked={whatsApp.shopInChatEnabled} help="Needs your Meta catalog connected to this WhatsApp number with cart on (WhatsApp Manager → Catalog). When a customer taps Place order on a WhatsApp cart, they get a link that opens your store with exactly those items in the bag, to pay online or choose COD. The AI assistant can also open the catalog in the chat when someone wants to browse. Free: replies inside the chat, no template needed." />
           <Check label="Second-order nudge" name="waSecondOrderEnabled" defaultChecked={whatsApp.secondOrderEnabled} help="One message to first-time customers some days after delivery, if they have not ordered again, have no open issue, refund or return, and have not opted out. Needs the Marketing template second_order_nudge: {{1}} first name, {{2}} product they bought, {{3}} store link, {{4}} your offer line." />
           <div className="grid gap-4">
             <Field label="Second-order nudge: days after delivery" name="waSecondOrderDelayDays" type="number" defaultValue={String(whatsApp.secondOrderDelayDays)} help="7 to 90. 21 suits swimwear: long enough to have used it." />

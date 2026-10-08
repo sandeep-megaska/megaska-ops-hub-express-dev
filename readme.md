@@ -215,6 +215,21 @@ they opted out. Marketing template `second_order_nudge` ({{1}} first name, {{2}}
 product bought, {{3}} store link with utm_medium=second_order, {{4}} offer line).
 Once per customer: AuditEvent `WHATSAPP_SECOND_ORDER_NUDGE_SENT` on the Shopify customer.
 
+### Shop in chat (WhatsApp catalog → Shopify cart)
+
+`services/whatsapp/shop-in-chat.ts`, switched on per shop (Merchant Settings →
+WhatsApp → Shop in chat); needs the Meta catalog connected to the WhatsApp
+number with cart on. A cart sent with "Place order" arrives as an `order`
+message (webhook routes it here, not to the AI). Catalog retailer ids are mapped
+to Shopify variants (`shopify_<CC>_<product>_<variant>`, plain variant ids,
+variant gids, else SKU lookup), checked for stock, and the customer gets one
+free-form reply with the signed bag link (`/apps/loopd2c/checkout/bag`, token
+from `createCodRecoveryToken`, checkout id `wa:<message id>`, needs
+CHECKOUT_RECOVERY_SIGNING_SECRET). The bag opens with exactly those items and is
+tagged with the cart attribute `loopd2c_source=whatsapp_cart`. Sold-out items are
+named; unmatched carts become a SOFT handoff. AuditEvent `WHATSAPP_CART_LINK_SENT`.
+The AI assistant may set `show_catalog` to send a `catalog_message` after its reply.
+
 ### AI assistant (inbound chats)
 
 LoopD2C → WhatsApp Inbox → **AI assistant** (`/admin/whatsapp/assistant`).
