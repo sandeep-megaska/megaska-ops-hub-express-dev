@@ -6,6 +6,7 @@
 // gate (mode, pauses, handoffs, limits) → "typing…" → store facts from Shopify
 // → OpenAI → send / draft / hand over to the team (email alert).
 
+import { resolveRestockTarget, restockItemLabel, type RestockTarget } from "../back-in-stock.ts";
 import { consentKeyword } from "../consent.ts";
 import {
   assistantGate,
@@ -30,7 +31,7 @@ type Conversation = { id: string; shopId: string; businessPhoneNumberId: string;
 type Message = { id: string; direction: string; waMessageId: string | null; type: string; body: string | null; sentByAi?: boolean; createdAt: Date };
 
 export type AssistantDb = {
-  merchantWhatsAppAccount: { findUnique(args: unknown): Promise<{ shopId: string; enabled: boolean; aiMode?: string | null; aiKnowledge?: string | null } | null> };
+  merchantWhatsAppAccount: { findUnique(args: unknown): Promise<{ shopId: string; enabled: boolean; aiMode?: string | null; aiKnowledge?: string | null; backInStockEnabled?: boolean } | null> };
   shop: { findUnique(args: unknown): Promise<{ id: string; shopDomain: string } | null> };
   whatsAppConversation: { findFirst(args: unknown): Promise<Conversation | null>; update(args: unknown): Promise<unknown> };
   whatsAppMessage: { findMany(args: unknown): Promise<Message[]>; count(args: unknown): Promise<number> };
@@ -46,6 +47,7 @@ export type AssistantDeps = {
   sendText?: (input: { shopId: string; conversationId: string; text: string }) => Promise<unknown>;
   typing?: (input: { shopId: string; businessPhoneNumberId: string; waMessageId: string }) => Promise<unknown>;
   alert?: (input: { shopId: string; subject: string; text: string }) => Promise<unknown>;
+  saveRestock?: (input: { shopId: string; phone: string; customerName: string | null; target: RestockTarget }) => Promise<unknown>;
 };
 
 export type AssistantRunResult = { status: string; outcome?: string; intent?: string };
@@ -69,6 +71,7 @@ const defaults = {
     const { sendOpsAlert } = await import("../../notifications/email.ts");
     return sendOpsAlert({ shopId: input.shopId, eventType: "GENERAL", subject: input.subject, text: input.text });
   },
+  saveRestock: async (input: { shopId: string; phone: string; customerName: string | null; target: RestockTarget }) => (await import("../back-in-stock.ts")).saveBackInStockRequest(input),
 };
 
 function inboxLink(shopDomain: string, conversationId: string) {
@@ -84,11 +87,11 @@ export function chatLines(messages: Message[]): ChatLine[] {
 
 // Asks the model and returns the parsed answer (null when AI is unavailable or failed).
 export async function askAssistant(
-  input: { shopDomain: string; contactPhone: string; merchantNotes: string | null; chat: ChatLine[] },
+  input: { shopDomain: string; contactPhone: string; merchantNotes: string | null; chat: ChatLine[]; backInStock?: boolean },
   deps: Pick<AssistantDeps, "complete" | "loadContext"> = {},
 ): Promise<{ result: AssistantResult | null; context: StoreContext }> {
   const context = await (deps.loadContext ?? defaults.loadContext)({ shopDomain: input.shopDomain, contactPhone: input.contactPhone, searchTerms: productSearchTerms(input.chat), merchantNotes: input.merchantNotes });
-  const raw = await (deps.complete ?? defaults.complete)({ system: buildSystemPrompt(context.storeName), user: buildUserPrompt(context, input.chat) });
+  const raw = await (deps.complete ?? defaults.complete)({ system: buildSystemPrompt(context.storeName, { backInStock: input.backInStock }), user: buildUserPrompt(context, input.chat) });
   return { result: parseAssistantResult(raw), context };
 }
 
@@ -166,14 +169,29 @@ export async function runWhatsAppAssistant(input: { shopId: string; conversation
   if (trigger.waMessageId) await (deps.typing ?? defaults.typing)({ shopId: input.shopId, businessPhoneNumberId: conversation.businessPhoneNumberId, waMessageId: trigger.waMessageId }).catch(() => undefined);
 
   let result: AssistantResult | null = null;
+  let context: StoreContext | null = null;
+  const backInStock = Boolean(account?.backInStockEnabled);
   try {
-    ({ result } = await askAssistant({ shopDomain: shop.shopDomain, contactPhone: conversation.contactPhone, merchantNotes: account?.aiKnowledge ?? null, chat: chatLines(recent) }, deps));
+    ({ result, context } = await askAssistant({ shopDomain: shop.shopDomain, contactPhone: conversation.contactPhone, merchantNotes: account?.aiKnowledge ?? null, chat: chatLines(recent), backInStock }, deps));
   } catch (error) {
     console.error("[WHATSAPP ASSISTANT] ai_failed", { conversationId: conversation.id, error: error instanceof Error ? error.message.slice(0, 200) : String(error) });
   }
   if (!result) {
     await handOver("The AI assistant was unavailable", mode === "AUTO" ? "Thanks for your message! A member of our team will reply here shortly. 🙏" : null, "SOFT");
     return { status: "handoff", outcome: "ai_unavailable" };
+  }
+
+  // "Tell me when it's back": save it now, whatever happens to the reply.
+  if (backInStock && result.restockRequest) {
+    const match = resolveRestockTarget(result.restockRequest, context?.products ?? []);
+    if (match.kind === "target") {
+      await (deps.saveRestock ?? defaults.saveRestock)({ shopId: input.shopId, phone: conversation.contactPhone, customerName: conversation.contactName, target: match.target })
+        .then(() => console.info("[WHATSAPP ASSISTANT] restock_saved", { conversationId: conversation.id, item: restockItemLabel(match.target) }))
+        .catch((error) => console.error("[WHATSAPP ASSISTANT] restock_save_failed", { conversationId: conversation.id, error: error instanceof Error ? error.message.slice(0, 200) : String(error) }));
+    } else if (match.kind === "unmatched" && !result.needsHuman) {
+      // The reply promises an alert we could not set up: let the team note it by hand.
+      result = { ...result, needsHuman: true, handoffKind: "SOFT", handoffReason: `Back-in-stock request not matched to a product: ${result.restockRequest.product}${result.restockRequest.size ? ` (size ${result.restockRequest.size})` : ""}` };
+    }
   }
 
   const outcome = decideOutcome(mode, result);
