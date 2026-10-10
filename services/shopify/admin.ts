@@ -583,7 +583,7 @@ export async function findShopifyCustomerIdByIdentity(
 
   return null;
 }
-async function createCustomer(input: ShopifyCustomerSyncInput) {
+async function createCustomer(input: ShopifyCustomerSyncInput, options?: AdminRequestOptions) {
   const { firstName, lastName } = splitName(input.fullName);
   const email = normalizeEmail(input.email);
   const phone = normalizePhone(input.phoneE164);
@@ -615,7 +615,8 @@ async function createCustomer(input: ShopifyCustomerSyncInput) {
         email: email || undefined,
         phone: phone || undefined,
       },
-    }
+    },
+    options
   );
 
   const errorMessage = data.customerCreate.userErrors[0]?.message;
@@ -1017,14 +1018,18 @@ export async function getShopifyCustomerDashboardData(input: {
     recentOrders: mappedRecentOrders,
   };
 }
+// Always pass the shop: without it the Admin client falls back to the
+// SHOPIFY_STORE_DOMAIN env store, and the profile gets linked to a customer in
+// a different Shopify store (whose orders it then can't see).
 export async function findOrCreateShopifyCustomer(
-  input: ShopifyCustomerSyncInput
+  input: ShopifyCustomerSyncInput,
+  options: { shopDomain: string }
 ): Promise<ShopifyCustomerSyncResult> {
   const email = normalizeEmail(input.email);
   const phone = normalizePhone(input.phoneE164);
 
   if (email) {
-    const existingByEmail = await findCustomerByQuery(`email:${email}`);
+    const existingByEmail = await findCustomerByQuery(`email:${email}`, options);
     if (existingByEmail?.id) {
       return {
         shopifyCustomerId: parseCustomerId(existingByEmail.id),
@@ -1048,7 +1053,7 @@ export async function findOrCreateShopifyCustomer(
       ? [phone]
       : [];
   for (const variant of phoneVariants) {
-    const existingByPhone = await findCustomerByQuery(`phone:${variant}`);
+    const existingByPhone = await findCustomerByQuery(`phone:${variant}`, options);
     if (existingByPhone?.id) {
       return {
         shopifyCustomerId: parseCustomerId(existingByPhone.id),
@@ -1062,7 +1067,7 @@ export async function findOrCreateShopifyCustomer(
     fullName: input.fullName,
     email,
     phoneE164: phone,
-  });
+  }, options);
 
   return {
     shopifyCustomerId: parseCustomerId(created.id),

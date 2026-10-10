@@ -175,7 +175,7 @@ export async function POST(req: NextRequest) {
           fullName: updatedCustomer.fullName,
           email: updatedCustomer.email,
           phoneE164: updatedCustomer.phoneE164,
-        });
+        }, { shopDomain: shop.shopDomain });
 
         const identity = await new CanonicalCustomerResolver().resolveFromCheckout({
           shopId: shop.id,
