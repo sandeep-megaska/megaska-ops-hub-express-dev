@@ -6,6 +6,7 @@ import { getAuthenticatedExchangeCustomer } from "../../../../services/exchange/
 import { evaluateExchangeEligibility } from "../../../../services/exchange/eligibility";
 import { sendExchangeRequestCreatedEmail } from "../../../../services/notifications/exchange";
 import { getMegaskaCustomerDashboardData } from "../../../../services/shopify/dashboard";
+import { findShopifyCustomerIdByIdentity } from "../../../../services/shopify/admin";
 import { getExchangeRequestPolicy } from "../../../../services/loopdesk/merchant-settings";
 import {
   findActiveRequest,
@@ -73,12 +74,15 @@ async function resolveTrustedFulfillment(input: {
         ...(input.shopifyOrderId
           ? [{ shopifyOrderId: input.shopifyOrderId }]
           : []),
-        ...(targetOrderNumber ? [{ shopifyOrderName: targetOrderNumber }] : []),
+        ...(targetOrderNumber
+          ? [{ shopifyOrderName: { in: orderNumberVariants(targetOrderNumber) } }]
+          : []),
       ],
     },
     select: {
       status: true,
       statusUpdatedAt: true,
+      deliveredAt: true,
       shipments: {
         orderBy: [{ statusUpdatedAt: "desc" }, { updatedAt: "desc" }],
         select: {
@@ -105,26 +109,48 @@ async function resolveTrustedFulfillment(input: {
 
     if (localOrder.status === "DELIVERED") {
       return {
-        deliveredAt: localOrder.statusUpdatedAt?.toISOString() || null,
+        deliveredAt:
+          (localOrder.deliveredAt || localOrder.statusUpdatedAt)?.toISOString() || null,
         fulfillmentStatus: "delivered",
       };
     }
+  }
 
+  // Not delivered locally (or no local order on this profile): ask Shopify, which
+  // records the carrier's delivery on the fulfillment. A local order that isn't
+  // marked delivered yet is only the answer when Shopify has nothing better.
+  const shopifyFulfillment = await resolveShopifyFulfillment(input, targetOrderNumber);
+  if (shopifyFulfillment?.deliveredAt) return shopifyFulfillment;
+  if (localOrder) {
     return {
       deliveredAt: null,
       fulfillmentStatus: localOrder.status.toLowerCase(),
     };
   }
+  return shopifyFulfillment;
+}
 
-  try {
-    const dashboard = input.customerShopifyId
-      ? await getMegaskaCustomerDashboardData({
-          shopDomain: input.shopDomain,
-          customerId: input.customerShopifyId,
-        })
-      : null;
-
-    const matchingOrder =
+// The order as Shopify sees it, from the profile's linked Shopify customer or,
+// when that customer has no such order, from the Shopify customer matching the
+// profile's verified phone (then email) - the same lookup the account dashboard
+// uses to list the customer's orders. Read-only: the link is not changed here.
+async function resolveShopifyFulfillment(
+  input: {
+    shopDomain: string;
+    customerShopifyId?: string | null;
+    customerEmail?: string | null;
+    customerPhone?: string | null;
+    orderNumber: string;
+    shopifyOrderId?: string | null;
+  },
+  targetOrderNumber: string,
+) {
+  const findOrder = async (customerId: string) => {
+    const dashboard = await getMegaskaCustomerDashboardData({
+      shopDomain: input.shopDomain,
+      customerId,
+    });
+    return (
       dashboard?.recentOrders.find((order) => {
         const matchesById = Boolean(
           input.shopifyOrderId && order.shopifyOrderId === input.shopifyOrderId,
@@ -134,7 +160,36 @@ async function resolveTrustedFulfillment(input: {
           normalizeOrderNumber(order.name) === targetOrderNumber,
         );
         return matchesById || matchesByName;
-      }) || null;
+      }) || null
+    );
+  };
+
+  try {
+    const linkedId = String(input.customerShopifyId || "").trim();
+    let matchingOrder = linkedId ? await findOrder(linkedId) : null;
+
+    if (!matchingOrder) {
+      const candidates = new Set<string>();
+      const byPhone = await findShopifyCustomerIdByIdentity({
+        shopDomain: input.shopDomain,
+        phoneE164: input.customerPhone || null,
+        email: input.customerEmail || null,
+      });
+      if (byPhone) candidates.add(byPhone);
+      if (input.customerEmail) {
+        const byEmail = await findShopifyCustomerIdByIdentity({
+          shopDomain: input.shopDomain,
+          phoneE164: null,
+          email: input.customerEmail,
+        });
+        if (byEmail) candidates.add(byEmail);
+      }
+      candidates.delete(linkedId);
+      for (const candidate of candidates) {
+        matchingOrder = await findOrder(candidate);
+        if (matchingOrder) break;
+      }
+    }
 
     if (matchingOrder) {
       const deliveredAt = matchingOrder.deliveredAt || null;
