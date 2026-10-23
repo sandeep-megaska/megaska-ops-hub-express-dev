@@ -1,0 +1,53 @@
+{% comment %}
+  LoopD2C delivery check: the shopper enters a PIN code on the product page and sees
+  whether it is serviceable, whether Cash on Delivery is available and the expected
+  delivery dates. The lookup goes through the app proxy, so the shop is resolved by
+  Shopify. The result is cached for the LoopD2C bag's "Delivering to" line.
+{% endcomment %}
+{{ 'loopdesk-delivery-check.css' | asset_url | stylesheet_tag }}
+<div
+  class="loopdesk-delivery-check"
+  data-loopdesk-delivery-check
+  data-app-proxy-base="/apps/loopd2c"
+  data-cutoff-hour="{{ block.settings.cutoff_hour }}"
+  data-skip-sunday="{{ block.settings.skip_sunday }}"
+  data-show-cod="{{ block.settings.show_cod }}"
+  {{ block.shopify_attributes }}
+>
+  <form class="loopdesk-delivery-check__form" novalidate>
+    <label class="loopdesk-delivery-check__label" for="loopdesk-delivery-pin-{{ block.id }}">{{ block.settings.heading }}</label>
+    <div class="loopdesk-delivery-check__row">
+      <input
+        id="loopdesk-delivery-pin-{{ block.id }}"
+        class="loopdesk-delivery-check__input"
+        type="text"
+        name="pincode"
+        inputmode="numeric"
+        autocomplete="postal-code"
+        maxlength="6"
+        pattern="[0-9]{6}"
+        placeholder="{{ block.settings.placeholder }}"
+        aria-describedby="loopdesk-delivery-msg-{{ block.id }}"
+      >
+      <button type="submit" class="loopdesk-delivery-check__button">{{ block.settings.button_label }}</button>
+    </div>
+  </form>
+  <div id="loopdesk-delivery-msg-{{ block.id }}" class="loopdesk-delivery-check__result" aria-live="polite"></div>
+</div>
+<script src="{{ 'loopdesk-delivery-check.js' | asset_url }}" defer></script>
+{% schema %}
+{
+  "name": "LoopD2C Delivery check",
+  "target": "section",
+  "enabled_on": { "templates": ["product"] },
+  "settings": [
+    { "type": "text", "id": "heading", "label": "Heading", "default": "Check delivery to your PIN code" },
+    { "type": "text", "id": "placeholder", "label": "Input placeholder", "default": "Enter PIN code" },
+    { "type": "text", "id": "button_label", "label": "Button label", "default": "Check" },
+    { "type": "checkbox", "id": "show_cod", "label": "Show Cash on Delivery availability", "default": true },
+    { "type": "header", "content": "Dispatch" },
+    { "type": "range", "id": "cutoff_hour", "label": "Orders after this hour ship the next day", "min": 0, "max": 23, "step": 1, "unit": "h", "default": 12, "info": "Delivery dates add Delhivery's transit days to the dispatch day. Uses the shopper's local time." },
+    { "type": "checkbox", "id": "skip_sunday", "label": "No dispatch on Sundays", "default": true }
+  ]
+}
+{% endschema %}
