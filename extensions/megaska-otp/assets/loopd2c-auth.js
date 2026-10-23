@@ -244,6 +244,7 @@
       ),
     );
     error.code = data?.code || data?.errorCode || data?.data?.code || data?.data?.errorCode || "";
+    error.status = response.status;
     throw error;
   }
 
@@ -336,6 +337,10 @@ if (token) {
     return data;
   }
 
+  // Only the server's own "this session is invalid" (HTTP 401, or a JSON answer with
+  // authenticated: false) signs the customer out. A check that fails for any other reason -
+  // the page navigating away mid-request, an app-proxy gateway page, a server error - keeps
+  // the token, so the customer isn't asked for a new OTP on their next checkout.
   async function fetchSession() {
     const token = getSessionToken();
 
@@ -346,32 +351,46 @@ if (token) {
       };
     }
 
-    try {
-      const data = await apiFetch("/auth/session", {
-        method: "GET",
-      });
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        const data = await apiFetch("/auth/session", {
+          method: "GET",
+        });
 
-      if (!data?.authenticated) {
-        clearSessionToken();
+        if (!data?.authenticated) {
+          clearSessionToken();
+          return {
+            authenticated: false,
+            customer: null,
+          };
+        }
+
         return {
-          authenticated: false,
-          customer: null,
+          authenticated: true,
+          customer: extractCustomer(data),
+          raw: data,
         };
+      } catch (error) {
+        if (error && error.status === 401) {
+          clearSessionToken();
+          return {
+            authenticated: false,
+            customer: null,
+          };
+        }
+        console.warn("[Megaska Auth] Session check failed; keeping the session", {
+          attempt: attempt + 1,
+          status: error && error.status,
+        });
+        if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 400));
       }
-
-      return {
-        authenticated: true,
-        customer: extractCustomer(data),
-        raw: data,
-      };
-    } catch (error) {
-      console.warn("[Megaska Auth] Session check failed, clearing token", error);
-      clearSessionToken();
-      return {
-        authenticated: false,
-        customer: null,
-      };
     }
+
+    return {
+      authenticated: false,
+      customer: null,
+      unavailable: true,
+    };
   }
 
   async function fetchDashboardSummary() {
