@@ -1,4 +1,15 @@
 (function () {
+  // Diagnostic logs stay silent for shoppers (they included phone numbers and cart
+  // tokens). Turn them on with ?loopd2c_debug=1 or localStorage.loopd2c_debug = "1".
+  const debugLog = (function () {
+    let enabled = false;
+    try {
+      enabled = /[?&]loopd2c_debug=1(&|$)/.test(window.location.search) || window.localStorage.getItem("loopd2c_debug") === "1";
+    } catch (e) {
+      enabled = false;
+    }
+    return enabled ? console.log.bind(console) : function () {};
+  })();
   const OTP_LENGTH = 4;
   const RESEND_SECONDS = 30;
   const SUCCESS_CLOSE_DELAY_MS = 1400;
@@ -186,7 +197,25 @@
     }
     return Object.assign({}, saved, { ageMs: age, checkoutUrl: isSafeResumeUrl(saved.checkoutUrl) ? saved.checkoutUrl : "" });
   }
+  // Whether checkout needs OTP login is the merchant's choice (Merchant settings →
+  // Checkout → "Require OTP login before checkout"), delivered as
+  // LoopDeskConfig.checkout.otpGateEnabled. Until the runtime config arrives the gate
+  // stays on, as it always was; only an explicit `false` turns it off.
   let checkoutInterceptionEnabled = true;
+  function merchantCheckoutGateSetting() {
+    if (typeof window.LOOPD2C_OTP_GATE === "boolean") return window.LOOPD2C_OTP_GATE;
+    const value = window.LoopDeskConfig?.checkout?.otpGateEnabled;
+    return typeof value === "boolean" ? value : null;
+  }
+  function applyMerchantCheckoutGate() {
+    if (merchantCheckoutGateSetting() === false) checkoutInterceptionEnabled = false;
+  }
+  // Read at each checkout decision, so the setting applies however late the config
+  // arrived (the bag script loads and rebuilds the config on its own schedule).
+  function checkoutGateOn() {
+    applyMerchantCheckoutGate();
+    return checkoutInterceptionEnabled;
+  }
   let accountMenuContainer = null;
   let accountMenuTrigger = null;
   let accountFallbackObserverBound = false;
@@ -1032,7 +1061,7 @@
     phoneInput.addEventListener("input", handlePhoneInput);
     phoneInput.addEventListener("keydown", (event) => {
       if (event.key === "Enter") {
-        console.log("[Megaska OTP] mobile form submitted", { digitCount: state.phoneDigits.length });
+        debugLog("[Megaska OTP] mobile form submitted", { digitCount: state.phoneDigits.length });
         handleSendOtpClick(event);
       }
     });
@@ -1202,7 +1231,7 @@
 
   if (lastLoggedStep !== state.step) {
     lastLoggedStep = state.step;
-    console.log("[Megaska OTP] step state changed", { step: state.step });
+    debugLog("[Megaska OTP] step state changed", { step: state.step });
   }
 
   const selectedCountry = getSelectedOtpCountry();
@@ -1402,7 +1431,7 @@
     //focusPhoneInput();
 
     if (triggerSource) {
-      console.log("[Megaska OTP] modal opened", { triggerSource });
+      debugLog("[Megaska OTP] modal opened", { triggerSource });
     }
   }
 
@@ -1433,7 +1462,7 @@
     renderStep();
 
     if (reason) {
-      console.log("[Megaska OTP] modal closed", { reason });
+      debugLog("[Megaska OTP] modal closed", { reason });
     }
 
     return true;
@@ -1454,13 +1483,13 @@
 
 function renderOtpStep() {
   state.step = "otp";
-  console.log("[Megaska OTP] OTP step state changes", { requesting: state.requesting });
+  debugLog("[Megaska OTP] OTP step state changes", { requesting: state.requesting });
   state.errorMessage = "";
   state.statusMessage = state.requesting ? "Sending OTP..." : "";
   state.otpDigits = ["", "", "", ""];
   renderStep();
   const { otpInputs } = getModalParts();
-  console.log("[Megaska OTP] OTP input fields rendered", { count: otpInputs.length });
+  debugLog("[Megaska OTP] OTP input fields rendered", { count: otpInputs.length });
   if (!state.requesting) focusOtpInput(0);
 }
 
@@ -1718,7 +1747,7 @@ async function completeAuthenticatedLogin(sessionCustomer, options) {
 
   const accountRedirectTarget = consumePendingAccountRedirect();
   if (accountRedirectTarget) {
-    console.log("[Megaska OTP] account redirect after login", { accountRedirectTarget });
+    debugLog("[Megaska OTP] account redirect after login", { accountRedirectTarget });
     window.location.assign(accountRedirectTarget);
     return;
   }
@@ -2371,7 +2400,7 @@ async function completeAuthenticatedLogin(sessionCustomer, options) {
     ) {
       const prefilledUrl = window.MegaskaAuth.applyCheckoutPrefillToUrl(rawUrl, customer);
       if (prefilledUrl !== rawUrl) {
-        console.log("[Megaska OTP] checkout prefill handoff executed", { targetUrl: prefilledUrl });
+        debugLog("[Megaska OTP] checkout prefill handoff executed", { targetUrl: prefilledUrl });
       }
       return prefilledUrl;
     }
@@ -2441,7 +2470,7 @@ async function completeAuthenticatedLogin(sessionCustomer, options) {
       };
     }
 
-    console.log("[Megaska Checkout Prefill] waiting for buyer identity update");
+    debugLog("[Megaska Checkout Prefill] waiting for buyer identity update");
     const startedAt = Date.now();
 
     try {
@@ -2452,7 +2481,7 @@ async function completeAuthenticatedLogin(sessionCustomer, options) {
         result?.checkoutUrl || rawCheckoutUrl,
         rawCheckoutUrl
       );
-      console.log("[Megaska Checkout Prefill] buyer identity update finished", {
+      debugLog("[Megaska Checkout Prefill] buyer identity update finished", {
         waitedMs: Date.now() - startedAt,
         ok: Boolean(result?.ok),
         skipped: Boolean(result?.skipped),
@@ -2499,20 +2528,20 @@ async function completeAuthenticatedLogin(sessionCustomer, options) {
 
   const target = buildWalletDiscountTarget(code);
 
-  console.log("[WALLET UI] apply success", {
+  debugLog("[WALLET UI] apply success", {
     reservationId,
     code,
     discountNodeId,
   });
 
-  console.log("[WALLET UI] waiting before wallet discount redirect", {
+  debugLog("[WALLET UI] waiting before wallet discount redirect", {
     code,
     target,
   });
 
   await new Promise((resolve) => setTimeout(resolve, 700));
 
-  console.log("[WALLET UI] redirecting to apply wallet discount", {
+  debugLog("[WALLET UI] redirecting to apply wallet discount", {
     code,
     target,
   });
@@ -2529,7 +2558,7 @@ async function completeAuthenticatedLogin(sessionCustomer, options) {
     ) {
       const applied = window.MegaskaAuth.applyCheckoutPrefillToForm(form, customer);
       if (applied) {
-        console.log("[Megaska OTP] checkout prefill handoff executed", { target: "form" });
+        debugLog("[Megaska OTP] checkout prefill handoff executed", { target: "form" });
       }
       return applied;
     }
@@ -2540,7 +2569,7 @@ async function continueToCheckoutFromPendingAction(preferredCustomer, source) {
   const customer = await resolveMegaskaCustomer(preferredCustomer);
   const prefilledUrl = await buildPrefilledCheckoutUrl("/checkout", customer);
 
-  console.log("[Megaska Checkout Prefill] checkout handoff start", {
+  debugLog("[Megaska Checkout Prefill] checkout handoff start", {
     source,
     detectedCheckoutUrl: prefilledUrl,
   });
@@ -2571,7 +2600,7 @@ async function continueToCheckoutFromPendingAction(preferredCustomer, source) {
     checkoutUrl: targetUrl || null,
   };
 
-  console.log("[Megaska Checkout Prefill] checkout continuation", {
+  debugLog("[Megaska Checkout Prefill] checkout continuation", {
     mode: "navigate",
     finalCheckoutUrl: targetUrl,
     mutationWaited: true,
@@ -2595,7 +2624,7 @@ function consumePendingAccountRedirect() {
 
     const action = pendingAction;
     clearPendingAction();
-    console.log("[Megaska OTP] pending intent resumed", { type: action.type });
+    debugLog("[Megaska OTP] pending intent resumed", { type: action.type });
 
     if (action.type === "navigate" && action.url) {
       await continueToCheckoutFromPendingAction(
@@ -2619,7 +2648,7 @@ function consumePendingAccountRedirect() {
     if (action.type === "cart-add-submit") {
       const form = action.form;
       if (!form || typeof form.submit !== "function") return;
-      console.log("[Megaska OTP] pending cart/add resume", { form });
+      debugLog("[Megaska OTP] pending cart/add resume", { form });
 
       try {
         resumingCartAddForms.add(form);
@@ -2643,7 +2672,7 @@ function consumePendingAccountRedirect() {
       const form = action.form;
       if (!form) return;
 
-      console.log("[Megaska OTP] resuming buy-now action", { form });
+      debugLog("[Megaska OTP] resuming buy-now action", { form });
 
       const formData = new FormData(form);
       const submitterName = String(action.submitter?.name || "").trim();
@@ -2670,7 +2699,7 @@ function consumePendingAccountRedirect() {
           throw new Error(`cart add failed with status ${addResponse.status}`);
         }
 
-        console.log("[Megaska OTP] buy-now add-to-cart complete");
+        debugLog("[Megaska OTP] buy-now add-to-cart complete");
       } catch (error) {
         console.error("[Megaska OTP] buy-now add-to-cart failed, falling back to form submit", error);
         if (typeof form.submit === "function") {
@@ -2679,12 +2708,12 @@ function consumePendingAccountRedirect() {
         return;
       }
 
-      console.log("[Megaska OTP] buy-now checkout handoff start");
+      debugLog("[Megaska OTP] buy-now checkout handoff start");
       await continueToCheckoutFromPendingAction(
         preferredCustomer,
         "pendingAction.buy-now-submit"
       );
-      console.log("[Megaska OTP] buy-now checkout continuation");
+      debugLog("[Megaska OTP] buy-now checkout continuation");
     }
   }
 
@@ -2815,7 +2844,7 @@ function consumePendingAccountRedirect() {
         field: validation.phoneField,
         message: "",
       });
-      console.log("[Megaska Checkout Gate] allowed", {
+      debugLog("[Megaska Checkout Gate] allowed", {
         verifiedPhone: validation.verifiedPhone,
         checkoutPhone: validation.checkoutPhone,
       });
@@ -2840,7 +2869,7 @@ function consumePendingAccountRedirect() {
       setPendingAction(opts.pendingAction);
     }
 
-    console.log("[Megaska Checkout Gate] blocked", {
+    debugLog("[Megaska Checkout Gate] blocked", {
       reason: validation.reason,
       verifiedPhone: validation.verifiedPhone,
       checkoutPhone: validation.checkoutPhone,
@@ -2933,7 +2962,7 @@ function consumePendingAccountRedirect() {
       event.preventDefault();
     }
 
-    console.log("[Megaska OTP] logout intercepted");
+    debugLog("[Megaska OTP] logout intercepted");
 
     try {
       if (window.MegaskaAuth && typeof window.MegaskaAuth.logout === "function") {
@@ -2965,7 +2994,7 @@ function consumePendingAccountRedirect() {
     accountMenuContainer = menu;
     accountMenuTrigger = triggerEl;
     accountMenuTrigger.setAttribute("aria-expanded", "true");
-    console.log("[Megaska OTP] authenticated menu opened");
+    debugLog("[Megaska OTP] authenticated menu opened");
   }
 
   function isAccountMenuOpen() {
@@ -2990,7 +3019,7 @@ function consumePendingAccountRedirect() {
     if (!authenticated) {
       closeAccountMenu();
     }
-    console.log("[Megaska OTP] header sync updated", { authenticated });
+    debugLog("[Megaska OTP] header sync updated", { authenticated });
     return authenticated;
   }
 
@@ -3166,7 +3195,7 @@ function consumePendingAccountRedirect() {
       await handlePromptFallback();
     }
 
-    console.log("[Megaska OTP] account trigger intercepted", {
+    debugLog("[Megaska OTP] account trigger intercepted", {
       authenticated: false,
       accountDestination,
     });
@@ -3175,7 +3204,7 @@ function consumePendingAccountRedirect() {
 
   hideAccountMenu();
 
-  console.log("[Megaska OTP] account trigger intercepted", {
+  debugLog("[Megaska OTP] account trigger intercepted", {
     authenticated: true,
     accountDestination,
   });
@@ -3213,6 +3242,11 @@ function consumePendingAccountRedirect() {
       await continueToCheckoutFromPendingAction(gateState.customer, source + ".authed");
       return true;
     }
+    // Gate off: a shopper who isn't signed in goes straight to Shopify Checkout.
+    if (!checkoutGateOn()) {
+      window.location.assign("/checkout");
+      return true;
+    }
     setPendingAction({ type: "navigate", url: "/checkout" });
     try {
       openModal(source);
@@ -3223,7 +3257,7 @@ function consumePendingAccountRedirect() {
   }
 
  async function handleCheckoutTriggerClick(event, triggerEl) {
-  if (!checkoutInterceptionEnabled) return;
+  if (!checkoutGateOn()) return;
 
   const targetUrl =
     triggerEl?.tagName === "A" ? triggerEl.getAttribute("href") : "/checkout";
@@ -3235,7 +3269,7 @@ function consumePendingAccountRedirect() {
   });
 
   if (!allowed) {
-    console.log("[Megaska OTP] checkout click intercepted", { targetUrl });
+    debugLog("[Megaska OTP] checkout click intercepted", { targetUrl });
     return;
   }
 
@@ -3247,7 +3281,7 @@ function consumePendingAccountRedirect() {
     const customer = await getCurrentMegaskaCustomer();
     const prefilledUrl = await buildPrefilledCheckoutUrl(targetUrl, customer);
 
-    console.log("[Megaska Checkout Prefill] checkout handoff start", {
+    debugLog("[Megaska Checkout Prefill] checkout handoff start", {
       source: "interceptedCheckoutAnchor.href",
       detectedCheckoutUrl: prefilledUrl,
     });
@@ -3278,7 +3312,7 @@ function consumePendingAccountRedirect() {
       checkoutUrl: finalTargetUrl || null,
     };
 
-    console.log("[Megaska Checkout Prefill] checkout continuation", {
+    debugLog("[Megaska Checkout Prefill] checkout continuation", {
       mode: "click",
       finalCheckoutUrl: finalTargetUrl,
       mutationWaited: true,
@@ -3322,7 +3356,7 @@ function consumePendingAccountRedirect() {
 
     const finalTargetUrl = handoff?.checkoutUrl || prefilledUrl || submittedAction;
 
-    console.log("[Megaska Checkout Prefill] checkout continuation", {
+    debugLog("[Megaska Checkout Prefill] checkout continuation", {
       mode: "click-form-redirect",
       formAction: submittedAction,
       finalCheckoutUrl: finalTargetUrl,
@@ -3386,7 +3420,7 @@ function consumePendingAccountRedirect() {
   document.addEventListener(
     "submit",
     async (event) => {
-      if (!checkoutInterceptionEnabled) return;
+      if (!checkoutGateOn()) return;
 
       const form = event.target;
       if (!form || !form.matches || !form.matches("form")) return;
@@ -3422,7 +3456,7 @@ function consumePendingAccountRedirect() {
       });
 
       if (!allowed) {
-        console.log("[Megaska OTP] checkout submit intercepted");
+        debugLog("[Megaska OTP] checkout submit intercepted");
         return;
       }
 
@@ -3453,7 +3487,7 @@ function consumePendingAccountRedirect() {
 
       const finalTargetUrl = handoff?.checkoutUrl || prefilledUrl || submittedAction;
 
-      console.log("[Megaska Checkout Prefill] checkout continuation", {
+      debugLog("[Megaska Checkout Prefill] checkout continuation", {
         mode: "form-redirect",
         finalCheckoutUrl: finalTargetUrl,
         mutationWaited: true,
@@ -3476,7 +3510,7 @@ function consumePendingAccountRedirect() {
           : null;
       if (!form) return;
 
-      console.log("[SUBMIT]", form, {
+      debugLog("[SUBMIT]", form, {
         action: form.getAttribute("action") || "",
         method: form.getAttribute("method") || "",
         id: form.id || "",
@@ -3503,7 +3537,7 @@ function consumePendingAccountRedirect() {
       );
     });
 
-    console.log("[PAYMENT BUTTONS FOUND]", found);
+    debugLog("[PAYMENT BUTTONS FOUND]", found);
   }
 
   function isInMobileContext(element) {
@@ -3974,7 +4008,7 @@ function ensureAccountEntryFallbacks() {
     if (mobileContainer) {
       if (!document.getElementById(ACCOUNT_FALLBACK_MOBILE_ID)) {
         insertMobileFallbackInMenu(mobileContainer, createMobileAccountFallback());
-        console.log("[Megaska OTP] mobile account fallback inserted");
+        debugLog("[Megaska OTP] mobile account fallback inserted");
       }
       hasMobileAccountEntry = true;
     }
@@ -4038,7 +4072,7 @@ function ensureDesktopAccountFallback() {
     }
   }
 
-  console.log("[Megaska OTP] desktop account fallback inserted");
+  debugLog("[Megaska OTP] desktop account fallback inserted");
 }
 
 function observeDesktopAccountContainer() {
@@ -4101,7 +4135,7 @@ function scheduleAccountFallbackReconciliation() {
     checkoutSubmitBound = true;
 
     document.addEventListener("submit", async (event) => {
-      if (!checkoutInterceptionEnabled) return;
+      if (!checkoutGateOn()) return;
       const form = event.target;
       if (!form || !form.matches || !form.matches("form")) return;
 
@@ -4133,7 +4167,7 @@ function scheduleAccountFallbackReconciliation() {
       });
 
       if (!allowed) {
-        console.log("[Megaska OTP] checkout submit intercepted");
+        debugLog("[Megaska OTP] checkout submit intercepted");
         return;
       }
 
@@ -4155,7 +4189,7 @@ function scheduleAccountFallbackReconciliation() {
         return;
       }
       const finalTargetUrl = handoff?.checkoutUrl || prefilledUrl || submittedAction;
-      console.log("[Megaska Checkout Prefill] checkout continuation", {
+      debugLog("[Megaska Checkout Prefill] checkout continuation", {
         mode: "form-redirect",
         finalCheckoutUrl: finalTargetUrl,
         mutationWaited: true,
@@ -4309,7 +4343,7 @@ function hasVisibleNativeDesktopAccountEntry() {
 
       hardBlockEvent(event);
 
-      console.log("[Megaska OTP] buy-now submit intercepted", { form });
+      debugLog("[Megaska OTP] buy-now submit intercepted", { form });
       setPendingAction({
         type: "buy-now-submit",
         form,
@@ -4322,6 +4356,7 @@ function hasVisibleNativeDesktopAccountEntry() {
   function interceptCheckoutClicks(options) {
     const opts = options || {};
     checkoutInterceptionEnabled = opts.enabled !== false;
+    applyMerchantCheckoutGate();
     bindCheckoutSubmitInterceptor();
     return checkoutInterceptionEnabled;
   }
@@ -4359,7 +4394,7 @@ function hasVisibleNativeDesktopAccountEntry() {
     updateResendUi();
     focusOtpInput(0);
     prefetchCartForPendingCheckout();
-    console.log("[Megaska OTP] login resumed after reload", { checkout: Boolean(saved.checkoutUrl) });
+    debugLog("[Megaska OTP] login resumed after reload", { checkout: Boolean(saved.checkoutUrl) });
   }
 
   // Back from WhatsApp without a reload: put the cursor in the first empty code box.
@@ -4409,6 +4444,7 @@ function hasVisibleNativeDesktopAccountEntry() {
   };
 
   window.addEventListener("loopdesk:runtime-config-ready", (event) => {
+    applyMerchantCheckoutGate();
     const modal = document.querySelector("[data-megaska-otp-modal]");
     if (modal) applyOtpModalBranding(modal);
     const eventPolicy = event?.detail?.otpCountryPolicy;

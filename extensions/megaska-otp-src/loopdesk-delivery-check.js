@@ -108,7 +108,7 @@
   function init(root) {
     if (root.getAttribute("data-loopdesk-delivery-ready") === "true") return;
     root.setAttribute("data-loopdesk-delivery-ready", "true");
-    var form = root.querySelector("form");
+    var form = root.querySelector(".loopdesk-delivery-check__form");
     var input = root.querySelector("input");
     var button = root.querySelector("button");
     var result = root.querySelector(".loopdesk-delivery-check__result");
@@ -126,8 +126,7 @@
       input.removeAttribute("aria-invalid");
     });
 
-    form.addEventListener("submit", function (event) {
-      event.preventDefault();
+    function check() {
       var pin = input.value.replace(/\D/g, "");
       if (!/^\d{6}$/.test(pin)) {
         input.setAttribute("aria-invalid", "true");
@@ -145,6 +144,12 @@
         })
         .then(function (data) {
           if (root.hidden) return;
+          // Delhivery not connected yet: shoppers don't see a check that can't work
+          // (the theme editor shows the merchant a setup hint instead).
+          if (data && data.error === "DELHIVERY_NOT_CONFIGURED" && !options.designMode) {
+            root.hidden = true;
+            return;
+          }
           var message = describe(data, new Date(), options);
           render(result, message);
           if (message.tone === "ok") {
@@ -159,6 +164,14 @@
           button.disabled = false;
           button.textContent = label;
         });
+    }
+
+    button.addEventListener("click", check);
+    input.addEventListener("keydown", function (event) {
+      if (event.key !== "Enter") return;
+      // Inside a product form, Enter would otherwise submit Add to bag.
+      event.preventDefault();
+      check();
     });
   }
 

@@ -298,6 +298,7 @@ async function saveMerchantSettings(
       checkout: {
         showSecureBadge: formData.get("showSecureBadge") === "on",
         showTrustCopy: formData.get("showTrustCopy") === "on",
+        otpGateEnabled: formData.get("otpGateEnabled") === "on",
       },
       cancellation: {
         autoCancelUnfulfilledOnRequest:
@@ -809,8 +810,9 @@ export default async function MerchantSettingsPage({
         </section>
 
         <section className={`${cardClass} grid gap-5`}>
-          <SectionHeader title="Checkout reassurance" description="Non-payment display controls only. Payment, OTP, and order logic are unchanged." />
+          <SectionHeader title="Checkout" description="Login before checkout, and the reassurance shown with the checkout button." />
           <div className="grid gap-3 md:grid-cols-2">
+            <Check label="Require OTP login before checkout" name="otpGateEnabled" defaultChecked={settings.checkout.otpGateEnabled} help="Shoppers verify their mobile number with a one-time code before going to Shopify Checkout. Off: checkout opens straight away, and shoppers can still log in from the account icon." />
             <Check label="Show secure badge" name="showSecureBadge" defaultChecked={settings.checkout.showSecureBadge} />
             <Check label="Show trust copy" name="showTrustCopy" defaultChecked={settings.checkout.showTrustCopy} />
           </div>
