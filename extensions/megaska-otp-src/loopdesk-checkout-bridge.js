@@ -30,8 +30,14 @@ async function resolveExpressCheckoutReadiness() {
   var shop = window.MEGASKA_SHOP_DOMAIN || window.LoopDeskConfig && (window.LoopDeskConfig.shopDomain || window.LoopDeskConfig.shop);
   if (shop && typeof window.fetch === "function") {
     try {
-      var response = await window.fetch("/apps/loopd2c/api/runtime/config?shop=" + encodeURIComponent(shop) + "&_loopdesk_checkout_readiness=" + Date.now(), { credentials: "same-origin" });
-      var payload = response.ok ? await response.json() : null;
+      // Reuse the config the app embed loaded for this page when it is recent, so
+      // checkout doesn't wait on another request.
+      var shared = window.LOOPD2C_RUNTIME_CONFIG_REQUEST;
+      var payload = shared && shared.payload && Date.now() - Number(shared.at || 0) < 60000 ? await shared.payload : null;
+      if (!payload || !payload.config) {
+        var response = await window.fetch("/apps/loopd2c/api/runtime/config?shop=" + encodeURIComponent(shop) + "&_loopdesk_checkout_readiness=" + Date.now(), { credentials: "same-origin" });
+        payload = response.ok ? await response.json() : null;
+      }
       if (payload && payload.config) {
         window.LoopDeskConfig = Object.assign({}, window.LoopDeskConfig || {}, payload.config);
       }

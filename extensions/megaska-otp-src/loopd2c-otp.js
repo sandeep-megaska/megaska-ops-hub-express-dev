@@ -4079,17 +4079,30 @@ function observeDesktopAccountContainer() {
   scheduleAccountFallbackReconciliation();
 }
 
+// Shopify's checkout prefetch keeps appending <link rel="prefetch"> tags to <head>
+// (several a second), and apps add scripts and styles. None of that can add or
+// change an account entry.
+function isIgnorableMutation(mutation) {
+  const target = mutation?.target;
+  if (!target) return true;
+  const head = document.head;
+  if (head && (target === head || head.contains(target))) return true;
+  if (mutation.type !== "childList") return false;
+  return [...(mutation.addedNodes || []), ...(mutation.removedNodes || [])].every(
+    (node) => node.nodeType === 1 && /^(LINK|SCRIPT|STYLE|META|NOSCRIPT)$/.test(node.nodeName)
+  );
+}
+
 function bindAccountFallbackObserver() {
   if (accountFallbackObserverBound) return;
   accountFallbackObserverBound = true;
   if (typeof MutationObserver !== "function") return;
 
-  accountFallbackObserver = new MutationObserver(() => {
-    if (hasVisibleNativeDesktopAccountEntry()) {
-      const fallback = document.getElementById(ACCOUNT_FALLBACK_DESKTOP_ID);
-      fallback?.closest(".megaska-account-fallback-item")?.remove();
-      if (fallback?.isConnected) fallback.remove();
-    }
+  // Only page changes that could add, move or hide an account entry count; the
+  // debounced reconciliation (ensureAccountEntryFallbacks) does the visibility check,
+  // which forces layout, instead of every mutation doing it.
+  accountFallbackObserver = new MutationObserver((mutations) => {
+    if (mutations.every(isIgnorableMutation)) return;
     scheduleAccountFallbackReconciliation();
   });
   accountFallbackObserver.observe(document.documentElement, {
