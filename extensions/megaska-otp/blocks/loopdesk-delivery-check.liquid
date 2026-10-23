@@ -14,8 +14,12 @@
   data-show-cod="{{ block.settings.show_cod }}"
   {{ block.shopify_attributes }}
 >
-  <form class="loopdesk-delivery-check__form" novalidate>
-    <label class="loopdesk-delivery-check__label" for="loopdesk-delivery-pin-{{ block.id }}">{{ block.settings.heading }}</label>
+  {%- comment -%}
+    No <form>: themes often render app blocks inside the product form, where a nested
+    form would be dropped and the button would submit Add to bag. Enter is handled in JS.
+  {%- endcomment -%}
+  <div class="loopdesk-delivery-check__form" role="group" aria-labelledby="loopdesk-delivery-label-{{ block.id }}">
+    <label id="loopdesk-delivery-label-{{ block.id }}" class="loopdesk-delivery-check__label" for="loopdesk-delivery-pin-{{ block.id }}">{{ block.settings.heading }}</label>
     <div class="loopdesk-delivery-check__row">
       <input
         id="loopdesk-delivery-pin-{{ block.id }}"
@@ -29,9 +33,9 @@
         placeholder="{{ block.settings.placeholder }}"
         aria-describedby="loopdesk-delivery-msg-{{ block.id }}"
       >
-      <button type="submit" class="loopdesk-delivery-check__button">{{ block.settings.button_label }}</button>
+      <button type="button" class="loopdesk-delivery-check__button">{{ block.settings.button_label }}</button>
     </div>
-  </form>
+  </div>
   <div id="loopdesk-delivery-msg-{{ block.id }}" class="loopdesk-delivery-check__result" aria-live="polite"></div>
 </div>
 <script src="{{ 'loopdesk-delivery-check.js' | asset_url }}" defer></script>

@@ -1,4 +1,15 @@
 (function () {
+  // Diagnostic logs stay silent for shoppers (they included phone numbers and cart
+  // tokens). Turn them on with ?loopd2c_debug=1 or localStorage.loopd2c_debug = "1".
+  const debugLog = (function () {
+    let enabled = false;
+    try {
+      enabled = /[?&]loopd2c_debug=1(&|$)/.test(window.location.search) || window.localStorage.getItem("loopd2c_debug") === "1";
+    } catch (e) {
+      enabled = false;
+    }
+    return enabled ? console.log.bind(console) : function () {};
+  })();
   const API_BASE = "/apps/loopd2c/api";
   const SESSION_KEY = "megaska_session_token";
   let identityReplacementPending = false;
@@ -135,7 +146,7 @@
   function logRuntimeFetch(path, details) {
     if (!shouldLogRuntimeFetch(path)) return;
     try {
-      console.log("[Megaska Runtime Fetch]", {
+      debugLog("[Megaska Runtime Fetch]", {
         endpoint: details.endpoint,
         status: details.status,
         hasBody: details.hasBody,
@@ -165,7 +176,7 @@
   const endpointUrl = buildApiUrl(path);
 
   if (path === "/otp/request") {
-    console.log("[Megaska OTP] send OTP fetch start", {
+    debugLog("[Megaska OTP] send OTP fetch start", {
       endpointUrl,
     });
   }
@@ -207,7 +218,7 @@
   });
 
   if (path === "/otp/request") {
-    console.log("[Megaska OTP] send OTP response", {
+    debugLog("[Megaska OTP] send OTP response", {
       status: response.status,
       contentType,
       bodyPresent: hasBody,
@@ -270,7 +281,7 @@
   }
 
   async function requestOtp(phone, countryCode, options) {
-    console.log("[Megaska Auth] OTP request triggered", { endpoint: `${API_BASE}/otp/request` });
+    debugLog("[Megaska Auth] OTP request triggered", { endpoint: `${API_BASE}/otp/request` });
     // channel "sms" skips WhatsApp delivery (the "Get code by SMS" fallback).
     const channel = options && options.channel === "sms" ? "sms" : undefined;
     const send = () => apiFetch("/otp/request", {
@@ -319,7 +330,7 @@
     });
 
    const token = extractSessionToken(data);
-console.log("[Megaska Auth] verifyOtp response token", {
+debugLog("[Megaska Auth] verifyOtp response token", {
   hasToken: Boolean(token),
   tokenLength: token ? token.length : 0,
 });
@@ -329,7 +340,7 @@ if (token) {
   clearSessionToken();
   setSessionToken(token);
   identityReplacementPending = true;
-  console.log("[Megaska Auth] session token saved", {
+  debugLog("[Megaska Auth] session token saved", {
     hasStoredToken: Boolean(getSessionToken()),
   });
 }
@@ -635,7 +646,7 @@ if (token) {
     const hasContactInfo = Boolean(email || phone);
 
     if (!hasContactInfo) {
-      console.log("[Megaska Buyer Identity] skipped - missing customer contact");
+      debugLog("[Megaska Buyer Identity] skipped - missing customer contact");
       return {
         ok: false,
         skipped: true,
@@ -645,7 +656,7 @@ if (token) {
 
     const sessionToken = getSessionToken();
     if (!sessionToken) {
-      console.log("[Megaska Buyer Identity] skipped - missing session token");
+      debugLog("[Megaska Buyer Identity] skipped - missing session token");
       return {
         ok: false,
         skipped: true,
@@ -659,7 +670,7 @@ if (token) {
       checkoutUrl: opts.checkoutUrl || cartContext.checkoutUrl || undefined,
     };
 
-    console.log("[Megaska Checkout Prefill] active cart detected", {
+    debugLog("[Megaska Checkout Prefill] active cart detected", {
       cartToken: payload.cartToken || null,
       cartTokenSource: "cart.js.token",
       checkoutUrl: payload.checkoutUrl || null,
@@ -667,13 +678,13 @@ if (token) {
       itemCount: cartContext.itemCount,
     });
 
-    console.log("[Megaska Buyer Identity] update request", {
+    debugLog("[Megaska Buyer Identity] update request", {
       cartToken: payload.cartToken || null,
       email: email || null,
       phone: phone || null,
     });
 
-    console.log("[Megaska Verified Phone] active cart annotation started", {
+    debugLog("[Megaska Verified Phone] active cart annotation started", {
       cartTokenPresent: Boolean(payload.cartToken),
       cartToken: payload.cartToken || null,
       hasVerifiedPhone: Boolean(phone),
@@ -699,7 +710,7 @@ if (token) {
       megaska_auth_verified_at: verifiedAt,
     }).then(
       (cartUpdateResult) => {
-        console.log("[Megaska Verified Phone] active cart annotation complete", {
+        debugLog("[Megaska Verified Phone] active cart annotation complete", {
           cartToken: cartUpdateResult?.token || payload.cartToken || null,
           itemCount: Number(cartUpdateResult?.item_count || 0),
         });
@@ -905,7 +916,7 @@ if (token) {
     const cartToken = sanitizeCartToken(cartContext?.cartToken || localStorageToken || "");
     const cartId = cartToken.startsWith("gid://shopify/Cart/") ? cartToken : "";
 
-    console.log("[WALLET UI] apply click", {
+    debugLog("[WALLET UI] apply click", {
       availableToRedeem,
       cartTokenPresent: Boolean(cartToken),
       cartIdPresent: Boolean(cartId),
@@ -927,7 +938,7 @@ if (token) {
         throw new Error(data?.error || "Wallet apply failed");
       }
 
-      console.log("[WALLET UI] apply success", {
+      debugLog("[WALLET UI] apply success", {
         reservationId: data?.reservationId || null,
         code: data?.code || null,
         discountNodeId: data?.discountNodeId || null,
@@ -936,7 +947,7 @@ if (token) {
 
       const code = String(data.code || "").trim();
       const targetUrl = `/discount/${encodeURIComponent(code)}?redirect=/cart`;
-      console.log("[WALLET UI] redirecting to wallet discount attach", {
+      debugLog("[WALLET UI] redirecting to wallet discount attach", {
         code,
         targetUrl,
       });
@@ -971,7 +982,7 @@ if (token) {
 
   function renderWalletSectionIntoLiveContainer(container, summary, containerSelector) {
     const availableToRedeem = Number(summary?.wallet?.availableToRedeem || 0);
-    console.log("[WALLET UI] render attempt", {
+    debugLog("[WALLET UI] render attempt", {
       availableToRedeem,
       hasContainer: Boolean(container),
       containerSelector: String(containerSelector || ""),
@@ -1006,7 +1017,7 @@ if (token) {
     container.appendChild(walletSection);
     bindWalletApplyButtons(container);
 
-    console.log("[WALLET UI] render success", {
+    debugLog("[WALLET UI] render success", {
       mounted: true,
       availableToRedeem,
     });

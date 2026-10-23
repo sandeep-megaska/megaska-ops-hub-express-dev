@@ -41,13 +41,13 @@ function makeElement(tag, attrs = {}) {
 }
 
 function loadBlock({ storage = makeStorage(), responses = [], attrs = {} } = {}) {
-  const form = makeElement("form");
+  const form = makeElement("div");
   const input = makeElement("input");
   const button = makeElement("button");
   button.textContent = "Check";
   const result = makeElement("div");
   const root = makeElement("div", { "data-app-proxy-base": "/apps/loopd2c", "data-cutoff-hour": "12", "data-skip-sunday": "true", "data-show-cod": "true", ...attrs });
-  root.querySelector = (selector) => ({ form, input, button, ".loopdesk-delivery-check__result": result })[selector] || null;
+  root.querySelector = (selector) => ({ ".loopdesk-delivery-check__form": form, input, button, ".loopdesk-delivery-check__result": result })[selector] || null;
   const calls = [];
   const queue = [...responses];
   const events = [];
@@ -116,7 +116,7 @@ test("explains unserviceable PIN codes and failed lookups to the shopper", () =>
 test("looks up through the app proxy and caches the result for the bag", async () => {
   const block = loadBlock({ responses: [[200, serviceable]] });
   block.input.value = "682001";
-  block.form.fire("submit");
+  block.button.fire("click");
   await settle(); await settle();
   assert.deepEqual(block.calls, ["/apps/loopd2c/api/delhivery/pincode?pin=682001"]);
   assert.equal(block.result.attrs["data-tone"], "ok");
@@ -134,7 +134,7 @@ test("looks up through the app proxy and caches the result for the bag", async (
 test("rejects an invalid PIN code without a lookup", () => {
   const block = loadBlock();
   block.input.value = "6820";
-  block.form.fire("submit");
+  block.button.fire("click");
   assert.equal(block.calls.length, 0);
   assert.equal(block.input.attrs["aria-invalid"], "true");
   assert.equal(block.result.attrs["data-tone"], "error");
@@ -143,7 +143,7 @@ test("rejects an invalid PIN code without a lookup", () => {
 test("hides itself when the module is switched off for the shop", async () => {
   const block = loadBlock({ responses: [[403, { ok: false }]] });
   block.input.value = "682001";
-  block.form.fire("submit");
+  block.button.fire("click");
   await settle(); await settle();
   assert.equal(block.root.hidden, true);
   assert.equal(block.storage.getItem("loopd2c_delivery_pin_result"), null);
@@ -161,6 +161,28 @@ test("the block is limited to product templates and uses the app proxy", () => {
   assert.deepEqual(schema.enabled_on, { templates: ["product"] });
   assert.match(blockLiquid, /data-app-proxy-base="\/apps\/loopd2c"/);
   assert.match(blockLiquid, /autocomplete="postal-code"/);
+  // No <form>: inside a product form it would be dropped and Check would submit Add to bag.
+  assert.doesNotMatch(blockLiquid.split("{% schema %}")[0].replace(/\{%-? comment -?%\}[\s\S]*?\{%-? endcomment -?%\}/g, ""), /<form/i);
+  assert.match(blockLiquid, /<button type="button"/);
+});
+
+test("Enter in the PIN field checks without submitting a surrounding form", async () => {
+  const block = loadBlock({ responses: [[200, serviceable]] });
+  block.input.value = "682001";
+  let prevented = false;
+  block.input.fire("keydown", { key: "Enter", preventDefault() { prevented = true; } });
+  await settle(); await settle();
+  assert.equal(prevented, true);
+  assert.deepEqual(block.calls, ["/apps/loopd2c/api/delhivery/pincode?pin=682001"]);
+  block.input.fire("keydown", { key: "a", preventDefault() { throw new Error("should not prevent other keys"); } });
+});
+
+test("shoppers don't see the check when Delhivery isn't connected", async () => {
+  const block = loadBlock({ responses: [[503, { ok: false, error: "DELHIVERY_NOT_CONFIGURED" }]] });
+  block.input.value = "682001";
+  block.button.fire("click");
+  await settle(); await settle();
+  assert.equal(block.root.hidden, true);
 });
 
 // Pulls the bag's delivery helpers out of the drawer script and runs them alone.

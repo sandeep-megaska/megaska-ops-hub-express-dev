@@ -174,6 +174,7 @@ test("desktop LoopDesk fallback dispatches to OTP before navigation and routes a
     "handlePromptFallback",
     "hideAccountMenu",
     "window",
+    "debugLog",
     `async ${handlerSource.replace(/async\s*$/, "")}; return handleAccountTriggerClick;`
   )(
     (event) => {
@@ -186,7 +187,8 @@ test("desktop LoopDesk fallback dispatches to OTP before navigation and routes a
     (modalSource) => { modalSources.push(modalSource); },
     async () => {},
     () => {},
-    { location: { assign: (destination) => navigations.push(destination) } }
+    { location: { assign: (destination) => navigations.push(destination) } },
+    () => {}
   );
 
   fallback.addEventListener("click", async (event) => {

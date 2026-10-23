@@ -727,10 +727,12 @@
         nativeDrawerDisabledRequiredMessage: text(cart.nativeDrawerDisabledRequiredMessage, DEFAULT_CONFIG.cart.nativeDrawerDisabledRequiredMessage),
         customTriggerSelector: text(cart.customTriggerSelector || legacy.customTriggerSelector, DEFAULT_CONFIG.cart.customTriggerSelector)
       },
-      checkout: {
+      // otpGateEnabled is passed through untouched (absent stays absent): loopd2c-otp.js
+      // reads it to decide whether checkout needs OTP login.
+      checkout: Object.assign({
         showSecureBadge: bool(checkout.showSecureBadge, DEFAULT_CONFIG.checkout.showSecureBadge),
         showTrustCopy: bool(checkout.showTrustCopy, DEFAULT_CONFIG.checkout.showTrustCopy)
-      },
+      }, typeof checkout.otpGateEnabled === "boolean" ? { otpGateEnabled: checkout.otpGateEnabled } : {}),
       enabled: bool(firstDefined(raw.enabled, legacy.enabled), DEFAULT_CONFIG.enabled),
       cartOwnershipMode: text(cart.cartOwnershipMode || legacy.cartOwnershipMode, DEFAULT_CONFIG.cartOwnershipMode),
       cartIntelligence: normalizeCartIntelligence(raw.cart_intelligence_config || raw.cartIntelligence),

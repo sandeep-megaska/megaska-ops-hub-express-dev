@@ -86,6 +86,11 @@
       .then(function (response) { return response.ok ? response.json() : null; })
       .then(function (payload) {
         if (!payload || !payload.config) return;
+        // The merchant's "Require OTP login before checkout" setting, kept apart from
+        // LoopDeskConfig (which the bag script rebuilds) so nothing can overwrite it.
+        if (payload.config.checkout && typeof payload.config.checkout.otpGateEnabled === "boolean") {
+          window.LOOPD2C_OTP_GATE = payload.config.checkout.otpGateEnabled;
+        }
         window.LoopDeskConfig = Object.assign({}, window.LoopDeskConfig || {}, payload.config, {
           otpModalBranding: Object.assign({}, (window.LoopDeskConfig && window.LoopDeskConfig.otpModalBranding) || {}, payload.config.otpModalBranding || {}),
           otpCountryPolicy: payload.config.otpCountryPolicy || (window.LoopDeskConfig && window.LoopDeskConfig.otpCountryPolicy) || null
@@ -119,7 +124,8 @@
       "type": "checkbox",
       "id": "cart_drawer_enabled",
       "label": "Enable LoopD2C cart drawer",
-      "default": true
+      "info": "Replaces your theme's cart with the LoopD2C bag. Off until you turn it on.",
+      "default": false
     },
     {
       "type": "checkbox",
