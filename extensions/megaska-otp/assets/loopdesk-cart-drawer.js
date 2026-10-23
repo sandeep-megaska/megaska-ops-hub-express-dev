@@ -1901,28 +1901,39 @@
   // lets the shopper choose in the drawer (before any checkout). Prepaid price
   // reflects the merchant's prepaid offer; the actual discount is applied by the
   // discount Function at checkout keyed on the loopd2c_payment_intent attribute.
-  // Reuse the pincode the shopper already checked on the product page: the theme's
-  // 'mg-pincode-widget' caches its Delhivery result in localStorage under
-  // megaska_delivery_pin_result ({ pin, city, stateCode, inc, tatDays, isCod }).
+  // Reuse the PIN code the shopper already checked on the product page. The LoopD2C
+  // Delivery check app block caches its Delhivery result in localStorage under
+  // loopd2c_delivery_pin_result ({ pin, city, stateCode, inc, tatDays, isCod,
+  // cutoffHour, skipSunday }). Stores still on a theme-coded checker that writes
+  // megaska_delivery_pin_result (same shape, no dispatch options) keep working.
   // The drawer reads it to show "Delivering to <city> · Expected by <date>".
-  // Display-only; hidden until the shopper has checked a pincode.
+  // Display-only; hidden until the shopper has checked a PIN code.
+  var DELIVERY_PIN_KEYS = ["loopd2c_delivery_pin_result", "megaska_delivery_pin_result"];
+  // When both are present (a store mid-switch), the most recent check wins.
   function readDeliveryPinResult() {
-    try {
-      var raw = window.localStorage.getItem("megaska_delivery_pin_result");
-      if (!raw) return null;
-      var data = JSON.parse(raw);
-      if (!data || !/^\d{6}$/.test(String(data.pin || ""))) return null;
-      return data;
-    } catch (e) { return null; }
+    var best = null;
+    for (var i = 0; i < DELIVERY_PIN_KEYS.length; i += 1) {
+      try {
+        var raw = window.localStorage.getItem(DELIVERY_PIN_KEYS[i]);
+        if (!raw) continue;
+        var data = JSON.parse(raw);
+        if (!data || !/^\d{6}$/.test(String(data.pin || ""))) continue;
+        if (!best || (Date.parse(data.checkedAt) || 0) > (Date.parse(best.checkedAt) || 0)) best = data;
+      } catch (e) {}
+    }
+    return best;
   }
-  // Same dispatch-day rule the product-page widget uses (orders placed after noon,
-  // or on a Sunday, ship the next working day) so the drawer date matches the PDP.
-  function deliveryShipDate() {
+  // Same dispatch-day rule as the product-page block: orders placed at or after the
+  // cutoff hour (default noon), or on a Sunday when Sundays are skipped, ship the next
+  // dispatch day, so the drawer date matches the product page.
+  function deliveryShipDate(data) {
+    var cutoff = data && data.cutoffHour != null && !isNaN(Number(data.cutoffHour)) ? Number(data.cutoffHour) : 12;
+    var skipSunday = !data || data.skipSunday !== false;
     var now = new Date();
     var ship = new Date(now.getTime());
-    var isSun = function (d) { return d.getDay() === 0; };
-    if (isSun(now)) { while (isSun(ship)) ship.setDate(ship.getDate() + 1); }
-    else if (now.getHours() >= 12) { ship.setDate(ship.getDate() + 1); while (isSun(ship)) ship.setDate(ship.getDate() + 1); }
+    var closed = function (d) { return skipSunday && d.getDay() === 0; };
+    if (closed(now)) { while (closed(ship)) ship.setDate(ship.getDate() + 1); }
+    else if (now.getHours() >= cutoff) { ship.setDate(ship.getDate() + 1); while (closed(ship)) ship.setDate(ship.getDate() + 1); }
     return ship;
   }
   function renderDeliveryEstimate() {
@@ -1935,7 +1946,7 @@
     var eta = "";
     var tat = Number(data.tatDays);
     if (tat > 0) {
-      var ship = deliveryShipDate();
+      var ship = deliveryShipDate(data);
       var d1 = new Date(ship.getTime()); d1.setDate(d1.getDate() + tat);
       var d2 = new Date(ship.getTime()); d2.setDate(d2.getDate() + tat + 1);
       var opts = { day: "numeric", month: "short" };
