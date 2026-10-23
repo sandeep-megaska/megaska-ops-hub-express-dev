@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { syncSingleOrder } from "../../../../../services/gst/order-sync";
-import { getShopDomainFromRequest } from "../../../../../services/shopify/shop";
+import { resolveGstAdminShopDomain } from "../../../../../services/gst/request-shop";
 
 export const runtime = "nodejs";
 
@@ -10,11 +10,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, data: null, error: "Invalid JSON payload" }, { status: 400 });
   }
 
+  const shopDomain = await resolveGstAdminShopDomain(req);
+  if (!shopDomain) return NextResponse.json({ ok: false, data: null, error: "Unauthorized. Reopen this page from Shopify admin." }, { status: 401 });
+
   const result = await syncSingleOrder({
     orderName: body.orderName ? String(body.orderName) : undefined,
     orderNumber: body.orderNumber ? String(body.orderNumber) : undefined,
     forceResync: Boolean(body.forceResync),
-    shopDomain: getShopDomainFromRequest(req) || (body.shopDomain ? String(body.shopDomain) : undefined),
+    shopDomain,
   });
 
   if (!result.ok) {

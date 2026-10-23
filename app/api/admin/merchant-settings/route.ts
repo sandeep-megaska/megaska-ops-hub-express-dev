@@ -6,7 +6,6 @@ import {
 import {
   formatAdminShopResolutionError,
   resolveAdminShopFromRequest,
-  resolveAdminShopFromSearchParams,
 } from "../../../../services/shopify/admin-shop-context";
 
 export const runtime = "nodejs";
@@ -41,15 +40,12 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     );
 
-  const requestResolved = await shop(req);
-  const bodyShop = typeof body.shop === "string" ? body.shop : "";
-  const resolved = requestResolved.shop?.id
-    ? requestResolved
-    : await resolveAdminShopFromSearchParams({ shop: bodyShop });
+  // The shop comes only from the verified session token; a `shop` in the body is ignored.
+  const resolved = await shop(req);
   if (!resolved.shop?.id)
     return NextResponse.json(
       { ok: false, error: formatAdminShopResolutionError(resolved) },
-      { status: 400 },
+      { status: 401 },
     );
   try {
     const settings = await updateLoopDeskMerchantSettings(resolved.shop.id, body);

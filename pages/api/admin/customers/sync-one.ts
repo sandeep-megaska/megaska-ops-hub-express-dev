@@ -1,10 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "../../../../services/db/prisma";
 import { syncSingleCustomerForShop } from "../../../../lib/customer-sync";
-import {
-  getShopDomainFromRequest,
-  resolveShopConfig,
-} from "../../../../services/shopify/shop-resolver";
+import { verifyShopifySessionToken } from "../../../../services/shopify/session-token";
 
 export default async function handler(
   req: NextApiRequest,
@@ -27,23 +24,15 @@ export default async function handler(
       });
     }
 
-    const host = req.headers.host || "localhost";
-    const protocol = host.includes("localhost") ? "http" : "https";
-    const url = `${protocol}://${host}${req.url || ""}`;
-
-    const requestLike = {
-      url,
-      headers: {
-        get(name: string) {
-          const value = req.headers[name.toLowerCase()];
-          if (Array.isArray(value)) return value[0] || null;
-          return value ?? null;
-        },
-      },
-    };
-
-    const requestedShopDomain = getShopDomainFromRequest(requestLike as any);
-    const shopConfig = await resolveShopConfig(requestedShopDomain);
+    // The shop comes only from the verified App Bridge session token (the admin
+    // page's same-origin fetch carries it); never from ?shop=, headers or a default store.
+    let verifiedShopDomain = "";
+    try {
+      verifiedShopDomain = verifyShopifySessionToken(String(req.headers.authorization || "")).shopDomain;
+    } catch {
+      verifiedShopDomain = "";
+    }
+    const shopConfig = { shopDomain: verifiedShopDomain };
 
     if (!shopConfig?.shopDomain) {
       return res.status(401).json({

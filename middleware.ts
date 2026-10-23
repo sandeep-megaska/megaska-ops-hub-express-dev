@@ -20,12 +20,21 @@ function buildFrameAncestors(shop: string | null) {
 // client-side navigation/data fetches send "empty" — both are always let
 // through. Clients that omit the header entirely fail open rather than
 // risk breaking a legitimate embed we can't positively identify.
+//
+// It also forwards the requested path + query to the page as x-loopd2c-url (any
+// client-sent copy is replaced), so an admin page or server action whose Shopify
+// session can't be verified knows where the session bounce should return to.
+// WhatsApp media opened in a new tab is a top-level document load by design; that
+// route checks its own signed URL, so it is not redirected.
+const ADMIN_REQUEST_URL_HEADER = "x-loopd2c-url";
+const SIGNED_MEDIA_PATH = /^\/admin\/whatsapp\/media\//;
+
 export function middleware(request: NextRequest) {
   const url = request.nextUrl;
   const shop = url.searchParams.get("shop");
   const secFetchDest = request.headers.get("sec-fetch-dest");
 
-  if (secFetchDest === "document") {
+  if (secFetchDest === "document" && !SIGNED_MEDIA_PATH.test(url.pathname)) {
     const appHandle = process.env.SHOPIFY_APP_HANDLE || DEFAULT_APP_HANDLE;
     const destination = isValidShop(shop)
       ? `https://${shop}/admin/apps/${appHandle}`
@@ -33,7 +42,9 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(destination);
   }
 
-  const response = NextResponse.next();
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set(ADMIN_REQUEST_URL_HEADER, `${url.pathname}${url.search}`);
+  const response = NextResponse.next({ request: { headers: requestHeaders } });
   response.headers.set("Content-Security-Policy", buildFrameAncestors(shop));
   return response;
 }
