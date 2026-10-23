@@ -164,6 +164,11 @@ test("the block is limited to product templates and uses the app proxy", () => {
   // No <form>: inside a product form it would be dropped and Check would submit Add to bag.
   assert.doesNotMatch(blockLiquid.split("{% schema %}")[0].replace(/\{%-? comment -?%\}[\s\S]*?\{%-? endcomment -?%\}/g, ""), /<form/i);
   assert.match(blockLiquid, /<button type="button"/);
+  // Inside a product form the PIN field must not be posted with Add to bag, and a
+  // half-typed PIN must not fail the browser's form validation and block it.
+  const input = blockLiquid.match(/<input[\s\S]*?>/)[0];
+  assert.doesNotMatch(input, /\sname=/);
+  assert.doesNotMatch(input, /\s(pattern|required|minlength)=/);
 });
 
 test("Enter in the PIN field checks without submitting a surrounding form", async () => {
