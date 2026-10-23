@@ -883,7 +883,7 @@
                   type="tel"
                   inputmode="numeric"
                   pattern="[0-9]*"
-                  maxlength="1"
+                  autocomplete="${index === 0 ? "one-time-code" : "off"}"
                   class="megaska-otp-digit"
                   data-megaska-otp-digit
                   data-index="${index}"
@@ -1880,20 +1880,36 @@ async function completeAuthenticatedLogin(sessionCustomer, options) {
   const index = Number(input.dataset.index);
   const value = String(input.value || "");
 
-  // FULL OTP autofill (key fix)
-  if (value.length > 1) {
-    const digits = value.replace(/\D/g, "").slice(0, OTP_LENGTH);
-    state.otpDigits = digits.split("").concat(Array(OTP_LENGTH).fill("")).slice(0, OTP_LENGTH);
+  // A whole code inserted into one box at once: the iPhone keyboard's code suggestion
+  // (e.g. from a WhatsApp notification) or Android autofill. The boxes have no maxlength,
+  // so the browser doesn't cut it down to the first digit.
+  const typed = value.replace(/\D/g, "");
+  if (typed.length >= OTP_LENGTH) {
+    state.otpDigits = typed.slice(0, OTP_LENGTH).split("");
     state.errorMessage = "";
     renderStep();
+    submitOtpIfReady();
+    return;
+  }
 
-    if (digits.length === OTP_LENGTH) {
+  // More than one digit in a box (typed before the cursor moved on, or a partial paste):
+  // keep them in order from this box onwards. Focusing a box selects its digit, so
+  // retyping a box replaces it instead.
+  if (typed.length > 1) {
+    typed.split("").forEach((digit, offset) => {
+      if (index + offset < OTP_LENGTH) state.otpDigits[index + offset] = digit;
+    });
+    state.errorMessage = "";
+    renderStep();
+    if (collectOtpDigits().length === OTP_LENGTH) {
       submitOtpIfReady();
+    } else {
+      focusOtpInput(Math.min(OTP_LENGTH - 1, index + typed.length));
     }
     return;
   }
 
-  const digit = value.replace(/\D/g, "").slice(0, 1);
+  const digit = typed;
   state.otpDigits[index] = digit;
   input.value = digit;
 
