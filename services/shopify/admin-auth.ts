@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
-import { getShopByDomain, ShopResolutionError, type ShopRow } from "./shop";
+import { ShopResolutionError, type ShopRow } from "./shop";
+import { ensureShopInstalled } from "./install";
 import { SessionTokenError, verifyShopifySessionToken } from "./session-token";
 
 /**
@@ -29,7 +30,8 @@ export async function requireAdminShopFromRequest(req: NextRequest): Promise<Sho
     throw new ShopResolutionError(401, message);
   }
 
-  const shop = await getShopByDomain(verified.shopDomain);
+  // Installs or reactivates the shop on its first verified request (token exchange).
+  const shop = await ensureShopInstalled(verified.shopDomain, token);
   if (!shop) {
     throw new ShopResolutionError(404, "Shop not found");
   }

@@ -18,7 +18,8 @@ import { SessionTokenError, verifyShopifySessionToken } from "./session-token.ts
 */
 
 export type AdminRequestVerification =
-  | { ok: true; shopDomain: string; method: "session_token" | "id_token" | "hmac" }
+  // sessionToken is the raw verified token (absent for HMAC), used for the install token exchange.
+  | { ok: true; shopDomain: string; method: "session_token" | "id_token" | "hmac"; sessionToken?: string }
   | { ok: false; reason: string };
 
 // Shopify's app-load URL is used straight away; an older one is a replay.
@@ -58,7 +59,7 @@ export function verifyAdminRequest(input: {
   if (bearer) {
     try {
       const verified = verifyShopifySessionToken(bearer, tokenOpts);
-      return { ok: true, shopDomain: verified.shopDomain, method: "session_token" };
+      return { ok: true, shopDomain: verified.shopDomain, method: "session_token", sessionToken: bearer };
     } catch (error) {
       return { ok: false, reason: error instanceof SessionTokenError ? error.message : "Invalid session token" };
     }
@@ -68,7 +69,7 @@ export function verifyAdminRequest(input: {
   if (idToken) {
     try {
       const verified = verifyShopifySessionToken(idToken, { ...tokenOpts, leewaySeconds: 10 });
-      return { ok: true, shopDomain: verified.shopDomain, method: "id_token" };
+      return { ok: true, shopDomain: verified.shopDomain, method: "id_token", sessionToken: idToken };
     } catch {
       // An expired URL token is normal after a reload; Shopify's HMAC may still be fresh.
     }

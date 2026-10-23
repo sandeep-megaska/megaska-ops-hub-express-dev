@@ -109,11 +109,6 @@ export default async function InstallationWizardPage({ searchParams }: PageProps
         <div className="mk-alert mk-alert-error" role="alert">
           {formatAdminShopResolutionError(resolved)}
         </div>
-        {resolved.shopDomain ? (
-          <a className="mk-btn mk-btn-primary" href={`/api/auth/install?shop=${encodeURIComponent(resolved.shopDomain)}`}>
-            Reinstall the Shopify app for {resolved.shopDomain}
-          </a>
-        ) : null}
       </main>
     );
   }
@@ -133,7 +128,6 @@ export default async function InstallationWizardPage({ searchParams }: PageProps
   if (params.embedded) embeddedContext.set("embedded", params.embedded);
   const settingsHref = `/admin/merchant-settings?${embeddedContext.toString()}`;
   const runtimeHref = `/api/runtime/config?shop=${shopParam}`;
-  const installHref = `/api/auth/install?shop=${shopParam}`;
   const diagnosticsHref = `/admin/diagnostics/environment?${embeddedContext.toString()}`;
   const appEmbedDeepLink = `https://${resolved.shop.shopDomain}/admin/themes/current/editor?context=apps`;
   // Opens the product template in the theme editor with the Delivery check block ready
@@ -181,9 +175,8 @@ export default async function InstallationWizardPage({ searchParams }: PageProps
           number={2}
           title="App installation status"
           status={installationComplete ? "Complete" : "Incomplete"}
-          description="Confirms the app has an active installed Shop record from Shopify OAuth."
+          description="Confirms Shopify has installed the app for this shop. It installs itself the first time you open it from Shopify admin."
           details={<p>Installation status: <strong>{resolved.shop.installationStatus || "unknown"}</strong>. Active: <strong>{resolved.shop.isActive ? "Yes" : "No"}</strong>.</p>}
-          actions={<LinkButton href={installHref}>Run install / OAuth</LinkButton>}
         />
         <WizardStep
           number={3}
