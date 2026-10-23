@@ -3,7 +3,7 @@ import test from "node:test";
 import { readFileSync } from "node:fs";
 
 const source = readFileSync(
-  new URL("../megaska-otp/assets/loopd2c-otp.js", import.meta.url),
+  new URL("../megaska-otp-src/loopd2c-otp.js", import.meta.url),
   "utf8"
 );
 

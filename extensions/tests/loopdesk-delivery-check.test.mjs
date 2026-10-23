@@ -3,9 +3,9 @@ import fs from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
 
-const blockSource = fs.readFileSync(new URL("../megaska-otp/assets/loopdesk-delivery-check.js", import.meta.url), "utf8");
+const blockSource = fs.readFileSync(new URL("../megaska-otp-src/loopdesk-delivery-check.js", import.meta.url), "utf8");
 const blockLiquid = fs.readFileSync(new URL("../megaska-otp/blocks/loopdesk-delivery-check.liquid", import.meta.url), "utf8");
-const drawerSource = fs.readFileSync(new URL("../megaska-otp/assets/loopdesk-cart-drawer.js", import.meta.url), "utf8");
+const drawerSource = fs.readFileSync(new URL("../megaska-otp-src/loopdesk-cart-drawer.js", import.meta.url), "utf8");
 
 function makeStorage(entries = {}) {
   const store = new Map(Object.entries(entries));

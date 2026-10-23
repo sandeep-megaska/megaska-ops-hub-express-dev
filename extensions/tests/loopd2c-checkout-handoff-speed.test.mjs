@@ -3,7 +3,7 @@ import fs from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
 
-const source = fs.readFileSync(new URL("../megaska-otp/assets/loopd2c-auth.js", import.meta.url), "utf8");
+const source = fs.readFileSync(new URL("../megaska-otp-src/loopd2c-auth.js", import.meta.url), "utf8");
 
 // Loads the auth script with a signed-in session. `routes` answers each request by path;
 // a route may return a promise to hold the response back. Every request is logged in `log`.

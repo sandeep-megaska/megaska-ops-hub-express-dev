@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-const js = readFileSync("extensions/megaska-otp/assets/loopdesk-customer-dashboard.js", "utf8");
-const css = readFileSync("extensions/megaska-otp/assets/loopdesk-customer-dashboard.css", "utf8");
+const js = readFileSync("extensions/megaska-otp-src/loopdesk-customer-dashboard.js", "utf8");
+const css = readFileSync("extensions/megaska-otp-src/loopdesk-customer-dashboard.css", "utf8");
 assert.match(js, /const state = \{ status: "BOOTING"/);
 for (const state of ["BOOTING", "LOADING", "AUTH_REQUIRED", "READY", "EMPTY", "ERROR"]) assert.match(js, new RegExp(state));
 assert.match(js, /state\.request/);

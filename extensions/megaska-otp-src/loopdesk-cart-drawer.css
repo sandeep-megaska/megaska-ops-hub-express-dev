@@ -1,0 +1,923 @@
+.loopdesk-cart-drawer-is-open {
+  overflow: hidden;
+}
+
+.loopdesk-cart-drawer__overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  background: rgba(15, 23, 42, 0.48);
+  opacity: 1;
+  backdrop-filter: blur(2px);
+  transition: opacity 220ms ease;
+}
+
+.loopdesk-cart-drawer__overlay[hidden] {
+  display: block;
+  pointer-events: none;
+  opacity: 0;
+}
+
+.loopdesk-cart-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  z-index: 2147483001;
+  display: flex;
+  flex-direction: column;
+  width: min(520px, 100vw);
+  max-width: 100vw;
+  height: 100dvh;
+  color: var(--loopdesk-text, #111827);
+  background: var(--loopdesk-surface, #ffffff);
+  box-shadow: -28px 0 70px rgba(15, 23, 42, 0.24);
+  transform: translateX(104%);
+  transition: transform 240ms cubic-bezier(0.22, 1, 0.36, 1);
+  font-family: var(--loopdesk-font, inherit);
+}
+
+.loopdesk-cart-drawer,
+.loopdesk-cart-drawer * {
+  box-sizing: border-box;
+}
+
+.loopdesk-cart-drawer[aria-hidden="false"] {
+  transform: translateX(0);
+}
+
+.loopdesk-cart-drawer__header,
+.loopdesk-cart-drawer__footer {
+  padding: 20px;
+  border-color: #e5e7eb;
+}
+
+.loopdesk-cart-drawer__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  border-bottom: 1px solid #eef2f7;
+}
+
+.loopdesk-cart-drawer__brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.loopdesk-cart-drawer__brand-logo {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  border-radius: var(--loopdesk-radius, 16px);
+  object-fit: contain;
+}
+
+.loopdesk-cart-drawer__header h2,
+.loopdesk-cart-drawer__header p,
+.loopdesk-cart-drawer__microcopy,
+.loopdesk-cart-drawer__powered {
+  margin: 0;
+}
+
+.loopdesk-cart-drawer__header h2 {
+  font-size: 21px;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+.loopdesk-cart-drawer__header p {
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.loopdesk-cart-drawer__close {
+  width: 40px;
+  height: 40px;
+  border: 1px solid #e5e7eb;
+  border-radius: var(--loopdesk-radius, 999px);
+  background: #ffffff;
+  color: var(--loopdesk-text, #111827);
+  cursor: pointer;
+  font-size: 28px;
+  line-height: 1;
+}
+
+.loopdesk-cart-drawer__scroll {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-x: clip;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.loopdesk-cart-drawer__scroll::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.loopdesk-cart-drawer__body {
+  min-width: 0;
+  padding: 6px 20px 0;
+}
+
+.loopdesk-cart-drawer__summary {
+  min-width: 0;
+  padding: 4px 20px 16px;
+}
+
+.loopdesk-cart-drawer__loading,
+.loopdesk-cart-drawer__empty,
+.loopdesk-cart-drawer__error {
+  display: flex;
+  min-height: 220px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 32px 8px;
+  color: #64748b;
+  text-align: center;
+}
+
+.loopdesk-cart-drawer__empty strong {
+  color: var(--loopdesk-text, #111827);
+  font-size: 18px;
+}
+
+.loopdesk-cart-drawer__loading span {
+  width: 28px;
+  height: 28px;
+  border: 3px solid #e5e7eb;
+  border-top-color: var(--loopdesk-primary, var(--ld-primary, #111827));
+  border-radius: var(--loopdesk-radius, 999px);
+  animation: loopdesk-spin 800ms linear infinite;
+}
+
+.loopdesk-cart-drawer__error {
+  color: #b91c1c;
+}
+
+.loopdesk-cart-drawer__line {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr);
+  gap: 14px;
+  padding: 18px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.loopdesk-cart-drawer__image-wrap {
+  width: 84px;
+  height: 96px;
+  overflow: hidden;
+  border: 1px solid #eef2f7;
+  border-radius: var(--loopdesk-radius, 16px);
+  background: #f8fafc;
+}
+
+.loopdesk-cart-drawer__image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.loopdesk-cart-drawer__image--placeholder {
+  background: linear-gradient(135deg, #f1f5f9, #e2e8f0);
+}
+
+.loopdesk-cart-drawer__line-main {
+  min-width: 0;
+}
+
+.loopdesk-cart-drawer__line-top {
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.loopdesk-cart-drawer__title {
+  flex: 1 1 0;
+  min-width: 0;
+  color: var(--loopdesk-text, #111827);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  /* Long SEO product titles: two lines are enough to recognise the item. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.loopdesk-cart-drawer__size {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.loopdesk-cart-drawer__size select {
+  height: 30px;
+  padding: 0 26px 0 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background-color: #fff;
+  color: #111827;
+  font: inherit;
+  font-weight: 700;
+}
+
+.loopdesk-cart-drawer__line-notice {
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-size: 12px;
+}
+
+.loopdesk-cart-drawer__variant {
+  margin-top: 5px;
+  color: #64748b;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.loopdesk-cart-drawer__price {
+  min-width: max-content;
+  color: var(--loopdesk-text, #111827);
+  font-size: 14px;
+  font-weight: 700;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.loopdesk-cart-drawer__savings {
+  margin-top: 4px;
+  color: #15803d;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.loopdesk-cart-drawer__line-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.loopdesk-cart-drawer__qty {
+  display: inline-grid;
+  grid-template-columns: 34px 38px 34px;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid #dbe3ee;
+  border-radius: var(--loopdesk-radius, 999px);
+  background: #ffffff;
+  text-align: center;
+}
+
+.loopdesk-cart-drawer__qty button {
+  height: 34px;
+  border: 0;
+  background: transparent;
+  color: var(--loopdesk-text, #111827);
+  cursor: pointer;
+  font-size: 18px;
+}
+
+.loopdesk-cart-drawer__qty span {
+  color: var(--loopdesk-text, #111827);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.loopdesk-cart-drawer__remove {
+  border: 0;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: underline;
+}
+
+.loopdesk-cart-drawer__footer {
+  position: sticky;
+  bottom: 0;
+  min-width: 0;
+  border-top: 1px solid #e5e7eb;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 -12px 30px rgba(15, 23, 42, 0.08);
+}
+
+.loopdesk-cart-drawer__subtotal {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  color: var(--loopdesk-text, #111827);
+  font-size: 16px;
+}
+
+.loopdesk-cart-drawer__subtotal strong {
+  font-size: 20px;
+}
+
+/* `display: flex` above overrides the UA [hidden] rule, which left the
+   "Total savings -₹0.00" row visible on carts with no savings. */
+.loopdesk-cart-drawer__subtotal[hidden] {
+  display: none !important;
+}
+
+.loopdesk-cart-drawer__pay-note {
+  margin: -8px 0 14px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #64748b;
+}
+
+.loopdesk-cart-drawer__pay-note-save {
+  color: #047857;
+  font-weight: 700;
+}
+
+/* The prepaid offer is the strongest saving in the drawer: show it as a strip. */
+.loopdesk-cart-drawer__pay-note-offer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 2px 10px;
+  margin-bottom: 4px;
+  padding: 9px 12px;
+  border: 1px dashed #34d399;
+  border-radius: 10px;
+  background: #ecfdf5;
+  color: #065f46;
+  font-size: 13px;
+}
+
+.loopdesk-cart-drawer__pay-note-offer strong {
+  font-weight: 800;
+}
+
+.loopdesk-cart-drawer__pay-note-alt {
+  display: block;
+  color: #64748b;
+}
+
+.loopdesk-cart-drawer__delivery {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+.loopdesk-cart-drawer__delivery-icon { flex: 0 0 auto; color: #475569; line-height: 0; }
+.loopdesk-cart-drawer__delivery-copy { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.loopdesk-cart-drawer__delivery-copy strong { font-size: 13px; font-weight: 700; color: #0f172a; overflow-wrap: anywhere; }
+.loopdesk-cart-drawer__delivery-copy em { font-style: normal; font-size: 12px; font-weight: 600; color: #047857; }
+
+.loopdesk-tier-progress { max-width:100%; margin:16px 0; padding:16px; overflow:hidden; border:1px solid #dbe3ee; border-radius:var(--loopdesk-radius, 16px); background:#f8fafc; }
+.loopdesk-tier-progress p, .loopdesk-tier-progress h3 { margin:0; }
+.loopdesk-tier-progress__eyebrow { color:var(--loopdesk-primary, #111827); font-size:15px; font-weight:800; }
+.loopdesk-tier-progress h3 { margin-top:3px; color:#475569; font-size:12px; font-weight:500; line-height:1.4; }
+.loopdesk-tier-progress__bar { margin-top:18px; }
+.loopdesk-tier-progress ol { display:grid; grid-template-columns:repeat(var(--tier-count, 3), minmax(0, 1fr)); margin:0; padding:0; list-style:none; }
+.loopdesk-tier-progress__tier { position:relative; display:flex; min-width:0; flex-direction:column; align-items:center; color:#64748b; text-align:center; }
+.loopdesk-tier-progress__marker { z-index:1; display:grid; width:20px; height:20px; place-items:center; border:2px solid #cbd5e1; border-radius:50%; background:#fff; color:#fff; font-size:11px; }
+.loopdesk-tier-progress__connector { position:absolute; top:8px; left:50%; width:100%; height:4px; overflow:hidden; background:#dbe3ee; }
+.loopdesk-tier-progress__connector i { display:block; height:100%; background:var(--loopdesk-accent, #2563eb); }
+.loopdesk-tier-progress__tier.is-unlocked .loopdesk-tier-progress__marker, .loopdesk-tier-progress__tier.is-current .loopdesk-tier-progress__marker { border-color:var(--loopdesk-accent, #2563eb); background:var(--loopdesk-accent, #2563eb); }
+.loopdesk-tier-progress__tier.is-current .loopdesk-tier-progress__marker { box-shadow:0 0 0 4px rgba(37,99,235,.16); }
+.loopdesk-tier-progress__range { min-width:0; margin-top:8px; font-size:10px; line-height:1.25; overflow-wrap:anywhere; }
+.loopdesk-tier-progress__tier strong { margin-top:2px; color:var(--loopdesk-text, #111827); font-size:11px; line-height:1.2; }
+.loopdesk-tier-progress__status { display:grid; gap:2px; margin-top:15px !important; font-size:12px; line-height:1.45; }
+.loopdesk-tier-progress__status-title { color:#15803d; }
+.loopdesk-tier-progress small { display:block; margin-top:9px; color:#64748b; font-size:10px; }
+
+@media (max-width: 380px) {
+  .loopdesk-tier-progress { padding:13px 10px; }
+  .loopdesk-tier-progress__range { font-size:9px; }
+  .loopdesk-tier-progress__tier strong { font-size:10px; }
+}
+
+.loopdesk-cart-drawer__trust-badges {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  max-width: 100%;
+  margin: 0 0 12px;
+}
+
+.loopdesk-cart-drawer__trust-badges--row {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.loopdesk-cart-drawer__trust-badge {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 8px 9px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #f8fafc;
+  color: var(--loopdesk-text, #111827);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+.loopdesk-cart-drawer__trust-badge span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.loopdesk-cart-drawer__trust-badge svg {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  fill: none;
+  stroke: var(--loopdesk-primary, #111827);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+.loopdesk-cart-drawer__express,
+.loopdesk-cart-drawer__view-cart {
+  display: block;
+  width: 100%;
+  min-height: 50px;
+  border-radius: var(--loopdesk-radius, 999px);
+  font-weight: 800;
+  text-align: center;
+}
+
+.loopdesk-cart-drawer__express {
+  border: 0;
+  background: var(--loopdesk-primary, var(--ld-primary, #111827));
+  color: #ffffff;
+  cursor: pointer;
+  box-shadow: 0 14px 28px rgba(17, 24, 39, 0.18);
+}
+
+.loopdesk-cart-drawer__express[hidden],
+.loopdesk-cart-drawer__view-cart[hidden] {
+  display: none;
+}
+
+.loopdesk-cart-drawer__express:disabled,
+.loopdesk-cart-drawer__express[aria-disabled="true"] {
+  cursor: not-allowed;
+  box-shadow: none;
+  opacity: 0.48;
+  filter: none;
+}
+
+.loopdesk-cart-drawer__view-cart {
+  margin-top: 10px;
+  border: 1px solid #d1d5db;
+  color: var(--loopdesk-text, #111827);
+  line-height: 50px;
+  text-decoration: none;
+}
+
+.loopdesk-cart-drawer__microcopy,
+.loopdesk-cart-drawer__powered {
+  margin-top: 10px;
+  color: #64748b;
+  font-size: 12px;
+  text-align: center;
+}
+
+.loopdesk-cart-drawer__powered {
+  margin-top: 4px;
+  font-size: 11px;
+}
+
+.loopdesk-checkout-cta {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  align-self: start;
+  justify-self: start;
+  box-sizing: border-box;
+  /* Injected into the merchant's native /cart page, so defend the box against
+     hostile theme button styles: some themes force aspect-ratio:1 or a fixed
+     height, which — with a pill radius — rendered this as a full black circle.
+     Force auto height/aspect and a rectangular radius. */
+  width: 100% !important;
+  max-width: 460px;
+  height: auto !important;
+  min-height: 58px !important;
+  max-height: none !important;
+  aspect-ratio: auto !important;
+  margin: 10px 0;
+  padding: 12px 18px;
+  border: 1px solid var(--ld-border, transparent);
+  border-radius: 14px !important;
+  background: var(--loopdesk-primary, var(--ld-primary, #111827));
+  color: var(--ld-primary-text, #ffffff);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+  text-decoration: none;
+  box-shadow: 0 10px 24px rgba(17, 24, 39, 0.16);
+}
+
+.loopdesk-checkout-cta:hover,
+.loopdesk-checkout-cta:focus-visible,
+.loopdesk-cart-drawer__express:not(:disabled):hover,
+.loopdesk-cart-drawer__view-cart:hover,
+.loopdesk-cart-drawer__close:hover,
+.loopdesk-cart-drawer__qty button:hover {
+  filter: brightness(1.04);
+}
+
+.loopdesk-checkout-cta:focus-visible,
+.loopdesk-cart-drawer button:focus-visible,
+.loopdesk-cart-drawer a:focus-visible {
+  outline: 2px solid var(--loopdesk-primary, var(--ld-primary, #111827));
+  outline-offset: 2px;
+}
+
+.loopdesk-checkout-cta__label,
+.loopdesk-checkout-cta__subtext,
+.loopdesk-checkout-cta__trust {
+  display: block;
+}
+
+.loopdesk-checkout-cta__label {
+  font-size: 16px;
+  letter-spacing: 0.01em;
+}
+
+.loopdesk-checkout-cta__subtext {
+  margin-top: 4px;
+  color: var(--ld-primary-text, #ffffff);
+  font-size: 12px;
+  font-weight: 600;
+  opacity: 0.92;
+}
+
+.loopdesk-checkout-cta__trust {
+  margin-top: 2px;
+  color: var(--ld-primary-text, #ffffff);
+  font-size: 11px;
+  font-weight: 500;
+  opacity: 0.76;
+}
+
+@keyframes loopdesk-spin {
+  to { transform: rotate(360deg); }
+}
+
+.loopdesk-checkout-handoff {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483040;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.55);
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+.loopdesk-checkout-handoff.is-visible { opacity: 1; }
+/* `display: flex` above overrides the UA `[hidden]` rule, which left a
+   transparent full-screen layer catching taps after the OTP modal opened
+   instead of navigating (its id matches checkout selectors, so the next tap
+   was treated as a checkout click and skipped OTP). */
+.loopdesk-checkout-handoff[hidden] { display: none !important; }
+.loopdesk-checkout-handoff__card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  max-width: min(360px, 80vw);
+  padding: 26px 30px;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.35);
+  text-align: center;
+}
+.loopdesk-checkout-handoff__spinner {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 3px solid #e2e8f0;
+  border-top-color: #0f172a;
+  animation: loopdesk-spin 700ms linear infinite;
+}
+.loopdesk-checkout-handoff__title { font-size: 15px; font-weight: 700; color: #0f172a; }
+.loopdesk-checkout-handoff__sub { font-size: 12px; line-height: 1.4; color: #64748b; }
+
+@media (max-width: 640px) {
+  .loopdesk-cart-drawer {
+    width: 100vw;
+    max-width: 100vw;
+  }
+
+  .loopdesk-cart-drawer__trust-badges,
+  .loopdesk-cart-drawer__trust-badges--row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 480px) {
+  .loopdesk-cart-drawer {
+    width: 100vw;
+    max-width: 100vw;
+  }
+
+  .loopdesk-cart-drawer__header,
+  .loopdesk-cart-drawer__footer,
+  .loopdesk-cart-drawer__body,
+  .loopdesk-cart-drawer__summary {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .loopdesk-cart-drawer__trust-badge {
+    gap: 5px;
+    padding: 7px;
+    font-size: 10px;
+  }
+}
+
+@media (max-width: 360px) {
+  .loopdesk-cart-drawer__trust-badges,
+  .loopdesk-cart-drawer__trust-badges--row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+body.loopdesk-cart-drawer-is-open cart-drawer,
+body.loopdesk-cart-drawer-is-open cart-notification,
+body.loopdesk-cart-drawer-is-open #CartDrawer,
+body.loopdesk-cart-drawer-is-open #cart-drawer,
+body.loopdesk-cart-drawer-is-open .cart-drawer,
+body.loopdesk-cart-drawer-is-open .cart-notification,
+body.loopdesk-cart-drawer-is-open .drawer--cart {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+#loopdesk-cart-drawer-root {
+  display: block !important;
+  visibility: visible !important;
+}
+
+body.loopdesk-cart-drawer-is-open #loopdesk-cart-drawer-root .loopdesk-cart-drawer {
+  display: flex !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
+}
+
+body.loopdesk-cart-drawer-is-open #loopdesk-cart-drawer-root .loopdesk-cart-drawer__overlay {
+  display: block !important;
+  visibility: visible !important;
+}
+
+body.loopdesk-cart-drawer-is-open #loopdesk-cart-drawer-root .loopdesk-cart-drawer__overlay[hidden] {
+  pointer-events: none !important;
+  opacity: 0 !important;
+}
+
+.loopdesk-cart-drawer__offer {
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px solid rgba(17, 24, 39, 0.12);
+  border-radius: var(--loopdesk-radius, 16px);
+  background: rgba(17, 24, 39, 0.03);
+}
+
+.loopdesk-cart-drawer__offer-image {
+  width: 56px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: 12px;
+  float: right;
+  margin-left: 12px;
+}
+
+.loopdesk-cart-drawer__offer-badge {
+  display: inline-flex;
+  margin-bottom: 8px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--loopdesk-primary, #111827);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.loopdesk-cart-drawer__offer h3 {
+  margin: 0 0 6px;
+  font-size: 15px;
+  line-height: 1.25;
+}
+
+.loopdesk-cart-drawer__offer p {
+  margin: 0 0 10px;
+  color: #6b7280;
+  font-size: 13px;
+}
+
+.loopdesk-cart-drawer__offer-product-title,
+.loopdesk-cart-drawer__offer-variant-title {
+  margin-bottom: 4px;
+  font-size: 13px;
+  color: #111827;
+}
+
+.loopdesk-cart-drawer__offer-variant-title {
+  color: #6b7280;
+}
+
+.loopdesk-cart-drawer__offer-price {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  margin-bottom: 10px;
+  font-size: 13px;
+}
+
+.loopdesk-cart-drawer__offer-price s {
+  color: #9ca3af;
+}
+
+.loopdesk-cart-drawer__offer-price strong {
+  color: #111827;
+}
+
+.loopdesk-cart-drawer__offer select {
+  width: 100%;
+  margin-bottom: 10px;
+  padding: 9px 10px;
+  border: 1px solid rgba(17, 24, 39, 0.16);
+  border-radius: 10px;
+  background: #fff;
+}
+
+.loopdesk-cart-drawer__offer button {
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--loopdesk-primary, #111827);
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.loopdesk-cart-drawer__offer button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.loopdesk-cart-drawer__offer-savings {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 10px;
+  font-size: 12px;
+}
+
+.loopdesk-cart-drawer__offer-savings span {
+  color: #9ca3af;
+  text-decoration: line-through;
+}
+
+.loopdesk-cart-drawer__offer-savings strong,
+.loopdesk-cart-drawer__offer-savings em {
+  color: #047857;
+  font-style: normal;
+}
+
+.loopdesk-cart-drawer__shipping-progress {
+  margin: 0 0 16px;
+  padding: 14px;
+  border: 1px solid rgba(17, 24, 39, 0.1);
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.loopdesk-cart-drawer__shipping-progress-text {
+  margin: 0 0 9px;
+  color: var(--loopdesk-text, #111827);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.loopdesk-cart-drawer__shipping-progress-track {
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e5e7eb;
+}
+
+.loopdesk-cart-drawer__shipping-progress-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--loopdesk-primary, #111827);
+  transition: width 180ms ease;
+}
+
+.loopdesk-cart-banner { display:flex; align-items:flex-start; gap:10px; margin:0 0 12px; padding:11px 12px; border:1px solid transparent; border-radius:12px; color:#1e3a5f; background:#eff6ff; font-size:13px; line-height:1.4; }
+.loopdesk-cart-banner--success { color:#14532d; background:#f0fdf4; border-color:#bbf7d0; }
+.loopdesk-cart-banner--warning { color:#713f12; background:#fffbeb; border-color:#fde68a; }
+.loopdesk-cart-banner--neutral { color:#374151; background:#f8fafc; border-color:#e5e7eb; }
+.loopdesk-cart-banner--brand { color:var(--loopdesk-text, #111827); background:color-mix(in srgb, var(--loopdesk-primary, #111827) 10%, white); border-color:color-mix(in srgb, var(--loopdesk-primary, #111827) 22%, white); }
+.loopdesk-cart-banner--info { border-color:#bfdbfe; }
+.loopdesk-cart-banner--center { justify-content:center; text-align:center; }
+.loopdesk-cart-banner--left { text-align:left; }
+.loopdesk-cart-banner__icon { display:inline-grid; flex:0 0 20px; place-items:center; width:20px; height:20px; border:1px solid currentColor; border-radius:50%; font-size:11px; font-weight:800; }
+.loopdesk-cart-banner__content { min-width:0; }
+.loopdesk-cart-banner__content p { margin:0; overflow-wrap:anywhere; }
+.loopdesk-cart-banner__link { display:inline-block; margin-top:4px; color:inherit; font-weight:700; text-decoration:underline; text-underline-offset:2px; }
+.loopdesk-cart-banner__dismiss { flex:0 0 auto; width:24px; height:24px; margin:-3px -4px -3px 0; border:0; border-radius:6px; color:inherit; background:transparent; font-size:18px; line-height:1; cursor:pointer; }
+.loopdesk-cart-banner__link:focus-visible, .loopdesk-cart-banner__dismiss:focus-visible { outline:2px solid currentColor; outline-offset:2px; }
+
+.loopdesk-cart-savings { max-width:100%; margin:12px 0; padding:12px 14px; border:1px solid #e5e7eb; border-radius:12px; color:var(--loopdesk-text, #111827); background:#f8fafc; font-size:13px; line-height:1.4; }
+.loopdesk-cart-savings__header, .loopdesk-cart-savings__row { display:flex; align-items:baseline; justify-content:space-between; gap:16px; }
+.loopdesk-cart-savings__title { flex:1 1 0; min-width:0; margin:0; overflow-wrap:anywhere; font-size:14px; font-weight:700; }
+.loopdesk-cart-savings__total { flex:0 0 auto; font-size:15px; font-weight:800; }
+.loopdesk-cart-savings__rows { display:grid; gap:5px; margin:8px 0 0; padding-top:8px; border-top:1px solid #e5e7eb; }
+.loopdesk-cart-savings__row { margin:0; }
+.loopdesk-cart-savings__label { min-width:0; color:#4b5563; overflow-wrap:anywhere; }
+.loopdesk-cart-savings__amount { flex:0 0 auto; margin:0; font-variant-numeric:tabular-nums; font-weight:600; }
+
+/* Coupon (in-drawer discount code entry). Ported from the removed
+   loopdesk-cart-drawer-embed block into the active drawer asset so the coupon
+   input lives in the cart drawer only (not the express-checkout modal). */
+.loopdesk-cart-drawer__coupon { margin:16px 0 0; padding:14px; border:1px solid #dbe2ea; border-radius:14px; background:#fff; }
+.loopdesk-cart-drawer__coupon-title { margin:0; font-size:13px; font-weight:600; color:#334155; cursor:pointer; list-style:none; text-decoration:underline; text-underline-offset:3px; }
+.loopdesk-cart-drawer__coupon-title::-webkit-details-marker { display:none; }
+.loopdesk-cart-drawer__coupon:not([open]) { padding:10px 14px; border-style:dashed; }
+.loopdesk-cart-drawer__coupon[open] .loopdesk-cart-drawer__coupon-title { margin-bottom:10px; text-decoration:none; font-size:14px; font-weight:700; color:#111827; }
+.loopdesk-cart-drawer__coupon-row { display:flex; gap:8px; }
+.loopdesk-cart-drawer__coupon-input { min-width:0; flex:1; height:42px; padding:0 12px; border:1px solid #cbd5e1; border-radius:10px; font:inherit; text-transform:uppercase; }
+.loopdesk-cart-drawer__coupon-button { height:42px; padding:0 16px; border:0; border-radius:10px; background:#111827; color:#fff; font:inherit; font-weight:700; cursor:pointer; }
+.loopdesk-cart-drawer__coupon-button[disabled] { opacity:.6; cursor:wait; }
+.loopdesk-cart-drawer__coupon-status { margin:10px 0 0; font-size:12px; line-height:1.4; color:#475569; }
+.loopdesk-cart-drawer__coupon-status[data-state="success"] { color:#15803d; }
+.loopdesk-cart-drawer__coupon-status[data-state="error"] { color:#b91c1c; }
+.loopdesk-cart-drawer__coupon-remove { margin-left:8px; padding:0; border:0; background:transparent; color:inherit; font:inherit; text-decoration:underline; cursor:pointer; }
+
+/* Payment choice block (flag-gated: config.cart.paymentChoiceEnabled) */
+.loopdesk-cart-drawer__payment-choice { display:flex; flex-direction:column; gap:10px; margin:4px 0 12px; }
+.loopdesk-cart-drawer__pay-label { margin:0 0 2px; font-size:12px; font-weight:700; color:#64748b; }
+/* Each option is an action button (there is no separate Express Checkout CTA in
+   choice mode). Prepaid is the primary (dark) button; COD is secondary. */
+.loopdesk-cart-drawer__pay-option { display:flex; align-items:center; justify-content:space-between; gap:12px; width:100%; text-align:left; border-radius:12px; padding:14px 16px; cursor:pointer; font:inherit; border:1.5px solid transparent; transition:filter .12s, border-color .12s, background .12s; }
+.loopdesk-cart-drawer__pay-option--primary { background:#0f172a; border-color:#0f172a; }
+.loopdesk-cart-drawer__pay-option--primary:hover { filter:brightness(1.15); }
+.loopdesk-cart-drawer__pay-option--primary .loopdesk-cart-drawer__pay-copy strong,
+.loopdesk-cart-drawer__pay-option--primary .loopdesk-cart-drawer__pay-amt { color:#fff; }
+.loopdesk-cart-drawer__pay-option--primary .loopdesk-cart-drawer__pay-copy em.is-save { color:#6ee7b7; }
+/* Make the prepaid CTA text stand out so shoppers pick Pay Now over COD. */
+.loopdesk-cart-drawer__pay-option--primary .loopdesk-cart-drawer__pay-copy strong { font-size:16px; font-weight:800; letter-spacing:.3px; text-transform:uppercase; }
+.loopdesk-cart-drawer__pay-option--secondary { background:#fff; border-color:#e2e8f0; }
+.loopdesk-cart-drawer__pay-option--secondary:hover { border-color:#cbd5e1; }
+.loopdesk-cart-drawer__pay-copy { display:flex; flex-direction:column; gap:2px; min-width:0; }
+.loopdesk-cart-drawer__pay-copy strong { font-size:14px; font-weight:700; color:#0f172a; }
+.loopdesk-cart-drawer__pay-copy em { font-style:normal; font-size:12px; color:#64748b; }
+.loopdesk-cart-drawer__pay-copy em.is-save { color:#047857; font-weight:700; }
+.loopdesk-cart-drawer__pay-copy em.is-more { color:#b45309; font-weight:600; }
+.loopdesk-cart-drawer__pay-amt { display:flex; align-items:center; gap:6px; font-size:15px; font-weight:800; color:#0f172a; white-space:nowrap; }
+.loopdesk-cart-drawer__pay-arrow { font-size:18px; font-weight:700; line-height:1; opacity:.7; }
+.loopdesk-cart-drawer__place-order { display:flex; align-items:center; justify-content:space-between; gap:12px; width:100%; text-align:left; border:none; border-radius:12px; padding:15px 18px; margin:4px 0 8px; cursor:pointer; font:inherit; background:#0f172a; transition:filter .12s; }
+.loopdesk-cart-drawer__place-order:hover { filter:brightness(1.15); }
+.loopdesk-cart-drawer__place-order-copy { display:flex; flex-direction:column; gap:2px; min-width:0; }
+.loopdesk-cart-drawer__place-order-copy strong { font-size:15px; font-weight:800; color:#fff; letter-spacing:.01em; }
+.loopdesk-cart-drawer__place-order-copy em { font-style:normal; font-size:12px; color:#cbd5e1; }
+.loopdesk-cart-drawer__place-order .loopdesk-cart-drawer__pay-arrow { color:#fff; }
+.loopdesk-cart-drawer__pay-methods { display:flex; flex-wrap:wrap; gap:4px; margin-top:6px; }
+.loopdesk-cart-drawer__pay-method { font-size:10px; font-weight:700; letter-spacing:.02em; line-height:1; padding:3px 6px; border-radius:5px; background:rgba(255,255,255,.16); color:#e2e8f0; white-space:nowrap; }
+
+/* Reassurance under the Prepaid / COD buttons. */
+.loopdesk-cart-drawer__pay-switch { margin:8px 2px 0; color:#64748b; font-size:11.5px; line-height:1.4; text-align:center; }

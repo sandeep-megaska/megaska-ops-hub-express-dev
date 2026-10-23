@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Minified build output; lint the sources in extensions/megaska-otp-src instead.
+    "extensions/megaska-otp/assets/**",
   ]),
 ]);
 

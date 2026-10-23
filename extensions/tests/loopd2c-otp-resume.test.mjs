@@ -3,7 +3,7 @@ import fs from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
 
-const source = fs.readFileSync(new URL("../megaska-otp/assets/loopd2c-otp.js", import.meta.url), "utf8");
+const source = fs.readFileSync(new URL("../megaska-otp-src/loopd2c-otp.js", import.meta.url), "utf8");
 
 // The resume helpers, run on their own with a fake localStorage, the modal state and the
 // pending action they read.
