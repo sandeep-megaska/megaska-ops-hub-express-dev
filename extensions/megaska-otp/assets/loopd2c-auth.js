@@ -533,6 +533,29 @@ if (token) {
     return true;
   }
 
+  // The bag can't change while the OTP modal is open, so it is read once when the OTP
+  // is sent and reused at checkout instead of being fetched after the OTP is entered.
+  const CART_CONTEXT_PREFETCH_MAX_AGE_MS = 5 * 60 * 1000;
+  let prefetchedCartContext = null;
+
+  function prefetchActiveCartContext() {
+    const promise = fetchActiveCartContext();
+    prefetchedCartContext = { promise, at: Date.now() };
+    promise.catch(() => {
+      if (prefetchedCartContext && prefetchedCartContext.promise === promise) prefetchedCartContext = null;
+    });
+    return promise;
+  }
+
+  function takePrefetchedCartContext() {
+    const prefetched = prefetchedCartContext;
+    prefetchedCartContext = null;
+    if (!prefetched || Date.now() - prefetched.at > CART_CONTEXT_PREFETCH_MAX_AGE_MS) {
+      return fetchActiveCartContext();
+    }
+    return prefetched.promise.catch(() => fetchActiveCartContext());
+  }
+
   async function fetchActiveCartContext() {
     const response = await fetch("/cart.js", {
       method: "GET",
@@ -611,7 +634,7 @@ if (token) {
       };
     }
 
-    const cartContext = await fetchActiveCartContext();
+    const cartContext = await takePrefetchedCartContext();
     const payload = {
       cartToken: cartContext.cartToken || undefined,
       checkoutUrl: opts.checkoutUrl || cartContext.checkoutUrl || undefined,
@@ -646,29 +669,45 @@ if (token) {
       };
     }
 
-    try {
-      const cartUpdateResult = await writeMegaskaCartAttributes({
-        megaska_phone_verified: "true",
-        megaska_verified_phone: phone,
-        megaska_customer_profile_id: customerProfileId,
-        megaska_shopify_customer_id: shopifyCustomerId,
-        megaska_auth_source: "otp",
-        megaska_auth_verified_at: verifiedAt,
-      });
-      console.log("[Megaska Verified Phone] active cart annotation complete", {
-        cartToken: cartUpdateResult?.token || payload.cartToken || null,
-        itemCount: Number(cartUpdateResult?.item_count || 0),
-      });
-    } catch (error) {
-      console.error("[Megaska Verified Phone] active cart annotation failed", error);
-    }
+    // The verified-phone cart attributes (read by the checkout validation) and the server
+    // prefill are independent, so both requests run at the same time.
+    const attributesWrite = writeMegaskaCartAttributes({
+      megaska_phone_verified: "true",
+      megaska_verified_phone: phone,
+      megaska_customer_profile_id: customerProfileId,
+      megaska_shopify_customer_id: shopifyCustomerId,
+      megaska_auth_source: "otp",
+      megaska_auth_verified_at: verifiedAt,
+    }).then(
+      (cartUpdateResult) => {
+        console.log("[Megaska Verified Phone] active cart annotation complete", {
+          cartToken: cartUpdateResult?.token || payload.cartToken || null,
+          itemCount: Number(cartUpdateResult?.item_count || 0),
+        });
+      },
+      (error) => {
+        console.error("[Megaska Verified Phone] active cart annotation failed", error);
+      }
+    );
 
-    const response = await fetch(buildApiUrl("/checkout/prefill"), {
+    const prefillRequest = fetch(buildApiUrl("/checkout/prefill"), {
       method: "POST",
       credentials: "include",
       headers: buildHeaders(),
       body: JSON.stringify(payload),
     });
+
+    // Wait for the attribute write even when the prefill request fails, so checkout never
+    // opens before the cart carries the verified phone.
+    const [prefillOutcome] = await Promise.all([
+      prefillRequest.then(
+        (value) => ({ value }),
+        (error) => ({ error })
+      ),
+      attributesWrite,
+    ]);
+    if (prefillOutcome.error) throw prefillOutcome.error;
+    const response = prefillOutcome.value;
 
     let data = null;
     try {
@@ -1278,6 +1317,7 @@ const sku = order?.firstLineItemSku || order?.sku || "";
     applyCheckoutPrefillToUrl,
     applyCheckoutPrefillToForm,
     applyBuyerIdentityToActiveCart,
+    prefetchActiveCartContext,
     fetchActiveCartContext,
     updateAuthUILoggedOut,
     updateAuthUILoggedIn,
