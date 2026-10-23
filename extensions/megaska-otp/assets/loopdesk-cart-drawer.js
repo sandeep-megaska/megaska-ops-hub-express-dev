@@ -2038,18 +2038,19 @@
       + payMethods.map(function (m) { return '<span class="loopdesk-cart-drawer__pay-method">' + m + '</span>'; }).join("")
       + '</span>';
     var saveText = prepaidSavings > 0 ? "Save " + money(prepaidSavings, cur) : "Fast & secure";
-    var codText = prepaidSavings > 0 ? money(prepaidSavings, cur) + " more than online" : "Pay at delivery";
+    // COD is described plainly; the saving is already stated on the Pay Online option.
+    var codText = "Pay when it arrives";
     // Experiment (config.cart.paymentChoiceCollapsed): show one "Place Order"
     // button first; it expands to the two priced options on click. Reduces the
     // up-front choice while keeping every benefit one tap away.
     if (config.cart.paymentChoiceCollapsed && !state.payChoiceExpanded) {
       return '<button type="button" class="loopdesk-cart-drawer__place-order" data-loopdesk-place-order>'
-        + '<span class="loopdesk-cart-drawer__place-order-copy"><strong>Checkout</strong><em>' + (prepaidSavings > 0 ? 'Pay online &amp; save ' + money(prepaidSavings, cur) + ' · or Cash on Delivery' : 'Pay online or Cash on Delivery') + '</em></span>'
+        + '<span class="loopdesk-cart-drawer__place-order-copy"><strong>Checkout</strong><em>' + (prepaidSavings > 0 ? 'Pay online ' + money(prices.prepaidPrice, cur) + ' · save ' + money(prepaidSavings, cur) + ' · or COD ' + money(base, cur) : 'Pay ' + money(base, cur) + ' online or Cash on Delivery') + '</em></span>'
         + '<span class="loopdesk-cart-drawer__pay-arrow" aria-hidden="true">›</span></button>';
     }
     return '<p class="loopdesk-cart-drawer__pay-label">Choose how to pay</p>'
       + opt("prepaid", "primary", "Pay Now &amp; Save More", prepaidPrice, saveText, "is-save", methodsHtml)
-      + opt("cod", "secondary", "Cash on Delivery", base, codText, prepaidSavings > 0 ? "is-more" : "")
+      + opt("cod", "secondary", "Cash on Delivery", base, codText, "")
       // Shopify Checkout cannot switch a prepaid-priced order to COD, so say plainly
       // that the choice can be changed here before paying.
       + (prepaidSavings > 0 ? '<p class="loopdesk-cart-drawer__pay-switch">Changed your mind at payment? Come back to your bag and choose Cash on Delivery anytime before paying.</p>' : "");
