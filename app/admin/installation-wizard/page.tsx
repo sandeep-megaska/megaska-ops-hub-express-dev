@@ -25,10 +25,6 @@ type PageProps = {
 
 type WizardStatus = "Complete" | "Incomplete" | "Needs attention";
 
-function envPresent(name: string) {
-  return Boolean(String(process.env[name] || "").trim());
-}
-
 function badgeClass(status: WizardStatus) {
   if (status === "Complete") return "mk-badge mk-badge-success";
   if (status === "Needs attention") return "mk-badge mk-badge-warning";
@@ -121,14 +117,11 @@ export default async function InstallationWizardPage({ searchParams }: PageProps
     getRazorpayAdminConfig(resolved.shop.id),
   ]);
 
-  const shopParam = encodeURIComponent(resolved.shop.shopDomain);
   const embeddedContext = new URLSearchParams();
   embeddedContext.set("shop", resolved.shop.shopDomain);
   if (params.host) embeddedContext.set("host", params.host);
   if (params.embedded) embeddedContext.set("embedded", params.embedded);
   const settingsHref = `/admin/merchant-settings?${embeddedContext.toString()}`;
-  const runtimeHref = `/api/runtime/config?shop=${shopParam}`;
-  const diagnosticsHref = `/admin/diagnostics/environment?${embeddedContext.toString()}`;
   const appEmbedDeepLink = `https://${resolved.shop.shopDomain}/admin/themes/current/editor?context=apps`;
   // Opens the product template in the theme editor with the Delivery check block ready
   // to place. Needs the app's client ID; without it, the editor opens on the template.
@@ -137,8 +130,6 @@ export default async function InstallationWizardPage({ searchParams }: PageProps
     appClientId ? `&addAppBlockId=${encodeURIComponent(appClientId)}/loopdesk-delivery-check&target=mainSection` : ""
   }`;
 
-  const coreEnvNames = ["DATABASE_URL", "SHOPIFY_API_KEY", "SHOPIFY_API_SECRET", "SHOPIFY_APP_URL", "SHOPIFY_SCOPES"];
-  const missingCoreEnv = coreEnvNames.filter((name) => !envPresent(name));
   const installationComplete = Boolean(
     resolved.shop.isActive &&
       resolved.shop.installedAt &&
@@ -151,7 +142,7 @@ export default async function InstallationWizardPage({ searchParams }: PageProps
   const runtimeComplete = Boolean(runtimeConfig.cart && runtimeConfig.branding && runtimeConfig.cartIntelligence && runtimeConfig.razorpay && runtimeConfig.delhivery);
   const cartIntelligenceConfigured = Boolean(cartIntelligence.enabled || cartIntelligence.cartGoalProgress.enabled || cartIntelligence.trustBadgesEnabled || cartIntelligence.dynamicBannerEnabled || cartIntelligence.upsellsEnabled || cartIntelligence.bundlesEnabled || cartIntelligence.aiRecommendationsEnabled || (cartIntelligence.cartGoalProgress.targetAmountMinor || 0) > 0);
   const cartNeedsAttention = settings.cart.drawerMode === "loopdesk" || settings.cart.drawerMode === "auto";
-  const ready = installationComplete && runtimeComplete && missingCoreEnv.length === 0 && brandingComplete && delhiveryComplete && razorpayComplete;
+  const ready = installationComplete && runtimeComplete && brandingComplete && delhiveryComplete && razorpayComplete;
 
   return (
     <main className="mk-page mx-auto max-w-5xl">
@@ -159,7 +150,7 @@ export default async function InstallationWizardPage({ searchParams }: PageProps
         <p className="mk-hero-tagline">LoopD2C SaaS onboarding</p>
         <h1 className="mk-hero-title">Installation Wizard</h1>
         <p className="mk-hero-subtitle">
-          Guide {resolved.shop.shopDomain} through install, OAuth, environment checks, theme app embed guidance, cart mode, branding, Delhivery, the product page delivery check, Razorpay, and launch readiness. This page reads existing configuration only and never exposes secrets.
+          Guide {resolved.shop.shopDomain} through install, the theme app embed, cart mode, branding, Delhivery, the product page delivery check, Razorpay, and launch readiness. This page only reads your settings.
         </p>
       </div>
 
@@ -168,7 +159,7 @@ export default async function InstallationWizardPage({ searchParams }: PageProps
           number={1}
           title="Welcome"
           status="Complete"
-          description="You are setting up LoopD2C for this Shopify shop. Keep this wizard URL open with the shop query parameter preserved."
+          description="You are setting up LoopD2C for this Shopify shop."
           details={<p>Shop context: <strong>{resolved.shop.shopDomain}</strong></p>}
         />
         <WizardStep
@@ -180,21 +171,13 @@ export default async function InstallationWizardPage({ searchParams }: PageProps
         />
         <WizardStep
           number={3}
-          title="Environment validation"
-          status={missingCoreEnv.length === 0 && runtimeComplete ? "Complete" : "Needs attention"}
-          description="Checks required environment values by presence only and verifies runtime config resolves for this shop. Secret values are not displayed."
-          details={<p>{missingCoreEnv.length ? `Missing environment values: ${missingCoreEnv.join(", ")}.` : "Required environment values are present."} Runtime config: <strong>{runtimeComplete ? "resolved" : "needs review"}</strong>.</p>}
-          actions={<><LinkButton href={diagnosticsHref}>Open diagnostics</LinkButton><LinkButton href={runtimeHref}>View safe runtime config</LinkButton></>}
-        />
-        <WizardStep
-          number={4}
           title="Theme app embed guidance"
           status="Needs attention"
           description="Open the Shopify theme editor, enable the LoopD2C app embed, save the theme, then return here. The wizard does not modify theme settings."
           actions={<LinkButton href={appEmbedDeepLink}>Open theme app embeds</LinkButton>}
         />
         <WizardStep
-          number={5}
+          number={4}
           title="Cart mode guidance"
           status={cartNeedsAttention ? "Needs attention" : "Complete"}
           description="If you want LoopD2C Enhanced Drawer, set the Shopify theme cart type to Page, not Drawer. This prevents two drawers from competing."
@@ -202,15 +185,15 @@ export default async function InstallationWizardPage({ searchParams }: PageProps
           actions={<LinkButton href={`${settingsHref}#cart`}>Review cart settings</LinkButton>}
         />
         <WizardStep
-          number={6}
+          number={5}
           title="Branding setup"
           status={brandingComplete ? "Complete" : "Incomplete"}
-          description="Review merchant name, colors, logo, labels, and customer-facing support details used by LoopD2C runtime config."
+          description="Review merchant name, colors, logo, labels, and customer-facing support details shown on your storefront."
           details={<p>Merchant name: <strong>{settings.general.merchantName}</strong>. Primary color: <strong>{settings.branding.primaryColor}</strong>.</p>}
           actions={<LinkButton href={`${settingsHref}#branding`}>Open branding settings</LinkButton>}
         />
         <WizardStep
-          number={7}
+          number={6}
           title="Delhivery setup status"
           status={delhiveryComplete ? "Complete" : delhivery.enabled ? "Needs attention" : "Incomplete"}
           description="Confirms Delhivery is enabled and has required merchant-level setup. API token values are masked and not shown."
@@ -218,7 +201,7 @@ export default async function InstallationWizardPage({ searchParams }: PageProps
           actions={<LinkButton href={`${settingsHref}#delhivery`}>Open Delhivery settings</LinkButton>}
         />
         <WizardStep
-          number={8}
+          number={7}
           title="Product page delivery check"
           status={delhiveryComplete ? "Needs attention" : "Incomplete"}
           description="Add the LoopD2C Delivery check block to your product page so shoppers can check serviceability, Cash on Delivery and expected delivery dates for their PIN code. The LoopD2C bag then shows the same delivery line. The wizard does not modify your theme."
@@ -226,7 +209,7 @@ export default async function InstallationWizardPage({ searchParams }: PageProps
           actions={<LinkButton href={deliveryBlockDeepLink}>Add Delivery check block</LinkButton>}
         />
         <WizardStep
-          number={9}
+          number={8}
           title="Razorpay setup status"
           status={razorpayComplete ? "Complete" : razorpay.enabled ? "Needs attention" : "Incomplete"}
           description="Confirms Razorpay is enabled and has required merchant-level setup. Key secret and webhook secret are never exposed."
@@ -235,7 +218,7 @@ export default async function InstallationWizardPage({ searchParams }: PageProps
         />
 
         <WizardStep
-          number={10}
+          number={9}
           title="Cart Intelligence setup status"
           status={cartIntelligenceConfigured ? "Complete" : "Incomplete"}
           description="Shows merchant-configurable Cart Intelligence setup status. This is configuration foundation only and may require later activation before any storefront feature renders."
@@ -243,11 +226,11 @@ export default async function InstallationWizardPage({ searchParams }: PageProps
           actions={<LinkButton href={`${settingsHref}#cart-intelligence`}>Open Cart Intelligence settings</LinkButton>}
         />
         <WizardStep
-          number={11}
+          number={10}
           title="Ready / launch checklist"
           status={ready ? "Complete" : "Needs attention"}
-          description="Launch once install, OAuth, environment validation, theme embed, cart guidance, branding, Delhivery, the delivery check block, and Razorpay are reviewed."
-          details={<ul style={{ margin: 0, paddingLeft: 20, display: "grid", gap: 4 }}><li>Runtime config reads loopdesk_runtime_config, cart_intelligence_config, delhivery_config, and razorpay_config.</li><li>No checkout, payment execution, shipment creation, OTP, cart logic, analytics, upsell, or AI behavior is changed by this wizard.</li><li>Preserved shop parameter: {resolved.shop.shopDomain}</li></ul>}
+          description="Launch once install, theme embed, cart guidance, branding, Delhivery, the delivery check block, and Razorpay are reviewed."
+          details={<ul style={{ margin: 0, paddingLeft: 20, display: "grid", gap: 4 }}><li>Storefront settings: <strong>{runtimeComplete ? "loaded" : "needs review"}</strong>.</li><li>This wizard only reads your settings; it does not change checkout, payments, shipping, OTP or your theme.</li></ul>}
         />
       </div>
     </main>
