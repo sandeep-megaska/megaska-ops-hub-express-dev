@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 
 const accountRoute = readFileSync("app/apps/loopd2c/account/route.ts", "utf8");
 const assetRoute = readFileSync("app/apps/loopd2c/account/assets/[asset]/route.ts", "utf8");
-const dashboardJs = readFileSync("extensions/megaska-otp/assets/loopdesk-customer-dashboard.js", "utf8");
+const dashboardJs = readFileSync("extensions/megaska-otp-src/loopdesk-customer-dashboard.js", "utf8");
 
 assert.match(accountRoute, /loopdesk-customer-dashboard-root/);
 assert.match(accountRoute, /loopdesk-customer-dashboard-config/);

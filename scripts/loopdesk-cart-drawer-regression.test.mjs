@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-const source = readFileSync(new URL("../extensions/megaska-otp/assets/loopdesk-cart-drawer.js", import.meta.url), "utf8");
-const css = readFileSync(new URL("../extensions/megaska-otp/assets/loopdesk-cart-drawer.css", import.meta.url), "utf8");
+const source = readFileSync(new URL("../extensions/megaska-otp-src/loopdesk-cart-drawer.js", import.meta.url), "utf8");
+const css = readFileSync(new URL("../extensions/megaska-otp-src/loopdesk-cart-drawer.css", import.meta.url), "utf8");
 
 const embed = readFileSync(new URL("../extensions/megaska-otp/blocks/megaska-otp-embed.liquid", import.meta.url), "utf8");
 

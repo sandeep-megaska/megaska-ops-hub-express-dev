@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-const src = readFileSync("extensions/megaska-otp/assets/loopdesk-cart-drawer.js", "utf8");
-const css = readFileSync("extensions/megaska-otp/assets/loopdesk-cart-drawer.css", "utf8");
+const src = readFileSync("extensions/megaska-otp-src/loopdesk-cart-drawer.js", "utf8");
+const css = readFileSync("extensions/megaska-otp-src/loopdesk-cart-drawer.css", "utf8");
 
 // PR-1 of the Shopify-Checkout migration: a flag-gated drawer block that lets the
 // shopper choose Prepaid vs COD (with both prices) and records it as a cart
@@ -231,7 +231,7 @@ test("prepaid hand-off gates through OTP before Shopify Checkout", () => {
   assert.match(src, /beginGatedShopifyCheckout[\s\S]*?window\.location\.assign\("\/checkout"\)/, "direct navigate must be the fallback path");
 });
 
-const otp = readFileSync("extensions/megaska-otp/assets/loopd2c-otp.js", "utf8");
+const otp = readFileSync("extensions/megaska-otp-src/loopd2c-otp.js", "utf8");
 
 test("OTP: no premature guard error when the modal is the prompt", () => {
   // When the reason opens the OTP modal, the guard error message is suppressed
