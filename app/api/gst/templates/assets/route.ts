@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
+import { resolveGstAdminShopId } from "../../../../../services/gst/request-shop";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 export const runtime = "nodejs";
 
 const MAX_SIZE_BYTES = 2 * 1024 * 1024;
-const ALLOWED_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/avif", "image/svg+xml"]);
+// No SVG: it is served from the app origin, where its scripts would run.
+const ALLOWED_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/avif"]);
 const ALLOWED_SLOTS = new Set(["header", "footer"]);
 
 function extensionFor(mimeType: string): string {
@@ -13,11 +15,12 @@ function extensionFor(mimeType: string): string {
   if (mimeType === "image/jpeg") return "jpg";
   if (mimeType === "image/webp") return "webp";
   if (mimeType === "image/avif") return "avif";
-  if (mimeType === "image/svg+xml") return "svg";
   return "bin";
 }
 
 export async function POST(req: NextRequest) {
+  const shopId = await resolveGstAdminShopId(req);
+  if (!shopId) return NextResponse.json({ ok: false, error: "Unauthorized. Reopen this page from Shopify admin." }, { status: 401 });
   const formData = await req.formData();
   const slot = String(formData.get("slot") || "").trim().toLowerCase();
   const file = formData.get("file");

@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "../../../../services/db/prisma";
 import { formatAdminShopResolutionError, resolveAdminShopFromSearchParams } from "../../../../services/shopify/admin-shop-context";
+import { signAdminMediaQuery } from "../../../../services/shopify/admin-request-auth";
 import { InboxReplyError, isWithinCustomerWindow, markConversationRead, sendInboxReply } from "../../../../services/whatsapp/inbox";
 import AutoRefresh from "../AutoRefresh";
 
@@ -56,6 +57,8 @@ export default async function WhatsAppConversationPage({ params, searchParams }:
   }
   const conversation = await prisma.whatsAppConversation.findFirst({ where: { id, shopId: shop.id } });
   const shopParam = `shop=${encodeURIComponent(shop.shopDomain)}`;
+  // <img>/<audio> loads carry no session token, so each media URL is signed for this shop.
+  const mediaUrl = (mediaId: string) => `/admin/whatsapp/media/${encodeURIComponent(mediaId)}?${signAdminMediaQuery(shop.shopDomain, mediaId)}`;
   if (!conversation) {
     return (
       <div className="mk-page">
@@ -135,13 +138,13 @@ export default async function WhatsAppConversationPage({ params, searchParams }:
               <div style={{ maxWidth: "75%", padding: "8px 12px", borderRadius: 12, background: inbound ? "var(--surface-2, #f3f4f6)" : "#dcf8c6", color: "#111", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
                 {message.mediaId && (message.type === "image" || message.type === "sticker") ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={`/admin/whatsapp/media/${encodeURIComponent(message.mediaId)}?${shopParam}`} alt="" style={{ maxWidth: 280, borderRadius: 8, display: "block", marginBottom: 6 }} />
+                  <img src={mediaUrl(message.mediaId)} alt="" style={{ maxWidth: 280, borderRadius: 8, display: "block", marginBottom: 6 }} />
                 ) : null}
                 {message.mediaId && message.type === "audio" ? (
-                  <audio controls src={`/admin/whatsapp/media/${encodeURIComponent(message.mediaId)}?${shopParam}`} style={{ display: "block", marginBottom: 6 }} />
+                  <audio controls src={mediaUrl(message.mediaId)} style={{ display: "block", marginBottom: 6 }} />
                 ) : null}
                 {message.mediaId && (message.type === "video" || message.type === "document") ? (
-                  <a href={`/admin/whatsapp/media/${encodeURIComponent(message.mediaId)}?${shopParam}`} target="_blank" rel="noopener noreferrer">Open {message.type}</a>
+                  <a href={mediaUrl(message.mediaId)} target="_blank" rel="noopener noreferrer">Open {message.type}</a>
                 ) : null}
                 <div>{message.body}</div>
                 <div className="mk-help" style={{ textAlign: "right", marginTop: 4 }}>

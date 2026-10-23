@@ -1,7 +1,9 @@
-import crypto from "crypto";
+import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 import type { NextRequest } from "next/server";
 import { getShopByDomain, normalizeShopDomain, ShopResolutionError, type ShopRow } from "./shop";
 import { requireAdminShopFromRequest } from "./admin-auth";
+import { sessionBounceUrl, verifyAdminRequest } from "./admin-request-auth";
 
 export type AdminShopSearchParams = {
   shop?: string | string[];
@@ -31,31 +33,6 @@ function firstParam(value: string | string[] | null | undefined) {
 
 function isInstalledShop(shop: ShopRow | null) {
   return Boolean(shop?.id && shop.isActive && !shop.uninstalledAt);
-}
-
-function isValidShopifyShopDomain(shopDomain: string) {
-  return /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/i.test(shopDomain);
-}
-
-function validateShopifyHmac(params: URLSearchParams) {
-  const secret = String(process.env.SHOPIFY_API_SECRET || "").trim();
-  const hmac = params.get("hmac") || "";
-  if (!secret || !hmac) return false;
-
-  const entries = [...params.entries()]
-    .filter(([key]) => key !== "hmac" && key !== "signature")
-    .sort(([a], [b]) => a.localeCompare(b));
-  const message = entries.map(([key, value]) => `${key}=${value}`).join("&");
-  const generated = crypto
-    .createHmac("sha256", secret)
-    .update(message)
-    .digest("hex");
-
-  if (generated.length !== hmac.length) return false;
-  return crypto.timingSafeEqual(
-    Buffer.from(generated, "utf8"),
-    Buffer.from(hmac, "utf8"),
-  );
 }
 
 function logAdminShopResolutionFailure(
@@ -120,65 +97,73 @@ export function getAdminShopDomainFromSearchParams(
   );
 }
 
+// The middleware forwards the URL of the page (or server action) being rendered.
+export const ADMIN_REQUEST_URL_HEADER = "x-loopd2c-url";
+
+async function readRequestHeaders() {
+  try {
+    return await headers();
+  } catch {
+    return null;
+  }
+}
+
+// SECURITY: the shop always comes from something Shopify signed (a session token on
+// the request, the app-load id_token, or the app-load HMAC) — see admin-request-auth.ts.
+// A ?shop= param on its own is only checked against it, never trusted. When the
+// request can't be verified, a page render or server action is sent to the session
+// bounce page, which gets a fresh token from App Bridge and reloads.
 export async function resolveAdminShopFromSearchParams(
   params: AdminShopSearchParams,
   sourceOptions: { headerAttempted?: boolean; headerResolved?: boolean } = {},
 ): Promise<AdminShopContext> {
-  const shopDomain = getAdminShopDomainFromSearchParams(params);
+  const requestedShopDomain = getAdminShopDomainFromSearchParams(params);
   const queryAttempted = Boolean(firstParam(params.shop) || firstParam(params.shopify_shop));
   const resolutionSources = describeResolutionSources({
     queryAttempted,
-    queryResolved: queryAttempted && Boolean(shopDomain),
+    queryResolved: queryAttempted && Boolean(requestedShopDomain),
     headerAttempted: sourceOptions.headerAttempted,
     headerResolved: sourceOptions.headerResolved,
   });
-  if (!shopDomain) {
-    logAdminShopResolutionFailure("missing_shop_param", {
-      hasShopParam: Boolean(firstParam(params.shop)),
-      hasShopifyShopParam: Boolean(firstParam(params.shopify_shop)),
-      hasHostParam: Boolean(firstParam(params.host)),
-      hasHmac: Boolean(firstParam(params.hmac)),
+
+  const requestHeaders = await readRequestHeaders();
+  const verification = verifyAdminRequest({
+    authorization: requestHeaders?.get("authorization"),
+    params: toUrlSearchParams(params),
+  });
+
+  if (!verification.ok) {
+    logAdminShopResolutionFailure("unverified_admin_request", {
+      reason: verification.reason,
+      requestedShopDomain,
+    });
+    const bounce = sessionBounceUrl(requestHeaders?.get(ADMIN_REQUEST_URL_HEADER));
+    if (bounce) redirect(bounce);
+    return {
+      shop: null,
+      shopDomain: "",
+      error: "Your Shopify session could not be verified. Reopen LoopD2C from Shopify admin.",
+      hmacVerified: false,
+      resolutionSources,
+    };
+  }
+
+  if (requestedShopDomain && requestedShopDomain !== verification.shopDomain) {
+    logAdminShopResolutionFailure("shop_param_mismatch", {
+      requestedShopDomain,
+      verifiedShopDomain: verification.shopDomain,
     });
     return {
       shop: null,
       shopDomain: "",
-      error:
-        "Unable to resolve shop. Open this page from Shopify admin or add a shop query parameter.",
+      error: "This page belongs to a different shop. Reopen LoopD2C from Shopify admin.",
       hmacVerified: false,
       resolutionSources,
     };
   }
 
-  if (!isValidShopifyShopDomain(shopDomain)) {
-    logAdminShopResolutionFailure("invalid_shop_format", { shopDomain });
-    return {
-      shop: null,
-      shopDomain,
-      error: "Invalid Shopify shop domain.",
-      hmacVerified: false,
-      resolutionSources,
-    };
-  }
-
-  const hmacVerified = firstParam(params.hmac)
-    ? validateShopifyHmac(toUrlSearchParams(params))
-    : false;
-  if (firstParam(params.hmac) && !hmacVerified) {
-    logAdminShopResolutionFailure(
-      String(process.env.SHOPIFY_API_SECRET || "").trim()
-        ? "hmac_invalid"
-        : "missing_shopify_api_secret_with_hmac",
-      { shopDomain },
-    );
-    return {
-      shop: null,
-      shopDomain,
-      error:
-        "Invalid Shopify admin signature. Reopen this page from Shopify admin.",
-      hmacVerified,
-      resolutionSources,
-    };
-  }
+  const shopDomain = verification.shopDomain;
+  const hmacVerified = true;
 
   let shop: ShopRow | null = null;
   try {

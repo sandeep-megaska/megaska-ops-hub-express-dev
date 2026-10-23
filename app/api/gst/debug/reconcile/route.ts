@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { resolveGstAdminShopId } from "../../../../../services/gst/request-shop";
 import { isGstNoteDocumentType } from "../../../../../services/gst/constants";
 import {
   buildShadowInvoiceDraft,
@@ -30,6 +31,8 @@ function parseLines(value: unknown): GstDocumentLineInput[] {
 }
 
 export async function POST(req: NextRequest) {
+  const shopId = await resolveGstAdminShopId(req);
+  if (!shopId) return NextResponse.json({ ok: false, error: "Unauthorized. Reopen this page from Shopify admin." }, { status: 401 });
   const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
   if (!body) {
     return NextResponse.json({ ok: false, error: "Invalid JSON payload" }, { status: 400 });

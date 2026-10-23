@@ -2,10 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "../../../../../../services/db/prisma";
 import { createCodAdvancePaymentLink } from "../../../../../../services/cod-advance/razorpay";
 import { auditCodAdvance } from "../../../../../../services/cod-advance/core";
+import { getAuthenticatedExchangeCustomer } from "../../../../../../services/exchange/auth";
 export const runtime = "nodejs";
-export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+// Only the signed-in customer who created the intent can ask for its payment link.
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const intent = await (prisma as any).codAdvanceIntent.findUnique({ where: { id }, include: { customerProfile: true } });
+  const auth = await getAuthenticatedExchangeCustomer(req);
+  if (!auth?.shop.id || !auth.session.customer.id) return NextResponse.json({ ok: false, error: "Invalid or expired session" }, { status: 401 });
+  const intent = await (prisma as any).codAdvanceIntent.findFirst({ where: { id, shopId: auth.shop.id, customerProfileId: auth.session.customer.id }, include: { customerProfile: true } });
   if (!intent) return NextResponse.json({ ok: false, error: "Intent not found" }, { status: 404 });
   if (intent.advanceAmountPaise > intent.orderAmountPaise) return NextResponse.json({ ok: false, error: "Advance amount cannot exceed order amount" }, { status: 400 });
   if (intent.razorpayPaymentLinkId && intent.razorpayPaymentLinkUrl && ["CREATED", "PAYMENT_PENDING"].includes(intent.status)) return NextResponse.json({ ok: true, intent, idempotent: true });

@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { importSkuMappingsCsv } from "../../../../../../services/gst/sku-tax-map";
-import { getShopDomainFromRequest, resolveShopConfig } from "../../../../../../services/shopify/shop";
+import { resolveShopConfig } from "../../../../../../services/shopify/shop";
+import { resolveGstAdminShopDomain } from "../../../../../../services/gst/request-shop";
 
 export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
-  const shopDomain = getShopDomainFromRequest(req);
+  const shopDomain = await resolveGstAdminShopDomain(req);
+  if (!shopDomain) return NextResponse.json({ ok: false, error: "Unauthorized. Reopen this page from Shopify admin." }, { status: 401 });
   const shop = await resolveShopConfig(shopDomain);
 
   let csvText = "";
