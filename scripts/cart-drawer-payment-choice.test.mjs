@@ -37,10 +37,13 @@ test("choosing a method persists a cart attribute for the Functions", () => {
   assert.match(src, /\/cart\/update\.js/, "must persist via /cart/update.js");
 });
 
-test("both prices are shown, prepaid discounted and COD loss-framed", () => {
+test("both prices are shown, prepaid discounted and COD described plainly", () => {
   assert.match(src, /function renderPaymentChoice/, "renderPaymentChoice must exist");
   assert.match(src, /prepaidOfferSavingsMinor/, "prepaid price must use the merchant prepaid offer");
-  assert.match(src, /more than online/, "COD option must be loss-framed against online");
+  assert.match(src, /var codText = "Pay when it arrives";/, "COD option must say how it works, not what it costs extra");
+  assert.doesNotMatch(src, /more than online/, "COD must not be framed as a penalty");
+  assert.match(src, /'Pay online ' \+ money\(prices\.prepaidPrice, cur\) \+ ' · save '/, "the pinned Checkout button must show the online price and the saving");
+  assert.match(src, /' · or COD ' \+ money\(base, cur\)/, "the pinned Checkout button must show the COD price");
 });
 
 test("payment-choice base is intent-neutral (never double-counts an already-applied prepaid discount)", () => {
