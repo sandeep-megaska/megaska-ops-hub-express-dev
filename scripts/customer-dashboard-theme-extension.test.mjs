@@ -4,7 +4,7 @@ import vm from "node:vm";
 
 const launcher = readFileSync("extensions/megaska-otp/blocks/loopdesk-account-launcher.liquid", "utf8");
 const inline = readFileSync("extensions/megaska-otp/blocks/loopdesk-customer-dashboard.liquid", "utf8");
-const launcherJs = readFileSync("extensions/megaska-otp/assets/loopdesk-account-launcher.js", "utf8");
+const launcherJs = readFileSync("extensions/megaska-otp-src/loopdesk-account-launcher.js", "utf8");
 
 assert.match(launcher, /data-loopdesk-account-launcher/);
 assert.match(launcher, /logged_out_label/);

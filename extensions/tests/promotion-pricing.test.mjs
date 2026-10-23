@@ -3,7 +3,7 @@ import fs from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
 
-const source = fs.readFileSync(new URL("../megaska-otp/assets/loopdesk-promotion-pricing.js", import.meta.url), "utf8");
+const source = fs.readFileSync(new URL("../megaska-otp-src/loopdesk-promotion-pricing.js", import.meta.url), "utf8");
 function api() { const window = {}; vm.runInNewContext(source, { window, globalThis: window }); return window.LoopDeskPromotionPricing; }
 function cart(overrides = {}) { return { token: "cart-1", currency: "INR", item_count: 1, original_total_price: 120000, items_subtotal_price: 120000, total_discount: 12000, total_price: 108000, items: [], ...overrides }; }
 

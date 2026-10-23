@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-const formScript = readFileSync("extensions/megaska-otp/assets/loopdesk-product-reviews.js", "utf8");
-const formStyles = readFileSync("extensions/megaska-otp/assets/loopdesk-product-reviews.css", "utf8");
+const formScript = readFileSync("extensions/megaska-otp-src/loopdesk-product-reviews.js", "utf8");
+const formStyles = readFileSync("extensions/megaska-otp-src/loopdesk-product-reviews.css", "utf8");
 const storefrontStars = formScript.match(/function stars\(r\)\{.*?return n\}/s)?.[0];
 
 test("storefront ratings render filled stars before empty stars", () => {

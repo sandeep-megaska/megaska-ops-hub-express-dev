@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-const source = readFileSync(new URL("../megaska-otp/assets/loopdesk-cart-drawer.js", import.meta.url), "utf8");
+const source = readFileSync(new URL("../megaska-otp-src/loopdesk-cart-drawer.js", import.meta.url), "utf8");
 
 // Shopify answers 409 Conflict when cart requests overlap (e.g. the drawer's
 // reload racing a page that is still changing the cart).

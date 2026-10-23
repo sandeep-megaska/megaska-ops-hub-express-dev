@@ -22,7 +22,9 @@
     "identity:merge-known": "node scripts/merge-known-customer-profiles.mjs",
     "review:diagnose-eligibility": "node scripts/review-diagnose-eligibility.mjs",
     "review:diagnose-ownership": "node scripts/review-diagnose-ownership.mjs",
-    "audit:saas-env": "node scripts/audit-saas-environment.mjs"
+    "audit:saas-env": "node scripts/audit-saas-environment.mjs",
+    "build:extension": "node scripts/build-theme-extension.mjs",
+    "check:extension": "node scripts/build-theme-extension.mjs --check"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.6.0",
@@ -43,6 +45,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "esbuild": "0.25.10",
     "eslint": "^9",
     "eslint-config-next": "16.2.2",
     "tailwindcss": "^4",

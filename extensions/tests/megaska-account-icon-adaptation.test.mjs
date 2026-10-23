@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
 
-const source = readFileSync(new URL("../megaska-otp/assets/loopd2c-otp.js", import.meta.url), "utf8");
+const source = readFileSync(new URL("../megaska-otp-src/loopd2c-otp.js", import.meta.url), "utf8");
 
 function functionSource(name, nextName) {
   const start = source.indexOf(`function ${name}(`);
@@ -140,7 +140,7 @@ test("adapter resolution and reconciliation cover all structural strategies", ()
 });
 
 test("neutral fallback CSS is isolated from theme-native account controls", () => {
-  const css = readFileSync(new URL("../megaska-otp/assets/loopd2c-otp.css", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../megaska-otp-src/loopd2c-otp.css", import.meta.url), "utf8");
   assert.match(css, /\.megaska-account-fallback--desktop\[data-loopdesk-account-control-source="loopdesk-default"\]/);
   assert.doesNotMatch(css, /\[data-loopdesk-account-control-source="native-hidden-clone"\][^{]*\{[^}]*(?:width|background|color):/s);
 });
@@ -188,7 +188,7 @@ test("merchant account-icon customization is read, built, sanitized, and applied
 });
 
 test("mobile hide of the header account icon is gated on a real mobile account entry", () => {
-  const css = readFileSync(new URL("../megaska-otp/assets/loopd2c-otp.css", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../megaska-otp-src/loopd2c-otp.css", import.meta.url), "utf8");
   // The small-viewport hide only applies when a dedicated mobile account entry
   // exists; themes that share one header icon row keep the icon on mobile.
   assert.match(

@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-const dashboard = readFileSync("extensions/megaska-otp/assets/loopdesk-customer-dashboard.js", "utf8");
-const form = readFileSync("extensions/megaska-otp/assets/loopdesk-product-reviews.js", "utf8");
-const formStyles = readFileSync("extensions/megaska-otp/assets/loopdesk-product-reviews.css", "utf8");
+const dashboard = readFileSync("extensions/megaska-otp-src/loopdesk-customer-dashboard.js", "utf8");
+const form = readFileSync("extensions/megaska-otp-src/loopdesk-product-reviews.js", "utf8");
+const formStyles = readFileSync("extensions/megaska-otp-src/loopdesk-product-reviews.css", "utf8");
 const eligiblePurchasesRoute = readFileSync("app/api/reviews/submissions/eligible-purchases/route.ts", "utf8");
 const block = readFileSync("extensions/megaska-otp/blocks/loopdesk-customer-dashboard.liquid", "utf8");
 

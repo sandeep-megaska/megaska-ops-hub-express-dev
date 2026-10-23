@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
 
-const asset = (name) => readFileSync(new URL(`../megaska-otp/assets/${name}`, import.meta.url), "utf8");
+const asset = (name) => readFileSync(new URL(`../megaska-otp-src/${name}`, import.meta.url), "utf8");
 const block = (name) => readFileSync(new URL(`../megaska-otp/blocks/${name}`, import.meta.url), "utf8");
 
 test("funnel analytics module beacons to the app-proxy track endpoint", () => {
