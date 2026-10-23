@@ -136,6 +136,12 @@ export default async function InstallationWizardPage({ searchParams }: PageProps
   const installHref = `/api/auth/install?shop=${shopParam}`;
   const diagnosticsHref = `/admin/diagnostics/environment?${embeddedContext.toString()}`;
   const appEmbedDeepLink = `https://${resolved.shop.shopDomain}/admin/themes/current/editor?context=apps`;
+  // Opens the product template in the theme editor with the Delivery check block ready
+  // to place. Needs the app's client ID; without it, the editor opens on the template.
+  const appClientId = String(process.env.SHOPIFY_API_KEY || "").trim();
+  const deliveryBlockDeepLink = `https://${resolved.shop.shopDomain}/admin/themes/current/editor?template=product${
+    appClientId ? `&addAppBlockId=${encodeURIComponent(appClientId)}/loopdesk-delivery-check&target=mainSection` : ""
+  }`;
 
   const coreEnvNames = ["DATABASE_URL", "SHOPIFY_API_KEY", "SHOPIFY_API_SECRET", "SHOPIFY_APP_URL", "SHOPIFY_SCOPES"];
   const missingCoreEnv = coreEnvNames.filter((name) => !envPresent(name));
@@ -159,7 +165,7 @@ export default async function InstallationWizardPage({ searchParams }: PageProps
         <p className="mk-hero-tagline">LoopD2C SaaS onboarding</p>
         <h1 className="mk-hero-title">Installation Wizard</h1>
         <p className="mk-hero-subtitle">
-          Guide {resolved.shop.shopDomain} through install, OAuth, environment checks, theme app embed guidance, cart mode, branding, Delhivery, Razorpay, and launch readiness. This page reads existing configuration only and never exposes secrets.
+          Guide {resolved.shop.shopDomain} through install, OAuth, environment checks, theme app embed guidance, cart mode, branding, Delhivery, the product page delivery check, Razorpay, and launch readiness. This page reads existing configuration only and never exposes secrets.
         </p>
       </div>
 
@@ -220,6 +226,14 @@ export default async function InstallationWizardPage({ searchParams }: PageProps
         />
         <WizardStep
           number={8}
+          title="Product page delivery check"
+          status={delhiveryComplete ? "Needs attention" : "Incomplete"}
+          description="Add the LoopD2C Delivery check block to your product page so shoppers can check serviceability, Cash on Delivery and expected delivery dates for their PIN code. The LoopD2C bag then shows the same delivery line. The wizard does not modify your theme."
+          details={<p>{delhiveryComplete ? "Delhivery is set up. Open the theme editor, place the block under the price or buy buttons, set your dispatch cutoff, and save." : "Finish Delhivery setup first: the block uses your Delhivery account and origin PIN code for dates."} If your theme already has its own PIN code checker, remove it after adding the block so shoppers see one.</p>}
+          actions={<LinkButton href={deliveryBlockDeepLink}>Add Delivery check block</LinkButton>}
+        />
+        <WizardStep
+          number={9}
           title="Razorpay setup status"
           status={razorpayComplete ? "Complete" : razorpay.enabled ? "Needs attention" : "Incomplete"}
           description="Confirms Razorpay is enabled and has required merchant-level setup. Key secret and webhook secret are never exposed."
@@ -228,7 +242,7 @@ export default async function InstallationWizardPage({ searchParams }: PageProps
         />
 
         <WizardStep
-          number={9}
+          number={10}
           title="Cart Intelligence setup status"
           status={cartIntelligenceConfigured ? "Complete" : "Incomplete"}
           description="Shows merchant-configurable Cart Intelligence setup status. This is configuration foundation only and may require later activation before any storefront feature renders."
@@ -236,10 +250,10 @@ export default async function InstallationWizardPage({ searchParams }: PageProps
           actions={<LinkButton href={`${settingsHref}#cart-intelligence`}>Open Cart Intelligence settings</LinkButton>}
         />
         <WizardStep
-          number={10}
+          number={11}
           title="Ready / launch checklist"
           status={ready ? "Complete" : "Needs attention"}
-          description="Launch once install, OAuth, environment validation, theme embed, cart guidance, branding, Delhivery, and Razorpay are reviewed."
+          description="Launch once install, OAuth, environment validation, theme embed, cart guidance, branding, Delhivery, the delivery check block, and Razorpay are reviewed."
           details={<ul style={{ margin: 0, paddingLeft: 20, display: "grid", gap: 4 }}><li>Runtime config reads loopdesk_runtime_config, cart_intelligence_config, delhivery_config, and razorpay_config.</li><li>No checkout, payment execution, shipment creation, OTP, cart logic, analytics, upsell, or AI behavior is changed by this wizard.</li><li>Preserved shop parameter: {resolved.shop.shopDomain}</li></ul>}
         />
       </div>
