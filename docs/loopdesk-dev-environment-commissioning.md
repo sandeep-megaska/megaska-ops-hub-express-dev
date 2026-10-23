@@ -46,8 +46,8 @@ Only configure these when testing the related module; they are not required to c
 
 ### Diagnostics/internal
 
-- `ADMIN_OPS_KEY`: accepted as `x-admin-ops-key` header or `ops_key` query parameter for production diagnostics.
-- `INTERNAL_DIAGNOSTIC_SECRET`: accepted as `x-internal-diagnostic-secret` header or `diagnostic_secret` query parameter for production diagnostics.
+- `ADMIN_OPS_KEY`: sent as the `x-admin-ops-key` header for diagnostics (query parameters are not accepted).
+- `INTERNAL_DIAGNOSTIC_SECRET`: sent as the `x-internal-diagnostic-secret` header for diagnostics (query parameters are not accepted).
 - `SHOPIFY_ADMIN_DIAGNOSTIC_SECRET`: used by the internal admin-token diagnostic endpoint.
 - `INTERNAL_CHECKOUT_RECOVERY_DISPATCH_SECRET`: used only by checkout recovery dispatch diagnostics.
 - `VERCEL_ENV` and `NODE_ENV`: provided by Vercel/Next.js; surfaced by diagnostics as non-secret context.
@@ -111,7 +111,7 @@ A runtime config row is created/updated when merchant settings are saved. If no 
 
 1. Open diagnostics with the shop query:
    - `https://megaska-ops-hub-express-dev.vercel.app/admin/diagnostics/environment?shop=megaskastore.myshopify.com`
-   - In production, include `x-admin-ops-key: <ADMIN_OPS_KEY>` or `x-internal-diagnostic-secret: <INTERNAL_DIAGNOSTIC_SECRET>`.
+   - Always include `x-admin-ops-key: <ADMIN_OPS_KEY>` or `x-internal-diagnostic-secret: <INTERNAL_DIAGNOSTIC_SECRET>`.
 2. Confirm presence booleans are `true` for `DATABASE_URL`, `SHOPIFY_API_KEY`, `SHOPIFY_API_SECRET`, `SHOPIFY_APP_URL`, `SHOPIFY_SCOPES`, `SHOPIFY_STORE_DOMAIN`, `APP_BASE_URL`, and `NEXT_PUBLIC_APP_URL`.
 3. Confirm `db.connectionOk = true`.
 4. Confirm `shop.resolvedShop = "megaskastore.myshopify.com"` and `shop.installedActiveShopRowExists = true`.

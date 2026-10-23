@@ -31,13 +31,11 @@ function diagnosticSecret() {
   ).trim();
 }
 
+// Header only: a secret in the query string ends up in access logs and browser history.
 function providedSecret(req: NextRequest) {
-  const url = new URL(req.url);
   return String(
     req.headers.get("x-admin-ops-key") ||
       req.headers.get("x-internal-diagnostic-secret") ||
-      url.searchParams.get("ops_key") ||
-      url.searchParams.get("diagnostic_secret") ||
       "",
   ).trim();
 }
