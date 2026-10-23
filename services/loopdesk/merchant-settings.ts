@@ -65,7 +65,9 @@ export type LoopDeskMerchantSettings = {
     iconCustomSvg: string;
     iconSize: number;
   };
-  checkout: { showSecureBadge: boolean; showTrustCopy: boolean };
+  // otpGateEnabled: require OTP login before checkout. Off for new installs; shops that
+  // existed before this setting keep it on (migration 20261024120000_otp_checkout_gate_setting).
+  checkout: { showSecureBadge: boolean; showTrustCopy: boolean; otpGateEnabled: boolean };
   cancellation: { autoCancelUnfulfilledOnRequest: boolean };
   requests: { windowDays: number; excludedExchangeCategories: string[] };
   otpModalBranding: {
@@ -755,6 +757,7 @@ export function validateLoopDeskMerchantSettingsPatch(
   }
   validateBool(checkout.showSecureBadge, "Show secure badge");
   validateBool(checkout.showTrustCopy, "Show trust copy");
+  validateBool(checkout.otpGateEnabled, "Require OTP login before checkout");
   validateBool(cancellation.autoCancelUnfulfilledOnRequest, "Auto-cancel unfulfilled orders on customer request");
   if (
     requests.windowDays !== undefined &&
@@ -900,6 +903,7 @@ export function normalizeLoopDeskMerchantSettings(
     checkout: {
       showSecureBadge: bool(checkout.showSecureBadge, true),
       showTrustCopy: bool(checkout.showTrustCopy, true),
+      otpGateEnabled: bool(checkout.otpGateEnabled, false),
     },
     cancellation: {
       autoCancelUnfulfilledOnRequest: bool(cancellation.autoCancelUnfulfilledOnRequest, false),

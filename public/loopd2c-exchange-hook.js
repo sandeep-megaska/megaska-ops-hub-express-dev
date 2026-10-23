@@ -1,4 +1,10 @@
 (function () {
+  // Reverse pickup fee for the shopper-facing copy, set by the app proxy route from the
+  // amount the payment link actually charges.
+  const REVERSE_PICKUP_FEE = String(window.LOOPD2C_REVERSE_PICKUP_FEE || "").trim();
+  const REVERSE_PICKUP_NOTE = REVERSE_PICKUP_FEE
+    ? `Reverse pickup has a ${REVERSE_PICKUP_FEE} charge. After the store approves your exchange, you will receive a payment link.`
+    : "Reverse pickup has a charge. After the store approves your exchange, you will receive a payment link.";
   const API_BASE_URL = String(window.MEGASKA_API_BASE || "/apps/loopd2c/api").replace(/\/$/, "");
   const SESSION_STORAGE_KEY = "megaska_session_token";
   const MODAL_ID = "mk-exchange-modal-layer";
@@ -534,7 +540,7 @@
             <option value="REVERSE_PICKUP" selected>Reverse pickup</option>
             <option value="SELF_SHIP">Self ship</option>
           </select>
-          <div class="mk-ex-muted" id="mk-ex-return-method-note">Reverse pickup has a ₹120 charge. After Megaska approves your exchange, you will receive a Razorpay payment link.</div>
+          <div class="mk-ex-muted" id="mk-ex-return-method-note">${REVERSE_PICKUP_NOTE}</div>
         </div>
 
         <div class="mk-ex-row">
@@ -575,8 +581,8 @@
         const method = String(methodSelect.value || "REVERSE_PICKUP").trim().toUpperCase();
         methodNote.textContent =
           method === "SELF_SHIP"
-            ? "You will ship the item to Megaska after approval. No reverse pickup charge applies."
-            : "Reverse pickup has a ₹120 charge. After Megaska approves your exchange, you will receive a Razorpay payment link.";
+            ? "You will ship the item back to the store after approval. No reverse pickup charge applies."
+            : REVERSE_PICKUP_NOTE;
       });
     }
 
@@ -628,8 +634,8 @@
       <strong>Exchange request created</strong>
       <div>Request ID: ${escapeHtml(request?.id || "—")}</div>
       <div>Request status: ${escapeHtml(request?.status || "OPEN")}</div>
-      <div>Request received. Megaska will review stock and pickup availability.</div>
-      <div>If reverse pickup is approved, you will receive a ₹120 Razorpay payment link.</div>
+      <div>Request received. The store will review stock and pickup availability.</div>
+      <div>If reverse pickup is approved, you will receive a payment link${REVERSE_PICKUP_FEE ? ` for ${REVERSE_PICKUP_FEE}` : ""}.</div>
       <div>Forward shipping for the replacement item is free after approval.</div>
       <div class="mk-ex-muted">${escapeHtml(stockReviewMessage || "Exchange approval depends on the availability of the requested size.")}</div>
       <div class="mk-ex-muted">If the requested size is unavailable, our team will contact you with the next steps.</div>
