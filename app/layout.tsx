@@ -47,6 +47,51 @@ export default function RootLayout({
             `,
           }}
         />
+        {/*
+          Inside the admin iframe, give every same-origin request without an
+          Authorization header a fresh App Bridge session token. That covers Next's
+          own client navigations and server actions, which is how admin pages and
+          their forms prove which shop they belong to (services/shopify/
+          admin-request-auth.ts). Installed before Next hydrates; outside the
+          iframe (customer pages) it does nothing.
+        */}
+        <script
+          id="shopify-session-fetch"
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function () {
+                var original = window.fetch;
+                if (!original || original.__loopd2cSession || window.top === window.self) return;
+                function freshToken() {
+                  var bridge = window.shopify;
+                  if (!bridge || typeof bridge.idToken !== "function") return Promise.resolve("");
+                  return Promise.race([
+                    bridge.idToken(),
+                    new Promise(function (resolve) { setTimeout(function () { resolve(""); }, 3000); })
+                  ]).catch(function () { return ""; });
+                }
+                var wrapped = function (input, init) {
+                  try {
+                    var target = new URL(typeof input === "string" || input instanceof URL ? String(input) : input.url, window.location.href);
+                    var headers = new Headers((init && init.headers) || (input instanceof Request ? input.headers : undefined));
+                    if (target.origin === window.location.origin && !headers.has("authorization")) {
+                      return freshToken().then(function (token) {
+                        if (!token) return original.call(window, input, init);
+                        headers.set("Authorization", "Bearer " + token);
+                        return original.call(window, input, Object.assign({}, init, { headers: headers }));
+                      });
+                    }
+                  } catch (e) {
+                    /* fall through to the untouched request */
+                  }
+                  return original.call(window, input, init);
+                };
+                wrapped.__loopd2cSession = true;
+                window.fetch = wrapped;
+              })();
+            `,
+          }}
+        />
         {/* eslint-disable-next-line @next/next/no-sync-scripts -- Shopify App Bridge CDN must be server-rendered in the initial admin document head. */}
         <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>
       </head>

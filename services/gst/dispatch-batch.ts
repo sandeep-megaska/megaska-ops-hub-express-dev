@@ -25,6 +25,8 @@ interface BatchGenerateInput {
 }
 
 interface PrintBatchInput {
+  /** The verified shop; documents from any other shop are never returned. */
+  shopId: string;
   documentIds?: string[];
   orderImportIds?: string[];
 }
@@ -552,6 +554,7 @@ export async function prepareInvoicePrintBatch(input: PrintBatchInput): Promise<
       const imports = Array.from(new Set((input.orderImportIds || []).map((id) => String(id).trim()).filter(Boolean)));
       const docs = await dispatchDb.gstDocument.findMany({
         where: {
+          shopId: input.shopId,
           documentType: "TAX_INVOICE",
           sourceOrderId: { in: imports },
         },
@@ -565,7 +568,7 @@ export async function prepareInvoicePrintBatch(input: PrintBatchInput): Promise<
     }
 
     const documents = await dispatchDb.gstDocument.findMany({
-      where: { id: { in: resolvedDocumentIds } },
+      where: { shopId: input.shopId, id: { in: resolvedDocumentIds } },
       select: { id: true, documentNumber: true, sourceOrderNumber: true, documentDate: true, status: true },
       orderBy: [{ documentDate: "asc" }, { documentNumber: "asc" }],
     });

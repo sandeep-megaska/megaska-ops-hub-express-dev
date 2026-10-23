@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { listDispatchReadyOrders } from "../../../../../services/gst/dispatch-batch";
-import { getShopDomainFromRequest, resolveShopConfig } from "../../../../../services/shopify/shop";
+import { resolveShopConfig } from "../../../../../services/shopify/shop";
+import { resolveGstAdminShopDomain } from "../../../../../services/gst/request-shop";
 import { gstPerfLog, gstPerfNow } from "../../../../../services/gst/perf";
 
 export const runtime = "nodejs";
 
 export async function GET(req: NextRequest) {
   const totalStartedAtMs = gstPerfNow();
-  const shopDomain = getShopDomainFromRequest(req);
+  const shopDomain = await resolveGstAdminShopDomain(req);
+  if (!shopDomain) return NextResponse.json({ ok: false, error: "Unauthorized. Reopen this page from Shopify admin." }, { status: 401 });
   const shop = await resolveShopConfig(shopDomain);
   const query = req.nextUrl.searchParams;
   const result = await listDispatchReadyOrders({

@@ -4,12 +4,14 @@ import {
   listUnmappedSkusFromImportedOrders,
   upsertSkuTaxMapping,
 } from "../../../../../services/gst/sku-tax-map";
-import { getShopDomainFromRequest, resolveShopConfig } from "../../../../../services/shopify/shop";
+import { resolveShopConfig } from "../../../../../services/shopify/shop";
+import { resolveGstAdminShopDomain } from "../../../../../services/gst/request-shop";
 
 export const runtime = "nodejs";
 
 export async function GET(req: NextRequest) {
-  const shopDomain = getShopDomainFromRequest(req);
+  const shopDomain = await resolveGstAdminShopDomain(req);
+  if (!shopDomain) return NextResponse.json({ ok: false, error: "Unauthorized. Reopen this page from Shopify admin." }, { status: 401 });
   const shop = await resolveShopConfig(shopDomain);
   const search = req.nextUrl.searchParams.get("search") || undefined;
   const view = (req.nextUrl.searchParams.get("view") || "").toLowerCase();
@@ -33,7 +35,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const shopDomain = getShopDomainFromRequest(req);
+  const shopDomain = await resolveGstAdminShopDomain(req);
+  if (!shopDomain) return NextResponse.json({ ok: false, error: "Unauthorized. Reopen this page from Shopify admin." }, { status: 401 });
   const shop = await resolveShopConfig(shopDomain);
   const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
 

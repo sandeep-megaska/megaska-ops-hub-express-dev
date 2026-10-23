@@ -8,7 +8,8 @@ import type { GstSettingsWriteInput } from "../../../../services/gst/settings";
 import { validateGstIdentityConfig } from "../../../../services/gst/settings";
 import { isGstModuleEnabled, setGstModuleEnabled } from "../../../../services/gst/module-toggle";
 import { prisma } from "../../../../services/db/prisma";
-import { getShopDomainFromRequest, resolveShopConfig } from "../../../../services/shopify/shop";
+import { resolveShopConfig } from "../../../../services/shopify/shop";
+import { resolveGstAdminShopDomain } from "../../../../services/gst/request-shop";
 
 export const runtime = "nodejs";
 
@@ -26,11 +27,12 @@ function resolveNullableString(value: unknown, fallback: string | null): string 
 }
 
 async function resolveShopContext(req: NextRequest) {
-  const requestedShopDomain = getShopDomainFromRequest(req);
-  const usedGlobalFallback = !requestedShopDomain;
+  // Only the verified session token says which shop this is (no ?shop= / default-shop fallback).
+  const requestedShopDomain = await resolveGstAdminShopDomain(req);
+  const usedGlobalFallback = false;
   const resolvedShop = requestedShopDomain
     ? await resolveShopConfig(requestedShopDomain)
-    : await resolveShopConfig();
+    : { id: null, shopDomain: "", accessToken: null, storefrontAccessToken: null };
 
   return {
     requestedShopDomain,
@@ -42,6 +44,7 @@ async function resolveShopContext(req: NextRequest) {
 export async function GET(req: NextRequest) {
   const { requestedShopDomain, resolvedShop, usedGlobalFallback } = await resolveShopContext(req);
   const resolvedShopId = resolvedShop.id ?? null;
+  if (!requestedShopDomain) return NextResponse.json({ ok: false, error: "Unauthorized. Reopen this page from Shopify admin." }, { status: 401 });
 
   // GST settings are always shop-scoped now; no shopId: null global fallback.
   const settings = resolvedShopId
@@ -75,6 +78,7 @@ export async function GET(req: NextRequest) {
 async function saveSettings(req: NextRequest) {
   const { requestedShopDomain, resolvedShop, usedGlobalFallback } = await resolveShopContext(req);
   const resolvedShopId = resolvedShop.id ?? null;
+  if (!requestedShopDomain) return NextResponse.json({ ok: false, error: "Unauthorized. Reopen this page from Shopify admin." }, { status: 401 });
 
   if (!resolvedShopId) {
     return NextResponse.json(
