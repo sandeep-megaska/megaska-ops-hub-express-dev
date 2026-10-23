@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
-const source = readFileSync('extensions/megaska-otp/assets/loopdesk-buy-now-bridge.js', 'utf8');
+const source = readFileSync('extensions/megaska-otp-src/loopdesk-buy-now-bridge.js', 'utf8');
 
 const mustContain = (needle) => assert.ok(source.includes(needle), `missing ${needle}`);
 

@@ -3,7 +3,7 @@ import fs from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
 
-const source = fs.readFileSync(new URL("../megaska-otp/assets/loopd2c-auth.js", import.meta.url), "utf8");
+const source = fs.readFileSync(new URL("../megaska-otp-src/loopd2c-auth.js", import.meta.url), "utf8");
 
 // Loads the auth script with a stored session token. `answers` are the responses to
 // /auth/session in order: [status, body, contentType], or an Error to make fetch reject.

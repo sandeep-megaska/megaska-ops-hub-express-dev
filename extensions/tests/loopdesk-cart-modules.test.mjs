@@ -3,9 +3,9 @@ import fs from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
 
-const drawerPath = new URL("../megaska-otp/assets/loopdesk-cart-drawer.js", import.meta.url);
+const drawerPath = new URL("../megaska-otp-src/loopdesk-cart-drawer.js", import.meta.url);
 const source = fs.readFileSync(drawerPath, "utf8");
-const drawerCssPath = new URL("../megaska-otp/assets/loopdesk-cart-drawer.css", import.meta.url);
+const drawerCssPath = new URL("../megaska-otp-src/loopdesk-cart-drawer.css", import.meta.url);
 const drawerCss = fs.readFileSync(drawerCssPath, "utf8");
 
 test("drawer CSS keeps the wider panel and scrollbar-free scrolling viewport safe", () => {

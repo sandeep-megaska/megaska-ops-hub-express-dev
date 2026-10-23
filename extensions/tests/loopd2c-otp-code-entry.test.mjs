@@ -3,7 +3,7 @@ import fs from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
 
-const source = fs.readFileSync(new URL("../megaska-otp/assets/loopd2c-otp.js", import.meta.url), "utf8");
+const source = fs.readFileSync(new URL("../megaska-otp-src/loopd2c-otp.js", import.meta.url), "utf8");
 
 // handleOtpInput on its own, with the modal state and the calls it makes recorded.
 function loadCodeEntry(initialDigits = ["", "", "", ""]) {

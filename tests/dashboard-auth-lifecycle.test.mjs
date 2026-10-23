@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import vm from "node:vm";
 import { readFileSync } from "node:fs";
 
-const source = readFileSync("extensions/megaska-otp/assets/loopdesk-customer-dashboard.js", "utf8");
+const source = readFileSync("extensions/megaska-otp-src/loopdesk-customer-dashboard.js", "utf8");
 
 function createHarness({ token = "", fetchImpl, configOverride = {} } = {}) {
   const listeners = new Map();

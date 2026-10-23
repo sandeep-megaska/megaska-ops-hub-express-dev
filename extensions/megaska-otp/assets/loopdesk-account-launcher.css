@@ -1,3 +1,2 @@
-.loopdesk-account-launcher { display: inline-flex; align-items: center; gap: .45rem; border: 0; border-radius: 999px; padding: .7rem 1rem; background: #e91e63; color: #fff; font: inherit; font-weight: 700; cursor: pointer; text-decoration: none; }
-.loopdesk-account-launcher:focus-visible { outline: 3px solid #b9164c; outline-offset: 3px; }
-.loopdesk-account-launcher__icon { width: 1em; height: 1em; }
+/* Built from extensions/megaska-otp-src/loopdesk-account-launcher.css by npm run build:extension. Do not edit. */
+.loopdesk-account-launcher{display:inline-flex;align-items:center;gap:.45rem;border:0;border-radius:999px;padding:.7rem 1rem;background:#e91e63;color:#fff;font:inherit;font-weight:700;cursor:pointer;text-decoration:none}.loopdesk-account-launcher:focus-visible{outline:3px solid #b9164c;outline-offset:3px}.loopdesk-account-launcher__icon{width:1em;height:1em}

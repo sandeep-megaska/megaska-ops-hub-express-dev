@@ -3,7 +3,7 @@ import fs from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
 
-const source = fs.readFileSync(new URL("../megaska-otp/assets/loopd2c-auth.js", import.meta.url), "utf8");
+const source = fs.readFileSync(new URL("../megaska-otp-src/loopd2c-auth.js", import.meta.url), "utf8");
 
 // Loads the auth script with `responses` as the storefront's answers to
 // /otp/request, in order: [status, body, contentType].

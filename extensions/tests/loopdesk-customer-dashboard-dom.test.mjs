@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-const js = readFileSync("extensions/megaska-otp/assets/loopdesk-customer-dashboard.js", "utf8");
-const css = readFileSync("extensions/megaska-otp/assets/loopdesk-customer-dashboard.css", "utf8");
+const js = readFileSync("extensions/megaska-otp-src/loopdesk-customer-dashboard.js", "utf8");
+const css = readFileSync("extensions/megaska-otp-src/loopdesk-customer-dashboard.css", "utf8");
 
 assert.match(js, /Sign in to view your account/);
 assert.match(js, /data-megaska-open-login>Sign in/);
