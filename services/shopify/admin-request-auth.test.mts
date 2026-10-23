@@ -43,8 +43,9 @@ test("a bare ?shop= param is never enough", () => {
 });
 
 test("a valid bearer session token names the shop", () => {
-  const result = verifyAdminRequest({ ...keys, authorization: `Bearer ${token()}`, params: new URLSearchParams({ shop: "victim.myshopify.com" }) });
-  assert.deepEqual(result, { ok: true, shopDomain: "acme.myshopify.com", method: "session_token" });
+  const bearer = token();
+  const result = verifyAdminRequest({ ...keys, authorization: `Bearer ${bearer}`, params: new URLSearchParams({ shop: "victim.myshopify.com" }) });
+  assert.deepEqual(result, { ok: true, shopDomain: "acme.myshopify.com", method: "session_token", sessionToken: bearer });
 });
 
 test("an invalid bearer token fails without falling back to the URL", () => {
@@ -55,8 +56,9 @@ test("an invalid bearer token fails without falling back to the URL", () => {
 });
 
 test("the app-load id_token in the URL names the shop", () => {
-  const result = verifyAdminRequest({ ...keys, params: new URLSearchParams({ id_token: token("shop-b.myshopify.com") }) });
-  assert.deepEqual(result, { ok: true, shopDomain: "shop-b.myshopify.com", method: "id_token" });
+  const idToken = token("shop-b.myshopify.com");
+  const result = verifyAdminRequest({ ...keys, params: new URLSearchParams({ id_token: idToken }) });
+  assert.deepEqual(result, { ok: true, shopDomain: "shop-b.myshopify.com", method: "id_token", sessionToken: idToken });
 });
 
 test("an expired URL id_token is rejected", () => {

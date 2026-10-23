@@ -1,6 +1,9 @@
 import { Suspense } from "react";
 import AdminNavLink from "./AdminNavLink";
 import CustomerSyncCard from "./CustomerSyncCard";
+import { formatAdminShopResolutionError, resolveAdminShopFromSearchParams, type AdminShopSearchParams } from "../services/shopify/admin-shop-context";
+
+export const dynamic = "force-dynamic";
 
 type ModuleCard = { title: string; meta: string; href: string };
 type ModuleGroup = { heading: string; blurb: string; cards: ModuleCard[] };
@@ -14,7 +17,7 @@ const moduleGroups: ModuleGroup[] = [
       { title: "Promotions", meta: "Cart offers, tiered order discounts, and compilation status", href: "/admin/promotions" },
       { title: "Reviews", meta: "Moderate, import/export, and configure review display", href: "/admin/reviews" },
       { title: "Merchant Settings", meta: "Branding, cart drawer, labels, and runtime settings", href: "/admin/merchant-settings" },
-      { title: "Installation Wizard", meta: "OAuth, theme embed, and provider readiness", href: "/admin/installation-wizard" },
+      { title: "Installation Wizard", meta: "Theme embed and provider readiness", href: "/admin/installation-wizard" },
     ],
   },
   {
@@ -49,7 +52,18 @@ const moduleGroups: ModuleGroup[] = [
   },
 ];
 
-export default function DashboardPage() {
+// Shopify opens the app here right after install. Resolving the shop on this first
+// verified load is what installs it (token exchange) before any other page is used.
+export default async function DashboardPage({ searchParams }: { searchParams?: Promise<AdminShopSearchParams> }) {
+  const resolved = await resolveAdminShopFromSearchParams((await searchParams) ?? {});
+  if (!resolved.shop?.id) {
+    return (
+      <div className="mk-page">
+        <div className="mk-alert mk-alert-error" role="alert">{formatAdminShopResolutionError(resolved)}</div>
+      </div>
+    );
+  }
+
   return (
     <div className="mk-page">
       <section className="mk-hero">

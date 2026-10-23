@@ -156,5 +156,5 @@ export async function resolveShopifyAdminAccessToken(
   const storedToken = resolveStoredToken(input);
   if (storedToken) return storedToken;
 
-  throw new Error("Missing installed Shopify Admin token. Reinstall app through /api/auth/install?shop=" + shopDomain);
+  throw new Error("Missing installed Shopify Admin token for " + shopDomain + ". Open the app from Shopify admin to reinstall it.");
 }
