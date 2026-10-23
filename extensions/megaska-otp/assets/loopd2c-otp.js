@@ -1501,6 +1501,7 @@ function renderSuccessStep(message) {
     state.otpRequestPhoneE164 = "";
     renderOtpStep();
     startResendTimer();
+    prefetchCartForPendingCheckout();
 
     try {
       const otpRequestResponse = await window.MegaskaAuth.requestOtp(state.otpRequestPhoneInput, state.otpRequestCountryCode);
@@ -1550,6 +1551,14 @@ function renderSuccessStep(message) {
   function handleSendOtpClick(event) {
     if (event) event.preventDefault();
     submitPhoneIfReady({ explicit: true });
+  }
+
+  // While the customer reads the WhatsApp code, read the bag so checkout doesn't wait for it
+  // afterwards. Only for checkout from the bag: buy-now adds the item after the OTP.
+  function prefetchCartForPendingCheckout() {
+    if (!pendingAction || pendingAction.type !== "navigate") return;
+    if (!window.MegaskaAuth || typeof window.MegaskaAuth.prefetchActiveCartContext !== "function") return;
+    window.MegaskaAuth.prefetchActiveCartContext().catch(() => {});
   }
 
   function collectOtpDigits() {
@@ -1621,7 +1630,8 @@ async function completeAuthenticatedLogin(sessionCustomer, options) {
   const hasCheckoutPending = Boolean(opts.hasCheckoutPending);
 
   hideAccountMenu();
-  await syncAccountUiState();
+  // Every caller has just refreshed the session, so reuse it instead of asking the server again.
+  await syncAccountUiState(sessionCustomer ? true : undefined);
 
   const accountRedirectTarget = consumePendingAccountRedirect();
   if (accountRedirectTarget) {
@@ -2849,9 +2859,11 @@ function consumePendingAccountRedirect() {
     openAccountMenu(triggerEl);
   }
 
-  async function syncAccountUiState() {
-    const gateState = await getMegaskaCheckoutGateState();
-    const authenticated = gateState.authenticated;
+  async function syncAccountUiState(knownAuthenticated) {
+    const authenticated =
+      typeof knownAuthenticated === "boolean"
+        ? knownAuthenticated
+        : (await getMegaskaCheckoutGateState()).authenticated;
     document.documentElement.classList.toggle("megaska-account-authenticated", authenticated);
     document.documentElement.classList.toggle("megaska-account-guest", !authenticated);
     if (!authenticated) {
