@@ -123,6 +123,69 @@
   let submitDebugBound = false;
   let paymentButtonsLogged = false;
   let pendingAction = null;
+
+  // A WhatsApp code makes the customer switch apps, and Instagram's in-app browser or iOS
+  // Safari often reloads the page meanwhile. The login in progress is kept for the code's
+  // lifetime so the page reopens at "enter the code" instead of starting over. The code itself
+  // is never stored.
+  const OTP_RESUME_KEY = "megaska_otp_resume";
+  const OTP_RESUME_MAX_AGE_MS = 5 * 60 * 1000;
+
+  function isSafeResumeUrl(url) {
+    return typeof url === "string" && url.startsWith("/") && !url.startsWith("//");
+  }
+
+  function saveOtpResume() {
+    try {
+      const checkoutUrl =
+        pendingAction && pendingAction.type === "navigate" && isSafeResumeUrl(pendingAction.url) ? pendingAction.url : "";
+      window.localStorage.setItem(
+        OTP_RESUME_KEY,
+        JSON.stringify({
+          savedAt: Date.now(),
+          phoneDigits: state.phoneDigits,
+          normalizedPhone: state.normalizedPhone,
+          otpRequestPhoneInput: state.otpRequestPhoneInput,
+          otpRequestCountryCode: state.otpRequestCountryCode,
+          otpRequestPhoneE164: state.otpRequestPhoneE164,
+          otpChannel: state.otpChannel,
+          smsFallbackAvailable: Boolean(state.smsFallbackAvailable),
+          checkoutUrl,
+        })
+      );
+    } catch (_error) {
+      // Storage blocked (private mode): the flow works as before, without resuming.
+    }
+  }
+
+  function clearOtpResume() {
+    try {
+      window.localStorage.removeItem(OTP_RESUME_KEY);
+    } catch (_error) {
+      // Nothing to clear.
+    }
+  }
+
+  function readOtpResume() {
+    let saved = null;
+    try {
+      saved = JSON.parse(window.localStorage.getItem(OTP_RESUME_KEY) || "null");
+    } catch (_error) {
+      saved = null;
+    }
+    const age = Date.now() - Number(saved && saved.savedAt);
+    if (
+      !saved ||
+      !(age >= 0 && age < OTP_RESUME_MAX_AGE_MS) ||
+      !saved.normalizedPhone ||
+      !saved.otpRequestPhoneInput ||
+      !saved.otpRequestCountryCode
+    ) {
+      if (saved) clearOtpResume();
+      return null;
+    }
+    return Object.assign({}, saved, { ageMs: age, checkoutUrl: isSafeResumeUrl(saved.checkoutUrl) ? saved.checkoutUrl : "" });
+  }
   let checkoutInterceptionEnabled = true;
   let accountMenuContainer = null;
   let accountMenuTrigger = null;
@@ -829,6 +892,7 @@
                 )
                 .join("")}
             </div>
+            <button type="button" class="megaska-otp-primary-btn megaska-otp-paste-btn" data-megaska-paste-code hidden>Paste code</button>
 
             <div class="megaska-otp-resend-row">
               <span data-megaska-resend-text>Resend available in 30s</span>
@@ -978,6 +1042,7 @@
     });
     modal.querySelector("[data-megaska-resend]").addEventListener("click", handleResend);
     modal.querySelector("[data-megaska-sms-fallback]").addEventListener("click", handleSmsFallback);
+    modal.querySelector("[data-megaska-paste-code]").addEventListener("click", handlePasteCodeClick);
 
     modal.querySelectorAll("[data-megaska-otp-digit]").forEach((input) => {
       input.addEventListener("input", handleOtpInput);
@@ -1253,7 +1318,11 @@
   // WhatsApp delivery failures (number not on WhatsApp) surface only
   // asynchronously at Meta, so offer SMS once the resend window has passed.
   function updateSmsFallbackUi() {
-    const { smsFallbackRow } = getModalParts();
+    const { smsFallbackRow, modal } = getModalParts();
+    const pasteBtn = modal && modal.querySelector("[data-megaska-paste-code]");
+    if (pasteBtn) {
+      pasteBtn.hidden = !(state.step === "otp" && canPasteCode() && !state.requesting && !state.verifying);
+    }
     if (!smsFallbackRow) return;
     smsFallbackRow.hidden = !(
       state.step === "otp" &&
@@ -1267,7 +1336,19 @@
   function applyOtpDeliveryChannel(payload) {
     state.otpChannel = payload?.channel === "whatsapp" ? "whatsapp" : "sms";
     state.smsFallbackAvailable = payload?.smsFallbackAvailable === true;
-    state.statusMessage = state.otpChannel === "whatsapp" ? "💬 Code sent on WhatsApp" : "";
+    state.statusMessage = whatsAppCodeStatus();
+    saveOtpResume();
+  }
+
+  function canPasteCode() {
+    return Boolean(navigator.clipboard && typeof navigator.clipboard.readText === "function");
+  }
+
+  function whatsAppCodeStatus() {
+    if (state.otpChannel !== "whatsapp") return "";
+    return canPasteCode()
+      ? "💬 Code sent on WhatsApp. Tap “Copy code” there, then “Paste code” here."
+      : "💬 Code sent on WhatsApp";
   }
 
   function focusPhoneInput() {
@@ -1333,6 +1414,7 @@
     const force = Boolean(opts.force);
 
     if (!force && isBusy()) return false;
+    clearOtpResume();
     // Dismissed without verifying: the gated action (e.g. navigate to
     // /checkout) must not resume on a later, unrelated login.
     if (reason && reason !== "success") clearPendingAction();
@@ -1629,6 +1711,7 @@ async function completeAuthenticatedLogin(sessionCustomer, options) {
   const opts = options || {};
   const hasCheckoutPending = Boolean(opts.hasCheckoutPending);
 
+  clearOtpResume();
   hideAccountMenu();
   // Every caller has just refreshed the session, so reuse it instead of asking the server again.
   await syncAccountUiState(sessionCustomer ? true : undefined);
@@ -1872,6 +1955,27 @@ async function completeAuthenticatedLogin(sessionCustomer, options) {
     submitOtpIfReady();
   }
 }
+  async function handlePasteCodeClick() {
+    if (!isModalOpen() || state.step !== "otp" || state.verifying || !canPasteCode()) return;
+    let text = "";
+    try {
+      text = await navigator.clipboard.readText();
+    } catch (_error) {
+      text = "";
+    }
+    const digits = String(text || "").replace(/\D/g, "");
+    if (digits.length !== OTP_LENGTH) {
+      state.errorMessage = "Tap “Copy code” in WhatsApp first, then tap “Paste code”. Or type the 4 digits.";
+      renderStep();
+      focusOtpInput(0);
+      return;
+    }
+    state.otpDigits = digits.split("");
+    state.errorMessage = "";
+    renderStep();
+    submitOtpIfReady();
+  }
+
   async function handleResend() {
     if (!isModalOpen()) return;
     if (state.requesting || state.resendSeconds > 0 || !state.normalizedPhone) return;
@@ -1929,6 +2033,7 @@ async function completeAuthenticatedLogin(sessionCustomer, options) {
   function handleEditPhone() {
     if (!isModalOpen()) return;
     if (isBusy()) return;
+    clearOtpResume();
     renderPhoneStep();
   }
 
@@ -4205,6 +4310,52 @@ function hasVisibleNativeDesktopAccountEntry() {
     return checkoutInterceptionEnabled;
   }
 
+  // Reopens "enter the code" when the page was reloaded while the customer read the code
+  // in WhatsApp, with the pending checkout restored.
+  async function resumeOtpAfterReload() {
+    const saved = readOtpResume();
+    if (!saved || isModalOpen()) return;
+    const gate = await getMegaskaCheckoutGateState();
+    if (gate.authenticated) {
+      clearOtpResume();
+      return;
+    }
+    if (isModalOpen() || !readOtpResume()) return;
+    if (saved.checkoutUrl) setPendingAction({ type: "navigate", url: saved.checkoutUrl });
+    openModal("otp-resume");
+    state.phoneDigits = String(saved.phoneDigits || saved.otpRequestPhoneInput);
+    state.normalizedPhone = saved.normalizedPhone;
+    state.lastRequestedPhone = saved.normalizedPhone;
+    state.otpRequestPhoneInput = saved.otpRequestPhoneInput;
+    state.otpRequestCountryCode = saved.otpRequestCountryCode;
+    state.otpRequestPhoneE164 = String(saved.otpRequestPhoneE164 || "");
+    state.otpChannel = saved.otpChannel === "sms" ? "sms" : "whatsapp";
+    state.smsFallbackAvailable = Boolean(saved.smsFallbackAvailable);
+    state.step = "otp";
+    state.otpDigits = ["", "", "", ""];
+    state.statusMessage = whatsAppCodeStatus();
+    const resendLeft = Math.max(0, RESEND_SECONDS - Math.floor(saved.ageMs / 1000));
+    if (resendLeft > 0) {
+      startResendTimer();
+      state.resendSeconds = resendLeft;
+    }
+    renderStep();
+    updateResendUi();
+    focusOtpInput(0);
+    prefetchCartForPendingCheckout();
+    console.log("[Megaska OTP] login resumed after reload", { checkout: Boolean(saved.checkoutUrl) });
+  }
+
+  // Back from WhatsApp without a reload: put the cursor in the first empty code box.
+  function bindOtpReturnFocus() {
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState !== "visible") return;
+      if (!isModalOpen() || state.step !== "otp" || state.verifying || state.requesting) return;
+      const firstEmpty = state.otpDigits.findIndex((digit) => !digit);
+      if (firstEmpty >= 0) focusOtpInput(firstEmpty);
+    });
+  }
+
   function init() {
     bindGlobalClickInterceptor();
     bindSubmitDebugListener();
@@ -4217,6 +4368,8 @@ function hasVisibleNativeDesktopAccountEntry() {
       bindAccountFallbackObserver();
     }
     syncAccountUiState();
+    resumeOtpAfterReload();
+    bindOtpReturnFocus();
     if (document && document.readyState === "loading") {
       document.addEventListener("DOMContentLoaded", logPaymentButtonsPresence, { once: true });
     } else {

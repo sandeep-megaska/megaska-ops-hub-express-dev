@@ -402,6 +402,14 @@
   transition: opacity 0.2s ease, transform 0.2s ease;
 }
 
+.megaska-otp-paste-btn {
+  margin-top: 14px;
+}
+
+.megaska-otp-paste-btn[hidden] {
+  display: none;
+}
+
 .megaska-otp-primary-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
