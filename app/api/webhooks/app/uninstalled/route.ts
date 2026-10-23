@@ -18,10 +18,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, skipped: true, reason: "missing-shop-domain" });
   }
 
+  // Shopify revokes the app's tokens on uninstall; drop our copies too. Opening the app
+  // again after a reinstall exchanges a fresh token (services/shopify/install.ts).
   await prisma.$executeRawUnsafe(
     `UPDATE "Shop"
      SET "isActive" = false,
          "uninstalledAt" = NOW(),
+         "installationStatus" = 'UNINSTALLED',
+         "accessToken" = NULL,
+         "accessTokenEncrypted" = NULL,
+         "storefrontAccessToken" = NULL,
+         "storefrontTokenEncrypted" = NULL,
          "updatedAt" = NOW()
      WHERE "shopDomain" = $1`,
     shopDomain

@@ -1,9 +1,11 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import type { NextRequest } from "next/server";
-import { getShopByDomain, normalizeShopDomain, ShopResolutionError, type ShopRow } from "./shop";
+import { normalizeShopDomain, ShopResolutionError, type ShopRow } from "./shop";
 import { requireAdminShopFromRequest } from "./admin-auth";
 import { sessionBounceUrl, verifyAdminRequest } from "./admin-request-auth";
+import { ensureShopInstalled } from "./install";
+import { shopNeedsInstall } from "./token-exchange";
 
 export type AdminShopSearchParams = {
   shop?: string | string[];
@@ -165,9 +167,12 @@ export async function resolveAdminShopFromSearchParams(
   const shopDomain = verification.shopDomain;
   const hmacVerified = true;
 
+  // First open after install (or reinstall): swap the verified session token for an
+  // offline token and create/reactivate the Shop row. An HMAC-only app load has no
+  // token to exchange, so a shop that still needs installing is bounced to get one.
   let shop: ShopRow | null = null;
   try {
-    shop = await getShopByDomain(shopDomain);
+    shop = await ensureShopInstalled(shopDomain, verification.sessionToken ?? null);
   } catch (error) {
     logAdminShopResolutionFailure("database_unavailable", {
       shopDomain,
@@ -180,6 +185,11 @@ export async function resolveAdminShopFromSearchParams(
       hmacVerified,
       resolutionSources,
     };
+  }
+
+  if (shopNeedsInstall(shop) && !verification.sessionToken) {
+    const bounce = sessionBounceUrl(requestHeaders?.get(ADMIN_REQUEST_URL_HEADER));
+    if (bounce) redirect(bounce);
   }
 
   if (!shop) {

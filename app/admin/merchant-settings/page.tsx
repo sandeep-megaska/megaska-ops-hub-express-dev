@@ -520,16 +520,6 @@ export default async function MerchantSettingsPage({
           <p className="mt-3 text-sm text-red-700">
             {params.error || formatAdminShopResolutionError(resolved)}
           </p>
-          {resolved.shopDomain ? (
-            <p className="mt-4 text-sm">
-              <a
-                className="font-medium text-blue-700 underline"
-                href={`/api/auth/install?shop=${encodeURIComponent(resolved.shopDomain)}`}
-              >
-                Reinstall the Shopify app for {resolved.shopDomain}
-              </a>
-            </p>
-          ) : null}
         </div>
       </main>
     );

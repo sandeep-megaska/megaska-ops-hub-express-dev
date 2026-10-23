@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 
 const SHOP_DOMAIN_PATTERN = /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/i;
-const DEFAULT_APP_HANDLE = "megaska-ops-hub-express-dev";
+// The production app handle (shopify.app.toml). Staging sets SHOPIFY_APP_HANDLE.
+const DEFAULT_APP_HANDLE = "loopd2c";
 const DEFAULT_MARKETING_SITE_URL = "https://www.loopd2c.com";
 
 function isValidShop(shop: string | null): shop is string {
