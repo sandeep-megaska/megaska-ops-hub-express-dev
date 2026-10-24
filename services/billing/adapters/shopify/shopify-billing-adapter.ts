@@ -2,6 +2,7 @@ import { Prisma } from "../../../../generated/prisma/index.js";
 import { adminGraphql } from "../../../shopify/admin.ts";
 import { prisma } from "../../../db/prisma.ts";
 import { isDevelopmentStore } from "./development-store.ts";
+import { chargePrice, storeBillingCurrency } from "./charge-currency.ts";
 import type { BillingProviderAdapter, CreateProviderSubscriptionInput, CreateProviderSubscriptionResult, CreateProviderUsageChargeInput, CreateProviderUsageChargeResult } from "../billing-adapter.types.ts";
 
 export class BillingProviderError extends Error {
@@ -59,15 +60,24 @@ export class ShopifyBillingAdapter implements BillingProviderAdapter {
   ) {}
 
   async createSubscription(input: CreateProviderSubscriptionInput): Promise<CreateProviderSubscriptionResult> {
-    const basePrice = decimal(input.monthlyBasePrice, "monthlyBasePrice"); const code = currency(input.currency);
+    decimal(input.monthlyBasePrice, "monthlyBasePrice"); const planCurrency = currency(input.currency);
     if (!input.shopId || !input.merchantSubscriptionId || !input.returnUrl) throw new BillingProviderValidationError("INVALID_SUBSCRIPTION_INPUT", "shop, subscription, and server return URL are required.");
+    const shopDomain = await this.resolveShopDomain(input.shopId);
+    if (!shopDomain) throw new BillingProviderValidationError("SHOP_NOT_FOUND", "Shop was not found.");
+    // Shopify only accepts USD or the store's own billing currency, so a store billed in
+    // another currency (e.g. a USD-billed development store) gets the plan's USD price.
+    const billingCurrency = await storeBillingCurrency(this.execute, shopDomain);
+    const price = chargePrice({ amount: input.monthlyBasePrice, currency: planCurrency, usdAmount: input.usdMonthlyBasePrice }, billingCurrency);
+    if (!price || (price.currency !== planCurrency && input.cappedUsageAmount !== undefined)) {
+      throw new BillingProviderValidationError("BILLING_CURRENCY_UNSUPPORTED", `No ${billingCurrency ?? "matching"} price is configured for this plan.`);
+    }
+    const basePrice = decimal(price.amount, "monthlyBasePrice"); const code = price.currency;
+    if (code !== planCurrency) this.logger.info("billing_charge_currency", { shopDomain, billingCurrency, chargeCurrency: code });
     const lineItems: unknown[] = [{ plan: { appRecurringPricingDetails: { price: { amount: basePrice.toString(), currencyCode: code }, interval: "EVERY_30_DAYS" } } }];
     if (input.cappedUsageAmount !== undefined) {
       const cap = decimal(input.cappedUsageAmount, "cappedUsageAmount");
       lineItems.push({ plan: { appUsagePricingDetails: { cappedAmount: { amount: cap.toString(), currencyCode: code }, terms: "Rated LoopD2C feature usage" } } });
     }
-    const shopDomain = await this.resolveShopDomain(input.shopId);
-    if (!shopDomain) throw new BillingProviderValidationError("SHOP_NOT_FOUND", "Shop was not found.");
     // Development stores only accept test charges; an explicit input.test wins.
     const testCharge = input.test ?? (await isDevelopmentStore(this.execute, shopDomain));
     if (testCharge) this.logger.info("billing_test_charge", { shopDomain });
