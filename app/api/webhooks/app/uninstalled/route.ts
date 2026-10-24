@@ -34,5 +34,26 @@ export async function POST(req: NextRequest) {
     shopDomain
   );
 
+  // Shopify cancels the app's subscription on uninstall. Mirror that, so a reinstall starts
+  // by choosing a plan again instead of finding a subscription Shopify no longer has.
+  await prisma.$executeRawUnsafe(
+    `UPDATE "MerchantSubscription"
+     SET "status" = 'CANCELED',
+         "providerStatus" = 'CANCELLED',
+         "canceledAt" = NOW(),
+         "updatedAt" = NOW()
+     WHERE "shopId" IN (SELECT "id" FROM "Shop" WHERE "shopDomain" = $1)
+       AND "status" <> 'CANCELED'`,
+    shopDomain
+  );
+  await prisma.$executeRawUnsafe(
+    `UPDATE "MerchantPlanChange"
+     SET "status" = 'CANCELED',
+         "updatedAt" = NOW()
+     WHERE "shopId" IN (SELECT "id" FROM "Shop" WHERE "shopDomain" = $1)
+       AND "status" IN ('PENDING', 'PENDING_PROVIDER_CONFIRMATION', 'SCHEDULED', 'PROCESSING')`,
+    shopDomain
+  );
+
   return NextResponse.json({ ok: true, shopDomain, deactivated: true });
 }
