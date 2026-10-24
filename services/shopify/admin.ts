@@ -321,6 +321,12 @@ function hasRuntimeCredentialConfig() {
 
 type AdminRequestOptions = {
   shopDomain?: string | null;
+  /**
+   * Use the shop's installed (token-exchange) token instead of a client-credentials
+   * token. Billing needs it: Shopify treats client-credentials tokens as if the shop
+   * owned the app and refuses to create charges with them.
+   */
+  preferStoredToken?: boolean;
 };
 
 export type ShopifyCancelledOrder = {
@@ -364,7 +370,7 @@ export async function adminGraphql<T>(
     shopDomain,
     storedAccessToken: shopConfig.accessTokenDirect,
     storedAccessTokenEncrypted: shopConfig.accessTokenEncrypted,
-    preferRuntime: true,
+    preferRuntime: !options?.preferStoredToken,
   });
   const token = resolvedToken.accessToken;
   const tokenSource = resolvedToken.tokenSource;

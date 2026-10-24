@@ -54,7 +54,9 @@ function normalize(error: unknown): never {
 /** Shopify-only transport translation; persistence and retry orchestration stay above this class. */
 export class ShopifyBillingAdapter implements BillingProviderAdapter {
   constructor(
-    private readonly execute: ShopifyGraphqlExecutor = (query, variables, options) => adminGraphql(query, variables, options),
+    // The shop's installed token: charges made with a client-credentials token fail with
+    // "this application is currently owned by a Shop".
+    private readonly execute: ShopifyGraphqlExecutor = (query, variables, options) => adminGraphql(query, variables, { ...options, preferStoredToken: true }),
     private readonly logger: Logger = console,
     private readonly resolveShopDomain: ShopDomainResolver = async (shopId) => (await prisma.shop.findUnique({ where: { id: shopId }, select: { shopDomain: true } }))?.shopDomain ?? null,
   ) {}
