@@ -37,3 +37,11 @@ test("the adapter charges the chosen price and the plan passes its USD price", (
   const route = fs.readFileSync(new URL("../../../../app/api/admin/billing/plan-route.ts", import.meta.url), "utf8");
   assert.match(route, /console\.error\("billing_provider_error", \{ code: error\.code, retryable: error\.retryable, message: error\.message \}\)/);
 });
+
+test("billing mutations only select fields Shopify's UserError has (field, message)", () => {
+  // Selecting `code` made Shopify reject every appSubscriptionCreate with "Field 'code' doesn't exist on type 'UserError'".
+  const adapter = fs.readFileSync(new URL("./shopify-billing-adapter.ts", import.meta.url), "utf8");
+  const selections = adapter.match(/userErrors \{[^}]*\}/g) || [];
+  assert.equal(selections.length, 2);
+  for (const selection of selections) assert.equal(selection, "userErrors { field message }");
+});
