@@ -21,8 +21,9 @@ export const pricingPlans = [
   {
     code: "PROFESSIONAL",
     name: "Professional",
-    monthlyBasePrice: "4999",
+    monthlyBasePrice: "2899",
     currency: "INR",
+    usdMonthlyBasePrice: "29",
   },
 ];
 
@@ -52,15 +53,17 @@ export async function seedCommercialCatalog(db = prisma) {
     where: { code: "PROFESSIONAL" },
     update: {
       name: "Professional",
-      monthlyBasePrice: new Prisma.Decimal("4999"),
+      monthlyBasePrice: new Prisma.Decimal("2899"),
       currency: "INR",
+      usdMonthlyBasePrice: new Prisma.Decimal("29"),
       active: true,
     },
     create: {
       code: "PROFESSIONAL",
       name: "Professional",
-      monthlyBasePrice: new Prisma.Decimal("4999"),
+      monthlyBasePrice: new Prisma.Decimal("2899"),
       currency: "INR",
+      usdMonthlyBasePrice: new Prisma.Decimal("29"),
       active: true,
     },
   });
