@@ -1,6 +1,7 @@
 import { Prisma } from "../../../../generated/prisma/index.js";
 import { adminGraphql } from "../../../shopify/admin.ts";
 import { prisma } from "../../../db/prisma.ts";
+import { isDevelopmentStore } from "./development-store.ts";
 import type { BillingProviderAdapter, CreateProviderSubscriptionInput, CreateProviderSubscriptionResult, CreateProviderUsageChargeInput, CreateProviderUsageChargeResult } from "../billing-adapter.types.ts";
 
 export class BillingProviderError extends Error {
@@ -67,8 +68,11 @@ export class ShopifyBillingAdapter implements BillingProviderAdapter {
     }
     const shopDomain = await this.resolveShopDomain(input.shopId);
     if (!shopDomain) throw new BillingProviderValidationError("SHOP_NOT_FOUND", "Shop was not found.");
+    // Development stores only accept test charges; an explicit input.test wins.
+    const testCharge = input.test ?? (await isDevelopmentStore(this.execute, shopDomain));
+    if (testCharge) this.logger.info("billing_test_charge", { shopDomain });
     try {
-      const data = await this.execute<SubscriptionMutationResponse>(CREATE_SUBSCRIPTION, { name: input.planName, returnUrl: input.returnUrl, lineItems, trialDays: input.trialDays ?? null, test: input.test ?? false }, { shopDomain });
+      const data = await this.execute<SubscriptionMutationResponse>(CREATE_SUBSCRIPTION, { name: input.planName, returnUrl: input.returnUrl, lineItems, trialDays: input.trialDays ?? null, test: testCharge }, { shopDomain });
       userError(data.appSubscriptionCreate.userErrors);
       const subscription = data.appSubscriptionCreate.appSubscription; const confirmationUrl = data.appSubscriptionCreate.confirmationUrl;
       if (!subscription || !confirmationUrl) throw new ShopifyBillingProviderError("SHOPIFY_RESPONSE_INVALID", true, "Shopify did not return a subscription confirmation URL.");
