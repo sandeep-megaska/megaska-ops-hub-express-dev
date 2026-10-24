@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import { prisma } from "../db/prisma";
-import { encryptShopifyToken } from "./token-crypto";
+import { decryptShopifyToken, encryptShopifyToken } from "./token-crypto";
 import { getShopByDomain, type ShopRow } from "./shop";
 import { exchangeSessionTokenForOfflineToken, shopNeedsInstall, ShopInstallError } from "./token-exchange";
 
@@ -143,6 +143,22 @@ export async function persistShopInstallation(input: { shopDomain: string; acces
   return rows[0] || null;
 }
 
+// Shops installed before installs created a storefront token (Megaska among them) have
+// none, so wallet apply and checkout prefill fail. Opening the app creates it. Each server
+// instance tries a shop at most once an hour, so a failing shop isn't retried per request.
+const STOREFRONT_BACKFILL_RETRY_MS = 60 * 60 * 1000;
+const storefrontBackfillAttempts = new Map<string, number>();
+
+async function backfillStorefrontToken(shop: ShopRow) {
+  if (shop.storefrontAccessToken || shop.storefrontTokenEncrypted) return;
+  const lastAttempt = storefrontBackfillAttempts.get(shop.id);
+  if (lastAttempt && Date.now() - lastAttempt < STOREFRONT_BACKFILL_RETRY_MS) return;
+  storefrontBackfillAttempts.set(shop.id, Date.now());
+  const accessToken = String(shop.accessToken || "").trim() || decryptShopifyToken(shop.accessTokenEncrypted);
+  if (!accessToken) return;
+  await ensureStorefrontToken(shop.id, shop.shopDomain, accessToken);
+}
+
 /**
  * Returns the installed Shop row for a shop whose identity was just verified from a
  * Shopify session token, installing or reactivating it first when needed. Returns the
@@ -151,7 +167,10 @@ export async function persistShopInstallation(input: { shopDomain: string; acces
  */
 export async function ensureShopInstalled(shopDomain: string, sessionToken: string | null): Promise<ShopRow | null> {
   const existing = await getShopByDomain(shopDomain);
-  if (!shopNeedsInstall(existing)) return existing;
+  if (existing && !shopNeedsInstall(existing)) {
+    await backfillStorefrontToken(existing);
+    return existing;
+  }
   if (!sessionToken) return existing;
 
   try {

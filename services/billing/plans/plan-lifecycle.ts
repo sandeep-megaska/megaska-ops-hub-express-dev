@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { prisma } from "../../db/prisma.ts";
 import { ShopifyBillingAdapter } from "../adapters/shopify/shopify-billing-adapter.ts";
 
@@ -20,11 +21,17 @@ async function createProviderConfirmation(changeId: string, shopId: string, sub:
 }
 export async function requestInitialSubscription(input: { shopId: string; pricingPlanCode: string }): Promise<PlanChangeResult> {
   const target = await plan(input.pricingPlanCode); const existing = await prisma.merchantSubscription.findUnique({ where: { shopId: input.shopId } });
-  if (existing && ["ACTIVE", "TRIALING", "PAST_DUE", "PAUSED"].includes(existing.status)) throw new PlanLifecycleError("PLAN_ALREADY_ACTIVE");
+  // Subscriptions are created without a Shopify trial, so TRIALING only ever means "chosen but
+  // not approved in Shopify yet" (or a row left from before billing). It, CANCELED (uninstall)
+  // and EXPIRED never block choosing a plan; only a subscription Shopify approved does.
+  if (existing && ["ACTIVE", "PAST_DUE", "PAUSED"].includes(existing.status)) throw new PlanLifecycleError("PLAN_ALREADY_ACTIVE");
   const sub = existing ?? await prisma.merchantSubscription.create({ data: { shopId: input.shopId, pricingPlanId: target.id, status: "TRIALING", billingProvider: "SHOPIFY", renewsAutomatically: true } });
-  const key = `plan-change:initial:${input.shopId}:${target.id}`; let change = await prisma.merchantPlanChange.findUnique({ where: { idempotencyKey: key } });
-  if (!change) change = await prisma.merchantPlanChange.create({ data: { shopId: input.shopId, merchantSubscriptionId: sub.id, toPricingPlanId: target.id, changeType: "INITIAL_SUBSCRIPTION", timing: "IMMEDIATE", status: "PENDING", idempotencyKey: key, provider: "SHOPIFY" } });
-  if (change.status === "PENDING") change = await createProviderConfirmation(change.id, input.shopId, sub, target);
+  // A merchant who left, declined or uninstalled before approving must be able to try again,
+  // so every attempt gets a fresh Shopify approval and earlier unapproved attempts are closed.
+  await prisma.merchantPlanChange.updateMany({ where: { shopId: input.shopId, merchantSubscriptionId: sub.id, changeType: "INITIAL_SUBSCRIPTION", status: { in: ["PENDING", "PENDING_PROVIDER_CONFIRMATION"] } }, data: { status: "CANCELED" } });
+  const key = `plan-change:initial:${input.shopId}:${target.id}:${crypto.randomUUID()}`;
+  let change = await prisma.merchantPlanChange.create({ data: { shopId: input.shopId, merchantSubscriptionId: sub.id, toPricingPlanId: target.id, changeType: "INITIAL_SUBSCRIPTION", timing: "IMMEDIATE", status: "PENDING", idempotencyKey: key, provider: "SHOPIFY" } });
+  change = await createProviderConfirmation(change.id, input.shopId, sub, target);
   console.info("plan_selection_requested", { shopId: input.shopId, subscriptionId: sub.id, planChangeId: change.id, toPlanCode: target.code, status: change.status }); return result(change);
 }
 export async function requestPlanChange(input: { shopId: string; merchantSubscriptionId: string; targetPlanCode: string; requestedTiming?: Timing }): Promise<PlanChangeResult> {

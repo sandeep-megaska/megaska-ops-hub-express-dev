@@ -13,3 +13,12 @@ test("installs and reinstalls create a storefront token when the shop has none",
   assert.match(helper, /"storefrontAccessToken" = NULL/, "never stored in plain text");
   assert.match(helper, /\} catch \(error\) \{\n {4}console\.error\("\[SHOP INSTALL\] storefront token failed"/, "never blocks the install");
 });
+
+test("installed shops without a storefront token get one when the app is opened, at most hourly", () => {
+  const backfill = source.slice(source.indexOf("async function backfillStorefrontToken("), source.indexOf("/**\n * Returns the installed Shop row"));
+  assert.match(backfill, /if \(shop\.storefrontAccessToken \|\| shop\.storefrontTokenEncrypted\) return;/, "keeps an existing token");
+  assert.match(backfill, /Date\.now\(\) - lastAttempt < STOREFRONT_BACKFILL_RETRY_MS\) return;/, "throttled per shop");
+  assert.match(backfill, /storefrontBackfillAttempts\.set\(shop\.id, Date\.now\(\)\);\n {2}const accessToken/, "attempt recorded before calling Shopify");
+  assert.match(backfill, /await ensureStorefrontToken\(shop\.id, shop\.shopDomain, accessToken\);/);
+  assert.match(source, /if \(existing && !shopNeedsInstall\(existing\)\) \{\n {4}await backfillStorefrontToken\(existing\);\n {4}return existing;\n {2}\}/);
+});
