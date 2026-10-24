@@ -22,14 +22,14 @@ mutation CreateAppSubscription($name: String!, $returnUrl: URL!, $lineItems: [Ap
   appSubscriptionCreate(name: $name, returnUrl: $returnUrl, lineItems: $lineItems, trialDays: $trialDays, test: $test) {
     appSubscription { id status lineItems { id plan { pricingDetails { __typename } } } }
     confirmationUrl
-    userErrors { field message code }
+    userErrors { field message }
   }
 }`;
 const CREATE_USAGE = `
 mutation CreateAppUsageRecord($subscriptionLineItemId: ID!, $price: MoneyInput!, $description: String!) {
   appUsageRecordCreate(subscriptionLineItemId: $subscriptionLineItemId, price: $price, description: $description) {
     appUsageRecord { id }
-    userErrors { field message code }
+    userErrors { field message }
   }
 }`;
 
