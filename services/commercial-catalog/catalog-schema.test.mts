@@ -48,7 +48,8 @@ test("seed data contains the commercial catalog defaults", () => {
   }
   assert.match(seed, /code: "PROFESSIONAL"/);
   assert.match(seed, /name: "Professional"/);
-  assert.match(seed, /monthlyBasePrice: "4999"/);
+  assert.match(seed, /monthlyBasePrice: "2899"/);
+  assert.match(seed, /usdMonthlyBasePrice: "29"/);
   assert.match(seed, /currency: "INR"/);
   assert.match(seed, /featureCode: "OTP", includedQuantity: "1000", overageUnitPrice: "0\.35"/);
   assert.match(seed, /featureCode: "EMAIL", includedQuantity: "2000", overageUnitPrice: "0\.08"/);

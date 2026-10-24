@@ -9,6 +9,8 @@ export type CreateProviderSubscriptionInput = {
   currency: string;
   monthlyBasePrice: string;
   cappedUsageAmount?: string;
+  /** USD price for stores whose Shopify billing currency isn't `currency`. */
+  usdMonthlyBasePrice?: string | null;
   trialDays?: number;
   test?: boolean;
   idempotencyKey: string;
