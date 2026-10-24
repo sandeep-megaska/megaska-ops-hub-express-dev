@@ -19,9 +19,14 @@ export default function BillingDashboard({ shopDomain }: { shopDomain: string })
     setApproving(true); setApproveError("");
     try {
       const response = await fetch(`/api/admin/billing/plan/select?shop=${encodeURIComponent(shopDomain)}`, { method: "POST", cache: "no-store", headers: { ...(await adminAuthHeaders()), "Content-Type": "application/json" }, body: JSON.stringify({ targetPlanCode: planCode }) });
-      const data = await response.json().catch(() => null) as { ok?: boolean; result?: { confirmationUrl?: string | null } } | null;
+      const data = await response.json().catch(() => null) as { ok?: boolean; error?: string; result?: { confirmationUrl?: string | null } } | null;
       const url = data?.ok ? data.result?.confirmationUrl : null;
-      if (!url) { setApproveError("We couldn't open Shopify's approval page. Please try again."); setApproving(false); return; }
+      if (!url) {
+        setApproveError(data?.error === "BILLING_CURRENCY_UNSUPPORTED"
+          ? "LoopD2C isn't priced in your store's Shopify billing currency yet. Please contact LoopD2C support."
+          : `We couldn't open Shopify's approval page. Please try again.${data?.error ? ` (${data.error})` : ""}`);
+        setApproving(false); return;
+      }
       window.open(url, "_top");
     } catch { setApproveError("We couldn't open Shopify's approval page. Please try again."); setApproving(false); }
   }, [shopDomain]);
