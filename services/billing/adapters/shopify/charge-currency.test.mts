@@ -45,3 +45,14 @@ test("billing mutations only select fields Shopify's UserError has (field, messa
   assert.equal(selections.length, 2);
   for (const selection of selections) assert.equal(selection, "userErrors { field message }");
 });
+
+test("billing calls Shopify with the shop's installed token, not a client-credentials token", () => {
+  // Charges made with a client-credentials token fail: "this application is currently owned by a Shop".
+  const adapter = fs.readFileSync(new URL("./shopify-billing-adapter.ts", import.meta.url), "utf8");
+  assert.match(adapter, /adminGraphql\(query, variables, \{ \.\.\.options, preferStoredToken: true \}\)/);
+  const admin = fs.readFileSync(new URL("../../../shopify/admin.ts", import.meta.url), "utf8");
+  assert.match(admin, /preferRuntime: !options\?\.preferStoredToken,/);
+  const tokens = fs.readFileSync(new URL("../../../shopify/admin-token.ts", import.meta.url), "utf8");
+  assert.match(tokens, /const preferRuntime = input\.preferRuntime !== false;/);
+  assert.match(tokens, /const storedToken = resolveStoredToken\(input\);\n {2}if \(storedToken\) return storedToken;/);
+});
