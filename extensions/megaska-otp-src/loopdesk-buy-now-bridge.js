@@ -160,7 +160,7 @@
     nodes.forEach(replaceNativeButton);
   }
   function queue(root) { queuedRoots.push(root || document); clearTimeout(processTimer); processTimer = setTimeout(function () { var roots = queuedRoots.splice(0, 25); roots.forEach(process); }, 50); }
-  function startObserver() { if (observer) return; observer = new MutationObserver(function (muts) { muts.forEach(function (m) { Array.prototype.forEach.call(m.addedNodes || [], function (n) { if (n.nodeType === 1) queue(n); }); }); }); observer.observe(document.documentElement, { childList: true, subtree: true }); stats.observerStarts += 1; }
+  function startObserver() { if (observer) return; observer = new MutationObserver(function (muts) { muts.forEach(function (m) { Array.prototype.forEach.call(m.addedNodes || [], function (n) { if (n.nodeType === 1 && !/^(LINK|SCRIPT|STYLE|META|NOSCRIPT)$/.test(n.nodeName) && n.parentNode !== document.head) queue(n); }); }); }); observer.observe(document.documentElement, { childList: true, subtree: true }); stats.observerStarts += 1; }
   document.addEventListener("shopify:section:load", function (e) { queue(e.target); });
   document.addEventListener("shopify:block:select", function (e) { queue(e.target); });
   document.addEventListener("megaska:auth-state-changed", function () { if (!hasResume() || !hasToken()) return; clearResume(); clearTimeout(resumeTimer); resumeTimer = setTimeout(openCheckout, 150); });

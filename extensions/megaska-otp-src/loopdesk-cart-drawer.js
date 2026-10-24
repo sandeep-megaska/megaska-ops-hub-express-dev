@@ -175,7 +175,7 @@
       document.querySelectorAll(trimmed);
       return trimmed;
     } catch (_error) {
-      debugLog("invalid custom cart trigger selector ignored", { selector: trimmed }, true);
+      debugLog("invalid custom cart trigger selector ignored", { selector: trimmed });
       return "";
     }
   }
@@ -786,15 +786,26 @@
     };
   }
 
-  function debugLog(message, payload, force) {
-    if (!window.console || (window.LOOPDESK_CART_DRAWER_DEBUG !== true && !force)) return;
+  // Silent for shoppers. Turn on with window.LOOPDESK_CART_DRAWER_DEBUG = true,
+  // ?loopd2c_debug=1 or localStorage.loopd2c_debug = "1". (The `force` argument
+  // used to bypass this and logged on every page mutation.)
+  var CART_DEBUG_ENABLED = (function () {
+    try {
+      return /[?&]loopd2c_debug=1(?:&|$)/.test(window.location.search) || window.localStorage.getItem("loopd2c_debug") === "1";
+    } catch (_error) {
+      return false;
+    }
+  })();
+
+  function debugLog(message, payload) {
+    if (!window.console || (window.LOOPDESK_CART_DRAWER_DEBUG !== true && !CART_DEBUG_ENABLED)) return;
     window.console.debug("[LoopDesk Cart] " + message, payload || {});
   }
 
-  function debugLogOnce(key, message, payload, force) {
+  function debugLogOnce(key, message, payload) {
     if (diagnosticActions[key]) return;
     diagnosticActions[key] = true;
-    debugLog(message, payload, force);
+    debugLog(message, payload);
   }
 
 
@@ -834,6 +845,11 @@
     if (state.cart && stalePromotionLineUpdates(state.cart).length) fetchCart();
   }
 
+  function recentRuntimeConfigRequest(maxAgeMs) {
+    var shared = window.LOOPD2C_RUNTIME_CONFIG_REQUEST;
+    return shared && shared.payload && typeof shared.payload.then === "function" && Date.now() - Number(shared.at || 0) < maxAgeMs ? shared.payload : null;
+  }
+
   function refreshPromotionRuntime(reason) {
     if (hasPromotionRules()) return Promise.resolve(false);
     if (state.promotionRuntimeRefresh.inFlight || state.promotionRuntimeRefresh.attempts >= state.promotionRuntimeRefresh.maxAttempts) return Promise.resolve(false);
@@ -843,17 +859,20 @@
     state.promotionRuntimeRefresh.attempts += 1;
     state.promotionRuntimeRefresh.inFlight = true;
     var url = "/apps/loopd2c/api/runtime/config?shop=" + encodeURIComponent(shopDomain) + "&_loopdesk_runtime=" + Date.now();
-    debugLog("promotion runtime refresh started", { reason: reason, attempt: state.promotionRuntimeRefresh.attempts }, true);
-    return fetch(url, { credentials: "same-origin", cache: "no-store", headers: { Accept: "application/json" } })
+    debugLog("promotion runtime refresh started", { reason: reason, attempt: state.promotionRuntimeRefresh.attempts });
+    // The first refresh reuses the config the app embed is already loading for this page.
+    var shared = state.promotionRuntimeRefresh.attempts === 1 ? recentRuntimeConfigRequest(15000) : null;
+    var request = shared || fetch(url, { credentials: "same-origin", cache: "no-store", headers: { Accept: "application/json" } })
       .then(function (response) {
         if (!response.ok) throw new Error("Promotion runtime request failed");
         return response.json();
-      })
+      });
+    return request
       .then(function (payload) {
         var freshConfig = payload && payload.config || {};
         if (freshConfig.promotions && Array.isArray(freshConfig.promotions.rules)) {
           applyFreshRuntimePromotions(freshConfig.promotions);
-          debugLog("promotion runtime refresh applied", { rules: config.promotions.rules.length }, true);
+          debugLog("promotion runtime refresh applied", { rules: config.promotions.rules.length });
           return true;
         }
         return false;
@@ -878,7 +897,7 @@
     refreshPromotionRuntime("cart-non-empty");
   }
 
-  debugLog("config loaded", { drawerMode: config.cart.drawerMode, openAfterAddToCart: config.cart.openAfterAddToCart, expressCheckoutButtonEnabled: config.cart.expressCheckoutButtonEnabled, viewCartButtonEnabled: config.cart.viewCartButtonEnabled }, true);
+  debugLog("config loaded", { drawerMode: config.cart.drawerMode, openAfterAddToCart: config.cart.openAfterAddToCart, expressCheckoutButtonEnabled: config.cart.expressCheckoutButtonEnabled, viewCartButtonEnabled: config.cart.viewCartButtonEnabled });
 
   function getLoopDeskRoot() {
     return document.getElementById(ROOT_ID);
@@ -970,7 +989,7 @@
       hasCartApi: hasCartApi,
       hasRoot: hasRoot,
       reason: reason
-    }, true);
+    });
     return { active: active, reason: reason, cartOwnershipMode: ownershipMode };
   }
 
@@ -987,16 +1006,16 @@
     [0, 50, 150, 300].forEach(function (delay) {
       window.setTimeout(function () {
         neutralizeThemeDrawers();
-        debugLog("delayed cleanup ran", { delay: delay }, true);
+        debugLog("delayed cleanup ran", { delay: delay });
         var remaining = Array.prototype.slice.call(document.querySelectorAll(THEME_CART_DRAWER_SELECTORS.join(",")))
           .filter(function (drawer, index, list) { return drawer && !isLoopDeskOwned(drawer) && list.indexOf(drawer) === index && isThemeDrawerVisible(drawer); });
-        if (remaining.length) debugLog("remaining native cart drawer detected after cleanup", { count: remaining.length, drawers: remaining.map(getElementDescriptor) }, true);
+        if (remaining.length) debugLog("remaining native cart drawer detected after cleanup", { count: remaining.length, drawers: remaining.map(getElementDescriptor) });
       }, delay);
     });
     if (window.requestAnimationFrame) {
       window.requestAnimationFrame(function () {
         neutralizeThemeDrawers();
-        debugLog("delayed cleanup ran", { delay: "requestAnimationFrame" }, true);
+        debugLog("delayed cleanup ran", { delay: "requestAnimationFrame" });
       });
     }
   }
@@ -1092,7 +1111,7 @@
       drawer.style.display = "none";
       drawer.style.visibility = "hidden";
       state.neutralizedThemeDrawers.push(record);
-      debugLog("native cart panel suppressed", { element: getElementDescriptor(drawer) }, true);
+      debugLog("native cart panel suppressed", { element: getElementDescriptor(drawer) });
     });
   }
 
@@ -1238,7 +1257,7 @@
     if (CUSTOM_CART_TRIGGER_SELECTOR) {
       var customTrigger = target.closest(CUSTOM_CART_TRIGGER_SELECTOR);
       if (customTrigger && !isInsideLoopDeskDrawer(customTrigger) && !isExcludedCartControl(customTrigger)) {
-        debugLogOnce("cart-trigger-matched-custom", "cart trigger matched merchant custom selector", { eventType: "cart-trigger", trigger: getElementDescriptor(customTrigger) }, true);
+        debugLogOnce("cart-trigger-matched-custom", "cart trigger matched merchant custom selector", { eventType: "cart-trigger", trigger: getElementDescriptor(customTrigger) });
         return customTrigger;
       }
     }
@@ -1249,7 +1268,7 @@
     var wrapper = trigger.closest && trigger.closest("[class*='cart-icon' i], [id*='cart-icon' i], [class*='header__icon--cart' i], [class*='header-cart' i], [class*='cart-toggle' i], [class*='cart-trigger' i], [class*='mini-cart' i], [data-cart], [data-cart-drawer], [data-cart-trigger], [aria-controls*='cart' i]");
     var text = elementText(trigger) + " " + elementText(wrapper || null) + " " + iconGlyphText(trigger) + " " + iconGlyphText(wrapper || null);
     if (!hasCartPath(trigger.getAttribute && trigger.getAttribute("href")) && !CART_TRIGGER_KEYWORD_REGEX.test(text)) return null;
-    debugLogOnce("cart-trigger-matched", "cart trigger matched selector/type", { eventType: "cart-trigger", trigger: getElementDescriptor(trigger), wrapper: getElementDescriptor(wrapper) }, true);
+    debugLogOnce("cart-trigger-matched", "cart trigger matched selector/type", { eventType: "cart-trigger", trigger: getElementDescriptor(trigger), wrapper: getElementDescriptor(wrapper) });
     return trigger;
   }
 
@@ -1298,9 +1317,9 @@
       trigger.parentNode.replaceChild(clone, trigger);
       state.cartTriggerTakeovers.push(record);
       applied += 1;
-      debugLog("trigger cloned", { trigger: getElementDescriptor(clone) }, true);
+      debugLog("trigger cloned", { trigger: getElementDescriptor(clone) });
     });
-    if (applied) debugLog("trigger takeover applied", { count: applied }, true);
+    if (applied) debugLog("trigger takeover applied", { count: applied });
   }
 
   function restoreCartTriggerTakeover() {
@@ -1308,7 +1327,7 @@
     state.cartTriggerTakeovers.forEach(function (record) {
       if (record.clone && record.clone.parentNode) {
         record.clone.parentNode.replaceChild(record.original, record.clone);
-        debugLog("trigger restored", { trigger: getElementDescriptor(record.original) }, true);
+        debugLog("trigger restored", { trigger: getElementDescriptor(record.original) });
       }
     });
     state.cartTriggerTakeovers = [];
@@ -1319,15 +1338,30 @@
     cartTriggerTakeoverTimer = window.setTimeout(function () {
       cartTriggerTakeoverTimer = null;
       applyCartTriggerTakeover();
-      if (reason === "mutation") debugLog("mutation observer reapplied takeover", {}, true);
+      if (reason === "mutation") debugLog("mutation observer reapplied takeover", {});
     }, 80);
+  }
+
+  // Shopify's checkout prefetch keeps appending <link rel="prefetch"> tags to <head>
+  // (several a second), and apps add scripts and styles. None of that can add or
+  // change a storefront control, so it must not trigger a full-page re-scan.
+  function isIgnorableMutation(mutation) {
+    var target = mutation && mutation.target;
+    if (!target) return true;
+    var head = document.head;
+    if (head && (target === head || head.contains(target))) return true;
+    if (mutation.type !== "childList") return false;
+    var nodes = Array.prototype.slice.call(mutation.addedNodes || []).concat(Array.prototype.slice.call(mutation.removedNodes || []));
+    return nodes.every(function (node) {
+      return node.nodeType === 1 && /^(LINK|SCRIPT|STYLE|META|NOSCRIPT)$/.test(node.nodeName);
+    });
   }
 
   function observeCartTriggerTakeoverTargets() {
     if (!window.MutationObserver || cartTriggerObserver) return;
     cartTriggerObserver = new MutationObserver(function (mutations) {
       var shouldReapply = mutations.some(function (mutation) {
-        if (!mutation.target || isInsideLoopDeskDrawer(mutation.target)) return false;
+        if (isIgnorableMutation(mutation) || isInsideLoopDeskDrawer(mutation.target)) return false;
         if (mutation.target.getAttribute && mutation.target.getAttribute("data-loopdesk-cart-trigger") === "true") return false;
         return mutation.type === "childList" || mutation.type === "attributes";
       });
@@ -2210,11 +2244,11 @@
       restoreNeutralizedThemeDrawers();
       restoreLoopDeskBodyLock();
     }
-    if (open) debugLog("drawer opened", { source: "loopdesk", mode: config.cart.drawerMode }, true);
+    if (open) debugLog("drawer opened", { source: "loopdesk", mode: config.cart.drawerMode });
   }
 
   function closeDrawerForCheckoutHandoff() {
-    if (state.open) debugLog("LoopDesk drawer closed before checkout", {}, true);
+    if (state.open) debugLog("LoopDesk drawer closed before checkout", {});
     state.open = false;
     if (elements.panel) elements.panel.setAttribute("aria-hidden", "true");
     if (elements.overlay) {
@@ -2391,12 +2425,12 @@
     if (action === "pointerdown" || action === "touchstart" || action === "mousedown" || action === "keydown") {
       suppressNextCartClickUntil = Date.now() + 750;
       suppressedCartTrigger = trigger;
-      debugLogOnce(action + "-suppressed", action + " suppressed", { trigger: getElementDescriptor(trigger) }, true);
+      debugLogOnce(action + "-suppressed", action + " suppressed", { trigger: getElementDescriptor(trigger) });
     } else if (action === "click") {
-      debugLogOnce("click-suppressed", "click suppressed", { trigger: getElementDescriptor(trigger) }, true);
+      debugLogOnce("click-suppressed", "click suppressed", { trigger: getElementDescriptor(trigger) });
     }
     openLoopDeskCartFromTrigger(trigger, action).then(function () {
-      debugLogOnce("loopdesk-drawer-opened-from-trigger", "LoopDesk drawer opened", { trigger: getElementDescriptor(trigger), action: action }, true);
+      debugLogOnce("loopdesk-drawer-opened-from-trigger", "LoopDesk drawer opened", { trigger: getElementDescriptor(trigger), action: action });
       scheduleNativeCartPanelCleanup();
     });
     return false;
@@ -2424,7 +2458,7 @@
     if (!isDrawerAvailable()) mount();
     if (!isDrawerAvailable()) return false;
     refreshAndMaybeOpen(true);
-    debugLog("deferred cart open mounted", { trigger: getElementDescriptor(pending.trigger), action: pending.action }, true);
+    debugLog("deferred cart open mounted", { trigger: getElementDescriptor(pending.trigger), action: pending.action });
     return true;
   }
 
@@ -2442,7 +2476,7 @@
       deferredCartOpenTimers.push(window.setTimeout(flushDeferredCartOpen, delay));
     });
     document.addEventListener("DOMContentLoaded", flushDeferredCartOpen, { once: true });
-    debugLog("cart open deferred until mount", { trigger: getElementDescriptor(trigger), action: action }, true);
+    debugLog("cart open deferred until mount", { trigger: getElementDescriptor(trigger), action: action });
     return Promise.resolve();
   }
 
@@ -2454,10 +2488,10 @@
 
     var capability = getCapabilityResult();
     var active = isLoopDeskDrawerActive();
-    debugLog("selected drawer mode", { mode: config.cart.drawerMode, active: active }, true);
-    debugLog("capability result", capability, true);
+    debugLog("selected drawer mode", { mode: config.cart.drawerMode, active: active });
+    debugLog("capability result", capability);
     if (!active) {
-      debugLog("fallback theme behavior allowed", { trigger: getElementDescriptor(trigger), reason: capability.reason || "theme-mode" }, true);
+      debugLog("fallback theme behavior allowed", { trigger: getElementDescriptor(trigger), reason: capability.reason || "theme-mode" });
       return;
     }
 
@@ -2465,11 +2499,11 @@
       event.preventDefault();
       event.stopPropagation();
       if (event.stopImmediatePropagation) event.stopImmediatePropagation();
-      debugLogOnce(event.type + "-duplicate-suppressed", "open suppressed as duplicate", { eventType: event.type, trigger: getElementDescriptor(trigger), ownershipMode: state.cartOwnershipMode, rootMounted: Boolean(getLoopDeskRoot()) }, true);
+      debugLogOnce(event.type + "-duplicate-suppressed", "open suppressed as duplicate", { eventType: event.type, trigger: getElementDescriptor(trigger), ownershipMode: state.cartOwnershipMode, rootMounted: Boolean(getLoopDeskRoot()) });
       return false;
     }
     if (event.type === "click" || event.type === "pointerdown" || event.type === "mousedown" || event.type === "touchstart" || event.type === "keydown") {
-      debugLog("cart trigger intercepted", { eventType: event.type, trigger: getElementDescriptor(trigger), ownershipMode: state.cartOwnershipMode, rootMounted: Boolean(getLoopDeskRoot()), takeoverAlreadyApplied: Boolean(getConnectedTakeoverRecord(trigger) || trigger.getAttribute && trigger.getAttribute("data-loopdesk-cart-trigger") === "true") }, true);
+      debugLog("cart trigger intercepted", { eventType: event.type, trigger: getElementDescriptor(trigger), ownershipMode: state.cartOwnershipMode, rootMounted: Boolean(getLoopDeskRoot()), takeoverAlreadyApplied: Boolean(getConnectedTakeoverRecord(trigger) || trigger.getAttribute && trigger.getAttribute("data-loopdesk-cart-trigger") === "true") });
       return ownCartTriggerEvent(event, trigger, event.type);
     }
   }
@@ -2597,8 +2631,8 @@
     bindElements(root);
     document.addEventListener("keydown", function (event) { if (event.key === "Escape") setOpen(false); });
     document.addEventListener("loopdesk:cart-drawer:open", function () { refreshAndMaybeOpen(true); });
-    debugLog("selected drawer mode", { mode: config.cart.drawerMode, active: isLoopDeskDrawerActive() }, true);
-    debugLog("capability result", getCapabilityResult(), true);
+    debugLog("selected drawer mode", { mode: config.cart.drawerMode, active: isLoopDeskDrawerActive() });
+    debugLog("capability result", getCapabilityResult());
     refreshPromotionRuntime("init").then(function (applied) { if (!applied && !hasPromotionRules()) schedulePromotionRuntimeRefresh("init-delayed", 750); });
     refreshAndMaybeOpen(consumeCartAddReopenIntent());
     applyCartTriggerTakeover();
@@ -2639,7 +2673,7 @@
     // it keeps the stricter readiness gate.
     var modalReady = Boolean(readiness && readiness.enabled === true && readiness.ready === true && readiness.provider === "razorpay");
     if (!modalReady) {
-      debugLog("Shopify checkout fallback", { source: source || "checkout-intent", reason: readiness && readiness.ready === false ? "not-ready" : "config-unavailable" }, true);
+      debugLog("Shopify checkout fallback", { source: source || "checkout-intent", reason: readiness && readiness.ready === false ? "not-ready" : "config-unavailable" });
       window.location.assign("/checkout");
       return;
     }
@@ -2655,7 +2689,7 @@
     closeDrawerForCheckoutHandoff();
     // Modal retired: the legacy (flag-off) path now finishes in native Shopify
     // Checkout like the in-drawer choice, instead of opening the express modal.
-    debugLog("Shopify checkout handoff started", { source: checkoutSource }, true);
+    debugLog("Shopify checkout handoff started", { source: checkoutSource });
     showCheckoutHandoffOverlay();
     window.setTimeout(releaseLock, 900);
     window.location.assign("/checkout");
@@ -2677,7 +2711,7 @@
   function handoffToShopifyCheckout(intent, source) {
     state.paymentIntent = intent === "cod" ? "cod" : "prepaid";
     var triggerSource = "loopdesk-drawer-" + state.paymentIntent;
-    debugLog("Shopify checkout hand-off", { source: source || "checkout-intent", intent: state.paymentIntent }, true);
+    debugLog("Shopify checkout hand-off", { source: source || "checkout-intent", intent: state.paymentIntent });
     closeDrawerForCheckoutHandoff();
     showCheckoutHandoffOverlay();
     var proceeded = false;
@@ -2905,7 +2939,7 @@
     if (!window.MutationObserver || checkoutObserver) return;
     checkoutObserver = new MutationObserver(function (mutations) {
       var shouldScan = mutations.some(function (mutation) {
-        if (!mutation.target || isInsideLoopDeskDrawer(mutation.target)) return false;
+        if (isIgnorableMutation(mutation) || isInsideLoopDeskDrawer(mutation.target)) return false;
         return mutation.type === 'childList' || mutation.type === 'attributes';
       });
       if (shouldScan) scheduleCheckoutCtaScan();
@@ -3231,7 +3265,7 @@
       document.addEventListener(eventName, function (event) {
         debugLog('custom cart event observed', { eventName: eventName, detail: event.detail });
         window.setTimeout(function () { refreshAndMaybeOpen(false); }, 0);
-        if (!isAppOwnedCartMode()) { debugLog("fallback theme behavior allowed", { eventName: eventName, reason: "inactive-drawer-mode" }, true); return; }
+        if (!isAppOwnedCartMode()) { debugLog("fallback theme behavior allowed", { eventName: eventName, reason: "inactive-drawer-mode" }); return; }
         event.preventDefault();
         event.stopPropagation();
         if (event.stopImmediatePropagation) event.stopImmediatePropagation();
