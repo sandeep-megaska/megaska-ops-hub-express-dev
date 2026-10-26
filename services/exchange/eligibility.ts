@@ -1,4 +1,5 @@
 import { CLEARANCE_KEYWORDS, EXCHANGE_ALLOWED_DAYS_WINDOW, EXCLUDED_CATEGORY_KEYWORDS } from "./constants.ts";
+import { EXCHANGE_REQUEST_WINDOW_MESSAGE } from "./deadlines.ts";
 
 type EligibilityInput = {
   requestedSize: string;
@@ -152,7 +153,7 @@ export function evaluateExchangeEligibility(input: EligibilityInput) {
     if (days > windowDays) {
       return {
         decision: "REJECTED" as const,
-        reason: `Exchange requests are allowed within ${windowDays} days of delivery.`,
+        reason: EXCHANGE_REQUEST_WINDOW_MESSAGE,
         blocked: true,
         stockReviewMessage: STOCK_REVIEW_MESSAGE,
       };

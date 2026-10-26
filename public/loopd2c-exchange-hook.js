@@ -695,6 +695,7 @@
       text.includes("Exchange can be requested only after the order has been delivered") ||
       text.includes("Exchange requests cannot be processed more than") ||
       text.includes("Exchange requests are allowed within") ||
+      text.includes("Exchange requests must be made within") ||
       text.includes("Requested size is required") ||
       text.includes("Current size and requested size are identical") ||
       text.includes("already have an open exchange request") ||

@@ -9,7 +9,7 @@ import {
   validateIssueVideoEvidence,
 } from "./issue.ts";
 import { EXCHANGE_ALLOWED_DAYS_WINDOW } from "./constants.ts";
-import { ISSUE_REPORT_WINDOW_MESSAGE } from "./deadlines.ts";
+import { EXCHANGE_REQUEST_WINDOW_MESSAGE, ISSUE_REPORT_WINDOW_MESSAGE } from "./deadlines.ts";
 
 function daysAgoIso(days: number) {
   return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
@@ -35,18 +35,19 @@ test("exchange: within the default window is eligible, beyond it is rejected", (
   );
   const late = evaluateExchangeEligibility({ ...BASE_EXCHANGE, deliveredAt: daysAgoIso(6) });
   assert.equal(late.decision, "REJECTED");
-  assert.match(late.reason, /within 5 days of delivery/);
+  assert.equal(late.reason, EXCHANGE_REQUEST_WINDOW_MESSAGE);
+  assert.match(late.reason, /within 2 days of delivery/);
 });
 
-test("exchange: a custom windowDays overrides the default and appears in the message", () => {
-  // window 3: delivered 4 days ago → rejected, message names 3 days
+test("exchange: a custom windowDays overrides the default; the message always quotes the published 2 days", () => {
+  // window 3: delivered 4 days ago → rejected, message still quotes 2 days
   const rejected = evaluateExchangeEligibility({
     ...BASE_EXCHANGE,
     deliveredAt: daysAgoIso(4),
     windowDays: 3,
   });
   assert.equal(rejected.decision, "REJECTED");
-  assert.match(rejected.reason, /within 3 days of delivery/);
+  assert.equal(rejected.reason, EXCHANGE_REQUEST_WINDOW_MESSAGE);
   // window 3: delivered 2 days ago → eligible
   assert.equal(
     evaluateExchangeEligibility({ ...BASE_EXCHANGE, deliveredAt: daysAgoIso(2), windowDays: 3 }).decision,
