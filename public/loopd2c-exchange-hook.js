@@ -995,8 +995,9 @@
         </div>
 
         <div class="mk-ex-row">
-          <label class="mk-ex-label">Video/unboxing proof URL(s) (optional, comma-separated)</label>
-          <input class="mk-ex-input" id="mk-issue-video-urls" placeholder="https://... , https://..." />
+          <label class="mk-ex-label" for="mk-issue-video-urls">Unboxing video link(s) (required, comma-separated)</label>
+          <input class="mk-ex-input" id="mk-issue-video-urls" required aria-required="true" placeholder="https://... , https://..." />
+          <span class="mk-ex-muted">Upload your unboxing video to Google Drive or YouTube (unlisted), make sure anyone with the link can view it, and paste the link here.</span>
         </div>
 
         <div class="mk-ex-error" id="mk-ex-error" style="display:none"></div>
@@ -1055,6 +1056,14 @@
     }
     if (!declaredUnused || !declaredUnwashed || !declaredTagsIntact || !declaredWithinWindow) {
       showError("All policy declarations are required for issue requests.");
+      return;
+    }
+    if (!videoEvidenceUrls.length) {
+      showError("Add a link to your unboxing video. Issue reports need one continuous, uncut unboxing video.");
+      return;
+    }
+    if (!videoEvidenceUrls.every(function (url) { return /^https?:\/\/\S+$/i.test(url); })) {
+      showError("Video links must start with https:// or http://.");
       return;
     }
 
