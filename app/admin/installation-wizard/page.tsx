@@ -35,9 +35,11 @@ function StatusPill({ status }: { status: WizardStatus }) {
   return <span className={badgeClass(status)}>{status}</span>;
 }
 
-function LinkButton({ href, children }: { href: string; children: React.ReactNode }) {
+// Shopify admin pages (the theme editor) refuse to load inside the app's frame, so
+// links to them open in a new tab; links to LoopD2C's own pages stay in the app.
+function LinkButton({ href, children, shopifyAdmin = false }: { href: string; children: React.ReactNode; shopifyAdmin?: boolean }) {
   return (
-    <a className="mk-btn mk-btn-sm" href={href}>
+    <a className="mk-btn mk-btn-sm" href={href} {...(shopifyAdmin ? { target: "_blank", rel: "noopener noreferrer" } : {})}>
       {children}
     </a>
   );
@@ -174,7 +176,7 @@ export default async function InstallationWizardPage({ searchParams }: PageProps
           title="Theme app embed guidance"
           status="Needs attention"
           description="Open the Shopify theme editor, enable the LoopD2C app embed, save the theme, then return here. The wizard does not modify theme settings."
-          actions={<LinkButton href={appEmbedDeepLink}>Open theme app embeds</LinkButton>}
+          actions={<LinkButton href={appEmbedDeepLink} shopifyAdmin>Open theme app embeds</LinkButton>}
         />
         <WizardStep
           number={4}
@@ -206,7 +208,7 @@ export default async function InstallationWizardPage({ searchParams }: PageProps
           status={delhiveryComplete ? "Needs attention" : "Incomplete"}
           description="Add the LoopD2C Delivery check block to your product page so shoppers can check serviceability, Cash on Delivery and expected delivery dates for their PIN code. The LoopD2C bag then shows the same delivery line. The wizard does not modify your theme."
           details={<p>{delhiveryComplete ? "Delhivery is set up. Open the theme editor, place the block under the price or buy buttons, set your dispatch cutoff, and save." : "Finish Delhivery setup first: the block uses your Delhivery account and origin PIN code for dates."} If your theme already has its own PIN code checker, remove it after adding the block so shoppers see one.</p>}
-          actions={<LinkButton href={deliveryBlockDeepLink}>Add Delivery check block</LinkButton>}
+          actions={<LinkButton href={deliveryBlockDeepLink} shopifyAdmin>Add Delivery check block</LinkButton>}
         />
         <WizardStep
           number={8}

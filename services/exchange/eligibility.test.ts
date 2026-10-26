@@ -2,8 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { evaluateExchangeEligibility } from "./eligibility.ts";
-import { evaluateIssueEligibility } from "./issue.ts";
+import {
+  evaluateIssueEligibility,
+  ISSUE_VIDEO_INVALID_MESSAGE,
+  ISSUE_VIDEO_REQUIRED_MESSAGE,
+  validateIssueVideoEvidence,
+} from "./issue.ts";
 import { EXCHANGE_ALLOWED_DAYS_WINDOW } from "./constants.ts";
+import { EXCHANGE_REQUEST_WINDOW_MESSAGE, ISSUE_REPORT_WINDOW_MESSAGE } from "./deadlines.ts";
 
 function daysAgoIso(days: number) {
   return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
@@ -29,18 +35,19 @@ test("exchange: within the default window is eligible, beyond it is rejected", (
   );
   const late = evaluateExchangeEligibility({ ...BASE_EXCHANGE, deliveredAt: daysAgoIso(6) });
   assert.equal(late.decision, "REJECTED");
-  assert.match(late.reason, /within 5 days of delivery/);
+  assert.equal(late.reason, EXCHANGE_REQUEST_WINDOW_MESSAGE);
+  assert.match(late.reason, /within 2 days of delivery/);
 });
 
-test("exchange: a custom windowDays overrides the default and appears in the message", () => {
-  // window 3: delivered 4 days ago → rejected, message names 3 days
+test("exchange: a custom windowDays overrides the default; the message always quotes the published 2 days", () => {
+  // window 3: delivered 4 days ago → rejected, message still quotes 2 days
   const rejected = evaluateExchangeEligibility({
     ...BASE_EXCHANGE,
     deliveredAt: daysAgoIso(4),
     windowDays: 3,
   });
   assert.equal(rejected.decision, "REJECTED");
-  assert.match(rejected.reason, /within 3 days of delivery/);
+  assert.equal(rejected.reason, EXCHANGE_REQUEST_WINDOW_MESSAGE);
   // window 3: delivered 2 days ago → eligible
   assert.equal(
     evaluateExchangeEligibility({ ...BASE_EXCHANGE, deliveredAt: daysAgoIso(2), windowDays: 3 }).decision,
@@ -78,16 +85,25 @@ const BASE_ISSUE = {
   declaredTagsIntact: true,
 };
 
-test("issue: respects the same configurable window (default 5, custom overrides)", () => {
+test("issue: enforces the configurable window (default 5, custom overrides) but always quotes the published 2 days", () => {
   assert.equal(
     evaluateIssueEligibility({ ...BASE_ISSUE, deliveredAt: daysAgoIso(4) }).eligible,
     true,
   );
   const late = evaluateIssueEligibility({ ...BASE_ISSUE, deliveredAt: daysAgoIso(6) });
   assert.equal(late.eligible, false);
-  assert.match(late.reason, /within 5 days of delivery/);
+  assert.equal(late.reason, ISSUE_REPORT_WINDOW_MESSAGE);
+  assert.match(late.reason, /within 2 days of delivery/);
 
   const customLate = evaluateIssueEligibility({ ...BASE_ISSUE, deliveredAt: daysAgoIso(4), windowDays: 3 });
   assert.equal(customLate.eligible, false);
-  assert.match(customLate.reason, /within 3 days of delivery/);
+  assert.equal(customLate.reason, ISSUE_REPORT_WINDOW_MESSAGE);
+});
+
+test("issue: an unboxing video link is required and must be http(s)", () => {
+  assert.equal(validateIssueVideoEvidence([]), ISSUE_VIDEO_REQUIRED_MESSAGE);
+  assert.equal(validateIssueVideoEvidence(["not a link"]), ISSUE_VIDEO_INVALID_MESSAGE);
+  assert.equal(validateIssueVideoEvidence(["https://drive.google.com/file/d/abc", "javascript:alert(1)"]), ISSUE_VIDEO_INVALID_MESSAGE);
+  assert.equal(validateIssueVideoEvidence(["https://youtu.be/abc"]), null);
+  assert.equal(validateIssueVideoEvidence(["http://example.com/video.mp4", "https://drive.google.com/file/d/abc"]), null);
 });

@@ -204,7 +204,10 @@ body.ld-account-scroll-lock { overflow: hidden; }
 #loopdesk-customer-dashboard-root .ld-account-issue-items strong, #loopdesk-customer-dashboard-root .ld-account-issue-items small, #loopdesk-customer-dashboard-root .ld-account-issue-items em { grid-column: 3; overflow-wrap: anywhere; }
 #loopdesk-customer-dashboard-root .ld-account-issue-items small, #loopdesk-customer-dashboard-root .ld-account-issue-items em { color: var(--ld-account-muted); }
 #loopdesk-customer-dashboard-root .ld-account-issue-modal > label, #loopdesk-customer-dashboard-root .ld-account-issue-evidence label { display: grid; gap: 8px; font-weight: 800; margin: 12px 0; }
-#loopdesk-customer-dashboard-root .ld-account-issue-evidence { display: grid; gap: 8px; border: 1px dashed var(--ld-account-line); border-radius: 18px; padding: 14px; margin: 14px 0; }
+#loopdesk-customer-dashboard-root .ld-account-issue-policy { display: grid; gap: 6px; background: var(--ld-account-soft); border-radius: 18px; padding: 14px; margin: 14px 0; overflow-wrap: anywhere; }
+#loopdesk-customer-dashboard-root .ld-account-issue-policy ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; color: var(--ld-account-muted); }
+#loopdesk-customer-dashboard-root .ld-account-issue-policy a { font-weight: 800; color: inherit; }
+#loopdesk-customer-dashboard-root .ld-account-issue-evidence {display: grid; gap: 8px; border: 1px dashed var(--ld-account-line); border-radius: 18px; padding: 14px; margin: 14px 0; }
 #loopdesk-customer-dashboard-root .ld-account-issue-evidence span { color: var(--ld-account-muted); font-weight: 600; }
 #loopdesk-customer-dashboard-root .ld-account-issue-modal input[type="text"], #loopdesk-customer-dashboard-root .ld-account-issue-modal select { min-height: 44px; border: 1px solid var(--ld-account-line); border-radius: 14px; padding: 10px 12px; font: inherit; }
 #loopdesk-customer-dashboard-root .ld-account-issue-modal input:focus, #loopdesk-customer-dashboard-root .ld-account-issue-modal select:focus { outline: 3px solid var(--ld-account-brand); outline-offset: 2px; }

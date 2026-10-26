@@ -907,12 +907,12 @@ for (const request of exchangeRequests) {
       const notShipped = !delivered && !shippedOrInTransit;
       const deadlineRequestLockReason = delivered
         ? !deliveredAt || !withinRequestWindow
-          ? exchangeRequestWindowLockReason(requestWindowDays)
+          ? exchangeRequestWindowLockReason()
           : null
         : null;
       const issueLockReason = delivered
         ? !deliveredAt || !withinRequestWindow
-          ? issueRequestWindowLockReason(requestWindowDays)
+          ? issueRequestWindowLockReason()
           : null
         : null;
       const reversePickupLockReason = delivered

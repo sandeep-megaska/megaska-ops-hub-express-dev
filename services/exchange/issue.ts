@@ -1,4 +1,5 @@
 import { EXCHANGE_ALLOWED_DAYS_WINDOW } from "./constants.ts";
+import { ISSUE_REPORT_WINDOW_MESSAGE } from "./deadlines.ts";
 
 const ISSUE_ACTIVE_STATUSES = ["OPEN", "AWAITING_PAYMENT", "PICKUP_PENDING", "PAYMENT_RECEIVED", "APPROVED", "RETURN_RECEIVED"] as const;
 
@@ -42,6 +43,24 @@ export function isIssueStatusBlocking(status: string | null | undefined) {
   return ISSUE_ACTIVE_STATUSES.includes(String(status || "").trim().toUpperCase() as (typeof ISSUE_ACTIVE_STATUSES)[number]);
 }
 
+export const ISSUE_VIDEO_REQUIRED_MESSAGE =
+  "Add a link to your unboxing video. Issue reports need one continuous, uncut unboxing video.";
+export const ISSUE_VIDEO_INVALID_MESSAGE = "Video links must start with https:// or http://.";
+
+// Quality claims are reviewed against an unboxing video, so at least one usable video link is required.
+export function validateIssueVideoEvidence(videoEvidenceUrls: string[]) {
+  if (videoEvidenceUrls.length === 0) return ISSUE_VIDEO_REQUIRED_MESSAGE;
+  const invalid = videoEvidenceUrls.some((value) => {
+    try {
+      const url = new URL(value);
+      return url.protocol !== "https:" && url.protocol !== "http:";
+    } catch {
+      return true;
+    }
+  });
+  return invalid ? ISSUE_VIDEO_INVALID_MESSAGE : null;
+}
+
 export function evaluateIssueEligibility(input: {
   fulfillmentStatus?: string | null;
   deliveredAt?: string | null;
@@ -74,7 +93,7 @@ export function evaluateIssueEligibility(input: {
     const elapsedMs = Date.now() - deliveredAt.getTime();
     const elapsedDays = elapsedMs / (1000 * 60 * 60 * 24);
     if (elapsedDays > windowDays) {
-      return { eligible: false, reason: `Issue reporting is allowed within ${windowDays} days of delivery.` };
+      return { eligible: false, reason: ISSUE_REPORT_WINDOW_MESSAGE };
     }
   }
 
