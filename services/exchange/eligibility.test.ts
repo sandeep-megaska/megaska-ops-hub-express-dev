@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { evaluateExchangeEligibility } from "./eligibility.ts";
-import { evaluateIssueEligibility } from "./issue.ts";
+import {
+  evaluateIssueEligibility,
+  ISSUE_VIDEO_INVALID_MESSAGE,
+  ISSUE_VIDEO_REQUIRED_MESSAGE,
+  validateIssueVideoEvidence,
+} from "./issue.ts";
 import { EXCHANGE_ALLOWED_DAYS_WINDOW } from "./constants.ts";
 
 function daysAgoIso(days: number) {
@@ -90,4 +95,12 @@ test("issue: respects the same configurable window (default 5, custom overrides)
   const customLate = evaluateIssueEligibility({ ...BASE_ISSUE, deliveredAt: daysAgoIso(4), windowDays: 3 });
   assert.equal(customLate.eligible, false);
   assert.match(customLate.reason, /within 3 days of delivery/);
+});
+
+test("issue: an unboxing video link is required and must be http(s)", () => {
+  assert.equal(validateIssueVideoEvidence([]), ISSUE_VIDEO_REQUIRED_MESSAGE);
+  assert.equal(validateIssueVideoEvidence(["not a link"]), ISSUE_VIDEO_INVALID_MESSAGE);
+  assert.equal(validateIssueVideoEvidence(["https://drive.google.com/file/d/abc", "javascript:alert(1)"]), ISSUE_VIDEO_INVALID_MESSAGE);
+  assert.equal(validateIssueVideoEvidence(["https://youtu.be/abc"]), null);
+  assert.equal(validateIssueVideoEvidence(["http://example.com/video.mp4", "https://drive.google.com/file/d/abc"]), null);
 });

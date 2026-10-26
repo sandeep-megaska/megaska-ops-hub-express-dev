@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { withCors, handleOptions } from "../../_lib/cors";
 import { prisma } from "../../../../services/db/prisma";
 import { getAuthenticatedCustomer } from "../../../../services/exchange/auth";
-import { evaluateIssueEligibility } from "../../../../services/exchange/issue";
+import { evaluateIssueEligibility, validateIssueVideoEvidence } from "../../../../services/exchange/issue";
 import { getRequestWindowDays } from "../../../../services/loopdesk/merchant-settings";
 import { sendIssueRequestCreatedEmail } from "../../../../services/notifications/issue";
 import {
@@ -127,6 +127,14 @@ export async function POST(req: NextRequest) {
           { error: "orderNumber, reason, and productTitle are required" },
           { status: 400 },
         ),
+      );
+    }
+
+    const videoEvidenceError = validateIssueVideoEvidence(videoEvidenceUrls);
+    if (videoEvidenceError) {
+      return withCors(
+        req,
+        NextResponse.json({ error: videoEvidenceError }, { status: 400 }),
       );
     }
 
