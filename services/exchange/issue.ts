@@ -1,4 +1,5 @@
 import { EXCHANGE_ALLOWED_DAYS_WINDOW } from "./constants.ts";
+import { ISSUE_REPORT_WINDOW_MESSAGE } from "./deadlines.ts";
 
 const ISSUE_ACTIVE_STATUSES = ["OPEN", "AWAITING_PAYMENT", "PICKUP_PENDING", "PAYMENT_RECEIVED", "APPROVED", "RETURN_RECEIVED"] as const;
 
@@ -92,7 +93,7 @@ export function evaluateIssueEligibility(input: {
     const elapsedMs = Date.now() - deliveredAt.getTime();
     const elapsedDays = elapsedMs / (1000 * 60 * 60 * 24);
     if (elapsedDays > windowDays) {
-      return { eligible: false, reason: `Issue reporting is allowed within ${windowDays} days of delivery.` };
+      return { eligible: false, reason: ISSUE_REPORT_WINDOW_MESSAGE };
     }
   }
 
