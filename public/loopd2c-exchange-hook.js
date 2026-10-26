@@ -86,6 +86,9 @@
       .mk-ex-textarea { min-height: 80px; resize: vertical; }
       .mk-ex-error { margin-top: 10px; color: #b91c1c; font-size: 13px; }
       .mk-ex-muted { color: #6b7280; font-size: 13px; }
+      .mk-ex-policy { margin-top: 10px; border: 1px solid #f1e7df; background: #fff; border-radius: 12px; padding: 10px 12px; font-size: 13px; display: grid; gap: 6px; }
+      .mk-ex-policy ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; color: #4b5563; }
+      .mk-ex-policy a { color: #1f2937; font-weight: 700; }
       .mk-ex-success { margin-top: 10px; border: 1px solid #d9f1e4; background: #f5fcf8; border-radius: 12px; padding: 10px; display: grid; gap: 6px; }
       .mk-ex-actions { margin-top: 14px; display: flex; gap: 10px; justify-content: flex-end; }
       .mk-ex-btn { border: 1px solid #eadfd7; border-radius: 12px; background: #fff; color: #1f2937; padding: 10px 14px; font-weight: 600; cursor: pointer; text-decoration: none; }
@@ -940,6 +943,18 @@
       <div class="mk-ex-modal" role="dialog" aria-modal="true" aria-label="Issue request">
         <h3>Report issue</h3>
         <p class="mk-ex-muted">This is for damaged/wrong/quality exceptions only. Normal returns are not supported.</p>
+
+        <div class="mk-ex-policy" role="note">
+          <strong>Before you submit</strong>
+          <ul>
+            <li>Report within 2 days of delivery.</li>
+            <li>Your unboxing video must be one continuous, uncut video that starts with the sealed package and shows the shipping label. Edited, paused or partial videos, or videos started after opening, are not accepted.</li>
+            <li>Add clear photos of the issue and of the item with its tags attached.</li>
+            <li>The item must be sent back for inspection before any replacement or refund. If the issue is confirmed, we cover return shipping and replace the item, or refund it if a replacement is not available. Only the affected item is covered.</li>
+            <li>Used, washed or tag-removed items and false claims are rejected.</li>
+          </ul>
+          <a href="/pages/returns-and-exchange-policy" target="_blank" rel="noopener">Read the full policy</a>
+        </div>
 
         <div class="mk-ex-row">
           <label class="mk-ex-label">Order</label>
