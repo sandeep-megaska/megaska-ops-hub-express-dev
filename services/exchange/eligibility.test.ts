@@ -9,6 +9,7 @@ import {
   validateIssueVideoEvidence,
 } from "./issue.ts";
 import { EXCHANGE_ALLOWED_DAYS_WINDOW } from "./constants.ts";
+import { ISSUE_REPORT_WINDOW_MESSAGE } from "./deadlines.ts";
 
 function daysAgoIso(days: number) {
   return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
@@ -83,18 +84,19 @@ const BASE_ISSUE = {
   declaredTagsIntact: true,
 };
 
-test("issue: respects the same configurable window (default 5, custom overrides)", () => {
+test("issue: enforces the configurable window (default 5, custom overrides) but always quotes the published 2 days", () => {
   assert.equal(
     evaluateIssueEligibility({ ...BASE_ISSUE, deliveredAt: daysAgoIso(4) }).eligible,
     true,
   );
   const late = evaluateIssueEligibility({ ...BASE_ISSUE, deliveredAt: daysAgoIso(6) });
   assert.equal(late.eligible, false);
-  assert.match(late.reason, /within 5 days of delivery/);
+  assert.equal(late.reason, ISSUE_REPORT_WINDOW_MESSAGE);
+  assert.match(late.reason, /within 2 days of delivery/);
 
   const customLate = evaluateIssueEligibility({ ...BASE_ISSUE, deliveredAt: daysAgoIso(4), windowDays: 3 });
   assert.equal(customLate.eligible, false);
-  assert.match(customLate.reason, /within 3 days of delivery/);
+  assert.equal(customLate.reason, ISSUE_REPORT_WINDOW_MESSAGE);
 });
 
 test("issue: an unboxing video link is required and must be http(s)", () => {

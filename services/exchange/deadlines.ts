@@ -9,8 +9,11 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 export function exchangeRequestWindowLockReason(days: number = EXCHANGE_ALLOWED_DAYS_WINDOW) {
   return `Exchange requests are allowed within ${days} days of delivery.`;
 }
-export function issueRequestWindowLockReason(days: number = EXCHANGE_ALLOWED_DAYS_WINDOW) {
-  return `Issue reporting is allowed within ${days} days of delivery.`;
+// Customers are told 2 days (the published policy); the enforced window is the
+// merchant's request window (default 5 days), deliberately more lenient.
+export const ISSUE_REPORT_WINDOW_MESSAGE = "Issue reports must be made within 2 days of delivery.";
+export function issueRequestWindowLockReason() {
+  return ISSUE_REPORT_WINDOW_MESSAGE;
 }
 export const REVERSE_PICKUP_WINDOW_LOCK_REASON =
   "Reverse pickup is available only within 7 days of delivery.";

@@ -912,7 +912,7 @@ for (const request of exchangeRequests) {
         : null;
       const issueLockReason = delivered
         ? !deliveredAt || !withinRequestWindow
-          ? issueRequestWindowLockReason(requestWindowDays)
+          ? issueRequestWindowLockReason()
           : null
         : null;
       const reversePickupLockReason = delivered
