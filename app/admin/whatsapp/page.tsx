@@ -3,6 +3,7 @@ import { prisma } from "../../../services/db/prisma";
 import { formatAdminShopResolutionError, resolveAdminShopFromSearchParams } from "../../../services/shopify/admin-shop-context";
 import { isWithinCustomerWindow } from "../../../services/whatsapp/inbox";
 import AutoRefresh from "./AutoRefresh";
+import WhatsAppTemplateAlert from "../../../components/WhatsAppTemplateAlert";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +27,7 @@ export default async function WhatsAppInboxPage({ searchParams }: { searchParams
 
   const filter = params.filter === "team" ? "team" : "all";
   const [account, conversations, needsTeam] = await Promise.all([
-    prisma.merchantWhatsAppAccount.findUnique({ where: { shopId: shop.id }, select: { enabled: true, displayPhoneNumber: true, aiMode: true } }).catch(() => null),
+    prisma.merchantWhatsAppAccount.findUnique({ where: { shopId: shop.id }, select: { enabled: true, displayPhoneNumber: true, aiMode: true, templateFailingSince: true, templateFailureError: true } }).catch(() => null),
     prisma.whatsAppConversation.findMany({ where: { shopId: shop.id, ...(filter === "team" ? { needsHuman: true } : {}) }, orderBy: { lastMessageAt: "desc" }, take: 200 }).catch(() => []),
     prisma.whatsAppConversation.count({ where: { shopId: shop.id, needsHuman: true } }).catch(() => 0),
   ]);
@@ -55,6 +56,7 @@ export default async function WhatsAppInboxPage({ searchParams }: { searchParams
         </div>
       </div>
 
+      {account?.enabled ? <WhatsAppTemplateAlert since={account.templateFailingSince} error={account.templateFailureError} phone={account.displayPhoneNumber} /> : null}
       {!account?.enabled ? (
         <section className="mk-card" style={{ marginBottom: 16 }}>
           <p className="mk-section-subtitle" style={{ margin: 0 }}>

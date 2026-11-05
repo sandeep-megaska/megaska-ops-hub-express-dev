@@ -56,6 +56,8 @@ export type MerchantWhatsAppAccountRow = {
   lastCheckedAt?: Date | null;
   lastCheckStatus?: string | null;
   lastCheckMessage?: string | null;
+  templateFailingSince?: Date | null;
+  templateFailureError?: string | null;
 };
 
 type AccountDb = {
@@ -200,6 +202,9 @@ export type MerchantWhatsAppAdminView = {
   lastCheckedAt: string | null;
   lastCheckStatus: string | null;
   lastCheckMessage: string | null;
+  // Template messages failing at Meta (services/whatsapp/template-health.ts); null when fine.
+  templateFailingSince: string | null;
+  templateFailureError: string | null;
   platformOtpAvailable: boolean;
 };
 
@@ -232,6 +237,8 @@ export function toAdminView(account: MerchantWhatsAppAccountRow | null, env: Rec
     lastCheckedAt: account?.lastCheckedAt ? new Date(account.lastCheckedAt).toISOString() : null,
     lastCheckStatus: account?.lastCheckStatus ?? null,
     lastCheckMessage: account?.lastCheckMessage ?? null,
+    templateFailingSince: account?.templateFailingSince ? new Date(account.templateFailingSince).toISOString() : null,
+    templateFailureError: account?.templateFailureError ?? null,
     platformOtpAvailable: Boolean(platformOtpSender(env)),
   };
 }

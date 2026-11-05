@@ -741,6 +741,13 @@ model MerchantWhatsAppAccount {
   lastCheckStatus   String?
   lastCheckMessage  String?
 
+  // Template messages (OTPs, order updates) failing in a row at Meta, usually an
+  // empty prepaid balance or a payment problem (services/whatsapp/template-health.ts).
+  // Set when the failures start, cleared on the next delivered template.
+  templateFailingSince   DateTime?
+  templateFailureError   String?
+  templateAlertEmailedAt DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
