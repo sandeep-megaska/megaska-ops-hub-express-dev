@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "../../../../services/db/prisma";
 import { withCors, handleOptions } from "../../_lib/cors";
-import { sendOtpWithTwilio } from "../../../../services/auth/otp";
+import { createSmsOtpChallenge } from "../../../../services/auth/sms-otp-challenge";
 import {
   WHATSAPP_OTP_MAX_PER_WINDOW,
   WHATSAPP_OTP_PROVIDER,
@@ -37,55 +37,11 @@ async function createProviderChallenge(
   provider: "twilio",
   expiresAt: Date
 ) {
-  const twilioVerification = await sendOtpWithTwilio(phoneE164);
-
-  const challenge = await prisma.oTPChallenge.create({
-    data: {
-      shopId,
-      phoneE164,
-      provider,
-      providerSid: twilioVerification.sid,
-      status: "pending",
-      attemptsCount: 0,
-      expiresAt,
-      metadata: {
-        mode: "twilio",
-        twilioStatus: twilioVerification.status,
-      },
-    },
-  });
-
-  if (!twilioVerification.sid) {
-    console.warn("[USAGE METER]", {
-      operation: "otp_usage_provider_reference_missing",
-      shopId,
-      sourceType: "OTP_CHALLENGE",
-      sourceId: challenge.id,
-      provider: "PLATFORM_TWILIO",
-    });
-  }
-
-  try {
-    await recordAcceptedOtpRequestUsage({
-      shopId,
-      challengeId: challenge.id,
-      provider: "PLATFORM_TWILIO",
-      providerSid: twilioVerification.sid ?? null,
-      phoneE164,
-    });
-  } catch (error) {
-    console.error("[USAGE METER]", {
-      operation: "otp_usage_record_failed",
-      shopId,
-      sourceType: "OTP_CHALLENGE",
-      sourceId: challenge.id,
-      provider: "PLATFORM_TWILIO",
-      errorName: error instanceof Error ? error.name : "UnknownError",
-    });
-  }
+  const challenge = await createSmsOtpChallenge({ shopId, phoneE164, expiresAt });
+  const twilioVerification = { status: challenge.providerStatus };
 
   console.info("[OTP REQUEST SEND SUCCESS]", {
-    challengeId: challenge.id,
+    challengeId: challenge.challengeId,
     shopId,
     provider,
     providerStatus: twilioVerification.status,
@@ -97,7 +53,7 @@ async function createProviderChallenge(
       sent: true,
       success: true,
       otpSent: true,
-      challengeId: challenge.id,
+      challengeId: challenge.challengeId,
       phone: phoneE164,
       provider,
       channel: "sms",

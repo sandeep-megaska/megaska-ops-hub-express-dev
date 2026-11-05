@@ -6,6 +6,8 @@ import { handleCodConfirmationReply, parseCodPayload } from "../../../../service
 import { runWhatsAppAssistant } from "../../../../services/whatsapp/assistant/run";
 import { handleCartSizeChoice, handleWhatsAppCatalogOrder, parseSizeReply, type CatalogOrderItem } from "../../../../services/whatsapp/shop-in-chat";
 import { recordOtpDeliveryStatuses } from "../../../../services/whatsapp/otp-delivery";
+import { prismaSmsBackupDeps, sendSmsBackupForFailedOtp } from "../../../../services/whatsapp/otp-sms-backup";
+import { noteTemplateStatuses } from "../../../../services/whatsapp/template-health";
 import { verifyMetaSignature } from "../../../../services/whatsapp/webhook-signature";
 
 export const runtime = "nodejs";
@@ -111,7 +113,16 @@ export async function POST(request: NextRequest) {
           console.info("[COD CONFIRMATION] reply", { messageId: message.id, outcome: result.outcome });
         }
         await applyStatusUpdates(change.value as WebhookValue);
-        await recordOtpDeliveryStatuses(change.value as WebhookValue);
+        await recordOtpDeliveryStatuses(change.value as WebhookValue, {
+          // Meta couldn't deliver a WhatsApp OTP: send the code by SMS instead, after Meta has its 200.
+          onFailed: (challengeId) => after(() => prismaSmsBackupDeps()
+            .then((deps) => sendSmsBackupForFailedOtp(challengeId, deps))
+            .then((outcome) => console.info("[OTP SMS BACKUP]", { challengeId, outcome }))
+            .catch((error) => console.error("[OTP SMS BACKUP] failed", { challengeId, error: error instanceof Error ? error.message : String(error) }))),
+        });
+        // Template messages (OTPs, order updates) failing in a row: tell the merchant once.
+        await noteTemplateStatuses(change.value as WebhookValue, businessNumberId)
+          .catch((error) => console.error("[WHATSAPP TEMPLATE HEALTH] failed", { error: error instanceof Error ? error.message : String(error) }));
       } catch (error) {
         console.error("[WHATSAPP] inbox_store_failed", { error: error instanceof Error ? error.message : String(error) });
       }

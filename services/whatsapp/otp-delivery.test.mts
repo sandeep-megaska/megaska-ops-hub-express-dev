@@ -31,3 +31,10 @@ test("delivery status only moves forward and ignores unknown messages", async ()
   assert.equal(await recordOtpDeliveryStatuses({ statuses: [{ id: "wamid.1", status: "delivered" }, { id: "wamid.other", status: "failed" }] }, { db }), 0);
   assert.deepEqual(db.rows[0].metadata, { delivery: { status: "read" } });
 });
+
+test("an undelivered OTP is handed to the SMS backup; a delivered one isn't", async () => {
+  const db = fakeDb([{ id: "c1", providerSid: "wamid.1", metadata: {} }, { id: "c2", providerSid: "wamid.2", metadata: {} }]);
+  const failed: string[] = [];
+  await recordOtpDeliveryStatuses({ statuses: [{ id: "wamid.1", status: "failed", errors: [{ code: 130429, title: "Rate limit hit" }] }, { id: "wamid.2", status: "delivered" }] }, { db, onFailed: (id) => failed.push(id) });
+  assert.deepEqual(failed, ["c1"]);
+});
