@@ -1,4 +1,5 @@
 import { revalidatePath } from "next/cache";
+import WhatsAppTemplateAlert from "../../../components/WhatsAppTemplateAlert";
 import { redirect } from "next/navigation";
 import {
   getCartIntelligenceSettings,
@@ -1343,6 +1344,7 @@ export default async function MerchantSettingsPage({
           title="WhatsApp"
           description="Connect your own WhatsApp Business number (Meta WhatsApp Cloud API). With it, login codes, abandoned-checkout reminders and exchange updates go out under your brand. Without it, only login codes are sent on WhatsApp, from the LoopD2C number; everything else stays on email and SMS."
         />
+        <WhatsAppTemplateAlert since={whatsApp.templateFailingSince} error={whatsApp.templateFailureError} phone={whatsApp.displayPhoneNumber} />
         {params.waNotice ? <div className="mk-alert mk-alert-success">{params.waNotice}</div> : null}
         {params.waError ? <div className="mk-alert mk-alert-error">{params.waError}</div> : null}
         <p className={helpClass}>

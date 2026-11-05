@@ -113,6 +113,25 @@ hashed and verified by us (4 digits, 5-minute expiry, 5 attempts, 25s resend
 cooldown, 5 sends per 15 minutes per number). Template: category
 **Authentication**, code delivery **Copy code** button.
 
+**Automatic SMS backup** (`services/whatsapp/otp-sms-backup.ts`): Meta accepts a
+WhatsApp OTP and reports a failed delivery later on the status webhook (number not
+on WhatsApp, or the WhatsApp account out of funds: `130429` / `131042`). When that
+happens to a pending, unexpired WhatsApp challenge, the code is sent again by
+platform Twilio SMS (when the shop's OTP settings allow SMS): the WhatsApp
+challenge is superseded and the SMS one is verified instead. At most 3 automatic
+backups per number per 15 minutes; the outcome is kept in the challenge's
+`metadata.smsBackup`.
+
+**Template health** (`services/whatsapp/template-health.ts`): when 5 or more
+template messages (OTPs, order updates, nudges) from a merchant's number fail
+within 6 hours with an account-level error (`130429` and `131042` usually mean
+an empty prepaid balance or a payment problem; also `131048`, `131031`), the
+shop's admin recipients get one email (at most every 12 hours) and the WhatsApp
+inbox and WhatsApp settings show a warning with the fix. It clears on the next
+delivered template. Fields: `MerchantWhatsAppAccount.templateFailingSince`,
+`templateFailureError`, `templateAlertEmailedAt` (migration
+`20261105120000_whatsapp_template_health`).
+
 ### Webhook (opt-outs)
 
 `https://<app-host>/api/webhooks/whatsapp`, subscribed to `messages`.

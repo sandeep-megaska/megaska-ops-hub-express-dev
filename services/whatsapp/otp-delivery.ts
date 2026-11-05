@@ -24,7 +24,8 @@ async function defaultDb(): Promise<OtpDeliveryDb> {
   return prisma as unknown as OtpDeliveryDb;
 }
 
-export async function recordOtpDeliveryStatuses(value: WebhookValue, deps: { db?: OtpDeliveryDb; now?: Date } = {}) {
+// onFailed: called with the challenge id when Meta reports the OTP undelivered (the SMS backup).
+export async function recordOtpDeliveryStatuses(value: WebhookValue, deps: { db?: OtpDeliveryDb; now?: Date; onFailed?: (challengeId: string) => void } = {}) {
   const statuses = (value.statuses || []).filter((s) => s.id && s.status && RANK[s.status]);
   if (!statuses.length) return 0;
   const db = deps.db ?? (await defaultDb());
@@ -38,7 +39,10 @@ export async function recordOtpDeliveryStatuses(value: WebhookValue, deps: { db?
     const error = status.status === "failed" ? describeStatusErrors(status.errors) || "failed" : null;
     const delivery = { status: status.status, error, at: (deps.now ?? new Date()).toISOString() };
     await db.oTPChallenge.update({ where: { id: challenge.id }, data: { metadata: { ...metadata, delivery } } });
-    if (error) console.warn("[OTP WHATSAPP DELIVERY FAILED]", { challengeId: challenge.id, error });
+    if (error) {
+      console.warn("[OTP WHATSAPP DELIVERY FAILED]", { challengeId: challenge.id, error });
+      deps.onFailed?.(challenge.id);
+    }
     updated += 1;
   }
   return updated;
