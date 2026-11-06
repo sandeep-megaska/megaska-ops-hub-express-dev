@@ -40,6 +40,7 @@ import { OTP_COUNTRY_CATALOG } from "../../../services/settings/otp-country-cata
 import OtpCountryPolicyField from "./OtpCountryPolicyField";
 import {
   checkMerchantWhatsApp,
+  setUpExchangeTemplates,
   getMerchantWhatsAppAdmin,
   saveMerchantWhatsApp,
 } from "../../../services/settings/merchant-whatsapp";
@@ -227,6 +228,9 @@ async function whatsAppFormAction(
     });
     if (formData.get("waIntent") === "check") {
       const result = await checkMerchantWhatsApp(shopId);
+      embeddedContext.set(result.ok ? "waNotice" : "waError", result.message);
+    } else if (formData.get("waIntent") === "exchange_templates") {
+      const result = await setUpExchangeTemplates(shopId);
       embeddedContext.set(result.ok ? "waNotice" : "waError", result.message);
     } else {
       embeddedContext.set("waNotice", "WhatsApp settings saved.");
@@ -1367,7 +1371,7 @@ export default async function MerchantSettingsPage({
             <Field label="First reminder template" name="waRecoveryFirstTemplate" defaultValue={whatsApp.recoveryFirstTemplate} />
             <Field label="Second reminder template" name="waRecoveryReminderTemplate" defaultValue={whatsApp.recoveryReminderTemplate} help="Both need one URL button: https://<your store>/apps/loopd2c/checkout/bag?t={{1}}" />
           </div>
-          <Check label="Exchange updates" name="waExchangeEnabled" defaultChecked={whatsApp.exchangeEnabled} help="Send exchange status updates (exchange_approved, exchange_pickup_scheduled …) from your number." />
+          <Check label="Exchange updates" name="waExchangeEnabled" defaultChecked={whatsApp.exchangeEnabled} help="Send exchange status updates (approved, pickup scheduled, picked up, received, replacement shipped, completed, rejected) from your number. Needs the nine exchange templates approved by Meta: use Set up exchange templates below first." />
           <Check label="COD order confirmation" name="waCodConfirmEnabled" defaultChecked={whatsApp.codConfirmEnabled} help="A few minutes after each cash-on-delivery order, ask the customer to Confirm or Cancel. Confirmed orders are tagged cod-confirmed; cancel requests are tagged cod-cancel-requested and sent to your inbox; no reply in 12 hours is tagged cod-no-response so you can call before shipping." />
           <Check label="Shipping updates" name="waShippingUpdatesEnabled" defaultChecked={whatsApp.shippingUpdatesEnabled} help="From your courier tracking in Shopify: shipped (with tracking link), out for delivery (with the COD amount to keep ready), delivery attempt failed (customer can reply to arrange another attempt) and delivered. Sent 8 am–9 pm IST only. Needs Utility templates order_shipped, order_out_for_delivery, order_delivery_attempt_failed and order_delivered." />
           <Field label="COD confirmation template" name="waCodConfirmTemplate" defaultValue={whatsApp.codConfirmTemplate} help="Utility template. Body: {{1}} customer first name, {{2}} order number, {{3}} order total. Two Quick reply buttons, in this order: Confirm order, Cancel order." />
@@ -1385,6 +1389,9 @@ export default async function MerchantSettingsPage({
         <div className="flex flex-wrap items-center justify-end gap-3">
           <button className="mk-btn" type="submit" name="waIntent" value="check">
             Save &amp; check connection
+          </button>
+          <button className="mk-btn" type="submit" name="waIntent" value="exchange_templates" title="Submits the nine exchange-update templates to Meta from your WhatsApp Business Account (skips any already there)">
+            Save &amp; set up exchange templates
           </button>
           <button className="mk-btn mk-btn-primary" type="submit" name="waIntent" value="save">
             Save WhatsApp settings
