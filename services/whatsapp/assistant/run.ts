@@ -51,6 +51,8 @@ export type AssistantDeps = {
   aiConfigured?: () => boolean;
   complete?: (input: { system: string; user: string }) => Promise<Record<string, unknown> | null>;
   loadContext?: (input: { shopDomain: string; contactPhone: string; searchTerms: string[]; merchantNotes: string | null }) => Promise<StoreContext>;
+  // The customer's exchanges, cancellations, issue reports and refunds in LoopD2C.
+  loadRequests?: (input: { shopId: string; contactPhone: string }) => Promise<NonNullable<StoreContext["requests"]>>;
   sendText?: (input: { shopId: string; conversationId: string; text: string }) => Promise<unknown>;
   typing?: (input: { shopId: string; businessPhoneNumberId: string; waMessageId: string }) => Promise<unknown>;
   alert?: (input: { shopId: string; subject: string; text: string }) => Promise<unknown>;
@@ -74,6 +76,7 @@ const defaults = {
   complete: async (input: { system: string; user: string }) =>
     (await import("../../ai/openai-client.ts")).openaiChatJson({ ...input, model: assistantModel(), maxTokens: 500, temperature: 0.3, timeoutMs: 25_000 }),
   loadContext: async (input: Parameters<NonNullable<AssistantDeps["loadContext"]>>[0]) => (await import("./store-context.ts")).loadStoreContext(input),
+  loadRequests: async (input: { shopId: string; contactPhone: string }) => (await import("./customer-requests.ts")).loadCustomerRequests(input.shopId, input.contactPhone),
   sendText: async (input: { shopId: string; conversationId: string; text: string }) => (await import("../inbox.ts")).sendConversationText({ ...input, sentByAi: true }),
   typing: async (input: { shopId: string; businessPhoneNumberId: string; waMessageId: string }) => (await import("../inbox.ts")).showTypingIndicator(input),
   alert: async (input: { shopId: string; subject: string; text: string }) => {
@@ -119,10 +122,18 @@ export function chatLines(messages: Message[]): ChatLine[] {
 
 // Asks the model and returns the parsed answer (null when AI is unavailable or failed).
 export async function askAssistant(
-  input: { shopDomain: string; contactPhone: string; merchantNotes: string | null; chat: ChatLine[]; backInStock?: boolean; shopInChat?: boolean; adContext?: string | null },
-  deps: Pick<AssistantDeps, "complete" | "loadContext"> = {},
+  input: { shopId?: string; shopDomain: string; contactPhone: string; merchantNotes: string | null; chat: ChatLine[]; backInStock?: boolean; shopInChat?: boolean; adContext?: string | null },
+  deps: Pick<AssistantDeps, "complete" | "loadContext" | "loadRequests"> = {},
 ): Promise<{ result: AssistantResult | null; context: StoreContext }> {
-  const context = await (deps.loadContext ?? defaults.loadContext)({ shopDomain: input.shopDomain, contactPhone: input.contactPhone, searchTerms: productSearchTerms(input.chat), merchantNotes: input.merchantNotes });
+  const [context, requests] = await Promise.all([
+    (deps.loadContext ?? defaults.loadContext)({ shopDomain: input.shopDomain, contactPhone: input.contactPhone, searchTerms: productSearchTerms(input.chat), merchantNotes: input.merchantNotes }),
+    // A failed lookup only means the assistant can't see requests; it still answers the rest.
+    input.shopId ? (deps.loadRequests ?? defaults.loadRequests)({ shopId: input.shopId, contactPhone: input.contactPhone }).catch((error) => {
+      console.warn("[WHATSAPP ASSISTANT] requests_read_failed", { shopId: input.shopId, error: error instanceof Error ? error.message.slice(0, 200) : String(error) });
+      return [];
+    }) : Promise.resolve([]),
+  ]);
+  if (requests.length) context.requests = requests;
   if (input.adContext) context.adContext = input.adContext;
   const raw = await (deps.complete ?? defaults.complete)({ system: buildSystemPrompt(context.storeName, { backInStock: input.backInStock, shopInChat: input.shopInChat }), user: buildUserPrompt(context, input.chat) });
   return { result: parseAssistantResult(raw), context };
@@ -206,7 +217,7 @@ export async function runWhatsAppAssistant(input: { shopId: string; conversation
   const backInStock = Boolean(account?.backInStockEnabled);
   const shopInChat = Boolean(account?.shopInChatEnabled);
   try {
-    ({ result, context } = await askAssistant({ shopDomain: shop.shopDomain, contactPhone: conversation.contactPhone, merchantNotes: account?.aiKnowledge ?? null, chat: chatLines(recent), backInStock, shopInChat, adContext: adContextFor(conversation, at) }, deps));
+    ({ result, context } = await askAssistant({ shopId: input.shopId, shopDomain: shop.shopDomain, contactPhone: conversation.contactPhone, merchantNotes: account?.aiKnowledge ?? null, chat: chatLines(recent), backInStock, shopInChat, adContext: adContextFor(conversation, at) }, deps));
   } catch (error) {
     console.error("[WHATSAPP ASSISTANT] ai_failed", { conversationId: conversation.id, error: error instanceof Error ? error.message.slice(0, 200) : String(error) });
   }

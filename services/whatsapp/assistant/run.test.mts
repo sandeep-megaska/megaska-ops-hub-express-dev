@@ -6,10 +6,12 @@ import { orderFromNode, productFromNode } from "./store-context.ts";
 
 const NOW = new Date("2026-10-07T08:00:00Z");
 
-function setup(overrides: { mode?: string; messages?: any[]; conversation?: any; aiReply?: any; aiConfigured?: boolean } = {}) {
+function setup(overrides: { mode?: string; messages?: any[]; conversation?: any; aiReply?: any; aiConfigured?: boolean; requests?: any[] } = {}) {
   const updates: any[] = [];
   const sent: string[] = [];
   const alerts: any[] = [];
+  const prompts: string[] = [];
+  const lookups: any[] = [];
   const messages = overrides.messages ?? [{ id: "m1", direction: "INBOUND", waMessageId: "wamid.1", type: "text", body: "Is the swim dress available in XL?", createdAt: NOW }];
   const db: any = {
     merchantWhatsAppAccount: { findUnique: async () => ({ shopId: "shop-1", enabled: true, aiMode: overrides.mode ?? "AUTO", aiKnowledge: "Delivery in 3-7 days." }) },
@@ -26,12 +28,13 @@ function setup(overrides: { mode?: string; messages?: any[]; conversation?: any;
     sleep: async () => undefined,
     aiConfigured: () => overrides.aiConfigured ?? true,
     loadContext: async () => ({ storeName: "Megaska", storeUrl: "https://megaska.com", policies: [], merchantNotes: null, products: [], orders: [] }),
-    complete: async () => overrides.aiReply ?? { reply: "Yes! XL is in stock at ₹1,195: https://megaska.com/products/swim-dress", intent: "product", needs_human: false, confidence: 0.9 },
+    loadRequests: async (input: any) => { lookups.push(input); return overrides.requests ?? []; },
+    complete: async (input: any) => { prompts.push(input.user); return overrides.aiReply ?? { reply: "Yes! XL is in stock at ₹1,195: https://megaska.com/products/swim-dress", intent: "product", needs_human: false, confidence: 0.9 }; },
     sendText: async (input: any) => { sent.push(input.text); },
     typing: async () => undefined,
     alert: async (input: any) => { alerts.push(input); },
   };
-  return { deps, updates, sent, alerts };
+  return { deps, updates, sent, alerts, prompts, lookups };
 }
 
 test("AUTO: a product question gets the assistant's answer, no team alert", async () => {
@@ -254,4 +257,29 @@ test("the reply above product cards is cut to a short lead-in", () => {
   const long = "Here are our swim bottoms you might like:\n1. High Waisted Bottom - ₹495\n   https://megaska.com/products/a\n2. Another - ₹495\n   https://megaska.com/products/b";
   assert.equal(cardsLeadText(long), "Here are our swim bottoms you might like 👇\nTap a product, add it to your cart and tap Place order. We'll ask your size and send a link to check out.");
   assert.equal(cardsLeadText("Here are our bikini sets 👇"), "Here are our bikini sets 👇");
+});
+
+test("the customer's exchange and refund requests are given to the assistant, looked up by this shop and number", async () => {
+  const requests = [{ kind: "exchange", order: "#1042", requestedOn: "23 Oct", status: "Reverse pickup scheduled", items: "Swim dress (size M → L)", pickup: "scheduled | AWB 123 | https://track.example/123", replacement: null, refund: null }];
+  const { deps, prompts, lookups, sent } = setup({ requests, aiReply: { reply: "Your exchange for #1042: pickup is scheduled (AWB 123).", intent: "request_status", needs_human: false, confidence: 0.9 } });
+  const result = await runWhatsAppAssistant({ shopId: "shop-1", conversationId: "c1", waMessageId: "wamid.1" }, deps);
+  assert.equal(result.status, "sent");
+  assert.deepEqual(lookups, [{ shopId: "shop-1", contactPhone: "919539180257" }]);
+  assert.match(prompts[0], /REQUESTS \(this customer's exchanges/);
+  assert.match(prompts[0], /exchange for order #1042 \(requested 23 Oct\) \| status: Reverse pickup scheduled \| items: Swim dress \(size M → L\) \| pickup: scheduled \| AWB 123/);
+  assert.deepEqual(sent, ["Your exchange for #1042: pickup is scheduled (AWB 123)."]);
+});
+
+test("a failed request lookup doesn't stop the reply", async () => {
+  const { deps, sent, prompts } = setup();
+  deps.loadRequests = async () => { throw new Error("db down"); };
+  assert.equal((await runWhatsAppAssistant({ shopId: "shop-1", conversationId: "c1", waMessageId: "wamid.1" }, deps)).status, "sent");
+  assert.equal(sent.length, 1);
+  assert.doesNotMatch(prompts[0], /REQUESTS/);
+});
+
+test("a new exchange or refund request still goes to the team", async () => {
+  const { deps, alerts } = setup({ aiReply: { reply: "Our team will help with the exchange.", intent: "return_exchange", needs_human: false, confidence: 0.9 } });
+  assert.equal((await runWhatsAppAssistant({ shopId: "shop-1", conversationId: "c1", waMessageId: "wamid.1" }, deps)).status, "handoff");
+  assert.equal(alerts.length, 1);
 });
