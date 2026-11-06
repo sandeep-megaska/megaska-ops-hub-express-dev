@@ -305,4 +305,15 @@ Templates `exchange_approved`, `exchange_payment_received`,
 `WHATSAPP_TEMPLATE_EXCHANGE_<STATUS>`), sent from the shop's own number when
 exchange updates are switched on.
 
+**Set up exchange templates** (Merchant Settings → WhatsApp → "Save & set up
+exchange templates", `services/whatsapp/exchange-templates.ts`): submits the nine
+templates as Utility in the account's template language from the shop's
+WhatsApp Business Account (`POST /{waba}/message_templates`, with examples),
+skipping any already on the account in that language, and reports what was
+submitted, already approved or pending, and Meta's reason for any that failed.
+The bodies' `{{1}}` name, `{{2}}` order number and `{{3}}` AWB (pickup scheduled,
+replacement shipped) match what each step sends; names are shared with the
+sender (`EXCHANGE_TEMPLATE_NAMES`). Switch on Exchange updates once Meta has
+approved them.
+
 Never expose WhatsApp secrets as `NEXT_PUBLIC_*`.

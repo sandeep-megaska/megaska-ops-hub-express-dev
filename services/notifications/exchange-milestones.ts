@@ -3,6 +3,7 @@ import { EXCHANGE_STATUS_DESCRIPTIONS } from "../exchange/lifecycle";
 import { sendCustomerEmail, sendOpsAlert } from "./email";
 import { sendTemplateMessage } from "../whatsapp";
 import { resolveWhatsAppSender } from "../whatsapp/sender";
+import { EXCHANGE_TEMPLATE_NAMES } from "../whatsapp/exchange-templates";
 
 // Centralized customer + admin notifications for exchange status milestones.
 //
@@ -65,7 +66,7 @@ const MILESTONES: Record<string, MilestoneDefinition> = {
     }),
     whatsapp: {
       key: "APPROVED",
-      defaultTemplate: "exchange_approved",
+      defaultTemplate: EXCHANGE_TEMPLATE_NAMES.APPROVED,
       variables: (c) => [c.customerName || "there", c.orderNumber],
     },
     adminSubject: (c) => `Exchange approved: #${c.orderNumber}`,
@@ -77,7 +78,7 @@ const MILESTONES: Record<string, MilestoneDefinition> = {
     }),
     whatsapp: {
       key: "PAYMENT_RECEIVED",
-      defaultTemplate: "exchange_payment_received",
+      defaultTemplate: EXCHANGE_TEMPLATE_NAMES.PAYMENT_RECEIVED,
       variables: (c) => [c.customerName || "there", c.orderNumber],
     },
     adminSubject: (c) => `Exchange payment received: #${c.orderNumber}`,
@@ -92,7 +93,7 @@ const MILESTONES: Record<string, MilestoneDefinition> = {
     }),
     whatsapp: {
       key: "PICKUP_SCHEDULED",
-      defaultTemplate: "exchange_pickup_scheduled",
+      defaultTemplate: EXCHANGE_TEMPLATE_NAMES.PICKUP_SCHEDULED,
       variables: (c) => [c.customerName || "there", c.orderNumber, c.reverseAwb || "-"],
     },
     adminSubject: (c) => `Reverse pickup scheduled: #${c.orderNumber}`,
@@ -104,7 +105,7 @@ const MILESTONES: Record<string, MilestoneDefinition> = {
     }),
     whatsapp: {
       key: "PICKUP_COMPLETED",
-      defaultTemplate: "exchange_pickup_completed",
+      defaultTemplate: EXCHANGE_TEMPLATE_NAMES.PICKUP_COMPLETED,
       variables: (c) => [c.customerName || "there", c.orderNumber],
     },
     adminSubject: (c) => `Reverse pickup completed: #${c.orderNumber}`,
@@ -116,7 +117,7 @@ const MILESTONES: Record<string, MilestoneDefinition> = {
     }),
     whatsapp: {
       key: "ITEM_RECEIVED",
-      defaultTemplate: "exchange_item_received",
+      defaultTemplate: EXCHANGE_TEMPLATE_NAMES.ITEM_RECEIVED,
       variables: (c) => [c.customerName || "there", c.orderNumber],
     },
     adminSubject: (c) => `Return received at warehouse: #${c.orderNumber}`,
@@ -128,7 +129,7 @@ const MILESTONES: Record<string, MilestoneDefinition> = {
     }),
     whatsapp: {
       key: "REPLACEMENT_PROCESSING",
-      defaultTemplate: "exchange_replacement_processing",
+      defaultTemplate: EXCHANGE_TEMPLATE_NAMES.REPLACEMENT_PROCESSING,
       variables: (c) => [c.customerName || "there", c.orderNumber],
     },
     adminSubject: (c) => `Replacement processing: #${c.orderNumber}`,
@@ -140,7 +141,7 @@ const MILESTONES: Record<string, MilestoneDefinition> = {
     }),
     whatsapp: {
       key: "REPLACEMENT_SHIPPED",
-      defaultTemplate: "exchange_replacement_shipped",
+      defaultTemplate: EXCHANGE_TEMPLATE_NAMES.REPLACEMENT_SHIPPED,
       variables: (c) => [c.customerName || "there", c.orderNumber, c.forwardAwb || "-"],
     },
     adminSubject: (c) => `Replacement shipped: #${c.orderNumber}`,
@@ -152,7 +153,7 @@ const MILESTONES: Record<string, MilestoneDefinition> = {
     }),
     whatsapp: {
       key: "CLOSED",
-      defaultTemplate: "exchange_completed",
+      defaultTemplate: EXCHANGE_TEMPLATE_NAMES.CLOSED,
       variables: (c) => [c.customerName || "there", c.orderNumber],
     },
     adminSubject: (c) => `Exchange completed: #${c.orderNumber}`,
@@ -164,7 +165,7 @@ const MILESTONES: Record<string, MilestoneDefinition> = {
     }),
     whatsapp: {
       key: "REJECTED",
-      defaultTemplate: "exchange_rejected",
+      defaultTemplate: EXCHANGE_TEMPLATE_NAMES.REJECTED,
       variables: (c) => [c.customerName || "there", c.orderNumber],
     },
     adminSubject: (c) => `Exchange rejected: #${c.orderNumber}`,
