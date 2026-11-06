@@ -122,3 +122,12 @@ test("the Meta catalog id can be pasted with its label or from a Commerce Manage
   assert.equal(buildMerchantWhatsAppUpdate({ ...input, catalogId: "" }, null, encrypt).catalogId, null);
   assert.throws(() => buildMerchantWhatsAppUpdate({ ...input, catalogId: "my catalog" }, null, encrypt), MerchantWhatsAppValidationError);
 });
+
+test("exchange and request updates have separate switches", () => {
+  assert.equal(pick("exchange", account({ requestUpdatesEnabled: false }))?.source, "MERCHANT");
+  assert.equal(pick("requests", account({ requestUpdatesEnabled: false })), null);
+  assert.equal(pick("requests", account({ exchangeEnabled: false, requestUpdatesEnabled: true }))?.source, "MERCHANT");
+  assert.equal(pick("exchange", account({ exchangeEnabled: false, requestUpdatesEnabled: true })), null);
+  assert.equal(pick("requests", null), null, "never from the LoopD2C number");
+  assert.equal(toAdminView(account({ requestUpdatesEnabled: true }) as any, {}).requestUpdatesEnabled, true);
+});

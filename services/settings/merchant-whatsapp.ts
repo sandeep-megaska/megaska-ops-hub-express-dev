@@ -30,7 +30,7 @@ export async function saveMerchantWhatsApp(shopId: string, input: MerchantWhatsA
   const current = await getMerchantWhatsAppAccount(shopId, db());
   const data = buildMerchantWhatsAppUpdate(input, current);
   await db().merchantWhatsAppAccount.upsert({ where: { shopId }, create: { shopId, ...data }, update: data });
-  console.info("[MERCHANT WHATSAPP SETTINGS]", { operation: "saved", shopId, enabled: data.enabled, otpEnabled: data.otpEnabled, recoveryEnabled: data.recoveryEnabled, exchangeEnabled: data.exchangeEnabled });
+  console.info("[MERCHANT WHATSAPP SETTINGS]", { operation: "saved", shopId, enabled: data.enabled, otpEnabled: data.otpEnabled, recoveryEnabled: data.recoveryEnabled, exchangeEnabled: data.exchangeEnabled, requestUpdatesEnabled: data.requestUpdatesEnabled });
 }
 
 // Read-only connection check against Meta; the result is stored and shown in the form.

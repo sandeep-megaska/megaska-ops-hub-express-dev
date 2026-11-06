@@ -12,7 +12,7 @@
 
 import { decryptShopifyToken, encryptShopifyToken } from "../shopify/token-crypto.ts";
 
-export type WhatsAppPurpose = "otp" | "recovery" | "exchange";
+export type WhatsAppPurpose = "otp" | "recovery" | "exchange" | "requests";
 export type WhatsAppSenderSource = "MERCHANT" | "PLATFORM";
 
 export type WhatsAppSender = {
@@ -39,6 +39,7 @@ export type MerchantWhatsAppAccountRow = {
   recoveryFirstTemplate: string;
   recoveryReminderTemplate: string;
   exchangeEnabled: boolean;
+  requestUpdatesEnabled?: boolean;
   codConfirmEnabled?: boolean;
   codConfirmTemplate?: string;
   shippingUpdatesEnabled?: boolean;
@@ -159,6 +160,7 @@ export function chooseWhatsAppSender(
   const own = merchantSender(account, options.decrypt);
   if (purpose === "otp") return own && account?.otpEnabled ? own : platformOtpSender(options.env);
   if (purpose === "recovery") return own && account?.recoveryEnabled ? own : null;
+  if (purpose === "requests") return own && account?.requestUpdatesEnabled ? own : null;
   return own && account?.exchangeEnabled ? own : null;
 }
 
@@ -188,6 +190,7 @@ export type MerchantWhatsAppAdminView = {
   recoveryFirstTemplate: string;
   recoveryReminderTemplate: string;
   exchangeEnabled: boolean;
+  requestUpdatesEnabled: boolean;
   codConfirmEnabled: boolean;
   codConfirmTemplate: string;
   shippingUpdatesEnabled: boolean;
@@ -223,6 +226,7 @@ export function toAdminView(account: MerchantWhatsAppAccountRow | null, env: Rec
     recoveryFirstTemplate: account?.recoveryFirstTemplate ?? "checkout_recovery",
     recoveryReminderTemplate: account?.recoveryReminderTemplate ?? "checkout_recovery_reminder",
     exchangeEnabled: account?.exchangeEnabled ?? false,
+    requestUpdatesEnabled: account?.requestUpdatesEnabled ?? false,
     codConfirmEnabled: account?.codConfirmEnabled ?? false,
     codConfirmTemplate: account?.codConfirmTemplate ?? "cod_order_confirmation",
     shippingUpdatesEnabled: account?.shippingUpdatesEnabled ?? false,
@@ -311,6 +315,7 @@ export function buildMerchantWhatsAppUpdate(
     otpEnabled: flag(input.otpEnabled),
     recoveryEnabled: flag(input.recoveryEnabled),
     exchangeEnabled: flag(input.exchangeEnabled),
+    requestUpdatesEnabled: flag(input.requestUpdatesEnabled),
     codConfirmEnabled: flag(input.codConfirmEnabled),
     shippingUpdatesEnabled: flag(input.shippingUpdatesEnabled),
     backInStockEnabled: flag(input.backInStockEnabled),

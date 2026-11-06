@@ -313,13 +313,14 @@ skipping any already on the account in that language, and reports what was
 submitted, already approved or pending, and Meta's reason for any that failed.
 The bodies' `{{1}}` name, `{{2}}` order number and `{{3}}` AWB (pickup scheduled,
 replacement shipped) match what each step sends; names are shared with the
-sender (`EXCHANGE_TEMPLATE_NAMES`, `REQUEST_TEMPLATE_NAMES`). Switch on customer
-updates once Meta has approved them.
+sender (`EXCHANGE_TEMPLATE_NAMES`, `REQUEST_TEMPLATE_NAMES`). The message reports each group separately; tick
+**Exchange updates** and **Cancellation, issue and refund updates** each once its
+templates are approved.
 
 ### Cancellation, issue and refund updates
 
-`services/notifications/request-updates.ts`, same sender and toggle as exchange
-updates, each step sent once (AuditEvent marker `request.update_notified.<KEY>`):
+`services/notifications/request-updates.ts`, from the shop's own number with its own
+switch (`requestUpdatesEnabled`, "Cancellation, issue and refund updates"), each step sent once (AuditEvent marker `request.update_notified.<KEY>`):
 
 | Step | Template | Variables |
 |---|---|---|
@@ -353,6 +354,8 @@ PR parcels only; an optional company goes on the Shopify address and the CSV:
 3. **Records** (`CollabShipment`): retail value, product cost (the variant's Shopify
    cost price at the time), shipping cost (entered from the Delhivery bill),
    campaign, handle, and whether the content was posted, with its link.
+   **Get cost from Shopify** fills in items that had no cost price when sent (cost
+   added in Shopify later); costs already recorded are never changed.
 4. **Tracking**: the `delhivery-tracking` cron refreshes open parcels (15 per run);
    **Refresh** does one now.
 5. **Export CSV for accounts**: one line per item for the month (IST), with unit and

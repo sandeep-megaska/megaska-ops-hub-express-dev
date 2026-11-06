@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "../../../../../services/db/prisma";
 import { requireAdminShopFromRequest } from "../../../../../services/shopify/admin-auth";
 import { ShopResolutionError } from "../../../../../services/shopify/shop";
-import { bookCollabShipment, syncCollabTracking } from "../../../../../services/collab/collab-operations";
+import { bookCollabShipment, refreshCollabCosts, syncCollabTracking } from "../../../../../services/collab/collab-operations";
 import { DELIVERABLE_STATUSES, type DeliverableStatus } from "../../../../../services/collab/collab-shipments";
 
 export const maxDuration = 60;
@@ -45,7 +45,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
 }
 
-// action=book retries the Delhivery booking; action=track refreshes tracking now.
+// action=book retries the Delhivery booking; action=track refreshes tracking now;
+// action=cost fills in cost prices added in Shopify since the parcel was sent.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const shop = await requireAdminShopFromRequest(req);
@@ -54,6 +55,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (body.action === "book") {
       const result = await bookCollabShipment(shop, id);
       return NextResponse.json(result, { status: result.ok ? 200 : 422 });
+    }
+    if (body.action === "cost") {
+      const result = await refreshCollabCosts(shop, id);
+      return NextResponse.json(result, { status: result.ok ? 200 : 404 });
     }
     if (body.action === "track") {
       const row = await prisma.collabShipment.findFirst({ where: { id, shopId: shop.id }, select: { id: true, shopId: true, awb: true, trackingUrl: true, deliveredAt: true } });
