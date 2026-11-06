@@ -227,6 +227,8 @@ export type StoreContext = {
   // Store data that could not be read (shown in the admin preview, never to customers).
   readErrors?: string[];
   orders: Array<{ name: string; placedOn: string; status: string; payment: string; items: string; tracking: string | null; total: string }>;
+  // This customer's exchange, cancellation, issue and refund requests in LoopD2C (customer-requests.ts).
+  requests?: Array<{ kind: string; order: string; requestedOn: string; status: string; items: string; pickup: string | null; replacement: string | null; refund: string | null }>;
   // The Click-to-WhatsApp ad this customer came from (recently), if any.
   adContext?: string | null;
 };
@@ -242,7 +244,8 @@ export function buildSystemPrompt(storeName: string, options: { backInStock?: bo
     "- Never invent or change prices, discounts, offers, coupon codes, stock, sizes, delivery dates, policies or order details. Quote prices exactly as given.",
     "- Never create urgency or scarcity (no 'only few left', 'hurry', 'offer ends soon') unless MERCHANT NOTES state it as a fact.",
     "- Never ask for or accept OTPs, passwords, card numbers, CVV or UPI PINs.",
-    "- Requests that need a person: a complaint, damaged/wrong/missing item, asking for a refund, return, exchange or cancellation of their order, payment taken but no order, address change, a delivery problem, or an upset customer. Reply with one or two short, warm lines saying the team will help (you may quote the relevant policy fact). If MERCHANT NOTES say the customer can do it themselves (for example cancel, exchange or report an issue from their account), give those steps too. Set needs_human to true and handoff_kind to \"hard\".",
+    "- Status of an existing request: when the customer asks about an exchange, cancellation, issue or refund listed under REQUESTS (\"where is my exchange?\", \"is my refund done?\", \"when is the pickup?\"), answer from it: the status in plain words, the pickup or replacement tracking, the refund amount and status. Do not hand over just for that: use intent request_status with needs_human false. (A new request or a change still uses return_exchange and goes to the team.) Never promise dates that are not in the facts. If the status says something is waiting on the customer (a payment, bank or UPI details), tell them that.",
+    "- Requests that need a person: a complaint, damaged/wrong/missing item, asking for a NEW refund, return, exchange or cancellation, or a change to an existing request, payment taken but no order, address change, a delivery problem, or an upset customer. Reply with one or two short, warm lines saying the team will help (you may quote the relevant policy fact). If MERCHANT NOTES say the customer can do it themselves (for example cancel, exchange or report an issue from their account), give those steps too. Set needs_human to true and handoff_kind to \"hard\".",
     "- Upset customer, complaint or apology: no emoji at all; acknowledge the specific problem in plain words.",
     "- Reply times: if MERCHANT NOTES give support hours and NOW is outside them, say the team will reply when they are back (quote the hours) instead of \"shortly\".",
     "- A general question ABOUT a policy (\"what is your refund policy?\", \"do you allow exchange?\") is not a request: answer it from the facts (intent policy) without needs_human.",
@@ -264,7 +267,7 @@ export function buildSystemPrompt(storeName: string, options: { backInStock?: bo
     "Style: reply in the customer's language and script (English, Hindi, Hinglish, Malayalam, Tamil, …). Warm, plain and short: at most 5 short lines. WhatsApp formatting only (*bold* sparingly), at most one emoji. No greeting block or signature on follow-up messages.",
     "If the message is only a greeting, greet back and say you can help with products, sizes and orders.",
     "",
-    `Return JSON only: {"reply": string, "intent": "greeting"|"product"|"size"|"order_status"|"policy"|"complaint"|"return_exchange"|"other", "needs_human": boolean, "handoff_kind": "soft"|"hard"|null, "handoff_reason": string|null, "confidence": number between 0 and 1 = how fully the facts support your reply${options.backInStock ? ', "restock_request": {"product": string, "size": string|null, "color": string|null}|null' : ""}${options.shopInChat ? ', "show_products": string[], "cards_title": string|null, "show_catalog": boolean' : ""}}.`,
+    `Return JSON only: {"reply": string, "intent": "greeting"|"product"|"size"|"order_status"|"request_status"|"policy"|"complaint"|"return_exchange"|"other", "needs_human": boolean, "handoff_kind": "soft"|"hard"|null, "handoff_reason": string|null, "confidence": number between 0 and 1 = how fully the facts support your reply${options.backInStock ? ', "restock_request": {"product": string, "size": string|null, "color": string|null}|null' : ""}${options.shopInChat ? ', "show_products": string[], "cards_title": string|null, "show_catalog": boolean' : ""}}.`,
   ].join("\n");
 }
 
@@ -292,6 +295,7 @@ export function buildUserPrompt(context: StoreContext, chat: ChatLine[], now: Da
       : "PRODUCTS: no product matched the customer's words.",
   );
   if (context.catalogOverview?.length) sections.push(`CATALOG OVERVIEW (product types in the store):\n${context.catalogOverview.join(", ")}`);
+  if (context.requests?.length) sections.push(`REQUESTS (this customer's exchanges, cancellations, issue reports and refunds with the store):\n${context.requests.map((request) => `- ${request.kind} for order ${request.order} (requested ${request.requestedOn}) | status: ${request.status}${request.items ? ` | items: ${request.items}` : ""}${request.pickup ? ` | pickup: ${request.pickup}` : ""}${request.replacement ? ` | replacement delivery: ${request.replacement}` : ""}${request.refund ? ` | refund: ${request.refund}` : ""}`).join("\n")}`);
   sections.push(
     context.orders.length
       ? `ORDERS (this customer's recent orders):\n${context.orders.map((order) => `- ${order.name} placed ${order.placedOn} | ${order.status} | payment: ${order.payment} | ${order.total} | items: ${order.items}${order.tracking ? ` | tracking: ${order.tracking}` : ""}`).join("\n")}`
