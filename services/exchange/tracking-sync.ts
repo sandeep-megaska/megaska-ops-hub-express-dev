@@ -1,6 +1,6 @@
 import type { ShipmentStatus, ShipmentTracking } from "../../generated/prisma";
 import { prisma } from "../db/prisma";
-import { canTransitionExchangeStatus } from "./lifecycle";
+import { exchangeShipmentStatus, isFreshMilestone, nextForwardExchangeStatus, nextReverseExchangeStatus } from "./tracking-status.ts";
 import { DelhiveryAdapter, DelhiveryTrackingError } from "../logistics/delhivery-adapter";
 import { resolveDelhiveryRuntimeConfig } from "../logistics/delhivery-runtime";
 import { notifyExchangeMilestone } from "../notifications/exchange-milestones";
@@ -26,49 +26,6 @@ interface SyncableShipment {
   trackingUrl: string | null;
   deliveredAt: Date | null;
   shippedAt: Date | null;
-}
-
-function reverseShipmentStatus(rawStatus: string | null | undefined, normalizedStatus: string): ShipmentStatus {
-  const haystack = `${rawStatus || ""} ${normalizedStatus}`.toLowerCase();
-  if (["failed", "cancelled", "canceled", "exception", "delivery_failed"].some((t) => haystack.includes(t))) return "FAILED";
-  if (["delivered", "received"].some((t) => haystack.includes(t))) return "DELIVERED";
-  if (["in_transit", "in transit", "picked", "picked_up", "pickupdone", "dispatched"].some((t) => haystack.includes(t))) return "IN_TRANSIT";
-  if (["ready_for_pickup", "manifested", "scheduled", "pickup created"].some((t) => haystack.includes(t))) return "SCHEDULED";
-  return "PENDING";
-}
-
-function forwardShipmentStatus(rawStatus: string | null | undefined, normalizedStatus: string): ShipmentStatus {
-  const haystack = `${rawStatus || ""} ${normalizedStatus}`.toLowerCase();
-  if (["failed", "cancelled", "canceled", "exception", "delivery_failed"].some((t) => haystack.includes(t))) return "FAILED";
-  if (["delivered", "received"].some((t) => haystack.includes(t))) return "DELIVERED";
-  if (["out_for_delivery", "out for delivery", "in_transit", "in transit", "picked", "picked_up", "dispatched"].some((t) => haystack.includes(t))) return "IN_TRANSIT";
-  if (["ready_for_pickup", "manifested", "scheduled"].some((t) => haystack.includes(t))) return "SCHEDULED";
-  return "PENDING";
-}
-
-function nextReverseExchangeStatus(currentStatus: string, shipmentStatus: ShipmentStatus, rawStatus?: string | null) {
-  const raw = String(rawStatus || "").toLowerCase();
-  const target =
-    shipmentStatus === "DELIVERED"
-      ? "ITEM_RECEIVED"
-      : shipmentStatus === "IN_TRANSIT" && ["pickup completed", "pickupdone", "picked", "picked up"].some((t) => raw.includes(t))
-        ? "PICKUP_COMPLETED"
-        : ["SCHEDULED", "IN_TRANSIT"].includes(shipmentStatus)
-          ? "PICKUP_SCHEDULED"
-          : null;
-  if (!target || !canTransitionExchangeStatus(currentStatus, target)) return currentStatus;
-  return target;
-}
-
-function nextForwardExchangeStatus(currentStatus: string, shipmentStatus: ShipmentStatus) {
-  const target =
-    shipmentStatus === "DELIVERED"
-      ? "CLOSED"
-      : ["SCHEDULED", "IN_TRANSIT"].includes(shipmentStatus)
-        ? "REPLACEMENT_SHIPPED"
-        : null;
-  if (!target || !canTransitionExchangeStatus(currentStatus, target)) return currentStatus;
-  return target;
 }
 
 function usefulRemarks(direction: ExchangeShipmentDirection, rawStatus?: string | null, eventsCount = 0) {
@@ -113,12 +70,10 @@ export async function syncExchangeShipment(
   }
 
   const isReverse = shipment.direction === "REVERSE_PICKUP";
-  const shipmentStatus = isReverse
-    ? reverseShipmentStatus(snapshot.rawStatus, snapshot.normalizedStatus)
-    : forwardShipmentStatus(snapshot.rawStatus, snapshot.normalizedStatus);
+  const shipmentStatus = exchangeShipmentStatus(snapshot.normalizedStatus);
   const statusTimestamp = snapshot.statusUpdatedAt || new Date();
   const nextStatus = isReverse
-    ? nextReverseExchangeStatus(request.status, shipmentStatus, snapshot.rawStatus)
+    ? nextReverseExchangeStatus(request.status, shipmentStatus, snapshot.normalizedStatus)
     : nextForwardExchangeStatus(request.status, shipmentStatus);
   const changed = nextStatus !== request.status;
 
@@ -175,8 +130,10 @@ export async function syncExchangeShipment(
   // Notify customer + admin on an actual status transition. Idempotent per
   // (request, status), so the 30-min cron and the manual "Sync tracking" button
   // never double-notify the same milestone.
-  if (changed) {
+  if (changed && isFreshMilestone(snapshot.statusUpdatedAt)) {
     await notifyExchangeMilestone(request.id, nextStatus);
+  } else if (changed) {
+    console.info("[DELHIVERY TRACKING] milestone_not_notified_stale", { requestId: request.id, status: nextStatus, statusAt: snapshot.statusUpdatedAt });
   }
 
   return {
