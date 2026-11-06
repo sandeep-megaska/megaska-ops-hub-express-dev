@@ -332,3 +332,30 @@ Override names with `WHATSAPP_TEMPLATE_<KEY>` (e.g. `WHATSAPP_TEMPLATE_REFUND_PA
 Sends never block the status change; with updates off nothing is sent or marked.
 
 Never expose WhatsApp secrets as `NEXT_PUBLIC_*`.
+
+## Influencer & collab parcels
+
+Admin → **Collab parcels** (`/admin/collabs`, `services/collab/`) sends free
+products (influencer, brand collab, PR, gift) at the store's cost, instead of
+booking them in the Delhivery panel:
+
+1. **Shopify order at ₹0**: the real variants, with one 100% order discount titled
+   "<purpose> - paid by store", tax-exempt, tagged `LoopD2C Collab`, `Collab: <purpose>`
+   and `Campaign: <name>`, plus a note and `loopd2c_collab_*` attributes. Shopify
+   takes the stock off, and the order shows in Shopify's own reports as a
+   discount. Stock is checked first; a variant that can't be oversold stops the parcel.
+2. **Delhivery Prepaid booking** through the Shipments flow (`bookOrderShipments`),
+   with the retail value declared to the courier (`declaredValuePaise`). The order is
+   marked shipped in Shopify with the AWB (emails the recipient only if ticked).
+   If booking fails, the order stays and **Book on Delhivery** retries it.
+3. **Records** (`CollabShipment`): retail value, product cost (the variant's Shopify
+   cost price at the time), shipping cost (entered from the Delhivery bill),
+   campaign, handle, and whether the content was posted, with its link.
+4. **Tracking**: the `delhivery-tracking` cron refreshes open parcels (15 per run);
+   **Refresh** does one now.
+5. **Export CSV for accounts**: one line per item for the month (IST), with unit and
+   line retail and cost, and shipping on the parcel's first line.
+
+Collab orders skip GST auto-invoicing (a ₹0 tax invoice would use up a number). How
+free samples are treated for GST and input tax credit is for the store's accountant
+to decide; the CSV and the tagged Shopify orders are there for that.
