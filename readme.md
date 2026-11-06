@@ -333,14 +333,16 @@ Sends never block the status change; with updates off nothing is sent or marked.
 
 Never expose WhatsApp secrets as `NEXT_PUBLIC_*`.
 
-## Influencer & collab parcels
+## Free parcels (influencer, collab, samples)
 
-Admin → **Collab parcels** (`/admin/collabs`, `services/collab/`) sends free
-products (influencer, brand collab, PR, gift) at the store's cost, instead of
-booking them in the Delhivery panel:
+Admin → **Free parcels** (`/admin/collabs`, `services/collab/`) sends free
+products at the store's cost (influencer, brand collab, PR, samples to vendors and
+manufacturers, photoshoot / internal, gift, other) instead of booking them in the
+Delhivery panel. Content tracking (posted, link) applies to influencer, collab and
+PR parcels only; an optional company goes on the Shopify address and the CSV:
 
 1. **Shopify order at ₹0**: the real variants, with one 100% order discount titled
-   "<purpose> - paid by store", tax-exempt, tagged `LoopD2C Collab`, `Collab: <purpose>`
+   "<purpose> - paid by store", tax-exempt, tagged `LoopD2C Collab`, `Free parcel: <purpose>`
    and `Campaign: <name>`, plus a note and `loopd2c_collab_*` attributes. Shopify
    takes the stock off, and the order shows in Shopify's own reports as a
    discount. Stock is checked first; a variant that can't be oversold stops the parcel.

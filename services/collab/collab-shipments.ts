@@ -1,4 +1,5 @@
-// Influencer / collab / PR / gift parcels the store sends at its own cost.
+// Free parcels the store sends at its own cost: influencer, collab, PR, gifts,
+// samples to vendors and manufacturers, photoshoots.
 //
 // Each parcel becomes a ₹0 Shopify order (100% discount, tagged COLLAB_ORDER_TAG):
 // Shopify takes the stock off and the order sits in Shopify's own reports, while
@@ -9,9 +10,12 @@
 import type { MegaskaOrderStatus } from "../../generated/prisma/index.js";
 
 export const COLLAB_ORDER_TAG = "LoopD2C Collab";
-export const COLLAB_PURPOSES = ["INFLUENCER", "COLLAB", "PR", "GIFT", "OTHER"] as const;
+export const COLLAB_PURPOSES = ["INFLUENCER", "COLLAB", "PR", "VENDOR_SAMPLE", "INTERNAL", "GIFT", "OTHER"] as const;
 export type CollabPurpose = (typeof COLLAB_PURPOSES)[number];
-export const PURPOSE_LABEL: Record<CollabPurpose, string> = { INFLUENCER: "Influencer", COLLAB: "Brand collab", PR: "PR / media", GIFT: "Gift", OTHER: "Other" };
+export const PURPOSE_LABEL: Record<CollabPurpose, string> = { INFLUENCER: "Influencer", COLLAB: "Brand collab", PR: "PR / media", VENDOR_SAMPLE: "Sample to vendor / manufacturer", INTERNAL: "Photoshoot / internal", GIFT: "Gift", OTHER: "Other" };
+// Parcels where the recipient is expected to post content.
+export const CONTENT_PURPOSES: readonly CollabPurpose[] = ["INFLUENCER", "COLLAB", "PR"];
+export const expectsContent = (purpose: string) => (CONTENT_PURPOSES as readonly string[]).includes(purpose);
 export const DELIVERABLE_STATUSES = ["PENDING", "POSTED", "NOT_POSTED", "NOT_NEEDED"] as const;
 export type DeliverableStatus = (typeof DELIVERABLE_STATUSES)[number];
 export const MAX_COLLAB_ITEMS = 20;
@@ -25,7 +29,7 @@ export const INDIAN_STATES = [
   "Uttar Pradesh", "Uttarakhand", "West Bengal",
 ] as const;
 
-export type CollabAddress = { address1: string; address2: string; city: string; state: string; pin: string };
+export type CollabAddress = { company?: string; address1: string; address2: string; city: string; state: string; pin: string };
 export type CollabItem = { variantId: string; title: string; sku: string; quantity: number; unitPricePaise: number; unitCostPaise: number | null };
 export type CollabInput = {
   purpose: CollabPurpose;
@@ -65,7 +69,7 @@ export function normalizeCollabInput(body: unknown): { ok: true; data: CollabInp
   const email = text(input.recipientEmail, 120);
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { ok: false, error: "The email address doesn't look right." };
   const raw = (input.address && typeof input.address === "object" ? input.address : {}) as Record<string, unknown>;
-  const address: CollabAddress = { address1: text(raw.address1, 200), address2: text(raw.address2, 200), city: text(raw.city, 80), state: text(raw.state, 80), pin: text(raw.pin, 10).replace(/\D/g, "") };
+  const address: CollabAddress = { company: text(raw.company, 80) || undefined, address1: text(raw.address1, 200), address2: text(raw.address2, 200), city: text(raw.city, 80), state: text(raw.state, 80), pin: text(raw.pin, 10).replace(/\D/g, "") };
   if (address.address1.length < 5) return { ok: false, error: "Enter the street address." };
   if (!address.city) return { ok: false, error: "Enter the city." };
   if (!(INDIAN_STATES as readonly string[]).includes(address.state)) return { ok: false, error: "Choose the state." };
@@ -170,7 +174,7 @@ function splitName(name: string) {
 // titled so reports show why it's free, no tax, tagged and annotated for audit.
 export function buildCollabDraftOrderInput(collabId: string, input: CollabInput) {
   const { firstName, lastName } = splitName(input.recipientName);
-  const shippingAddress = { firstName, lastName, address1: input.address.address1, address2: input.address.address2 || undefined, city: input.address.city, province: input.address.state, country: "India", zip: input.address.pin, phone: input.recipientPhone };
+  const shippingAddress = { firstName, lastName, company: input.address.company || undefined, address1: input.address.address1, address2: input.address.address2 || undefined, city: input.address.city, province: input.address.state, country: "India", zip: input.address.pin, phone: input.recipientPhone };
   const purposeLabel = PURPOSE_LABEL[input.purpose];
   return {
     lineItems: input.items.map((item) => ({ variantId: item.variantId, quantity: item.quantity })),
@@ -179,8 +183,8 @@ export function buildCollabDraftOrderInput(collabId: string, input: CollabInput)
     billingAddress: shippingAddress,
     appliedDiscount: { title: `${purposeLabel} - paid by store`, description: "Free parcel: product and shipping paid by the store", value: 100, valueType: "PERCENTAGE" },
     taxExempt: true,
-    tags: [COLLAB_ORDER_TAG, `Collab: ${purposeLabel}`, ...(input.campaign ? [`Campaign: ${input.campaign.slice(0, 40)}`] : [])],
-    note: [`${purposeLabel} parcel, paid by the store (LoopD2C ${collabId}).`, input.recipientHandle ? `Handle: ${input.recipientHandle}${input.platform ? ` (${input.platform})` : ""}` : "", input.campaign ? `Campaign: ${input.campaign}` : "", input.notes || ""].filter(Boolean).join("\n"),
+    tags: [COLLAB_ORDER_TAG, `Free parcel: ${purposeLabel}`, ...(input.campaign ? [`Campaign: ${input.campaign.slice(0, 40)}`] : [])],
+    note: [`${purposeLabel}: free parcel, paid by the store (LoopD2C ${collabId}).`, input.address.company ? `Company: ${input.address.company}` : "", input.recipientHandle ? `Handle: ${input.recipientHandle}${input.platform ? ` (${input.platform})` : ""}` : "", input.campaign ? `Campaign: ${input.campaign}` : "", input.notes || ""].filter(Boolean).join("\n"),
     customAttributes: [
       { key: "loopd2c_collab_id", value: collabId },
       { key: "loopd2c_collab_purpose", value: input.purpose },
@@ -247,14 +251,14 @@ const rupees = (paise: number | null) => (paise === null ? "" : (paise / 100).to
 
 // One line per item, so quantities and costs add up per SKU in a spreadsheet.
 export function collabCsv(rows: CollabRow[]) {
-  const header = ["Date", "Shopify order", "Purpose", "Campaign", "Recipient", "Phone", "Handle", "Platform", "City", "State", "SKU", "Product", "Qty", "Unit retail (INR)", "Unit cost (INR)", "Line retail (INR)", "Line cost (INR)", "Parcel shipping cost (INR)", "AWB", "Delivery", "Delivered on", "Content", "Content link", "Status"];
+  const header = ["Date", "Shopify order", "Purpose", "Campaign / reference", "Company", "Recipient", "Phone", "Handle", "Platform", "City", "State", "SKU", "Product", "Qty", "Unit retail (INR)", "Unit cost (INR)", "Line retail (INR)", "Line cost (INR)", "Parcel shipping cost (INR)", "AWB", "Delivery", "Delivered on", "Content", "Content link", "Status"];
   const lines = [header.map(csvCell).join(",")];
   for (const row of rows) {
     const address = (row.address && typeof row.address === "object" ? row.address : {}) as Partial<CollabAddress>;
     const items = (Array.isArray(row.items) ? row.items : []) as CollabItem[];
     items.forEach((item, index) => {
       lines.push([
-        row.createdAt.toISOString().slice(0, 10), row.shopifyOrderName, PURPOSE_LABEL[row.purpose as CollabPurpose] || row.purpose, row.campaign, row.recipientName, row.recipientPhone,
+        row.createdAt.toISOString().slice(0, 10), row.shopifyOrderName, PURPOSE_LABEL[row.purpose as CollabPurpose] || row.purpose, row.campaign, address.company, row.recipientName, row.recipientPhone,
         row.recipientHandle, row.platform, address.city, address.state, item.sku, item.title, item.quantity, rupees(item.unitPricePaise), rupees(item.unitCostPaise),
         rupees(item.unitPricePaise * item.quantity), item.unitCostPaise === null ? "" : rupees(item.unitCostPaise * item.quantity),
         index === 0 ? rupees(row.shippingCostPaise) : "", row.awb, row.trackingStatus ? TRACKING_LABEL[row.trackingStatus] || row.trackingStatus : "",

@@ -10,7 +10,8 @@ const STATES = [
   "Mizoram", "Nagaland", "Odisha", "Puducherry", "Punjab", "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura",
   "Uttar Pradesh", "Uttarakhand", "West Bengal",
 ];
-const PURPOSES = [["INFLUENCER", "Influencer"], ["COLLAB", "Brand collab"], ["PR", "PR / media"], ["GIFT", "Gift"], ["OTHER", "Other"]] as const;
+const PURPOSES = [["INFLUENCER", "Influencer"], ["COLLAB", "Brand collab"], ["PR", "PR / media"], ["VENDOR_SAMPLE", "Sample to vendor / manufacturer"], ["INTERNAL", "Photoshoot / internal"], ["GIFT", "Gift"], ["OTHER", "Other"]] as const;
+const CONTENT_PURPOSES = ["INFLUENCER", "COLLAB", "PR"];
 const PURPOSE_LABEL: Record<string, string> = Object.fromEntries(PURPOSES);
 const CONTENT = [["PENDING", "Waiting for content"], ["POSTED", "Posted"], ["NOT_POSTED", "Not posted"], ["NOT_NEEDED", "No content expected"]] as const;
 const TRACKING: Record<string, [string, string]> = {
@@ -23,16 +24,17 @@ const TRACKING: Record<string, [string, string]> = {
 type Variant = { variantId: string; title: string; sku: string; unitPricePaise: number; unitCostPaise: number | null; available: number | null };
 type Line = Variant & { quantity: number };
 type Item = { title: string; sku: string; quantity: number };
+type Address = { company?: string; city?: string };
 type Row = {
   id: string; createdAt: string; purpose: string; recipientName: string; recipientPhone: string; recipientHandle: string | null; platform: string | null;
-  campaign: string | null; items: Item[]; retailValuePaise: number; productCostPaise: number; shippingCostPaise: number | null; status: string; errorMessage: string | null;
+  campaign: string | null; address: Address | null; items: Item[]; retailValuePaise: number; productCostPaise: number; shippingCostPaise: number | null; status: string; errorMessage: string | null;
   shopifyOrderName: string | null; awb: string | null; trackingUrl: string | null; trackingStatus: string | null; deliverableStatus: string; contentUrl: string | null;
 };
 type Summary = { parcels: number; retailValuePaise: number; productCostPaise: number; shippingCostPaise: number; delivered: number; posted: number; expectingPost: number };
 
 const rupees = (paise: number) => `₹${(paise / 100).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 const thisMonth = () => new Date(Date.now() + 330 * 60000).toISOString().slice(0, 7);
-const emptyForm = { purpose: "INFLUENCER", recipientName: "", recipientPhone: "", recipientEmail: "", recipientHandle: "", platform: "Instagram", campaign: "", notes: "", address1: "", address2: "", city: "", state: "", pin: "", weightGrams: "500", notifyRecipient: false };
+const emptyForm = { purpose: "INFLUENCER", company: "", recipientName: "", recipientPhone: "", recipientEmail: "", recipientHandle: "", platform: "Instagram", campaign: "", notes: "", address1: "", address2: "", city: "", state: "", pin: "", weightGrams: "500", notifyRecipient: false };
 
 async function api<T>(url: string, init: RequestInit = {}): Promise<T> {
   const headers = { ...(await adminAuthHeaders()), ...(init.body ? { "Content-Type": "application/json" } : {}) };
@@ -167,7 +169,7 @@ function ParcelRow({ row, onChange, onError }: { row: Row; onChange: () => void;
     <tr>
       <td>
         <strong>{row.recipientName}</strong>
-        <div className="mk-help">{[row.recipientHandle, row.platform].filter(Boolean).join(" · ") || row.recipientPhone}</div>
+        <div className="mk-help">{[row.address?.company, row.recipientHandle, row.platform].filter(Boolean).join(" · ") || row.recipientPhone}</div>
         <div className="mk-help">{PURPOSE_LABEL[row.purpose] || row.purpose}{row.campaign ? ` · ${row.campaign}` : ""} · {new Date(row.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}{row.shopifyOrderName ? ` · ${row.shopifyOrderName}` : ""}</div>
       </td>
       <td>{row.items.map((item) => <div key={`${item.sku}-${item.title}`} className="mk-help">{item.quantity} × {item.title}</div>)}</td>
@@ -186,11 +188,13 @@ function ParcelRow({ row, onChange, onError }: { row: Row; onChange: () => void;
         {row.awb && row.trackingStatus !== "DELIVERED" && <button type="button" className="mk-link" style={{ background: "none", border: 0, padding: 0 }} disabled={busy} onClick={() => action("track")}>Refresh</button>}
       </td>
       <td style={{ minWidth: 200 }}>
+        {!CONTENT_PURPOSES.includes(row.purpose) && content === "NOT_NEEDED" ? <span className="mk-help">No content expected</span> : <>
         <select className="mk-select" aria-label="Content status" value={content} onChange={(event) => setContent(event.target.value)}>
           {CONTENT.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
         </select>
         {content === "POSTED" && <input className="mk-input" placeholder="Link to the post" aria-label="Link to the post" value={contentUrl} onChange={(event) => setContentUrl(event.target.value)} style={{ marginTop: 4 }} />}
         {row.contentUrl && content === "POSTED" && !dirty && <div className="mk-help"><a className="mk-link" href={row.contentUrl} target="_blank" rel="noreferrer">Open post</a></div>}
+        </>}
         {dirty && <button type="button" className="mk-btn mk-btn-primary" style={{ marginTop: 4 }} disabled={busy} onClick={save}>Save</button>}
       </td>
     </tr>
@@ -206,6 +210,7 @@ function NewParcel({ onCreated }: { onCreated: (message: string) => void }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const set = (key: keyof typeof emptyForm) => (event: { target: { value: string } }) => setForm((current) => ({ ...current, [key]: event.target.value }));
+  const content = CONTENT_PURPOSES.includes(form.purpose);
   const retail = lines.reduce((sum, line) => sum + line.unitPricePaise * line.quantity, 0);
   const cost = lines.reduce((sum, line) => sum + (line.unitCostPaise ?? 0) * line.quantity, 0);
 
@@ -237,7 +242,9 @@ function NewParcel({ onCreated }: { onCreated: (message: string) => void }) {
         method: "POST",
         body: JSON.stringify({
           ...form,
-          address: { address1: form.address1, address2: form.address2, city: form.city, state: form.state, pin: form.pin },
+          recipientHandle: content ? form.recipientHandle : "",
+          platform: content ? form.platform : "",
+          address: { company: form.purpose === "INFLUENCER" ? "" : form.company, address1: form.address1, address2: form.address2, city: form.city, state: form.state, pin: form.pin },
           items: lines.map((line) => ({ variantId: line.variantId, quantity: line.quantity })),
         }),
       });
@@ -259,11 +266,12 @@ function NewParcel({ onCreated }: { onCreated: (message: string) => void }) {
       {error && <div className="mk-alert mk-alert-error">{error}</div>}
       <div className="mk-form-grid">
         <Field label="For"><select className="mk-select" value={form.purpose} onChange={set("purpose")}>{PURPOSES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field>
-        <Field label="Campaign (optional)"><input className="mk-input" placeholder="Diwali launch" value={form.campaign} onChange={set("campaign")} /></Field>
+        <Field label={content ? "Campaign (optional)" : "Reference (optional)"}><input className="mk-input" placeholder={content ? "Diwali launch" : "PO / style no."} value={form.campaign} onChange={set("campaign")} /></Field>
+        {form.purpose !== "INFLUENCER" && <Field label="Company (optional)"><input className="mk-input" value={form.company} onChange={set("company")} /></Field>}
         <Field label="Name"><input className="mk-input" value={form.recipientName} onChange={set("recipientName")} autoComplete="off" /></Field>
         <Field label="Mobile (for the courier)"><input className="mk-input" inputMode="tel" value={form.recipientPhone} onChange={set("recipientPhone")} /></Field>
-        <Field label="Handle (optional)"><input className="mk-input" placeholder="@handle" value={form.recipientHandle} onChange={set("recipientHandle")} /></Field>
-        <Field label="Platform"><select className="mk-select" value={form.platform} onChange={set("platform")}>{["Instagram", "YouTube", "Facebook", "Blog", "Other"].map((name) => <option key={name}>{name}</option>)}</select></Field>
+        {content && <Field label="Handle (optional)"><input className="mk-input" placeholder="@handle" value={form.recipientHandle} onChange={set("recipientHandle")} /></Field>}
+        {content && <Field label="Platform"><select className="mk-select" value={form.platform} onChange={set("platform")}>{["Instagram", "YouTube", "Facebook", "Blog", "Other"].map((name) => <option key={name}>{name}</option>)}</select></Field>}
         <Field label="Email (optional)"><input className="mk-input" type="email" value={form.recipientEmail} onChange={set("recipientEmail")} /></Field>
         <Field label="Address"><input className="mk-input" value={form.address1} onChange={set("address1")} /></Field>
         <Field label="Landmark / area (optional)"><input className="mk-input" value={form.address2} onChange={set("address2")} /></Field>
@@ -271,7 +279,7 @@ function NewParcel({ onCreated }: { onCreated: (message: string) => void }) {
         <Field label="State"><select className="mk-select" value={form.state} onChange={set("state")}><option value="">Choose…</option>{STATES.map((state) => <option key={state}>{state}</option>)}</select></Field>
         <Field label="Pincode"><input className="mk-input" inputMode="numeric" maxLength={6} value={form.pin} onChange={set("pin")} /></Field>
         <Field label="Weight (g)"><input className="mk-input" inputMode="numeric" value={form.weightGrams} onChange={set("weightGrams")} /></Field>
-        <Field label="Notes (optional)"><input className="mk-input" placeholder="1 reel + 2 stories" value={form.notes} onChange={set("notes")} /></Field>
+        <Field label="Notes (optional)"><input className="mk-input" placeholder={content ? "1 reel + 2 stories" : "What it's for"} value={form.notes} onChange={set("notes")} /></Field>
       </div>
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
