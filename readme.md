@@ -285,6 +285,17 @@ per day. A team reply clears the flag and pauses the assistant in that chat for
 Logic and prompt: `services/whatsapp/assistant/` (`policy.ts` is pure and
 unit-tested).
 
+**Request status** (`customer-requests.ts`): the assistant also gets this
+customer's exchange, cancellation, issue and refund requests from LoopD2C's own
+records (`OrderActionRequest` of the last 120 days, up to 5, matched on the
+WhatsApp number's last 10 digits against the request's phone or the customer
+profile's): the step in plain words, items (and sizes for exchanges), reverse
+pickup and replacement tracking, and the linked refund's amount and status. A
+question about one of them ("where is my exchange?", "is my refund done?") is
+answered from those facts with intent `request_status` and no handoff; a new
+request, a change to one, or a complaint still goes to the team
+(`return_exchange` stays a hard handoff). A failed lookup only hides requests.
+
 ### Exchange updates
 
 Templates `exchange_approved`, `exchange_payment_received`,
