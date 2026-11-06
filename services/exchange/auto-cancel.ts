@@ -1,4 +1,5 @@
 import { prisma } from "../db/prisma";
+import { notifyRequestUpdate } from "../notifications/request-updates";
 import { createRefundRequest } from "../refund-request";
 import { cancelShopifyOrder } from "../shopify/admin";
 import { getLoopDeskMerchantSettings } from "../loopdesk/merchant-settings";
@@ -156,6 +157,9 @@ export async function autoCancelUnfulfilledCancellationRequest(
         adminNote: [request.adminNote, note].filter(Boolean).join("\n") || null,
       },
     });
+
+    // The customer hears the order is cancelled (WhatsApp, when customer updates are on).
+    await notifyRequestUpdate(request.id);
 
     return { ok: true, reason: "cancelled", refundType, jobId: cancel.jobId };
   } catch (error) {

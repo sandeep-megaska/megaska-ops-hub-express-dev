@@ -1,7 +1,9 @@
-// The WhatsApp templates for exchange updates (services/notifications/exchange-milestones.ts),
-// and submitting them to Meta from the shop's own WhatsApp Business Account so the merchant
-// doesn't have to write nine templates by hand. Each body's {{n}} match the variables the
-// milestone sends: {{1}} customer name, {{2}} order number (without #), {{3}} AWB where present.
+// The WhatsApp templates for customer updates on exchanges (services/notifications/
+// exchange-milestones.ts) and on cancellations, issue reports and refunds
+// (services/notifications/request-updates.ts), and submitting them to Meta from the shop's own
+// WhatsApp Business Account so the merchant doesn't write them by hand. Each body's {{n}} match
+// what the step sends: {{1}} customer name, {{2}} order number (without #) or refund amount,
+// then the order number or AWB where present.
 
 export type ExchangeTemplateDraft = { key: string; name: string; body: string; examples: string[] };
 
@@ -32,17 +34,44 @@ const BODIES: Record<keyof typeof EXCHANGE_TEMPLATE_NAMES, string> = {
 
 const EXAMPLES = ["Asha", "1042", "ABC123456789"];
 
+// Cancellations, issue reports and refunds (override names with WHATSAPP_TEMPLATE_<KEY>).
+export const REQUEST_TEMPLATE_NAMES = {
+  CANCELLATION_APPROVED: "cancellation_approved",
+  CANCELLATION_REJECTED: "cancellation_rejected",
+  CANCELLATION_CLOSED: "order_cancelled",
+  ISSUE_OPEN: "issue_received",
+  ISSUE_APPROVED: "issue_approved",
+  ISSUE_REJECTED: "issue_rejected",
+  ISSUE_CLOSED: "issue_resolved",
+  REFUND_PAID: "refund_paid",
+} as const;
+
+const REQUEST_BODIES: Record<keyof typeof REQUEST_TEMPLATE_NAMES, { body: string; examples: string[] }> = {
+  CANCELLATION_APPROVED: { body: "Hi {{1}}, your cancellation request for order #{{2}} has been approved. We'll confirm here once the order is cancelled.", examples: ["Asha", "1042"] },
+  CANCELLATION_REJECTED: { body: "Hi {{1}}, we're sorry, we couldn't accept the cancellation request for order #{{2}}. Reply here and our team will explain and help.", examples: ["Asha", "1042"] },
+  CANCELLATION_CLOSED: { body: "Hi {{1}}, your order #{{2}} has been cancelled. If you paid online, we'll confirm your refund here.", examples: ["Asha", "1042"] },
+  ISSUE_OPEN: { body: "Hi {{1}}, we've received your report about order #{{2}}. Our team will review it and update you here.", examples: ["Asha", "1042"] },
+  ISSUE_APPROVED: { body: "Hi {{1}}, we've reviewed your report about order #{{2}} and approved it. We'll message you here with the next steps.", examples: ["Asha", "1042"] },
+  ISSUE_REJECTED: { body: "Hi {{1}}, we've reviewed your report about order #{{2}}, but we couldn't approve it. Reply here if you'd like to know more.", examples: ["Asha", "1042"] },
+  ISSUE_CLOSED: { body: "Hi {{1}}, your report about order #{{2}} has been resolved. Thank you for your patience.", examples: ["Asha", "1042"] },
+  REFUND_PAID: { body: "Hi {{1}}, we've sent your refund of {{2}} for order #{{3}}. Depending on your bank or payment method, it can take a few working days to show.", examples: ["Asha", "₹1,195", "1042"] },
+};
+
 export function exchangeTemplateName(key: string, env: Record<string, string | undefined> = process.env) {
+  if (key in REQUEST_TEMPLATE_NAMES) return String(env[`WHATSAPP_TEMPLATE_${key}`] ?? "").trim() || REQUEST_TEMPLATE_NAMES[key as keyof typeof REQUEST_TEMPLATE_NAMES];
   const override = String(env[`WHATSAPP_TEMPLATE_EXCHANGE_${key}`] ?? "").trim();
   return override || EXCHANGE_TEMPLATE_NAMES[key as keyof typeof EXCHANGE_TEMPLATE_NAMES];
 }
 
+// Every update template: the nine exchange steps, then cancellations, issue reports and refunds.
 export function exchangeTemplateDrafts(env: Record<string, string | undefined> = process.env): ExchangeTemplateDraft[] {
-  return (Object.keys(EXCHANGE_TEMPLATE_NAMES) as Array<keyof typeof EXCHANGE_TEMPLATE_NAMES>).map((key) => {
+  const exchange = (Object.keys(EXCHANGE_TEMPLATE_NAMES) as Array<keyof typeof EXCHANGE_TEMPLATE_NAMES>).map((key) => {
     const body = BODIES[key];
     const count = new Set(body.match(/\{\{\d+\}\}/g) ?? []).size;
     return { key, name: exchangeTemplateName(key, env), body, examples: EXAMPLES.slice(0, count) };
   });
+  const requests = (Object.keys(REQUEST_TEMPLATE_NAMES) as Array<keyof typeof REQUEST_TEMPLATE_NAMES>).map((key) => ({ key, name: exchangeTemplateName(key, env), ...REQUEST_BODIES[key] }));
+  return [...exchange, ...requests];
 }
 
 type Fetcher = typeof fetch;
@@ -95,5 +124,5 @@ export function templateSetupSummary(result: TemplateSetupResult) {
     result.failed.length ? `${result.failed.length} failed: ${result.failed.map((item) => `${item.name} (${item.error})`).join("; ")}` : null,
   ].filter(Boolean);
   const allApproved = !result.created.length && !result.failed.length && approved === result.existing.length;
-  return `Exchange templates: ${parts.join(", ")}.${allApproved ? " You can switch on Exchange updates." : result.failed.length ? "" : " Meta usually reviews utility templates within minutes to a day; switch on Exchange updates once they're approved."}`;
+  return `Update templates: ${parts.join(", ")}.${allApproved ? " You can switch on customer updates." : result.failed.length ? "" : " Meta usually reviews utility templates within minutes to a day; switch on customer updates once they're approved."}`;
 }

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { notifyRequestUpdate } from "../../../../../../services/notifications/request-updates";
 import { prisma } from "../../../../../../services/db/prisma";
 import { ShopResolutionError } from "../../../../../../services/shopify/shop";
 import { requireAdminShopFromRequest } from "../../../../../../services/shopify/admin-auth";
@@ -126,6 +127,8 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
         customerProfile: { select: { id: true } },
       },
     });
+    // The customer hears about it on WhatsApp (when customer updates are on).
+    await notifyRequestUpdate(updated.id);
     const refundRequests = await (prisma as any).refundRequest.findMany({
       where: { orderActionRequestId: updated.id },
       orderBy: { updatedAt: "desc" },

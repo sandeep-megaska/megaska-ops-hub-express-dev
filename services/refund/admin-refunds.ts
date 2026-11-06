@@ -1,4 +1,5 @@
 import { prisma } from "../db/prisma";
+import { notifyRefundPaid } from "../notifications/request-updates";
 import type { RefundRequest } from "../../generated/prisma/index.js";
 
 function toAdminSummary(refund: RefundRequest & { payoutDetails?: any | null; walletTransaction?: any | null }) {
@@ -158,6 +159,8 @@ export async function markAdminRefundPaid(shopId: string, id: string, payload: R
     });
   });
 
+  // The customer hears the refund was sent (WhatsApp, when customer updates are on).
+  await notifyRefundPaid(id);
   const updated = await getAdminRefundById(shopId, id);
   return { status: 200, data: updated };
 }
