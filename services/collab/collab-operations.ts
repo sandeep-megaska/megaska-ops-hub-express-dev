@@ -7,6 +7,7 @@ import {
   VARIANTS_BY_ID_QUERY,
   VARIANT_SEARCH_QUERY,
   buildCollabDraftOrderInput,
+  expectsContent,
   isTrackingDone,
   priceCollabItems,
   trackingUpdate,
@@ -60,7 +61,7 @@ export async function createCollabShipment(shop: Shop, input: CollabInput) {
       retailValuePaise: priced.retailValuePaise,
       productCostPaise: priced.productCostPaise,
       weightGrams: input.weightGrams,
-      deliverableStatus: input.purpose === "GIFT" ? "NOT_NEEDED" : "PENDING",
+      deliverableStatus: expectsContent(input.purpose) ? "PENDING" : "NOT_NEEDED",
     },
   });
 
