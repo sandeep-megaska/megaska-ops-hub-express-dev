@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { notifyRequestUpdate } from "../../../../../../services/notifications/request-updates";
 import { prisma } from "../../../../../../services/db/prisma";
 import { ShopResolutionError } from "../../../../../../services/shopify/shop";
 import { requireAdminShopFromRequest } from "../../../../../../services/shopify/admin-auth";
@@ -118,6 +119,7 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       },
       include: { items: { take: 1 }, customerProfile: { select: { id: true } } },
     });
+    await notifyRequestUpdate(updated.id);
 
     if (resolved?.ok) {
       if (normalizedNextStatus === "RETURN_RECEIVED" && resolved.refundRequestId) {

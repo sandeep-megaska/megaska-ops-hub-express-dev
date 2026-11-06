@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type { ExchangeRequestStatus, ShipmentStatus } from "../../../../generated/prisma";
 import { prisma } from "../../../../services/db/prisma";
 import { syncExchangeShipment } from "../../../../services/exchange/tracking-sync";
+import { syncOpenCollabTracking } from "../../../../services/collab/collab-operations";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -89,8 +90,15 @@ async function run(req: NextRequest) {
     }
   }
 
+  // Influencer / collab parcels (their own rows, not exchange requests).
+  const collab = await syncOpenCollabTracking(15).catch((error) => {
+    console.warn("[DELHIVERY TRACKING] collab_sync_failed", { error: error instanceof Error ? error.message : String(error) });
+    return null;
+  });
+
   const truncated = requests.length === REQUEST_LIMIT;
   const summary = {
+    collab,
     requestsScanned: requests.length,
     shipmentsSynced,
     statusAdvanced,
