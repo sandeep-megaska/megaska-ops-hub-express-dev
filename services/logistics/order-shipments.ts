@@ -269,7 +269,10 @@ export function normalizeShippableOrder(order: ShopifyShippableOrderNode, codInt
 export function buildOrderShipmentPayload(
   order: ShippableOrder,
   runtime: Pick<DelhiveryRuntimeConfig, "pickupLocationName" | "warehouse">,
-  options: { weightGrams: number; shippingMode: ShippingMode }
+  options: { weightGrams: number; shippingMode: ShippingMode },
+  // Value declared to the courier when the order total isn't it (a ₹0 collab order
+  // still carries goods worth their retail price).
+  declaredValuePaise?: number
 ): DelhiveryCmuPayload {
   if (order.blockers.length || !order.payment.ok) {
     throw new OrderShipmentError(order.blockers[0] || "Order is not ready to ship.", 400);
@@ -299,7 +302,7 @@ export function buildOrderShipmentPayload(
         quantity: order.itemCount,
         payment_mode: isCod ? "COD" : "Prepaid",
         cod_amount: isCod ? paiseToRupees(order.payment.codAmountPaise) : 0,
-        total_amount: paiseToRupees(order.totalPaise),
+        total_amount: paiseToRupees(declaredValuePaise && declaredValuePaise > order.totalPaise ? declaredValuePaise : order.totalPaise),
         weight: options.weightGrams,
         shipping_mode: options.shippingMode,
         seller_name: warehouse.name || pickupLocationName,
@@ -581,6 +584,7 @@ export async function bookOrderShipments(input: {
   runtime: DelhiveryRuntimeConfig;
   graphql: GraphqlFn;
   options: CreateOptions;
+  declaredValuePaise?: Record<string, number>;
   submit?: (runtime: DelhiveryRuntimeConfig, payload: DelhiveryCmuPayload) => Promise<DelhiveryForwardShipmentResult>;
   fulfill?: FulfillFn;
   now?: () => Date;
@@ -629,7 +633,7 @@ export async function bookOrderShipments(input: {
 
     let payload: DelhiveryCmuPayload;
     try {
-      payload = buildOrderShipmentPayload(order, input.runtime, input.options);
+      payload = buildOrderShipmentPayload(order, input.runtime, input.options, input.declaredValuePaise?.[orderId]);
     } catch (error) {
       results.push({ orderId, orderName: order.name, outcome: "skipped", error: error instanceof Error ? error.message : "Order is not ready to ship." });
       continue;

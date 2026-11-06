@@ -126,6 +126,7 @@ model Shop {
   identityMerges                CustomerIdentityMerge[]
   checkoutPricingSnapshots      ShopifyCheckoutPricingSnapshot[]
   orderCourierShipments         OrderCourierShipment[]
+  collabShipments               CollabShipment[]
   emailVerificationChallenges   EmailVerificationChallenge[]
   backInStockRequests BackInStockRequest[]
 }
@@ -1567,6 +1568,50 @@ enum OrderCourierShipmentStatus {
   CREATING
   CREATED
   FAILED
+}
+
+// Influencer, collab, PR and gift parcels the store sends at its own cost. Each is
+// a ₹0 Shopify order (100% discount, tagged "LoopD2C Collab") so stock goes down,
+// plus the retail value, product cost and shipping cost kept for accounts and audit.
+// Booked on Delhivery as Prepaid through the Shipments flow; tracked here.
+model CollabShipment {
+  id                  String    @id @default(uuid())
+  shopId              String
+  purpose             String // INFLUENCER | COLLAB | PR | GIFT | OTHER
+  recipientName       String
+  recipientPhone      String
+  recipientEmail      String?
+  recipientHandle     String?
+  platform            String?
+  campaign            String?
+  address             Json // { address1, address2, city, state, pin }
+  items               Json // [{ variantId, title, sku, quantity, unitPricePaise, unitCostPaise }]
+  retailValuePaise    Int       @default(0)
+  productCostPaise    Int       @default(0)
+  shippingCostPaise   Int?
+  weightGrams         Int?
+  status              String    @default("CREATING") // CREATING | ORDER_CREATED | BOOKED | FAILED
+  errorMessage        String?
+  shopifyOrderId      String?
+  shopifyOrderName    String?
+  awb                 String?
+  trackingUrl         String?
+  trackingStatus      MegaskaOrderStatus?
+  trackingRawStatus   String?
+  trackingUpdatedAt   DateTime?
+  deliveredAt         DateTime?
+  deliverableStatus   String    @default("PENDING") // PENDING | POSTED | NOT_NEEDED | NOT_POSTED
+  contentUrl          String?
+  postedAt            DateTime?
+  notes               String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@unique([shopId, shopifyOrderId])
+  @@index([shopId, createdAt])
+  @@index([awb])
 }
 
 // Outbound courier shipments booked from the admin "Shipments" page, keyed by

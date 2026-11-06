@@ -5,6 +5,7 @@ import { getAuthenticatedCustomer } from "../../../../services/exchange/auth";
 import { evaluateIssueEligibility, validateIssueVideoEvidence } from "../../../../services/exchange/issue";
 import { getRequestWindowDays } from "../../../../services/loopdesk/merchant-settings";
 import { sendIssueRequestCreatedEmail } from "../../../../services/notifications/issue";
+import { notifyRequestUpdate } from "../../../../services/notifications/request-updates";
 import {
   findActiveRequest,
   formatRequestLockReason,
@@ -242,6 +243,7 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    await notifyRequestUpdate(created.id);
     try {
       await sendIssueRequestCreatedEmail({
         shopId: created.shopId || "",
