@@ -15,7 +15,7 @@ const CONTENT_PURPOSES = ["INFLUENCER", "COLLAB", "PR"];
 const PURPOSE_LABEL: Record<string, string> = Object.fromEntries(PURPOSES);
 const CONTENT = [["PENDING", "Waiting for content"], ["POSTED", "Posted"], ["NOT_POSTED", "Not posted"], ["NOT_NEEDED", "No content expected"]] as const;
 const TRACKING: Record<string, [string, string]> = {
-  ORDER_CONFIRMED: ["Booked", "mk-badge-neutral"], READY_FOR_PICKUP: ["Awaiting pickup", "mk-badge-neutral"], PICKED_UP: ["Picked up", "mk-badge-info"],
+  ORDER_CONFIRMED: ["Booked", "mk-badge-neutral"], PROCESSING: ["Booked, not picked up yet", "mk-badge-neutral"], PACKED: ["Packed", "mk-badge-neutral"], READY_FOR_PICKUP: ["Awaiting pickup", "mk-badge-neutral"], PICKED_UP: ["Picked up", "mk-badge-info"],
   IN_TRANSIT: ["In transit", "mk-badge-info"], OUT_FOR_DELIVERY: ["Out for delivery", "mk-badge-info"], DELIVERED: ["Delivered", "mk-badge-success"],
   DELIVERY_FAILED: ["Delivery failed", "mk-badge-danger"], RTO_INITIATED: ["Returning to you", "mk-badge-warning"], RTO_DELIVERED: ["Returned to you", "mk-badge-warning"],
   CANCELLED: ["Cancelled", "mk-badge-danger"],

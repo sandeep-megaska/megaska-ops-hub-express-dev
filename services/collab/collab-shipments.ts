@@ -217,7 +217,7 @@ export function isTrackingDone(status: MegaskaOrderStatus | null | undefined) {
 }
 
 export const TRACKING_LABEL: Partial<Record<MegaskaOrderStatus, string>> = {
-  ORDER_CONFIRMED: "Booked", READY_FOR_PICKUP: "Awaiting pickup", PICKED_UP: "Picked up", IN_TRANSIT: "In transit",
+  ORDER_CONFIRMED: "Booked", PROCESSING: "Booked, not picked up yet", PACKED: "Packed", READY_FOR_PICKUP: "Awaiting pickup", PICKED_UP: "Picked up", IN_TRANSIT: "In transit",
   OUT_FOR_DELIVERY: "Out for delivery", DELIVERED: "Delivered", DELIVERY_FAILED: "Delivery failed", RTO_INITIATED: "Returning to you",
   RTO_DELIVERED: "Returned to you", CANCELLED: "Cancelled",
 };
