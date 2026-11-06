@@ -42,3 +42,21 @@ export async function checkMerchantWhatsApp(shopId: string) {
   await db().merchantWhatsAppAccount.update({ where: { shopId }, data: { lastCheckedAt: new Date(), lastCheckStatus: result.ok ? "OK" : "ERROR", lastCheckMessage: result.message.slice(0, 500) } });
   return result;
 }
+
+// Submits the exchange-update templates to Meta from the shop's own WhatsApp Business Account
+// (skipping any already there) and says where they stand.
+export async function setUpExchangeTemplates(shopId: string) {
+  const account = await getMerchantWhatsAppAccount(shopId, db());
+  if (!account) return { ok: false, message: "Save the WhatsApp settings first." };
+  if (!account.businessAccountId) return { ok: false, message: "Add the WhatsApp Business Account ID first (Meta → WhatsApp → API setup), then try again." };
+  const sender = merchantSender({ ...account, enabled: true });
+  if (!sender) return { ok: false, message: "The saved access token cannot be read. Enter it again and save." };
+  const { submitExchangeTemplates, templateSetupSummary } = await import("../whatsapp/exchange-templates.ts");
+  try {
+    const result = await submitExchangeTemplates({ wabaId: account.businessAccountId, accessToken: sender.accessToken, language: account.templateLanguage || "en" });
+    console.info("[MERCHANT WHATSAPP SETTINGS]", { operation: "exchange_templates", shopId, created: result.created.length, existing: result.existing.length, failed: result.failed.length });
+    return { ok: result.failed.length === 0, message: templateSetupSummary(result) };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message.slice(0, 300) : "Could not reach Meta." };
+  }
+}
