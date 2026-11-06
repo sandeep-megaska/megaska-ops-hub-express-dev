@@ -23,7 +23,7 @@ const TRACKING: Record<string, [string, string]> = {
 
 type Variant = { variantId: string; title: string; sku: string; unitPricePaise: number; unitCostPaise: number | null; available: number | null };
 type Line = Variant & { quantity: number };
-type Item = { title: string; sku: string; quantity: number };
+type Item = { title: string; sku: string; quantity: number; unitCostPaise: number | null };
 type Address = { company?: string; city?: string };
 type Row = {
   id: string; createdAt: string; purpose: string; recipientName: string; recipientPhone: string; recipientHandle: string | null; platform: string | null;
@@ -163,7 +163,7 @@ function ParcelRow({ row, onChange, onError }: { row: Row; onChange: () => void;
   }
 
   const save = () => run(() => api(`/api/admin/collabs/${row.id}`, { method: "PATCH", body: JSON.stringify({ deliverableStatus: content, contentUrl, shippingCostRupees: shipping }) }));
-  const action = (name: "book" | "track") => run(() => api(`/api/admin/collabs/${row.id}`, { method: "POST", body: JSON.stringify({ action: name }) }));
+  const action = (name: "book" | "track" | "cost") => run(() => api(`/api/admin/collabs/${row.id}`, { method: "POST", body: JSON.stringify({ action: name }) }));
 
   return (
     <tr>
@@ -175,7 +175,8 @@ function ParcelRow({ row, onChange, onError }: { row: Row; onChange: () => void;
       <td>{row.items.map((item) => <div key={`${item.sku}-${item.title}`} className="mk-help">{item.quantity} × {item.title}</div>)}</td>
       <td>
         <div>{rupees(row.retailValuePaise)}</div>
-        <div className="mk-help">cost {rupees(row.productCostPaise)}</div>
+        <div className="mk-help">cost {rupees(row.productCostPaise)}{row.items.some((item) => item.unitCostPaise === null) ? " (some items have no cost price)" : ""}</div>
+        {row.items.some((item) => item.unitCostPaise === null) && <button type="button" className="mk-link" style={{ background: "none", border: 0, padding: 0 }} disabled={busy} onClick={() => action("cost")}>Get cost from Shopify</button>}
         <label className="mk-help" style={{ display: "flex", gap: 4, alignItems: "center" }}>
           Shipping ₹<input className="mk-input" style={{ width: 80 }} inputMode="decimal" aria-label="Shipping cost in rupees" value={shipping} onChange={(event) => setShipping(event.target.value.replace(/[^\d.]/g, ""))} />
         </label>

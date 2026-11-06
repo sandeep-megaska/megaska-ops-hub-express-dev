@@ -1,6 +1,6 @@
 // WhatsApp updates to the customer on cancellations, issue reports and refunds, from the shop's
-// own number when customer updates are switched on (the same switch and sender as exchange
-// updates). Until now these steps only alerted the store's team. One message per step: a marker
+// own number when "Cancellation, issue and refund updates" is ticked (requestUpdatesEnabled;
+// its own switch, so exchange updates can run while these templates await Meta). Until now these steps only alerted the store's team. One message per step: a marker
 // AuditEvent (like exchange milestones) stops repeats from every code path that reaches it.
 
 import { exchangeTemplateName, REQUEST_TEMPLATE_NAMES } from "../whatsapp/exchange-templates.ts";
@@ -36,7 +36,7 @@ async function defaultDeps(): Promise<SendDeps> {
   return {
     marker: async (entityType, entityId, eventType) => Boolean(await prisma.auditEvent.findFirst({ where: { entityType, entityId, eventType }, select: { id: true } })),
     mark: async (entityType, entityId, eventType, payload) => { await prisma.auditEvent.create({ data: { actorType: "system", eventType, entityType, entityId, payload: payload as never } }); },
-    sender: (shopId) => resolveWhatsAppSender(shopId, "exchange"),
+    sender: (shopId) => resolveWhatsAppSender(shopId, "requests"),
     send: (input) => sendTemplateMessage(input as never),
   };
 }
@@ -46,7 +46,7 @@ export async function sendRequestUpdate(input: { entityType: string; entityId: s
   const d = deps ?? (await defaultDeps());
   const eventType = `request.update_notified.${input.key}`;
   if (await d.marker(input.entityType, input.entityId, eventType)) return { sent: false, reason: "already-notified" };
-  // Only from the shop's own number with customer updates switched on.
+  // Only from the shop's own number with request updates switched on.
   const sender = await d.sender(input.shopId);
   if (!sender) return { sent: false, reason: "updates-off" };
   await d.send({ sender, shopId: input.shopId, toPhone: input.toPhone, templateName: exchangeTemplateName(input.key), languageCode: sender.languageCode, variables: input.variables });

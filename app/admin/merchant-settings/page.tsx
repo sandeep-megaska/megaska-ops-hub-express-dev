@@ -214,6 +214,7 @@ async function whatsAppFormAction(
       recoveryFirstTemplate: formData.get("waRecoveryFirstTemplate"),
       recoveryReminderTemplate: formData.get("waRecoveryReminderTemplate"),
       exchangeEnabled: formData.get("waExchangeEnabled"),
+      requestUpdatesEnabled: formData.get("waRequestUpdatesEnabled"),
       codConfirmEnabled: formData.get("waCodConfirmEnabled"),
       codConfirmTemplate: formData.get("waCodConfirmTemplate"),
       shippingUpdatesEnabled: formData.get("waShippingUpdatesEnabled"),
@@ -1371,7 +1372,8 @@ export default async function MerchantSettingsPage({
             <Field label="First reminder template" name="waRecoveryFirstTemplate" defaultValue={whatsApp.recoveryFirstTemplate} />
             <Field label="Second reminder template" name="waRecoveryReminderTemplate" defaultValue={whatsApp.recoveryReminderTemplate} help="Both need one URL button: https://<your store>/apps/loopd2c/checkout/bag?t={{1}}" />
           </div>
-          <Check label="Customer updates: exchanges, cancellations, issues, refunds" name="waExchangeEnabled" defaultChecked={whatsApp.exchangeEnabled} help="WhatsApp updates from your number as requests move: each exchange step; cancellation approved, not accepted or done; issue report received, approved, not accepted or resolved; refund sent. Needs the update templates approved by Meta: use Set up update templates below first." />
+          <Check label="Exchange updates" name="waExchangeEnabled" defaultChecked={whatsApp.exchangeEnabled} help="WhatsApp updates from your number at each exchange step (approved, payment received, pickup, item received, replacement shipped, done or not accepted). Needs the 9 exchange templates approved by Meta." />
+          <Check label="Cancellation, issue and refund updates" name="waRequestUpdatesEnabled" defaultChecked={whatsApp.requestUpdatesEnabled} help="Cancellation approved, not accepted or done; issue report received, approved, not accepted or resolved; refund sent. Needs those 8 templates approved by Meta: use Set up update templates below, and tick this once it says they are approved." />
           <Check label="COD order confirmation" name="waCodConfirmEnabled" defaultChecked={whatsApp.codConfirmEnabled} help="A few minutes after each cash-on-delivery order, ask the customer to Confirm or Cancel. Confirmed orders are tagged cod-confirmed; cancel requests are tagged cod-cancel-requested and sent to your inbox; no reply in 12 hours is tagged cod-no-response so you can call before shipping." />
           <Check label="Shipping updates" name="waShippingUpdatesEnabled" defaultChecked={whatsApp.shippingUpdatesEnabled} help="From your courier tracking in Shopify: shipped (with tracking link), out for delivery (with the COD amount to keep ready), delivery attempt failed (customer can reply to arrange another attempt) and delivered. Sent 8 am–9 pm IST only. Needs Utility templates order_shipped, order_out_for_delivery, order_delivery_attempt_failed and order_delivered." />
           <Field label="COD confirmation template" name="waCodConfirmTemplate" defaultValue={whatsApp.codConfirmTemplate} help="Utility template. Body: {{1}} customer first name, {{2}} order number, {{3}} order total. Two Quick reply buttons, in this order: Confirm order, Cancel order." />
