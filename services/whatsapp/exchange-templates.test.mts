@@ -50,7 +50,9 @@ test("only missing templates are submitted, as utility with examples, in the acc
   assert.deepEqual((pickup.components as Array<{ example: { body_text: string[][] } }>)[0].example.body_text, [["Asha", "1042", "ABC123456789"]]);
   assert.deepEqual(result.existing, [{ name: "exchange_approved", status: "APPROVED" }, { name: "exchange_completed", status: "PENDING" }]);
   assert.equal(result.created.length, 15);
-  assert.match(templateSetupSummary(result), /Update templates: 15 submitted to Meta for review, 1 already approved, 1 already submitted \(pending\).*switch on customer updates once they're approved/);
+  const summary = templateSetupSummary(result);
+  assert.match(summary, /^Exchange templates: 7 submitted to Meta for review, 1 already approved, 1 already submitted \(pending\)\. Tick Exchange updates once they're approved\./);
+  assert.match(summary, /Cancellation, issue and refund templates: 8 submitted to Meta for review\. Tick Cancellation, issue and refund updates once they're approved\. Meta usually reviews/);
 });
 
 test("Meta's reasons are reported, and 'already exists' isn't a failure", async () => {
@@ -62,5 +64,7 @@ test("Meta's reasons are reported, and 'already exists' isn't a failure", async 
 });
 
 test("all approved: the summary says exchange updates can be switched on", () => {
-  assert.match(templateSetupSummary({ created: [], failed: [], existing: Array.from({ length: 9 }, (_, i) => ({ name: `t${i}`, status: "APPROVED" })) }), /9 already approved\. You can switch on customer updates\./);
+  assert.match(templateSetupSummary({ created: [], failed: [], existing: Array.from({ length: 9 }, (_, i) => ({ name: `t${i}`, status: "APPROVED" })) }), /^Exchange templates: 9 already approved\. You can tick Exchange updates\.$/);
+  const split = templateSetupSummary({ created: [], failed: [], existing: [{ name: "exchange_approved", status: "APPROVED" }, { name: "refund_paid", status: "PENDING" }] });
+  assert.equal(split, "Exchange templates: 1 already approved. You can tick Exchange updates. Cancellation, issue and refund templates: 1 already submitted (pending). Tick Cancellation, issue and refund updates once they're approved. Meta usually reviews utility templates within minutes to a day.");
 });

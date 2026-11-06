@@ -158,6 +158,20 @@ export function priceCollabItems(requested: { variantId: string; quantity: numbe
   return { ok: true as const, items, warnings, ...collabTotals(items) };
 }
 
+// Fills in cost prices that were missing when the parcel was sent (cost set in Shopify
+// later). Costs already recorded are never changed: they were the cost at the time.
+export function fillMissingCosts(items: CollabItem[], nodes: ShopifyVariantNode[]) {
+  const costById = new Map(nodes.filter((node) => node?.id).map((node) => [String(node.id), amountToPaise(node.inventoryItem?.unitCost?.amount)]));
+  let filled = 0;
+  const next = items.map((item) => {
+    const cost = costById.get(item.variantId);
+    if (item.unitCostPaise !== null || cost === null || cost === undefined) return item;
+    filled += 1;
+    return { ...item, unitCostPaise: cost };
+  });
+  return { items: next, filled, stillMissing: next.filter((item) => item.unitCostPaise === null).length, ...collabTotals(next) };
+}
+
 export function collabTotals(items: CollabItem[]) {
   return {
     retailValuePaise: items.reduce((sum, item) => sum + item.unitPricePaise * item.quantity, 0),

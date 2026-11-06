@@ -113,16 +113,31 @@ export async function submitExchangeTemplates(input: { wabaId: string; accessTok
   return result;
 }
 
-// One line for the settings page.
-export function templateSetupSummary(result: TemplateSetupResult) {
-  const approved = result.existing.filter((item) => item.status === "APPROVED").length;
-  const waiting = result.existing.length - approved;
-  const parts = [
-    result.created.length ? `${result.created.length} submitted to Meta for review` : null,
-    approved ? `${approved} already approved` : null,
-    waiting ? `${waiting} already submitted (${[...new Set(result.existing.filter((item) => item.status !== "APPROVED").map((item) => item.status.toLowerCase()))].join(", ")})` : null,
-    result.failed.length ? `${result.failed.length} failed: ${result.failed.map((item) => `${item.name} (${item.error})`).join("; ")}` : null,
+// The settings-page message: one sentence per group, since each has its own tick box.
+export function templateSetupSummary(result: TemplateSetupResult, env: Record<string, string | undefined> = process.env) {
+  const requestNames = new Set(exchangeTemplateDrafts(env).filter((draft) => draft.key in REQUEST_TEMPLATE_NAMES).map((draft) => draft.name));
+  let reviewing = false;
+  const line = (requests: boolean, label: string, box: string) => {
+    const mine = (name: string) => requestNames.has(name) === requests;
+    const created = result.created.filter(mine);
+    const existing = result.existing.filter((item) => mine(item.name));
+    const failed = result.failed.filter((item) => mine(item.name));
+    if (!created.length && !existing.length && !failed.length) return null;
+    const approved = existing.filter((item) => item.status === "APPROVED").length;
+    const waiting = existing.filter((item) => item.status !== "APPROVED");
+    const parts = [
+      created.length ? `${created.length} submitted to Meta for review` : null,
+      approved ? `${approved} already approved` : null,
+      waiting.length ? `${waiting.length} already submitted (${[...new Set(waiting.map((item) => item.status.toLowerCase()))].join(", ")})` : null,
+      failed.length ? `${failed.length} failed: ${failed.map((item) => `${item.name} (${item.error})`).join("; ")}` : null,
+    ].filter(Boolean);
+    const allApproved = !created.length && !failed.length && !waiting.length;
+    if (!allApproved && !failed.length) reviewing = true;
+    return `${label}: ${parts.join(", ")}.${allApproved ? ` You can tick ${box}.` : failed.length ? "" : ` Tick ${box} once they're approved.`}`;
+  };
+  const lines = [
+    line(false, "Exchange templates", "Exchange updates"),
+    line(true, "Cancellation, issue and refund templates", "Cancellation, issue and refund updates"),
   ].filter(Boolean);
-  const allApproved = !result.created.length && !result.failed.length && approved === result.existing.length;
-  return `Update templates: ${parts.join(", ")}.${allApproved ? " You can switch on customer updates." : result.failed.length ? "" : " Meta usually reviews utility templates within minutes to a day; switch on customer updates once they're approved."}`;
+  return `${lines.join(" ")}${reviewing ? " Meta usually reviews utility templates within minutes to a day." : ""}`;
 }

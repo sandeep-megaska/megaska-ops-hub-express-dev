@@ -4,6 +4,7 @@ import {
   buildCollabDraftOrderInput,
   collabCsv,
   expectsContent,
+  fillMissingCosts,
   isCollabOrderTags,
   monthRange,
   normalizeCollabInput,
@@ -137,4 +138,23 @@ test("vendor samples carry the company and expect no content", () => {
     deliverableStatus: "NOT_NEEDED", contentUrl: null, postedAt: null, notes: null }]).trim().split("\n");
   assert.ok(csv[0].includes("Campaign / reference,Company,Recipient"));
   assert.ok(csv[1].includes("Sample to vendor / manufacturer,PO-77,Lakshmi Textiles,Ravi"));
+});
+
+test("missing costs are filled in later; recorded costs never change", () => {
+  const items = [
+    { variantId: V1, title: "Dress", sku: "SD", quantity: 2, unitPricePaise: 100000, unitCostPaise: null },
+    { variantId: V2, title: "Cap", sku: "CAP", quantity: 1, unitPricePaise: 29900, unitCostPaise: 5000 },
+    { variantId: "gid://shopify/ProductVariant/3", title: "Bag", sku: "BAG", quantity: 1, unitPricePaise: 50000, unitCostPaise: null },
+  ];
+  const nodes = [
+    { id: V1, inventoryItem: { unitCost: { amount: "410.00" } } },
+    { id: V2, inventoryItem: { unitCost: { amount: "99.00" } } },
+    { id: "gid://shopify/ProductVariant/3", inventoryItem: { unitCost: null } },
+  ];
+  const result = fillMissingCosts(items, nodes);
+  assert.equal(result.filled, 1);
+  assert.equal(result.stillMissing, 1);
+  assert.equal(result.items[0].unitCostPaise, 41000);
+  assert.equal(result.items[1].unitCostPaise, 5000, "cost at the time stays");
+  assert.equal(result.productCostPaise, 2 * 41000 + 5000);
 });

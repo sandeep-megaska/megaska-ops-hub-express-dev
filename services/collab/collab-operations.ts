@@ -7,12 +7,14 @@ import {
   VARIANTS_BY_ID_QUERY,
   VARIANT_SEARCH_QUERY,
   buildCollabDraftOrderInput,
+  fillMissingCosts,
   expectsContent,
   isTrackingDone,
   priceCollabItems,
   trackingUpdate,
   variantView,
   type CollabInput,
+  type CollabItem,
   type ShopifyVariantNode,
 } from "./collab-shipments.ts";
 
@@ -116,6 +118,22 @@ export async function bookCollabShipment(shop: Shop, id: string, opts: { notifyR
   const error = result && "error" in result ? result.error : "Delhivery booking failed.";
   await prisma.collabShipment.update({ where: { id }, data: { errorMessage: `Delhivery: ${error}`.slice(0, 500) } });
   return { ok: false as const, error };
+}
+
+// Picks up cost prices added in Shopify after the parcel was sent.
+export async function refreshCollabCosts(shop: Shop, id: string) {
+  const row = await prisma.collabShipment.findFirst({ where: { id, shopId: shop.id }, select: { id: true, items: true, productCostPaise: true } });
+  if (!row) return { ok: false as const, error: "Parcel not found." };
+  const items = (Array.isArray(row.items) ? row.items : []) as CollabItem[];
+  const missing = items.filter((item) => item.unitCostPaise === null).map((item) => item.variantId);
+  if (!missing.length) return { ok: true as const, filled: 0, stillMissing: 0, productCostPaise: row.productCostPaise };
+  const data = await gql<{ nodes?: ShopifyVariantNode[] }>(shop)(VARIANTS_BY_ID_QUERY, { ids: [...new Set(missing)] });
+  const result = fillMissingCosts(items, data.nodes || []);
+  if (result.filled) {
+    await prisma.collabShipment.update({ where: { id }, data: { items: result.items as never, productCostPaise: result.productCostPaise } });
+    await audit(shop.id, id, "collab.cost.filled", { filled: result.filled, previousProductCostPaise: row.productCostPaise, productCostPaise: result.productCostPaise });
+  }
+  return { ok: true as const, filled: result.filled, stillMissing: result.stillMissing, productCostPaise: result.productCostPaise };
 }
 
 type TrackableRow = { id: string; shopId: string; awb: string | null; trackingUrl: string | null; deliveredAt: Date | null };
