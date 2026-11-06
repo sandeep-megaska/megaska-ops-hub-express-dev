@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   buildCollabDraftOrderInput,
   collabCsv,
+  expectsContent,
   isCollabOrderTags,
   monthRange,
   normalizeCollabInput,
@@ -115,4 +116,25 @@ test("tracking, totals, CSV and month range", () => {
   const range = monthRange("2026-11");
   assert.equal(range.from.toISOString(), "2026-10-31T18:30:00.000Z");
   assert.equal(range.to.toISOString(), "2026-11-30T18:30:00.000Z");
+});
+
+test("vendor samples carry the company and expect no content", () => {
+  const parsed = normalizeCollabInput({ ...valid, purpose: "vendor_sample", recipientHandle: "", address: { ...valid.address, company: "Lakshmi Textiles" } });
+  assert.ok(parsed.ok);
+  if (!parsed.ok) return;
+  assert.equal(parsed.data.address.company, "Lakshmi Textiles");
+  const draft = buildCollabDraftOrderInput("c2", parsed.data);
+  assert.equal(draft.shippingAddress.company, "Lakshmi Textiles");
+  assert.ok(draft.tags.includes("Free parcel: Sample to vendor / manufacturer"));
+  assert.ok(draft.note.includes("Company: Lakshmi Textiles"));
+  assert.equal(draft.appliedDiscount.title, "Sample to vendor / manufacturer - paid by store");
+  assert.equal(expectsContent("VENDOR_SAMPLE"), false);
+  assert.equal(expectsContent("INTERNAL"), false);
+  assert.equal(expectsContent("INFLUENCER"), true);
+  const csv = collabCsv([{ id: "c2", createdAt: new Date("2026-11-06T05:00:00Z"), purpose: "VENDOR_SAMPLE", recipientName: "Ravi", recipientPhone: "+919847012345", recipientHandle: null, platform: null,
+    campaign: "PO-77", address: { company: "Lakshmi Textiles", city: "Tiruppur", state: "Tamil Nadu" }, items: [{ variantId: V1, title: "Dress", sku: "SD", quantity: 1, unitPricePaise: 100000, unitCostPaise: 30000 }],
+    retailValuePaise: 100000, productCostPaise: 30000, shippingCostPaise: null, status: "BOOKED", shopifyOrderName: "#1101", awb: null, trackingStatus: null, deliveredAt: null,
+    deliverableStatus: "NOT_NEEDED", contentUrl: null, postedAt: null, notes: null }]).trim().split("\n");
+  assert.ok(csv[0].includes("Campaign / reference,Company,Recipient"));
+  assert.ok(csv[1].includes("Sample to vendor / manufacturer,PO-77,Lakshmi Textiles,Ravi"));
 });
