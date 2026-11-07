@@ -54,6 +54,7 @@ export type ShopifyShippableOrderNode = {
   currentTotalPriceSet?: Money;
   totalOutstandingSet?: Money;
   customAttributes?: Array<{ key: string; value?: string | null }> | null;
+  tags?: string[] | null;
   shippingAddress?: {
     name?: string | null;
     firstName?: string | null;
@@ -92,9 +93,27 @@ export type ShippableOrder = {
   itemCount: number;
   totalPaise: number;
   payment: ShipmentPayment;
+  // The customer's answer to the WhatsApp COD confirmation (null when not asked: prepaid,
+  // or COD confirmation is off).
+  codConfirmation: CodConfirmationState | null;
   blockers: string[];
   warnings: string[];
 };
+
+export type CodConfirmationState = "confirmed" | "waiting" | "no_response" | "cancel_requested";
+
+// Tags written by services/orders/whatsapp-cod-confirmation.ts (COD_TAGS).
+const COD_CONFIRM_TAGS = { confirmed: "cod-confirmed", cancelRequested: "cod-cancel-requested", noResponse: "cod-no-response" };
+
+export function codConfirmationState(tags: string[] | null | undefined, isCod: boolean, codConfirmEnabled: boolean): CodConfirmationState | null {
+  const set = new Set((tags || []).map((tag) => clean(tag).toLowerCase()));
+  // A cancel request always counts, even if the feature was switched off since.
+  if (set.has(COD_CONFIRM_TAGS.cancelRequested)) return "cancel_requested";
+  if (!isCod || !codConfirmEnabled) return null;
+  if (set.has(COD_CONFIRM_TAGS.confirmed)) return "confirmed";
+  if (set.has(COD_CONFIRM_TAGS.noResponse)) return "no_response";
+  return "waiting";
+}
 
 const ORDER_FIELDS = `
   id
@@ -108,6 +127,7 @@ const ORDER_FIELDS = `
   currentTotalPriceSet { shopMoney { amount currencyCode } }
   totalOutstandingSet { shopMoney { amount } }
   customAttributes { key value }
+  tags
   shippingAddress { name firstName lastName phone address1 address2 city province zip country }
   lineItems(first: 50) { nodes { title variantTitle sku unfulfilledQuantity } }
 `;
@@ -198,7 +218,7 @@ export function resolveShipmentPayment(input: {
   return { ok: true, mode: "PREPAID", codAmountPaise: 0, source: "prepaid" };
 }
 
-export function normalizeShippableOrder(order: ShopifyShippableOrderNode, codIntentBalancePaise?: number | null): ShippableOrder {
+export function normalizeShippableOrder(order: ShopifyShippableOrderNode, codIntentBalancePaise?: number | null, opts: { codConfirmEnabled?: boolean } = {}): ShippableOrder {
   const address = order.shippingAddress || null;
   const items = (order.lineItems?.nodes || [])
     .map((item) => ({
@@ -238,9 +258,13 @@ export function normalizeShippableOrder(order: ShopifyShippableOrderNode, codInt
   if (phone.replace(/\D/g, "").length < 10) blockers.push("Missing or invalid phone number.");
   if (!items.length) blockers.push("No unfulfilled items.");
   if (!payment.ok) blockers.push(payment.reason);
+  const codConfirmation = codConfirmationState(order.tags, payment.ok && payment.mode === "COD", opts.codConfirmEnabled === true);
+  if (codConfirmation === "cancel_requested") blockers.push("The customer asked to cancel on WhatsApp. Cancel it in Shopify, or remove the cod-cancel-requested tag if they changed their mind.");
 
   const warnings: string[] = [];
   if (payment.ok && payment.warning) warnings.push(payment.warning);
+  if (codConfirmation === "waiting") warnings.push("COD not confirmed yet: the customer hasn't answered the WhatsApp confirmation.");
+  if (codConfirmation === "no_response") warnings.push("COD not confirmed: no answer to the WhatsApp confirmation in 12 hours. Consider calling before shipping."); 
 
   return {
     id: order.id,
@@ -261,6 +285,7 @@ export function normalizeShippableOrder(order: ShopifyShippableOrderNode, codInt
     itemCount: items.reduce((sum, item) => sum + item.quantity, 0),
     totalPaise,
     payment,
+    codConfirmation,
     blockers,
     warnings,
   };

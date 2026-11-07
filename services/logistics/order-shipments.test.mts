@@ -382,3 +382,25 @@ test("preview reports the Shopify step for booked orders", () => {
   const stale = describeExistingShipment({ ...row, shopifyFulfillmentStatus: "PENDING", updatedAt: new Date(now - STALE_CREATING_MS - 1) }, now) as { shopify: { status: string } };
   assert.equal(stale.shopify.status, "FAILED");
 });
+
+test("COD confirmation: a cancel request blocks booking; unconfirmed COD is flagged", async () => {
+  const { normalizeShippableOrder: normalize, codConfirmationState } = await import("./order-shipments.ts");
+  const base = {
+    id: "gid://shopify/Order/9", name: "#522511", createdAt: "2026-11-06T03:00:00Z", displayFinancialStatus: "PENDING", displayFulfillmentStatus: "UNFULFILLED",
+    currentTotalPriceSet: { shopMoney: { amount: "1280.00", currencyCode: "INR" } }, totalOutstandingSet: { shopMoney: { amount: "1280.00" } }, customAttributes: [],
+    shippingAddress: { name: "Geeta", phone: "+919876543210", address1: "12 MG Road", city: "Pune", province: "Maharashtra", zip: "411001", country: "India" },
+    lineItems: { nodes: [{ title: "Swim dress", sku: "SD", unfulfilledQuantity: 1 }] },
+  };
+  const cancel = normalize({ ...base, tags: ["cod-cancel-requested"] }, null, { codConfirmEnabled: true });
+  assert.equal(cancel.codConfirmation, "cancel_requested");
+  assert.match(cancel.blockers.join(" "), /asked to cancel on WhatsApp/);
+  assert.equal(normalize({ ...base, tags: ["cod-cancel-requested"] }).blockers.length, 1, "blocks even when confirmation is off");
+  const waiting = normalize({ ...base, tags: [] }, null, { codConfirmEnabled: true });
+  assert.equal(waiting.codConfirmation, "waiting");
+  assert.equal(waiting.blockers.length, 0);
+  assert.match(waiting.warnings.join(" "), /not confirmed yet/);
+  assert.equal(normalize({ ...base, tags: ["cod-no-response"] }, null, { codConfirmEnabled: true }).codConfirmation, "no_response");
+  assert.equal(normalize({ ...base, tags: ["cod-confirmed"] }, null, { codConfirmEnabled: true }).warnings.length, 0);
+  assert.equal(normalize({ ...base, tags: [] }).codConfirmation, null, "no flag when the shop doesn't ask");
+  assert.equal(codConfirmationState([], false, true), null, "prepaid is never flagged");
+});

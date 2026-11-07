@@ -180,6 +180,12 @@ tag `cod-no-response` (no second message). Events: AuditEvent
 `WHATSAPP_COD_CONFIRMATION_SENT` / `_RESPONSE` on the order. Admin:
 `/admin/whatsapp/cod`.
 
+A Confirm tap on an order that has already shipped gets "already on its way"
+with the tracking link. On **Shipments**, `cod-cancel-requested` blocks booking
+(remove the tag if the customer changes their mind), and while COD confirmation
+is on, COD orders without `cod-confirmed` show "Not confirmed yet" / "No answer
+on WhatsApp" and are not preselected.
+
 ### Shipping updates
 
 `services/orders/whatsapp-shipping-updates.ts`, switched on per shop

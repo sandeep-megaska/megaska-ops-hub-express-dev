@@ -3,11 +3,14 @@
 // A few minutes after a cash-on-delivery order, the shop's own WhatsApp number
 // sends a Utility template with two Quick reply buttons, Confirm order and
 // Cancel order (payloads `codc:confirm:<order id>` / `codc:cancel:<order id>`).
-// - Confirm → Shopify tag `cod-confirmed` and a thank-you message.
+// - Confirm → Shopify tag `cod-confirmed` and a thank-you message ("already on its way",
+//             with tracking, when the team shipped it before the customer answered).
 // - Cancel  → tag `cod-cancel-requested`, the chat is flagged for the team and
 //             they are emailed. Nothing is cancelled automatically.
 // - No reply in 12 hours → tag `cod-no-response`, so the team can call before
 //             shipping. No second message is sent.
+// The Shipments page reads these tags: cod-cancel-requested blocks booking, and an
+// unconfirmed COD order is flagged and not preselected.
 // A reply only counts when it comes from a phone number on that order.
 //
 // Sends run from the 15-minute checkout-recovery cron; replies arrive through
@@ -48,6 +51,9 @@ export type CodOrderNode = {
   shippingAddress?: { firstName?: string | null; phone?: string | null } | null;
   customAttributes?: Array<{ key?: string | null; value?: string | null }> | null;
 };
+
+// The order as the reply handler reads it (with tracking, for an already-shipped order).
+type CodReplyOrderNode = CodOrderNode & { fulfillments?: Array<{ trackingInfo?: Array<{ url?: string | null }> | null }> | null };
 
 export type CodOrder = { orderId: string; orderName: string; phone: string; firstName: string; total: string; createdAt: number };
 
@@ -117,6 +123,8 @@ export const COD_REPLIES = {
   confirmed: (name: string) => `Thank you! Your order ${name} is confirmed ✅ We'll ship it soon and share tracking details.`,
   cancelRequested: (name: string) => `We've received your request to cancel order ${name}. Our team will confirm the cancellation here shortly.`,
   alreadyCancelled: (name: string) => `Order ${name} is already cancelled. If you need anything else, just reply here.`,
+  // Confirmed after the team already shipped it (they answered late).
+  alreadyShippedConfirmed: (name: string, trackingUrl: string | null) => `Thank you! Your order ${name} is confirmed ✅ It's already on its way${trackingUrl ? `: track it here ${trackingUrl}` : "; we've sent you the tracking details"}.`,
   alreadyShippedCancel: (name: string) => `Order ${name} has already been shipped. Our team will contact you here about your cancellation request.`,
 } as const;
 
@@ -150,6 +158,7 @@ const ORDER_QUERY = `query CodConfirmOrder($id: ID!) {
     customer { defaultPhoneNumber { phoneNumber } }
     shippingAddress { phone }
     customAttributes { key value }
+    fulfillments(first: 5) { trackingInfo(first: 1) { url } }
   }
 }`;
 const TAGS_ADD = `mutation CodConfirmTag($id: ID!, $tags: [String!]!) { tagsAdd(id: $id, tags: $tags) { userErrors { field message } } }`;
@@ -262,6 +271,15 @@ export async function runWhatsAppCodConfirmation(
   return summary;
 }
 
+function isShipped(order: CodOrderNode) {
+  return Boolean(order.displayFulfillmentStatus && order.displayFulfillmentStatus !== "UNFULFILLED");
+}
+
+function trackingUrlOf(order: CodReplyOrderNode) {
+  for (const fulfillment of order.fulfillments ?? []) for (const info of fulfillment.trackingInfo ?? []) if (info?.url && /^https:\/\//.test(info.url)) return info.url;
+  return null;
+}
+
 export type CodReplyResult = { handled: boolean; outcome: string };
 
 // A customer tapped Confirm order / Cancel order. Called by the WhatsApp
@@ -291,7 +309,7 @@ export async function handleCodConfirmationReply(
     ? await db.whatsAppConversation.findUnique({ where: { businessPhoneNumberId_contactPhone: { businessPhoneNumberId: input.businessPhoneNumberId, contactPhone: fromPhone } } })
     : null;
 
-  const data = await graphql<{ order?: CodOrderNode | null }>(ORDER_QUERY, { id: parsed.orderId }, { shopDomain: shop.shopDomain });
+  const data = await graphql<{ order?: CodReplyOrderNode | null }>(ORDER_QUERY, { id: parsed.orderId }, { shopDomain: shop.shopDomain });
   const order = data.order;
   if (!order?.id || !fromPhone || !orderPhones(order).includes(fromPhone)) {
     console.warn("[COD CONFIRMATION] reply_phone_mismatch", { shopId: shop.id, orderId: parsed.orderId });
@@ -315,14 +333,14 @@ export async function handleCodConfirmationReply(
     if (previous.some((event) => payloadOf(event).response === "confirmed")) return { handled: true, outcome: "already_confirmed" };
     await addTag(graphql, shop.shopDomain, order.id, COD_TAGS.confirmed);
     await record("confirmed");
-    await reply(COD_REPLIES.confirmed(name));
+    await reply(isShipped(order) ? COD_REPLIES.alreadyShippedConfirmed(name, trackingUrlOf(order)) : COD_REPLIES.confirmed(name));
     return { handled: true, outcome: "confirmed" };
   }
 
   if (previous.some((event) => payloadOf(event).response === "cancel_requested")) return { handled: true, outcome: "already_cancel_requested" };
   await addTag(graphql, shop.shopDomain, order.id, COD_TAGS.cancelRequested);
   await record("cancel_requested");
-  const shipped = Boolean(order.displayFulfillmentStatus && order.displayFulfillmentStatus !== "UNFULFILLED");
+  const shipped = isShipped(order);
   await reply(shipped ? COD_REPLIES.alreadyShippedCancel(name) : COD_REPLIES.cancelRequested(name));
   if (conversation) {
     await db.whatsAppConversation.update({ where: { id: conversation.id }, data: { needsHuman: true, handoffKind: "HARD", handoffReason: `COD order ${name}: customer asked to cancel` } }).catch(() => undefined);
