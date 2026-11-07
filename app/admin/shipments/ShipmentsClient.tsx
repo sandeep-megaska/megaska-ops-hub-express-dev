@@ -22,6 +22,7 @@ type PreviewOrder = {
   itemCount: number;
   totalPaise: number;
   payment: { ok: true; mode: "PREPAID" | "COD"; codAmountPaise: number; source: string } | { ok: false; reason: string };
+  codConfirmation: "confirmed" | "waiting" | "no_response" | "cancel_requested" | null;
   blockers: string[];
   warnings: string[];
   shipment: ExistingShipment;
@@ -60,9 +61,10 @@ function isSelectable(order: PreviewOrder, markFulfilled: boolean) {
   return !order.blockers.length && order.shipment.state !== "IN_PROGRESS";
 }
 
-// Fresh orders are preselected; retries (failed bookings, Shopify updates) need a deliberate tick.
+// Fresh orders are preselected; retries (failed bookings, Shopify updates) and COD orders the
+// customer hasn't confirmed on WhatsApp need a deliberate tick.
 function isPreselected(order: PreviewOrder) {
-  return isSelectable(order, true) && order.shipment.state === "NONE";
+  return isSelectable(order, true) && order.shipment.state === "NONE" && (order.codConfirmation === null || order.codConfirmation === "confirmed");
 }
 
 function shopifyStepLabel(step: ShopifyStep | undefined) {
@@ -399,6 +401,11 @@ export default function ShipmentsClient() {
                               ? <span className="mk-badge mk-badge-warning">COD {rupees(order.payment.codAmountPaise)}{order.payment.source === "partial_cod" ? " (balance)" : ""}</span>
                               : <span className="mk-badge mk-badge-success">Prepaid</span>
                             : <span className="mk-badge mk-badge-danger">Check</span>}
+                          {order.codConfirmation && order.codConfirmation !== "cancel_requested" ? (
+                            <div className="mk-help" style={order.codConfirmation === "confirmed" ? undefined : { color: "#b54708" }}>
+                              {order.codConfirmation === "confirmed" ? "Confirmed on WhatsApp" : order.codConfirmation === "no_response" ? "No answer on WhatsApp" : "Not confirmed yet"}
+                            </div>
+                          ) : null}
                         </td>
                         <td>
                           {order.shipment.state === "CREATED" ? (

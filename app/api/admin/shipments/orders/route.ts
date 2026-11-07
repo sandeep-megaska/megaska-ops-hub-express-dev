@@ -44,13 +44,16 @@ export async function POST(req: NextRequest) {
       fetchShippableOrderNodes(graphql, filters),
     ]);
     const ids = scan.nodes.map((node) => node.id);
-    const [codBalances, existing] = await Promise.all([
+    const [codBalances, existing, whatsApp] = await Promise.all([
       loadCodIntentBalances(db, shop.id, ids),
       loadExistingShipments(db, shop.id, ids),
+      prisma.merchantWhatsAppAccount.findUnique({ where: { shopId: shop.id }, select: { enabled: true, codConfirmEnabled: true } }).catch(() => null),
     ]);
+    // Only flag unconfirmed COD orders when the shop actually asks customers to confirm.
+    const codConfirmEnabled = Boolean(whatsApp?.enabled && whatsApp.codConfirmEnabled);
 
     const orders = scan.nodes.map((node) => ({
-      ...normalizeShippableOrder(node, codBalances.get(node.id) ?? null),
+      ...normalizeShippableOrder(node, codBalances.get(node.id) ?? null, { codConfirmEnabled }),
       shipment: describeExistingShipment(existing.get(node.id)),
     }));
 
