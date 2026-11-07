@@ -126,3 +126,13 @@ test("Cancel on a shipped order says so; a cancelled order is not re-tagged", as
   assert.equal((await handleCodConfirmationReply({ businessPhoneNumberId: "111", fromPhone: "919876543210", payload: "codc:confirm:7001" }, cancelled.deps)).outcome, "already_cancelled");
   assert.equal(cancelled.tags.length, 0);
 });
+
+test("Confirm on an order the team already shipped says it's on its way, with tracking", async () => {
+  const shipped = replyDeps({ displayFulfillmentStatus: "FULFILLED", fulfillments: [{ trackingInfo: [{ url: "https://www.delhivery.com/track/package/17049210018373" }] }] });
+  assert.equal((await handleCodConfirmationReply({ businessPhoneNumberId: "111", fromPhone: "919876543210", payload: "codc:confirm:7001" }, shipped.deps)).outcome, "confirmed");
+  assert.deepEqual(shipped.sent, [COD_REPLIES.alreadyShippedConfirmed("522440", "https://www.delhivery.com/track/package/17049210018373")]);
+  assert.match(shipped.sent[0], /already on its way: track it here https:\/\/www\.delhivery\.com/);
+  const noLink = replyDeps({ displayFulfillmentStatus: "FULFILLED" });
+  await handleCodConfirmationReply({ businessPhoneNumberId: "111", fromPhone: "919876543210", payload: "codc:confirm:7001" }, noLink.deps);
+  assert.doesNotMatch(noLink.sent[0], /ship it soon/);
+});
