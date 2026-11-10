@@ -12,7 +12,7 @@ import {
 import { normalizeShopDomain } from "../../../../../services/shopify/shop-resolver";
 import { isCanonicalE164, normalizeShopifyPhone } from "../../../../../services/shopify/shopify-phone-normalization";
 import { autoGenerateInvoiceForOrder } from "../../../../../services/gst/auto-invoice";
-import { isCollabOrderTags } from "../../../../../services/collab/collab-shipments";
+import { isNoInvoiceOrderTags } from "../../../../../services/exchange/replacement-order";
 import { reconcileGiftCardRedemption } from "../../../../../services/store-credit/gift-card-reconcile";
 import { notifyCheckoutStoreCreditRedeemed } from "../../../../../services/notifications/store-credit";
 import { verifyShopifyWebhookHmac, describeShopifyWebhookHmac } from "../../../../../services/shopify/webhook-hmac";
@@ -255,8 +255,9 @@ export async function POST(req: NextRequest) {
   // (vercel.json) bounds the background work. It is idempotent (skips if an
   // invoice already exists) and fully isolated (its own try/catch).
   const gstOrderName = String(payload.name || "").trim();
-  // Collab parcels are ₹0 orders: no tax invoice, so they don't take an invoice number.
-  if (gstOrderName && shopDomain && !isCollabOrderTags(payload.tags)) {
+  // Free parcels and ₹0 exchange replacements: no tax invoice, so they don't take an
+  // invoice number. A replacement with a paid style difference is invoiced as usual.
+  if (gstOrderName && shopDomain && !isNoInvoiceOrderTags(payload.tags)) {
     after(async () => {
       try {
         const tenant = await prisma.shop.findFirst({ where: { shopDomain }, select: { id: true } });
