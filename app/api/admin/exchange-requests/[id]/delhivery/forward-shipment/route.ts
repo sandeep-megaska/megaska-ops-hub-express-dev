@@ -6,6 +6,7 @@ import { resolveDelhiveryRuntimeConfig } from "../../../../../../../services/log
 import { resolveExchangeShippingAddress } from "../../../../../../../services/exchange/pickup-address";
 import { ShopResolutionError } from "../../../../../../../services/shopify/shop";
 import { requireAdminShopFromRequest } from "../../../../../../../services/shopify/admin-auth";
+import { styleReplacementBlocker } from "../../../../../../../services/exchange/style-exchange";
 
 const ELIGIBLE_STATUSES = ["ITEM_RECEIVED", "REPLACEMENT_PROCESSING"];
 
@@ -48,9 +49,14 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
 
     const reverseShipment = request.shipments.find((shipment) => shipment.direction === "REVERSE_PICKUP") || null;
     const reverseDelivered = reverseShipment?.status === "DELIVERED" || request.status === "ITEM_RECEIVED";
-    if (!reverseDelivered) {
-      return NextResponse.json({ error: "Returned item must be received before creating replacement shipment." }, { status: 400 });
+    // Or the team cleared it to ship early (return picked up, courier slow).
+    if (!reverseDelivered && !request.earlyReplacementAt) {
+      return NextResponse.json({ error: "Returned item must be received before creating replacement shipment, or use \"Ship replacement before the return arrives\"." }, { status: 400 });
     }
+
+    // Different style: the price difference must be paid or settled first.
+    const styleBlocked = styleReplacementBlocker({ difference: request.styleDifferencePaise, settledAt: request.styleSettledAt });
+    if (styleBlocked) return NextResponse.json({ error: styleBlocked }, { status: 400 });
 
     const existingForwardShipment = request.shipments.find((shipment) => shipment.direction === "FORWARD_REPLACEMENT") || null;
     if (existingForwardShipment?.awb) {

@@ -6,6 +6,10 @@ import {
   resolveShopConfig,
 } from "../../../../services/shopify/shop";
 import ExchangeLifecycleControls from "./ExchangeLifecycleControls";
+import EarlyReplacementCard from "./EarlyReplacementCard";
+import StyleExchangeCard from "./StyleExchangeCard";
+import { styleChangeBlocker } from "../../../../services/exchange/style-exchange";
+import { earlyReplacementEligibility, returnOutstanding } from "../../../../services/exchange/early-replacement";
 import { resolveDelhiveryRuntimeConfig } from "../../../../services/logistics/delhivery-runtime";
 import { headers } from "next/headers";
 
@@ -63,7 +67,7 @@ export default async function AdminExchangeDetailPage({
     where: { id, requestType: "EXCHANGE", shopId: shop.id },
     include: {
       items: true,
-      payments: { orderBy: { createdAt: "desc" }, include: { invoice: true } },
+      payments: { where: { purpose: "REVERSE_PICKUP_FEE" }, orderBy: { createdAt: "desc" }, include: { invoice: true } },
       shipments: true,
     },
   });
@@ -85,6 +89,9 @@ export default async function AdminExchangeDetailPage({
   const delhiveryCapability = { configured: delhiveryRuntime.configured, reason: delhiveryRuntime.reason };
   const forwardShipment = request.shipments.find((shipment) => shipment.direction === "FORWARD_REPLACEMENT") || null;
   const nextTransitions = allowedStatusTransitions[request.status] || [];
+  const stylePayment = await prisma.requestPayment.findFirst({ where: { requestId: request.id, purpose: "STYLE_DIFFERENCE" }, orderBy: { createdAt: "desc" } });
+  const styleLocked = styleChangeBlocker({ status: request.status, styleSettledAt: request.styleSettledAt, forwardAwb: forwardShipment?.awb, stylePaymentPaid: stylePayment?.status === "PAID" && stylePayment.amount === request.styleDifferencePaise });
+  const earlyEligibility = earlyReplacementEligibility({ status: request.status, earlyReplacementAt: request.earlyReplacementAt, reverseShipment, forwardAwb: forwardShipment?.awb });
 
   return (
     <div className="mk-page">
@@ -122,6 +129,26 @@ export default async function AdminExchangeDetailPage({
           </div>
         </div>
       </section>
+
+      <StyleExchangeCard
+        requestId={request.id}
+        shopDomain={shopDomain || shop.shopDomain}
+        items={request.items.map((item) => ({ id: item.id, productTitle: item.productTitle, variantTitle: item.variantTitle, sku: item.sku, requestedSize: item.requestedSize, quantity: item.quantity, replacementTitle: item.replacementTitle, replacementSku: item.replacementSku, replacementUnitPricePaise: item.replacementUnitPricePaise, originalUnitPricePaise: item.originalUnitPricePaise }))}
+        differencePaise={request.styleDifferencePaise}
+        settlement={request.styleSettlement}
+        settledAtIso={request.styleSettledAt ? request.styleSettledAt.toISOString() : null}
+        payment={stylePayment ? { status: stylePayment.status, url: stylePayment.paymentLinkUrl, amount: stylePayment.amount } : null}
+        locked={request.status === "REJECTED" ? "This exchange was rejected." : styleLocked}
+      />
+
+      <EarlyReplacementCard
+        requestId={request.id}
+        shopDomain={shopDomain || shop.shopDomain}
+        eligible={earlyEligibility.ok}
+        early={request.earlyReplacementAt ? { atIso: request.earlyReplacementAt.toISOString(), reason: request.earlyReplacementReason } : null}
+        returnOutstanding={returnOutstanding({ earlyReplacementAt: request.earlyReplacementAt, reverseShipment })}
+        reverseStatus={reverseShipment?.status ?? null}
+      />
 
       <ExchangeLifecycleControls
         requestId={request.id}

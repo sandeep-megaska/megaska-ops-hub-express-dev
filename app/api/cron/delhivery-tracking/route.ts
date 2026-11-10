@@ -45,7 +45,9 @@ async function run(req: NextRequest) {
   const requests = await prisma.orderActionRequest.findMany({
     where: {
       requestType: "EXCHANGE",
-      status: { notIn: TERMINAL_REQUEST_STATUSES },
+      // Open exchanges, plus closed ones whose replacement went out before the
+      // return arrived (the return is still tracked until it's back).
+      OR: [{ status: { notIn: TERMINAL_REQUEST_STATUSES } }, { earlyReplacementAt: { not: null }, status: { not: "REJECTED" } }],
       shipments: {
         some: {
           carrier: "DELHIVERY",
@@ -71,7 +73,7 @@ async function run(req: NextRequest) {
     for (const shipment of syncable) {
       try {
         const result = await syncExchangeShipment(
-          { id: request.id, status: currentStatus, shopId: request.shopId },
+          { id: request.id, status: currentStatus, shopId: request.shopId, orderNumber: request.orderNumber, earlyReplacementAt: request.earlyReplacementAt },
           shipment,
           { actorType: "system" },
         );
