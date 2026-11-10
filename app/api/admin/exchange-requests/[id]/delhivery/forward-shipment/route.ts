@@ -7,6 +7,7 @@ import { resolveExchangeShippingAddress } from "../../../../../../../services/ex
 import { ShopResolutionError } from "../../../../../../../services/shopify/shop";
 import { requireAdminShopFromRequest } from "../../../../../../../services/shopify/admin-auth";
 import { styleReplacementBlocker } from "../../../../../../../services/exchange/style-exchange";
+import { ReplacementOrderError, ensureReplacementOrder, fulfillReplacementOrder } from "../../../../../../../services/exchange/replacement-order-operations";
 
 const ELIGIBLE_STATUSES = ["ITEM_RECEIVED", "REPLACEMENT_PROCESSING"];
 
@@ -68,6 +69,15 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     if (!shippingAddress) {
       return NextResponse.json({ error: "Could not resolve the customer's shipping address from the order." }, { status: 400 });
     }
+    // Shopify order for the replacement first (stock, records, GST for a paid
+    // difference); it's created once, so a failed booking can be retried safely.
+    let replacementOrder: { id: string; name: string | null };
+    try {
+      replacementOrder = await ensureReplacementOrder(shop, request.id, shippingAddress);
+    } catch (error) {
+      if (error instanceof ReplacementOrderError) return NextResponse.json({ error: error.message }, { status: 422 });
+      throw error;
+    }
     const delhiveryResult = await createDelhiveryForwardShipment(request, runtime, shippingAddress);
     const nextStatus = resolveNextStatus(request.status, Boolean(delhiveryResult.awb));
 
@@ -119,7 +129,8 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
       return { request: updatedRequest, shipment };
     });
 
-    return NextResponse.json(result);
+    const shopifyFulfillment = delhiveryResult.awb ? await fulfillReplacementOrder(shop, request.id, delhiveryResult.awb, delhiveryResult.trackingUrl) : null;
+    return NextResponse.json({ ...result, replacementOrder, shopifyFulfillment });
   } catch (error) {
     const status = error instanceof ShopResolutionError ? error.status : error instanceof DelhiveryForwardShipmentError ? error.statusCode : 500;
     return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to create Delhivery replacement shipment." }, { status });

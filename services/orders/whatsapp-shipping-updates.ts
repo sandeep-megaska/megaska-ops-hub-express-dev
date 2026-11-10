@@ -186,7 +186,7 @@ export async function runWhatsAppShippingUpdates(
       const since = new Date(now.getTime() - ORDER_LOOKBACK_MS).toISOString();
       let after: string | null = null;
       for (let page = 0; page < 4; page += 1) {
-        const data: { orders?: { nodes?: ShippingOrderNode[]; pageInfo?: { hasNextPage?: boolean; endCursor?: string | null } } } = await graphql(ORDERS_QUERY, { query: `fulfillment_status:shipped AND updated_at:>='${since}'`, after }, { shopDomain: shop.shopDomain });
+        const data: { orders?: { nodes?: ShippingOrderNode[]; pageInfo?: { hasNextPage?: boolean; endCursor?: string | null } } } = await graphql(ORDERS_QUERY, { query: `fulfillment_status:shipped AND updated_at:>='${since}' AND -tag:'LoopD2C Exchange'`, after }, { shopDomain: shop.shopDomain });
         orders.push(...(data.orders?.nodes ?? []));
         if (!data.orders?.pageInfo?.hasNextPage) break;
         after = data.orders.pageInfo.endCursor ?? null;
