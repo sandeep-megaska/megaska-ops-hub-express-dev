@@ -120,6 +120,10 @@ export default async function AdminExchangeDetailPage({
             <p style={{ fontWeight: 600 }}>{request.customerEmailSnapshot || "—"}</p>
           </div>
           <div>
+            <p className="mk-stat-label">Replacement order (Shopify)</p>
+            <p style={{ fontWeight: 600 }}>{request.replacementShopifyOrderName || (request.replacementShopifyOrderId === "pending" ? "Being created…" : "Created when the replacement is booked")}</p>
+          </div>
+          <div>
             <p className="mk-stat-label">Requested Date</p>
             <p style={{ fontWeight: 600 }}>{formatDate(request.requestedAt)}</p>
           </div>

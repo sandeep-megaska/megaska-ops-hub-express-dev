@@ -302,6 +302,24 @@ answered from those facts with intent `request_status` and no handoff; a new
 request, a change to one, or a complaint still goes to the team
 (`return_exchange` stays a hard handoff). A failed lookup only hides requests.
 
+### Shopify order for each replacement
+
+**Create replacement shipment** first creates a Shopify order for the replacement
+(`services/exchange/replacement-order*.ts`), once per exchange (stored on
+`replacementShopifyOrderId` / `Name`; a failed Delhivery booking can be retried
+without a second order), then books Delhivery and marks that order shipped with
+the AWB (no Shopify email; the customer gets the exchange update).
+- Items: the chosen style, or the same product and colour in the requested size
+  (sizes like "Large" / "L" / "X-Large" are matched). If the size can't be found,
+  pick it with "Exchange for a different style".
+- Total = what the customer paid extra: ₹0 (100% discount, tax-exempt, tags
+  `LoopD2C Exchange`, `No charge`) for a size swap or a cheaper / same-price
+  style; the paid difference for a dearer style (discount = the rest), which the
+  GST module invoices as usual. ₹0 replacements and free parcels skip GST
+  auto-invoicing (`isNoInvoiceOrderTags`).
+- Stock goes down in Shopify like any order. Orders tagged `LoopD2C Exchange` are
+  left out of the WhatsApp shipping updates (the exchange updates cover them).
+
 ### Exchange for a different style
 
 Exchange page → **Exchange for a different style** (team-only;

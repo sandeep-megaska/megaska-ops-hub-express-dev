@@ -1333,6 +1333,10 @@ model OrderActionRequest {
   styleDifferencePaise     Int?
   styleSettlement          String?
   styleSettledAt           DateTime?
+  // Shopify order for the replacement (services/exchange/replacement-order.ts):
+  // "pending" while being created.
+  replacementShopifyOrderId   String?
+  replacementShopifyOrderName String?
 
   customerProfile CustomerProfile          @relation(fields: [customerProfileId], references: [id])
   shop            Shop?                    @relation(fields: [shopId], references: [id], onDelete: SetNull)
