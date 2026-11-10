@@ -444,6 +444,7 @@ export async function GET(req: NextRequest) {
       include: {
         items: true,
         payments: {
+          where: { purpose: "REVERSE_PICKUP_FEE" },
           orderBy: { createdAt: "desc" },
           take: 1,
         },

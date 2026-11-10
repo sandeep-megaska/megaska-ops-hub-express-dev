@@ -33,7 +33,7 @@ export async function GET(
       },
       include: {
         items: true,
-        payments: { orderBy: { createdAt: "desc" }, include: { invoice: true } },
+        payments: { where: { purpose: "REVERSE_PICKUP_FEE" }, orderBy: { createdAt: "desc" }, include: { invoice: true } },
         shipments: true,
       },
     });

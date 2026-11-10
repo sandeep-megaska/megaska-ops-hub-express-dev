@@ -11,6 +11,8 @@ type ExchangeRequestForForwardShipment = {
     sku: string | null;
     requestedSize: string | null;
     quantity: number;
+    replacementTitle?: string | null;
+    replacementSku?: string | null;
   }>;
 };
 
@@ -94,7 +96,10 @@ export function buildDelhiveryForwardShipmentPayload(
   const warehouseState = warehouseValue(["DELHIVERY_WAREHOUSE_STATE", "DELHIVERY_PICKUP_STATE"]);
   const warehousePin = warehouseValue(["DELHIVERY_WAREHOUSE_PIN", "DELHIVERY_ORIGIN_PIN", "DELHIVERY_PICKUP_PIN"]);
   const productDescription = request.items
-    .map((item) => [item.productTitle, item.variantTitle, item.requestedSize ? `Size ${item.requestedSize}` : null, item.sku].map(clean).filter(Boolean).join(" / "))
+    // A different style ships the chosen product; otherwise the same product in the requested size.
+    .map((item) => (item.replacementTitle
+      ? [item.replacementTitle, item.replacementSku]
+      : [item.productTitle, item.variantTitle, item.requestedSize ? `Size ${item.requestedSize}` : null, item.sku]).map(clean).filter(Boolean).join(" / "))
     .filter(Boolean)
     .join("; ") || "Exchange replacement item";
   const totalQuantity = request.items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0) || 1;

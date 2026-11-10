@@ -129,6 +129,18 @@ export async function POST(req: NextRequest) {
     });
   }
 
+  // A style-difference payment never touches the return pickup (the flow below is
+  // for the reverse pickup fee).
+  if (payment.purpose === "STYLE_DIFFERENCE") {
+    if (status === "PAID" && !isDuplicatePaidWebhook) {
+      const { markStyleDifferencePaid } = await import("../../../../services/exchange/style-operations");
+      const paidRequestId = payment.requestId;
+      const paidAmount = payment.amount;
+      after(() => markStyleDifferencePaid(paidRequestId, paidAmount));
+    }
+    return NextResponse.json({ ok: true, purpose: "STYLE_DIFFERENCE" });
+  }
+
   if (status === "PAID") {
     if (isDuplicatePaidWebhook) {
       return NextResponse.json({ ok: true, duplicate: true });

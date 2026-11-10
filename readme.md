@@ -302,6 +302,34 @@ answered from those facts with intent `request_status` and no handoff; a new
 request, a change to one, or a complaint still goes to the team
 (`return_exchange` stays a hard handoff). A failed lookup only hides requests.
 
+### Exchange for a different style
+
+Exchange page → **Exchange for a different style** (team-only;
+`services/exchange/style-exchange.ts`, `style-operations.ts`). The team picks
+another product for an item (Shopify search; stock checked). The difference is
+the new style's current price minus what the customer paid for the line after
+discounts (`discountedUnitPriceAfterAllDiscountsSet`), times quantity.
+- Dearer: **Send payment link** creates a Razorpay link (`RequestPayment`
+  purpose `STYLE_DIFFERENCE`, 7 days). The webhook settles it without touching
+  the return pickup; a link paid after the style changed only alerts the team.
+- Cheaper: the team chooses store credit (wallet credit, mirrored to the Shopify
+  gift card), no refund, or "refunded outside LoopD2C".
+- **Create replacement shipment** waits until the difference is settled, and the
+  Delhivery description names the new style. Once settled, the style is locked.
+Views that show the reverse pickup charge read only `REVERSE_PICKUP_FEE` payments.
+
+### Shipping a replacement before the return arrives
+
+Exchange page → **Ship replacement before the return arrives**
+(`services/exchange/early-replacement.ts`), for when Delhivery has picked up the
+return but is slow to bring it back. Team-only, only once the return is picked up
+(request `PICKUP_COMPLETED`, or reverse shipment `IN_TRANSIT`), with a reason. It
+records `earlyReplacementAt` / `earlyReplacementReason`, moves the exchange to
+`REPLACEMENT_PROCESSING` (customer gets that update) so **Create replacement
+shipment** works. The tracking cron keeps following the return after the exchange
+closes; when it arrives that's recorded, and if it fails or goes back to the
+customer the team is emailed once. The exchanges list shows "return not back yet".
+
 ### Exchange updates
 
 Templates `exchange_approved`, `exchange_payment_received`,

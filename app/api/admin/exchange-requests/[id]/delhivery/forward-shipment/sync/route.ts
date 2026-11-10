@@ -23,7 +23,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     }
 
     const sync = await syncExchangeShipment(
-      { id: request.id, status: request.status, shopId: request.shopId },
+      { id: request.id, status: request.status, shopId: request.shopId, orderNumber: request.orderNumber, earlyReplacementAt: request.earlyReplacementAt },
       forwardShipment,
       { actorType: "admin" },
     );
