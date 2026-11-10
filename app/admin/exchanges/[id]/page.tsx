@@ -6,6 +6,8 @@ import {
   resolveShopConfig,
 } from "../../../../services/shopify/shop";
 import ExchangeLifecycleControls from "./ExchangeLifecycleControls";
+import EarlyReplacementCard from "./EarlyReplacementCard";
+import { earlyReplacementEligibility, returnOutstanding } from "../../../../services/exchange/early-replacement";
 import { resolveDelhiveryRuntimeConfig } from "../../../../services/logistics/delhivery-runtime";
 import { headers } from "next/headers";
 
@@ -85,6 +87,7 @@ export default async function AdminExchangeDetailPage({
   const delhiveryCapability = { configured: delhiveryRuntime.configured, reason: delhiveryRuntime.reason };
   const forwardShipment = request.shipments.find((shipment) => shipment.direction === "FORWARD_REPLACEMENT") || null;
   const nextTransitions = allowedStatusTransitions[request.status] || [];
+  const earlyEligibility = earlyReplacementEligibility({ status: request.status, earlyReplacementAt: request.earlyReplacementAt, reverseShipment, forwardAwb: forwardShipment?.awb });
 
   return (
     <div className="mk-page">
@@ -122,6 +125,15 @@ export default async function AdminExchangeDetailPage({
           </div>
         </div>
       </section>
+
+      <EarlyReplacementCard
+        requestId={request.id}
+        shopDomain={shopDomain || shop.shopDomain}
+        eligible={earlyEligibility.ok}
+        early={request.earlyReplacementAt ? { atIso: request.earlyReplacementAt.toISOString(), reason: request.earlyReplacementReason } : null}
+        returnOutstanding={returnOutstanding({ earlyReplacementAt: request.earlyReplacementAt, reverseShipment })}
+        reverseStatus={reverseShipment?.status ?? null}
+      />
 
       <ExchangeLifecycleControls
         requestId={request.id}

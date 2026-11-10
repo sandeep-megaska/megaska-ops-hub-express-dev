@@ -302,6 +302,18 @@ answered from those facts with intent `request_status` and no handoff; a new
 request, a change to one, or a complaint still goes to the team
 (`return_exchange` stays a hard handoff). A failed lookup only hides requests.
 
+### Shipping a replacement before the return arrives
+
+Exchange page → **Ship replacement before the return arrives**
+(`services/exchange/early-replacement.ts`), for when Delhivery has picked up the
+return but is slow to bring it back. Team-only, only once the return is picked up
+(request `PICKUP_COMPLETED`, or reverse shipment `IN_TRANSIT`), with a reason. It
+records `earlyReplacementAt` / `earlyReplacementReason`, moves the exchange to
+`REPLACEMENT_PROCESSING` (customer gets that update) so **Create replacement
+shipment** works. The tracking cron keeps following the return after the exchange
+closes; when it arrives that's recorded, and if it fails or goes back to the
+customer the team is emailed once. The exchanges list shows "return not back yet".
+
 ### Exchange updates
 
 Templates `exchange_approved`, `exchange_payment_received`,

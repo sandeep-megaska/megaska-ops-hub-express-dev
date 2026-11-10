@@ -1321,6 +1321,10 @@ model OrderActionRequest {
   eligibilityDecision   String?
   eligibilityReason     String?
   megaskaOrderId        String?
+  // Replacement shipped before the returned item reached the warehouse (team-only,
+  // once Delhivery picked the return up). The return keeps being tracked after close.
+  earlyReplacementAt     DateTime?
+  earlyReplacementReason String?
 
   customerProfile CustomerProfile          @relation(fields: [customerProfileId], references: [id])
   shop            Shop?                    @relation(fields: [shopId], references: [id], onDelete: SetNull)

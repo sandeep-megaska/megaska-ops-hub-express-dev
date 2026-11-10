@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { returnOutstanding } from "../../../services/exchange/early-replacement";
 import { headers } from "next/headers";
 import { prisma } from "../../../services/db/prisma";
 import {
@@ -17,6 +18,8 @@ type ExchangeRequest = {
   requestedAt?: Date | null;
   createdAt?: Date | null;
   items?: unknown[];
+  earlyReplacementAt?: Date | null;
+  shipments?: Array<{ direction: string; status: string }>;
 };
 
 function formatDateTime(value: Date | null | undefined) {
@@ -151,6 +154,9 @@ export default async function AdminExchangesPage({
 
                   <td>
                     <span className={`mk-badge mk-badge-${statusBadgeVariant(request.status)}`}>{request.status}</span>
+                    {returnOutstanding({ earlyReplacementAt: request.earlyReplacementAt, reverseShipment: request.shipments?.find((shipment) => shipment.direction === "REVERSE_PICKUP") })
+                      ? <div className="mk-help" style={{ color: "#b54708" }}>Replacement sent early · return not back yet</div>
+                      : null}
                   </td>
 
                   <td>{formatDateTime(request.requestedAt || request.createdAt)}</td>

@@ -16,6 +16,9 @@ interface SyncableRequest {
   id: string;
   status: string;
   shopId: string | null;
+  orderNumber?: string | null;
+  // Set when the replacement went out before the return arrived (early-replacement.ts).
+  earlyReplacementAt?: Date | null;
 }
 
 interface SyncableShipment {
@@ -136,6 +139,11 @@ export async function syncExchangeShipment(
     console.info("[DELHIVERY TRACKING] milestone_not_notified_stale", { requestId: request.id, status: nextStatus, statusAt: snapshot.statusUpdatedAt });
   }
 
+  if (isReverse && request.earlyReplacementAt && (shipmentStatus === "DELIVERED" || shipmentStatus === "FAILED")) {
+    await recordEarlyReturnOutcome(request, shipmentStatus, snapshot.rawStatus ?? null, shipment.awb).catch((error) =>
+      console.error("[DELHIVERY TRACKING] early_return_outcome_failed", { requestId: request.id, error: error instanceof Error ? error.message : String(error) }));
+  }
+
   return {
     shipment: updatedShipment,
     tracking: snapshot,
@@ -144,4 +152,26 @@ export async function syncExchangeShipment(
     nextExchangeStatus: nextStatus,
     changed,
   };
+}
+
+// The replacement already went out; record when the return finally arrives, and
+// alert the team once if it won't (sent back to the customer, or cancelled).
+async function recordEarlyReturnOutcome(request: SyncableRequest, shipmentStatus: "DELIVERED" | "FAILED", rawStatus: string | null, awb: string | null) {
+  const eventType = shipmentStatus === "DELIVERED" ? "exchange.early_replacement.return_received" : "exchange.early_replacement.return_failed";
+  const already = await prisma.auditEvent.findFirst({ where: { entityType: "OrderActionRequest", entityId: request.id, eventType }, select: { id: true } });
+  if (already) return;
+  await prisma.auditEvent.create({ data: { actorType: "system", eventType, entityType: "OrderActionRequest", entityId: request.id, payload: { shopId: request.shopId, awb, rawStatus } as never } });
+  if (shipmentStatus !== "FAILED" || !request.shopId) return;
+  const { sendAdminAlert } = await import("../notifications/resend");
+  const appBaseUrl = String(process.env.APP_BASE_URL || "").trim().replace(/\/$/, "");
+  await sendAdminAlert({
+    shopId: request.shopId,
+    eventType: "EXCHANGE",
+    subject: `Return not coming back: exchange #${request.orderNumber ?? ""} (replacement already sent)`,
+    text: [
+      `The replacement for exchange #${request.orderNumber ?? ""} was shipped before the return arrived, and Delhivery now reports the return as "${rawStatus || "failed"}" (AWB ${awb ?? "-"}).`,
+      "Contact the customer and Delhivery about the returned item.",
+      appBaseUrl ? `Exchange: ${appBaseUrl}/admin/exchanges/${encodeURIComponent(request.id)}` : "",
+    ].filter(Boolean).join("\n"),
+  });
 }

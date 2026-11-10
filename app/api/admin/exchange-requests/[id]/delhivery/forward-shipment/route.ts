@@ -48,8 +48,9 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
 
     const reverseShipment = request.shipments.find((shipment) => shipment.direction === "REVERSE_PICKUP") || null;
     const reverseDelivered = reverseShipment?.status === "DELIVERED" || request.status === "ITEM_RECEIVED";
-    if (!reverseDelivered) {
-      return NextResponse.json({ error: "Returned item must be received before creating replacement shipment." }, { status: 400 });
+    // Or the team cleared it to ship early (return picked up, courier slow).
+    if (!reverseDelivered && !request.earlyReplacementAt) {
+      return NextResponse.json({ error: "Returned item must be received before creating replacement shipment, or use \"Ship replacement before the return arrives\"." }, { status: 400 });
     }
 
     const existingForwardShipment = request.shipments.find((shipment) => shipment.direction === "FORWARD_REPLACEMENT") || null;
