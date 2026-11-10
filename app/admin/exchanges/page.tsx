@@ -77,7 +77,7 @@ export default async function AdminExchangesPage({
     },
     include: {
       items: true,
-      payments: { orderBy: { createdAt: "desc" }, take: 1 },
+      payments: { where: { purpose: "REVERSE_PICKUP_FEE" }, orderBy: { createdAt: "desc" }, take: 1 },
       shipments: true,
     },
     orderBy: { requestedAt: "desc" },

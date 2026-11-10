@@ -20,7 +20,7 @@ export async function GET(
       },
       include: {
         items: true,
-        payments: { orderBy: { createdAt: "desc" } },
+        payments: { where: { purpose: "REVERSE_PICKUP_FEE" }, orderBy: { createdAt: "desc" } },
         shipments: true,
       },
     });

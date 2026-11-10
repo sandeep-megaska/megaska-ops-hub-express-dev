@@ -11,6 +11,7 @@ type CreatePaymentLinkInput = {
   amount?: number;
   currency?: string;
   expiresAt?: Date | null;
+  description?: string;
 };
 
 export async function isRazorpayConfigured(shopId: string) {
@@ -29,7 +30,7 @@ export async function createReversePickupPaymentLink(input: CreatePaymentLinkInp
     amount: input.amount || REVERSE_PICKUP_FEE_PAISE,
     currency: input.currency || REVERSE_PICKUP_CURRENCY,
     accept_partial: false,
-    description: `Exchange reverse pickup fee for ${input.requestId}`,
+    description: input.description || `Exchange reverse pickup fee for ${input.requestId}`,
     reference_id: input.requestId,
     customer: {
       name: input.customerName || undefined,

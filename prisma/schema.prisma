@@ -1199,6 +1199,8 @@ enum ExchangeRequestStatus {
 
 enum PaymentPurpose {
   REVERSE_PICKUP_FEE
+  // Customer pays the difference for a dearer style (services/exchange/style-exchange.ts).
+  STYLE_DIFFERENCE
 }
 
 enum PaymentProvider {
@@ -1325,6 +1327,12 @@ model OrderActionRequest {
   // once Delhivery picked the return up). The return keeps being tracked after close.
   earlyReplacementAt     DateTime?
   earlyReplacementReason String?
+  // Different-style exchange (team-only): replacement value minus what the customer
+  // paid, across items. > 0 the customer owes it, < 0 the store does. Settlement:
+  // COLLECT (payment link) | STORE_CREDIT | NO_REFUND | MANUAL_REFUND.
+  styleDifferencePaise     Int?
+  styleSettlement          String?
+  styleSettledAt           DateTime?
 
   customerProfile CustomerProfile          @relation(fields: [customerProfileId], references: [id])
   shop            Shop?                    @relation(fields: [shopId], references: [id], onDelete: SetNull)
@@ -1355,6 +1363,12 @@ model OrderActionItem {
   isClearance         Boolean  @default(false)
   isExcludedCategory  Boolean  @default(false)
   eligibilitySnapshot Json?
+  // Different style chosen by the team (null = same product, requested size).
+  replacementVariantId      String?
+  replacementTitle          String?
+  replacementSku            String?
+  replacementUnitPricePaise Int?
+  originalUnitPricePaise    Int?
   createdAt           DateTime @default(now())
 
   request OrderActionRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)

@@ -87,7 +87,7 @@ export async function GET(req: NextRequest) {
       },
       include: {
         items: { take: 1 },
-        payments: { orderBy: { createdAt: "desc" }, take: 1 },
+        payments: { where: { purpose: "REVERSE_PICKUP_FEE" }, orderBy: { createdAt: "desc" }, take: 1 },
         shipments: true,
       },
       orderBy: { requestedAt: "desc" },
