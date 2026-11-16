@@ -170,3 +170,52 @@ test("A5 renders onto A5 pages with nothing clipped off the sheet", { skip: chro
     await browser.close();
   }
 });
+
+// "Print invoice" on the order page (components/gst/invoice-print.ts) prints this
+// same HTML in a new tab and opens the print dialog on load.
+test("print-tab HTML opens the print dialog and resolves URLs against the app", async () => {
+  const { withAutoPrint } = await import("../../components/gst/invoice-print.ts");
+  const html = withAutoPrint(buildGstInvoiceHtml(sampleModel(), "auto"), "https://app.example.com/");
+  assert.match(html, /<head><base href="https:\/\/app\.example\.com\/" \/>/);
+  assert.match(html, /window\.print\(\);[^<]*<\/script><\/body>/);
+  assert.equal((html.match(/window\.print\(\)/g) || []).length, 2, "the page's own Print button plus the auto-print");
+});
+
+test("'Match printer paper' printed on A5 from the print tab: nothing clipped, paginates", { skip: chromiumPath ? false : "no Chromium binary available" }, async () => {
+  const { withAutoPrint } = await import("../../components/gst/invoice-print.ts");
+  const { default: puppeteer } = await import("puppeteer-core");
+  const browser = await puppeteer.launch({ executablePath: chromiumPath, args: ["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"], headless: true });
+  try {
+    const html = withAutoPrint(buildGstInvoiceHtml(sampleModel(), "auto"), "https://app.example.com");
+    const page = await browser.newPage();
+    // Same steps as the button: open a blank tab, write the invoice into it, and the
+    // print dialog opens once it has loaded (print() stubbed so it doesn't block).
+    const printed = await page.evaluate(async (invoiceHtml) => {
+      const tab = window.open("", "_blank");
+      if (!tab) return -1;
+      let calls = 0;
+      tab.print = () => { calls++; };
+      tab.document.open();
+      tab.document.write(invoiceHtml);
+      tab.document.close();
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      tab.close();
+      return calls;
+    }, html);
+    assert.equal(printed, 1, "the print dialog should open exactly once");
+
+    // A5 portrait minus the 10mm "auto" margins, at 96dpi.
+    await page.setViewport({ width: Math.round(((148 - 20) / 25.4) * 96), height: Math.round(((210 - 20) / 25.4) * 96) });
+    await page.setContent(html, { waitUntil: "load" });
+    await page.emulateMediaType("print");
+    const overflow = await page.evaluate(() => ({ scrollWidth: document.documentElement.scrollWidth, clientWidth: document.documentElement.clientWidth }));
+    assert.ok(overflow.scrollWidth <= overflow.clientWidth + 1, `content overflows A5 by ${overflow.scrollWidth - overflow.clientWidth}px`);
+    // The operator picks A5 in the dialog: "auto" has no page size of its own, so the dialog's sheet wins.
+    const pdf = Buffer.from(await page.pdf({ format: "A5", printBackground: true })).toString("latin1");
+    const mediaBox = pdf.match(/MediaBox \[0 0 ([\d.]+) ([\d.]+)\]/);
+    assert.ok(mediaBox && Math.abs(Number(mediaBox[1]) - 420) <= 2 && Math.abs(Number(mediaBox[2]) - 595) <= 2, `expected an A5 sheet, got ${mediaBox?.[1]}x${mediaBox?.[2]}`);
+    assert.match(pdf, /\/Count\s+([2-9]|\d{2,})/, "expected the long invoice to paginate");
+  } finally {
+    await browser.close();
+  }
+});

@@ -7,7 +7,7 @@
 //
 // Because the invoice is pre-generated when the order is created (orders/create
 // webhook -> autoGenerateInvoiceForOrder), this page normally just *finds* the
-// ready invoice and shows Download + Send-email immediately — no generation
+// ready invoice and shows Print, Download and Send-email immediately — no generation
 // wait, and none of the sandboxed-iframe round-trips that made the popup slow.
 // Auth is the same App Bridge session-token path every other in-app GST page
 // uses (adminAuthHeaders()).
@@ -15,6 +15,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { adminAuthHeaders } from '../../lib/admin-fetch'
+import { printGstInvoice } from './invoice-print'
 
 interface OrderInvoiceStatus {
   orderName?: string | null
@@ -45,6 +46,7 @@ export function GstOrderInvoice() {
   const [loading, setLoading] = useState(true)
   const [working, setWorking] = useState(false)
   const [downloading, setDownloading] = useState(false)
+  const [printing, setPrinting] = useState(false)
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [sentNotice, setSentNotice] = useState<string | null>(null)
@@ -92,6 +94,18 @@ export function GstOrderInvoice() {
     setWorking(true)
     setSentNotice(null)
     await fetchStatus(true)
+  }
+
+  // Synchronous up to window.open (inside printGstInvoice), so the print tab
+  // is opened directly by the click and not blocked as a pop-up.
+  function onPrint() {
+    const invoiceId = status?.invoiceId
+    if (!invoiceId || printing) return
+    setPrinting(true)
+    setError(null)
+    printGstInvoice(invoiceId, adminAuthHeaders)
+      .catch((err) => setError(err instanceof Error ? err.message : String(err)))
+      .finally(() => setPrinting(false))
   }
 
   async function onDownloadPdf() {
@@ -200,8 +214,11 @@ export function GstOrderInvoice() {
 
           {hasInvoice ? (
             <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div>
-                <button className="mk-btn mk-btn-primary" onClick={onDownloadPdf} disabled={downloading}>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button className="mk-btn mk-btn-primary" onClick={onPrint} disabled={printing}>
+                  {printing ? 'Preparing print…' : 'Print invoice'}
+                </button>
+                <button className="mk-btn" onClick={onDownloadPdf} disabled={downloading}>
                   {downloading ? 'Downloading PDF…' : 'Download PDF'}
                 </button>
               </div>
