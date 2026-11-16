@@ -5,8 +5,9 @@
 // out for the paper picked in the print dialog (A4 or A5), whereas the PDF is a
 // fixed sheet that gets clipped when printed on smaller paper at actual size.
 //
-// `margins=printer` leaves the page margins to the printer: a fixed CSS margin
-// let an Epson inkjet cut the top and sides off, though Save as PDF was fine.
+// `margins=printer` gives the invoice its own white edge on every printed page,
+// so it stays inside the printer's printable area even when the print dialog's
+// Margins is "None" (an Epson L3250 cut the top and sides off without it).
 //
 // The HTML is fetched with the App Bridge session token, so no signed URL is
 // needed, and written into a tab opened synchronously in the click handler (a
