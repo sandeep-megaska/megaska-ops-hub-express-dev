@@ -3,6 +3,8 @@ import { gstDb } from "./db";
 import { buildB2cSalesRegisterExport } from "./reports/b2c-sales-register";
 import { generateInvoiceBatch, listDispatchReadyOrders } from "./dispatch-batch";
 import { syncOrdersByDateRange } from "./order-sync";
+import { applyGstOrderAdjustments, loadPeriodOrders } from "./reports/order-adjustments";
+import { istDateString } from "./reports/order-status";
 import type { ReportWarning } from "./reports/types";
 import type { GstServiceResult } from "./types";
 
@@ -281,8 +283,6 @@ export async function prepareB2cSalesRegisterReport(input: PrepareB2cReportInput
   }
 
   const warnings: ReportWarning[] = [];
-  const from = periodStart.toISOString().slice(0, 10);
-  const to = periodEnd.toISOString().slice(0, 10);
 
   // Without the shop, the sync has no store to ask (production has no default
   // store), which surfaced as "Shopify runtime admin authentication is not
@@ -291,7 +291,13 @@ export async function prepareB2cSalesRegisterReport(input: PrepareB2cReportInput
   if (!shopDomain) {
     return { ok: false, error: "Unable to resolve the shop for this report. Reopen this page from Shopify admin." };
   }
-  const syncResult = await syncOrdersByDateRange({ from, to, shopDomain });
+  const shopId = String(input.shopId || "").trim();
+  if (!shopId) {
+    return { ok: false, error: "Unable to resolve the shop for this report. Reopen this page from Shopify admin." };
+  }
+  // periodStart/periodEnd are India-time day boundaries (the route parses them
+  // as IST), so they go to the sync as exact instants, not as UTC dates.
+  const syncResult = await syncOrdersByDateRange({ from: periodStart, to: periodEnd, shopDomain });
   if (!syncResult.ok) {
     return { ok: false, error: syncResult.error || "Failed to sync orders for selected range" };
   }
@@ -304,22 +310,29 @@ export async function prepareB2cSalesRegisterReport(input: PrepareB2cReportInput
     });
   }
 
+  // The period's orders with their current status (just refreshed by the sync).
+  const periodOrders = await loadPeriodOrders({ shopId, periodStart, periodEnd });
+  const invoiceableIds = new Set(periodOrders.filter((order) => order.gstClass !== "VOID").map((order) => order.id));
+
   const notInvoiced = await listDispatchReadyOrders({
-    shopId: input.shopId || undefined,
-    from,
-    to,
+    shopId,
+    from: periodStart.toISOString(),
+    // Its upper bound is a UTC day end, so ask for the IST end date and keep
+    // only orders inside the IST period below.
+    to: istDateString(periodEnd),
     invoiceStatus: "NOT_INVOICED",
   });
   if (!notInvoiced.ok) {
     return { ok: false, error: notInvoiced.error || "Failed to load non-invoiced GST orders for selected range" };
   }
 
+  // Voided orders (cancelled before payment) are not a supply: never invoice them.
   const orderImportIds = (notInvoiced.data || [])
     .map((row) => String(row.id || "").trim())
-    .filter(Boolean);
+    .filter((id) => id && invoiceableIds.has(id));
   if (orderImportIds.length > 0) {
     const generated = await generateInvoiceBatch({
-      shopId: input.shopId || undefined,
+      shopId,
       orderImportIds,
     });
     if (!generated.ok) {
@@ -375,9 +388,13 @@ export async function prepareB2cSalesRegisterReport(input: PrepareB2cReportInput
     }
   }
 
+  // Cancel invoices of voided orders; credit-note fully refunded ones.
+  const adjustments = await applyGstOrderAdjustments({ shopId, gstSettingsId: input.gstSettingsId, orders: periodOrders });
+  warnings.push(...adjustments.warnings);
+
   const result = await buildB2cSalesRegisterExport({
     gstSettingsId: input.gstSettingsId,
-    shopId: input.shopId || undefined,
+    shopId,
     periodStart,
     periodEnd,
   });

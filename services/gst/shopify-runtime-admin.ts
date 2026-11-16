@@ -41,6 +41,9 @@ type GstSyncOrderNode = {
   phone?: string | null;
   displayFinancialStatus?: string | null;
   displayFulfillmentStatus?: string | null;
+  cancelledAt?: string | null;
+  paymentGatewayNames?: string[] | null;
+  refunds?: Array<{ createdAt?: string | null; totalRefundedSet?: ShopifyMoneySet | null }> | null;
   subtotalPriceSet?: ShopifyMoneySet | null;
   totalTaxSet?: ShopifyMoneySet | null;
   totalPriceSet?: ShopifyMoneySet | null;
@@ -52,6 +55,7 @@ type GstSyncOrderNode = {
       id: string;
       title?: string | null;
       sku?: string | null;
+      variantTitle?: string | null;
       quantity?: number | null;
       discountedUnitPriceAfterAllDiscountsSet?: ShopifyMoneySet | null;
       product?: { id?: string | null } | null;
@@ -224,6 +228,13 @@ function normalizeGstSyncOrder(node: GstSyncOrderNode) {
     createdAt: node.createdAt || new Date().toISOString(),
     financialStatus: String(node.displayFinancialStatus || "").trim() || null,
     fulfillmentStatus: String(node.displayFulfillmentStatus || "").trim() || null,
+    // For GST: a voided order is not a sale, and a refunded one needs a credit note.
+    cancelledAt: node.cancelledAt || null,
+    paymentGateway: (node.paymentGatewayNames || []).map((name) => String(name || "").trim()).filter(Boolean).join(", ") || null,
+    refunds: (node.refunds || []).map((refund) => ({
+      createdAt: refund.createdAt || null,
+      amount: Number(refund.totalRefundedSet?.shopMoney?.amount || 0),
+    })),
 
     currency: String(node.subtotalPriceSet?.shopMoney?.currencyCode || "INR"),
     subtotalPrice: Number(node.subtotalPriceSet?.shopMoney?.amount || 0),
@@ -245,6 +256,7 @@ function normalizeGstSyncOrder(node: GstSyncOrderNode) {
       variantId: extractShopifyEntityId(line.variant?.id || ""),
       title: String(line.title || "Item"),
       sku: line.sku || null,
+      variantTitle: String(line.variantTitle || "").trim() || null,
       quantity: Number(line.quantity || 0),
       price: Number(line.discountedUnitPriceAfterAllDiscountsSet?.shopMoney?.amount || 0),
       discount: 0,
@@ -260,6 +272,12 @@ const GST_ORDER_FIELDS = `
   phone
   displayFinancialStatus
   displayFulfillmentStatus
+  cancelledAt
+  paymentGatewayNames
+  refunds(first: 20) {
+    createdAt
+    totalRefundedSet { shopMoney { amount } }
+  }
   subtotalPriceSet { shopMoney { amount currencyCode } }
   totalTaxSet { shopMoney { amount } }
   totalPriceSet { shopMoney { amount } }
@@ -301,6 +319,7 @@ const GST_ORDER_FIELDS = `
       id
       title
       sku
+      variantTitle
       quantity
       discountedUnitPriceAfterAllDiscountsSet { shopMoney { amount } }
       product { id }

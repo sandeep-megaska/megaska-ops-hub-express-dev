@@ -20,12 +20,13 @@ interface ShopifyOrderLine {
   variantId?: string;
   title?: string;
   sku?: string | null;
+  variantTitle?: string | null;
   quantity?: number;
   price?: number;
   discount?: number;
 }
 
-interface ShopifyOrderLike {
+export interface ShopifyOrderLike {
   id?: string;
   name?: string;
   createdAt?: string;
@@ -40,6 +41,11 @@ interface ShopifyOrderLike {
   phone?: string | null;
   shippingAddress?: unknown;
   billingAddress?: unknown;
+  financialStatus?: string | null;
+  fulfillmentStatus?: string | null;
+  cancelledAt?: string | null;
+  paymentGateway?: string | null;
+  refunds?: Array<{ createdAt?: string | null; amount?: number }>;
   lines?: ShopifyOrderLine[];
 }
 
@@ -65,6 +71,7 @@ export interface GstOrderSyncSummary {
 type SyncDbClient = {
   gstOrderImport: {
     findUnique: (args: unknown) => Promise<Record<string, unknown> | null>;
+    update: (args: unknown) => Promise<Record<string, unknown>>;
   };
 };
 
@@ -78,8 +85,38 @@ function parseDate(value: string | Date, field: string): Date {
   return parsed;
 }
 
+// The order's current payment / fulfilment / cancellation state. GST needs it
+// to tell sales from voided orders (not invoiced) and refunds (credit notes),
+// and the B2C register reports it. It changes after import, so every sync
+// refreshes it on orders already imported (mergeOrderStatusIntoSnapshot).
+function orderStatusFields(order: ShopifyOrderLike): Record<string, unknown> {
+  return {
+    financialStatus: order.financialStatus || null,
+    fulfillmentStatus: order.fulfillmentStatus || null,
+    cancelledAt: order.cancelledAt || null,
+    paymentGateway: order.paymentGateway || null,
+    refunds: Array.isArray(order.refunds) ? order.refunds : [],
+    statusSyncedAt: new Date().toISOString(),
+  };
+}
+
+/** An imported order's snapshot with the order's current status (and line variant titles) from Shopify. */
+export function mergeOrderStatusIntoSnapshot(snapshotRaw: unknown, order: ShopifyOrderLike): Record<string, unknown> {
+  const snapshot = typeof snapshotRaw === "object" && snapshotRaw !== null && !Array.isArray(snapshotRaw) ? (snapshotRaw as Record<string, unknown>) : {};
+  const variantTitleById = new Map((order.lines || []).filter((line) => line.id).map((line) => [String(line.id), line.variantTitle || null]));
+  const lines = Array.isArray(snapshot.lines)
+    ? snapshot.lines.map((line) => {
+        const current = typeof line === "object" && line !== null ? (line as Record<string, unknown>) : {};
+        const id = String(current.shopifyLineItemId || "");
+        return id && variantTitleById.has(id) ? { ...current, variantTitle: variantTitleById.get(id) } : current;
+      })
+    : snapshot.lines;
+  return { ...snapshot, ...orderStatusFields(order), ...(lines !== undefined ? { lines } : {}) };
+}
+
 function normalizeOrderPayload(order: ShopifyOrderLike): Record<string, unknown> {
   return {
+    ...orderStatusFields(order),
     shopifyOrderName: String(order.name || order.id || ""),
     orderCreatedAt: order.createdAt || new Date().toISOString(),
     orderCurrency: String(order.currency || "INR"),
@@ -100,6 +137,7 @@ function normalizeOrderPayload(order: ShopifyOrderLike): Record<string, unknown>
           shopifyVariantId: line.variantId ? String(line.variantId) : undefined,
           title: String(line.title || "Item"),
           sku: line.sku ? String(line.sku) : null,
+          variantTitle: line.variantTitle ? String(line.variantTitle) : null,
           quantity: Number(line.quantity || 0),
           unitPrice: Number(line.price || 0),
           discount: Number(line.discount || 0),
@@ -207,10 +245,20 @@ export async function syncOrdersByDateRange(input: SyncFilters): Promise<GstServ
 
           const existing = await syncDb.gstOrderImport.findUnique({
             where: { shopId_shopifyOrderId: { shopId: resolvedShopId, shopifyOrderId } },
-            select: { id: true },
+            select: { id: true, snapshot: true },
           });
 
           if (existing && !input.forceResync) {
+            // Already imported: keep its lines and tax data, but refresh its status
+            // (a void or refund after import must reach the GST report).
+            try {
+              await syncDb.gstOrderImport.update({
+                where: { id: existing.id },
+                data: { snapshot: mergeOrderStatusIntoSnapshot(existing.snapshot, order), lastSyncedAt: new Date() },
+              });
+            } catch (error) {
+              console.error("[GST Sync] order status refresh failed", { shopifyOrderId, error: error instanceof Error ? error.message : String(error) });
+            }
             return {
               imported: 0,
               alreadySynced: 1,

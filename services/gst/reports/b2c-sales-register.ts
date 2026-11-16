@@ -1,12 +1,14 @@
 import { gstDb } from "../db";
 import { toCsv } from "./csv";
 import type { B2cSalesRegisterExport, B2cSalesRegisterRow, ReportWarning } from "./types";
+import { istDateString, itemTypeForHsn, orderStatusOf } from "./order-status";
 
 type GstDocumentForReport = {
   id: string;
   documentNumber: string;
   documentType: string;
   documentDate: Date;
+  sourceOrderId?: string | null;
   sourceOrderNumber: string | null;
   shopifyOrderName: string | null;
   placeOfSupplyStateCode: string;
@@ -23,6 +25,7 @@ type GstDocumentForReport = {
     hsnOrSac: string | null;
     quantity: unknown;
     unitPrice: unknown;
+    taxableAmount?: unknown;
     taxRate: unknown;
     cgstAmount: unknown;
     sgstAmount: unknown;
@@ -37,7 +40,7 @@ type SnapshotLine = {
   variant: string;
   hsn: string;
   quantity: unknown;
-  price: unknown;
+  taxable: unknown;
   gstRate: unknown;
   igst: unknown;
   cgst: unknown;
@@ -87,8 +90,10 @@ function asText(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
+// GST invoice dates are India-time calendar dates: an order placed at 00:30 IST on
+// 2 Oct is a 2 Oct invoice, though it is still 1 Oct in UTC.
 function formatDateYyyyMmDd(value: Date): string {
-  return value.toISOString().slice(0, 10);
+  return istDateString(value);
 }
 
 function snapshotValue(snapshot: Record<string, unknown>, paths: string[][]): string {
@@ -146,7 +151,7 @@ function extractLineItems(snapshot: Record<string, unknown>): SnapshotLine[] {
       variant: asText(line.variant) || asText(line.variantName) || asText(line.variantTitle),
       hsn: asText(line.hsn) || asText(line.hsnCode) || asText(line.hsnOrSac),
       quantity: line.quantity,
-      price: line.price ?? line.unitPrice,
+      taxable: line.taxableAmount ?? line.taxable ?? line.taxableValue,
       gstRate: line.gstRate ?? line.taxRate,
       igst: line.igst ?? line.igstAmount,
       cgst: line.cgst ?? line.cgstAmount,
@@ -165,7 +170,7 @@ function buildRow(input: {
   variant?: string;
   hsn?: string;
   quantity?: unknown;
-  price?: unknown;
+  taxable?: unknown;
   gstRate?: unknown;
   igst?: unknown;
   cgst?: unknown;
@@ -192,7 +197,10 @@ function buildRow(input: {
     variant: input.variant || "",
     hsn: input.hsn || "",
     quantity: sign * asFiniteNumber(input.quantity),
-    price: asFiniteNumber(input.price),
+    // "Price" is the line's taxable value (before GST), as GSTR-1 reports it:
+    // Price + IGST + CGST + SGST + CESS = Total. Older snapshots without a
+    // taxable amount get it from the total less the tax.
+    price: sign * taxableValue(input),
     gstPercent: asFiniteNumber(input.gstRate),
     igst: sign * asFiniteNumber(input.igst),
     cgst: sign * asFiniteNumber(input.cgst),
@@ -204,6 +212,16 @@ function buildRow(input: {
     paymentGateway: input.paymentGateway || "",
     fulfillmentStatus: input.fulfillmentStatus || "",
   };
+}
+
+function round2(value: number): number {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+function taxableValue(input: { taxable?: unknown; total?: unknown; igst?: unknown; cgst?: unknown; sgst?: unknown; cess?: unknown }): number {
+  const hasTaxable = input.taxable !== undefined && input.taxable !== null && String(input.taxable).trim() !== "";
+  if (hasTaxable) return round2(asFiniteNumber(input.taxable));
+  return round2(asFiniteNumber(input.total) - asFiniteNumber(input.igst) - asFiniteNumber(input.cgst) - asFiniteNumber(input.sgst) - asFiniteNumber(input.cess));
 }
 
 function serializeRows(rows: B2cSalesRegisterRow[]): string {
@@ -234,18 +252,39 @@ function serializeRows(rows: B2cSalesRegisterRow[]): string {
   return toCsv([...B2C_SALES_REGISTER_HEADERS], csvRows);
 }
 
-function extractOrderStatusFields(snapshot: Record<string, unknown>): {
+type OrderImportForReport = { id: string; snapshot: unknown };
+
+function recordOf(value: unknown): Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+}
+
+/**
+ * Payment / fulfilment status and gateway: the order's current state, from its
+ * GST order import (refreshed by every sync), else the copy saved on the invoice.
+ */
+function extractOrderStatusFields(orderSnapshot: unknown, documentSnapshot: Record<string, unknown>): {
   paymentStatus: string;
   paymentGateway: string;
   fulfillmentStatus: string;
-  itemType: string;
 } {
+  const current = orderStatusOf(orderSnapshot);
+  const saved = orderStatusOf(recordOf(documentSnapshot.metadata).orderSnapshot);
   return {
-    paymentStatus: snapshotValue(snapshot, [["paymentStatus"], ["order", "paymentStatus"], ["source", "paymentStatus"]]),
-    paymentGateway: snapshotValue(snapshot, [["paymentGateway"], ["order", "paymentGateway"], ["source", "paymentGateway"]]),
-    fulfillmentStatus: snapshotValue(snapshot, [["fulfillmentStatus"], ["order", "fulfillmentStatus"], ["source", "fulfillmentStatus"]]),
-    itemType: snapshotValue(snapshot, [["itemType"], ["order", "itemType"], ["source", "itemType"]]),
+    paymentStatus: current.financialStatus || saved.financialStatus,
+    paymentGateway: current.paymentGateway || saved.paymentGateway,
+    fulfillmentStatus: current.fulfillmentStatus || saved.fulfillmentStatus,
   };
+}
+
+/** The order line an invoice line came from: by SKU ("SKU • title"), else by position. */
+function variantFor(orderSnapshot: unknown, documentSnapshot: Record<string, unknown>, product: string, index: number): string {
+  const lines = [recordOf(orderSnapshot).lines, recordOf(recordOf(documentSnapshot.metadata).orderSnapshot).lines].find(
+    (candidate) => Array.isArray(candidate) && candidate.some((line) => asText(recordOf(line).variantTitle)),
+  );
+  if (!Array.isArray(lines)) return "";
+  const sku = product.includes(" • ") ? product.split(" • ")[0].trim() : "";
+  const bySku = sku ? lines.find((line) => asText(recordOf(line).sku) === sku) : undefined;
+  return asText(recordOf(bySku ?? lines[index]).variantTitle);
 }
 
 export async function buildB2cSalesRegisterExport(input: {
@@ -277,6 +316,7 @@ export async function buildB2cSalesRegisterExport(input: {
         documentNumber: true,
         documentType: true,
         documentDate: true,
+        sourceOrderId: true,
         sourceOrderNumber: true,
         shopifyOrderName: true,
         placeOfSupplyStateCode: true,
@@ -295,6 +335,7 @@ export async function buildB2cSalesRegisterExport(input: {
             hsnOrSac: true,
             quantity: true,
             unitPrice: true,
+            taxableAmount: true,
             taxRate: true,
             cgstAmount: true,
             sgstAmount: true,
@@ -317,6 +358,16 @@ export async function buildB2cSalesRegisterExport(input: {
   const rows: B2cSalesRegisterRow[] = [];
   const warnings: ReportWarning[] = [];
 
+  // The orders behind these documents, for their current payment/fulfilment status.
+  const orderImportIds = Array.from(new Set(documents.map((document) => asText(document.sourceOrderId)).filter(Boolean)));
+  const orderImports: OrderImportForReport[] = orderImportIds.length
+    ? ((await (gstDb as unknown as { gstOrderImport: { findMany: (args: unknown) => Promise<OrderImportForReport[]> } }).gstOrderImport.findMany({
+        where: { id: { in: orderImportIds }, ...(input.shopId ? { shopId: input.shopId } : {}) },
+        select: { id: true, snapshot: true },
+      })) ?? [])
+    : [];
+  const orderSnapshotById = new Map(orderImports.map((row) => [String(row.id), row.snapshot]));
+
   if (documents.length === 0) {
     warnings.push({
       code: "NO_INVOICES_IN_RANGE",
@@ -330,7 +381,8 @@ export async function buildB2cSalesRegisterExport(input: {
     const snapshot = extractSnapshot(document.jsonSnapshot);
     const customer = extractCustomer(snapshot);
     const orderNumber = extractOrderNumber(document, snapshot);
-    const statusFields = extractOrderStatusFields(snapshot);
+    const orderSnapshot = orderSnapshotById.get(asText(document.sourceOrderId));
+    const statusFields = extractOrderStatusFields(orderSnapshot, snapshot);
 
     if (customer === "UNREGISTERED") {
       warnings.push({
@@ -343,17 +395,18 @@ export async function buildB2cSalesRegisterExport(input: {
 
     const snapshotLines = extractLineItems(snapshot);
     if (snapshotLines.length > 0) {
-      for (const snapshotLine of snapshotLines) {
+      for (const [index, snapshotLine] of snapshotLines.entries()) {
         rows.push(
           buildRow({
             document,
             orderNumber,
             customer,
             product: snapshotLine.product,
-            variant: snapshotLine.variant,
+            variant: snapshotLine.variant || variantFor(orderSnapshot, snapshot, snapshotLine.product, index),
             hsn: snapshotLine.hsn,
+            itemType: itemTypeForHsn(snapshotLine.hsn),
             quantity: snapshotLine.quantity,
-            price: snapshotLine.price,
+            taxable: snapshotLine.taxable,
             gstRate: snapshotLine.gstRate,
             igst: snapshotLine.igst,
             cgst: snapshotLine.cgst,
@@ -375,16 +428,18 @@ export async function buildB2cSalesRegisterExport(input: {
         documentNumber: document.documentNumber,
       });
 
-      for (const line of document.lines) {
+      for (const [index, line] of document.lines.entries()) {
         rows.push(
           buildRow({
             document,
             orderNumber,
             customer,
             product: line.description,
+            variant: variantFor(orderSnapshot, snapshot, line.description, index),
             hsn: line.hsnOrSac || "",
+            itemType: itemTypeForHsn(line.hsnOrSac || ""),
             quantity: line.quantity,
-            price: line.unitPrice,
+            taxable: line.taxableAmount,
             gstRate: line.taxRate,
             igst: line.igstAmount,
             cgst: line.cgstAmount,
@@ -410,6 +465,8 @@ export async function buildB2cSalesRegisterExport(input: {
         document,
         orderNumber,
         customer,
+        itemType: itemTypeForHsn(""),
+        taxable: document.taxableAmount,
         igst: document.igstAmount,
         cgst: document.cgstAmount,
         sgst: document.sgstAmount,
