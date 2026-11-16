@@ -265,8 +265,15 @@ async function loadLiveShopifyOrderSnapshot(document: Record<string, unknown>): 
 
   if (!orderNameOrNumber) return {};
 
+  // The document's own shop: without it the lookup had no store to ask in
+  // production and always failed ("runtime admin authentication is not configured").
+  const shopId = asText(document.shopId);
+  if (!shopId) return {};
+
   try {
-    const liveOrder = await getSingleShopifyOrderForGstSync({ orderNameOrNumber });
+    const shop = await prisma.shop.findUnique({ where: { id: shopId }, select: { shopDomain: true } });
+    if (!shop?.shopDomain) return {};
+    const liveOrder = await getSingleShopifyOrderForGstSync({ orderNameOrNumber, shopDomain: shop.shopDomain });
     if (liveOrder && typeof liveOrder === "object") {
       return liveOrder as Record<string, unknown>;
     }
