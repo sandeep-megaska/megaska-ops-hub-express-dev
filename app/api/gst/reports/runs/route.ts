@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { listReportRuns, prepareB2cSalesRegisterReport } from "../../../../../services/gst/report-export";
 import { getActiveGstSettings } from "../../../../../services/gst/settings";
-import { resolveGstAdminShopId } from "../../../../../services/gst/request-shop";
+import { resolveGstAdminShop, resolveGstAdminShopId } from "../../../../../services/gst/request-shop";
 
 export const runtime = "nodejs";
 
@@ -41,10 +41,13 @@ export async function POST(req: NextRequest) {
       periodEnd: body.periodEnd ?? null,
     });
 
-    const shopId = await resolveGstAdminShopId(req);
-    if (!shopId) {
-      return NextResponse.json({ ok: false, error: "Unable to resolve shop for this request" }, { status: 400 });
+    // The report syncs this shop's orders from Shopify first, so it needs the
+    // verified shop's domain as well as its id.
+    const shop = await resolveGstAdminShop(req);
+    if (!shop) {
+      return NextResponse.json({ ok: false, error: "Unable to resolve shop for this request. Reopen this page from Shopify admin." }, { status: 400 });
     }
+    const shopId = shop.id;
 
     const settings = await getActiveGstSettings({ shopId });
     if (!settings.ok || !settings.data) {
@@ -68,6 +71,7 @@ export async function POST(req: NextRequest) {
     const result = await prepareB2cSalesRegisterReport({
       gstSettingsId: settings.data.id,
       shopId: settings.data.shopId ? String(settings.data.shopId) : undefined,
+      shopDomain: shop.shopDomain,
       periodStart,
       periodEnd,
     });

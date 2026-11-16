@@ -17,6 +17,16 @@ export async function resolveGstAdminShopId(req: NextRequest): Promise<string | 
   }
 }
 
+/** The verified shop (id and myshopify domain) for a GST admin request, or null. */
+export async function resolveGstAdminShop(req: NextRequest): Promise<{ id: string; shopDomain: string } | null> {
+  try {
+    const shop = await requireAdminShopFromRequest(req);
+    return shop?.id && shop.shopDomain ? { id: String(shop.id), shopDomain: String(shop.shopDomain) } : null;
+  } catch {
+    return null;
+  }
+}
+
 /** The verified shop's myshopify domain for a GST admin request, or null. */
 export async function resolveGstAdminShopDomain(req: NextRequest): Promise<string | null> {
   try {

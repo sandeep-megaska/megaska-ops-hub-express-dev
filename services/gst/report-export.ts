@@ -41,6 +41,8 @@ export interface B2cReportPayload {
 export interface PrepareB2cReportInput {
   gstSettingsId: string;
   shopId?: string | null;
+  /** The verified shop's myshopify domain: the report syncs its orders from Shopify first. */
+  shopDomain: string;
   periodStart: Date | string;
   periodEnd: Date | string;
 }
@@ -282,7 +284,14 @@ export async function prepareB2cSalesRegisterReport(input: PrepareB2cReportInput
   const from = periodStart.toISOString().slice(0, 10);
   const to = periodEnd.toISOString().slice(0, 10);
 
-  const syncResult = await syncOrdersByDateRange({ from, to });
+  // Without the shop, the sync has no store to ask (production has no default
+  // store), which surfaced as "Shopify runtime admin authentication is not
+  // configured for GST sync". Fail closed rather than sync some other store.
+  const shopDomain = String(input.shopDomain || "").trim();
+  if (!shopDomain) {
+    return { ok: false, error: "Unable to resolve the shop for this report. Reopen this page from Shopify admin." };
+  }
+  const syncResult = await syncOrdersByDateRange({ from, to, shopDomain });
   if (!syncResult.ok) {
     return { ok: false, error: syncResult.error || "Failed to sync orders for selected range" };
   }
