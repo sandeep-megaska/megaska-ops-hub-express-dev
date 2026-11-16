@@ -64,7 +64,7 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
 
   try {
     if (format === "html") {
-      const htmlResult = await withDeadline("Invoice render", 20000, renderGstPdf(id, { paperSize }));
+      const htmlResult = await withDeadline("Invoice render", 20000, renderGstPdf(id, { paperSize, printerMargins: req.nextUrl.searchParams.get("margins") === "printer" }));
       if (!htmlResult.ok || !htmlResult.data) {
         return withExtensionCors(
           NextResponse.json({ ok: false, error: htmlResult.error || "Unable to render invoice HTML" }, { status: 404 }),

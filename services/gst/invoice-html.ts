@@ -32,9 +32,24 @@ export const GST_INVOICE_PAPER_GEOMETRY: Record<GstInvoicePaperSize, GstInvoiceP
 
 // Pure HTML builder: no database, no I/O. Kept separate from renderGstPdf so the
 // print layout can be exercised (and its page box measured) without a GST document.
-export function buildGstInvoiceHtml(model: GstInvoiceRenderModel, paperSize: GstInvoicePaperSize): string {
+export interface GstInvoiceHtmlOptions {
+  /**
+   * Leave the page margins to the browser and printer (the in-app Print button).
+   * A fixed @page margin is used as-is even when the printer cannot print that
+   * close to the edge, so a real printer (e.g. an Epson inkjet) cut the top and
+   * sides off while "Save as PDF" looked perfect. Without one, Chrome's Default
+   * margins are at least 1cm and never inside the printer's unprintable area.
+   * The server-side PDF renderers keep the fixed margin: they have no printer.
+   */
+  printerMargins?: boolean;
+}
+
+export function buildGstInvoiceHtml(model: GstInvoiceRenderModel, paperSize: GstInvoicePaperSize, options: GstInvoiceHtmlOptions = {}): string {
   const cfg = model.templateConfig;
   const paper = GST_INVOICE_PAPER_GEOMETRY[paperSize];
+  const pageRule = options.printerMargins
+    ? `@page { size: ${paper.cssPageSize}; }`
+    : `@page { size: ${paper.cssPageSize}; margin: ${paper.cssPageMargin}; }`;
   // De-cramped portrait rows: a wide Item Description that wraps, with SKU / HSN /
   // variant / per-line tax breakup on a compact sub-line, and only Qty / Taxable / GST% /
   // Total as aligned numeric columns.
@@ -76,7 +91,7 @@ export function buildGstInvoiceHtml(model: GstInvoiceRenderModel, paperSize: Gst
          do not scale to fit unless the operator changes Scale by hand. "auto" adopts
          whatever paper the print dialog selects; an explicit size pins the box, which
          is what the server-side PDF renderers need. */
-      @page { size: ${paper.cssPageSize}; margin: ${paper.cssPageMargin}; }
+      ${pageRule}
       body { font-family: Arial, sans-serif; color:#111; font-size:9px; margin:0; }
       .topline { display:flex; justify-content:space-between; gap:8px; border-bottom:1px solid #111; padding-bottom:8px; margin-bottom:10px; }
       .meta { text-align:right; }
