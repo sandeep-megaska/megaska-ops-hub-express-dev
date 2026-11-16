@@ -33,7 +33,7 @@ export type { GstInvoicePaperGeometry } from "./invoice-html";
 export interface GstPdfRenderOptions {
   /** Overrides the template's configured paper size for this render only. */
   paperSize?: GstInvoicePaperSize | string | null;
-  /** Leave page margins to the printer (in-app Print); see GstInvoiceHtmlOptions. */
+  /** In-app Print on a real printer: the invoice keeps its own edge; see GstInvoiceHtmlOptions. */
   printerMargins?: boolean;
 }
 

@@ -34,22 +34,28 @@ export const GST_INVOICE_PAPER_GEOMETRY: Record<GstInvoicePaperSize, GstInvoiceP
 // print layout can be exercised (and its page box measured) without a GST document.
 export interface GstInvoiceHtmlOptions {
   /**
-   * Leave the page margins to the browser and printer (the in-app Print button).
-   * A fixed @page margin is used as-is even when the printer cannot print that
-   * close to the edge, so a real printer (e.g. an Epson inkjet) cut the top and
-   * sides off while "Save as PDF" looked perfect. Without one, Chrome's Default
-   * margins are at least 1cm and never inside the printer's unprintable area.
-   * The server-side PDF renderers keep the fixed margin: they have no printer.
+   * For the in-app Print button, printed on a real printer. Besides the @page
+   * margin, the invoice carries its own white edge (padding on every printed
+   * page). Chrome drops the @page margin when the print dialog's Margins is
+   * "None", a choice it remembers between prints, and the invoice then ran to the
+   * paper's edge, where printers (an Epson L3250 here) cannot print: the top and
+   * sides were cut off. Server-side PDFs don't need it: they have no print dialog.
    */
   printerMargins?: boolean;
 }
 
+/** The invoice's own white edge on a real printer, kept even with Margins: None. */
+export const GST_INVOICE_PRINTER_SAFE_EDGE_MM = 6;
+
 export function buildGstInvoiceHtml(model: GstInvoiceRenderModel, paperSize: GstInvoicePaperSize, options: GstInvoiceHtmlOptions = {}): string {
   const cfg = model.templateConfig;
   const paper = GST_INVOICE_PAPER_GEOMETRY[paperSize];
-  const pageRule = options.printerMargins
-    ? `@page { size: ${paper.cssPageSize}; }`
-    : `@page { size: ${paper.cssPageSize}; margin: ${paper.cssPageMargin}; }`;
+  const pageRule = `@page { size: ${paper.cssPageSize}; margin: ${paper.cssPageMargin}; }`;
+  // box-decoration-break: clone repeats the padding at every page break, so pages
+  // 2+ keep the edge too, not only the top of the first and bottom of the last.
+  const printerEdge = options.printerMargins
+    ? `@media print { .page{ padding:${GST_INVOICE_PRINTER_SAFE_EDGE_MM}mm; box-decoration-break:clone; -webkit-box-decoration-break:clone; } }`
+    : "";
   // De-cramped portrait rows: a wide Item Description that wraps, with SKU / HSN /
   // variant / per-line tax breakup on a compact sub-line, and only Qty / Taxable / GST% /
   // Total as aligned numeric columns.
@@ -146,6 +152,7 @@ export function buildGstInvoiceHtml(model: GstInvoiceRenderModel, paperSize: Gst
         .footer-logo{ min-height:18px; font-size:10px; }
         .footer-logo img{ max-height:16px; max-width:110px; }
       }
+      ${printerEdge}
     </style></head><body><div class="page">
     <button class="print-btn" onclick="window.print()">Print ${escapeHtml(model.title)}</button>
     ${model.templateConfig.showHeaderLogo ? `<div class="header-logo">${model.branding.headerLogoSrc ? `<img src="${escapeHtml(model.branding.headerLogoSrc)}" alt="Header logo" />` : "bigonbuy"}</div>` : ""}
