@@ -33,6 +33,8 @@ export type { GstInvoicePaperGeometry } from "./invoice-html";
 export interface GstPdfRenderOptions {
   /** Overrides the template's configured paper size for this render only. */
   paperSize?: GstInvoicePaperSize | string | null;
+  /** Leave page margins to the printer (in-app Print); see GstInvoiceHtmlOptions. */
+  printerMargins?: boolean;
 }
 
 export function resolveGstInvoicePaperSize(
@@ -653,7 +655,7 @@ export async function renderGstPdf(
 
   const model = modelResult.data;
   const paperSize = resolveGstInvoicePaperSize(options.paperSize, model.templateConfig.paperSize);
-  const html = buildGstInvoiceHtml(model, paperSize);
+  const html = buildGstInvoiceHtml(model, paperSize, { printerMargins: options.printerMargins === true });
 
   gstPerfLog("gst.pdf.htmlRender", htmlStartedAtMs, { gstDocumentId, rowCount: model.rows.length, paperSize });
   return {
