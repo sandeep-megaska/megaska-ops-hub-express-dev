@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { buildGstInvoiceHtml, GST_INVOICE_PAPER_GEOMETRY } from "./invoice-html.ts";
+import { buildGstInvoiceHtml, GST_INVOICE_PAPER_GEOMETRY, GST_INVOICE_PRINTER_SAFE_EDGE_MM } from "./invoice-html.ts";
 import type { GstInvoiceRenderModel } from "./pdf.ts";
 import type { GstInvoiceTemplateConfig } from "./template.ts";
 
@@ -181,18 +181,22 @@ test("print-tab HTML opens the print dialog and resolves URLs against the app", 
   assert.equal((html.match(/window\.print\(\)/g) || []).length, 2, "the page's own Print button plus the auto-print");
 });
 
-test("in-app Print leaves page margins to the printer; generated PDFs keep fixed margins", () => {
-  // A fixed CSS margin is used as-is even where the printer can't print, which cut the
-  // top and sides off on an Epson L3250 while Save as PDF looked perfect.
+test("in-app Print carries its own white edge on every page; generated PDFs don't", () => {
+  // Chrome drops the @page margin when the dialog's Margins is "None" (and remembers
+  // that choice), so the invoice ran to the paper's edge and an Epson L3250 cut the
+  // top and sides off. The print tab's own padding, repeated at every page break,
+  // keeps it inside the printable area regardless.
+  const edge = new RegExp(`@media print \\{ \\.page\\{ padding:${GST_INVOICE_PRINTER_SAFE_EDGE_MM}mm; box-decoration-break:clone; -webkit-box-decoration-break:clone; \\} \\}`);
   for (const paper of ["auto", "A4", "A5"] as const) {
+    const { cssPageSize, cssPageMargin } = GST_INVOICE_PAPER_GEOMETRY[paper];
     const printTab = buildGstInvoiceHtml(sampleModel(), paper, { printerMargins: true });
-    assert.match(printTab, new RegExp(`@page \\{ size: ${GST_INVOICE_PAPER_GEOMETRY[paper].cssPageSize}; \\}`));
-    assert.doesNotMatch(printTab, /@page \{[^}]*margin/);
+    assert.match(printTab, edge, `${paper}: print tab needs its own edge`);
+    assert.ok(printTab.includes(`@page { size: ${cssPageSize}; margin: ${cssPageMargin}; }`), `${paper}: keeps the @page margin for Margins: Default`);
+    assert.doesNotMatch(buildGstInvoiceHtml(sampleModel(), paper), /box-decoration-break/, `${paper}: generated PDFs are unchanged`);
   }
-  assert.match(buildGstInvoiceHtml(sampleModel(), "A5"), /@page \{ size: A5 portrait; margin: 8mm; \}/);
 });
 
-test("print tab on A5 with a printer's wide margins: nothing clipped, paginates", { skip: chromiumPath ? false : "no Chromium binary available" }, async () => {
+test("print tab on A5 with Margins: None: keeps its edge, nothing clipped, paginates", { skip: chromiumPath ? false : "no Chromium binary available" }, async () => {
   const { withAutoPrint } = await import("../../components/gst/invoice-print.ts");
   const { default: puppeteer } = await import("puppeteer-core");
   const browser = await puppeteer.launch({ executablePath: chromiumPath, args: ["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"], headless: true });
@@ -215,17 +219,23 @@ test("print tab on A5 with a printer's wide margins: nothing clipped, paginates"
     }, html);
     assert.equal(printed, 1, "the print dialog should open exactly once");
 
-    // The printer sets the margins now. Use 15mm a side, wider than Chrome's 1cm
-    // default, as a printer with a large unprintable edge would: A5 minus 30mm at 96dpi.
-    const printerMarginMm = 15;
-    await page.setViewport({ width: Math.round(((148 - 2 * printerMarginMm) / 25.4) * 96), height: Math.round(((210 - 2 * printerMarginMm) / 25.4) * 96) });
-    await page.setContent(html, { waitUntil: "load" });
+    // Margins: None — Chrome ignores the @page margin and prints edge to edge. The
+    // invoice's own edge must keep everything inside: A5 minus 2×6mm at 96dpi.
+    const noneHtml = html.replace(/@page \{ size: ([^;]+); margin: [^;]+; \}/, "@page { size: $1; margin: 0; }");
+    assert.notEqual(noneHtml, html, "test setup: the @page margin should have been stripped");
+    const usable = (mm: number) => Math.round(((mm - 2 * GST_INVOICE_PRINTER_SAFE_EDGE_MM) / 25.4) * 96);
+    await page.setViewport({ width: Math.round((148 / 25.4) * 96), height: Math.round((210 / 25.4) * 96) });
+    await page.setContent(noneHtml, { waitUntil: "load" });
     await page.emulateMediaType("print");
-    const overflow = await page.evaluate(() => ({ scrollWidth: document.documentElement.scrollWidth, clientWidth: document.documentElement.clientWidth }));
-    assert.ok(overflow.scrollWidth <= overflow.clientWidth + 1, `content overflows A5 by ${overflow.scrollWidth - overflow.clientWidth}px`);
-    // The operator picks A5 in the dialog: "auto" has no page size of its own, so the dialog's sheet wins.
-    const margin = `${printerMarginMm}mm`;
-    const pdf = Buffer.from(await page.pdf({ format: "A5", printBackground: true, margin: { top: margin, right: margin, bottom: margin, left: margin } })).toString("latin1");
+    const box = await page.evaluate(() => {
+      const content = document.querySelector(".topline")!.getBoundingClientRect();
+      return { left: content.left, right: content.right, top: content.top, width: document.documentElement.clientWidth, scrollWidth: document.documentElement.scrollWidth };
+    });
+    const edgePx = (GST_INVOICE_PRINTER_SAFE_EDGE_MM / 25.4) * 96;
+    assert.ok(box.scrollWidth <= box.width + 1, `content overflows A5 by ${box.scrollWidth - box.width}px`);
+    assert.ok(box.left >= edgePx - 1 && box.width - box.right >= edgePx - 1 && box.top >= edgePx - 1, `content within ${GST_INVOICE_PRINTER_SAFE_EDGE_MM}mm of the paper edge: ${JSON.stringify(box)}`);
+    assert.ok(box.right - box.left <= usable(148) + 1);
+    const pdf = Buffer.from(await page.pdf({ format: "A5", printBackground: true, margin: { top: "0", right: "0", bottom: "0", left: "0" } })).toString("latin1");
     const mediaBox = pdf.match(/MediaBox \[0 0 ([\d.]+) ([\d.]+)\]/);
     assert.ok(mediaBox && Math.abs(Number(mediaBox[1]) - 420) <= 2 && Math.abs(Number(mediaBox[2]) - 595) <= 2, `expected an A5 sheet, got ${mediaBox?.[1]}x${mediaBox?.[2]}`);
     assert.match(pdf, /\/Count\s+([2-9]|\d{2,})/, "expected the long invoice to paginate");
