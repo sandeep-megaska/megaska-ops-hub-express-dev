@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic'
 
 export default function GstOrderInvoicePage() {
   return (
-    <GstShell title="GST Invoice" subtitle="Download or email the GST invoice for this order.">
+    <GstShell title="GST Invoice" subtitle="Print, download or email the GST invoice for this order.">
       <Suspense fallback={<p>Loading GST invoice…</p>}>
         <GstOrderInvoice />
       </Suspense>
