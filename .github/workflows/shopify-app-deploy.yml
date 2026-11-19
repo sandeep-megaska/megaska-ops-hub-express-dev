@@ -1,0 +1,67 @@
+# Deploys the LoopD2C Shopify app configuration and extensions (app URLs, scopes,
+# webhooks, app proxy, checkout functions, theme extension, order-page link) with
+# `shopify app deploy`. Run it by hand from Actions → "Shopify app deploy".
+#
+# Needs the repository secret SHOPIFY_SERVICE_ACCOUNT_TOKEN: in the Dev Dashboard,
+# open the LoopD2C app → Settings → App CLI automation token → Manage → add a
+# service account with "App development", and paste its token as the secret.
+name: Shopify app deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      config:
+        description: "App config file"
+        required: true
+        default: "shopify.app.toml"
+      message:
+        description: "Release note shown in the Dev Dashboard"
+        required: false
+        default: "Deploy from GitHub Actions"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: shopify-app-deploy-${{ inputs.config }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # The promotions discount function is Rust compiled to WebAssembly.
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Install Shopify CLI
+        run: npm install --global @shopify/cli@3 --no-audit --no-fund
+
+      # The JavaScript functions are built by the CLI from their own folders.
+      - name: Install function dependencies
+        run: |
+          for dir in extensions/loopd2c-payment-customization extensions/megaska-phone-checkout-validation; do
+            (cd "$dir" && npm install --no-audit --no-fund)
+          done
+
+      # Theme extension assets are generated from extensions/megaska-otp-src and committed.
+      - name: Check theme extension assets are up to date
+        run: node scripts/build-theme-extension.mjs --check
+
+      - name: Deploy
+        env:
+          SHOPIFY_SERVICE_ACCOUNT_TOKEN: ${{ secrets.SHOPIFY_SERVICE_ACCOUNT_TOKEN }}
+        run: |
+          if [ -z "$SHOPIFY_SERVICE_ACCOUNT_TOKEN" ]; then
+            echo "::error::The SHOPIFY_SERVICE_ACCOUNT_TOKEN repository secret is not set."
+            exit 1
+          fi
+          shopify app deploy --config "${{ inputs.config }}" --allow-updates --message "${{ inputs.message }}"

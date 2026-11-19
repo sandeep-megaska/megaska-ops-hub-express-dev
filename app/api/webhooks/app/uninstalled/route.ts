@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "../../../../../services/db/prisma";
 import { normalizeShopDomain } from "../../../../../services/shopify/shop-resolver";
-import { verifyShopifyWebhookHmac } from "../../../../../services/shopify/webhook-hmac";
+import { identifyShopifyWebhookSigner } from "../../../../../services/shopify/webhook-hmac";
 
 export const runtime = "nodejs";
 
@@ -9,8 +9,15 @@ export async function POST(req: NextRequest) {
   const rawBuffer = Buffer.from(await req.arrayBuffer());
   const hmacHeader = String(req.headers.get("x-shopify-hmac-sha256") || "").trim();
 
-  if (!verifyShopifyWebhookHmac(rawBuffer, hmacHeader)) {
+  const signer = identifyShopifyWebhookSigner(rawBuffer, hmacHeader);
+  if (!signer) {
     return NextResponse.json({ ok: false, error: "Invalid webhook signature" }, { status: 401 });
+  }
+  // Another of our apps was uninstalled (e.g. the old app after a move): its
+  // uninstall must not drop the token of the app that is still installed.
+  if (signer === "other-app") {
+    console.info("[APP UNINSTALLED] ignored: signed by another app", { shop: req.headers.get("x-shopify-shop-domain") });
+    return NextResponse.json({ ok: true, ignored: true, reason: "other-app" });
   }
 
   const shopDomain = normalizeShopDomain(req.headers.get("x-shopify-shop-domain"));
