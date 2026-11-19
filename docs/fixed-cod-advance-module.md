@@ -1,5 +1,7 @@
 # Fixed COD Advance Module
 
+> **Retired (Nov 2026).** The customer-facing `/api/cod-advance/intents` routes were removed: they had no callers since Express Checkout was retired, no advance was ever created in production, and collecting an advance through a Razorpay link outside Shopify Checkout conflicts with Shopify App Store requirement 1.1.2. The settings, models and Razorpay webhook handling remain for history; re-introducing an advance must go through Shopify Checkout.
+
 Fixed COD Advance is an isolated Partial COD payment module. When enabled, the module quotes and collects a fixed online advance through Razorpay and records the remaining COD balance for delivery collection.
 
 ## Data model

@@ -243,3 +243,11 @@ test("print tab on A5 with Margins: None: keeps its edge, nothing clipped, pagin
     await browser.close();
   }
 });
+
+// Every store using LoopD2C gets its own name when it has no logo, never a hard-coded brand.
+test("without a logo the invoice header shows the store's own trade name", () => {
+  const model = sampleModel(1);
+  const html = buildGstInvoiceHtml({ ...model, branding: { ...model.branding, headerLogoSrc: null } }, "A4");
+  assert.match(html, new RegExp(`<div class="header-logo">${model.supplier.tradeName || model.supplier.name}</div>`));
+  assert.doesNotMatch(html, /bigonbuy/i);
+});
