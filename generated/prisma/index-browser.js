@@ -243,6 +243,7 @@ exports.Prisma.PricingPlanScalarFieldEnum = {
   description: 'description',
   monthlyBasePrice: 'monthlyBasePrice',
   currency: 'currency',
+  usdMonthlyBasePrice: 'usdMonthlyBasePrice',
   active: 'active',
   tierRank: 'tierRank',
   displayOrder: 'displayOrder',
@@ -439,6 +440,88 @@ exports.Prisma.MerchantOtpSettingsScalarFieldEnum = {
   allowedCountryCodes: 'allowedCountryCodes',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
+};
+
+exports.Prisma.MerchantWhatsAppAccountScalarFieldEnum = {
+  id: 'id',
+  shopId: 'shopId',
+  enabled: 'enabled',
+  displayPhoneNumber: 'displayPhoneNumber',
+  phoneNumberId: 'phoneNumberId',
+  businessAccountId: 'businessAccountId',
+  accessTokenEncrypted: 'accessTokenEncrypted',
+  accessTokenMasked: 'accessTokenMasked',
+  templateLanguage: 'templateLanguage',
+  otpEnabled: 'otpEnabled',
+  otpTemplateName: 'otpTemplateName',
+  recoveryEnabled: 'recoveryEnabled',
+  recoveryFirstTemplate: 'recoveryFirstTemplate',
+  recoveryReminderTemplate: 'recoveryReminderTemplate',
+  exchangeEnabled: 'exchangeEnabled',
+  requestUpdatesEnabled: 'requestUpdatesEnabled',
+  codConfirmEnabled: 'codConfirmEnabled',
+  codConfirmTemplate: 'codConfirmTemplate',
+  shippingUpdatesEnabled: 'shippingUpdatesEnabled',
+  backInStockEnabled: 'backInStockEnabled',
+  reviewRequestsEnabled: 'reviewRequestsEnabled',
+  secondOrderEnabled: 'secondOrderEnabled',
+  secondOrderDelayDays: 'secondOrderDelayDays',
+  secondOrderOffer: 'secondOrderOffer',
+  shopInChatEnabled: 'shopInChatEnabled',
+  adConversionsEnabled: 'adConversionsEnabled',
+  capiDatasetId: 'capiDatasetId',
+  catalogId: 'catalogId',
+  aiMode: 'aiMode',
+  aiKnowledge: 'aiKnowledge',
+  lastCheckedAt: 'lastCheckedAt',
+  lastCheckStatus: 'lastCheckStatus',
+  lastCheckMessage: 'lastCheckMessage',
+  templateFailingSince: 'templateFailingSince',
+  templateFailureError: 'templateFailureError',
+  templateAlertEmailedAt: 'templateAlertEmailedAt',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.WhatsAppConversationScalarFieldEnum = {
+  id: 'id',
+  shopId: 'shopId',
+  businessPhoneNumberId: 'businessPhoneNumberId',
+  contactPhone: 'contactPhone',
+  contactName: 'contactName',
+  lastMessageAt: 'lastMessageAt',
+  lastMessagePreview: 'lastMessagePreview',
+  lastInboundAt: 'lastInboundAt',
+  unreadCount: 'unreadCount',
+  needsHuman: 'needsHuman',
+  handoffKind: 'handoffKind',
+  handoffReason: 'handoffReason',
+  aiPausedUntil: 'aiPausedUntil',
+  aiDraft: 'aiDraft',
+  aiDraftAt: 'aiDraftAt',
+  adSourceId: 'adSourceId',
+  adHeadline: 'adHeadline',
+  adBody: 'adBody',
+  adCtwaClid: 'adCtwaClid',
+  adReferredAt: 'adReferredAt',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.WhatsAppMessageScalarFieldEnum = {
+  id: 'id',
+  conversationId: 'conversationId',
+  direction: 'direction',
+  waMessageId: 'waMessageId',
+  type: 'type',
+  body: 'body',
+  mediaId: 'mediaId',
+  templateName: 'templateName',
+  status: 'status',
+  errorMessage: 'errorMessage',
+  sentByEmail: 'sentByEmail',
+  sentByAi: 'sentByAi',
+  createdAt: 'createdAt'
 };
 
 exports.Prisma.MerchantTwilioSettingsScalarFieldEnum = {
@@ -668,7 +751,14 @@ exports.Prisma.OrderActionRequestScalarFieldEnum = {
   deliveryDateSnapshot: 'deliveryDateSnapshot',
   eligibilityDecision: 'eligibilityDecision',
   eligibilityReason: 'eligibilityReason',
-  megaskaOrderId: 'megaskaOrderId'
+  megaskaOrderId: 'megaskaOrderId',
+  earlyReplacementAt: 'earlyReplacementAt',
+  earlyReplacementReason: 'earlyReplacementReason',
+  styleDifferencePaise: 'styleDifferencePaise',
+  styleSettlement: 'styleSettlement',
+  styleSettledAt: 'styleSettledAt',
+  replacementShopifyOrderId: 'replacementShopifyOrderId',
+  replacementShopifyOrderName: 'replacementShopifyOrderName'
 };
 
 exports.Prisma.OrderActionItemScalarFieldEnum = {
@@ -684,6 +774,11 @@ exports.Prisma.OrderActionItemScalarFieldEnum = {
   isClearance: 'isClearance',
   isExcludedCategory: 'isExcludedCategory',
   eligibilitySnapshot: 'eligibilitySnapshot',
+  replacementVariantId: 'replacementVariantId',
+  replacementTitle: 'replacementTitle',
+  replacementSku: 'replacementSku',
+  replacementUnitPricePaise: 'replacementUnitPricePaise',
+  originalUnitPricePaise: 'originalUnitPricePaise',
   createdAt: 'createdAt'
 };
 
@@ -811,6 +906,65 @@ exports.Prisma.OrderShipmentScalarFieldEnum = {
   statusUpdatedAt: 'statusUpdatedAt',
   rawStatus: 'rawStatus',
   metadata: 'metadata',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.CollabShipmentScalarFieldEnum = {
+  id: 'id',
+  shopId: 'shopId',
+  purpose: 'purpose',
+  recipientName: 'recipientName',
+  recipientPhone: 'recipientPhone',
+  recipientEmail: 'recipientEmail',
+  recipientHandle: 'recipientHandle',
+  platform: 'platform',
+  campaign: 'campaign',
+  address: 'address',
+  items: 'items',
+  retailValuePaise: 'retailValuePaise',
+  productCostPaise: 'productCostPaise',
+  shippingCostPaise: 'shippingCostPaise',
+  weightGrams: 'weightGrams',
+  status: 'status',
+  errorMessage: 'errorMessage',
+  shopifyOrderId: 'shopifyOrderId',
+  shopifyOrderName: 'shopifyOrderName',
+  awb: 'awb',
+  trackingUrl: 'trackingUrl',
+  trackingStatus: 'trackingStatus',
+  trackingRawStatus: 'trackingRawStatus',
+  trackingUpdatedAt: 'trackingUpdatedAt',
+  deliveredAt: 'deliveredAt',
+  deliverableStatus: 'deliverableStatus',
+  contentUrl: 'contentUrl',
+  postedAt: 'postedAt',
+  notes: 'notes',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.OrderCourierShipmentScalarFieldEnum = {
+  id: 'id',
+  shopId: 'shopId',
+  shopifyOrderId: 'shopifyOrderId',
+  shopifyOrderName: 'shopifyOrderName',
+  provider: 'provider',
+  status: 'status',
+  awb: 'awb',
+  trackingUrl: 'trackingUrl',
+  providerReference: 'providerReference',
+  paymentMode: 'paymentMode',
+  codAmountPaise: 'codAmountPaise',
+  weightGrams: 'weightGrams',
+  shippingMode: 'shippingMode',
+  errorMessage: 'errorMessage',
+  rawResponse: 'rawResponse',
+  attempts: 'attempts',
+  shopifyFulfillmentStatus: 'shopifyFulfillmentStatus',
+  shopifyFulfillmentId: 'shopifyFulfillmentId',
+  shopifyFulfillmentError: 'shopifyFulfillmentError',
+  shopifyFulfilledAt: 'shopifyFulfilledAt',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 };
@@ -1103,6 +1257,9 @@ exports.Prisma.WalletAccountScalarFieldEnum = {
   customerProfileId: 'customerProfileId',
   currency: 'currency',
   currentBalance: 'currentBalance',
+  shopifyGiftCardId: 'shopifyGiftCardId',
+  shopifyGiftCardLast4: 'shopifyGiftCardLast4',
+  giftCardCodeEnc: 'giftCardCodeEnc',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 };
@@ -1124,7 +1281,8 @@ exports.Prisma.WalletTransactionScalarFieldEnum = {
   adminNote: 'adminNote',
   createdByType: 'createdByType',
   createdById: 'createdById',
-  createdAt: 'createdAt'
+  createdAt: 'createdAt',
+  giftCardSyncedAt: 'giftCardSyncedAt'
 };
 
 exports.Prisma.WalletReservationScalarFieldEnum = {
@@ -1770,6 +1928,42 @@ exports.Prisma.ShopInstallationEventScalarFieldEnum = {
   createdAt: 'createdAt'
 };
 
+exports.Prisma.WebsiteContactSubmissionScalarFieldEnum = {
+  id: 'id',
+  createdAt: 'createdAt',
+  name: 'name',
+  email: 'email',
+  company: 'company',
+  shopDomain: 'shopDomain',
+  enquiryType: 'enquiryType',
+  subject: 'subject',
+  message: 'message',
+  sourceIpHash: 'sourceIpHash',
+  userAgent: 'userAgent',
+  status: 'status'
+};
+
+exports.Prisma.BackInStockRequestScalarFieldEnum = {
+  id: 'id',
+  shopId: 'shopId',
+  phone: 'phone',
+  customerName: 'customerName',
+  productId: 'productId',
+  variantId: 'variantId',
+  key: 'key',
+  productTitle: 'productTitle',
+  variantTitle: 'variantTitle',
+  optionSize: 'optionSize',
+  optionColor: 'optionColor',
+  productUrl: 'productUrl',
+  source: 'source',
+  status: 'status',
+  messageId: 'messageId',
+  notifiedAt: 'notifiedAt',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
 exports.Prisma.SortOrder = {
   asc: 'asc',
   desc: 'desc'
@@ -1908,9 +2102,11 @@ exports.MerchantUsageProvider = exports.$Enums.MerchantUsageProvider = {
   PLATFORM_TWILIO: 'PLATFORM_TWILIO',
   PLATFORM_RESEND: 'PLATFORM_RESEND',
   PLATFORM_MSG91: 'PLATFORM_MSG91',
+  PLATFORM_WHATSAPP: 'PLATFORM_WHATSAPP',
   MERCHANT_TWILIO: 'MERCHANT_TWILIO',
   MERCHANT_RESEND: 'MERCHANT_RESEND',
   MERCHANT_MSG91: 'MERCHANT_MSG91',
+  MERCHANT_WHATSAPP: 'MERCHANT_WHATSAPP',
   INTERNAL: 'INTERNAL'
 };
 
@@ -2045,7 +2241,8 @@ exports.ExchangeRequestStatus = exports.$Enums.ExchangeRequestStatus = {
 };
 
 exports.PaymentPurpose = exports.$Enums.PaymentPurpose = {
-  REVERSE_PICKUP_FEE: 'REVERSE_PICKUP_FEE'
+  REVERSE_PICKUP_FEE: 'REVERSE_PICKUP_FEE',
+  STYLE_DIFFERENCE: 'STYLE_DIFFERENCE'
 };
 
 exports.PaymentProvider = exports.$Enums.PaymentProvider = {
@@ -2121,6 +2318,12 @@ exports.CourierProvider = exports.$Enums.CourierProvider = {
   DTDC: 'DTDC',
   ATS: 'ATS',
   OTHER: 'OTHER'
+};
+
+exports.OrderCourierShipmentStatus = exports.$Enums.OrderCourierShipmentStatus = {
+  CREATING: 'CREATING',
+  CREATED: 'CREATED',
+  FAILED: 'FAILED'
 };
 
 exports.ReviewRequestTrigger = exports.$Enums.ReviewRequestTrigger = {
@@ -2455,6 +2658,9 @@ exports.Prisma.ModelName = {
   MerchantUsageEvent: 'MerchantUsageEvent',
   MerchantNotificationSettings: 'MerchantNotificationSettings',
   MerchantOtpSettings: 'MerchantOtpSettings',
+  MerchantWhatsAppAccount: 'MerchantWhatsAppAccount',
+  WhatsAppConversation: 'WhatsAppConversation',
+  WhatsAppMessage: 'WhatsAppMessage',
   MerchantTwilioSettings: 'MerchantTwilioSettings',
   MerchantMsg91Settings: 'MerchantMsg91Settings',
   PromotionRule: 'PromotionRule',
@@ -2475,6 +2681,8 @@ exports.Prisma.ModelName = {
   ShipmentTracking: 'ShipmentTracking',
   MegaskaOrder: 'MegaskaOrder',
   OrderShipment: 'OrderShipment',
+  CollabShipment: 'CollabShipment',
+  OrderCourierShipment: 'OrderCourierShipment',
   OrderShipmentEvent: 'OrderShipmentEvent',
   ReviewSettings: 'ReviewSettings',
   ReviewRequest: 'ReviewRequest',
@@ -2522,7 +2730,9 @@ exports.Prisma.ModelName = {
   ExpressCheckoutOrderLink: 'ExpressCheckoutOrderLink',
   ShopModuleConfig: 'ShopModuleConfig',
   ShopProxyRoute: 'ShopProxyRoute',
-  ShopInstallationEvent: 'ShopInstallationEvent'
+  ShopInstallationEvent: 'ShopInstallationEvent',
+  WebsiteContactSubmission: 'WebsiteContactSubmission',
+  BackInStockRequest: 'BackInStockRequest'
 };
 
 /**
