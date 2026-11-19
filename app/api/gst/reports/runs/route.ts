@@ -2,28 +2,27 @@ import { NextRequest, NextResponse } from "next/server";
 import { listReportRuns, prepareB2cSalesRegisterReport } from "../../../../../services/gst/report-export";
 import { getActiveGstSettings } from "../../../../../services/gst/settings";
 import { resolveGstAdminShop, resolveGstAdminShopId } from "../../../../../services/gst/request-shop";
+import { istDayEnd, istDayStart } from "../../../../../services/gst/reports/order-status";
 
 export const runtime = "nodejs";
 
 
+// GST periods are India-time calendar days: 1 Oct 00:00 IST to 31 Oct 23:59 IST.
+// A bare YYYY-MM-DD, or a day sent as UTC start/end of day (the GST screens send
+// `${from}T00:00:00.000Z` / `${to}T23:59:59.999Z`), means that IST day; UTC boundaries put orders placed between midnight and 05:30 IST in the
+// wrong day, and on the 1st or last of the month in the wrong return.
 function parseDateInput(value: unknown, mode: "start" | "end"): Date | null {
   const raw = String(value || "").trim();
   if (!raw) return null;
 
-  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
-    const suffix = mode === "start" ? "T00:00:00.000Z" : "T23:59:59.999Z";
-    const parsed = new Date(`${raw}${suffix}`);
+  const day = raw.match(/^(\d{4}-\d{2}-\d{2})(?:T(?:00:00:00|23:59:59)(?:\.\d{1,3})?Z)?$/);
+  if (day) {
+    const parsed = mode === "start" ? istDayStart(day[1]) : istDayEnd(day[1]);
     return Number.isNaN(parsed.getTime()) ? null : parsed;
   }
 
   const parsed = new Date(raw);
-  if (Number.isNaN(parsed.getTime())) return null;
-
-  if (mode === "end" && /^\d{4}-\d{2}-\d{2}T00:00:00(?:\.000)?Z$/.test(raw)) {
-    parsed.setUTCHours(23, 59, 59, 999);
-  }
-
-  return parsed;
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
 export async function POST(req: NextRequest) {
