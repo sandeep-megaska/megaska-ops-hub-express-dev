@@ -35,7 +35,7 @@ jobs:
 
       - uses: actions/setup-node@v5
         with:
-          node-version: "22"
+          node-version: "24"
 
       # The promotions discount function is Rust compiled to WebAssembly.
       - uses: dtolnay/rust-toolchain@stable
@@ -48,7 +48,7 @@ jobs:
         run: npm ci --ignore-scripts --no-audit --no-fund
 
       - name: Install Shopify CLI
-        run: npm install --global @shopify/cli@3 --no-audit --no-fund
+        run: npm install --global @shopify/cli@5 --no-audit --no-fund
 
       # The JavaScript functions are built by the CLI from their own folders.
       - name: Install function dependencies
