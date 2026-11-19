@@ -254,6 +254,10 @@
     ".icon-user",
     ".site-header__account",
     ".customer-account-link",
+    // Horizon and other new-customer-accounts themes: <div class="account-button">
+    // wrapping Shopify's <shopify-account> component (no link, no label).
+    "shopify-account",
+    ".account-button",
     "[class*='account-icon' i]",
     "[class*='account-toggle' i]",
     "[class*='account-trigger' i]",
@@ -407,6 +411,7 @@
     "header .header-icons",
     "header .header__actions",
     "header .header-actions",
+    "header header-actions",
     "header .h_icon_iccl",
     "header .icon-action",
     "header .list-inline",
@@ -3074,7 +3079,7 @@ function consumePendingAccountRedirect() {
 
   function getAccountTriggerActionElement(element) {
     if (!element || typeof element.closest !== "function") return element;
-    return element.closest("a,button,[role='button']") || element;
+    return element.closest("a,button,[role='button'],shopify-account") || element;
   }
 
   const LOOPDESK_ACCOUNT_TRIGGER_SELECTOR =
@@ -3120,7 +3125,7 @@ function consumePendingAccountRedirect() {
     );
     if (isLoopDeskOwned) {
       return Boolean(
-        actionElement.matches?.("a,button,[role='button']") &&
+        actionElement.matches?.("a,button,[role='button'],shopify-account") &&
           isSafeLoopDeskAccountDestination(actionElement)
       );
     }
