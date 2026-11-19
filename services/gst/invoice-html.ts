@@ -106,7 +106,7 @@ export function buildGstInvoiceHtml(model: GstInvoiceRenderModel, paperSize: Gst
       /* A long email or address must wrap inside its column rather than widen the
          page box past the sheet. */
       .block div, .topline div { overflow-wrap:anywhere; }
-      .header-logo{ display:flex; justify-content:center; align-items:center; margin-bottom:8px; min-height:34px; font-size:16px; font-weight:700; letter-spacing:1px; text-transform:lowercase; }
+      .header-logo{ display:flex; justify-content:center; align-items:center; margin-bottom:8px; min-height:34px; font-size:16px; font-weight:700; letter-spacing:1px; }
       .header-logo img{ max-height:32px; max-width:220px; object-fit:contain; }
       /* Line items: a wide Item Description that wraps, with SKU/HSN/tax breakup on a
          sub-line, instead of squeezing every field into a narrow portrait column. */
@@ -155,7 +155,7 @@ export function buildGstInvoiceHtml(model: GstInvoiceRenderModel, paperSize: Gst
       ${printerEdge}
     </style></head><body><div class="page">
     <button class="print-btn" onclick="window.print()">Print ${escapeHtml(model.title)}</button>
-    ${model.templateConfig.showHeaderLogo ? `<div class="header-logo">${model.branding.headerLogoSrc ? `<img src="${escapeHtml(model.branding.headerLogoSrc)}" alt="Header logo" />` : "bigonbuy"}</div>` : ""}
+    ${model.templateConfig.showHeaderLogo ? `<div class="header-logo">${model.branding.headerLogoSrc ? `<img src="${escapeHtml(model.branding.headerLogoSrc)}" alt="Header logo" />` : escapeHtml(model.supplier.tradeName || model.supplier.name)}</div>` : ""}
     <div class="topline"><div><div><strong>GSTIN: ${escapeHtml(model.supplier.gstin)}</strong></div><div>${escapeHtml(model.title)}</div><div>Original for Recipient</div></div>
     <div class="meta"><div><strong>${escapeHtml(model.supplier.tradeName || model.supplier.name)}</strong></div><div>${escapeHtml(model.supplier.name)}</div></div></div>
     <div class="topline"><div>Invoice No: ${escapeHtml(model.documentNumber)}<br/>Invoice Date: ${escapeHtml(model.documentDate)}<br/>Order: ${escapeHtml(model.orderNumber)}</div><div class="meta">Place of Supply: ${escapeHtml(model.placeOfSupply)}<br/>Order Date: ${escapeHtml(model.orderDate)}</div></div>
