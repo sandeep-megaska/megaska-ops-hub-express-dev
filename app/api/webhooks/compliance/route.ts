@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "../../../../services/db/prisma";
 import { redactOrderMegaskaIdentityMetafields } from "../../../../services/shopify/admin";
 import { normalizeShopDomain } from "../../../../services/shopify/shop-resolver";
-import { verifyShopifyWebhookHmac } from "../../../../services/shopify/webhook-hmac";
+import { identifyShopifyWebhookSigner } from "../../../../services/shopify/webhook-hmac";
 import {
   findCustomerProfilesForRedaction,
   hasUnmatchablePhoneIdentifier,
@@ -195,13 +195,23 @@ export async function POST(req: NextRequest) {
   const rawBuffer = Buffer.from(await req.arrayBuffer());
   const hmacHeader = String(req.headers.get("x-shopify-hmac-sha256") || "").trim();
 
-  if (!verifyShopifyWebhookHmac(rawBuffer, hmacHeader)) {
+  const signer = identifyShopifyWebhookSigner(rawBuffer, hmacHeader);
+  if (!signer) {
     return NextResponse.json({ ok: false, error: "Invalid webhook signature" }, { status: 401 });
   }
 
   const rawBody = rawBuffer.toString("utf8");
   const topic = String(req.headers.get("x-shopify-topic") || "").trim();
   const shopDomainHeader = req.headers.get("x-shopify-shop-domain");
+
+  // shop/redact means "that app was uninstalled 48 hours ago". From another of our
+  // apps (e.g. the old app after a move), the store still uses this one: never
+  // erase its data. Customer requests (data_request, redact) are a shopper's own
+  // privacy request about the same records, so they're honoured from any of our apps.
+  if (topic === "shop/redact" && signer === "other-app") {
+    console.info("[GDPR] shop/redact ignored: signed by another app", { shop: shopDomainHeader });
+    return NextResponse.json({ ok: true, ignored: true, reason: "other-app" });
+  }
 
   try {
     switch (topic) {
