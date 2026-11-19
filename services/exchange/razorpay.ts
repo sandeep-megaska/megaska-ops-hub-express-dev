@@ -75,3 +75,44 @@ export async function verifyRazorpayWebhookSignature(shopId: string, rawBody: st
   const expected = crypto.createHmac("sha256", webhookSecret).update(rawBody).digest("hex");
   return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
 }
+
+/**
+ * Reads one payment back from Razorpay with the shop's own keys, e.g. a fee the
+ * customer paid through a link the team created in the Razorpay dashboard (the
+ * webhook only recognises links loopd2c created). Null when Razorpay has no such
+ * payment on this account.
+ */
+export async function fetchRazorpayPayment(shopId: string, paymentId: string): Promise<Record<string, unknown> | null> {
+  const { enabled, keyId, keySecret } = await getInternalRazorpayConfig(shopId);
+  if (!enabled || !keyId || !keySecret) {
+    throw new Error("Razorpay credentials are not configured");
+  }
+  const auth = Buffer.from(`${keyId}:${keySecret}`).toString("base64");
+  const response = await fetch(`https://api.razorpay.com/v1/payments/${encodeURIComponent(paymentId)}`, {
+    headers: { Authorization: `Basic ${auth}` },
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (response.status === 400 || response.status === 404) return null;
+  const data = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+  if (!response.ok || !data) {
+    throw new Error(`Razorpay payment lookup failed (${response.status})`);
+  }
+  return data;
+}
+
+/** Best effort: cancels a still-active payment link so the customer can't pay the fee twice. */
+export async function cancelRazorpayPaymentLink(shopId: string, paymentLinkId: string): Promise<boolean> {
+  try {
+    const { enabled, keyId, keySecret } = await getInternalRazorpayConfig(shopId);
+    if (!enabled || !keyId || !keySecret) return false;
+    const auth = Buffer.from(`${keyId}:${keySecret}`).toString("base64");
+    const response = await fetch(`https://api.razorpay.com/v1/payment_links/${encodeURIComponent(paymentLinkId)}/cancel`, {
+      method: "POST",
+      headers: { Authorization: `Basic ${auth}` },
+      signal: AbortSignal.timeout(10_000),
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
