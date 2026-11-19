@@ -11,9 +11,11 @@ var checkoutSelector = 'a[href="/checkout"],a[href^="/checkout"],a[href*="/check
 var excludedSelector = 'form[action*="/cart/add"] button,form[action*="/cart/add"] input,[name="add"],[type="submit"][formaction*="/cart/add"],[name="plus"],[name="minus"],[name="updates[]"],[data-quantity],[data-quantity-selector],[href*="change"],[name*="remove" i],[class*="remove" i],[id*="remove" i],[class*="discount" i],[id*="discount" i],[name*="discount" i],[aria-label*="discount" i],[data-discount],[class*="coupon" i],[id*="coupon" i],[name*="coupon" i],[type="search"],[role="search"] button';
 var lastSubmitter = null;
 var lock = false;
+// The merchant's "verify phone before checkout" switch (stored as the
+// express_checkout module for older installs). Every path ends in Shopify Checkout.
 function isExpressCheckoutReady() {
   var config = window.LoopDeskConfig && window.LoopDeskConfig.express_checkout;
-  return Boolean(config && config.enabled === true && config.ready === true && config.provider === "razorpay");
+  return Boolean(config && config.enabled === true && config.ready === true);
 }
 function setPendingExpressCheckoutIntent(source) {
   try {
@@ -110,7 +112,7 @@ function openDrawerOtp() {
 }
 async function continueExpressCheckout(reason) {
   var readiness = await resolveExpressCheckoutReadiness();
-  if (!(readiness.enabled === true && readiness.ready === true && readiness.provider === "razorpay")) {
+  if (!(readiness.enabled === true && readiness.ready === true)) {
     state.fallbacks += 1;
     state.lastReason = "express-checkout-not-ready";
     clearPendingIntent();
@@ -123,14 +125,9 @@ async function continueExpressCheckout(reason) {
   state.opened += 1;
   state.lastReason = reason || SOURCE;
   window.setTimeout(function () { lock = false; }, 900);
-  if (window.MegaskaExpressCheckout && typeof window.MegaskaExpressCheckout.open === 'function') {
-    window.MegaskaExpressCheckout.open({ source: reason || SOURCE });
-    return;
-  }
-  state.fallbacks += 1;
-  // Express modal retired: never navigate straight to /checkout from here, or a
-  // logged-out shopper skips OTP. Route through the OTP gate, which continues to
-  // Shopify Checkout directly when the session is already verified.
+  // Never navigate straight to /checkout from here, or a logged-out shopper skips
+  // OTP. Route through the OTP gate, which continues to Shopify Checkout directly
+  // when the session is already verified.
   if (window.MegaskaOtp && typeof window.MegaskaOtp.beginGatedShopifyCheckout === 'function') {
     Promise.resolve(window.MegaskaOtp.beginGatedShopifyCheckout({ triggerSource: reason || SOURCE }))
       .catch(function () { window.location.href = FALLBACK_URL; });
@@ -167,7 +164,7 @@ document.addEventListener('click', function (event) {
   if (!openDrawerOtp()) {
     clearPendingIntent();
     state.lastReason = 'express-checkout-otp-bridge-missing';
-    if (window.console) window.console.warn('[LoopDesk Checkout] OTP bridge unavailable for Express Checkout');
+    if (window.console) window.console.warn('[LoopDesk Checkout] OTP bridge unavailable for checkout');
   }
 }, true);
 document.addEventListener('megaska:auth-state-changed', function () {
@@ -206,7 +203,6 @@ window[API_NAME] = {
   status: function () {
     return {
       loaded: window[MARKER] === true,
-      modalApiPresent: Boolean(window.MegaskaExpressCheckout && typeof window.MegaskaExpressCheckout.open === 'function'),
       drawerResumePending: Boolean(getPendingIntent() && getPendingIntent().type === 'express_checkout'),
       clicks: state.clicks,
       submits: state.submits,

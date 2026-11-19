@@ -623,7 +623,7 @@ export default async function MerchantSettingsPage({
         <section className={`${cardClass} grid gap-5`}>
           <SectionHeader title="Drawer labels" description="Button and reassurance copy rendered in the storefront cart drawer." />
           <div className="grid gap-4 md:grid-cols-3">
-            <Field label="Express checkout text" name="expressCheckoutText" defaultValue={settings.labels.expressCheckoutText} />
+            <Field label="Checkout button text" name="expressCheckoutText" defaultValue={settings.labels.expressCheckoutText} />
             <Field label="View cart text" name="viewCartText" defaultValue={settings.labels.viewCartText} />
             <Field label="Secure checkout text" name="secureCheckoutText" defaultValue={settings.labels.secureCheckoutText} />
           </div>
@@ -643,7 +643,7 @@ export default async function MerchantSettingsPage({
           </div>
           <div className="grid gap-3 md:grid-cols-3">
             <Check label="Open after add to cart" name="openAfterAddToCart" defaultChecked={settings.cart.openAfterAddToCart} help="Opens LoopD2C drawer after cart add when LoopD2C drawer is active." />
-            <Check label="Express checkout button" name="expressCheckoutButtonEnabled" defaultChecked={settings.cart.expressCheckoutButtonEnabled} help="Keeps Express Checkout visible in drawer." />
+            <Check label="Checkout button" name="expressCheckoutButtonEnabled" defaultChecked={settings.cart.expressCheckoutButtonEnabled} help="Shows the drawer button that opens Shopify Checkout." />
             <Check label="View cart button" name="viewCartButtonEnabled" defaultChecked={settings.cart.viewCartButtonEnabled} help="Keeps the standard cart link visible." />
             <Check label="In-drawer Prepaid/COD choice" name="paymentChoiceEnabled" defaultChecked={settings.cart.paymentChoiceEnabled} help="Shopper picks Prepaid or COD in the drawer. Both finish in native Shopify Checkout (enable native COD in Shopify payment settings); the prepaid discount and COD-hiding are applied by the Shopify Functions." />
             <Check label="Collapse choice into a Place Order button (test)" name="paymentChoiceCollapsed" defaultChecked={settings.cart.paymentChoiceCollapsed} help="Experiment: show a single Place Order button that reveals the Prepaid/COD options on click, instead of both buttons up front. Works on its own - you don't also need the choice toggle above." />

@@ -13,7 +13,8 @@ const moduleGroups: ModuleGroup[] = [
     heading: "Storefront & conversion",
     blurb: "Everything the shopper sees — promotions, reviews, and the drawer.",
     cards: [
-      { title: "Checkout Analytics", meta: "Express-checkout funnel, drop-off, abandoned carts, and recovery", href: "/admin/analytics" },
+      { title: "Prepaid offer & COD", meta: "Prepaid discount, COD charge, and phone verification before checkout", href: "/admin/checkout" },
+      { title: "Checkout Analytics", meta: "Checkout funnel, drop-off, abandoned carts, and recovery", href: "/admin/analytics" },
       { title: "Promotions", meta: "Cart offers, tiered order discounts, and compilation status", href: "/admin/promotions" },
       { title: "Reviews", meta: "Moderate, import/export, and configure review display", href: "/admin/reviews" },
       { title: "Merchant Settings", meta: "Branding, cart drawer, labels, and runtime settings", href: "/admin/merchant-settings" },
@@ -34,10 +35,8 @@ const moduleGroups: ModuleGroup[] = [
   },
   {
     heading: "Payments & finance",
-    blurb: "Money movement — advances, store credit, and billing.",
+    blurb: "Store credit and billing.",
     cards: [
-      { title: "COD Advance", meta: "Partial advance collection on cash-on-delivery orders", href: "/admin/cod-advance" },
-      { title: "Partial COD", meta: "Configure partial cash-on-delivery policies", href: "/admin/partial-cod" },
       { title: "Wallets", meta: "Store credit balances and ledger operations", href: "/admin/wallets" },
       { title: "Billing", meta: "Subscription and usage billing", href: "/admin/billing" },
     ],

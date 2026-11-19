@@ -2669,10 +2669,8 @@
       return;
     }
     var readiness = window.LoopDeskConfig && window.LoopDeskConfig.express_checkout;
-    // Legacy (flag-off) path only: prepaid is captured in-modal via Razorpay, so
-    // it keeps the stricter readiness gate.
-    var modalReady = Boolean(readiness && readiness.enabled === true && readiness.ready === true && readiness.provider === "razorpay");
-    if (!modalReady) {
+    var gateReady = Boolean(readiness && readiness.enabled === true && readiness.ready === true);
+    if (!gateReady) {
       debugLog("Shopify checkout fallback", { source: source || "checkout-intent", reason: readiness && readiness.ready === false ? "not-ready" : "config-unavailable" });
       window.location.assign("/checkout");
       return;
@@ -2687,8 +2685,7 @@
     };
     clearLocalCartDrawerErrors();
     closeDrawerForCheckoutHandoff();
-    // Modal retired: the legacy (flag-off) path now finishes in native Shopify
-    // Checkout like the in-drawer choice, instead of opening the express modal.
+    // Finishes in native Shopify Checkout, like the in-drawer choice.
     debugLog("Shopify checkout handoff started", { source: checkoutSource });
     showCheckoutHandoffOverlay();
     window.setTimeout(releaseLock, 900);

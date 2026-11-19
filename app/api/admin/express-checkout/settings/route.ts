@@ -60,10 +60,8 @@ export async function POST(req: NextRequest) {
   if (!body) return NextResponse.json({ ok: false, error: "Invalid JSON payload" }, { status: 400 });
 
   const requestedEnabled = body.enabled === true;
-  // Enabling Express Checkout no longer requires Razorpay: COD opens the modal
-  // with no payment provider, and prepaid is handed off to Shopify Checkout.
-  // `readiness.razorpayReady` still reports whether the legacy in-app prepaid
-  // capture is usable, for merchants who want to surface that.
+  // "Verify phone before checkout" (stored as the express_checkout module). Every
+  // order is placed and paid on Shopify Checkout; no payment provider is involved.
   const readiness = await setExpressCheckoutEnabled(resolved.id, requestedEnabled);
 
   const codFeeAmountPaise = parseCodFeeRupeesToPaise(body.codFeeAmountRupees);
