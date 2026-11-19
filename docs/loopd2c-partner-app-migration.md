@@ -15,7 +15,7 @@ Limited** Partner organization:
 
 A public app can be installed only on development stores of its Partner
 organization until Shopify approves it, so **Megaska stays on the old app until
-approval**. Both projects use the same database: data is keyed by shop.
+approval**. The review project uses the staging database; Megaska's data stays in production.
 
 ## Phase 1: review (now)
 
@@ -25,8 +25,11 @@ approval**. Both projects use the same database: data is keyed by shop.
    orders**; create a development store for reviewers.
 2. **Vercel:** new project `loopd2c-partner` from this repository, branch `main`.
    Environment (Production):
-   - Copy from the production project, same values: `DATABASE_URL`,
-     `DIRECT_URL`, email (Resend), OpenAI, Delhivery/Razorpay platform keys if any.
+   - `DATABASE_URL` and `DIRECT_URL`: the **staging** database (the review
+     store is test data; keeps test and production data separate, as stated in
+     the protected customer data answers). Its schema must include every
+     migration on `main`, since the build doesn't run migrations.
+   - Copy from the production project, same values: email (Resend), OpenAI, Delhivery/Razorpay platform keys if any.
    - Production's `SHOPIFY_TOKEN_ENCRYPTION_KEY`, `GIFT_CARD_ENCRYPTION_KEY` and
      `REFUND_PAYOUT_ENCRYPTION_KEY` are Vercel *sensitive* variables, so their
      values can't be read or copied. The review project doesn't need them: it
