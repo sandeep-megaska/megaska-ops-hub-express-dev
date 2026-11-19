@@ -1,0 +1,47 @@
+# LoopD2C public app, in the BIGONBUY Technologies Private Limited Partner organization.
+# Deploy with the "Shopify app deploy" GitHub workflow (config: shopify.app.loopd2c.toml).
+#
+# Until Shopify approves the app for public distribution it can only be installed
+# on development stores in the Partner organization, so it runs on its own Vercel
+# project (loopd2c-partner) while Megaska stays on the store-organization app in
+# shopify.app.toml. After approval: install this app on Megaska, uninstall the
+# old one, point app.loopd2c.com at this project and update the URLs below.
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "e16e6f02914ab7a1c1814b1cdb28cfb0"
+name = "LoopD2C"
+handle = "loopd2c"
+application_url = "https://loopd2c-partner.vercel.app"
+embedded = true
+
+[app_proxy]
+url = "https://loopd2c-partner.vercel.app/apps/loopd2c"
+subpath = "loopd2c"
+prefix = "apps"
+
+[webhooks]
+api_version = "2026-04"
+
+  [[webhooks.subscriptions]]
+  topics = ["app/uninstalled"]
+  uri = "/api/webhooks/app/uninstalled"
+
+  [[webhooks.subscriptions]]
+  topics = ["orders/create"]
+  uri = "/api/webhooks/orders/create"
+
+  [[webhooks.subscriptions]]
+  compliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]
+  uri = "https://loopd2c-partner.vercel.app/api/webhooks/compliance"
+
+[access_scopes]
+# read_all_orders is added once Shopify approves the "Read all orders" request
+# (Dev Dashboard → app → Settings → Additional API and extension access).
+scopes = "read_app_proxy,read_customers,read_discounts,read_draft_orders,read_orders,read_products,unauthenticated_read_checkouts,unauthenticated_read_product_listings,unauthenticated_write_checkouts,write_app_proxy,write_customers,write_discounts,read_gift_cards,write_gift_cards,write_gift_card_transactions,write_draft_orders,write_orders,write_payment_customizations,read_merchant_managed_fulfillment_orders,write_merchant_managed_fulfillment_orders"
+optional_scopes = [ ]
+use_legacy_install_flow = false
+
+[auth]
+redirect_urls = [
+  "https://loopd2c-partner.vercel.app/api/auth/callback"
+]
