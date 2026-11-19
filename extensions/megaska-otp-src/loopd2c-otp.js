@@ -240,6 +240,8 @@
     "a[href^='/account/login?']",
     "a[href*='/account/login']",
     "a[href*='/account/register']",
+    "a[href*='/customer_authentication/redirect']",
+    "a[href*='/customer_authentication/login']",
     "[data-account-link]",
     "[data-customer-login]",
     "[data-account]",
@@ -3060,7 +3062,11 @@ function consumePendingAccountRedirect() {
     return (
       normalizedPath === "/account" ||
       normalizedPath === "/account/login" ||
-      normalizedPath === "/account/register"
+      normalizedPath === "/account/register" ||
+      // New customer accounts: themes link the account icon to Shopify's sign-in
+      // redirect instead of /account/login.
+      normalizedPath === "/customer_authentication/redirect" ||
+      normalizedPath === "/customer_authentication/login"
     );
   }
 
@@ -3071,7 +3077,12 @@ function consumePendingAccountRedirect() {
     if (!href) return false;
     try {
       const url = new URL(href, window.location.origin);
-      return url.origin === window.location.origin && isShopifyNativeAccountPath(url.pathname);
+      if (url.origin === window.location.origin) return isShopifyNativeAccountPath(url.pathname);
+      // New customer accounts hosted by Shopify: shopify.com/<shop id>/account
+      // or account.<store domain>.
+      const host = url.hostname.toLowerCase();
+      const hostedAccounts = host === "shopify.com" || host.startsWith("account.");
+      return url.protocol === "https:" && hostedAccounts && /(^|\/)account(\/|$)/.test(url.pathname);
     } catch {
       return false;
     }
