@@ -15,7 +15,7 @@
       poweredByText: "Powered by LoopD2C"
     },
     labels: {
-      expressCheckoutText: "Express Checkout",
+      expressCheckoutText: "Checkout",
       viewCartText: "View Cart",
       continueShoppingText: "Continue Shopping",
       loadingText: "Loading...",
