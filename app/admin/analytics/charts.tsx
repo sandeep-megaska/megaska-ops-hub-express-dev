@@ -23,7 +23,7 @@ export function FunnelChart({
   // window.top global, which silently makes count/top === NaN).
   const maxCount = Math.max(1, stages[0]?.count ?? 0);
   return (
-    <div role="img" aria-label="Express-checkout conversion funnel" style={{ display: "grid", gap: "0.7rem" }}>
+    <div role="img" aria-label="Checkout conversion funnel" style={{ display: "grid", gap: "0.7rem" }}>
       {stages.map((s) => {
         // SVG width in user units (viewBox 0..100) — reliable across nesting,
         // unlike percentage widths of block children in grid/flex contexts.

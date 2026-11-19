@@ -161,7 +161,7 @@ export default function CheckoutAnalyticsClient({ shop }: { shop: string }) {
         <div>
           <h1 className="mk-page-title">Checkout analytics</h1>
           <p className="mk-page-subtitle">
-            The express-checkout funnel Shopify can&rsquo;t see — where shoppers drop off, who abandons, and what to recover.
+            The pre-checkout funnel Shopify can&rsquo;t see — where shoppers drop off, who abandons, and what to recover.
           </p>
         </div>
         <div className="mk-header-actions">
@@ -247,7 +247,7 @@ export default function CheckoutAnalyticsClient({ shop }: { shop: string }) {
               <summary className="mk-stat-meta" style={{ cursor: "pointer" }}>View as table</summary>
               <div className="mk-table-wrap" style={{ marginTop: "0.5rem" }}>
                 <table className="mk-table">
-                  <caption>Express-checkout funnel stages and drop-off</caption>
+                  <caption>Checkout funnel stages and drop-off</caption>
                 <thead>
                   <tr><th>Stage</th><th>Basis</th><th>Reached</th><th>Step conversion</th><th>Drop-off</th></tr>
                 </thead>
@@ -277,12 +277,12 @@ export default function CheckoutAnalyticsClient({ shop }: { shop: string }) {
           <section className="mk-grid-3">
             <div className="mk-card">
               <h2 className="mk-section-title">Entry point</h2>
-              <p className="mk-section-subtitle">Where the express-checkout click came from.</p>
+              <p className="mk-section-subtitle">Where the checkout click came from.</p>
               <ShareBar items={funnel.funnel.segments.entryPoint.map((e) => ({ label: e.label, value: e.sessions, share: e.share }))} />
             </div>
             <div className="mk-card">
               <h2 className="mk-section-title">Device</h2>
-              <p className="mk-section-subtitle">Measured at the express-checkout click.</p>
+              <p className="mk-section-subtitle">Measured at the checkout click.</p>
               <ShareBar items={funnel.funnel.segments.device.map((d) => ({ label: d.label, value: d.sessions, share: d.share }))} />
             </div>
             <div className="mk-card">
@@ -332,7 +332,7 @@ export default function CheckoutAnalyticsClient({ shop }: { shop: string }) {
                 </div>
                 <div className="mk-card">
                   <h2 className="mk-section-title">Checkout identity</h2>
-                  <p className="mk-section-subtitle">Express checkouts started, signed in vs guest.</p>
+                  <p className="mk-section-subtitle">Checkouts started, signed in vs guest.</p>
                   <div className="mk-table-wrap">
                     <table className="mk-table">
                       <thead><tr><th>Type</th><th>Checkouts</th></tr></thead>
@@ -374,11 +374,11 @@ export default function CheckoutAnalyticsClient({ shop }: { shop: string }) {
               <section className="mk-card">
                 <h2 className="mk-section-title">Abandoned carts</h2>
                 <p className="mk-section-subtitle">
-                  Express-checkout carts that stalled before an order. Mobile numbers are masked.
+                  Carts that stalled before an order. Mobile numbers are masked.
                 </p>
                 <div className="mk-table-wrap">
                   <table className="mk-table">
-                    <caption>Recoverable abandoned express-checkout carts</caption>
+                    <caption>Recoverable abandoned carts</caption>
                     <thead>
                       <tr>
                         <th>Started</th><th>Last activity</th><th>Value</th><th>Items</th>

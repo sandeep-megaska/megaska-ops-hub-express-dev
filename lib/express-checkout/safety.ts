@@ -25,10 +25,9 @@ export type ExpressCheckoutCustomerSessionContext = {
   session: CustomerSessionForShop;
 };
 
-// Public SaaS: express checkout is available to any installed shop that has
-// completed per-shop readiness (merchant enable toggle + a configured and
-// validated Razorpay key), which resolveExpressCheckoutReadiness enforces in
-// requireExpressCheckoutShop below. There is no per-shop allowlist.
+// Public SaaS: available to any installed shop whose merchant has turned on the
+// pre-checkout phone verification switch, which resolveExpressCheckoutReadiness
+// reports to requireExpressCheckoutShop below. There is no per-shop allowlist.
 // EXPRESS_CHECKOUT_ENABLED is retained only as an opt-out emergency kill
 // switch: unset — or anything other than the literal "false" — keeps express
 // checkout enabled.
