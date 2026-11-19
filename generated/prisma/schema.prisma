@@ -103,6 +103,8 @@ model Shop {
   promotionRuntimeSyncState     PromotionRuntimeSyncState?
   merchantNotificationSettings  MerchantNotificationSettings?
   merchantOtpSettings           MerchantOtpSettings?
+  merchantWhatsAppAccount       MerchantWhatsAppAccount?
+  whatsAppConversations         WhatsAppConversation[]
   merchantUsageEvents           MerchantUsageEvent[]
   merchantSubscription          MerchantSubscription?
   merchantBillingPeriods        MerchantBillingPeriod[]
@@ -123,7 +125,10 @@ model Shop {
   identityReconciliationAudits  CustomerIdentityReconciliationAudit[]
   identityMerges                CustomerIdentityMerge[]
   checkoutPricingSnapshots      ShopifyCheckoutPricingSnapshot[]
+  orderCourierShipments         OrderCourierShipment[]
+  collabShipments               CollabShipment[]
   emailVerificationChallenges   EmailVerificationChallenge[]
+  backInStockRequests           BackInStockRequest[]
 }
 
 model EmailVerificationChallenge {
@@ -244,9 +249,11 @@ enum MerchantUsageProvider {
   PLATFORM_TWILIO
   PLATFORM_RESEND
   PLATFORM_MSG91
+  PLATFORM_WHATSAPP
   MERCHANT_TWILIO
   MERCHANT_RESEND
   MERCHANT_MSG91
+  MERCHANT_WHATSAPP
   INTERNAL
 }
 
@@ -281,17 +288,19 @@ model BillableFeature {
 }
 
 model PricingPlan {
-  id               String   @id @default(uuid())
-  code             String   @unique
-  name             String
-  description      String?
-  monthlyBasePrice Decimal  @db.Decimal(18, 6)
-  currency         String   @default("INR")
-  active           Boolean  @default(true)
-  tierRank         Int      @default(0)
-  displayOrder     Int      @default(0)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id                  String   @id @default(uuid())
+  code                String   @unique
+  name                String
+  description         String?
+  monthlyBasePrice    Decimal  @db.Decimal(18, 6)
+  currency            String   @default("INR")
+  /// Charged instead of monthlyBasePrice to stores whose Shopify billing currency isn't `currency`.
+  usdMonthlyBasePrice Decimal? @db.Decimal(18, 6)
+  active              Boolean  @default(true)
+  tierRank            Int      @default(0)
+  displayOrder        Int      @default(0)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
   features                PricingPlanFeature[]
   merchantSubscriptions   MerchantSubscription[]
@@ -685,6 +694,129 @@ model MerchantOtpSettings {
   @@index([shopId])
 }
 
+// A merchant's own WhatsApp Business number (Meta Cloud API). When present and
+// enabled, OTP, abandoned-checkout recovery and exchange updates are sent from
+// it. Without one, only OTP is sent, from the shared LoopD2C platform number
+// (WHATSAPP_OTP_* env); other WhatsApp automation is not sent for that shop.
+model MerchantWhatsAppAccount {
+  id     String @id @default(uuid())
+  shopId String @unique
+
+  enabled              Boolean @default(false)
+  displayPhoneNumber   String?
+  phoneNumberId        String
+  businessAccountId    String?
+  accessTokenEncrypted String
+  accessTokenMasked    String?
+  templateLanguage     String  @default("en")
+
+  otpEnabled               Boolean @default(true)
+  otpTemplateName          String  @default("loopd2c_login_otp")
+  recoveryEnabled          Boolean @default(false)
+  recoveryFirstTemplate    String  @default("checkout_recovery")
+  recoveryReminderTemplate String  @default("checkout_recovery_reminder")
+  exchangeEnabled          Boolean @default(false)
+  // Cancellation, issue and refund updates (services/notifications/request-updates.ts).
+  requestUpdatesEnabled    Boolean @default(false)
+  // COD order confirmation: a Utility template with Confirm / Cancel buttons
+  // after each cash-on-delivery order (services/orders/whatsapp-cod-confirmation.ts).
+  codConfirmEnabled        Boolean @default(false)
+  codConfirmTemplate       String  @default("cod_order_confirmation")
+  // Shipped / out for delivery / delivery attempt failed / delivered updates
+  // from Shopify fulfillment tracking (services/orders/whatsapp-shipping-updates.ts).
+  shippingUpdatesEnabled   Boolean @default(false)
+  backInStockEnabled       Boolean @default(false)
+  reviewRequestsEnabled    Boolean @default(false)
+  secondOrderEnabled       Boolean @default(false)
+  secondOrderDelayDays     Int     @default(21)
+  secondOrderOffer         String? // real, current offer line for the nudge (never invented)
+  shopInChatEnabled        Boolean @default(false) // WhatsApp catalog carts → Shopify bag link; AI may send the catalog
+  adConversionsEnabled     Boolean @default(false) // report WhatsApp-ad purchases to Meta (Conversions API for Business Messaging)
+  capiDatasetId            String? // Meta dataset of the WhatsApp Business Account (looked up on first use)
+  catalogId                String? // Meta catalog connected to the number (entered, or looked up on first use)
+
+  // AI assistant for inbound chats: OFF | DRAFT (suggests replies in the
+  // inbox) | AUTO (answers on its own, hands off to the team when unsure).
+  aiMode      String  @default("OFF")
+  aiKnowledge String? // merchant notes/FAQ the assistant may quote
+
+  lastCheckedAt    DateTime?
+  lastCheckStatus  String?
+  lastCheckMessage String?
+
+  // Template messages (OTPs, order updates) failing in a row at Meta, usually an
+  // empty prepaid balance or a payment problem (services/whatsapp/template-health.ts).
+  // Set when the failures start, cleared on the next delivered template.
+  templateFailingSince   DateTime?
+  templateFailureError   String?
+  templateAlertEmailedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+}
+
+// WhatsApp inbox: one conversation per (shop's business number, customer).
+// Inbound messages arrive through the WhatsApp webhook; replies are sent from
+// the admin inbox. Free-form replies are only allowed within 24 hours of the
+// customer's last message (lastInboundAt), per WhatsApp rules.
+model WhatsAppConversation {
+  id                    String    @id @default(uuid())
+  shopId                String
+  businessPhoneNumberId String
+  contactPhone          String
+  contactName           String?
+  lastMessageAt         DateTime  @default(now())
+  lastMessagePreview    String?
+  lastInboundAt         DateTime?
+  unreadCount           Int       @default(0)
+  // AI assistant state: a chat the assistant handed to the team, a pause
+  // after a team member replies, and the latest suggested reply (DRAFT mode).
+  needsHuman            Boolean   @default(false)
+  // SOFT: the assistant keeps answering other questions; HARD (or null, for
+  // older rows): it stays quiet until the team replies or resolves the chat.
+  handoffKind           String?
+  handoffReason         String?
+  aiPausedUntil         DateTime?
+  aiDraft               String?
+  aiDraftAt             DateTime?
+  // Latest Click-to-WhatsApp ad that brought this customer (webhook referral).
+  adSourceId            String?
+  adHeadline            String?
+  adBody                String?
+  adCtwaClid            String?
+  adReferredAt          DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  shop     Shop              @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  messages WhatsAppMessage[]
+
+  @@unique([businessPhoneNumberId, contactPhone])
+  @@index([shopId, lastMessageAt])
+}
+
+model WhatsAppMessage {
+  id             String   @id @default(uuid())
+  conversationId String
+  direction      String // INBOUND | OUTBOUND
+  waMessageId    String?  @unique
+  type           String   @default("text")
+  body           String?
+  mediaId        String?
+  templateName   String?
+  status         String? // OUTBOUND: sent | delivered | read | failed
+  errorMessage   String?
+  sentByEmail    String?
+  sentByAi       Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  conversation WhatsAppConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+}
+
 model MerchantTwilioSettings {
   id                    String @id @default(uuid())
   merchantOtpSettingsId String @unique
@@ -1012,9 +1144,9 @@ model OTPChallenge {
   id            String    @id @default(uuid())
   shopId        String
   phoneE164     String
-  provider      String // twilio, msg91, mock
+  provider      String // twilio, msg91, whatsapp, mock
   providerSid   String?
-  status        String // pending, verified, failed, expired
+  status        String // pending, verified, failed, expired, superseded
   attemptsCount Int       @default(0)
   requestedAt   DateTime  @default(now())
   verifiedAt    DateTime?
@@ -1067,6 +1199,8 @@ enum ExchangeRequestStatus {
 
 enum PaymentPurpose {
   REVERSE_PICKUP_FEE
+  // Customer pays the difference for a dearer style (services/exchange/style-exchange.ts).
+  STYLE_DIFFERENCE
 }
 
 enum PaymentProvider {
@@ -1168,27 +1302,41 @@ enum ShipmentStatus {
 }
 
 model OrderActionRequest {
-  id                    String                @id @default(uuid())
-  shopId                String?
-  requestType           RequestType           @default(EXCHANGE)
-  customerProfileId     String
-  shopifyCustomerId     String?
-  shopifyOrderId        String?
-  orderNumber           String
-  status                ExchangeRequestStatus @default(OPEN)
-  reason                String?
-  customerNote          String?
-  adminNote             String?
-  requestedAt           DateTime              @default(now())
-  updatedAt             DateTime              @updatedAt
-  customerNameSnapshot  String?
-  customerPhoneSnapshot String?
-  customerEmailSnapshot String?
-  orderAmountSnapshot   String?
-  deliveryDateSnapshot  DateTime?
-  eligibilityDecision   String?
-  eligibilityReason     String?
-  megaskaOrderId        String?
+  id                          String                @id @default(uuid())
+  shopId                      String?
+  requestType                 RequestType           @default(EXCHANGE)
+  customerProfileId           String
+  shopifyCustomerId           String?
+  shopifyOrderId              String?
+  orderNumber                 String
+  status                      ExchangeRequestStatus @default(OPEN)
+  reason                      String?
+  customerNote                String?
+  adminNote                   String?
+  requestedAt                 DateTime              @default(now())
+  updatedAt                   DateTime              @updatedAt
+  customerNameSnapshot        String?
+  customerPhoneSnapshot       String?
+  customerEmailSnapshot       String?
+  orderAmountSnapshot         String?
+  deliveryDateSnapshot        DateTime?
+  eligibilityDecision         String?
+  eligibilityReason           String?
+  megaskaOrderId              String?
+  // Replacement shipped before the returned item reached the warehouse (team-only,
+  // once Delhivery picked the return up). The return keeps being tracked after close.
+  earlyReplacementAt          DateTime?
+  earlyReplacementReason      String?
+  // Different-style exchange (team-only): replacement value minus what the customer
+  // paid, across items. > 0 the customer owes it, < 0 the store does. Settlement:
+  // COLLECT (payment link) | STORE_CREDIT | NO_REFUND | MANUAL_REFUND.
+  styleDifferencePaise        Int?
+  styleSettlement             String?
+  styleSettledAt              DateTime?
+  // Shopify order for the replacement (services/exchange/replacement-order.ts):
+  // "pending" while being created.
+  replacementShopifyOrderId   String?
+  replacementShopifyOrderName String?
 
   customerProfile CustomerProfile          @relation(fields: [customerProfileId], references: [id])
   shop            Shop?                    @relation(fields: [shopId], references: [id], onDelete: SetNull)
@@ -1207,19 +1355,25 @@ model OrderActionRequest {
 }
 
 model OrderActionItem {
-  id                  String   @id @default(uuid())
-  requestId           String
-  shopifyLineItemId   String?
-  productTitle        String
-  variantTitle        String?
-  sku                 String?
-  currentSize         String?
-  requestedSize       String
-  quantity            Int      @default(1)
-  isClearance         Boolean  @default(false)
-  isExcludedCategory  Boolean  @default(false)
-  eligibilitySnapshot Json?
-  createdAt           DateTime @default(now())
+  id                        String   @id @default(uuid())
+  requestId                 String
+  shopifyLineItemId         String?
+  productTitle              String
+  variantTitle              String?
+  sku                       String?
+  currentSize               String?
+  requestedSize             String
+  quantity                  Int      @default(1)
+  isClearance               Boolean  @default(false)
+  isExcludedCategory        Boolean  @default(false)
+  eligibilitySnapshot       Json?
+  // Different style chosen by the team (null = same product, requested size).
+  replacementVariantId      String?
+  replacementTitle          String?
+  replacementSku            String?
+  replacementUnitPricePaise Int?
+  originalUnitPricePaise    Int?
+  createdAt                 DateTime @default(now())
 
   request OrderActionRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
 
@@ -1431,6 +1585,92 @@ model OrderShipment {
 
   @@index([orderId, createdAt])
   @@index([provider, providerReference])
+  @@index([awb])
+}
+
+enum OrderCourierShipmentStatus {
+  CREATING
+  CREATED
+  FAILED
+}
+
+// Influencer, collab, PR and gift parcels the store sends at its own cost. Each is
+// a ₹0 Shopify order (100% discount, tagged "LoopD2C Collab") so stock goes down,
+// plus the retail value, product cost and shipping cost kept for accounts and audit.
+// Booked on Delhivery as Prepaid through the Shipments flow; tracked here.
+model CollabShipment {
+  id                String              @id @default(uuid())
+  shopId            String
+  purpose           String // INFLUENCER | COLLAB | PR | GIFT | OTHER
+  recipientName     String
+  recipientPhone    String
+  recipientEmail    String?
+  recipientHandle   String?
+  platform          String?
+  campaign          String?
+  address           Json // { address1, address2, city, state, pin }
+  items             Json // [{ variantId, title, sku, quantity, unitPricePaise, unitCostPaise }]
+  retailValuePaise  Int                 @default(0)
+  productCostPaise  Int                 @default(0)
+  shippingCostPaise Int?
+  weightGrams       Int?
+  status            String              @default("CREATING") // CREATING | ORDER_CREATED | BOOKED | FAILED
+  errorMessage      String?
+  shopifyOrderId    String?
+  shopifyOrderName  String?
+  awb               String?
+  trackingUrl       String?
+  trackingStatus    MegaskaOrderStatus?
+  trackingRawStatus String?
+  trackingUpdatedAt DateTime?
+  deliveredAt       DateTime?
+  deliverableStatus String              @default("PENDING") // PENDING | POSTED | NOT_NEEDED | NOT_POSTED
+  contentUrl        String?
+  postedAt          DateTime?
+  notes             String?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@unique([shopId, shopifyOrderId])
+  @@index([shopId, createdAt])
+  @@index([awb])
+}
+
+// Outbound courier shipments booked from the admin "Shipments" page, keyed by
+// the Shopify order (not MegaskaOrder, which exists only for known customers).
+// The unique key doubles as the booking lock so an order is never sent twice.
+model OrderCourierShipment {
+  id                       String                     @id @default(uuid())
+  shopId                   String
+  shopifyOrderId           String
+  shopifyOrderName         String
+  provider                 CourierProvider            @default(DELHIVERY)
+  status                   OrderCourierShipmentStatus @default(CREATING)
+  awb                      String?
+  trackingUrl              String?
+  providerReference        String?
+  paymentMode              String // PREPAID | COD
+  codAmountPaise           Int                        @default(0)
+  weightGrams              Int?
+  shippingMode             String?
+  errorMessage             String?
+  rawResponse              Json?
+  attempts                 Int                        @default(0)
+  // Shopify fulfillment (marks the order shipped with the AWB): PENDING |
+  // DONE | FAILED; null when not attempted.
+  shopifyFulfillmentStatus String?
+  shopifyFulfillmentId     String?
+  shopifyFulfillmentError  String?
+  shopifyFulfilledAt       DateTime?
+  createdAt                DateTime                   @default(now())
+  updatedAt                DateTime                   @updatedAt
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@unique([shopId, shopifyOrderId, provider])
+  @@index([shopId, createdAt])
   @@index([awb])
 }
 
@@ -1908,13 +2148,19 @@ enum WalletActorType {
 }
 
 model WalletAccount {
-  id                String   @id @default(uuid())
-  shopId            String
-  customerProfileId String
-  currency          String   @default("INR")
-  currentBalance    Int      @default(0)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id                   String   @id @default(uuid())
+  shopId               String
+  customerProfileId    String
+  currency             String   @default("INR")
+  currentBalance       Int      @default(0)
+  // Store credit is mirrored to a Shopify gift card so it can be applied natively
+  // at Shopify Checkout. One persistent card per customer; the code is generated by
+  // us and stored encrypted (Shopify never returns it) for the dashboard/drawer.
+  shopifyGiftCardId    String?
+  shopifyGiftCardLast4 String?
+  giftCardCodeEnc      String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 
   shop         Shop                @relation(fields: [shopId], references: [id], onDelete: Cascade)
   customer     CustomerProfile     @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
@@ -1944,6 +2190,10 @@ model WalletTransaction {
   createdByType     WalletActorType
   createdById       String?
   createdAt         DateTime              @default(now())
+  // Set once this CREDIT ledger entry has been mirrored onto the customer's Shopify
+  // gift card (so the balance is spendable at native checkout). Null = not yet synced
+  // or a debit that never syncs; it is the retry marker for the gift-card projection.
+  giftCardSyncedAt  DateTime?
 
   shop                  Shop            @relation(fields: [shopId], references: [id], onDelete: Cascade)
   walletAccount         WalletAccount   @relation(fields: [walletAccountId], references: [id], onDelete: Cascade)
@@ -2145,7 +2395,7 @@ model GstSettings {
   defaultCurrency           String               @default("INR")
   priceIncludesTax          Boolean              @default(true)
   einvoiceEnabled           Boolean              @default(false)
-  autoGenerateOnOrderCreate Boolean              @default(false)
+  autoGenerateOnOrderCreate Boolean              @default(true)
   isActive                  Boolean              @default(true)
   createdAt                 DateTime             @default(now())
   updatedAt                 DateTime             @updatedAt
@@ -3018,4 +3268,54 @@ model ShopInstallationEvent {
 
   @@index([shopId, createdAt])
   @@index([eventType, createdAt])
+}
+
+/// Contact-form submissions from the public marketing WEBSITE (loopdesk-website).
+/// This is deliberately NOT app/merchant data — it is website enquiries, stored in
+/// the shared app database under a clearly-identifiable, website-scoped table name
+/// so it is never confused with Shopify/merchant records. No relation to Shop.
+model WebsiteContactSubmission {
+  id           String   @id @default(uuid())
+  createdAt    DateTime @default(now())
+  name         String
+  email        String
+  company      String?
+  shopDomain   String?
+  enquiryType  String?
+  subject      String?
+  message      String
+  sourceIpHash String?
+  userAgent    String?
+  status       String   @default("NEW")
+
+  @@index([createdAt])
+  @@index([status])
+}
+
+// A customer asked on WhatsApp to be told when a sold-out product (or one size
+// / colour of it) is back. Checked by the 15-minute cron; one message each.
+model BackInStockRequest {
+  id           String    @id @default(uuid())
+  shopId       String
+  phone        String // digits with country code, no +
+  customerName String?
+  productId    String
+  variantId    String?
+  key          String // variantId, or productId|size|colour
+  productTitle String
+  variantTitle String?
+  optionSize   String? // when no single variant was picked: any variant with this size …
+  optionColor  String? // … and/or colour counts
+  productUrl   String?
+  source       String    @default("WHATSAPP_AI")
+  status       String    @default("WAITING") // WAITING | NOTIFIED | CANCELLED | EXPIRED
+  messageId    String?
+  notifiedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@unique([shopId, phone, key])
+  @@index([shopId, status])
 }
