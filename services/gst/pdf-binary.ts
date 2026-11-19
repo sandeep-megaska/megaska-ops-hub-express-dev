@@ -263,7 +263,9 @@ function buildStyledPdf(model: GstInvoiceRenderModel, paperSize: "A4" | "A5" = "
 
   if (cfg.showHeaderLogo) {
     if (!drawImage(commands, headerLogo, pageWidth / 2 - 90, y - 26, 180, 24)) {
-      drawText(commands, pageWidth / 2 - 28, y - 16, "bigonbuy", 11);
+      // No logo: the merchant's own trade name (never a hard-coded brand).
+      const brand = (model.supplier.tradeName || model.supplier.name || "").slice(0, 40);
+      drawText(commands, pageWidth / 2 - measureText(brand, 11, true) / 2, y - 16, brand, 11, true);
     }
     y -= 30;
   }
