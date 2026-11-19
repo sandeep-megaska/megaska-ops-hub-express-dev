@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { prisma } from "../../../../services/db/prisma";
 import { ISSUE_ALLOWED_STATUS_TRANSITIONS, getIssueRefundMode } from "../../../../services/exchange/issue";
 import IssueLifecycleControls from "./IssueLifecycleControls";
@@ -34,6 +35,7 @@ export default async function AdminIssueDetailPage({ params }: { params: Promise
     where: { id, requestType: "ISSUE" },
     include: {
       items: true,
+      shipments: { where: { direction: "REVERSE_PICKUP" } },
       payments: { orderBy: { createdAt: "desc" } },
       refundRequests: {
         where: { source: "ISSUE_REQUEST" },
@@ -76,6 +78,25 @@ export default async function AdminIssueDetailPage({ params }: { params: Promise
         <p className="mk-list-subtitle">Issue Reason: {request.reason || "-"}</p>
         <p className="mk-list-subtitle">Customer Description: {request.customerNote || "-"}</p>
         <p className="mk-list-subtitle">Admin Note: {request.adminNote || "-"}</p>
+      </section>
+
+      <section className="mk-card">
+        <h3 className="mk-section-title">Reverse pickup</h3>
+        {request.shipments[0]?.awb ? (
+          <>
+            <p className="mk-list-subtitle">
+              Delhivery AWB:{" "}
+              {request.shipments[0].trackingUrl ? <a href={request.shipments[0].trackingUrl} target="_blank" rel="noreferrer">{request.shipments[0].awb}</a> : request.shipments[0].awb}
+            </p>
+            <p className="mk-list-subtitle">Pickup status: {request.shipments[0].status}{request.shipments[0].remarks ? ` (${request.shipments[0].remarks})` : ""}</p>
+            <p className="mk-help">Tracked every 30 minutes; the issue moves to &quot;returned goods received&quot; when it reaches you.</p>
+          </>
+        ) : (
+          <p className="mk-list-subtitle">
+            Not booked.{" "}
+            <Link className="mk-btn mk-btn-sm" href={`/admin/reverse-pickups?order=${encodeURIComponent(request.orderNumber)}`}>Arrange reverse pickup</Link>
+          </p>
+        )}
       </section>
 
       <section className="mk-card">
