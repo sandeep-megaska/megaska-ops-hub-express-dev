@@ -26,13 +26,14 @@ approval**. Both projects use the same database: data is keyed by shop.
 2. **Vercel:** new project `loopd2c-partner` from this repository, branch `main`.
    Environment (Production):
    - Copy from the production project, same values: `DATABASE_URL`,
-     `DIRECT_URL`, `LOOPDESK_SESSION_SECRET`, email (Resend), OpenAI,
-     Delhivery/Razorpay platform keys if any.
-   - Production has no dedicated token encryption key, so Megaska's Shopify
-     token and gift-card codes are encrypted with a key derived from the old
-     app's `SHOPIFY_API_SECRET`. Give the new project its own random
-     `SHOPIFY_TOKEN_ENCRYPTION_KEY` (`openssl rand -base64 32`), so its
-     encryption no longer depends on an app secret.
+     `DIRECT_URL`, email (Resend), OpenAI, Delhivery/Razorpay platform keys if any.
+   - Production's `SHOPIFY_TOKEN_ENCRYPTION_KEY`, `GIFT_CARD_ENCRYPTION_KEY` and
+     `REFUND_PAYOUT_ENCRYPTION_KEY` are Vercel *sensitive* variables, so their
+     values can't be read or copied. The review project doesn't need them: it
+     only serves the review store. Give it its own random values for those three
+     and for `LOOPDESK_SESSION_SECRET` if that is sensitive too
+     (`openssl rand -base64 32` each). Megaska's encrypted data stays readable
+     only by the production project, which is why Phase 2 keeps using it.
    - New: `SHOPIFY_API_KEY=e16e6f02914ab7a1c1814b1cdb28cfb0`,
      `SHOPIFY_API_SECRET=<new app client secret>`,
      `SHOPIFY_APP_HANDLE=loopd2c`,
@@ -49,14 +50,16 @@ approval**. Both projects use the same database: data is keyed by shop.
 
 ## Phase 2: move Megaska (after approval)
 
-1. Vercel production: `SHOPIFY_API_SECRET_PREVIOUS=<old secret>`. This is
-   **required**: without it the existing gift-card codes (encrypted with a key
-   derived from the old secret) can't be read. Also copy the new project's
-   `SHOPIFY_TOKEN_ENCRYPTION_KEY` there. Then set `SHOPIFY_API_KEY`,
+1. Switch the **production** Vercel project (it holds the encryption keys that
+   Megaska's tokens, gift-card codes and refund details were encrypted with;
+   don't move the domain to `loopd2c-partner`): set
+   `SHOPIFY_API_SECRET_PREVIOUS=<old secret>` (a safety net only, since the
+   dedicated keys don't depend on the app secret), `SHOPIFY_API_KEY` and
    `SHOPIFY_API_SECRET` = new app, `SHOPIFY_APP_HANDLE=loopd2c`; keep
-   `CRON_SECRET`. Point `app.loopd2c.com` at the app (or move the domain to
-   `loopd2c-partner` and give it `CRON_SECRET`), update the URLs in
-   `shopify.app.loopd2c.toml` to `https://app.loopd2c.com` and deploy.
+   `CRON_SECRET` and the encryption keys. Update the URLs in
+   `shopify.app.loopd2c.toml` to `https://app.loopd2c.com` and deploy. The
+   review store then reinstalls once (its token was encrypted with the review
+   project's key). The `loopd2c-partner` project can then be deleted.
 2. Uninstall the old app from Megaska. Its `app/uninstalled` and later
    `shop/redact` are signed with the old secret and are ignored (see
    `identifyShopifyWebhookSigner`), so they can't drop the new token or delete
