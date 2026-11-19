@@ -26,10 +26,13 @@ approval**. Both projects use the same database: data is keyed by shop.
 2. **Vercel:** new project `loopd2c-partner` from this repository, branch `main`.
    Environment (Production):
    - Copy from the production project, same values: `DATABASE_URL`,
-     `DIRECT_URL`, `SHOPIFY_TOKEN_ENCRYPTION_KEY` (must match, or stored tokens
-     can't be read), `LOOPDESK_SESSION_SECRET`, `DATA_ENCRYPTION_KEY`/
-     `GIFT_CARD_ENCRYPTION_KEY`/`TOKEN_ENCRYPTION_KEY` if set, email (Resend),
-     OpenAI, Delhivery/Razorpay platform keys if any.
+     `DIRECT_URL`, `LOOPDESK_SESSION_SECRET`, email (Resend), OpenAI,
+     Delhivery/Razorpay platform keys if any.
+   - Production has no dedicated token encryption key, so Megaska's Shopify
+     token and gift-card codes are encrypted with a key derived from the old
+     app's `SHOPIFY_API_SECRET`. Give the new project its own random
+     `SHOPIFY_TOKEN_ENCRYPTION_KEY` (`openssl rand -base64 32`), so its
+     encryption no longer depends on an app secret.
    - New: `SHOPIFY_API_KEY=e16e6f02914ab7a1c1814b1cdb28cfb0`,
      `SHOPIFY_API_SECRET=<new app client secret>`,
      `SHOPIFY_APP_HANDLE=loopd2c`,
@@ -46,8 +49,10 @@ approval**. Both projects use the same database: data is keyed by shop.
 
 ## Phase 2: move Megaska (after approval)
 
-1. Vercel production: `SHOPIFY_API_SECRET_PREVIOUS=<old secret>` (keeps values
-   encrypted under the old secret readable), then `SHOPIFY_API_KEY`,
+1. Vercel production: `SHOPIFY_API_SECRET_PREVIOUS=<old secret>`. This is
+   **required**: without it the existing gift-card codes (encrypted with a key
+   derived from the old secret) can't be read. Also copy the new project's
+   `SHOPIFY_TOKEN_ENCRYPTION_KEY` there. Then set `SHOPIFY_API_KEY`,
    `SHOPIFY_API_SECRET` = new app, `SHOPIFY_APP_HANDLE=loopd2c`; keep
    `CRON_SECRET`. Point `app.loopd2c.com` at the app (or move the domain to
    `loopd2c-partner` and give it `CRON_SECRET`), update the URLs in
