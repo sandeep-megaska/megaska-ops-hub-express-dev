@@ -7,6 +7,9 @@ import {
 } from "../../../../services/shopify/shop";
 import ExchangeLifecycleControls from "./ExchangeLifecycleControls";
 import EarlyReplacementCard from "./EarlyReplacementCard";
+import PickupFeeCard from "./PickupFeeCard";
+import { isWithinReversePickupWindow } from "../../../../services/exchange/deadlines";
+import { REVERSE_PICKUP_FEE_PAISE } from "../../../../services/exchange/constants";
 import StyleExchangeCard from "./StyleExchangeCard";
 import { styleChangeBlocker } from "../../../../services/exchange/style-exchange";
 import { earlyReplacementEligibility, returnOutstanding } from "../../../../services/exchange/early-replacement";
@@ -143,6 +146,17 @@ export default async function AdminExchangeDetailPage({
         settledAtIso={request.styleSettledAt ? request.styleSettledAt.toISOString() : null}
         payment={stylePayment ? { status: stylePayment.status, url: stylePayment.paymentLinkUrl, amount: stylePayment.amount } : null}
         locked={request.status === "REJECTED" ? "This exchange was rejected." : styleLocked}
+      />
+
+      <PickupFeeCard
+        requestId={request.id}
+        shopDomain={shopDomain || shop.shopDomain}
+        show={!reverseShipment?.awb && ["AWAITING_PAYMENT", "PAYMENT_RECEIVED", "APPROVED", "PICKUP_PENDING"].includes(request.status)}
+        feePaid={request.payments[0]?.status === "PAID"}
+        feeStatus={request.payments[0]?.status ?? null}
+        feeRupees={Math.round((request.payments[0]?.amount || REVERSE_PICKUP_FEE_PAISE) / 100)}
+        withinWindow={isWithinReversePickupWindow(request.deliveryDateSnapshot)}
+        delhiveryConfigured={delhiveryCapability.configured}
       />
 
       <EarlyReplacementCard

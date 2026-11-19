@@ -1,6 +1,7 @@
 import type { ShipmentStatus, ShipmentTracking } from "../../generated/prisma";
 import { prisma } from "../db/prisma";
 import { exchangeShipmentStatus, isFreshMilestone, nextForwardExchangeStatus, nextReverseExchangeStatus } from "./tracking-status.ts";
+import { issueStatusAfterReverseShipment } from "./manual-reverse-pickup-rules.ts";
 import { DelhiveryAdapter, DelhiveryTrackingError } from "../logistics/delhivery-adapter";
 import { resolveDelhiveryRuntimeConfig } from "../logistics/delhivery-runtime";
 import { notifyExchangeMilestone } from "../notifications/exchange-milestones";
@@ -19,6 +20,8 @@ interface SyncableRequest {
   orderNumber?: string | null;
   // Set when the replacement went out before the return arrived (early-replacement.ts).
   earlyReplacementAt?: Date | null;
+  /** "ISSUE" for a reverse pickup the team arranged on an issue request. */
+  requestType?: string | null;
 }
 
 interface SyncableShipment {
@@ -75,9 +78,14 @@ export async function syncExchangeShipment(
   const isReverse = shipment.direction === "REVERSE_PICKUP";
   const shipmentStatus = exchangeShipmentStatus(snapshot.normalizedStatus);
   const statusTimestamp = snapshot.statusUpdatedAt || new Date();
-  const nextStatus = isReverse
-    ? nextReverseExchangeStatus(request.status, shipmentStatus, snapshot.normalizedStatus)
-    : nextForwardExchangeStatus(request.status, shipmentStatus);
+  // Issue requests reuse the status names with their own meanings: the return
+  // reaching the warehouse moves "approved, awaiting returned goods" to "received".
+  const isIssue = request.requestType === "ISSUE";
+  const nextStatus = isIssue
+    ? (isReverse ? issueStatusAfterReverseShipment(request.status, shipmentStatus) : request.status)
+    : isReverse
+      ? nextReverseExchangeStatus(request.status, shipmentStatus, snapshot.normalizedStatus)
+      : nextForwardExchangeStatus(request.status, shipmentStatus);
   const changed = nextStatus !== request.status;
 
   const deliveredAt = shipmentStatus === "DELIVERED" ? statusTimestamp : shipment.deliveredAt;
@@ -133,7 +141,10 @@ export async function syncExchangeShipment(
   // Notify customer + admin on an actual status transition. Idempotent per
   // (request, status), so the 30-min cron and the manual "Sync tracking" button
   // never double-notify the same milestone.
-  if (changed && isFreshMilestone(snapshot.statusUpdatedAt)) {
+  // Exchange milestone messages only; issues have no customer template.
+  if (changed && isIssue) {
+    console.info("[DELHIVERY TRACKING] issue_status_advanced", { requestId: request.id, status: nextStatus });
+  } else if (changed && isFreshMilestone(snapshot.statusUpdatedAt)) {
     await notifyExchangeMilestone(request.id, nextStatus);
   } else if (changed) {
     console.info("[DELHIVERY TRACKING] milestone_not_notified_stale", { requestId: request.id, status: nextStatus, statusAt: snapshot.statusUpdatedAt });
