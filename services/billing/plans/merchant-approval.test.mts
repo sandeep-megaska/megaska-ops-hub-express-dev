@@ -20,7 +20,7 @@ test("every attempt gets a fresh Shopify approval and closes earlier unapproved 
   assert.match(initial, /updateMany\(\{ where: \{ shopId: input\.shopId, merchantSubscriptionId: sub\.id, changeType: "INITIAL_SUBSCRIPTION", status: \{ in: \["PENDING", "PENDING_PROVIDER_CONFIRMATION"\] \} \}, data: \{ status: "CANCELED" \} \}\);/);
   assert.match(initial, /const key = `plan-change:initial:\$\{input\.shopId\}:\$\{target\.id\}:\$\{crypto\.randomUUID\(\)\}`;/);
   assert.ok(initial.indexOf("updateMany(") < initial.indexOf("merchantPlanChange.create("), "close old attempts before creating the new one");
-  assert.match(initial, /change = await createProviderConfirmation\(change\.id, input\.shopId, sub, target\);/);
+  assert.match(initial, /change = await createProviderConfirmation\(change\.id, input\.shopId, sub, target, \{ offerTrial: true \}\);/);
 });
 
 test("the Billing page offers approval until Shopify confirms, including after a reinstall", () => {

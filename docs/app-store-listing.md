@@ -62,11 +62,11 @@ Listing text:
 - **Plan name**: Professional
 - **Price**: ₹2,899 / month
 - **Features**: All LoopD2C features · 1,000 OTP sends and 2,000 emails each month included · Additional OTP ₹0.35, email ₹0.08
-- **Additional charges**: "Usage charges for OTP and email beyond the included amounts, capped at ₹[CAP] per 30 days. WhatsApp messages are sent from your own WhatsApp Business account and billed to you by Meta."
+- **Free trial**: 14 days (first subscription only)
+- **Additional charges**: "Usage charges for OTP and email beyond the included amounts, capped at ₹1,000 per 30 days (US$12 for stores billed in USD). WhatsApp messages are sent from your own WhatsApp Business account and billed to you by Meta."
 
-**[DECIDE]** Free trial: none is configured. 7 or 14 days is common and is a
-one-line change (`trialDays`).
-**[DECIDE]** Usage cap amount (₹ per 30 days). See **[FIX] 1**.
+The app charges exactly this (`services/billing/plans/plan-lifecycle.ts`:
+`BILLING_TRIAL_DAYS`, `USAGE_CAP_PER_30_DAYS`).
 **[DECIDE]** The website pricing page still says "pricing being finalised".
 Update it to match the listing before submitting; reviewers compare them.
 
@@ -108,7 +108,7 @@ Update it to match the listing before submitting; reviewers compare them.
 > 2. In Online Store → Themes → Customize → App embeds, turn on **LoopD2C OTP Embed** and save. Turn on "Enable LoopD2C cart drawer" and "Show Checkout button".
 >
 > **Logging in (OTP)**
-> 3. On the storefront, click the account icon. Enter the test number **[FIX 2: test number]** and the code **[FIX 2: test code]**. This test number works on development stores only and sends no SMS.
+> 3. On the storefront, click the account icon. Enter the test number **[REVIEW_OTP_PHONE without +91]** (country India) and, when asked for the code, **[REVIEW_OTP_CODE]**. This test number works on development stores only and sends no SMS. Any other Indian mobile number receives a real code.
 >
 > **Cart, prepaid discount and COD**
 > 4. In the app, open **Prepaid offer & COD**, tick "Enable prepaid discount", set 10 %, and save. Saving publishes the discount function and the payment customization.
@@ -141,15 +141,10 @@ prepaid discount → GST invoice → account page. English narration or captions
 
 ## [FIX] before submission
 
-1. **Usage billing.** `plan-lifecycle.ts` creates the subscription without
-   `cappedUsageAmount`, so Shopify has no usage line item and the OTP and
-   email overage in the listing could not be charged. Pass a cap (and decide
-   its amount), or remove the overage from the listing.
-2. **Reviewer OTP.** OTP only goes to Indian numbers (`allowedCountryCodes:
-   ["IN"]`) and there is no test number, so a reviewer outside India can't log
-   in. Add a reviewer test number with a fixed code that works only on
-   development stores (Shopify's `partnerDevelopment` flag) and never sends
-   an SMS.
+1. ~~Usage billing~~ — done: usage line capped at ₹1,000 / US$12, 14-day trial.
+2. ~~Reviewer OTP~~ — done: set `REVIEW_OTP_PHONE` and `REVIEW_OTP_CODE` on the
+   Vercel project that serves the app, then put both in the testing
+   instructions above.
 3. **Website consistency.** The pricing page ("being finalised") and the
    "WhatsApp abandoned-cart recovery: Planned" label don't match the app
    (checkout recovery messages exist today). Align them with this listing.

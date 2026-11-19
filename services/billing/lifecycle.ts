@@ -22,6 +22,17 @@ function validDate(value: unknown, field: string) { const date = value instanceo
 function validateCycle(cycle: ProviderBillingCycle) { const start = validDate(cycle.periodStart, "period_start"); const end = validDate(cycle.periodEnd, "period_end"); if (end <= start || end.getTime() - start.getTime() > MAX_PERIOD_DURATION_MS) throw new BillingLifecycleError("INVALID_PERIOD_RANGE"); const trialStart = cycle.trialStart == null ? null : validDate(cycle.trialStart, "trial_start"); const trialEnd = cycle.trialEnd == null ? null : validDate(cycle.trialEnd, "trial_end"); if (trialStart && trialEnd && trialEnd < trialStart) throw new BillingLifecycleError("INVALID_TRIAL_RANGE"); return { start, end, trialStart, trialEnd }; }
 async function ownedSubscription(shopId: string, subscriptionId: string) { const subscription = await db.merchantSubscription.findFirst({ where: { id: subscriptionId, shopId } }); if (!subscription) throw new BillingLifecycleError("SUBSCRIPTION_NOT_FOUND"); return subscription; }
 async function ownedPeriod(shopId: string, billingPeriodId: string) { const period = await db.merchantBillingPeriod.findFirst({ where: { id: billingPeriodId, shopId }, include: { subscription: true } }); if (!period) throw new BillingLifecycleError("BILLING_PERIOD_NOT_FOUND"); return period; }
+// Usage is rated in the plan's currency. A store Shopify bills in another currency (for
+// example a USD-billed development store) is charged the plan's USD price, so its usage
+// is converted at the same ratio as the base price before it is sent to Shopify.
+export async function usageChargeInChargeCurrency(row: { amount: Prisma.Decimal.Value; currency: string }, subscription: { pricingPlanId: string; providerMetadata?: unknown }): Promise<{ amount: string; currency: string }> {
+  const chargeCurrency = String((subscription.providerMetadata as { chargeCurrency?: unknown } | null)?.chargeCurrency || "").trim();
+  if (!chargeCurrency || chargeCurrency === row.currency) return { amount: String(row.amount), currency: row.currency };
+  const plan = await db.pricingPlan.findUnique({ where: { id: subscription.pricingPlanId }, select: { currency: true, monthlyBasePrice: true, usdMonthlyBasePrice: true } });
+  if (chargeCurrency !== "USD" || !plan || plan.currency !== row.currency || !plan.usdMonthlyBasePrice || new Prisma.Decimal(plan.monthlyBasePrice).isZero()) throw new BillingLifecycleError("USAGE_CURRENCY_CONVERSION_UNAVAILABLE");
+  const converted = new Prisma.Decimal(row.amount).mul(plan.usdMonthlyBasePrice).div(plan.monthlyBasePrice).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
+  return { amount: converted.toString(), currency: "USD" };
+}
 function cancelled(status: string) { return status === "CANCELED" || status === "EXPIRED"; }
 
 /** Synchronizes provider state only; it deliberately does not know any provider GraphQL shape. */
@@ -70,7 +81,8 @@ export async function submitRatedBillingPeriodUsage(input: { shopId: string; bil
     try {
       if (period.subscription.billingProvider !== "SHOPIFY") { await db.merchantBillingProviderSubmission.update({ where: { id: claim.submission.id }, data: { status: "SUCCEEDED", succeededAt: new Date() } }); output.submitted++; output.results.push({ merchantRatedUsageId: row.id, featureCode: row.featureCodeSnapshot, status: "SUCCEEDED", providerSubmissionId: claim.submission.id, errorCode: null }); continue; }
       const line = (period.subscription.providerMetadata as any)?.usageLineItemId;
-      const result = await new ShopifyBillingAdapter().createUsageCharge({ shopId: input.shopId, merchantSubscriptionId: period.subscriptionId, merchantBillingPeriodId: period.id, merchantRatedUsageId: row.id, description: `Rated ${row.featureCodeSnapshot} usage`, currency: row.currency, amount: String(row.amount), usageLineItemId: line, idempotencyKey: `usage:${row.id}` });
+      const charge = await usageChargeInChargeCurrency(row, period.subscription);
+      const result = await new ShopifyBillingAdapter().createUsageCharge({ shopId: input.shopId, merchantSubscriptionId: period.subscriptionId, merchantBillingPeriodId: period.id, merchantRatedUsageId: row.id, description: `Rated ${row.featureCodeSnapshot} usage`, currency: charge.currency, amount: charge.amount, usageLineItemId: line, idempotencyKey: `usage:${row.id}` });
       await db.merchantBillingProviderSubmission.update({ where: { id: claim.submission.id }, data: { status: "SUCCEEDED", succeededAt: new Date(), externalReference: result.externalUsageRecordId } }); output.submitted++; output.results.push({ merchantRatedUsageId: row.id, featureCode: row.featureCodeSnapshot, status: result.status, providerSubmissionId: claim.submission.id, errorCode: null });
     } catch (error) { const providerError = error instanceof BillingProviderError ? error : null; const status = providerError?.retryable ? "FAILED_RETRYABLE" : "FAILED_FINAL"; await db.merchantBillingProviderSubmission.update({ where: { id: claim.submission.id }, data: { status, failedAt: new Date(), errorCode: providerError?.code ?? "PROVIDER_SUBMISSION_FAILED", errorMessage: providerError?.message ?? "Provider usage submission failed." } }); if (status === "FAILED_RETRYABLE") output.retryableFailures++; else output.finalFailures++; output.results.push({ merchantRatedUsageId: row.id, featureCode: row.featureCodeSnapshot, status, providerSubmissionId: claim.submission.id, errorCode: providerError?.code ?? "PROVIDER_SUBMISSION_FAILED" }); }
   }
