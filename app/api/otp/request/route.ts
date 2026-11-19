@@ -20,6 +20,7 @@ import {
   resolveOtpPhoneForShop,
 } from "../../../../services/auth/otp-phone-policy";
 import { resolveOtpProviderForShop } from "../../../../services/auth/otp-provider-resolver";
+import { createReviewTestOtpChallenge, reviewTestOtpFor } from "../../../../services/auth/review-test-otp";
 import { recordAcceptedOtpRequestUsage } from "../../../../services/usage/otp-usage";
 import crypto from "node:crypto";
 import {
@@ -205,6 +206,20 @@ export async function POST(req: NextRequest) {
     const otpBlocked =
       resolution.available === false &&
       (resolution.reason === "OTP_DISABLED" || resolution.reason === "SHOP_UNRESOLVED");
+
+    // Shopify App Store reviewer test number (development stores only): nothing is
+    // sent and no usage is recorded; the fixed code verifies like a WhatsApp code.
+    const reviewTestOtp = otpBlocked ? null : await reviewTestOtpFor(shop, phoneE164);
+    if (reviewTestOtp) {
+      const challengeId = await createReviewTestOtpChallenge({ shopId: shop.id, phoneE164, code: reviewTestOtp.code, expiresAt });
+      return withCors(
+        req,
+        NextResponse.json(
+          { ok: true, sent: true, success: true, otpSent: true, challengeId, phone: phoneE164, provider: WHATSAPP_OTP_PROVIDER, channel: "sms", smsFallbackAvailable: false },
+          { status: 200, headers: { "Cache-Control": "no-store" } }
+        )
+      );
+    }
 
     // WhatsApp first (no DLT, far cheaper than SMS). The shopper can still ask
     // for SMS explicitly (channel: "sms") when the WhatsApp code never arrives.

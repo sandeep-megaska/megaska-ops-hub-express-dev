@@ -17,6 +17,30 @@ type ShopDomainResolver = (shopId: string) => Promise<string | null>;
 type SubscriptionMutationResponse = { appSubscriptionCreate: { appSubscription: { id: string; status: string | null; lineItems: Array<{ id: string; plan: { pricingDetails: { __typename: string } } }> } | null; confirmationUrl: string | null; userErrors: Array<{ message?: string; code?: string }> } };
 type UsageMutationResponse = { appUsageRecordCreate: { appUsageRecord: { id: string } | null; userErrors: Array<{ message?: string; code?: string }> } };
 
+type AppSubscriptionNode = {
+  id: string; status: string; trialDays?: number | null;
+  lineItems?: Array<{ id: string; plan: { pricingDetails: { __typename: string; price?: { currencyCode: string } | null; cappedAmount?: { amount: string; currencyCode: string } | null } } }>;
+};
+export type AppSubscriptionStatus = {
+  id: string; status: string; trialDays: number;
+  recurringLineItemId: string | null; usageLineItemId: string | null;
+  /** Currency Shopify charges this subscription in (the store's billing currency or USD). */
+  chargeCurrency: string | null; usageCap: { amount: string; currency: string } | null;
+};
+const GET_SUBSCRIPTION = `query GetAppSubscription($id: ID!) { node(id: $id) { ... on AppSubscription { id status trialDays lineItems { id plan { pricingDetails { __typename ... on AppRecurringPricingDetails { price { currencyCode } } ... on AppUsagePricingDetails { cappedAmount { amount currencyCode } } } } } } } }`;
+export function toAppSubscriptionStatus(node: AppSubscriptionNode): AppSubscriptionStatus {
+  const items = node.lineItems ?? [];
+  const recurring = items.find((item) => item.plan.pricingDetails.__typename === "AppRecurringPricingDetails") ?? null;
+  const usage = items.find((item) => item.plan.pricingDetails.__typename === "AppUsagePricingDetails") ?? null;
+  const cap = usage?.plan.pricingDetails.cappedAmount ?? null;
+  return {
+    id: node.id, status: node.status, trialDays: Number(node.trialDays ?? 0) || 0,
+    recurringLineItemId: recurring?.id ?? null, usageLineItemId: usage?.id ?? null,
+    chargeCurrency: recurring?.plan.pricingDetails.price?.currencyCode ?? cap?.currencyCode ?? null,
+    usageCap: cap ? { amount: String(cap.amount), currency: cap.currencyCode } : null,
+  };
+}
+
 const CREATE_SUBSCRIPTION = `
 mutation CreateAppSubscription($name: String!, $returnUrl: URL!, $lineItems: [AppSubscriptionLineItemInput!]!, $trialDays: Int, $test: Boolean) {
   appSubscriptionCreate(name: $name, returnUrl: $returnUrl, lineItems: $lineItems, trialDays: $trialDays, test: $test) {
@@ -70,14 +94,16 @@ export class ShopifyBillingAdapter implements BillingProviderAdapter {
     // another currency (e.g. a USD-billed development store) gets the plan's USD price.
     const billingCurrency = await storeBillingCurrency(this.execute, shopDomain);
     const price = chargePrice({ amount: input.monthlyBasePrice, currency: planCurrency, usdAmount: input.usdMonthlyBasePrice }, billingCurrency);
-    if (!price || (price.currency !== planCurrency && input.cappedUsageAmount !== undefined)) {
+    // The usage cap has to be in the charge currency too.
+    const usageCap = input.cappedUsageAmount === undefined ? undefined : price?.currency === planCurrency ? input.cappedUsageAmount : (input.usdCappedUsageAmount ?? undefined);
+    if (!price || (input.cappedUsageAmount !== undefined && usageCap === undefined)) {
       throw new BillingProviderValidationError("BILLING_CURRENCY_UNSUPPORTED", `No ${billingCurrency ?? "matching"} price is configured for this plan.`);
     }
     const basePrice = decimal(price.amount, "monthlyBasePrice"); const code = price.currency;
     if (code !== planCurrency) this.logger.info("billing_charge_currency", { shopDomain, billingCurrency, chargeCurrency: code });
     const lineItems: unknown[] = [{ plan: { appRecurringPricingDetails: { price: { amount: basePrice.toString(), currencyCode: code }, interval: "EVERY_30_DAYS" } } }];
-    if (input.cappedUsageAmount !== undefined) {
-      const cap = decimal(input.cappedUsageAmount, "cappedUsageAmount");
+    if (usageCap !== undefined) {
+      const cap = decimal(usageCap, "cappedUsageAmount");
       lineItems.push({ plan: { appUsagePricingDetails: { cappedAmount: { amount: cap.toString(), currencyCode: code }, terms: "Rated LoopD2C feature usage" } } });
     }
     // Development stores only accept test charges; an explicit input.test wins.
@@ -95,12 +121,12 @@ export class ShopifyBillingAdapter implements BillingProviderAdapter {
     } catch (error) { return normalize(error); }
   }
 
-  async getAppSubscriptionStatus(input: { shopId: string; externalSubscriptionId: string }): Promise<{ id: string; status: string } | null> {
+  async getAppSubscriptionStatus(input: { shopId: string; externalSubscriptionId: string }): Promise<AppSubscriptionStatus | null> {
     const shopDomain = await this.resolveShopDomain(input.shopId);
     if (!shopDomain) throw new BillingProviderValidationError("SHOP_NOT_FOUND", "Shop was not found.");
     try {
-      const data = await this.execute<{ node: { id: string; status: string } | null }>(`query GetAppSubscription($id: ID!) { node(id: $id) { ... on AppSubscription { id status } } }`, { id: input.externalSubscriptionId }, { shopDomain });
-      return data.node ? { id: data.node.id, status: data.node.status } : null;
+      const data = await this.execute<{ node: AppSubscriptionNode | null }>(GET_SUBSCRIPTION, { id: input.externalSubscriptionId }, { shopDomain });
+      return data.node ? toAppSubscriptionStatus(data.node) : null;
     } catch (error) { return normalize(error); }
   }
 

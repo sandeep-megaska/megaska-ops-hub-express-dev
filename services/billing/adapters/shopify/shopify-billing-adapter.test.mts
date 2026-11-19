@@ -10,7 +10,8 @@ test("creates recurring and configured usage line items from commercial plan val
   const calls: Array<{ query: string; variables: Record<string, unknown>}> = [];
   const result = await adapter({ appSubscriptionCreate: { appSubscription: { id: "gid://shopify/AppSubscription/1", status: "PENDING", lineItems: [{ id: "rec", plan: { pricingDetails: { __typename: "AppRecurringPricingDetails" } } }, { id: "use", plan: { pricingDetails: { __typename: "AppUsagePricingDetails" } } }] }, confirmationUrl: "https://shopify.test/confirm", userErrors: [] } }, calls).createSubscription({ shopId: "shop-a", merchantSubscriptionId: "sub-a", planName: "Professional", returnUrl: "https://app.test/admin/billing/shopify/confirm?subscription=sub-a", currency: "inr", monthlyBasePrice: "4999.125", cappedUsageAmount: "9000.50", idempotencyKey: "shopify:subscription:sub-a:1" });
   assert.equal(result.recurringLineItemId, "rec"); assert.equal(result.usageLineItemId, "use");
-  const lines = calls[0].variables.lineItems as Array<{ plan: Record<string, unknown> }>;
+  // The adapter first looks up the store's billing currency and plan; read the mutation itself.
+  const lines = calls.find((call) => call.query.includes("appSubscriptionCreate"))!.variables.lineItems as Array<{ plan: Record<string, unknown> }>;
   assert.equal((lines[0].plan.appRecurringPricingDetails as { price: { amount: string; currencyCode: string } }).price.amount, "4999.125");
   assert.equal((lines[1].plan.appUsagePricingDetails as { cappedAmount: { currencyCode: string } }).cappedAmount.currencyCode, "INR");
 });
