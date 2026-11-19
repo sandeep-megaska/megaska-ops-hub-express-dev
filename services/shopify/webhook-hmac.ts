@@ -58,6 +58,31 @@ export function verifyShopifyWebhookHmac(rawBuffer: Buffer, hmacHeader: string):
   return false;
 }
 
+export type ShopifyWebhookSigner = "this-app" | "other-app" | null;
+
+/**
+ * Which app signed a webhook: "this-app" (this deployment's own SHOPIFY_API_SECRET),
+ * "other-app" (another configured secret in SHOPIFY_WEBHOOK_SECRET), or null (none).
+ *
+ * Destructive webhooks (app/uninstalled, shop/redact, customers/redact) must be
+ * acted on only when "this-app" signed them. Several apps can share one shop
+ * record here (an old and a new app during a move, staging, an ops app): an
+ * uninstall of one of them would otherwise erase the token of the app that is
+ * still installed, and its shop/redact 48 hours later would delete the store's
+ * customer data.
+ */
+export function identifyShopifyWebhookSigner(rawBuffer: Buffer, hmacHeader: string): ShopifyWebhookSigner {
+  const header = String(hmacHeader || "").trim();
+  if (!header) return null;
+  const sign = (secret: string) => crypto.createHmac("sha256", secret).update(rawBuffer).digest("base64");
+  const own = String(process.env.SHOPIFY_API_SECRET || "").trim();
+  if (own && safeEqual(sign(own), header)) return "this-app";
+  for (const secret of collectShopifyWebhookSecrets()) {
+    if (secret !== own && safeEqual(sign(secret), header)) return "other-app";
+  }
+  return null;
+}
+
 export interface ShopifyWebhookHmacDiagnostics {
   ok: boolean;
   /** How many distinct signing secrets are configured on this deployment. */
