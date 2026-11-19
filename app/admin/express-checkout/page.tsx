@@ -1,13 +1,11 @@
-import { ExpressCheckoutSettingsForm } from '../../../components/express-checkout/express-checkout-settings-form'
+import { redirect } from 'next/navigation'
 
-export default function ExpressCheckoutSettingsPage() {
-  return <main className="mk-page mx-auto max-w-3xl">
-    <header className="mk-page-header">
-      <div>
-        <h1 className="mk-page-title">Express Checkout</h1>
-        <p className="mk-page-subtitle">Manage checkout payment copy and charges.</p>
-      </div>
-    </header>
-    <ExpressCheckoutSettingsForm />
-  </main>
+// Moved to /admin/checkout ("Prepaid offer & COD"). Kept so old links still work.
+export default async function ExpressCheckoutRedirect({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const params = new URLSearchParams()
+  for (const [key, value] of Object.entries(await searchParams)) {
+    for (const item of Array.isArray(value) ? value : value === undefined ? [] : [value]) params.append(key, item)
+  }
+  const query = params.toString()
+  redirect(query ? `/admin/checkout?${query}` : '/admin/checkout')
 }
