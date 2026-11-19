@@ -101,10 +101,10 @@ export default function RootLayout({
             <div className="mk-shell">
               <aside className="mk-sidebar">
                 <div className="mk-brand">
-                  <div className="mk-brand-badge">L</div>
+                  {/* eslint-disable-next-line @next/next/no-img-element -- static SVG brand mark; no optimisation needed. */}
+                  <img className="mk-brand-badge" src="/brand/loopd2c-icon.svg" alt="" width={40} height={40} />
                   <div>
-                    <p className="mk-brand-title">LoopD2C</p>
-                    <p className="mk-brand-subtitle">Built from real D2C operations</p>
+                    <p className="mk-brand-title">Loop<span className="mk-brand-accent">D2C</span></p>
                     <p className="mk-brand-tagline">Shopify Commerce Experience Platform</p>
                   </div>
                 </div>

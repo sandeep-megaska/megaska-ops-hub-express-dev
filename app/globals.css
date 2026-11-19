@@ -108,7 +108,7 @@ textarea {
 }
 
 .mk-sidebar {
-  background: #0b1220;
+  background: #070b34;
   color: #fff;
   padding: 22px 16px;
   display: flex;
@@ -128,13 +128,17 @@ textarea {
 .mk-brand-badge {
   width: 40px;
   height: 40px;
-  border-radius: 12px;
-  display: grid;
-  place-items: center;
-  font-weight: 800;
-  color: #fff;
-  background: linear-gradient(135deg, #6366f1, #8b5cf6);
-  box-shadow: 0 8px 18px rgba(99, 102, 241, 0.35);
+  flex-shrink: 0;
+  border-radius: 22%;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.14), 0 8px 18px rgba(79, 139, 255, 0.25);
+}
+
+/* "D2C" in the LoopD2C loop gradient, as in the logo. */
+.mk-brand-accent {
+  background-image: linear-gradient(90deg, #3fe0cf 0%, #7fa6ff 50%, #a58bff 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 .mk-brand-title {
@@ -143,16 +147,10 @@ textarea {
   font-size: 15px;
 }
 
-.mk-brand-subtitle {
-  margin: 2px 0 0;
-  color: rgba(255, 255, 255, 0.66);
-  font-size: 12px;
-}
-
 .mk-brand-tagline {
-  margin: 1px 0 0;
-  color: rgba(255, 255, 255, 0.45);
-  font-size: 10px;
+  margin: 2px 0 0;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 11px;
 }
 
 .mk-nav {
