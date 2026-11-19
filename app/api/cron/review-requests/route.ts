@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "../../../../services/db/prisma.ts";
 import { ingestRecentlyDeliveredOrders } from "../../../../services/reviews/review-delivered-order-ingestion.ts";
 import { evaluateAndApplyReviewRequestEligibility } from "../../../../services/reviews/review-eligibility.ts";
+import { synchronizeDeliveredOrderReviewCandidatesBestEffort } from "../../../../services/reviews/review-delivery-integration.ts";
 import {
   expireReviewRequests,
   processDueReviewRequests,
@@ -15,6 +16,7 @@ export const maxDuration = 300;
 const PROMOTE_BATCH = 100;
 const SEND_BATCH = 25;
 const INGEST_BATCH = 20;
+const REPAIR_BATCH = 20;
 const DEFAULT_MAX_DELIVERY_AGE_DAYS = 30;
 
 // Vercel Cron invokes this on a schedule (see vercel.json) and, when CRON_SECRET
@@ -59,6 +61,37 @@ async function promoteWaitingRequests(now: Date) {
   return { scanned: waiting.length, eligible, failed };
 }
 
+// Delivered orders whose review requests never got their delivery date: the
+// post-delivery candidate sync failed for them (until the customer-id fix it
+// failed for every order), and ingestion skips orders already marked delivered,
+// so nothing else retries them. Newest first, within the email window.
+async function repairUnsyncedDeliveredOrders(deliveredAfter: Date) {
+  const stuck = await prisma.reviewRequest.findMany({
+    take: REPAIR_BATCH,
+    distinct: ["megaskaOrderId"],
+    where: {
+      status: "PENDING_ELIGIBILITY",
+      deliveredAtSnapshot: null,
+      megaskaOrder: { status: "DELIVERED", deliveredAt: { not: null, gte: deliveredAfter } },
+      shop: { reviewSettings: { is: { reviewsEnabled: true, automaticRequestsEnabled: true } } },
+    },
+    orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+    select: { shopId: true, megaskaOrderId: true, shop: { select: { shopDomain: true } } },
+  });
+  let repaired = 0;
+  let failed = 0;
+  for (const request of stuck) {
+    const outcome = await synchronizeDeliveredOrderReviewCandidatesBestEffort({
+      shopId: request.shopId,
+      megaskaOrderId: request.megaskaOrderId,
+      shopDomain: request.shop.shopDomain,
+    });
+    if (outcome.ok) repaired += 1;
+    else failed += 1;
+  }
+  return { scanned: stuck.length, repaired, failed };
+}
+
 async function run(req: NextRequest) {
   if (!isAuthorizedCron(req)) {
     return NextResponse.json({ ok: false, error: "Not found" }, { status: 404 });
@@ -68,6 +101,7 @@ async function run(req: NextRequest) {
   try {
     const recovered = await recoverStaleScheduledReviewRequests({ now });
     const ingested = await ingestRecentlyDeliveredOrders({ now, maxAgeDays: maxDeliveryAgeDays(), maxOrders: INGEST_BATCH });
+    const repaired = await repairUnsyncedDeliveredOrders(deliveredAfter);
     const promoted = await promoteWaitingRequests(now);
     const processed = await processDueReviewRequests({ now, limit: SEND_BATCH, deliveredAfter });
     const expired = await expireReviewRequests({ now });
@@ -77,6 +111,8 @@ async function run(req: NextRequest) {
       deliveredOrdersDeferred: ingested.deferred,
       deliveredOrdersSkippedNoCustomer: ingested.skippedNoCustomer,
       deliveredOrderFailures: ingested.failed,
+      unsyncedOrdersRepaired: repaired.repaired,
+      unsyncedOrderRepairFailures: repaired.failed,
       promoted: promoted.eligible,
       promoteFailures: promoted.failed,
       scanned: processed.scanned,
