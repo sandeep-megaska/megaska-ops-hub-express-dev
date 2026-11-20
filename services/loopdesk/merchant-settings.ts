@@ -813,7 +813,7 @@ export function normalizeLoopDeskMerchantSettings(
         labels.expressCheckoutText ??
           labels.buttonText ??
           labels.checkoutButtonText,
-        "Express Checkout",
+        "Checkout",
         80,
       ),
       viewCartText: text(labels.viewCartText, "View Cart", 80),
