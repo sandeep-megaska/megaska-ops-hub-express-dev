@@ -730,6 +730,7 @@ textarea {
 
 .mk-hero-title {
   margin: 0;
+  color: #fff;
   font-size: 30px;
   font-weight: 800;
   letter-spacing: -0.03em;
@@ -779,6 +780,101 @@ textarea {
   background: rgba(255, 255, 255, 0.9);
 }
 
+/* Home page header: welcome text on the left, setup progress on the right. */
+.mk-hero-compact {
+  padding: 24px 28px;
+  background: radial-gradient(900px 320px at 100% -20%, rgba(79, 139, 255, 0.35), transparent 60%),
+    linear-gradient(135deg, #070b34, #1a2366);
+}
+
+.mk-hero-compact .mk-hero-title {
+  font-size: 26px;
+  margin-top: 4px;
+}
+
+.mk-hero-compact .mk-hero-tagline {
+  margin: 0;
+}
+
+.mk-hero-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 480px);
+  gap: 24px;
+  align-items: center;
+}
+
+.mk-setup {
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  padding: 14px 16px;
+}
+
+.mk-setup .mk-hero-actions {
+  margin-top: 10px;
+  gap: 8px;
+}
+
+.mk-setup .mk-btn {
+  min-height: 34px;
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+.mk-setup-head {
+  display: grid;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.mk-setup-bar {
+  display: block;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.15);
+  overflow: hidden;
+}
+
+.mk-setup-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #16e7d2, #4f8bff, #7b4dff);
+}
+
+.mk-setup-steps {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.mk-setup-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+  text-decoration: none;
+}
+
+.mk-setup-step:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.mk-setup-step.is-done {
+  color: #9ef5ea;
+  background: rgba(22, 231, 210, 0.12);
+}
+
 /* -------------------------------------------------------------- Responsive */
 
 @media (max-width: 1100px) {
@@ -818,6 +914,10 @@ textarea {
 
   .mk-hero {
     padding: 24px;
+  }
+
+  .mk-hero-row {
+    grid-template-columns: 1fr;
   }
 
   .mk-page-title {
