@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1200" width="1200" height="1200" role="img" aria-label="LoopD2C">
+<defs>
+<linearGradient id="rbg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#121A6E"/><stop offset="1" stop-color="#060A33"/></linearGradient>
+<linearGradient id="rloop" x1="240" y1="0" x2="960" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#16E7D2"/><stop offset="0.5" stop-color="#4F8BFF"/><stop offset="1" stop-color="#7B4DFF"/></linearGradient>
+</defs>
+<rect width="1200" height="1200" rx="264" fill="url(#rbg)"/>
+<path d="M 600 600 C 655 740 750 815 840 790 C 915 770 945 690 945 600 C 945 510 915 430 840 410 C 750 385 655 460 600 600 C 545 740 450 815 360 790 C 285 770 255 690 255 600 C 255 510 285 430 360 410 C 450 385 545 460 600 600 Z" fill="none" stroke="url(#rloop)" stroke-width="104" stroke-linejoin="round"/>
+<circle cx="921" cy="479" r="94" fill="#060A33"/><circle cx="921" cy="479" r="62" fill="#FFFFFF"/>
+</svg>
