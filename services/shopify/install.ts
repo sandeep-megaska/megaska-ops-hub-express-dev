@@ -16,7 +16,7 @@ export { ShopInstallError };
   creates or reactivates the row. The OAuth callback stores tokens the same way.
 */
 
-const ADMIN_API_VERSION = "2026-01";
+const ADMIN_API_VERSION = "2026-04";
 
 function normalizeHost(input: string | null | undefined) {
   return String(input || "").trim().replace(/^https?:\/\//, "").replace(/\/.*$/, "").toLowerCase();
