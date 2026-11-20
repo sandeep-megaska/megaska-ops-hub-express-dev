@@ -300,7 +300,7 @@ test("validates merchant settings admin patch fields", () => {
     labels: { expressCheckoutText: "x".repeat(81) },
   });
   assert.match(errors.join(" "), /Primary color/);
-  assert.match(errors.join(" "), /Logo URL/);
+  assert.match(errors.join(" "), /Logo: upload the image here/);
   assert.match(errors.join(" "), /Drawer mode/);
   assert.match(errors.join(" "), /Open after add to cart/);
   assert.match(errors.join(" "), /Express checkout text/);
@@ -591,7 +591,7 @@ test("validates and preserves saved OTP modal promotional copy", () => {
   const current = normalizeLoopDeskMerchantSettings({}, { shopName: "Megaska", shopDomain: "megaska.myshopify.com" });
   const merged = mergeLoopDeskMerchantSettings(current, {
     otpModalBranding: {
-      logoUrl: "https://cdn.shopify.com/logo.png",
+      logoUrl: "https://cdn.shopify.com/s/files/1/0001/files/logo.png",
       promotionEnabled: true,
       promotionBadgeText: "15% OFF",
       promotionMessage: "Use Code: MEGA15",
@@ -599,7 +599,7 @@ test("validates and preserves saved OTP modal promotional copy", () => {
       successMessage: "Welcome back!",
     },
   });
-  assert.equal(merged.otpModalBranding.logoUrl, "https://cdn.shopify.com/logo.png");
+  assert.equal(merged.otpModalBranding.logoUrl, "https://cdn.shopify.com/s/files/1/0001/files/logo.png");
   assert.equal(merged.otpModalBranding.promotionEnabled, true);
   assert.equal(merged.otpModalBranding.promotionBadgeText, "15% OFF");
   assert.equal(merged.otpModalBranding.promotionMessage, "Use Code: MEGA15");
@@ -609,8 +609,17 @@ test("validates and preserves saved OTP modal promotional copy", () => {
   const errors = validateLoopDeskMerchantSettingsPatch({
     otpModalBranding: { logoUrl: "http://example.com/logo.png", heading: "x".repeat(121), promotionEnabled: "yes", successMessage: "x".repeat(161) },
   });
-  assert.match(errors.join(" "), /OTP modal logo URL must use https/);
+  assert.match(errors.join(" "), /OTP modal logo: upload the image here/);
   assert.match(errors.join(" "), /OTP modal heading/);
   assert.match(errors.join(" "), /Show promotional banner/);
   assert.match(errors.join(" "), /OTP success message/);
+});
+
+test("logos must be uploaded to Shopify Files: other websites are refused and dropped", async () => {
+  const { isShopifyHostedImageUrl } = await import("./merchant-settings.ts");
+  assert.equal(isShopifyHostedImageUrl("https://cdn.shopify.com/s/files/1/0001/files/logo.png"), true);
+  assert.equal(isShopifyHostedImageUrl("https://images.example.com/logo.png"), false);
+  assert.equal(isShopifyHostedImageUrl("http://cdn.shopify.com/s/files/1/logo.png"), false, "https only");
+  assert.equal(isShopifyHostedImageUrl("https://cdn.shopify.com.evil.example/s/files/logo.png"), false);
+  assert.equal(isShopifyHostedImageUrl("data:image/png;base64,AAAA"), false);
 });

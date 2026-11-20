@@ -244,33 +244,21 @@ function radius(value: unknown, fallback: string) {
   const next = typeof value === "string" ? value.trim() : "";
   return RADIUS_RE.test(next) ? next : fallback;
 }
-function url(value: unknown) {
-  const next = nullableText(value, 800);
-  if (!next) return null;
-  if (
-    /^data:image\/(png|gif|jpe?g|webp|svg\+xml);base64,[a-z0-9+/=\s]+$/i.test(
-      next,
-    )
-  )
-    return next;
+// Logos are uploaded to the store's Shopify Files (Merchant Settings → Upload), so they
+// are served by Shopify's CDN. Links to other websites aren't accepted: storefront apps
+// may only load from servers they declare (network access), and a merchant's own image
+// host can't be declared for every store.
+export function isShopifyHostedImageUrl(value: string) {
   try {
-    const parsed = new URL(next);
-    return parsed.protocol === "http:" || parsed.protocol === "https:"
-      ? next
-      : null;
+    const parsed = new URL(value);
+    return parsed.protocol === "https:" && parsed.hostname === "cdn.shopify.com" && parsed.pathname.startsWith("/s/files/");
   } catch {
-    return null;
+    return false;
   }
 }
-function httpsUrl(value: unknown) {
+function shopifyImageUrl(value: unknown) {
   const next = nullableText(value, 800);
-  if (!next) return null;
-  try {
-    const parsed = new URL(next);
-    return parsed.protocol === "https:" ? next : null;
-  } catch {
-    return null;
-  }
+  return next && isShopifyHostedImageUrl(next) ? next : null;
 }
 function email(value: unknown) {
   const next = text(value, "", 254);
@@ -623,33 +611,13 @@ export function validateLoopDeskMerchantSettingsPatch(
     if (typeof value !== "string" || !COLOR_RE.test(value.trim()))
       errors.push(`${label} must be a valid hex, rgb/rgba, or hsl/hsla color.`);
   };
-  const validateUrl = (value: unknown, label: string, options: { httpsOnly?: boolean } = {}) => {
+  const validateShopifyImage = (value: unknown, label: string) => {
     if (value === undefined || value === null || value === "") return;
-    if (typeof value !== "string") {
-      errors.push(`${label} must be a URL.`);
-      return;
-    }
-    const next = value.trim();
-    if (next.length > 800) {
-      errors.push(`${label} must be 800 characters or fewer.`);
-      return;
-    }
-    if (
-      /^data:image\/(png|gif|jpe?g|webp|svg\+xml);base64,[a-z0-9+/=\s]+$/i.test(
-        next,
-      )
-    )
-      return;
-    try {
-      const parsed = new URL(next);
-      if (options.httpsOnly && parsed.protocol !== "https:")
-        errors.push(`${label} must use https.`);
-      else if (parsed.protocol !== "http:" && parsed.protocol !== "https:")
-        errors.push(`${label} must use http or https.`);
-    } catch {
-      errors.push(`${label} must be a valid URL.`);
+    if (typeof value !== "string" || !isShopifyHostedImageUrl(value.trim())) {
+      errors.push(`${label}: upload the image here; links to other websites aren't accepted.`);
     }
   };
+
   const general = isRecord(raw.general) ? raw.general : {};
   const branding = isRecord(raw.branding) ? raw.branding : {};
   const labels = isRecord(raw.labels) ? raw.labels : {};
@@ -669,7 +637,7 @@ export function validateLoopDeskMerchantSettingsPatch(
     errors.push("Support email must be a valid email address.");
   validateText(general.supportPhone, "Support phone", 40);
   validateText(general.supportWhatsApp, "Support WhatsApp", 40);
-  validateUrl(branding.logoUrl, "Logo URL");
+  validateShopifyImage(branding.logoUrl, "Logo");
   validateColor(branding.primaryColor, "Primary color");
   validateColor(branding.secondaryColor, "Secondary color");
   validateColor(branding.accentColor, "Accent color");
@@ -778,7 +746,7 @@ export function validateLoopDeskMerchantSettingsPatch(
       errors.push("At most 100 excluded-category keywords are allowed.");
     }
   }
-  validateUrl(otpModalBranding.logoUrl, "OTP modal logo URL", { httpsOnly: true });
+  validateShopifyImage(otpModalBranding.logoUrl, "OTP modal logo");
   validateText(otpModalBranding.logoAlt, "OTP modal logo alt text", 120);
   validateText(otpModalBranding.fallbackBrandText, "OTP modal fallback brand text", 120);
   validateText(otpModalBranding.heading, "OTP modal heading", 120);
@@ -835,7 +803,7 @@ export function normalizeLoopDeskMerchantSettings(
     branding: {
       merchantName,
       storeName,
-      logoUrl: url(branding.logoUrl),
+      logoUrl: shopifyImageUrl(branding.logoUrl),
       primaryColor: color(branding.primaryColor, "#111827"),
       secondaryColor: color(branding.secondaryColor, "#374151"),
       accentColor: color(branding.accentColor, "#2563eb"),
@@ -923,7 +891,7 @@ export function normalizeLoopDeskMerchantSettings(
         : [...EXCLUDED_CATEGORY_KEYWORDS],
     },
     otpModalBranding: {
-      logoUrl: httpsUrl(otpModalBranding.logoUrl),
+      logoUrl: shopifyImageUrl(otpModalBranding.logoUrl),
       logoAlt: text(otpModalBranding.logoAlt, merchantName || storeName, 120),
       fallbackBrandText: text(otpModalBranding.fallbackBrandText, storeName || "Secure Login", 120),
       heading: text(otpModalBranding.heading, "Login or Signup", 120),
