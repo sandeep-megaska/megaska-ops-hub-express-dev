@@ -1,5 +1,3 @@
-import { existsSync, readFileSync } from "node:fs";
-import path from "node:path";
 import { prisma } from "../db/prisma";
 import { getGstInvoiceById } from "./invoice";
 import { getGstNoteById } from "./notes";
@@ -8,6 +6,7 @@ import { getGstStatePrimaryNameByCode, resolveGstStateCode } from "./state-codes
 import { buildGstInvoiceHtml } from "./invoice-html";
 import type { GstServiceResult } from "./types";
 import { gstPerfLog, gstPerfNow } from "./perf";
+import { isShopifyHostedImageUrl } from "../shopify/hosted-image.ts";
 import {
   isGstInvoicePaperSize,
   resolveGstInvoiceTemplateConfig,
@@ -160,14 +159,6 @@ function buildAddressLines(source: Record<string, unknown>): string[] {
 
   return [line1, line2, [city, state].filter(Boolean).join(", "), [pincode, country].filter(Boolean).join(", ")]
     .filter(Boolean);
-}
-
-function publicAssetUrl(path: string): string {
-  const base =
-    process.env.NEXT_PUBLIC_APP_URL ||
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "");
-
-  return base ? `${base.replace(/\/$/, "")}${path}` : path;
 }
 
 function numberToWords(value: number): string {
@@ -414,27 +405,6 @@ function getInvoicePartyDetails(document: Record<string, unknown>): {
   };
 }
 
-function inferMimeType(filePath: string): string {
-  const ext = path.extname(filePath).toLowerCase();
-  if (ext === ".png") return "image/png";
-  if (ext === ".jpg" || ext === ".jpeg") return "image/jpeg";
-  if (ext === ".webp") return "image/webp";
-  if (ext === ".avif") return "image/avif";
-  if (ext === ".svg") return "image/svg+xml";
-  return "application/octet-stream";
-}
-
-function fileToDataUrl(filePath: string): string | null {
-  try {
-    const absolute = path.join(process.cwd(), "public", filePath.replace(/^\//, ""));
-    if (!existsSync(absolute)) return null;
-    const bytes = readFileSync(absolute);
-    return `data:${inferMimeType(filePath)};base64,${bytes.toString("base64")}`;
-  } catch {
-    return null;
-  }
-}
-
 type LogoResolutionResult = {
   src: string | null;
   configured: boolean;
@@ -453,7 +423,9 @@ type LogoResolutionResult = {
 const LOGO_DATA_URL_CACHE_TTL_MS = 30 * 60 * 1000;
 const logoDataUrlCache = new Map<string, { dataUrl: string; expiresAt: number }>();
 
-async function resolveInvoiceLogoForPdf(customUrl: unknown, fallbackPath: string): Promise<LogoResolutionResult> {
+// No built-in fallback image: without a usable logo the invoice prints the supplier's
+// trade name, so one merchant's brand can never appear on another merchant's invoice.
+async function resolveInvoiceLogoForPdf(customUrl: unknown): Promise<LogoResolutionResult> {
   const custom = typeof customUrl === "string" ? customUrl.trim() : "";
   const configured = Boolean(custom);
   if (custom.startsWith("data:image/")) {
@@ -462,13 +434,9 @@ async function resolveInvoiceLogoForPdf(customUrl: unknown, fallbackPath: string
   if (custom.startsWith("blob:")) {
     return { src: null, configured, resolvedConfiguredAsset: false, usedFallback: false, fallbackResolved: false, sourceType: "blob" };
   }
-  if (custom.startsWith("/")) {
-    const localData = fileToDataUrl(custom);
-    if (localData) {
-      return { src: localData, configured, resolvedConfiguredAsset: true, usedFallback: false, fallbackResolved: false, sourceType: "local" };
-    }
-  }
-  if (custom) {
+  // Only the store's own Shopify Files: older saved values (app-local uploads, other
+  // hosts) print the trade name instead.
+  if (custom && isShopifyHostedImageUrl(custom)) {
     const remoteSourceType = custom.startsWith("/") ? "local" : "remote";
     const cached = logoDataUrlCache.get(custom);
     if (cached && cached.expiresAt > Date.now()) {
@@ -483,7 +451,7 @@ async function resolveInvoiceLogoForPdf(customUrl: unknown, fallbackPath: string
     const logoController = new AbortController();
     const logoTimer = setTimeout(() => logoController.abort(), 4000);
     try {
-      const response = await fetch(publicAssetUrl(custom), { cache: "no-store", signal: logoController.signal });
+      const response = await fetch(custom, { cache: "no-store", signal: logoController.signal });
       if (response.ok) {
         const mime = response.headers.get("content-type") || "image/png";
         const buffer = Buffer.from(await response.arrayBuffer());
@@ -496,8 +464,7 @@ async function resolveInvoiceLogoForPdf(customUrl: unknown, fallbackPath: string
     }
   }
 
-  const fallback = fileToDataUrl(fallbackPath);
-  return { src: fallback, configured, resolvedConfiguredAsset: false, usedFallback: true, fallbackResolved: Boolean(fallback), sourceType: configured ? (custom.startsWith("/") ? "local" : "remote") : "none" };
+  return { src: null, configured, resolvedConfiguredAsset: false, usedFallback: false, fallbackResolved: false, sourceType: configured ? (custom.startsWith("/") ? "local" : "remote") : "none" };
 }
 export async function buildGstInvoiceRenderModel(gstDocumentId: string): Promise<GstServiceResult<GstInvoiceRenderModel>> {
   const renderModelStartedAtMs = gstPerfNow();
@@ -569,8 +536,8 @@ export async function buildGstInvoiceRenderModel(gstDocumentId: string): Promise
   const totalValue = Number(doc.totalAmount || 0);
 
   const [headerLogo, footerLogo] = await Promise.all([
-    resolveInvoiceLogoForPdf(themeConfig.headerLogoUrl, "/logos/header-logo.png"),
-    resolveInvoiceLogoForPdf(themeConfig.footerLogoUrl, "/logos/footer-logo.png"),
+    resolveInvoiceLogoForPdf(themeConfig.headerLogoUrl),
+    resolveInvoiceLogoForPdf(themeConfig.footerLogoUrl),
   ]);
   const headerLogoSrc = templateConfig.showHeaderLogo ? headerLogo.src : null;
   const footerLogoSrc = templateConfig.showFooterLogo ? footerLogo.src : null;

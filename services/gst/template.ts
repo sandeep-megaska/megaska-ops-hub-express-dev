@@ -1,6 +1,18 @@
 import type { GstServiceResult } from "./types";
 import { gstDb } from "./db";
 import { getActiveGstSettings } from "./settings";
+import { isShopifyHostedImageUrl } from "../shopify/hosted-image.ts";
+
+/** Keeps invoice logo URLs only when they point at the store's own Shopify Files. */
+export function sanitizeInvoiceThemeConfig(themeConfig: Record<string, unknown> | null | undefined): Record<string, unknown> | null {
+  if (!themeConfig) return null;
+  const next = { ...themeConfig };
+  for (const key of ["headerLogoUrl", "footerLogoUrl"]) {
+    const value = typeof next[key] === "string" ? String(next[key]).trim() : "";
+    next[key] = value && isShopifyHostedImageUrl(value) ? value : null;
+  }
+  return next;
+}
 
 type TemplateDbClient = {
   gstSettings: {
@@ -275,7 +287,7 @@ export async function createTemplate(input: CreateTemplateInput): Promise<GstSer
           declarationText: input.declarationText ?? null,
           notesText: input.notesText ?? null,
           logoFileUrl: input.logoFileUrl ?? null,
-          themeConfig: input.themeConfig ?? null,
+          themeConfig: sanitizeInvoiceThemeConfig(input.themeConfig),
           version: 1,
         },
       });
@@ -328,7 +340,7 @@ export async function updateTemplate(
           declarationText: patch.declarationText !== undefined ? patch.declarationText : undefined,
           notesText: patch.notesText !== undefined ? patch.notesText : undefined,
           logoFileUrl: patch.logoFileUrl !== undefined ? patch.logoFileUrl : undefined,
-          themeConfig: patch.themeConfig !== undefined ? patch.themeConfig : undefined,
+          themeConfig: patch.themeConfig !== undefined ? sanitizeInvoiceThemeConfig(patch.themeConfig) : undefined,
           version: { increment: 1 },
         },
       });
