@@ -121,6 +121,9 @@ export default function RootLayout({
                     <AdminNavLink href="/admin/promotions" className="mk-nav-link">
                       Promotions
                     </AdminNavLink>
+                    <AdminNavLink href="/admin/checkout" className="mk-nav-link">
+                      Prepaid offer &amp; COD
+                    </AdminNavLink>
                     <AdminNavLink href="/admin/billing" className="mk-nav-link">
                       Billing
                     </AdminNavLink>
