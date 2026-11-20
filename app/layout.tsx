@@ -13,15 +13,16 @@ export default function RootLayout({
     <html lang="en">
       <head>
         <meta name="shopify-api-key" content={process.env.SHOPIFY_API_KEY || ""} />
+        {/* App Store requirement 2.2.3: App Bridge is the first script in <head>. */}
+        {/* eslint-disable-next-line @next/next/no-sync-scripts -- Shopify App Bridge CDN must be server-rendered in the initial admin document head. */}
+        <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>
         {/*
-          Persist shop + host from the initial Admin URL SYNCHRONOUSLY, before
-          App Bridge boots. App Bridge strips shop/host from the iframe URL once
-          it initializes, so a data fetch that reads window.location.search a beat
-          later finds no shop and the server (which resolves the shop only from
-          the request URL / referer) answers 404 — the page then renders blank
-          until a manual refresh reloads Shopify's original URL. Capturing here,
-          ahead of the app-bridge script tag, guarantees the shop is saved while
-          it is still on the URL; client fetches fall back to this stored value.
+          Persist shop + host SYNCHRONOUSLY, right after App Bridge loads. App
+          Bridge can strip shop/host from the iframe URL once it initializes, so a
+          data fetch that reads window.location.search a beat later may find no
+          shop, and the server (which resolves the shop only from the request URL /
+          referer) answers 404. This reads the URL first and falls back to App
+          Bridge's own shopify.config, which carries the same shop and host.
         */}
         <script
           id="shopify-context-capture"
@@ -30,11 +31,12 @@ export default function RootLayout({
               (function () {
                 try {
                   var params = new URLSearchParams(window.location.search);
-                  var shop = (params.get("shop") || params.get("shopify_shop") || "").trim().toLowerCase();
+                  var config = (window.shopify && window.shopify.config) || {};
+                  var shop = (params.get("shop") || params.get("shopify_shop") || config.shop || "").trim().toLowerCase();
                   if (!shop) return;
                   window.sessionStorage.setItem("megaska:shopify-shop", shop);
                   window.localStorage.setItem("megaska:shopify-shop", shop);
-                  var host = (params.get("host") || "").trim();
+                  var host = (params.get("host") || config.host || "").trim();
                   if (host) {
                     var key = "megaska:shopify-host:" + shop;
                     window.sessionStorage.setItem(key, host);
@@ -92,8 +94,6 @@ export default function RootLayout({
             `,
           }}
         />
-        {/* eslint-disable-next-line @next/next/no-sync-scripts -- Shopify App Bridge CDN must be server-rendered in the initial admin document head. */}
-        <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>
       </head>
       <body>
         <Suspense fallback={<div className="mk-shell" />}>
