@@ -1,4 +1,5 @@
 import { revalidatePath } from "next/cache";
+import { LogoUploadField } from "../../../components/merchant-settings/logo-upload-field";
 import WhatsAppTemplateAlert from "../../../components/WhatsAppTemplateAlert";
 import { redirect } from "next/navigation";
 import {
@@ -611,7 +612,7 @@ export default async function MerchantSettingsPage({
         <section id="branding" className={`${cardClass} grid gap-5`}>
           <SectionHeader title="Branding" description="Safe public styling values used by the drawer and runtime config." />
           <div className="grid gap-4 md:grid-cols-2">
-            <Field label="Logo URL" name="logoUrl" defaultValue={settings.branding.logoUrl} placeholder="https://cdn.shopify.com/..." help="HTTP(S) image URL only; secrets are never stored here." />
+            <LogoUploadField label="Logo" name="logoUrl" defaultValue={settings.branding.logoUrl} help="Shown in the bag and storefront widgets. PNG, JPG, WebP or GIF, up to 2 MB; saved to your Shopify Files." />
             <Field label="Primary color" name="primaryColor" defaultValue={settings.branding.primaryColor} placeholder="#111827" help="Hex, rgb/rgba, or hsl/hsla." />
             <Field label="Secondary color" name="secondaryColor" defaultValue={settings.branding.secondaryColor} placeholder="#374151" help="Used for supporting UI accents." />
             <Field label="Accent color" name="accentColor" defaultValue={settings.branding.accentColor} placeholder="#2563eb" help="Used for highlight actions." />
@@ -721,10 +722,10 @@ export default async function MerchantSettingsPage({
         <section id="otp-modal-branding" className={`${cardClass} grid gap-5`}>
           <SectionHeader title="OTP Modal Branding & Content" description="Presentation-only OTP modal settings. These values do not change OTP logic, authentication, sessions, checkout continuation, or discount rules." />
           <div className="mk-alert mk-alert-info">
-            Use your store logo URL or upload/select a logo supported by the existing admin asset workflow. Promotional copy is display-only and is not coupled to active promotion rules or discount codes.
+            Upload your logo below; it is saved to your Shopify Files. Promotional copy is display-only and is not coupled to active promotion rules or discount codes.
           </div>
           <div className="grid gap-4 md:grid-cols-2">
-            <Field label="Logo URL" name="otpLogoUrl" defaultValue={settings.otpModalBranding.logoUrl} placeholder="https://cdn.shopify.com/..." help="Optional app-hosted, Shopify CDN, or secure HTTPS image URL." />
+            <LogoUploadField label="Login pop-up logo" name="otpLogoUrl" defaultValue={settings.otpModalBranding.logoUrl} help="Optional. PNG, JPG, WebP or GIF, up to 2 MB; saved to your Shopify Files." />
             <Field label="Logo alt text" name="otpLogoAlt" defaultValue={settings.otpModalBranding.logoAlt} help="Optional; defaults to the merchant/shop name." />
             <Field label="Fallback brand text" name="otpFallbackBrandText" defaultValue={settings.otpModalBranding.fallbackBrandText} help="Shown if the image is missing or fails. Defaults to the Shopify shop name, then Secure Login." />
             <Field label="Modal heading" name="otpHeading" defaultValue={settings.otpModalBranding.heading} />

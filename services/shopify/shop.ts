@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { prisma } from "../db/prisma";
 import { decryptShopifyToken, encryptShopifyToken } from "./token-crypto";
+import { getFreshShopAccessToken } from "./offline-token";
 
 export type ResolvedShopConfig = {
   id: string | null;
@@ -129,10 +130,11 @@ export async function resolveShopConfig(
   if (normalizedPreferred) {
     const shop = await getShopByDomain(normalizedPreferred);
     if (shop) {
+      const fresh = await getFreshShopAccessToken(shop.shopDomain);
       return {
         id: shop.id,
         shopDomain: shop.shopDomain,
-        accessToken: shop.accessToken || decryptShopifyToken(shop.accessTokenEncrypted),
+        accessToken: fresh?.accessToken || shop.accessToken || decryptShopifyToken(shop.accessTokenEncrypted),
         storefrontAccessToken: shop.storefrontAccessToken || decryptShopifyToken(shop.storefrontTokenEncrypted),
       };
     }
