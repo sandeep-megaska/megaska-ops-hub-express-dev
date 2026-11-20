@@ -34,6 +34,15 @@ api_version = "2026-04"
   compliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]
   uri = "https://loopd2c-partner.vercel.app/api/webhooks/compliance"
 
+# Network access declaration (required for storefront apps: Shopify rejects deploys and
+# App Store submissions without it from 1 December 2026). List every server that LoopD2C
+# code loads from or calls on storefront or admin pages, except Shopify itself, the app
+# proxy (served from the store's own domain) and theme app extension assets.
+# Today that is only the app server: the review page opened through the app proxy loads
+# its CSS and JS from it. Both the current and the post-cutover app URL are listed.
+[network_access]
+allowed_sources = ["https://loopd2c-partner.vercel.app", "https://app.loopd2c.com"]
+
 [access_scopes]
 # read_all_orders: granted by Shopify (Dev Dashboard → Settings → Access requests).
 scopes = "read_app_proxy,read_customers,read_discounts,read_draft_orders,read_all_orders,read_orders,read_products,unauthenticated_read_checkouts,unauthenticated_read_product_listings,unauthenticated_write_checkouts,write_app_proxy,write_customers,write_discounts,read_gift_cards,write_gift_cards,write_gift_card_transactions,write_draft_orders,write_orders,write_payment_customizations,read_merchant_managed_fulfillment_orders,write_merchant_managed_fulfillment_orders"
