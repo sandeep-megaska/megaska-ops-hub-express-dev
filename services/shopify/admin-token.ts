@@ -1,5 +1,6 @@
 import { normalizeShopDomain } from "./shop-resolver";
 import { decryptShopifyToken } from "./token-crypto";
+import { getFreshShopAccessToken } from "./offline-token";
 
 export type ShopifyAdminTokenSource =
   | "runtime_client_credentials"
@@ -151,6 +152,12 @@ export async function resolveShopifyAdminAccessToken(
         error: error instanceof Error ? error.message : "unknown_error",
       });
     }
+  }
+
+  // Expiring offline tokens are refreshed (and legacy ones migrated) before use.
+  if (shopDomain && (input.storedAccessToken || input.storedAccessTokenEncrypted)) {
+    const fresh = await getFreshShopAccessToken(shopDomain);
+    if (fresh) return { accessToken: fresh.accessToken, tokenSource: "encrypted_shop_stored_token", expiresAt: fresh.expiresAt ? fresh.expiresAt.getTime() : null };
   }
 
   const storedToken = resolveStoredToken(input);

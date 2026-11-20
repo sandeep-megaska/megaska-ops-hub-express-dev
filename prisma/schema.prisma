@@ -76,6 +76,9 @@ model Shop {
   checkoutEnabled          Boolean   @default(false)
   tokenExpiresAt           DateTime?
   tokenRotationRequiredAt  DateTime?
+  // Expiring offline tokens: refresh token (encrypted) and its expiry. See services/shopify/offline-token.ts.
+  refreshTokenEncrypted    String?
+  refreshTokenExpiresAt    DateTime?
 
   customers                     CustomerProfile[]
   otpChallenges                 OTPChallenge[]

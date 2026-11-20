@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { persistShopInstallation } from "../../../../services/shopify/install";
+import { parseOfflineTokenGrant, type OfflineTokenGrant } from "../../../../services/shopify/token-exchange";
 
 const SHOPIFY_API_KEY = process.env.SHOPIFY_API_KEY!;
 const SHOPIFY_API_SECRET = process.env.SHOPIFY_API_SECRET!;
@@ -51,7 +52,8 @@ export async function GET(request: NextRequest) {
   const tokenRes = await fetch(`https://${shop}/admin/oauth/access_token`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ client_id: SHOPIFY_API_KEY, client_secret: SHOPIFY_API_SECRET, code }),
+    // expiring: 1 → an expiring offline token with a refresh token (required for new public apps).
+    body: JSON.stringify({ client_id: SHOPIFY_API_KEY, client_secret: SHOPIFY_API_SECRET, code, expiring: 1 }),
   });
 
   if (!tokenRes.ok) {
@@ -60,13 +62,16 @@ export async function GET(request: NextRequest) {
   }
 
   const tokenData = await tokenRes.json();
-  const accessToken = String(tokenData.access_token || "").trim();
-  const scopes = String(tokenData.scope || tokenData.scopes || "").trim() || null;
-
-  if (!accessToken) return NextResponse.json({ error: "No access token returned" }, { status: 500 });
+  let grant: OfflineTokenGrant;
+  try {
+    grant = parseOfflineTokenGrant(tokenData, Date.now());
+  } catch {
+    return NextResponse.json({ error: "No access token returned" }, { status: 500 });
+  }
+  const scopes = grant.scopes || String(tokenData.scopes || "").trim() || null;
 
   try {
-    await persistShopInstallation({ shopDomain: shop, accessToken, scopes });
+    await persistShopInstallation({ shopDomain: shop, ...grant, scopes });
   } catch (error) {
     console.error("[SHOPIFY OAUTH CALLBACK] shop persistence failed after token exchange", {
       requestShop: shop,
