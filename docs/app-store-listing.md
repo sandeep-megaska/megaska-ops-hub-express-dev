@@ -1,12 +1,13 @@
-# LoopD2C — Shopify App Store listing and reviewer instructions (draft)
+# LoopD2C — Shopify App Store listing and reviewer instructions
 
 Text to paste into Partner Dashboard → Apps → LoopD2C → Distribution → App
 listing. Character limits are what the form showed when this was drafted; the
 form's counter is the authority. Everything below describes what the app does
 today. Keep it that way: no numbers, ratings or results we can't show.
 
-Items marked **[DECIDE]** need a decision before submission. Items marked
-**[FIX]** need a code change before submission (see the end).
+Status: final. All open decisions and pre-submission fixes are done (see the
+end). Values in angle brackets, like <your code>, are filled in only in the
+submission form.
 
 ---
 
@@ -21,8 +22,8 @@ corners; Shopify rounds them).
 **Primary category**: Store design → Cart customization *(or the closest
 "Cart" category offered)*
 **Secondary category**: Orders and shipping → Returns and exchanges
-**[DECIDE]** Shopify lets you tag category features afterwards; tick only the
-ones LoopD2C does.
+Shopify also asks you to tick category features: tick only the ones LoopD2C
+does.
 
 **Languages**: English
 **Works with**: Shopify Checkout, Shopify Functions, Delhivery, WhatsApp
@@ -67,8 +68,7 @@ Listing text:
 
 The app charges exactly this (`services/billing/plans/plan-lifecycle.ts`:
 `BILLING_TRIAL_DAYS`, `USAGE_CAP_PER_30_DAYS`).
-**[DECIDE]** The website pricing page still says "pricing being finalised".
-Update it to match the listing before submitting; reviewers compare them.
+The website pricing page (www.loopd2c.com/pricing) shows the same terms.
 
 ---
 
@@ -83,7 +83,7 @@ Update it to match the listing before submitting; reviewers compare them.
   5. Customer account page with an exchange request
   6. Admin: Prepaid offer & COD settings
 - **Demo store**: `https://loopd2c-review.myshopify.com` (password:
-  **[DECIDE]**; Shopify asks for it in the submission form, not the listing).
+  <storefront password>; Shopify asks for it in the submission form, not the listing).
 - **Video** (optional for the listing, but the submission needs a screencast,
   see §6).
 
@@ -108,7 +108,7 @@ Update it to match the listing before submitting; reviewers compare them.
 > 2. In Online Store → Themes → Customize → App embeds, turn on **LoopD2C OTP Embed** and save. Turn on "Enable LoopD2C cart drawer" and "Show Checkout button".
 >
 > **Logging in (OTP)**
-> 3. On the storefront, click the account icon. Enter the test number **[REVIEW_OTP_PHONE without +91]** (country India) and, when asked for the code, **[REVIEW_OTP_CODE]**. This test number works on development stores only and sends no SMS. Any other Indian mobile number receives a real code.
+> 3. On the storefront, click the account icon. Enter the test number **<REVIEW_OTP_PHONE without +91>** (country India) and, when asked for the code, **<REVIEW_OTP_CODE>**. This test number works on development stores only and sends no SMS. Any other Indian mobile number receives a real code.
 >
 > **Cart, prepaid discount and COD**
 > 4. In the app, open **Prepaid offer & COD**, tick "Enable prepaid discount", set 10 %, and save. Saving publishes the discount function and the payment customization.
@@ -139,12 +139,11 @@ prepaid discount → GST invoice → account page. English narration or captions
 
 ---
 
-## [FIX] before submission
+## Done before submission
 
-1. ~~Usage billing~~ — done: usage line capped at ₹1,000 / US$12, 14-day trial.
-2. ~~Reviewer OTP~~ — done: set `REVIEW_OTP_PHONE` and `REVIEW_OTP_CODE` on the
-   Vercel project that serves the app, then put both in the testing
-   instructions above.
-3. **Website consistency.** The pricing page ("being finalised") and the
-   "WhatsApp abandoned-cart recovery: Planned" label don't match the app
-   (checkout recovery messages exist today). Align them with this listing.
+- Usage billing: usage line capped at ₹1,000 / US$12 per 30 days, 14-day trial.
+- Reviewer OTP: `REVIEW_OTP_PHONE` and `REVIEW_OTP_CODE` set on the Vercel
+  project; keep them set after publication (requirement 4.5.5).
+- Website: pricing page and WhatsApp checkout recovery match this listing.
+- Platform: expiring offline tokens, `[network_access]` declaration, IP
+  allowlist, Admin/Storefront API 2026-04, App Bridge first in `<head>`.
