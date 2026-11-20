@@ -2,7 +2,7 @@ import { resolveShopifyAdminAccessToken } from "./admin-token";
 import { normalizeShopDomain, resolveShopConfig } from "./shop-resolver";
 import { isCanonicalE164, shopifyPhoneSearchVariants } from "./shopify-phone-normalization";
 
-const SHOPIFY_API_VERSION = "2026-01";
+const SHOPIFY_API_VERSION = "2026-04";
 
 type ShopifyCustomerNode = {
   id: string;

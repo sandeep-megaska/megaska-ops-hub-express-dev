@@ -1,5 +1,5 @@
 import { normalizeShopDomain, resolveShopConfig } from "./shop-resolver";
-const SHOPIFY_API_VERSION = "2026-01";
+const SHOPIFY_API_VERSION = "2026-04";
 
 type StorefrontGraphqlEnvelope<T> = {
   data?: T;
