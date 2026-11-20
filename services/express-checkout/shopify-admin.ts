@@ -2,7 +2,7 @@ import { prisma } from "../db/prisma";
 import { resolveShopifyAdminAccessToken, type ShopifyAdminTokenSource } from "../shopify/admin-token";
 import { normalizeShopDomain } from "../shopify/shop";
 
-const SHOPIFY_API_VERSION = "2026-01";
+const SHOPIFY_API_VERSION = "2026-04";
 
 type JsonRecord = Record<string, unknown>;
 

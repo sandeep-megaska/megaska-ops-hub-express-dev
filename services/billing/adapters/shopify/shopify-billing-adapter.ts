@@ -27,11 +27,15 @@ export type AppSubscriptionStatus = {
   /** Currency Shopify charges this subscription in (the store's billing currency or USD). */
   chargeCurrency: string | null; usageCap: { amount: string; currency: string } | null;
 };
-const GET_SUBSCRIPTION = `query GetAppSubscription($id: ID!) { node(id: $id) { ... on AppSubscription { id status trialDays lineItems { id plan { pricingDetails { __typename ... on AppRecurringPricingDetails { price { currencyCode } } ... on AppUsagePricingDetails { cappedAmount { amount currencyCode } } } } } } } }`;
+const GET_SUBSCRIPTION = `query GetAppSubscription($id: ID!) { node(id: $id) { ... on AppSubscription { id status trialDays lineItems { id plan { pricingDetails { __typename ... on AppRecurringPricing { price { currencyCode } } ... on AppUsagePricing { cappedAmount { amount currencyCode } } } } } } } }`;
+// Shopify's output union AppPricingDetails is AppRecurringPricing | AppUsagePricing
+// (the ...PricingDetails names are the *input* types used to create a subscription).
+const isRecurring = (typename: string) => typename === "AppRecurringPricing" || typename === "AppRecurringPricingDetails";
+const isUsage = (typename: string) => typename === "AppUsagePricing" || typename === "AppUsagePricingDetails";
 export function toAppSubscriptionStatus(node: AppSubscriptionNode): AppSubscriptionStatus {
   const items = node.lineItems ?? [];
-  const recurring = items.find((item) => item.plan.pricingDetails.__typename === "AppRecurringPricingDetails") ?? null;
-  const usage = items.find((item) => item.plan.pricingDetails.__typename === "AppUsagePricingDetails") ?? null;
+  const recurring = items.find((item) => isRecurring(item.plan.pricingDetails.__typename)) ?? null;
+  const usage = items.find((item) => isUsage(item.plan.pricingDetails.__typename)) ?? null;
   const cap = usage?.plan.pricingDetails.cappedAmount ?? null;
   return {
     id: node.id, status: node.status, trialDays: Number(node.trialDays ?? 0) || 0,
@@ -114,8 +118,8 @@ export class ShopifyBillingAdapter implements BillingProviderAdapter {
       userError(data.appSubscriptionCreate.userErrors);
       const subscription = data.appSubscriptionCreate.appSubscription; const confirmationUrl = data.appSubscriptionCreate.confirmationUrl;
       if (!subscription || !confirmationUrl) throw new ShopifyBillingProviderError("SHOPIFY_RESPONSE_INVALID", true, "Shopify did not return a subscription confirmation URL.");
-      const recurring = subscription.lineItems.find((item) => item.plan.pricingDetails.__typename === "AppRecurringPricingDetails")?.id ?? null;
-      const usage = subscription.lineItems.find((item) => item.plan.pricingDetails.__typename === "AppUsagePricingDetails")?.id ?? null;
+      const recurring = subscription.lineItems.find((item) => isRecurring(item.plan.pricingDetails.__typename))?.id ?? null;
+      const usage = subscription.lineItems.find((item) => isUsage(item.plan.pricingDetails.__typename))?.id ?? null;
       this.logger.info("billing_provider_submission_succeeded", { shopId: input.shopId, merchantSubscriptionId: input.merchantSubscriptionId, provider: "SHOPIFY", operation: "CREATE_SUBSCRIPTION" });
       return { provider: "SHOPIFY", externalSubscriptionId: subscription.id, confirmationUrl, status: "PENDING_CONFIRMATION", recurringLineItemId: recurring, usageLineItemId: usage, providerPayload: { status: subscription.status } };
     } catch (error) { return normalize(error); }

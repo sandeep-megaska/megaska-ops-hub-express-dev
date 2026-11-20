@@ -46,10 +46,19 @@ test("subscription status exposes the usage line item, charge currency, cap and 
   const status = toAppSubscriptionStatus({
     id: "gid://shopify/AppSubscription/1", status: "ACTIVE", trialDays: 14,
     lineItems: [
-      { id: "gid://shopify/AppSubscriptionLineItem/1", plan: { pricingDetails: { __typename: "AppRecurringPricingDetails", price: { currencyCode: "USD" } } } },
-      { id: "gid://shopify/AppSubscriptionLineItem/2", plan: { pricingDetails: { __typename: "AppUsagePricingDetails", cappedAmount: { amount: "12.0", currencyCode: "USD" } } } },
+      { id: "gid://shopify/AppSubscriptionLineItem/1", plan: { pricingDetails: { __typename: "AppRecurringPricing", price: { currencyCode: "USD" } } } },
+      { id: "gid://shopify/AppSubscriptionLineItem/2", plan: { pricingDetails: { __typename: "AppUsagePricing", cappedAmount: { amount: "12.0", currencyCode: "USD" } } } },
     ],
   });
   assert.deepEqual(status, { id: "gid://shopify/AppSubscription/1", status: "ACTIVE", trialDays: 14, recurringLineItemId: "gid://shopify/AppSubscriptionLineItem/1", usageLineItemId: "gid://shopify/AppSubscriptionLineItem/2", chargeCurrency: "USD", usageCap: { amount: "12.0", currency: "USD" } });
   assert.equal(toAppSubscriptionStatus({ id: "x", status: "ACTIVE" }).usageLineItemId, null);
+});
+
+test("the subscription status query uses Shopify's output pricing types", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const source = await readFile(new URL("./shopify-billing-adapter.ts", import.meta.url), "utf8");
+  const query = source.slice(source.indexOf("const GET_SUBSCRIPTION"), source.indexOf("export function toAppSubscriptionStatus"));
+  assert.match(query, /\.\.\. on AppRecurringPricing \{/);
+  assert.match(query, /\.\.\. on AppUsagePricing \{/);
+  assert.doesNotMatch(query, /PricingDetails \{/, "the ...PricingDetails names are input types and fail with undefinedType");
 });
