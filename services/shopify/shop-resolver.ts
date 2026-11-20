@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { prisma } from "../db/prisma";
 import { decryptShopifyToken, encryptShopifyToken } from "./token-crypto";
+import { getFreshShopAccessToken } from "./offline-token";
 
 type StorefrontCredentialSource =
   | "shop_row_plain"
@@ -154,6 +155,14 @@ function resolved(shop: ShopRow): ResolvedShopConfig {
   };
 }
 
+// Swaps in a refreshed token when the stored one is an expiring token near expiry.
+async function withFreshToken(config: ResolvedShopConfig): Promise<ResolvedShopConfig> {
+  if (!config.shopDomain || !config.accessToken) return config;
+  const fresh = await getFreshShopAccessToken(config.shopDomain);
+  if (!fresh) return config;
+  return { ...config, accessToken: fresh.accessToken, accessTokenEncrypted: fresh.accessTokenEncrypted, accessTokenDirect: null };
+}
+
 export async function getDefaultShopFromConfig() {
   if (process.env.NODE_ENV === "production" || process.env.VERCEL_ENV === "production") return null;
   const envDomain = normalizeShopDomain(trimEnv("SHOPIFY_STORE_DOMAIN"));
@@ -198,7 +207,7 @@ export async function resolveShopConfig(
       ? await getShopByIdAndDomain(normalizedShopId, normalizedPreferred)
       : await getShopByDomain(normalizedPreferred);
 
-    if (isUsableInstallation(shop)) return resolved(shop as ShopRow);
+    if (isUsableInstallation(shop)) return withFreshToken(resolved(shop as ShopRow));
 
     return unresolved(normalizedPreferred);
   }
@@ -206,7 +215,7 @@ export async function resolveShopConfig(
   if (normalizedShopId) return unresolved("");
 
   const defaultShop = await getDefaultShopFromConfig();
-  if (isUsableInstallation(defaultShop)) return resolved(defaultShop as ShopRow);
+  if (isUsableInstallation(defaultShop)) return withFreshToken(resolved(defaultShop as ShopRow));
 
   const envDomain = normalizeShopDomain(trimEnv("SHOPIFY_STORE_DOMAIN"));
   const envToken = envStorefrontTokenForDevelopmentShop(envDomain);

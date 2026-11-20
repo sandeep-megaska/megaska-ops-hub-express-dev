@@ -3,6 +3,7 @@ import { prisma } from "../db/prisma";
 import { decryptShopifyToken, encryptShopifyToken } from "./token-crypto";
 import { getShopByDomain, type ShopRow } from "./shop";
 import { exchangeSessionTokenForOfflineToken, shopNeedsInstall, ShopInstallError } from "./token-exchange";
+import { getFreshShopAccessToken } from "./offline-token";
 
 export { ShopInstallError };
 
@@ -94,8 +95,11 @@ async function ensureStorefrontToken(shopId: string, shopDomain: string, accessT
 
 // Creates or reactivates the Shop row with an encrypted offline token. Shared by the
 // token-exchange install and the OAuth callback.
-export async function persistShopInstallation(input: { shopDomain: string; accessToken: string; scopes: string | null }) {
+export async function persistShopInstallation(input: { shopDomain: string; accessToken: string; scopes: string | null; expiresAt?: Date | null; refreshToken?: string | null; refreshTokenExpiresAt?: Date | null }) {
   const encryptedAccessToken = encryptShopifyToken(input.accessToken);
+  const encryptedRefreshToken = input.refreshToken ? encryptShopifyToken(input.refreshToken) : null;
+  const tokenExpiresAt = input.expiresAt ?? null;
+  const refreshTokenExpiresAt = input.refreshToken ? input.refreshTokenExpiresAt ?? null : null;
   // Tokens are stored encrypted only; without a key the install fails rather than
   // storing plaintext.
   if (!encryptedAccessToken) throw new ShopInstallError("Token encryption is not configured");
@@ -109,11 +113,13 @@ export async function persistShopInstallation(input: { shopDomain: string; acces
   const rows = await prisma.$queryRaw<{ id: string; installationStatus: string | null; myshopifyDomain: string | null; hasAccessToken: boolean }[]>`
     INSERT INTO "Shop" (
       "id", "shopDomain", "accessToken", "accessTokenEncrypted", "scopes", "isActive", "installedAt", "uninstalledAt",
-      "createdAt", "updatedAt", "myshopifyDomain", "primaryDomain", "shopName", "appProxyEnabled", "checkoutEnabled", "installationStatus"
+      "createdAt", "updatedAt", "myshopifyDomain", "primaryDomain", "shopName", "appProxyEnabled", "checkoutEnabled", "installationStatus",
+      "tokenExpiresAt", "refreshTokenEncrypted", "refreshTokenExpiresAt"
     )
     VALUES (
       ${shopId}, ${input.shopDomain}, NULL, ${encryptedAccessToken}, ${input.scopes}, true, NOW(), NULL,
-      NOW(), NOW(), ${metadata.myshopifyDomain}, ${metadata.primaryDomain}, ${metadata.shopName}, ${appProxyEnabled}, ${checkoutEnabled}, 'ACTIVE'
+      NOW(), NOW(), ${metadata.myshopifyDomain}, ${metadata.primaryDomain}, ${metadata.shopName}, ${appProxyEnabled}, ${checkoutEnabled}, 'ACTIVE',
+      ${tokenExpiresAt}, ${encryptedRefreshToken}, ${refreshTokenExpiresAt}
     )
     ON CONFLICT ("shopDomain") DO UPDATE SET
       "accessToken" = NULL,
@@ -128,7 +134,10 @@ export async function persistShopInstallation(input: { shopDomain: string; acces
       "shopName" = EXCLUDED."shopName",
       "appProxyEnabled" = EXCLUDED."appProxyEnabled",
       "checkoutEnabled" = EXCLUDED."checkoutEnabled",
-      "installationStatus" = 'ACTIVE'
+      "installationStatus" = 'ACTIVE',
+      "tokenExpiresAt" = EXCLUDED."tokenExpiresAt",
+      "refreshTokenEncrypted" = EXCLUDED."refreshTokenEncrypted",
+      "refreshTokenExpiresAt" = EXCLUDED."refreshTokenExpiresAt"
     RETURNING "id", "installationStatus", "myshopifyDomain", ("accessToken" IS NOT NULL OR "accessTokenEncrypted" IS NOT NULL) AS "hasAccessToken"
   `;
 
@@ -154,7 +163,7 @@ async function backfillStorefrontToken(shop: ShopRow) {
   const lastAttempt = storefrontBackfillAttempts.get(shop.id);
   if (lastAttempt && Date.now() - lastAttempt < STOREFRONT_BACKFILL_RETRY_MS) return;
   storefrontBackfillAttempts.set(shop.id, Date.now());
-  const accessToken = String(shop.accessToken || "").trim() || decryptShopifyToken(shop.accessTokenEncrypted);
+  const accessToken = (await getFreshShopAccessToken(shop.shopDomain))?.accessToken || String(shop.accessToken || "").trim() || decryptShopifyToken(shop.accessTokenEncrypted);
   if (!accessToken) return;
   await ensureStorefrontToken(shop.id, shop.shopDomain, accessToken);
 }
@@ -174,8 +183,8 @@ export async function ensureShopInstalled(shopDomain: string, sessionToken: stri
   if (!sessionToken) return existing;
 
   try {
-    const { accessToken, scopes } = await exchangeSessionTokenForOfflineToken(shopDomain, sessionToken);
-    await persistShopInstallation({ shopDomain, accessToken, scopes });
+    const grant = await exchangeSessionTokenForOfflineToken(shopDomain, sessionToken);
+    await persistShopInstallation({ shopDomain, ...grant });
   } catch (error) {
     console.error("[SHOP INSTALL] token exchange install failed", {
       shopDomain,
