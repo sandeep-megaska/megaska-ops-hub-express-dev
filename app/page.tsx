@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import AdminNavLink from "./AdminNavLink";
 import CustomerSyncCard from "./CustomerSyncCard";
 import { formatAdminShopResolutionError, resolveAdminShopFromSearchParams, type AdminShopSearchParams } from "../services/shopify/admin-shop-context";
+import { getSetupProgress } from "../services/setup/setup-progress";
 
 export const dynamic = "force-dynamic";
 
@@ -64,28 +65,53 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
     );
   }
 
+  const setup = await getSetupProgress(resolved.shop.id);
+  const setupDone = setup.completed === setup.total;
+  const themeEmbedHref = `https://${resolved.shop.shopDomain}/admin/themes/current/editor?context=apps`;
+
   return (
     <div className="mk-page">
-      <section className="mk-hero">
-        <p className="mk-hero-tagline">LoopD2C · Commerce Operations Platform</p>
-        <h1 className="mk-hero-title">Operations Hub</h1>
-        <p className="mk-hero-subtitle">
-          Your control center for storefront conversion, order operations, payments, and
-          GST compliance — all shop-aware and built for D2C on Shopify.
-        </p>
-        <Suspense fallback={null}>
-          <div className="mk-hero-actions">
-            <AdminNavLink href="/admin/promotions" className="mk-btn mk-btn-primary">
-              Manage Promotions
-            </AdminNavLink>
-            <AdminNavLink href="/admin/merchant-settings" className="mk-btn">
-              Merchant Settings
-            </AdminNavLink>
+      <section className="mk-hero mk-hero-compact" aria-labelledby="home-title">
+        <div className="mk-hero-row">
+          <div>
+            <p className="mk-hero-tagline">LoopD2C · Shopify Commerce Experience Platform</p>
+            <h1 id="home-title" className="mk-hero-title">Welcome to LoopD2C</h1>
+            <p className="mk-hero-subtitle">Your store&apos;s bag, checkout, post-purchase and GST tools in one place.</p>
           </div>
-        </Suspense>
+          <Suspense fallback={null}>
+            <div className="mk-setup" aria-label="Setup progress">
+              <div className="mk-setup-head">
+                <span>{setupDone ? "Setup complete" : `Setup: ${setup.completed} of ${setup.total} done`}</span>
+                <span className="mk-setup-bar" aria-hidden="true"><span style={{ width: `${Math.round((setup.completed / setup.total) * 100)}%` }} /></span>
+              </div>
+              {setupDone ? (
+                <div className="mk-hero-actions">
+                  <AdminNavLink href="/admin/promotions" className="mk-btn mk-btn-primary">Promotions</AdminNavLink>
+                  <AdminNavLink href="/admin/checkout" className="mk-btn">Prepaid offer &amp; COD</AdminNavLink>
+                  <AdminNavLink href="/admin/merchant-settings" className="mk-btn">Merchant Settings</AdminNavLink>
+                </div>
+              ) : (
+                <>
+                  <ul className="mk-setup-steps">
+                    {setup.steps.map((step) => (
+                      <li key={step.id}>
+                        <AdminNavLink href={step.href} className={`mk-setup-step${step.done ? " is-done" : ""}`}>
+                          <span aria-hidden="true">{step.done ? "✓" : "○"}</span> {step.label}
+                          <span className="sr-only">{step.done ? " (done)" : " (to do)"}</span>
+                        </AdminNavLink>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="mk-hero-actions">
+                    {setup.next ? <AdminNavLink href={setup.next.href} className="mk-btn mk-btn-primary">Next: {setup.next.label}</AdminNavLink> : null}
+                    <a href={themeEmbedHref} target="_top" className="mk-btn">Theme app embed ↗</a>
+                  </div>
+                </>
+              )}
+            </div>
+          </Suspense>
+        </div>
       </section>
-
-      <CustomerSyncCard />
 
       <Suspense fallback={null}>
         {moduleGroups.map((group) => (
@@ -107,6 +133,8 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
           </section>
         ))}
       </Suspense>
+
+      <CustomerSyncCard />
     </div>
   );
 }
