@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { appEmbedDeepLink } from "../services/setup/theme-editor-links";
 import AdminNavLink from "./AdminNavLink";
 import CustomerSyncCard from "./CustomerSyncCard";
 import { formatAdminShopResolutionError, resolveAdminShopFromSearchParams, type AdminShopSearchParams } from "../services/shopify/admin-shop-context";
@@ -67,7 +68,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
 
   const setup = await getSetupProgress(resolved.shop.id);
   const setupDone = setup.completed === setup.total;
-  const themeEmbedHref = `https://${resolved.shop.shopDomain}/admin/themes/current/editor?context=apps`;
+  const themeEmbedHref = appEmbedDeepLink(resolved.shop.shopDomain);
 
   return (
     <div className="mk-page">

@@ -1,3 +1,4 @@
+import { appEmbedDeepLink as buildAppEmbedDeepLink } from "../../../services/setup/theme-editor-links";
 import {
   getCartIntelligenceSettings,
   getLoopDeskMerchantSettings,
@@ -124,7 +125,7 @@ export default async function InstallationWizardPage({ searchParams }: PageProps
   if (params.host) embeddedContext.set("host", params.host);
   if (params.embedded) embeddedContext.set("embedded", params.embedded);
   const settingsHref = `/admin/merchant-settings?${embeddedContext.toString()}`;
-  const appEmbedDeepLink = `https://${resolved.shop.shopDomain}/admin/themes/current/editor?context=apps`;
+  const appEmbedDeepLink = buildAppEmbedDeepLink(resolved.shop.shopDomain);
   // Opens the product template in the theme editor with the Delivery check block ready
   // to place. Needs the app's client ID; without it, the editor opens on the template.
   const appClientId = String(process.env.SHOPIFY_API_KEY || "").trim();
