@@ -1,10 +1,6 @@
 import { allowedStatusTransitions } from "../../../../services/exchange/lifecycle";
 import { prisma } from "../../../../services/db/prisma";
-import {
-  getShopByDomain,
-  normalizeShopDomain,
-  resolveShopConfig,
-} from "../../../../services/shopify/shop";
+import { resolveAdminShopFromSearchParams } from "../../../../services/shopify/admin-shop-context";
 import ExchangeLifecycleControls from "./ExchangeLifecycleControls";
 import EarlyReplacementCard from "./EarlyReplacementCard";
 import PickupFeeCard from "./PickupFeeCard";
@@ -14,7 +10,6 @@ import StyleExchangeCard from "./StyleExchangeCard";
 import { styleChangeBlocker } from "../../../../services/exchange/style-exchange";
 import { earlyReplacementEligibility, returnOutstanding } from "../../../../services/exchange/early-replacement";
 import { resolveDelhiveryRuntimeConfig } from "../../../../services/logistics/delhivery-runtime";
-import { headers } from "next/headers";
 
 export const dynamic = "force-dynamic";
 
@@ -42,20 +37,12 @@ export default async function AdminExchangeDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ shop?: string; shopify_shop?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { id } = await params;
-  const parsedSearch = await searchParams;
-  const requestHeaders = await headers();
-  const shopDomain = normalizeShopDomain(
-    parsedSearch?.shop ||
-      parsedSearch?.shopify_shop ||
-      requestHeaders.get("x-shopify-shop-domain")
-  );
-
-  const shop = shopDomain
-    ? await getShopByDomain(shopDomain)
-    : await resolveShopConfig();
+  // The shop comes from Shopify-signed request data, never from ?shop= alone.
+  const shop = (await resolveAdminShopFromSearchParams(await searchParams)).shop;
+  const shopDomain = shop?.shopDomain || "";
   if (!shop) {
     return (
       <div className="mk-page">

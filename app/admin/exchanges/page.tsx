@@ -1,12 +1,7 @@
 import Link from "next/link";
 import { returnOutstanding } from "../../../services/exchange/early-replacement";
-import { headers } from "next/headers";
 import { prisma } from "../../../services/db/prisma";
-import {
-  getShopByDomain,
-  normalizeShopDomain,
-  resolveShopConfig,
-} from "../../../services/shopify/shop";
+import { resolveAdminShopFromSearchParams } from "../../../services/shopify/admin-shop-context";
 
 type ExchangeRequest = {
   id: string;
@@ -38,20 +33,10 @@ function statusBadgeVariant(status: string) {
 export default async function AdminExchangesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ shop?: string; shopify_shop?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const headerStore = await headers();
-  const parsedSearch = await searchParams;
-  const requestedShopDomain = normalizeShopDomain(
-    parsedSearch?.shop ||
-      parsedSearch?.shopify_shop ||
-      headerStore.get("x-shopify-shop-domain") ||
-      ""
-  );
-
-  const currentShop = requestedShopDomain
-    ? await getShopByDomain(requestedShopDomain)
-    : await resolveShopConfig();
+  // The shop comes from Shopify-signed request data, never from ?shop= alone.
+  const currentShop = (await resolveAdminShopFromSearchParams(await searchParams)).shop;
 
   if (!currentShop?.id) {
     return (
@@ -84,7 +69,7 @@ export default async function AdminExchangesPage({
     take: 300,
   });
 
-  const shopDomain = requestedShopDomain || currentShop.shopDomain || "";
+  const shopDomain = currentShop.shopDomain || "";
   const stats = {
     total: requests.length,
     pending: requests.filter((r) =>
