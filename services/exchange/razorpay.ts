@@ -37,6 +37,8 @@ export async function createReversePickupPaymentLink(input: CreatePaymentLinkInp
       amount: input.amount || REVERSE_PICKUP_FEE_PAISE,
       currency: input.currency || REVERSE_PICKUP_CURRENCY,
       title: style ? `Price difference${input.orderNumber ? ` for exchange #${input.orderNumber}` : ""}` : "Reverse pickup",
+      lineTitle: `Reverse pickup${input.orderNumber ? ` for order #${input.orderNumber}` : ""}`,
+      itemTitle: `Reverse pickup charge${input.orderNumber ? ` (order #${input.orderNumber})` : ""}`,
       asShipping: !style,
       description: input.description,
       customerEmail: input.customerEmail,
