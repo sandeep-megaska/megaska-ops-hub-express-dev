@@ -2,11 +2,7 @@
   // Reverse pickup fee for the shopper-facing copy, set by the app proxy route from the
   // amount the payment link actually charges.
   const REVERSE_PICKUP_FEE = String(window.LOOPD2C_REVERSE_PICKUP_FEE || "").trim();
-  // false when the store doesn't charge a pickup fee (LoopD2C public app): no fee copy at all.
-  const REVERSE_PICKUP_FEE_ENABLED = window.LOOPD2C_REVERSE_PICKUP_FEE_ENABLED !== false;
-  const REVERSE_PICKUP_NOTE = !REVERSE_PICKUP_FEE_ENABLED
-    ? ""
-    : REVERSE_PICKUP_FEE
+  const REVERSE_PICKUP_NOTE = REVERSE_PICKUP_FEE
     ? `Reverse pickup has a ${REVERSE_PICKUP_FEE} charge. After the store approves your exchange, you will receive a payment link.`
     : "Reverse pickup has a charge. After the store approves your exchange, you will receive a payment link.";
   const API_BASE_URL = String(window.MEGASKA_API_BASE || "/apps/loopd2c/api").replace(/\/$/, "");
@@ -642,7 +638,7 @@
       <div>Request ID: ${escapeHtml(request?.id || "—")}</div>
       <div>Request status: ${escapeHtml(request?.status || "OPEN")}</div>
       <div>Request received. The store will review stock and pickup availability.</div>
-      ${REVERSE_PICKUP_FEE_ENABLED ? `<div>If reverse pickup is approved, you will receive a payment link${REVERSE_PICKUP_FEE ? ` for ${REVERSE_PICKUP_FEE}` : ""}.</div>` : ""}
+      <div>If reverse pickup is approved, you will receive a payment link${REVERSE_PICKUP_FEE ? ` for ${REVERSE_PICKUP_FEE}` : ""}.</div>
       <div>Forward shipping for the replacement item is free after approval.</div>
       <div class="mk-ex-muted">${escapeHtml(stockReviewMessage || "Exchange approval depends on the availability of the requested size.")}</div>
       <div class="mk-ex-muted">If the requested size is unavailable, our team will contact you with the next steps.</div>

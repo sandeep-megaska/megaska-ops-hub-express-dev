@@ -147,7 +147,7 @@ export default async function AdminExchangeDetailPage({
         feeRupees={Math.round((request.payments[0]?.amount || REVERSE_PICKUP_FEE_PAISE) / 100)}
         withinWindow={isWithinReversePickupWindow(request.deliveryDateSnapshot)}
         delhiveryConfigured={delhiveryCapability.configured}
-        feeEnabled={offShopifyPayments}
+        paymentIdEnabled={offShopifyPayments}
       />
 
       <EarlyReplacementCard

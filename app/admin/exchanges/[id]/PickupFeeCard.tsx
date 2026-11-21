@@ -13,8 +13,8 @@ type Props = {
   feeRupees: number;
   withinWindow: boolean;
   delhiveryConfigured: boolean;
-  /** false in the public app: no pickup fee is collected, the card only books the pickup. */
-  feeEnabled?: boolean;
+  /** false in the public app: the charge is paid on a Shopify invoice, so there is no Razorpay payment ID to record. */
+  paymentIdEnabled?: boolean;
 };
 
 type Result = { feeOutcome?: string; booking?: { shipment?: { awb?: string | null } } | null; bookingError?: { message: string } | null; error?: string };
@@ -22,10 +22,10 @@ type Result = { feeOutcome?: string; booking?: { shipment?: { awb?: string | nul
 // For when the customer didn't pay through loopd2c's link: the link expired and
 // the team sent a new one from Razorpay (the webhook can't see that payment), or
 // the fee is waived. Records the fee, then books the Delhivery reverse pickup.
-export default function PickupFeeCard({ requestId, shopDomain, show, feePaid, feeStatus, feeRupees, withinWindow, delhiveryConfigured, feeEnabled = true }: Props) {
-  const [mode, setMode] = useState<"PAYMENT_ID" | "WAIVE">(feeEnabled ? "PAYMENT_ID" : "WAIVE");
+export default function PickupFeeCard({ requestId, shopDomain, show, feePaid, feeStatus, feeRupees, withinWindow, delhiveryConfigured, paymentIdEnabled = true }: Props) {
+  const [mode, setMode] = useState<"PAYMENT_ID" | "WAIVE">(paymentIdEnabled ? "PAYMENT_ID" : "WAIVE");
   const [paymentId, setPaymentId] = useState("");
-  const [note, setNote] = useState(feeEnabled ? "" : "No pickup fee in LoopD2C");
+  const [note, setNote] = useState("");
   const [bookAnyway, setBookAnyway] = useState(false);
   const [windowNote, setWindowNote] = useState("");
   const [busy, setBusy] = useState(false);
@@ -67,22 +67,22 @@ export default function PickupFeeCard({ requestId, shopDomain, show, feePaid, fe
 
   return (
     <section className="mk-card" style={{ display: "grid", gap: 10 }}>
-      <h2 className="mk-section-title">{feeEnabled ? "Fee paid another way, or waived" : "Book the reverse pickup"}</h2>
+      <h2 className="mk-section-title">{paymentIdEnabled ? "Fee paid another way, or waived" : "Waive the pickup charge"}</h2>
       <p className="mk-help">
-        {!feeEnabled
-          ? "Book the Delhivery reverse pickup for this exchange. LoopD2C doesn't charge the customer a pickup fee."
+        {!paymentIdEnabled && !feePaid
+          ? `The ₹${feeRupees} pickup charge shows ${feeStatus ? feeStatus.toLowerCase().replace(/_/g, " ") : "not paid"}. The customer pays it on the Shopify invoice link and the pickup is then booked automatically. To book it now without the charge, waive it.`
           : feePaid
           ? "The pickup fee is paid but the reverse pickup isn't booked yet."
           : `The ₹${feeRupees} pickup fee shows ${feeStatus ? feeStatus.toLowerCase().replace(/_/g, " ") : "not paid"}. If the customer paid through a link you created in Razorpay, enter its payment ID: loopd2c checks it with Razorpay and books the Delhivery pickup. Or waive the fee.`}
       </p>
       {!delhiveryConfigured && <div className="mk-alert mk-alert-warning">Delhivery isn&apos;t set up for this shop (Settings → Delhivery).</div>}
 
-      {feeEnabled && !feePaid && (
+      {!feePaid && (
         <>
           <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-            <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            {paymentIdEnabled ? <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
               <input type="radio" name="fee-mode" checked={mode === "PAYMENT_ID"} onChange={() => setMode("PAYMENT_ID")} /> Customer paid (Razorpay payment ID)
-            </label>
+            </label> : null}
             <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
               <input type="radio" name="fee-mode" checked={mode === "WAIVE"} onChange={() => setMode("WAIVE")} /> Waive the fee
             </label>
@@ -117,7 +117,7 @@ export default function PickupFeeCard({ requestId, shopDomain, show, feePaid, fe
       {done && <div className="mk-alert mk-alert-success">{done}</div>}
       <div>
         <button type="button" className="mk-btn mk-btn-primary" disabled={busy || !ready} onClick={submit}>
-          {busy ? "Working…" : feePaid || !feeEnabled ? "Book reverse pickup" : mode === "PAYMENT_ID" ? "Verify payment & book pickup" : "Waive fee & book pickup"}
+          {busy ? "Working…" : feePaid ? "Book reverse pickup" : mode === "PAYMENT_ID" ? "Verify payment & book pickup" : "Waive fee & book pickup"}
         </button>
       </div>
     </section>

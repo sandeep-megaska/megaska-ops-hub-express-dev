@@ -25,7 +25,7 @@ type Props = {
   settledAtIso: string | null;
   payment: { status: string; url: string | null; amount: number } | null;
   locked: string | null;
-  /** false in the public app: no payment link for a dearer style, no store credit for a cheaper one. */
+  /** false in the public app: the payment link is a Shopify invoice, and there is no store credit for a cheaper style. */
   offShopifyPayments?: boolean;
 };
 
@@ -127,12 +127,10 @@ export default function StyleExchangeCard({ requestId, shopDomain, items, differ
           <strong>{owed > 0 ? `Customer owes ${rupees(owed)}` : owed < 0 ? `Store owes ${rupees(-owed)}` : "Same price: nothing to settle"}</strong>
           {settledAtIso ? (
             <div className="mk-alert mk-alert-info">Settled: {SETTLEMENT_LABEL[settlement || ""] || settlement} ({new Date(settledAtIso).toLocaleString("en-IN")}).</div>
-          ) : owed > 0 && !offShopifyPayments ? (
-            <div className="mk-alert mk-alert-warning">LoopD2C can&apos;t collect a price difference. Choose a style at the same price or cheaper, or create a new order in Shopify.</div>
           ) : owed > 0 ? (
             payment && payment.status !== "CANCELLED" ? (
               <div className="mk-help">
-                Payment link {payment.status === "PAID" ? "paid" : "sent (Razorpay texts and emails it to the customer)"}{payment.url ? <>: <a className="mk-link" href={payment.url} target="_blank" rel="noreferrer">{payment.url}</a></> : null}. You can also paste it in the WhatsApp chat. The replacement can be booked once it&apos;s paid.
+                Payment link {payment.status === "PAID" ? "paid" : offShopifyPayments ? "sent (Razorpay texts and emails it to the customer)" : "created (a Shopify invoice the customer pays at checkout)"}{payment.url ? <>: <a className="mk-link" href={payment.url} target="_blank" rel="noreferrer">{payment.url}</a></> : null}. You can also paste it in the WhatsApp chat. The replacement can be booked once it&apos;s paid.
               </div>
             ) : (
               <div><button type="button" className="mk-btn mk-btn-primary" disabled={busy || Boolean(locked)} onClick={() => call({ action: "settle", settlement: "COLLECT" })}>Send payment link for {rupees(owed)}</button></div>

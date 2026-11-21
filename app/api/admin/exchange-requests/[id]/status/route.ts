@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse, after } from "next/server";
-import { OFF_SHOPIFY_PAYMENTS_UNAVAILABLE, offShopifyPaymentsEnabled } from "../../../../../../services/platform/off-shopify-payments";
 import { prisma } from "../../../../../../services/db/prisma";
 import {
   ShopResolutionError,
@@ -91,14 +90,8 @@ export async function PATCH(
     let targetStatus = nextStatus;
     const isApprovalFlow = approvalMode === "APPROVE";
 
-    // The reverse-pickup fee is collected by payment link outside Shopify Checkout, so
-    // the public app skips the fee step (Shopify App Store 1.1.2).
-    const collectsPickupFee = offShopifyPaymentsEnabled();
     if (isApprovalFlow) {
-      targetStatus = returnMethod === "SELF_SHIP" || !collectsPickupFee ? "APPROVED" : "AWAITING_PAYMENT";
-    }
-    if (targetStatus === "AWAITING_PAYMENT" && !collectsPickupFee) {
-      return NextResponse.json({ error: OFF_SHOPIFY_PAYMENTS_UNAVAILABLE }, { status: 400 });
+      targetStatus = returnMethod === "SELF_SHIP" ? "APPROVED" : "AWAITING_PAYMENT";
     }
 
     const allowed = allowedStatusTransitions[existing.status] || [];
@@ -256,12 +249,15 @@ export async function PATCH(
         amount: reversePickupPayment.amount,
         currency: reversePickupPayment.currency || REVERSE_PICKUP_CURRENCY,
         expiresAt: reversePickupPayment.expiresAt || reversePickupPaymentExpiresAt,
+        purpose: "REVERSE_PICKUP_FEE",
+        orderNumber: updated.orderNumber,
       });
 
       await prisma.requestPayment.update({
         where: { id: reversePickupPayment.id },
         data: {
           status: "PENDING",
+          provider: paymentLink.provider,
           paymentLinkId: paymentLink.id,
           paymentLinkUrl: paymentLink.shortUrl,
           providerReferenceId: paymentLink.referenceId,

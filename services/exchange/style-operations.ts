@@ -66,11 +66,6 @@ export async function setStyle(shop: Shop, requestId: string, itemId: string, va
   await prisma.orderActionItem.update({ where: { id: item.id }, data });
   const items = request.items.map((row) => (row.id === item.id ? { ...row, ...data } : row)) as Array<{ quantity: number; replacementVariantId?: string | null; replacementUnitPricePaise?: number | null; originalUnitPricePaise?: number | null }>;
   const difference = styleDifferencePaise(items);
-  // Public app: a dearer style would need a payment outside Shopify Checkout, so it is refused.
-  if (difference !== null && difference > 0 && !offShopifyPaymentsEnabled()) {
-    await prisma.orderActionItem.update({ where: { id: item.id }, data: { replacementVariantId: null, replacementTitle: null, replacementSku: null, replacementUnitPricePaise: null, originalUnitPricePaise: null } });
-    return { ok: false as const, status: 422, error: "Choose a style at the same price or cheaper. A price difference can't be collected in LoopD2C; create a new order in Shopify instead." };
-  }
   await supersedeOpenLinks(request);
   await prisma.orderActionRequest.update({ where: { id: request.id }, data: { styleDifferencePaise: difference, styleSettlement: null, styleSettledAt: null } });
   await audit(shop.id, request.id, variantId ? "exchange.style.changed" : "exchange.style.cleared", { itemId, variantId, ...data, styleDifferencePaise: difference });
@@ -99,8 +94,10 @@ export async function settleStyle(shop: Shop, requestId: string, settlement: str
       customerPhone: request.customerPhoneSnapshot,
       customerEmail: request.customerEmailSnapshot,
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      purpose: "STYLE_DIFFERENCE",
+      orderNumber: request.orderNumber,
     });
-    await prisma.requestPayment.create({ data: { requestId: request.id, purpose: "STYLE_DIFFERENCE", amount, status: "PENDING", paymentLinkId: link.id, paymentLinkUrl: link.shortUrl, providerReferenceId: link.referenceId, expiresAt: link.expiresAt } });
+    await prisma.requestPayment.create({ data: { requestId: request.id, purpose: "STYLE_DIFFERENCE", amount, status: "PENDING", provider: link.provider, paymentLinkId: link.id, paymentLinkUrl: link.shortUrl, providerReferenceId: link.referenceId, expiresAt: link.expiresAt } });
     await prisma.orderActionRequest.update({ where: { id: request.id }, data: { styleSettlement: "COLLECT" } });
     await audit(shop.id, request.id, "exchange.style.payment_link_created", { amount, paymentLinkId: link.id });
     return { ok: true as const, paymentLinkUrl: link.shortUrl };

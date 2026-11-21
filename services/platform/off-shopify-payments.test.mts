@@ -14,11 +14,11 @@ test("LOOPD2C_OFF_SHOPIFY_PAYMENTS overrides the client ID", () => {
   assert.equal(offShopifyPaymentsEnabled({ SHOPIFY_API_KEY: "e16e6f02914ab7a1c1814b1cdb28cfb0", LOOPD2C_OFF_SHOPIFY_PAYMENTS: "1" }), true);
 });
 
-test("public app style exchanges: no payment link, no store credit", () => {
-  assert.deepEqual(settlementOptions(500, false), []);
+test("public app style exchanges: Shopify invoice for a dearer style, no store credit", () => {
+  assert.deepEqual(settlementOptions(500, false), ["COLLECT"]);
   assert.deepEqual(settlementOptions(-500, false), ["NO_REFUND", "MANUAL_REFUND"]);
   assert.equal(isSettlementAllowed("STORE_CREDIT", -500, false), false);
-  assert.equal(isSettlementAllowed("COLLECT", 500, false), false);
+  assert.equal(isSettlementAllowed("COLLECT", 500, false), true);
   assert.deepEqual(settlementOptions(500), ["COLLECT"], "original app unchanged");
   assert.deepEqual(settlementOptions(-500), ["STORE_CREDIT", "NO_REFUND", "MANUAL_REFUND"]);
 });

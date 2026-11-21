@@ -1,4 +1,5 @@
 import { normalizeShopDomain, resolveShopConfig } from "./shop-resolver";
+import { FEE_ORDER_TAG as EXCHANGE_CHARGE_ORDER_TAG } from "../exchange/shopify-fee-invoice.ts";
 
 const SHOPIFY_API_VERSION = "2026-04";
 
@@ -58,6 +59,7 @@ type ShopifyLineItemNode = {
 
 type ShopifyOrderNode = {
   id: string;
+  tags?: string[] | null;
   name?: string | null;
   processedAt?: string | null;
   createdAt?: string | null;
@@ -399,6 +401,7 @@ function mapOrder(order: ShopifyOrderNode): MegaskaDashboardOrder {
 const ORDER_FRAGMENT = `
   id
   name
+  tags
   processedAt
   createdAt
   closedAt
@@ -544,14 +547,16 @@ export async function getMegaskaCustomerDashboardData(input: {
   const customer = customerData.customer;
   if (!customer || customer.id !== customerGid) return null;
 
-  const recentOrders = (customer.orders?.nodes || []).map(mapOrder);
+  // Exchange charges paid on a LoopD2C Shopify invoice are orders too, but not
+  // purchases: keep them out of the customer's order list and count.
+  const orderNodes = customer.orders?.nodes || [];
+  const chargeOrders = orderNodes.filter((order) => (order.tags || []).includes(EXCHANGE_CHARGE_ORDER_TAG)).length;
+  const recentOrders = orderNodes.filter((order) => !(order.tags || []).includes(EXCHANGE_CHARGE_ORDER_TAG)).map(mapOrder);
   const totalOrderCountRaw = customer?.numberOfOrders;
-  const totalOrderCount = Math.max(
-    typeof totalOrderCountRaw === "number"
-      ? totalOrderCountRaw
-      : Number.parseInt(String(totalOrderCountRaw || "0"), 10) || 0,
-    recentOrders.length
-  );
+  const reportedOrderCount = typeof totalOrderCountRaw === "number"
+    ? totalOrderCountRaw
+    : Number.parseInt(String(totalOrderCountRaw || "0"), 10) || 0;
+  const totalOrderCount = Math.max(reportedOrderCount - chargeOrders, recentOrders.length);
 
   console.log("[SHOPIFY DASHBOARD V2] result", {
     shopDomain: input.shopDomain || null,

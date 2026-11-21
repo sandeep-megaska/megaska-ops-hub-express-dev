@@ -30,6 +30,11 @@ api_version = "2026-04"
   topics = ["orders/create"]
   uri = "/api/webhooks/orders/create"
 
+  # Exchange charges paid on a LoopD2C Shopify invoice (reverse pickup, price difference).
+  [[webhooks.subscriptions]]
+  topics = ["orders/paid"]
+  uri = "/api/webhooks/orders/paid"
+
   [[webhooks.subscriptions]]
   compliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]
   uri = "https://loopd2c-partner.vercel.app/api/webhooks/compliance"

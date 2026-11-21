@@ -1,4 +1,5 @@
-import { assertOffShopifyPaymentsEnabled } from "../platform/off-shopify-payments.ts";
+import { offShopifyPaymentsEnabled } from "../platform/off-shopify-payments.ts";
+import { cancelShopifyFeeInvoice, createShopifyFeeInvoice, isShopifyDraftOrderId } from "./shopify-fee-invoice.ts";
 import crypto from "crypto";
 import { getInternalRazorpayConfig } from "../razorpay/config";
 import { REVERSE_PICKUP_CURRENCY, REVERSE_PICKUP_FEE_PAISE } from "./constants";
@@ -13,6 +14,9 @@ type CreatePaymentLinkInput = {
   currency?: string;
   expiresAt?: Date | null;
   description?: string;
+  /** What the link charges for. A reverse pickup charge is a shipping charge. */
+  purpose?: "REVERSE_PICKUP_FEE" | "STYLE_DIFFERENCE";
+  orderNumber?: string | null;
 };
 
 export async function isRazorpayConfigured(shopId: string) {
@@ -20,9 +24,31 @@ export async function isRazorpayConfigured(shopId: string) {
   return Boolean(config.enabled && config.keyId && config.keySecret);
 }
 
+// Creates the link the customer pays an exchange charge with. The original
+// store-specific app uses Razorpay payment links; the public app uses a Shopify
+// draft-order invoice, so the customer pays on Shopify Checkout (Shopify App Store
+// 1.1.2). `provider` says which, and is stored on the RequestPayment row.
 export async function createReversePickupPaymentLink(input: CreatePaymentLinkInput) {
-  // Shopify App Store 1.1.2: no buyer payments outside Shopify Checkout in the public app.
-  assertOffShopifyPaymentsEnabled();
+  if (!offShopifyPaymentsEnabled()) {
+    const style = input.purpose === "STYLE_DIFFERENCE";
+    const invoice = await createShopifyFeeInvoice({
+      shopId: input.shopId,
+      requestId: input.requestId,
+      amount: input.amount || REVERSE_PICKUP_FEE_PAISE,
+      currency: input.currency || REVERSE_PICKUP_CURRENCY,
+      title: style ? `Price difference${input.orderNumber ? ` for exchange #${input.orderNumber}` : ""}` : "Reverse pickup",
+      asShipping: !style,
+      description: input.description,
+      customerEmail: input.customerEmail,
+      customerPhone: input.customerPhone,
+      expiresAt: input.expiresAt,
+    });
+    return { ...invoice, status: "created" };
+  }
+  return createRazorpayPaymentLink(input);
+}
+
+async function createRazorpayPaymentLink(input: CreatePaymentLinkInput) {
   const { enabled, keyId, keySecret } = await getInternalRazorpayConfig(input.shopId);
   if (!enabled || !keyId || !keySecret) {
     throw new Error("Razorpay credentials are not configured");
@@ -66,6 +92,7 @@ export async function createReversePickupPaymentLink(input: CreatePaymentLinkInp
     status: String(data.status || "created"),
     referenceId: String(data.reference_id || input.requestId),
     expiresAt: typeof data.expire_by === "number" ? new Date(data.expire_by * 1000) : null,
+    provider: "RAZORPAY" as const,
   };
 }
 
@@ -105,6 +132,7 @@ export async function fetchRazorpayPayment(shopId: string, paymentId: string): P
 
 /** Best effort: cancels a still-active payment link so the customer can't pay the fee twice. */
 export async function cancelRazorpayPaymentLink(shopId: string, paymentLinkId: string): Promise<boolean> {
+  if (isShopifyDraftOrderId(paymentLinkId)) return cancelShopifyFeeInvoice(shopId, paymentLinkId);
   try {
     const { enabled, keyId, keySecret } = await getInternalRazorpayConfig(shopId);
     if (!enabled || !keyId || !keySecret) return false;

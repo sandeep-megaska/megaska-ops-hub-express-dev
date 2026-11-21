@@ -1208,6 +1208,8 @@ enum PaymentPurpose {
 
 enum PaymentProvider {
   RAZORPAY
+  /// A Shopify draft-order invoice paid on Shopify Checkout (public app).
+  SHOPIFY
 }
 
 enum PaymentStatus {

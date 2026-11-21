@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withCors, handleOptions } from "../../../../_lib/cors";
-import { OFF_SHOPIFY_PAYMENTS_UNAVAILABLE, offShopifyPaymentsEnabled } from "../../../../../../services/platform/off-shopify-payments";
 import { prisma } from "../../../../../../services/db/prisma";
 import { ShopResolutionError } from "../../../../../../services/shopify/shop";
 import { getAuthenticatedExchangeCustomer } from "../../../../../../services/exchange/auth";
@@ -32,9 +31,6 @@ export async function POST(
   req: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
-  if (!offShopifyPaymentsEnabled()) {
-    return withCors(req, NextResponse.json({ error: OFF_SHOPIFY_PAYMENTS_UNAVAILABLE }, { status: 410 }));
-  }
   try {
     const auth = await getAuthenticatedExchangeCustomer(req);
     if (!auth) {
@@ -120,6 +116,8 @@ export async function POST(
       amount,
       currency: existingPayment?.currency || REVERSE_PICKUP_CURRENCY,
       expiresAt,
+      purpose: "REVERSE_PICKUP_FEE",
+      orderNumber: requestRow.orderNumber,
     });
 
     const payment = existingPayment
@@ -129,6 +127,7 @@ export async function POST(
             amount,
             currency: existingPayment.currency || REVERSE_PICKUP_CURRENCY,
             status: "PENDING",
+            provider: paymentLink.provider,
             paymentLinkId: paymentLink.id,
             paymentLinkUrl: paymentLink.shortUrl,
             providerReferenceId: paymentLink.referenceId,
@@ -139,10 +138,10 @@ export async function POST(
           data: {
             requestId: requestRow.id,
             purpose: "REVERSE_PICKUP_FEE",
-            provider: "RAZORPAY",
             amount,
             currency: REVERSE_PICKUP_CURRENCY,
             status: "PENDING",
+            provider: paymentLink.provider,
             paymentLinkId: paymentLink.id,
             paymentLinkUrl: paymentLink.shortUrl,
             providerReferenceId: paymentLink.referenceId,

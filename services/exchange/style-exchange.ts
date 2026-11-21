@@ -24,11 +24,11 @@ export function styleDifferencePaise(items: StyleItem[]): number | null {
   return changed.reduce((sum, item) => sum + ((item.replacementUnitPricePaise ?? 0) - (item.originalUnitPricePaise ?? 0)) * Math.max(1, item.quantity || 1), 0);
 }
 
-// offShopify=false (public app): no payment link for a dearer style and no store
-// credit for a cheaper one; a refund is made by the merchant in Shopify.
+// offShopify=false (public app): the dearer-style payment link is a Shopify invoice,
+// and there is no app-issued store credit for a cheaper style (refund in Shopify).
 export function settlementOptions(difference: number | null, offShopify = true): StyleSettlement[] {
   if (!difference) return [];
-  if (!offShopify) return difference > 0 ? [] : ["NO_REFUND", "MANUAL_REFUND"];
+  if (!offShopify) return difference > 0 ? ["COLLECT"] : ["NO_REFUND", "MANUAL_REFUND"];
   return difference > 0 ? ["COLLECT"] : ["STORE_CREDIT", "NO_REFUND", "MANUAL_REFUND"];
 }
 
