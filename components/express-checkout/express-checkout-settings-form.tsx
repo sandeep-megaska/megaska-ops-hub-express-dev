@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { adminAuthHeaders } from '../../lib/admin-fetch'
 
-const DEFAULT_TEXT = 'You need to pay to the delivery agent at the time of delivery. In case of any refund, the refund amount will be issued as store credit which you can utilize for future purchases. However, for card and UPI payments, the refund amount will be directly transferred to your original payment method.'
+const DEFAULT_TEXT = 'Pay the delivery agent in cash when your order arrives. Refunds for online payments go back to your original payment method.'
 
 function paiseToRupees(value: unknown) {
   const paise = Number(value || 0)
@@ -65,10 +65,10 @@ export function ExpressCheckoutSettingsForm() {
       <label className="mk-check"><input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} /> Verify the shopper&apos;s phone number (OTP) before checkout</label>
       <p className="mk-help" style={{ margin: 0 }}>Logged-out shoppers confirm their mobile number with a one-time code, then continue to Shopify Checkout with their details filled in. Shoppers who already verified go straight through.</p>
     </div>
-    <div><h2 className="mk-section-title">Cash on Delivery</h2><p className="mk-section-subtitle" style={{ margin: 0 }}>Configure the COD charge and the COD/refund copy shown at checkout.</p></div>
+    <div><h2 className="mk-section-title">Cash on Delivery</h2><p className="mk-section-subtitle" style={{ margin: 0 }}>The Cash on Delivery note shown to shoppers. COD availability follows your COD rules in Shopify Checkout.</p></div>
     {error ? <div className="mk-alert mk-alert-error">{error}</div> : null}
     {message ? <div className="mk-alert mk-alert-success">{message}</div> : null}
-    <div className="mk-field"><label className="mk-label" htmlFor="ec-cod-fee">COD charge (₹)</label><input id="ec-cod-fee" className="mk-input" value={form.codFeeAmountRupees} onChange={(e) => setForm((p) => ({ ...p, codFeeAmountRupees: e.target.value }))} inputMode="decimal" min="0" step="0.01" /><span className="mk-help">Set 0 to disable the COD fee.</span></div>
+    {/* No COD charge field: Shopify Checkout doesn't add one (it applied only to the retired LoopD2C checkout). */}
     <div className="mk-field"><label className="mk-label" htmlFor="ec-cod-text">COD/refund information text</label><textarea id="ec-cod-text" className="mk-textarea" value={form.codInformationText} onChange={(e) => setForm((p) => ({ ...p, codInformationText: e.target.value }))} /></div>
     <div><h2 className="mk-section-title">Prepaid discount offer</h2><p className="mk-section-subtitle" style={{ margin: 0 }}>Reward shoppers who pay online. The discount applies only to prepaid payment methods at Shopify Checkout — COD prices stay unchanged. The offer is calculated on the product subtotal and reduces the taxable value on the GST invoice.</p></div>
     <label className="mk-check"><input type="checkbox" checked={form.prepaidDiscountEnabled} onChange={(e) => setForm((p) => ({ ...p, prepaidDiscountEnabled: e.target.checked }))} /> Enable prepaid discount</label>

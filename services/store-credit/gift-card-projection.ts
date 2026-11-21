@@ -14,6 +14,7 @@
 // debit would double the balance.
 //
 // Every import is lazy so the unit test can inject all seams without loading the Shopify
+import { assertOffShopifyPaymentsEnabled } from "../platform/off-shopify-payments.ts";
 // admin / Prisma modules.
 
 type CreditResult =
@@ -101,6 +102,7 @@ export async function projectCreditToGiftCard(
   walletTransactionId: string,
   deps: ProjectionDeps = {},
 ): Promise<ProjectionResult> {
+  assertOffShopifyPaymentsEnabled();
   const loadTransaction = deps.loadTransaction ?? loadTransactionDefault;
   const resolveShopDomain = deps.resolveShopDomain ?? resolveShopDomainDefault;
   const markSynced = deps.markSynced ?? markSyncedDefault;

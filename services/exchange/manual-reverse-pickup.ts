@@ -15,6 +15,7 @@
 // reason, and every step audited.
 
 import { prisma } from "../db/prisma";
+import { OFF_SHOPIFY_PAYMENTS_UNAVAILABLE, offShopifyPaymentsEnabled } from "../platform/off-shopify-payments.ts";
 import { REVERSE_PICKUP_WINDOW_LOCK_REASON, isWithinReversePickupWindow } from "./deadlines";
 import { canTransitionExchangeStatus } from "./lifecycle";
 import { REVERSE_PICKUP_FEE_PAISE } from "./constants";
@@ -157,6 +158,8 @@ export async function bookReversePickup(input: BookInput) {
 
 /** Verifies a Razorpay payment ID against the fee; it must not settle another request already. */
 async function verifyFeePayment(shopId: string, paymentId: string, feePaise: number, requestId?: string) {
+  // A Razorpay payment taken outside Shopify Checkout: not used by the public app.
+  if (!offShopifyPaymentsEnabled()) throw new ManualPickupError(OFF_SHOPIFY_PAYMENTS_UNAVAILABLE, 400);
   const id = paymentId.trim();
   if (!RAZORPAY_PAYMENT_ID.test(id)) throw new ManualPickupError("Enter the Razorpay payment ID, which starts with pay_ (Razorpay → Payments).", 400, "INVALID_PAYMENT_ID");
   const used = await prisma.requestPayment.findFirst({ where: { paymentId: id, ...(requestId ? { requestId: { not: requestId } } : {}) }, select: { requestId: true } });
@@ -345,7 +348,7 @@ export async function arrangeReversePickupForOrder(input: {
 
   const reasonLabel = MANUAL_PICKUP_REASONS[input.reason];
   const note = String(input.note || "").trim();
-  const teamNote = `Reverse pickup arranged by the team: ${reasonLabel}${note ? `. ${note}` : ""}${input.fee.mode === "WAIVE" ? " (pickup fee: Megaska pays)" : ""}`;
+  const teamNote = `Reverse pickup arranged by the team: ${reasonLabel}${note ? `. ${note}` : ""}${input.fee.mode === "WAIVE" ? " (pickup fee: paid by the store)" : ""}`;
 
   const requestId = await prisma.$transaction(async (tx) => {
     let id = openIssue?.id ?? null;

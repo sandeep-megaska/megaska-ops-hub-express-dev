@@ -24,8 +24,11 @@ export function styleDifferencePaise(items: StyleItem[]): number | null {
   return changed.reduce((sum, item) => sum + ((item.replacementUnitPricePaise ?? 0) - (item.originalUnitPricePaise ?? 0)) * Math.max(1, item.quantity || 1), 0);
 }
 
-export function settlementOptions(difference: number | null): StyleSettlement[] {
+// offShopify=false (public app): no payment link for a dearer style and no store
+// credit for a cheaper one; a refund is made by the merchant in Shopify.
+export function settlementOptions(difference: number | null, offShopify = true): StyleSettlement[] {
   if (!difference) return [];
+  if (!offShopify) return difference > 0 ? [] : ["NO_REFUND", "MANUAL_REFUND"];
   return difference > 0 ? ["COLLECT"] : ["STORE_CREDIT", "NO_REFUND", "MANUAL_REFUND"];
 }
 
@@ -45,8 +48,8 @@ export function styleReplacementBlocker(input: { difference: number | null; sett
   return null;
 }
 
-export function isSettlementAllowed(settlement: string, difference: number | null): settlement is StyleSettlement {
-  return (settlementOptions(difference) as string[]).includes(settlement);
+export function isSettlementAllowed(settlement: string, difference: number | null, offShopify = true): settlement is StyleSettlement {
+  return (settlementOptions(difference, offShopify) as string[]).includes(settlement);
 }
 
 export function amountToPaise(amount: string | number | null | undefined): number | null {

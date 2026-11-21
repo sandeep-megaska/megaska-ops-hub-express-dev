@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { withCors, handleOptions } from "../../../_lib/cors";
 import { getAuthenticatedExchangeCustomer } from "../../../../../services/exchange/auth";
 import { getCustomerRefundById } from "../../../../../services/refund/customer-refunds";
+import { offShopifyPaymentsEnabled } from "../../../../../services/platform/off-shopify-payments";
 
 export const runtime = "nodejs";
 
@@ -22,5 +23,6 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
     return withCors(req, NextResponse.json({ error: "Refund not found" }, { status: 404 }));
   }
 
-  return withCors(req, NextResponse.json(item));
+  // false in the public app: refunds go back through Shopify, no bank or UPI details are collected.
+  return withCors(req, NextResponse.json({ ...item, payoutDetailsEnabled: offShopifyPaymentsEnabled() }));
 }

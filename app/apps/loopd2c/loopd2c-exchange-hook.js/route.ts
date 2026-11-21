@@ -4,6 +4,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { appProxyJsonError, requireEnabledModule, requireShopFromAppProxy } from "../../../../services/shopify/app-proxy";
 import { getExchangeRequestPolicy } from "../../../../services/loopdesk/merchant-settings";
+import { offShopifyPaymentsEnabled } from "../../../../services/platform/off-shopify-payments";
 import { REVERSE_PICKUP_CURRENCY, REVERSE_PICKUP_FEE_PAISE } from "../../../../services/exchange/constants";
 
 // The fee the payment link will charge, for the shopper-facing copy (e.g. "₹120").
@@ -20,7 +21,9 @@ export async function GET(request: NextRequest) {
     // customer up front (before they fill the form) instead of only on a failed
     // submit. The server remains the authority — this is a UX hint only.
     const { excludedCategories } = await getExchangeRequestPolicy(shop.id);
-    const bootstrap = `window.MEGASKA_SHOP_DOMAIN=window.MEGASKA_SHOP_DOMAIN||${JSON.stringify(shop.shopDomain)};window.MEGASKA_API_BASE=window.MEGASKA_API_BASE||"/apps/loopd2c/api";window.MEGASKA_EXCHANGE_EXCLUDED_CATEGORIES=${JSON.stringify(excludedCategories)};window.LOOPD2C_REVERSE_PICKUP_FEE=${JSON.stringify(reversePickupFeeLabel())};\n`;
+    // The public app charges no pickup fee (no payments outside Shopify Checkout).
+    const feeEnabled = offShopifyPaymentsEnabled();
+    const bootstrap = `window.MEGASKA_SHOP_DOMAIN=window.MEGASKA_SHOP_DOMAIN||${JSON.stringify(shop.shopDomain)};window.MEGASKA_API_BASE=window.MEGASKA_API_BASE||"/apps/loopd2c/api";window.MEGASKA_EXCHANGE_EXCLUDED_CATEGORIES=${JSON.stringify(excludedCategories)};window.LOOPD2C_REVERSE_PICKUP_FEE=${JSON.stringify(feeEnabled ? reversePickupFeeLabel() : "")};window.LOOPD2C_REVERSE_PICKUP_FEE_ENABLED=${JSON.stringify(feeEnabled)};\n`;
     return new NextResponse(`${bootstrap}${source}`, {
       headers: {
         "Content-Type": "application/javascript; charset=utf-8",

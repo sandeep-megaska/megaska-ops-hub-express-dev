@@ -5,6 +5,7 @@ import { ShopResolutionError } from "../../../../../../services/shopify/shop";
 import { requireAdminShopFromRequest } from "../../../../../../services/shopify/admin-auth";
 import { ISSUE_ALLOWED_STATUS_TRANSITIONS } from "../../../../../../services/exchange/issue";
 import { settleCodRefundAsStoreCredit } from "../../../../../../services/store-credit";
+import { offShopifyPaymentsEnabled } from "../../../../../../services/platform/off-shopify-payments";
 import { resolveIssueRefundSnapshot } from "../../../../../../services/issue-refund-recovery";
 
 export const runtime = "nodejs";
@@ -128,6 +129,7 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
         });
 
         if (
+          offShopifyPaymentsEnabled() &&
           refund?.method === "COD" &&
           !refund.walletTransactionId &&
           COD_STORE_CREDIT_ELIGIBLE_STATUSES.has(refund.status)

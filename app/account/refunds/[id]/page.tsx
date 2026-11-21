@@ -16,6 +16,7 @@ type RefundDetail = {
   currency: string;
   method: string;
   status: string;
+  payoutDetailsEnabled?: boolean;
   reason: string | null;
   createdAt: string;
   payoutDetails?: PayoutDetails | null;
@@ -62,7 +63,7 @@ export default function CustomerRefundDetailPage({ params }: { params: Promise<{
     void load(refundId);
   }, [refundId]);
 
-  const canSubmitDetails = useMemo(() => item?.status === "DETAILS_PENDING" && item?.method === "COD", [item]);
+  const canSubmitDetails = useMemo(() => item?.status === "DETAILS_PENDING" && item?.method === "COD" && item?.payoutDetailsEnabled !== false, [item]);
 
   async function submitPayoutDetails(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -154,7 +155,7 @@ export default function CustomerRefundDetailPage({ params }: { params: Promise<{
         <button type="submit" disabled={saving}>{saving ? "Submitting…" : "Submit details"}</button>
       </form> : null}
 
-      {!canSubmitDetails ? <p>{statusText[item.status] || "No action required."}</p> : null}
+      {!canSubmitDetails ? <p>{item.payoutDetailsEnabled === false && item.status === "DETAILS_PENDING" ? "The store will contact you about this refund." : statusText[item.status] || "No action required."}</p> : null}
     </> : null}
   </main>;
 }

@@ -25,23 +25,25 @@ type Props = {
   settledAtIso: string | null;
   payment: { status: string; url: string | null; amount: number } | null;
   locked: string | null;
+  /** false in the public app: no payment link for a dearer style, no store credit for a cheaper one. */
+  offShopifyPayments?: boolean;
 };
 
 const SETTLEMENT_LABEL: Record<string, string> = {
   COLLECT: "Customer pays the difference",
   STORE_CREDIT: "Store credit",
   NO_REFUND: "No refund (customer agreed)",
-  MANUAL_REFUND: "Refunded by us outside LoopD2C",
+  MANUAL_REFUND: "Refunded in Shopify",
 };
 const rupees = (paise: number) => `₹${(paise / 100).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 
 // Different-style exchange (team-only): swap an item for another product and settle
 // the price difference. Dearer → payment link; cheaper → team chooses.
-export default function StyleExchangeCard({ requestId, shopDomain, items, differencePaise, settlement, settledAtIso, payment, locked }: Props) {
+export default function StyleExchangeCard({ requestId, shopDomain, items, differencePaise, settlement, settledAtIso, payment, locked, offShopifyPayments = true }: Props) {
   const [editing, setEditing] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Variant[]>([]);
-  const [choice, setChoice] = useState("STORE_CREDIT");
+  const [choice, setChoice] = useState(offShopifyPayments ? "STORE_CREDIT" : "NO_REFUND");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -125,6 +127,8 @@ export default function StyleExchangeCard({ requestId, shopDomain, items, differ
           <strong>{owed > 0 ? `Customer owes ${rupees(owed)}` : owed < 0 ? `Store owes ${rupees(-owed)}` : "Same price: nothing to settle"}</strong>
           {settledAtIso ? (
             <div className="mk-alert mk-alert-info">Settled: {SETTLEMENT_LABEL[settlement || ""] || settlement} ({new Date(settledAtIso).toLocaleString("en-IN")}).</div>
+          ) : owed > 0 && !offShopifyPayments ? (
+            <div className="mk-alert mk-alert-warning">LoopD2C can&apos;t collect a price difference. Choose a style at the same price or cheaper, or create a new order in Shopify.</div>
           ) : owed > 0 ? (
             payment && payment.status !== "CANCELLED" ? (
               <div className="mk-help">
@@ -136,9 +140,9 @@ export default function StyleExchangeCard({ requestId, shopDomain, items, differ
           ) : owed < 0 ? (
             <div style={{ display: "grid", gap: 6 }}>
               <select className="mk-select" value={choice} onChange={(event) => setChoice(event.target.value)}>
-                <option value="STORE_CREDIT">Give {rupees(-owed)} as store credit</option>
+                {offShopifyPayments ? <option value="STORE_CREDIT">Give {rupees(-owed)} as store credit</option> : null}
                 <option value="NO_REFUND">No refund (customer agreed)</option>
-                <option value="MANUAL_REFUND">We refunded it outside LoopD2C</option>
+                <option value="MANUAL_REFUND">{offShopifyPayments ? "We refunded it outside LoopD2C" : `Refunded ${rupees(-owed)} in Shopify (Orders → Refund)`}</option>
               </select>
               <input className="mk-input" placeholder="Note (optional)" maxLength={300} value={note} onChange={(event) => setNote(event.target.value)} />
               <div><button type="button" className="mk-btn mk-btn-primary" disabled={busy || Boolean(locked)} onClick={() => call({ action: "settle", settlement: choice, note })}>Settle difference</button></div>

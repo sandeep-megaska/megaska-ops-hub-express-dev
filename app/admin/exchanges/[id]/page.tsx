@@ -1,4 +1,5 @@
 import { allowedStatusTransitions } from "../../../../services/exchange/lifecycle";
+import { offShopifyPaymentsEnabled } from "../../../../services/platform/off-shopify-payments";
 import { prisma } from "../../../../services/db/prisma";
 import { resolveAdminShopFromSearchParams } from "../../../../services/shopify/admin-shop-context";
 import ExchangeLifecycleControls from "./ExchangeLifecycleControls";
@@ -43,6 +44,7 @@ export default async function AdminExchangeDetailPage({
   // The shop comes from Shopify-signed request data, never from ?shop= alone.
   const shop = (await resolveAdminShopFromSearchParams(await searchParams)).shop;
   const shopDomain = shop?.shopDomain || "";
+  const offShopifyPayments = offShopifyPaymentsEnabled();
   if (!shop) {
     return (
       <div className="mk-page">
@@ -133,6 +135,7 @@ export default async function AdminExchangeDetailPage({
         settledAtIso={request.styleSettledAt ? request.styleSettledAt.toISOString() : null}
         payment={stylePayment ? { status: stylePayment.status, url: stylePayment.paymentLinkUrl, amount: stylePayment.amount } : null}
         locked={request.status === "REJECTED" ? "This exchange was rejected." : styleLocked}
+        offShopifyPayments={offShopifyPayments}
       />
 
       <PickupFeeCard
@@ -144,6 +147,7 @@ export default async function AdminExchangeDetailPage({
         feeRupees={Math.round((request.payments[0]?.amount || REVERSE_PICKUP_FEE_PAISE) / 100)}
         withinWindow={isWithinReversePickupWindow(request.deliveryDateSnapshot)}
         delhiveryConfigured={delhiveryCapability.configured}
+        feeEnabled={offShopifyPayments}
       />
 
       <EarlyReplacementCard

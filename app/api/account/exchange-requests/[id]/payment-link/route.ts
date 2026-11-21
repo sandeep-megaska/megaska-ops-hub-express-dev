@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withCors, handleOptions } from "../../../../_lib/cors";
+import { OFF_SHOPIFY_PAYMENTS_UNAVAILABLE, offShopifyPaymentsEnabled } from "../../../../../../services/platform/off-shopify-payments";
 import { prisma } from "../../../../../../services/db/prisma";
 import { ShopResolutionError } from "../../../../../../services/shopify/shop";
 import { getAuthenticatedExchangeCustomer } from "../../../../../../services/exchange/auth";
@@ -31,6 +32,9 @@ export async function POST(
   req: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
+  if (!offShopifyPaymentsEnabled()) {
+    return withCors(req, NextResponse.json({ error: OFF_SHOPIFY_PAYMENTS_UNAVAILABLE }, { status: 410 }));
+  }
   try {
     const auth = await getAuthenticatedExchangeCustomer(req);
     if (!auth) {

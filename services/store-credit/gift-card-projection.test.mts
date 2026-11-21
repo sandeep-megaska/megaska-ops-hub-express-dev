@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+// Gift-card store credit exists only in the original store-specific app; these tests
+// cover that behaviour. The public app refuses it (last test).
+process.env.LOOPD2C_OFF_SHOPIFY_PAYMENTS = "1";
+
 const { projectCreditToGiftCard } = await import("./gift-card-projection.ts");
 
 const FIXED_NOW = new Date("2026-08-04T00:00:00.000Z");
@@ -98,4 +102,13 @@ test("falls back to a default note when the ledger entry has no reason", async (
   const { d, calls } = deps({ loadTransaction: async () => txStub({ reason: null }) });
   await projectCreditToGiftCard("wt_1", d);
   assert.equal(calls.credit[0].note, "LoopD2C store credit");
+});
+
+test("the public app never issues gift-card store credit", async () => {
+  process.env.LOOPD2C_OFF_SHOPIFY_PAYMENTS = "0";
+  try {
+    await assert.rejects(projectCreditToGiftCard("tx-1"), /payments and refunds go through Shopify/);
+  } finally {
+    process.env.LOOPD2C_OFF_SHOPIFY_PAYMENTS = "1";
+  }
 });

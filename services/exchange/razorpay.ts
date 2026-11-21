@@ -1,3 +1,4 @@
+import { assertOffShopifyPaymentsEnabled } from "../platform/off-shopify-payments.ts";
 import crypto from "crypto";
 import { getInternalRazorpayConfig } from "../razorpay/config";
 import { REVERSE_PICKUP_CURRENCY, REVERSE_PICKUP_FEE_PAISE } from "./constants";
@@ -20,6 +21,8 @@ export async function isRazorpayConfigured(shopId: string) {
 }
 
 export async function createReversePickupPaymentLink(input: CreatePaymentLinkInput) {
+  // Shopify App Store 1.1.2: no buyer payments outside Shopify Checkout in the public app.
+  assertOffShopifyPaymentsEnabled();
   const { enabled, keyId, keySecret } = await getInternalRazorpayConfig(input.shopId);
   if (!enabled || !keyId || !keySecret) {
     throw new Error("Razorpay credentials are not configured");

@@ -1,6 +1,7 @@
 // Server-only: choosing a different style for an exchange item and settling the
 // price difference (rules in style-exchange.ts).
 import { prisma } from "../db/prisma.ts";
+import { offShopifyPaymentsEnabled } from "../platform/off-shopify-payments.ts";
 import { adminGraphql } from "../shopify/admin.ts";
 import { VARIANTS_BY_ID_QUERY, variantView, type ShopifyVariantNode } from "../collab/collab-shipments.ts";
 import { amountToPaise, isSettlementAllowed, styleChangeBlocker, styleDifferencePaise, type StyleSettlement } from "./style-exchange.ts";
@@ -65,6 +66,11 @@ export async function setStyle(shop: Shop, requestId: string, itemId: string, va
   await prisma.orderActionItem.update({ where: { id: item.id }, data });
   const items = request.items.map((row) => (row.id === item.id ? { ...row, ...data } : row)) as Array<{ quantity: number; replacementVariantId?: string | null; replacementUnitPricePaise?: number | null; originalUnitPricePaise?: number | null }>;
   const difference = styleDifferencePaise(items);
+  // Public app: a dearer style would need a payment outside Shopify Checkout, so it is refused.
+  if (difference !== null && difference > 0 && !offShopifyPaymentsEnabled()) {
+    await prisma.orderActionItem.update({ where: { id: item.id }, data: { replacementVariantId: null, replacementTitle: null, replacementSku: null, replacementUnitPricePaise: null, originalUnitPricePaise: null } });
+    return { ok: false as const, status: 422, error: "Choose a style at the same price or cheaper. A price difference can't be collected in LoopD2C; create a new order in Shopify instead." };
+  }
   await supersedeOpenLinks(request);
   await prisma.orderActionRequest.update({ where: { id: request.id }, data: { styleDifferencePaise: difference, styleSettlement: null, styleSettledAt: null } });
   await audit(shop.id, request.id, variantId ? "exchange.style.changed" : "exchange.style.cleared", { itemId, variantId, ...data, styleDifferencePaise: difference });
@@ -77,7 +83,7 @@ export async function settleStyle(shop: Shop, requestId: string, settlement: str
   const blocked = blocker(request);
   if (blocked) return { ok: false as const, status: 409, error: blocked };
   const difference = request.styleDifferencePaise ?? null;
-  if (!isSettlementAllowed(settlement, difference)) return { ok: false as const, status: 400, error: "That option doesn't fit this price difference." };
+  if (!isSettlementAllowed(settlement, difference, offShopifyPaymentsEnabled())) return { ok: false as const, status: 400, error: "That option doesn't fit this price difference." };
   const choice: StyleSettlement = settlement;
 
   if (choice === "COLLECT") {
