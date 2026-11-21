@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { prisma } from "../db/prisma";
+import { OFF_SHOPIFY_PAYMENTS_UNAVAILABLE, offShopifyPaymentsEnabled } from "../platform/off-shopify-payments.ts";
 import { platformEnvironment } from "../config/environment";
 import { type AuthenticatedExchangeContext } from "../exchange/auth";
 import type { RefundPayoutRail, RefundRequest, RefundStatus } from "../../generated/prisma/index.js";
@@ -128,6 +129,9 @@ export async function getCustomerRefundById(auth: AuthenticatedExchangeContext, 
 }
 
 export async function submitCustomerPayoutDetails(auth: AuthenticatedExchangeContext, id: string, payload: Record<string, unknown>) {
+  // Retired for both apps: LoopD2C no longer collects bank or UPI details (the
+  // route returns 410). Kept only so existing tests and callers compile.
+  if (!offShopifyPaymentsEnabled()) return { status: 410, error: OFF_SHOPIFY_PAYMENTS_UNAVAILABLE };
   const refund = await prisma.refundRequest.findFirst({
     where: { id, shopId: auth.shop.id, customerProfileId: auth.session.customer.id },
   });

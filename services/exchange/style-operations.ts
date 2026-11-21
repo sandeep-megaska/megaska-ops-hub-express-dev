@@ -1,6 +1,7 @@
 // Server-only: choosing a different style for an exchange item and settling the
 // price difference (rules in style-exchange.ts).
 import { prisma } from "../db/prisma.ts";
+import { offShopifyPaymentsEnabled } from "../platform/off-shopify-payments.ts";
 import { adminGraphql } from "../shopify/admin.ts";
 import { VARIANTS_BY_ID_QUERY, variantView, type ShopifyVariantNode } from "../collab/collab-shipments.ts";
 import { amountToPaise, isSettlementAllowed, styleChangeBlocker, styleDifferencePaise, type StyleSettlement } from "./style-exchange.ts";
@@ -77,7 +78,7 @@ export async function settleStyle(shop: Shop, requestId: string, settlement: str
   const blocked = blocker(request);
   if (blocked) return { ok: false as const, status: 409, error: blocked };
   const difference = request.styleDifferencePaise ?? null;
-  if (!isSettlementAllowed(settlement, difference)) return { ok: false as const, status: 400, error: "That option doesn't fit this price difference." };
+  if (!isSettlementAllowed(settlement, difference, offShopifyPaymentsEnabled())) return { ok: false as const, status: 400, error: "That option doesn't fit this price difference." };
   const choice: StyleSettlement = settlement;
 
   if (choice === "COLLECT") {
@@ -93,8 +94,10 @@ export async function settleStyle(shop: Shop, requestId: string, settlement: str
       customerPhone: request.customerPhoneSnapshot,
       customerEmail: request.customerEmailSnapshot,
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      purpose: "STYLE_DIFFERENCE",
+      orderNumber: request.orderNumber,
     });
-    await prisma.requestPayment.create({ data: { requestId: request.id, purpose: "STYLE_DIFFERENCE", amount, status: "PENDING", paymentLinkId: link.id, paymentLinkUrl: link.shortUrl, providerReferenceId: link.referenceId, expiresAt: link.expiresAt } });
+    await prisma.requestPayment.create({ data: { requestId: request.id, purpose: "STYLE_DIFFERENCE", amount, status: "PENDING", provider: link.provider, paymentLinkId: link.id, paymentLinkUrl: link.shortUrl, providerReferenceId: link.referenceId, expiresAt: link.expiresAt } });
     await prisma.orderActionRequest.update({ where: { id: request.id }, data: { styleSettlement: "COLLECT" } });
     await audit(shop.id, request.id, "exchange.style.payment_link_created", { amount, paymentLinkId: link.id });
     return { ok: true as const, paymentLinkUrl: link.shortUrl };

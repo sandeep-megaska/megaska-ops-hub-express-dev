@@ -234,6 +234,8 @@ export async function PATCH(
       return { updated: request, reversePickupPayment: reversePickupPaymentRow };
     });
 
+    // The link the customer pays the pickup charge on, for the approval email.
+    let paymentLinkUrl: string | null = reversePickupPayment?.status === "PENDING" ? reversePickupPayment.paymentLinkUrl ?? null : null;
     if (
       shouldRequirePayment &&
       reversePickupPayment &&
@@ -249,18 +251,22 @@ export async function PATCH(
         amount: reversePickupPayment.amount,
         currency: reversePickupPayment.currency || REVERSE_PICKUP_CURRENCY,
         expiresAt: reversePickupPayment.expiresAt || reversePickupPaymentExpiresAt,
+        purpose: "REVERSE_PICKUP_FEE",
+        orderNumber: updated.orderNumber,
       });
 
       await prisma.requestPayment.update({
         where: { id: reversePickupPayment.id },
         data: {
           status: "PENDING",
+          provider: paymentLink.provider,
           paymentLinkId: paymentLink.id,
           paymentLinkUrl: paymentLink.shortUrl,
           providerReferenceId: paymentLink.referenceId,
           expiresAt: paymentLink.expiresAt,
         },
       });
+      paymentLinkUrl = paymentLink.shortUrl;
     }
 
     if (shouldRequirePayment) {
@@ -280,6 +286,7 @@ export async function PATCH(
           adminNote: updated.adminNote,
           paymentAmountPaise: pickupChargePaise,
           paymentCurrency: "INR",
+          paymentLinkUrl,
         });
       }
     }

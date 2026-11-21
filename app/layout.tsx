@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import AdminNavLink from "./AdminNavLink";
 import ShopifyHostContext from "./ShopifyHostContext";
 import { AdminEmbeddedProvider } from "./AdminEmbeddedProvider";
+import { offShopifyPaymentsEnabled } from "../services/platform/off-shopify-payments";
 
 export default function RootLayout({
   children,
@@ -145,9 +146,11 @@ export default function RootLayout({
                     >
                       Cancellations
                     </AdminNavLink>
+                    {offShopifyPaymentsEnabled() ? (
                     <AdminNavLink href="/admin/wallets" className="mk-nav-link">
                       Store Credit / Wallets
                     </AdminNavLink>
+                    ) : null}
                     <AdminNavLink href="/admin/reviews" className="mk-nav-link">
                       Reviews
                     </AdminNavLink>

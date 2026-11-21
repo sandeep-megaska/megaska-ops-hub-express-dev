@@ -37,6 +37,8 @@ interface MilestoneContext {
   forwardAwb: string | null;
   forwardTrackingUrl: string | null;
   adminUrl: string;
+  /** The merchant's store name, for the email sign-off. */
+  storeName: string;
 }
 
 interface MilestoneDefinition {
@@ -62,7 +64,7 @@ const MILESTONES: Record<string, MilestoneDefinition> = {
   APPROVED: {
     customerEmail: (c) => ({
       subject: `Your exchange for order #${c.orderNumber} is approved`,
-      text: `Hi ${c.customerName || "there"},\n\nYour exchange request for order #${c.orderNumber} has been approved. Please ship the item back to us using the return instructions provided.\n\nThank you,\nMegaska`,
+      text: `Hi ${c.customerName || "there"},\n\nYour exchange request for order #${c.orderNumber} has been approved. Please ship the item back to us using the return instructions provided.\n\nThank you,\n${c.storeName}`,
     }),
     whatsapp: {
       key: "APPROVED",
@@ -74,7 +76,7 @@ const MILESTONES: Record<string, MilestoneDefinition> = {
   PAYMENT_RECEIVED: {
     customerEmail: (c) => ({
       subject: `Payment received for your exchange — order #${c.orderNumber}`,
-      text: `Hi ${c.customerName || "there"},\n\nWe've received your reverse-pickup payment for order #${c.orderNumber}. We're now arranging the pickup of your item and will share tracking details shortly.\n\nThank you,\nMegaska`,
+      text: `Hi ${c.customerName || "there"},\n\nWe've received your reverse-pickup payment for order #${c.orderNumber}. We're now arranging the pickup of your item and will share tracking details shortly.\n\nThank you,\n${c.storeName}`,
     }),
     whatsapp: {
       key: "PAYMENT_RECEIVED",
@@ -89,7 +91,7 @@ const MILESTONES: Record<string, MilestoneDefinition> = {
   PICKUP_SCHEDULED: {
     customerEmail: (c) => ({
       subject: `Reverse pickup scheduled for order #${c.orderNumber}`,
-      text: `Hi ${c.customerName || "there"},\n\nWe've scheduled the pickup of your item for order #${c.orderNumber}. Please keep the item packed and ready.${trackLine("Pickup AWB", c.reverseAwb, c.reverseTrackingUrl)}\n\nThank you,\nMegaska`,
+      text: `Hi ${c.customerName || "there"},\n\nWe've scheduled the pickup of your item for order #${c.orderNumber}. Please keep the item packed and ready.${trackLine("Pickup AWB", c.reverseAwb, c.reverseTrackingUrl)}\n\nThank you,\n${c.storeName}`,
     }),
     whatsapp: {
       key: "PICKUP_SCHEDULED",
@@ -101,7 +103,7 @@ const MILESTONES: Record<string, MilestoneDefinition> = {
   PICKUP_COMPLETED: {
     customerEmail: (c) => ({
       subject: `Your item has been picked up — order #${c.orderNumber}`,
-      text: `Hi ${c.customerName || "there"},\n\nYour item for order #${c.orderNumber} has been picked up and is on its way back to us. We'll let you know once it's received.${trackLine("Pickup AWB", c.reverseAwb, c.reverseTrackingUrl)}\n\nThank you,\nMegaska`,
+      text: `Hi ${c.customerName || "there"},\n\nYour item for order #${c.orderNumber} has been picked up and is on its way back to us. We'll let you know once it's received.${trackLine("Pickup AWB", c.reverseAwb, c.reverseTrackingUrl)}\n\nThank you,\n${c.storeName}`,
     }),
     whatsapp: {
       key: "PICKUP_COMPLETED",
@@ -113,7 +115,7 @@ const MILESTONES: Record<string, MilestoneDefinition> = {
   ITEM_RECEIVED: {
     customerEmail: (c) => ({
       subject: `We've received your returned item — order #${c.orderNumber}`,
-      text: `Hi ${c.customerName || "there"},\n\nWe've received your returned item for order #${c.orderNumber} at our warehouse and are now processing your replacement.\n\nThank you,\nMegaska`,
+      text: `Hi ${c.customerName || "there"},\n\nWe've received your returned item for order #${c.orderNumber} at our warehouse and are now processing your replacement.\n\nThank you,\n${c.storeName}`,
     }),
     whatsapp: {
       key: "ITEM_RECEIVED",
@@ -125,7 +127,7 @@ const MILESTONES: Record<string, MilestoneDefinition> = {
   REPLACEMENT_PROCESSING: {
     customerEmail: (c) => ({
       subject: `Your replacement is being prepared — order #${c.orderNumber}`,
-      text: `Hi ${c.customerName || "there"},\n\nGood news — your replacement for order #${c.orderNumber} is being prepared and will ship soon.\n\nThank you,\nMegaska`,
+      text: `Hi ${c.customerName || "there"},\n\nGood news — your replacement for order #${c.orderNumber} is being prepared and will ship soon.\n\nThank you,\n${c.storeName}`,
     }),
     whatsapp: {
       key: "REPLACEMENT_PROCESSING",
@@ -137,7 +139,7 @@ const MILESTONES: Record<string, MilestoneDefinition> = {
   REPLACEMENT_SHIPPED: {
     customerEmail: (c) => ({
       subject: `Your replacement has shipped — order #${c.orderNumber}`,
-      text: `Hi ${c.customerName || "there"},\n\nYour replacement for order #${c.orderNumber} has shipped.${trackLine("Tracking AWB", c.forwardAwb, c.forwardTrackingUrl)}\n\nThank you,\nMegaska`,
+      text: `Hi ${c.customerName || "there"},\n\nYour replacement for order #${c.orderNumber} has shipped.${trackLine("Tracking AWB", c.forwardAwb, c.forwardTrackingUrl)}\n\nThank you,\n${c.storeName}`,
     }),
     whatsapp: {
       key: "REPLACEMENT_SHIPPED",
@@ -149,7 +151,7 @@ const MILESTONES: Record<string, MilestoneDefinition> = {
   CLOSED: {
     customerEmail: (c) => ({
       subject: `Your exchange is complete — order #${c.orderNumber}`,
-      text: `Hi ${c.customerName || "there"},\n\nYour replacement for order #${c.orderNumber} has been delivered and your exchange is now complete. We hope you love it!\n\nThank you,\nMegaska`,
+      text: `Hi ${c.customerName || "there"},\n\nYour replacement for order #${c.orderNumber} has been delivered and your exchange is now complete. We hope you love it!\n\nThank you,\n${c.storeName}`,
     }),
     whatsapp: {
       key: "CLOSED",
@@ -161,7 +163,7 @@ const MILESTONES: Record<string, MilestoneDefinition> = {
   REJECTED: {
     customerEmail: (c) => ({
       subject: `Update on your exchange request — order #${c.orderNumber}`,
-      text: `Hi ${c.customerName || "there"},\n\nAfter reviewing your exchange request for order #${c.orderNumber}, we're unable to approve it${c.adminNote ? `: ${c.adminNote}` : "."}\n\nIf you have questions, please reply to this email.\n\nThank you,\nMegaska`,
+      text: `Hi ${c.customerName || "there"},\n\nAfter reviewing your exchange request for order #${c.orderNumber}, we're unable to approve it${c.adminNote ? `: ${c.adminNote}` : "."}\n\nIf you have questions, please reply to this email.\n\nThank you,\n${c.storeName}`,
     }),
     whatsapp: {
       key: "REJECTED",
@@ -218,7 +220,18 @@ export async function notifyExchangeMilestone(requestId: string, status: string)
     const forward = request.shipments.find((s) => s.direction === "FORWARD_REPLACEMENT") || null;
     const appBaseUrl = String(process.env.APP_BASE_URL || "").trim().replace(/\/$/, "");
 
+    let storeName = "our store";
+    if (request.shopId) {
+      try {
+        const { getLoopDeskMerchantSettings } = await import("../loopdesk/merchant-settings");
+        storeName = (await getLoopDeskMerchantSettings(request.shopId)).general.storeName || storeName;
+      } catch {
+        // keep the neutral sign-off
+      }
+    }
+
     const ctx: MilestoneContext = {
+      storeName,
       requestId: request.id,
       orderNumber: request.orderNumber,
       status,

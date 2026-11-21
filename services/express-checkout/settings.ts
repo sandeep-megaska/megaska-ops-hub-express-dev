@@ -2,7 +2,7 @@ import type { PrepaidDiscountSettings, PrepaidDiscountType } from "./pricing";
 
 export const DEFAULT_COD_FEE_AMOUNT_PAISE = 0;
 export const DEFAULT_COD_INFORMATION_TEXT =
-  "You need to pay to the delivery agent at the time of delivery. In case of any refund, the refund amount will be issued as store credit which you can utilize for future purchases. However, for card and UPI payments, the refund amount will be directly transferred to your original payment method.";
+  "Pay the delivery agent in cash when your order arrives. Refunds for online payments go back to your original payment method.";
 
 export const DEFAULT_PREPAID_DISCOUNT: PrepaidDiscountSettings = {
   enabled: false,
