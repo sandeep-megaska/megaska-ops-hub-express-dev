@@ -454,8 +454,12 @@ export async function shopifyAdminGraphql<T>(
   return adminGraphql<T>(query, variables, options);
 }
 
+// True when the app can call the Admin API for an installed shop. It does not
+// depend on SHOPIFY_STORE_DOMAIN: that single-store setting is unset on the public
+// app, and requiring it silently switched off customer linking and the account
+// page's order list for every store. Callers pass the shop's own domain.
 export function isShopifyAdminConfigured() {
-  return Boolean(getEnvTrimmed("SHOPIFY_STORE_DOMAIN") && (hasRuntimeCredentialConfig() || getEnvTrimmed("SHOPIFY_ADMIN_ACCESS_TOKEN")));
+  return Boolean(hasRuntimeCredentialConfig() || getEnvTrimmed("SHOPIFY_ADMIN_ACCESS_TOKEN"));
 }
 
 export async function getShopifyCancelledOrders(input: {

@@ -1,4 +1,5 @@
 import { prisma } from "../db/prisma";
+import { isShopifyHostedImageUrl } from "../shopify/hosted-image.ts";
 import { getDelhiveryRuntimeConfig, type DelhiveryPublicRuntimeConfig } from "../delhivery/config";
 import { getRazorpayRuntimeConfig, type RazorpayPublicRuntimeConfig } from "../razorpay/config";
 import { shopifyAdminGraphql } from "../shopify/admin";
@@ -248,14 +249,7 @@ function radius(value: unknown, fallback: string) {
 // are served by Shopify's CDN. Links to other websites aren't accepted: storefront apps
 // may only load from servers they declare (network access), and a merchant's own image
 // host can't be declared for every store.
-export function isShopifyHostedImageUrl(value: string) {
-  try {
-    const parsed = new URL(value);
-    return parsed.protocol === "https:" && parsed.hostname === "cdn.shopify.com" && parsed.pathname.startsWith("/s/files/");
-  } catch {
-    return false;
-  }
-}
+export { isShopifyHostedImageUrl };
 function shopifyImageUrl(value: unknown) {
   const next = nullableText(value, 800);
   return next && isShopifyHostedImageUrl(next) ? next : null;
@@ -819,7 +813,7 @@ export function normalizeLoopDeskMerchantSettings(
         labels.expressCheckoutText ??
           labels.buttonText ??
           labels.checkoutButtonText,
-        "Express Checkout",
+        "Checkout",
         80,
       ),
       viewCartText: text(labels.viewCartText, "View Cart", 80),
