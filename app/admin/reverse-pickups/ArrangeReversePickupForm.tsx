@@ -31,7 +31,7 @@ const ADDRESS_FIELDS: Array<{ key: keyof Address; label: string }> = [
   { key: "pin", label: "PIN code" },
 ];
 
-export default function ArrangeReversePickupForm({ shopDomain, initialOrder }: { shopDomain: string; initialOrder: string }) {
+export default function ArrangeReversePickupForm({ shopDomain, initialOrder, feeEnabled = true }: { shopDomain: string; initialOrder: string; feeEnabled?: boolean }) {
   const [orderNumber, setOrderNumber] = useState(initialOrder);
   const [lookup, setLookup] = useState<Lookup | null>(null);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
@@ -190,10 +190,10 @@ export default function ArrangeReversePickupForm({ shopDomain, initialOrder }: {
                 <input className="mk-input" placeholder="Customer received MBKS10 Wine instead of Black; WhatsApp 18 Nov" value={note} maxLength={500} onChange={(event) => setNote(event.target.value)} />
               </label>
 
-              <div style={{ display: "grid", gap: 6 }}>
+              {feeEnabled ? <div style={{ display: "grid", gap: 6 }}>
                 <span className="mk-label">Pickup fee</span>
                 <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                  <input type="radio" name="fee" checked={feeMode === "WAIVE"} onChange={() => setFeeMode("WAIVE")} /> Megaska pays (wrong or damaged item, our delay)
+                  <input type="radio" name="fee" checked={feeMode === "WAIVE"} onChange={() => setFeeMode("WAIVE")} /> The store pays (wrong or damaged item, our delay)
                 </label>
                 <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
                   <input type="radio" name="fee" checked={feeMode === "PAYMENT_ID"} onChange={() => setFeeMode("PAYMENT_ID")} /> Customer already paid (Razorpay payment ID)
@@ -201,7 +201,7 @@ export default function ArrangeReversePickupForm({ shopDomain, initialOrder }: {
                 {feeMode === "PAYMENT_ID" && (
                   <input className="mk-input" placeholder="pay_Nx3kQ9rT2vLm8s" value={paymentId} maxLength={60} onChange={(event) => setPaymentId(event.target.value)} />
                 )}
-              </div>
+              </div> : null}
 
               <div style={{ display: "grid", gap: 6 }}>
                 <span className="mk-label">Pickup address</span>

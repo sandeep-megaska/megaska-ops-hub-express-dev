@@ -16,6 +16,8 @@ import { isNoInvoiceOrderTags } from "../../../../../services/exchange/replaceme
 import { reconcileGiftCardRedemption } from "../../../../../services/store-credit/gift-card-reconcile";
 import { notifyCheckoutStoreCreditRedeemed } from "../../../../../services/notifications/store-credit";
 import { verifyShopifyWebhookHmac, describeShopifyWebhookHmac } from "../../../../../services/shopify/webhook-hmac";
+import { FEE_REF_ATTRIBUTE } from "../../../../../services/exchange/shopify-fee-invoice";
+import { flagUnpaidChargeOrder } from "../../../../../services/exchange/request-payment-paid";
 
 type ShopifyOrderWebhookPayload = {
   tags?: string;
@@ -254,6 +256,14 @@ export async function POST(req: NextRequest) {
   // after() runs even when the handler returns early. The route's maxDuration
   // (vercel.json) bounds the background work. It is idempotent (skips if an
   // invoice already exists) and fully isolated (its own try/catch).
+  // Exchange charge placed without payment: alert the store (see request-payment-paid.ts).
+  const chargeRef = String((payload.note_attributes || []).find((attribute) => attribute?.name === FEE_REF_ATTRIBUTE)?.value || "").trim();
+  if (chargeRef && shopDomain) {
+    const chargeOrderName = String(payload.name || "");
+    const chargeFinancialStatus = String((payload as { financial_status?: string }).financial_status || "");
+    after(() => flagUnpaidChargeOrder({ shopDomain, orderName: chargeOrderName, financialStatus: chargeFinancialStatus, referenceId: chargeRef }).catch(() => undefined));
+  }
+
   const gstOrderName = String(payload.name || "").trim();
   // Free parcels and ₹0 exchange replacements: no tax invoice, so they don't take an
   // invoice number. A replacement with a paid style difference is invoiced as usual.

@@ -22,6 +22,7 @@ import {
   getRazorpayAdminConfig,
   updateRazorpayConfig,
 } from "../../../services/razorpay/config";
+import { offShopifyPaymentsEnabled } from "../../../services/platform/off-shopify-payments";
 import {
   formatAdminShopResolutionError,
   resolveAdminShopFromSearchParams,
@@ -389,7 +390,8 @@ async function saveMerchantSettings(
       aiRecommendationsEnabled: currentCartIntelligence.aiRecommendationsEnabled,
       cartDrawerModules: currentCartIntelligence.cartDrawerModules,
     });
-    await updateRazorpayConfig(shopId, {
+    // The public app has no Razorpay section (Shopify App Store 1.1.2), so leave its config alone.
+    if (offShopifyPaymentsEnabled()) await updateRazorpayConfig(shopId, {
       enabled: formData.get("razorpayEnabled") === "on",
       environment: formData.get("razorpayEnvironment"),
       keyId: formData.get("razorpayKeyId"),
@@ -1247,7 +1249,7 @@ export default async function MerchantSettingsPage({
             ))}
           </fieldset>
         </section>
-        <section id="razorpay" className={`${cardClass} grid gap-5`}>
+        {offShopifyPaymentsEnabled() ? <section id="razorpay" className={`${cardClass} grid gap-5`}>
           <SectionHeader title="Razorpay" description="Merchant-level Razorpay configuration only. This does not change checkout payment execution, order creation, OTP, cart, Delhivery, analytics, or storefront business logic." />
           <div className="grid gap-3 md:grid-cols-2">
             <Check label="Razorpay Enabled" name="razorpayEnabled" defaultChecked={razorpay.enabled} help="Enables Razorpay as a configured merchant payment provider for backend services." />
@@ -1279,7 +1281,7 @@ export default async function MerchantSettingsPage({
             <Field label="Key Secret" name="razorpayKeySecret" type="password" defaultValue={razorpay.keySecretMasked} help="Key Secret is stored securely, masked after save, backend-only, and can be replaced by entering a new value." />
             <Field label="Webhook Secret" name="razorpayWebhookSecret" type="password" defaultValue={razorpay.webhookSecretMasked} help="Webhook Secret is stored securely for backend webhook verification only and is never exposed to storefront runtime config." />
           </div>
-        </section>
+        </section> : null}
 
         <section id="delhivery" className={`${cardClass} grid gap-5`}>
           <SectionHeader title="Delhivery" description="Merchant-level Delhivery configuration only. This does not change checkout, payment, order, or cart behavior." />
@@ -1327,7 +1329,7 @@ export default async function MerchantSettingsPage({
         <section className="grid gap-4 rounded-2xl border border-gray-200 bg-gray-50 p-6 text-sm text-gray-700 md:grid-cols-2">
           <div>
             <h2 className="font-semibold text-gray-950">Integrations placeholder</h2>
-            <p className="mt-2">Razorpay status: {razorpay.enabled ? "configured" : settings.integrations.razorpay.status}</p>
+            {offShopifyPaymentsEnabled() ? <p className="mt-2">Razorpay status: {razorpay.enabled ? "configured" : settings.integrations.razorpay.status}</p> : null}
             <p>Delhivery status: {settings.integrations.delhivery.status}</p>
           </div>
           <div>

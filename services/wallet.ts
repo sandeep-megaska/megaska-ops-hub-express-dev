@@ -1,6 +1,7 @@
 import { Prisma } from "../generated/prisma";
 import { prisma } from "./db/prisma";
 import { randomUUID } from "crypto";
+import { assertOffShopifyPaymentsEnabled } from "./platform/off-shopify-payments.ts";
 
 type WalletDirection = "CREDIT" | "DEBIT";
 type WalletTransactionType = "COD_REFUND_CREDIT" | "MANUAL_CREDIT" | "MANUAL_DEBIT" | "ADJUSTMENT" | "GOODWILL_CREDIT" | "CHECKOUT_REDEMPTION";
@@ -123,6 +124,9 @@ export async function listWalletTransactions(customerProfileId: string, currency
 }
 
 export async function applyWalletTransaction(input: WalletMutationInput & WalletAccountLookupOptions) {
+  // Shopify App Store 1.1.15: the public app doesn't issue its own store credit.
+  // Spending an existing balance (DEBIT) keeps working.
+  if (input.direction === "CREDIT") assertOffShopifyPaymentsEnabled();
   if (!Number.isInteger(input.amount) || input.amount <= 0) {
     throw new Error("amount must be a positive integer in minor currency units");
   }

@@ -116,6 +116,8 @@ export async function POST(
       amount,
       currency: existingPayment?.currency || REVERSE_PICKUP_CURRENCY,
       expiresAt,
+      purpose: "REVERSE_PICKUP_FEE",
+      orderNumber: requestRow.orderNumber,
     });
 
     const payment = existingPayment
@@ -125,6 +127,7 @@ export async function POST(
             amount,
             currency: existingPayment.currency || REVERSE_PICKUP_CURRENCY,
             status: "PENDING",
+            provider: paymentLink.provider,
             paymentLinkId: paymentLink.id,
             paymentLinkUrl: paymentLink.shortUrl,
             providerReferenceId: paymentLink.referenceId,
@@ -135,10 +138,10 @@ export async function POST(
           data: {
             requestId: requestRow.id,
             purpose: "REVERSE_PICKUP_FEE",
-            provider: "RAZORPAY",
             amount,
             currency: REVERSE_PICKUP_CURRENCY,
             status: "PENDING",
+            provider: paymentLink.provider,
             paymentLinkId: paymentLink.id,
             paymentLinkUrl: paymentLink.shortUrl,
             providerReferenceId: paymentLink.referenceId,

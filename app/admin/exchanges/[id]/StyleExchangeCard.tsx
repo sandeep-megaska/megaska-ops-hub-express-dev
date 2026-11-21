@@ -25,23 +25,25 @@ type Props = {
   settledAtIso: string | null;
   payment: { status: string; url: string | null; amount: number } | null;
   locked: string | null;
+  /** false in the public app: the payment link is a Shopify invoice, and there is no store credit for a cheaper style. */
+  offShopifyPayments?: boolean;
 };
 
 const SETTLEMENT_LABEL: Record<string, string> = {
   COLLECT: "Customer pays the difference",
   STORE_CREDIT: "Store credit",
   NO_REFUND: "No refund (customer agreed)",
-  MANUAL_REFUND: "Refunded by us outside LoopD2C",
+  MANUAL_REFUND: "Refunded in Shopify",
 };
 const rupees = (paise: number) => `₹${(paise / 100).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 
 // Different-style exchange (team-only): swap an item for another product and settle
 // the price difference. Dearer → payment link; cheaper → team chooses.
-export default function StyleExchangeCard({ requestId, shopDomain, items, differencePaise, settlement, settledAtIso, payment, locked }: Props) {
+export default function StyleExchangeCard({ requestId, shopDomain, items, differencePaise, settlement, settledAtIso, payment, locked, offShopifyPayments = true }: Props) {
   const [editing, setEditing] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Variant[]>([]);
-  const [choice, setChoice] = useState("STORE_CREDIT");
+  const [choice, setChoice] = useState(offShopifyPayments ? "STORE_CREDIT" : "NO_REFUND");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -128,7 +130,7 @@ export default function StyleExchangeCard({ requestId, shopDomain, items, differ
           ) : owed > 0 ? (
             payment && payment.status !== "CANCELLED" ? (
               <div className="mk-help">
-                Payment link {payment.status === "PAID" ? "paid" : "sent (Razorpay texts and emails it to the customer)"}{payment.url ? <>: <a className="mk-link" href={payment.url} target="_blank" rel="noreferrer">{payment.url}</a></> : null}. You can also paste it in the WhatsApp chat. The replacement can be booked once it&apos;s paid.
+                Payment link {payment.status === "PAID" ? "paid" : offShopifyPayments ? "sent (Razorpay texts and emails it to the customer)" : "created (a Shopify invoice the customer pays at checkout)"}{payment.url ? <>: <a className="mk-link" href={payment.url} target="_blank" rel="noreferrer">{payment.url}</a></> : null}. You can also paste it in the WhatsApp chat. The replacement can be booked once it&apos;s paid.
               </div>
             ) : (
               <div><button type="button" className="mk-btn mk-btn-primary" disabled={busy || Boolean(locked)} onClick={() => call({ action: "settle", settlement: "COLLECT" })}>Send payment link for {rupees(owed)}</button></div>
@@ -136,9 +138,9 @@ export default function StyleExchangeCard({ requestId, shopDomain, items, differ
           ) : owed < 0 ? (
             <div style={{ display: "grid", gap: 6 }}>
               <select className="mk-select" value={choice} onChange={(event) => setChoice(event.target.value)}>
-                <option value="STORE_CREDIT">Give {rupees(-owed)} as store credit</option>
+                {offShopifyPayments ? <option value="STORE_CREDIT">Give {rupees(-owed)} as store credit</option> : null}
                 <option value="NO_REFUND">No refund (customer agreed)</option>
-                <option value="MANUAL_REFUND">We refunded it outside LoopD2C</option>
+                <option value="MANUAL_REFUND">{offShopifyPayments ? "We refunded it outside LoopD2C" : `Refunded ${rupees(-owed)} in Shopify (Orders → Refund)`}</option>
               </select>
               <input className="mk-input" placeholder="Note (optional)" maxLength={300} value={note} onChange={(event) => setNote(event.target.value)} />
               <div><button type="button" className="mk-btn mk-btn-primary" disabled={busy || Boolean(locked)} onClick={() => call({ action: "settle", settlement: choice, note })}>Settle difference</button></div>

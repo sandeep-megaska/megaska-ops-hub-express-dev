@@ -2,6 +2,7 @@ import Link from "next/link";
 import { prisma } from "../../../services/db/prisma";
 import { formatAdminShopResolutionError, resolveAdminShopFromSearchParams } from "../../../services/shopify/admin-shop-context";
 import ArrangeReversePickupForm from "./ArrangeReversePickupForm";
+import { offShopifyPaymentsEnabled } from "../../../services/platform/off-shopify-payments";
 
 export const dynamic = "force-dynamic";
 
@@ -35,7 +36,7 @@ export default async function ReversePickupsPage({ searchParams }: { searchParam
         <p className="mk-page-subtitle">Arrange a Delhivery reverse pickup for any order: loopd2c fills in the customer, items and address. For an exchange with an expired payment link, use &quot;Fee paid another way&quot; on the exchange instead.</p>
       </div>
 
-      <ArrangeReversePickupForm shopDomain={shop.shopDomain} initialOrder={initialOrder} />
+      <ArrangeReversePickupForm shopDomain={shop.shopDomain} initialOrder={initialOrder} feeEnabled={offShopifyPaymentsEnabled()} />
 
       <section className="mk-card">
         <h2 className="mk-section-title">Arranged by the team</h2>

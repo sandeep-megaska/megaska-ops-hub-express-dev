@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { Prisma } from "../generated/prisma";
 import { prisma } from "./db/prisma";
+import { assertOffShopifyPaymentsEnabled } from "./platform/off-shopify-payments.ts";
 import { notifyCodRefundStoreCreditSettled, notifyGiftCardCodeGenerated } from "./notifications/store-credit";
 
 type StoreCreditActor = {
@@ -190,6 +191,7 @@ async function recoverDuplicateSettlement(
 }
 
 export async function settleCodRefundAsStoreCredit(input: SettleCodRefundAsStoreCreditInput) {
+  assertOffShopifyPaymentsEnabled();
   const refundRequestId = String(input.refundRequestId || "").trim();
   if (!refundRequestId) throw new Error("refundRequestId is required");
 
