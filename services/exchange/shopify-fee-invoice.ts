@@ -24,6 +24,10 @@ export type ShopifyFeeInvoiceInput = {
   title: string;
   /** true: a shipping charge (reverse pickup). false: a price difference. */
   asShipping: boolean;
+  /** The ₹0 line shown with a shipping charge, e.g. "Reverse pickup for order #1002". */
+  lineTitle?: string;
+  /** The line title when the charge itself is a line item, e.g. "Reverse pickup charge". */
+  itemTitle?: string;
   description?: string;
   customerEmail?: string | null;
   customerPhone?: string | null;
@@ -36,7 +40,7 @@ type Graphql = <T>(query: string, variables: Record<string, unknown>) => Promise
 type UserError = { field?: string[] | null; message: string };
 
 const DRAFT_ORDER_CREATE = `mutation LoopD2CExchangeCharge($input: DraftOrderInput!) {
-  draftOrderCreate(input: $input) { draftOrder { id invoiceUrl } userErrors { field message } }
+  draftOrderCreate(input: $input) { draftOrder { id invoiceUrl totalPriceSet { shopMoney { amount } } } userErrors { field message } }
 }`;
 const DRAFT_ORDER_DELETE = `mutation LoopD2CExchangeChargeDelete($input: DraftOrderDeleteInput!) {
   draftOrderDelete(input: $input) { deletedId userErrors { field message } }
@@ -70,12 +74,16 @@ function errorText(errors: UserError[] | undefined) {
   return errors && errors.length ? errors.map((e) => e.message).join("; ") : "";
 }
 
-/** Shopify may refuse a draft order without line items; the fallback is one custom, non-shippable line. */
-export function needsLineItemFallback(message: string) {
-  return /line ?items?/i.test(message);
-}
+/**
+ * How the charge is put on the draft order:
+ * - "shipping": the charge is a shipping line; Shopify needs at least one line
+ *   item, so a ₹0 informational line (not a product, nothing to ship) is added.
+ * - "item": a single custom line for the full charge (fallback, and price
+ *   differences).
+ */
+export type ChargeLayout = "shipping" | "item";
 
-export function buildDraftOrderInput(input: ShopifyFeeInvoiceInput & { referenceId: string; customerId?: string | null; shippingAddress?: ReturnType<typeof toMailingAddress> }, withLineItem: boolean) {
+export function buildDraftOrderInput(input: ShopifyFeeInvoiceInput & { referenceId: string; customerId?: string | null; shippingAddress?: ReturnType<typeof toMailingAddress> }, layout: ChargeLayout) {
   const currency = input.currency || "INR";
   const charge = money(input.amount, currency);
   const base: Record<string, unknown> = {
@@ -96,8 +104,14 @@ export function buildDraftOrderInput(input: ShopifyFeeInvoiceInput & { reference
     ...(input.customerPhone ? { phone: input.customerPhone } : {}),
     ...(input.shippingAddress ? { shippingAddress: input.shippingAddress } : {}),
   };
-  if (input.asShipping && !withLineItem) return { ...base, shippingLine: { title: input.title, priceWithCurrency: charge } };
-  return { ...base, lineItems: [{ title: input.title, quantity: 1, originalUnitPriceWithCurrency: charge, requiresShipping: false, taxable: true }] };
+  if (layout === "shipping") {
+    return {
+      ...base,
+      shippingLine: { title: input.title, priceWithCurrency: charge },
+      lineItems: [{ title: input.lineTitle || input.title, quantity: 1, originalUnitPriceWithCurrency: money(0, currency), requiresShipping: false, taxable: false }],
+    };
+  }
+  return { ...base, lineItems: [{ title: input.itemTitle || input.title, quantity: 1, originalUnitPriceWithCurrency: charge, requiresShipping: false, taxable: true }] };
 }
 
 export async function createShopifyFeeInvoice(input: ShopifyFeeInvoiceInput, deps: { graphql?: Graphql; shopDomain?: string } = {}): Promise<ShopifyFeeInvoice> {
@@ -125,12 +139,21 @@ export async function createShopifyFeeInvoice(input: ShopifyFeeInvoiceInput, dep
   const referenceId = `ld2c_${crypto.randomUUID()}`;
   const draftInput = { ...input, referenceId, customerId, shippingAddress };
 
-  let result = await graphql<{ draftOrderCreate: { draftOrder?: { id: string; invoiceUrl?: string | null } | null; userErrors: UserError[] } }>(DRAFT_ORDER_CREATE, { input: buildDraftOrderInput(draftInput, false) });
-  let message = errorText(result.draftOrderCreate.userErrors);
-  if (message && input.asShipping && needsLineItemFallback(message)) {
-    result = await graphql(DRAFT_ORDER_CREATE, { input: buildDraftOrderInput(draftInput, true) });
-    message = errorText(result.draftOrderCreate.userErrors);
+  type Created = { draftOrderCreate: { draftOrder?: { id: string; invoiceUrl?: string | null; totalPriceSet?: { shopMoney?: { amount?: string } } } | null; userErrors: UserError[] } };
+  const create = (layout: ChargeLayout) => graphql<Created>(DRAFT_ORDER_CREATE, { input: buildDraftOrderInput(draftInput, layout) });
+
+  let result: Created | null = null;
+  if (input.asShipping) {
+    // Preferred: the charge as shipping. Use it only if Shopify kept the shipping
+    // charge (the draft totals the full amount); otherwise discard it.
+    const attempt = await create("shipping");
+    const draft = attempt.draftOrderCreate.draftOrder;
+    const total = Math.round(Number(draft?.totalPriceSet?.shopMoney?.amount || 0) * 100);
+    if (!errorText(attempt.draftOrderCreate.userErrors) && draft?.id && draft.invoiceUrl && total >= input.amount) result = attempt;
+    else if (draft?.id) await graphql(DRAFT_ORDER_DELETE, { input: { id: draft.id } }).catch(() => undefined);
   }
+  if (!result) result = await create("item");
+  const message = errorText(result.draftOrderCreate.userErrors);
   const draft = result.draftOrderCreate.draftOrder;
   if (message || !draft?.id || !draft.invoiceUrl) throw new Error(`Shopify didn't create the payment link${message ? `: ${message}` : "."}`);
   return { id: draft.id, shortUrl: draft.invoiceUrl, referenceId, expiresAt: input.expiresAt ?? null, provider: "SHOPIFY" };
