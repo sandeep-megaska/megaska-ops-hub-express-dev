@@ -1,8 +1,8 @@
 'use client'
 
-import Image from 'next/image'
 import { useEffect, useState } from 'react'
 import { getDefaultGstTemplate, saveDefaultGstTemplate } from '../../lib/gst-client'
+import { adminAuthHeaders } from '../../lib/admin-fetch'
 
 type TemplatePreset = 'compact' | 'detailed' | 'dispatch'
 type FieldOption = 'showHeaderLogo' | 'showFooterLogo' | 'showSku' | 'showVariant' | 'showProductTitle' | 'showHsn' | 'showTaxBreakup' | 'showAmountInWords' | 'showDeclaration' | 'showFooterNote'
@@ -78,8 +78,6 @@ function normalizeTemplateConfig(value: ThemeConfig['invoiceTemplate']): Invoice
   return { ...DEFAULT_TEMPLATE_CONFIG, ...(value || {}), showProductTitle: true, showHsn: true }
 }
 
-const DEFAULT_HEADER = '/logos/header-logo.png'
-const DEFAULT_FOOTER = '/logos/footer-logo.avif'
 
 export function GstTemplateAdmin() {
   const [themeConfig, setThemeConfig] = useState<ThemeConfig>({ invoiceTemplate: DEFAULT_TEMPLATE_CONFIG })
@@ -109,7 +107,7 @@ export function GstTemplateAdmin() {
     setError('')
     setMessage('')
 
-    const res = await fetch('/api/gst/templates/assets', { method: 'POST', body: formData })
+    const res = await fetch('/api/gst/templates/assets', { method: 'POST', headers: await adminAuthHeaders(), body: formData })
     const payload = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; url?: string }
     if (!res.ok || !payload.ok || !payload.url) {
       setError(payload.error || 'Upload failed')
@@ -142,7 +140,7 @@ export function GstTemplateAdmin() {
       return
     }
     setThemeConfig(nextConfig)
-    setMessage(`${slot} logo reset to default`) 
+    setMessage(`${slot} logo removed`) 
     setLoading(false)
   }
 
@@ -163,8 +161,8 @@ export function GstTemplateAdmin() {
   }
 
   const invoiceTemplate = normalizeTemplateConfig(themeConfig.invoiceTemplate)
-  const headerSrc = themeConfig.headerLogoUrl || DEFAULT_HEADER
-  const footerSrc = themeConfig.footerLogoUrl || DEFAULT_FOOTER
+  const headerSrc = themeConfig.headerLogoUrl || ''
+  const footerSrc = themeConfig.footerLogoUrl || ''
 
   return (
     <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
@@ -211,14 +209,14 @@ export function GstTemplateAdmin() {
           </div>
         </div>
 
-        <p className="mk-section-subtitle">Upload header/footer logos for GST invoices (PNG, JPG, WEBP, AVIF, SVG up to 2MB).</p>
+        <p className="mk-section-subtitle">Upload header and footer logos for GST invoices (PNG, JPG or WebP, up to 2 MB). They are saved to your Shopify Files. Without a logo, the invoice shows your trade name.</p>
 
         <div className="grid gap-5 md:grid-cols-2">
           {(['header', 'footer'] as const).map((slot) => (
             <div key={slot} className="rounded-xl border border-[color:var(--line)] p-4 space-y-3">
               <h3 className="mk-section-title capitalize" style={{ marginBottom: 0 }}>{slot} logo</h3>
-              <input type="file" accept="image/png,image/jpeg,image/webp,image/avif,image/svg+xml" onChange={(e) => void uploadLogo(slot, e.target.files?.[0] || null)} disabled={loading} className="text-xs" />
-              <button type="button" className="mk-btn mk-btn-sm" onClick={() => void clearLogo(slot)} disabled={loading}>Reset</button>
+              <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(e) => void uploadLogo(slot, e.target.files?.[0] || null)} disabled={loading} className="text-xs" />
+              <button type="button" className="mk-btn mk-btn-sm" onClick={() => void clearLogo(slot)} disabled={loading}>Remove</button>
             </div>
           ))}
         </div>
@@ -232,11 +230,17 @@ export function GstTemplateAdmin() {
         <div className="space-y-4">
           <div>
             <div className="mk-help mb-1">Header</div>
-            <Image src={headerSrc} alt="Header logo preview" width={260} height={60} className="h-16 w-auto object-contain border rounded bg-white" />
+            {headerSrc
+              // eslint-disable-next-line @next/next/no-img-element -- Shopify CDN image uploaded by the merchant.
+              ? <img src={headerSrc} alt="Header logo preview" className="h-16 w-auto object-contain border rounded bg-white" />
+              : <div className="mk-help">No logo: the invoice shows your trade name.</div>}
           </div>
           <div>
             <div className="mk-help mb-1">Footer</div>
-            <Image src={footerSrc} alt="Footer logo preview" width={180} height={48} className="h-12 w-auto object-contain border rounded bg-white" />
+            {footerSrc
+              // eslint-disable-next-line @next/next/no-img-element -- Shopify CDN image uploaded by the merchant.
+              ? <img src={footerSrc} alt="Footer logo preview" className="h-12 w-auto object-contain border rounded bg-white" />
+              : <div className="mk-help">No logo: the invoice shows your trade name.</div>}
           </div>
         </div>
       </div>

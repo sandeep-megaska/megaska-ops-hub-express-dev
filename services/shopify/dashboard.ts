@@ -242,16 +242,27 @@ async function dashboardGraphql<T>(
   let token = "";
   let tokenSource: "shop_stored_token" | "runtime_client_credentials" | "env_fallback" = "env_fallback";
 
-if (runtimeConfigured) {
-  token = await getRuntimeAdminAccessToken(shopDomain);
-  tokenSource = "runtime_client_credentials";
-} else if (shopConfig.accessToken) {
-  token = shopConfig.accessToken;
-  tokenSource = "shop_stored_token";
-} else {
-  token = getEnvTrimmed("SHOPIFY_ADMIN_ACCESS_TOKEN");
-  tokenSource = "env_fallback";
-}
+  // A client-credentials token is only issued for stores in the app's own
+  // organization; on any other store fall back to the installed (offline) token
+  // instead of failing the whole account page.
+  if (runtimeConfigured) {
+    try {
+      token = await getRuntimeAdminAccessToken(shopDomain);
+      tokenSource = "runtime_client_credentials";
+    } catch (error) {
+      console.warn("[SHOPIFY DASHBOARD V2] runtime token unavailable; using the installed shop token", {
+        shopDomain,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+  if (!token && shopConfig.accessToken) {
+    token = shopConfig.accessToken;
+    tokenSource = "shop_stored_token";
+  } else if (!token) {
+    token = getEnvTrimmed("SHOPIFY_ADMIN_ACCESS_TOKEN");
+    tokenSource = "env_fallback";
+  }
 
   if (!shopDomain || !token) {
     throw new Error("Shopify dashboard sync is not configured for this shop");
@@ -264,7 +275,6 @@ console.log("[DASHBOARD SHOP SCOPE DEBUG]", {
   hasRuntimeConfig: runtimeConfigured,
   defaultShopDomain,
   tokenSource,
-  tokenPrefix: String(token || "").slice(0, 10),
 });
   console.log("[SHOPIFY DASHBOARD V2] admin graphql", {
     shopDomain,
