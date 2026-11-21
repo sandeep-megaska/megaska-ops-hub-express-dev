@@ -1,6 +1,5 @@
-import { headers } from "next/headers";
 import { getAdminRefundById } from "../../../../services/refund/admin-refunds";
-import { getShopByDomain, normalizeShopDomain, resolveShopConfig } from "../../../../services/shopify/shop";
+import { resolveAdminShopFromSearchParams } from "../../../../services/shopify/admin-shop-context";
 import RefundActions from "./RefundActions";
 
 function row(label: string, value: string | number | null | undefined) {
@@ -24,16 +23,12 @@ export default async function AdminRefundDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ shop?: string; shopify_shop?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { id } = await params;
-  const parsedSearch = await searchParams;
-  const requestHeaders = await headers();
-  const shopDomain = normalizeShopDomain(
-    parsedSearch?.shop || parsedSearch?.shopify_shop || requestHeaders.get("x-shopify-shop-domain")
-  );
-
-  const shop = shopDomain ? await getShopByDomain(shopDomain) : await resolveShopConfig();
+  // The shop comes from Shopify-signed request data, never from ?shop= alone.
+  const shop = (await resolveAdminShopFromSearchParams(await searchParams)).shop;
+  const shopDomain = shop?.shopDomain || "";
   if (!shop?.id) {
     return (
       <div className="mk-page">
