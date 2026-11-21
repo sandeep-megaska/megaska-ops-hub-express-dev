@@ -31,14 +31,16 @@ export async function isRazorpayConfigured(shopId: string) {
 export async function createReversePickupPaymentLink(input: CreatePaymentLinkInput) {
   if (!offShopifyPaymentsEnabled()) {
     const style = input.purpose === "STYLE_DIFFERENCE";
+    // Order numbers are stored with their "#" (e.g. "#1001"); the titles add their own.
+    const orderNo = String(input.orderNumber || "").trim().replace(/^#+/, "");
     const invoice = await createShopifyFeeInvoice({
       shopId: input.shopId,
       requestId: input.requestId,
       amount: input.amount || REVERSE_PICKUP_FEE_PAISE,
       currency: input.currency || REVERSE_PICKUP_CURRENCY,
-      title: style ? `Price difference${input.orderNumber ? ` for exchange #${input.orderNumber}` : ""}` : "Reverse pickup",
-      lineTitle: `Reverse pickup${input.orderNumber ? ` for order #${input.orderNumber}` : ""}`,
-      itemTitle: `Reverse pickup charge${input.orderNumber ? ` (order #${input.orderNumber})` : ""}`,
+      title: style ? `Price difference${orderNo ? ` for exchange #${orderNo}` : ""}` : "Reverse pickup",
+      lineTitle: `Reverse pickup${orderNo ? ` for order #${orderNo}` : ""}`,
+      itemTitle: `Reverse pickup charge${orderNo ? ` (order #${orderNo})` : ""}`,
       asShipping: !style,
       description: input.description,
       customerEmail: input.customerEmail,
