@@ -548,6 +548,8 @@ export async function GET(req: NextRequest) {
       paidAt: true,
       amount: true,
       currency: true,
+      paymentLinkUrl: true,
+      expiresAt: true,
     },
   },
   shipments: {
@@ -588,6 +590,8 @@ export async function GET(req: NextRequest) {
     paidAt: Date | null;
     amount: number;
     currency: string;
+    paymentLinkUrl?: string | null;
+    expiresAt?: Date | null;
   }>;
   shipments: Array<{
     direction: string;
@@ -666,6 +670,15 @@ export async function GET(req: NextRequest) {
           paidAt: payment.paidAt,
           amount: payment.amount,
           currency: payment.currency,
+          // The pickup-charge link (Shopify invoice or Razorpay), shown as
+          // "Open payment link" while it can still be paid.
+          paymentLinkUrl:
+            status === "AWAITING_PAYMENT" &&
+            payment.status === "PENDING" &&
+            payment.paymentLinkUrl &&
+            (!payment.expiresAt || new Date(payment.expiresAt).getTime() > Date.now())
+              ? payment.paymentLinkUrl
+              : null,
         }
       : null,
     reverseShipment: reverseShipment
