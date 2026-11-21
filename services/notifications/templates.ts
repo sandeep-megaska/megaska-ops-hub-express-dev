@@ -61,29 +61,24 @@ export function buildExchangeRequestedOpsTemplate(
 export function buildExchangePaymentRequiredCustomerTemplate(
   payload: ExchangeBase
 ): NotificationTemplate {
-  const amount =
-    typeof payload.paymentAmountPaise === "number"
-      ? (payload.paymentAmountPaise / 100).toFixed(2)
-      : null;
+  const amount = `₹${((typeof payload.paymentAmountPaise === "number" ? payload.paymentAmountPaise : 12000) / 100).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 
+  // Short and to the point: one action (pay the pickup charge), then the pickup is
+  // booked automatically.
   return {
-    subject: `Exchange approved - reverse pickup payment required for #${payload.orderNumber}`,
+    subject: `Exchange approved: pay ${amount} to book your pickup (order #${payload.orderNumber})`,
     text: [
-      `Hi ${payload.customerName || "Customer"},`,
+      `Hi ${payload.customerName || "there"},`,
       "",
-      "Your exchange request has been approved by our ops team.",
-      `Request ID: ${payload.requestId}`,
-      `Order Number: ${payload.orderNumber}`,
-      `Requested Size: ${payload.requestedSize || "-"}`,
-      amount
-        ? `Reverse Pickup Charge: ${payload.paymentCurrency || "INR"} ${amount}`
-        : "Reverse Pickup Charge: INR 120.00",
-      payload.paymentLinkUrl ? `Payment Link: ${payload.paymentLinkUrl}` : "",
-      `Dashboard: ${buildCustomerExchangeUrl(payload.requestId)}`,
+      `Good news: your exchange for order #${payload.orderNumber} is approved${payload.requestedSize ? ` (new size: ${payload.requestedSize})` : ""}.`,
       "",
-      "Please complete payment to schedule reverse pickup.",
+      `To collect your item, please pay the ${amount} reverse pickup charge:`,
+      payload.paymentLinkUrl ? payload.paymentLinkUrl : `Open your account page: ${buildCustomerExchangeUrl(payload.requestId)}`,
+      "",
+      "Your address is already filled in, so it takes less than a minute (UPI or card). As soon as it's paid, we book the pickup and send you the tracking details.",
+      payload.paymentLinkUrl ? `\nYou can also see this exchange on your account page: ${buildCustomerExchangeUrl(payload.requestId)}` : "",
     ]
-      .filter(Boolean)
+      .filter((line) => line !== undefined)
       .join("\n"),
   };
 }

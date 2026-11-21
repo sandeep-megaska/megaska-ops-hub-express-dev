@@ -13,6 +13,9 @@ test("the reverse pickup charge is a shipping line, not a product", () => {
   assert.deepEqual(input.tags, [FEE_ORDER_TAG]);
   assert.deepEqual((input.customAttributes as Array<{ key: string; value: string }>).find((a) => a.key === FEE_REF_ATTRIBUTE)?.value, "ld2c_ref");
   assert.deepEqual(input.purchasingEntity, { customerId: "gid://shopify/Customer/7" });
+  assert.equal((input.customAttributes as Array<{ key: string; value: string }>).find((a) => a.key === "loopd2c_payment_intent")?.value, "prepaid", "COD hidden at checkout");
+  assert.equal(input.acceptAutomaticDiscounts, false, "the prepaid offer can't discount the charge");
+  assert.equal(input.allowDiscountCodesInCheckout, false);
 });
 
 test("fallback and price differences use one custom, non-shippable line", () => {

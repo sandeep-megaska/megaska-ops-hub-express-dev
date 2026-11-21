@@ -234,6 +234,8 @@ export async function PATCH(
       return { updated: request, reversePickupPayment: reversePickupPaymentRow };
     });
 
+    // The link the customer pays the pickup charge on, for the approval email.
+    let paymentLinkUrl: string | null = reversePickupPayment?.status === "PENDING" ? reversePickupPayment.paymentLinkUrl ?? null : null;
     if (
       shouldRequirePayment &&
       reversePickupPayment &&
@@ -264,6 +266,7 @@ export async function PATCH(
           expiresAt: paymentLink.expiresAt,
         },
       });
+      paymentLinkUrl = paymentLink.shortUrl;
     }
 
     if (shouldRequirePayment) {
@@ -283,6 +286,7 @@ export async function PATCH(
           adminNote: updated.adminNote,
           paymentAmountPaise: pickupChargePaise,
           paymentCurrency: "INR",
+          paymentLinkUrl,
         });
       }
     }

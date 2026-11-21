@@ -55,3 +55,26 @@ export async function markShopifyChargePaid(input: { shopId: string; referenceId
     },
   };
 }
+
+/**
+ * orders/create safety net: an exchange-charge order that was placed but not paid
+ * (e.g. Cash on Delivery slipped through) never reaches orders/paid, so the
+ * exchange would wait forever. Tell the store instead.
+ */
+export async function flagUnpaidChargeOrder(input: { shopDomain: string; orderName: string; financialStatus: string; referenceId: string }) {
+  if (!input.referenceId || ["paid", "partially_refunded", "refunded"].includes(input.financialStatus.toLowerCase())) return;
+  const shop = await prisma.shop.findFirst({ where: { shopDomain: input.shopDomain }, select: { id: true } });
+  if (!shop) return;
+  const payment = await prisma.requestPayment.findFirst({
+    where: { provider: "SHOPIFY", providerReferenceId: input.referenceId, request: { shopId: shop.id } },
+    select: { request: { select: { orderNumber: true } } },
+  });
+  if (!payment) return;
+  const { sendAdminAlert } = await import("../notifications/resend.ts");
+  await sendAdminAlert({
+    shopId: shop.id,
+    eventType: "EXCHANGE",
+    subject: `Exchange #${payment.request.orderNumber}: the pickup charge order ${input.orderName} isn't paid`,
+    text: `Order ${input.orderName} for the exchange charge was placed with payment status "${input.financialStatus}", so the reverse pickup hasn't been booked. Check the payment in Shopify, or waive the charge on the exchange page to book the pickup.`,
+  }).catch(() => undefined);
+}

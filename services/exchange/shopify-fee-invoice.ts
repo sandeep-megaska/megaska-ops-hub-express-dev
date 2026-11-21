@@ -84,7 +84,13 @@ export function buildDraftOrderInput(input: ShopifyFeeInvoiceInput & { reference
     customAttributes: [
       { key: FEE_REF_ATTRIBUTE, value: input.referenceId },
       { key: FEE_REQUEST_ATTRIBUTE, value: input.requestId },
+      // The charge must be paid online: the LoopD2C payment customization hides
+      // Cash on Delivery for a "prepaid" cart, as it does for the cart drawer.
+      { key: "loopd2c_payment_intent", value: "prepaid" },
     ],
+    // A fixed charge: no automatic discounts (e.g. the prepaid offer) and no codes.
+    acceptAutomaticDiscounts: false,
+    allowDiscountCodesInCheckout: false,
     ...(input.customerId ? { purchasingEntity: { customerId: input.customerId } } : {}),
     ...(input.customerEmail ? { email: input.customerEmail } : {}),
     ...(input.customerPhone ? { phone: input.customerPhone } : {}),
