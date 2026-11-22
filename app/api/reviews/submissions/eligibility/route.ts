@@ -1,12 +1,12 @@
 import type { NextRequest } from "next/server";
 import { resolveCanonicalReviewTarget, resolveReviewSubmissionAccess } from "../../../../../services/reviews/review-submission-access.ts";
 import { evaluateReviewSubmissionEligibility } from "../../../../../services/reviews/review-submission-eligibility.ts";
+import { hasUnexpectedReviewQueryField } from "../../../../../services/reviews/review-query-fields.ts";
 import { allowedOrigin, rateLimit, reply } from "../../../../../services/reviews/review-submission-http.ts";
 import { reviewSubmissionEntryPoints, reviewSubmissionErrorStatus, reviewSubmissionMessage } from "../../../../../services/reviews/review-submission-api.ts";
 
 export const dynamic = "force-dynamic";
 
-const allowedQueryFields = new Set(["productId", "variantId", "orderId", "orderLineId", "accessToken", "entryPoint"]);
 function fail(errorCode: string) { return reply({ ok: false, errorCode, message: reviewSubmissionMessage(errorCode) }, reviewSubmissionErrorStatus(errorCode)); }
 function targetFromParams(params: URLSearchParams) { return { productId: params.get("productId"), variantId: params.get("variantId"), orderId: params.get("orderId"), orderLineId: params.get("orderLineId") }; }
 export function eligibilityMessage(reason: string) { return reviewSubmissionMessage(reason); }
@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
   if (!allowedOrigin(request)) return fail("UNAUTHENTICATED");
   if (!rateLimit(request, "review-submission-eligibility", 30, 900_000)) return fail("RATE_LIMITED");
   const params = new URL(request.url).searchParams;
-  for (const field of params.keys()) if (!allowedQueryFields.has(field)) return fail("INVALID_INPUT");
+  if (hasUnexpectedReviewQueryField(params)) return fail("INVALID_INPUT");
   const accessToken = params.get("accessToken");
   const entryPoint = params.get("entryPoint");
   if (!accessToken && (!entryPoint || !reviewSubmissionEntryPoints.has(entryPoint))) return fail("INVALID_INPUT");
