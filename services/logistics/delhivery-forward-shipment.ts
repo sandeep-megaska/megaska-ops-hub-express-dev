@@ -1,5 +1,6 @@
 import { toDelhiveryPhone, toDelhiveryPincode, type DelhiveryRuntimeConfig } from "./delhivery-runtime";
 import type { ResolvedShippingAddress } from "../exchange/pickup-address";
+import { replacementPackingDescription, type PackedLine } from "../exchange/replacement-order";
 import { ensureDelhiveryWarehouse, DelhiveryWarehouseError } from "./delhivery-warehouse";
 
 type ExchangeRequestForForwardShipment = {
@@ -9,6 +10,7 @@ type ExchangeRequestForForwardShipment = {
     productTitle: string | null;
     variantTitle: string | null;
     sku: string | null;
+    currentSize?: string | null;
     requestedSize: string | null;
     quantity: number;
     replacementTitle?: string | null;
@@ -76,10 +78,13 @@ function warehouseValue(names: string[], fallback = "") {
   return fallback;
 }
 
+export type ReplacementForShipment = { orderName: string | null; lines: PackedLine[] };
+
 export function buildDelhiveryForwardShipmentPayload(
   request: ExchangeRequestForForwardShipment,
   pickupLocationName: string,
   shippingAddress: ResolvedShippingAddress,
+  replacement?: ReplacementForShipment | null,
 ) {
   const name = required(shippingAddress.name, "Customer name");
   const phone = toDelhiveryPhone(required(shippingAddress.phone, "Customer phone"));
@@ -95,13 +100,8 @@ export function buildDelhiveryForwardShipmentPayload(
   const warehouseCity = warehouseValue(["DELHIVERY_WAREHOUSE_CITY", "DELHIVERY_PICKUP_CITY"]);
   const warehouseState = warehouseValue(["DELHIVERY_WAREHOUSE_STATE", "DELHIVERY_PICKUP_STATE"]);
   const warehousePin = warehouseValue(["DELHIVERY_WAREHOUSE_PIN", "DELHIVERY_ORIGIN_PIN", "DELHIVERY_PICKUP_PIN"]);
-  const productDescription = request.items
-    // A different style ships the chosen product; otherwise the same product in the requested size.
-    .map((item) => (item.replacementTitle
-      ? [item.replacementTitle, item.replacementSku]
-      : [item.productTitle, item.variantTitle, item.requestedSize ? `Size ${item.requestedSize}` : null, item.sku]).map(clean).filter(Boolean).join(" / "))
-    .filter(Boolean)
-    .join("; ") || "Exchange replacement item";
+  // What to pack, from the replacement Shopify order when it exists (see replacementPackingDescription).
+  const productDescription = replacementPackingDescription({ packed: replacement?.lines, items: request.items });
   const totalQuantity = request.items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0) || 1;
 
   return {
@@ -110,7 +110,8 @@ export function buildDelhiveryForwardShipmentPayload(
     },
     shipments: [
       {
-        order: `EX-FWD-${order}-${request.id.slice(0, 8)}`,
+        // The replacement Shopify order's number when there is one: that's the order the warehouse packs.
+        order: `EX-FWD-${clean(replacement?.orderName).replace(/^#/, "") || order}-${request.id.slice(0, 8)}`,
         name,
         phone,
         email: clean(shippingAddress.email) || undefined,
@@ -200,12 +201,13 @@ export async function createDelhiveryForwardShipment(
   request: ExchangeRequestForForwardShipment,
   runtime: DelhiveryRuntimeConfig,
   shippingAddress: ResolvedShippingAddress,
+  replacement?: ReplacementForShipment | null,
 ): Promise<DelhiveryForwardShipmentResult> {
   if (!runtime.configured) {
     throw new DelhiveryForwardShipmentError(runtime.reason, 503);
   }
 
-  const payload = buildDelhiveryForwardShipmentPayload(request, runtime.pickupLocationName, shippingAddress);
+  const payload = buildDelhiveryForwardShipmentPayload(request, runtime.pickupLocationName, shippingAddress, replacement);
   return submitDelhiveryShipmentPayload(runtime, payload);
 }
 

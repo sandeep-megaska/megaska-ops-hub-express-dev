@@ -2,7 +2,7 @@
 // (rules in replacement-order.ts).
 import { prisma } from "../db/prisma.ts";
 import { adminGraphql } from "../shopify/admin.ts";
-import { buildReplacementDraftOrder, pickSizeVariant, replacementChargePaise, type ReplacementLine, type SizeVariant } from "./replacement-order.ts";
+import { buildReplacementDraftOrder, pickSizeVariant, replacementChargePaise, type PackedLine, type ReplacementLine, type SizeVariant } from "./replacement-order.ts";
 
 type Shop = { id: string; shopDomain: string };
 type Address = { name: string; phone: string; address1: string; address2: string; city: string; state: string; pin: string; email?: string | null };
@@ -10,6 +10,7 @@ type UserError = { message?: string | null };
 
 const PENDING = "pending";
 const LINES_QUERY = `query ReplacementLines($id: ID!) { order(id: $id) { customer { id } lineItems(first: 100) { nodes { id variant { id selectedOptions { name value } product { variants(first: 100) { nodes { id sku price inventoryQuantity inventoryPolicy selectedOptions { name value } } } } } } } } }`;
+const ORDER_LINES_QUERY = `query ReplacementOrderLines($id: ID!) { order(id: $id) { lineItems(first: 50) { nodes { title variantTitle sku quantity } } } }`;
 const VARIANT_PRICES_QUERY = `query ReplacementPrices($ids: [ID!]!) { nodes(ids: $ids) { ... on ProductVariant { id price } } }`;
 
 type LineNode = { id: string; variant?: { id: string; selectedOptions?: Array<{ name: string; value: string }>; product?: { variants?: { nodes?: Array<SizeVariant & { inventoryPolicy?: string | null }> } } } | null };
@@ -20,11 +21,19 @@ function errors(list: UserError[] | null | undefined) {
 
 export class ReplacementOrderError extends Error {}
 
-// Creates the order once (idempotent). Returns its id and name.
-export async function ensureReplacementOrder(shop: Shop, requestId: string, address: Address) {
+type OrderLineNode = { title?: string | null; variantTitle?: string | null; sku?: string | null; quantity?: number | null };
+const toPacked = (nodes: OrderLineNode[] | null | undefined): PackedLine[] =>
+  (nodes || []).filter((node) => node.title).map((node) => ({ title: String(node.title), variantTitle: node.variantTitle ?? null, sku: node.sku ?? null, quantity: node.quantity ?? 1 }));
+
+// Creates the order once (idempotent). Returns its id, name and lines (what the
+// warehouse packs; empty if Shopify couldn't be read, the label then falls back).
+export async function ensureReplacementOrder(shop: Shop, requestId: string, address: Address): Promise<{ id: string; name: string | null; lines: PackedLine[] }> {
   const request = await prisma.orderActionRequest.findFirst({ where: { id: requestId, shopId: shop.id, requestType: "EXCHANGE" }, include: { items: true } });
   if (!request) throw new ReplacementOrderError("Exchange not found.");
-  if (request.replacementShopifyOrderId && request.replacementShopifyOrderId !== PENDING) return { id: request.replacementShopifyOrderId, name: request.replacementShopifyOrderName };
+  if (request.replacementShopifyOrderId && request.replacementShopifyOrderId !== PENDING) {
+    const existing = await adminGraphql<{ order?: { lineItems?: { nodes?: OrderLineNode[] } } | null }>(ORDER_LINES_QUERY, { id: request.replacementShopifyOrderId }, { shopDomain: shop.shopDomain }).catch(() => null);
+    return { id: request.replacementShopifyOrderId, name: request.replacementShopifyOrderName, lines: toPacked(existing?.order?.lineItems?.nodes) };
+  }
   if (!request.shopifyOrderId) throw new ReplacementOrderError("This exchange isn't linked to its Shopify order, so the replacement order can't be created.");
 
   // Claim, so a double click or a retry can't create two orders.
@@ -63,14 +72,14 @@ export async function ensureReplacementOrder(shop: Shop, requestId: string, addr
       `mutation ReplacementDraft($input: DraftOrderInput!) { draftOrderCreate(input: $input) { draftOrder { id } userErrors { field message } } }`, { input });
     const draftId = created.draftOrderCreate?.draftOrder?.id;
     if (!draftId) throw new ReplacementOrderError(`Shopify didn't create the replacement order: ${errors(created.draftOrderCreate?.userErrors) || "no reason given"}`);
-    const completed = await graphql<{ draftOrderComplete?: { draftOrder?: { order?: { id?: string; name?: string } | null } | null; userErrors?: UserError[] } }>(
-      `mutation ReplacementComplete($id: ID!) { draftOrderComplete(id: $id, paymentPending: false) { draftOrder { order { id name } } userErrors { field message } } }`, { id: draftId });
+    const completed = await graphql<{ draftOrderComplete?: { draftOrder?: { order?: { id?: string; name?: string; lineItems?: { nodes?: OrderLineNode[] } } | null } | null; userErrors?: UserError[] } }>(
+      `mutation ReplacementComplete($id: ID!) { draftOrderComplete(id: $id, paymentPending: false) { draftOrder { order { id name lineItems(first: 50) { nodes { title variantTitle sku quantity } } } } userErrors { field message } } }`, { id: draftId });
     const order = completed.draftOrderComplete?.draftOrder?.order;
     if (!order?.id) throw new ReplacementOrderError(`Shopify didn't complete the replacement order: ${errors(completed.draftOrderComplete?.userErrors) || "no reason given"}`);
 
     await prisma.orderActionRequest.update({ where: { id: request.id }, data: { replacementShopifyOrderId: order.id, replacementShopifyOrderName: order.name ?? null } });
     await prisma.auditEvent.create({ data: { actorType: "admin", eventType: "exchange.replacement_order.created", entityType: "OrderActionRequest", entityId: request.id, payload: { shopId: shop.id, shopifyOrderId: order.id, shopifyOrderName: order.name, chargePaise: replacementChargePaise(request), lines } as never } });
-    return { id: order.id, name: order.name ?? null };
+    return { id: order.id, name: order.name ?? null, lines: toPacked(order.lineItems?.nodes) };
   } catch (error) {
     await prisma.orderActionRequest.update({ where: { id: request.id }, data: { replacementShopifyOrderId: null } }).catch(() => undefined);
     throw error instanceof ReplacementOrderError ? error : new ReplacementOrderError(error instanceof Error ? error.message : "Shopify replacement order failed.");
