@@ -65,7 +65,7 @@ Last updated 23 Nov 2026. Keep this short; details live in the linked docs and P
     (Certificate of Incorporation with CIN); two-factor on. No assets until the
     LoopD2C Meta app is created after Shopify approval.
 - **Megaska's WhatsApp today:** Meta app "LoopD2C" (App ID 1109443664889956, never
-  reviewed, to be renamed "Megaska WhatsApp") in the Trading portfolio (shown as
+  reviewed, renamed "Megaska Chat Assistant" on 23 Nov 2026) in the Trading portfolio (shown as
   "Chatji", formerly "Megaska"). System user `loopd2c-server` has access only to that
   app and Megaska's WhatsApp account. A business's own app on its own number needs no
   Tech Provider review. Leave it as is (privacy policy stays megaska.com) until
