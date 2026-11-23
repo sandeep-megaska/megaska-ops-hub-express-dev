@@ -1,6 +1,6 @@
 # Project status and decisions (LoopD2C, website, Chatji)
 
-Last updated 22 Nov 2026. Keep this short; details live in the linked docs and PRs.
+Last updated 23 Nov 2026. Keep this short; details live in the linked docs and PRs.
 
 ## Repositories
 - `megaska-ops-hub-express-dev`: the LoopD2C Shopify app. Branches `main` (production)
@@ -49,10 +49,44 @@ Last updated 22 Nov 2026. Keep this short; details live in the linked docs and P
   until the new one is approved. Remove `CHATJI_GSTIN` (Trading's GSTIN) in Vercel
   until Technologies' GST is issued.
 
+## WhatsApp: Meta Tech Provider plan (decided 23 Nov 2026)
+- **One Meta business portfolio for BIGONBUY Technologies** (the "Chatji AI" one
+  Varun is creating; verify it as BIGONBUY Technologies Private Limited). It owns
+  both Meta apps, Chatji and LoopD2C. No portfolio per product.
+- **Chatji today** sits in the verified BIGONBUY Trading portfolio, with Tech Partner
+  and coexistence approval there. Before moving its app, ask Meta support whether
+  that approval moves with the app or needs a new review.
+- **LoopD2C (option B):** its own Meta app in the Technologies portfolio, with its own
+  Tech Provider app review (`whatsapp_business_management`,
+  `whatsapp_business_messaging`, Embedded Signup screencast). Not Chatji's app:
+  merchants should see "LoopD2C" in Meta's dialog, webhooks come straight to
+  LoopD2C, and the products stay independent.
+- **In the app:** a "Connect WhatsApp" button (Embedded Signup) replaces pasting a
+  phone number ID and system-user token (kept as an advanced fallback in merchant
+  settings). Two choices:
+  - "Use your existing WhatsApp Business app number" (coexistence): the default,
+    the usual case for small Indian D2C brands.
+  - "Use a dedicated number for automation" (Cloud API only): for larger teams
+    and high volume.
+  Confirm the coexistence limits in Meta's current docs (phone app kept active,
+  lower throughput, features that change, countries) and show them to merchants.
+- **Megaska:** WhatsApp stays as it is (Cloud API number) until its LoopD2C cutover.
+  Then its WhatsApp Business account (owned by BIGONBUY Trading, the client) gives
+  access to the LoopD2C app (BIGONBUY Technologies, the provider). The number and
+  templates carry over. It is the first account connected through the new flow
+  ("existing Cloud API number", not coexistence).
+- **Order of work:**
+  1. Now: Technologies portfolio created and verified; check the Chatji approval move.
+  2. After Shopify approval: create the LoopD2C Meta app; build Embedded Signup
+     behind a feature flag; screencast; submit Meta app review.
+  3. After Meta approval: switch it on for new merchants; connect Megaska during
+     its cutover.
+
 ## Open items
 - Shopify App Store review: respond to reviewer emails.
 - After approval: Megaska cutover; ask Shopify the COD gift-card question.
 - WhatsApp template with the pickup-charge link (Meta approval needed).
 - Chatji Meta portfolio move; GST registration for BIGONBUY Technologies.
+- LoopD2C WhatsApp Embedded Signup with coexistence (after Shopify approval; see the plan above).
 - Before April 2027: Admin/Storefront API upgrade (2026-04 support ends 16 Apr 2027);
   cart.discountAllocations deprecation (Storefront 2026-07).
