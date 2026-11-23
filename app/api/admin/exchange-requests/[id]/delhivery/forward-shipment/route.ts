@@ -71,14 +71,14 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     }
     // Shopify order for the replacement first (stock, records, GST for a paid
     // difference); it's created once, so a failed booking can be retried safely.
-    let replacementOrder: { id: string; name: string | null };
+    let replacementOrder: Awaited<ReturnType<typeof ensureReplacementOrder>>;
     try {
       replacementOrder = await ensureReplacementOrder(shop, request.id, shippingAddress);
     } catch (error) {
       if (error instanceof ReplacementOrderError) return NextResponse.json({ error: error.message }, { status: 422 });
       throw error;
     }
-    const delhiveryResult = await createDelhiveryForwardShipment(request, runtime, shippingAddress);
+    const delhiveryResult = await createDelhiveryForwardShipment(request, runtime, shippingAddress, { orderName: replacementOrder.name, lines: replacementOrder.lines });
     const nextStatus = resolveNextStatus(request.status, Boolean(delhiveryResult.awb));
 
     const result = await prisma.$transaction(async (tx) => {

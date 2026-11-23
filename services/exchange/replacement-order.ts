@@ -100,6 +100,41 @@ export function buildReplacementDraftOrder(input: {
   };
 }
 
+// What the warehouse packs, as it goes on the courier label (Delhivery products_desc).
+// The replacement's own SKU comes first so the packer can't mistake it for the
+// original: a size exchange used to print the original variant and SKU
+// ("… / Navy Royal / XL / Lycra / Size L / MBPS07-NavyRoyal-XL") and the XL was sent.
+export type PackedLine = { title: string; variantTitle?: string | null; sku?: string | null; quantity: number };
+type ExchangeItemForPacking = { productTitle?: string | null; variantTitle?: string | null; sku?: string | null; currentSize?: string | null; requestedSize?: string | null; quantity: number; replacementTitle?: string | null; replacementSku?: string | null };
+
+const text = (value: unknown) => String(value ?? "").replace(/\s+/g, " ").trim();
+
+// "Navy Royal / XL / Lycra" with XL -> L gives "Navy Royal / L / Lycra"; null if the size isn't in it.
+export function swapSizeInVariantTitle(variantTitle: string | null | undefined, currentSize: string | null | undefined, requestedSize: string | null | undefined) {
+  const parts = text(variantTitle).split(" / ").filter(Boolean);
+  const from = normalizeSize(currentSize);
+  const index = from ? parts.findIndex((part) => normalizeSize(part) === from) : -1;
+  if (index < 0 || !text(requestedSize)) return null;
+  parts[index] = text(requestedSize);
+  return parts.join(" / ");
+}
+
+function packedLineText(line: PackedLine) {
+  return [line.sku ? `SKU ${text(line.sku)}` : null, text(line.title), text(line.variantTitle) || null, `x${line.quantity}`].filter(Boolean).join(" · ");
+}
+
+export function replacementPackingDescription(input: { packed?: PackedLine[] | null; items: ExchangeItemForPacking[] }) {
+  // Best: the replacement Shopify order's own lines (exactly what was ordered).
+  const packed = (input.packed ?? []).filter((line) => text(line.title));
+  if (packed.length) return packed.map(packedLineText).join("; ").slice(0, 500);
+  // Fallback: the replacement worked out from the exchange, never the original's SKU.
+  return input.items.map((item) => {
+    if (item.replacementTitle) return packedLineText({ title: item.replacementTitle, sku: item.replacementSku, quantity: item.quantity });
+    const variant = swapSizeInVariantTitle(item.variantTitle, item.currentSize, item.requestedSize) ?? (item.requestedSize ? `Size ${text(item.requestedSize)}` : null);
+    return packedLineText({ title: text(item.productTitle), variantTitle: variant, quantity: item.quantity });
+  }).filter(Boolean).join("; ").slice(0, 500) || "Exchange replacement item";
+}
+
 // Orders that must not get a GST invoice number: free parcels, ₹0 replacements.
 export function isNoInvoiceOrderTags(tags: unknown): boolean {
   const list = (Array.isArray(tags) ? tags.map(String) : String(tags || "").split(",")).map((tag) => tag.trim().toLowerCase());
