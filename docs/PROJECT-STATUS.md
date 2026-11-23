@@ -53,16 +53,17 @@ Last updated 23 Nov 2026. Keep this short; details live in the linked docs and P
 - **One Meta business portfolio for BIGONBUY Technologies** (the "Chatji AI" one
   Varun is creating; verify it as BIGONBUY Technologies Private Limited). It owns
   both Meta apps, Chatji and LoopD2C. No portfolio per product.
-- **Portfolio name: "BIGONBUY Technologies"** (not "Chatji AI"). Meta's Embedded
-  Signup title shows the portfolio's display name ("Seamlessly connect your account
-  to ___"), the same for every app in it; the Privacy Policy / Terms links show the
-  app's name. A neutral company name fits both products. The display name can be
-  edited later, separately from the verified legal name. Confirm with LoopD2C's
-  popup preview before going live.
-- **Creating the portfolio:** Sandeep's profile is at Meta's 6-portfolio limit, and
-  the Shopify-created portfolios can't be deleted (their pixels/datasets are
-  permanent). Varun creates it from his profile and adds Sandeep as a full-control
-  admin.
+- **Portfolio created (23 Nov 2026): "LoopD2C-Chatji"**, by Varun (Sandeep's profile
+  is at Meta's 6-portfolio limit; Shopify-created portfolios can't be deleted because
+  their pixels are permanent). Sandeep has full control. Meta refused "BIGONBUY" and
+  "BIGONBUY Technologies" as display names. Embedded Signup's title shows this
+  display name for every app in the portfolio ("connect your account to
+  LoopD2C-Chatji"); the Privacy Policy / Terms links show the app's name. It can be
+  renamed later in Business info; the verified legal name is separate.
+  - Next: Business info with legal name BIGONBUY Technologies Private Limited,
+    registered office, website naming Technologies; then business verification
+    (Certificate of Incorporation with CIN); two-factor on. No assets until the
+    LoopD2C Meta app is created after Shopify approval.
 - **Chatji today** sits in the verified BIGONBUY Trading portfolio (Business ID
   1082074179187560, App ID 1412752687737627), with Tech Provider and coexistence
   approval there. Meta support (23 Nov 2026): the approval belongs to the
@@ -95,7 +96,7 @@ Last updated 23 Nov 2026. Keep this short; details live in the linked docs and P
   templates carry over. It is the first account connected through the new flow
   ("existing Cloud API number", not coexistence).
 - **Order of work:**
-  1. Now: Technologies portfolio created and verified. Chatji stays in Trading.
+  1. Now: verify the "LoopD2C-Chatji" portfolio as BIGONBUY Technologies. Chatji stays in Trading.
   2. After Shopify approval: create the LoopD2C Meta app; build Embedded Signup
      behind a feature flag; screencast; submit Meta app review.
   3. After Meta approval: switch it on for new merchants; connect Megaska during
