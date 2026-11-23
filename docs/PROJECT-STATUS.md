@@ -64,6 +64,13 @@ Last updated 23 Nov 2026. Keep this short; details live in the linked docs and P
     registered office, website naming Technologies; then business verification
     (Certificate of Incorporation with CIN); two-factor on. No assets until the
     LoopD2C Meta app is created after Shopify approval.
+- **Megaska's WhatsApp today:** Meta app "LoopD2C" (App ID 1109443664889956, never
+  reviewed, to be renamed "Megaska WhatsApp") in the Trading portfolio (shown as
+  "Chatji", formerly "Megaska"). System user `loopd2c-server` has access only to that
+  app and Megaska's WhatsApp account. A business's own app on its own number needs no
+  Tech Provider review. Leave it as is (privacy policy stays megaska.com) until
+  Megaska's cutover. Then Megaska connects through the new public LoopD2C app like
+  any merchant, and this app is retired. Don't press "Become a Tech Provider" on it.
 - **Chatji today** sits in the verified BIGONBUY Trading portfolio (Business ID
   1082074179187560, App ID 1412752687737627), with Tech Provider and coexistence
   approval there. Meta support (23 Nov 2026): the approval belongs to the
@@ -75,7 +82,9 @@ Last updated 23 Nov 2026. Keep this short; details live in the linked docs and P
   - Before moving: confirm whether Chatji is a direct Tech Provider or works
     through a Solution Partner (only the latter needs a partner request).
   - Before moving: check how Chatji stores client tokens. System users, their
-    tokens and the payment method belong to the portfolio and don't move.
+    tokens and the payment method belong to the portfolio and don't move
+    (`chatji-server`, `chatji-stagingserver` are Trading system users: new ones and
+    new tokens are needed in LoopD2C-Chatji).
 - **LoopD2C (option B):** its own Meta app in the Technologies portfolio, with its own
   Tech Provider app review (`whatsapp_business_management`,
   `whatsapp_business_messaging`, Embedded Signup screencast). Not Chatji's app:
