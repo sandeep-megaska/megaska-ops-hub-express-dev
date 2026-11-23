@@ -53,9 +53,18 @@ Last updated 23 Nov 2026. Keep this short; details live in the linked docs and P
 - **One Meta business portfolio for BIGONBUY Technologies** (the "Chatji AI" one
   Varun is creating; verify it as BIGONBUY Technologies Private Limited). It owns
   both Meta apps, Chatji and LoopD2C. No portfolio per product.
-- **Chatji today** sits in the verified BIGONBUY Trading portfolio, with Tech Partner
-  and coexistence approval there. Before moving its app, ask Meta support whether
-  that approval moves with the app or needs a new review.
+- **Chatji today** sits in the verified BIGONBUY Trading portfolio (Business ID
+  1082074179187560, App ID 1412752687737627), with Tech Provider and coexistence
+  approval there. Meta support (23 Nov 2026): the approval belongs to the
+  portfolio and does **not** move with the app; a new portfolio needs its own
+  approval, and app permissions must be rechecked after a move.
+  - So Chatji stays in Trading until the Technologies portfolio has its own
+    approval (obtained through the LoopD2C app). Then move Chatji, recheck its
+    permissions and retest its Embedded Signup.
+  - Before moving: confirm whether Chatji is a direct Tech Provider or works
+    through a Solution Partner (only the latter needs a partner request).
+  - Before moving: check how Chatji stores client tokens. System users, their
+    tokens and the payment method belong to the portfolio and don't move.
 - **LoopD2C (option B):** its own Meta app in the Technologies portfolio, with its own
   Tech Provider app review (`whatsapp_business_management`,
   `whatsapp_business_messaging`, Embedded Signup screencast). Not Chatji's app:
@@ -76,11 +85,11 @@ Last updated 23 Nov 2026. Keep this short; details live in the linked docs and P
   templates carry over. It is the first account connected through the new flow
   ("existing Cloud API number", not coexistence).
 - **Order of work:**
-  1. Now: Technologies portfolio created and verified; check the Chatji approval move.
+  1. Now: Technologies portfolio created and verified. Chatji stays in Trading.
   2. After Shopify approval: create the LoopD2C Meta app; build Embedded Signup
      behind a feature flag; screencast; submit Meta app review.
   3. After Meta approval: switch it on for new merchants; connect Megaska during
-     its cutover.
+     its cutover. Then move Chatji's app to Technologies (see above).
 
 ## Open items
 - Shopify App Store review: respond to reviewer emails.
