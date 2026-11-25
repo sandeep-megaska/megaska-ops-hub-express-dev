@@ -1,28 +1,26 @@
-// Runs the sync's database writes against a real Postgres.
+// Imports and the channel API against a real Postgres.
 //   TEST_DATABASE_URL=postgres://... npm run test:db
-// The database must already have the migrations applied. Uses its own store
-// slug and deletes it afterwards.
+// Needs the migrations applied. Uses its own store and deletes it afterwards.
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import type { ShopifyProduct } from "../lib/shopify/types.ts";
 
 const url = process.env.TEST_DATABASE_URL;
 if (url) {
   process.env.DATABASE_URL = url;
   process.env.STORE_SLUG = `test-${process.pid}`;
-  process.env.SHOPIFY_STORE_DOMAIN = `test-${process.pid}.myshopify.com`;
 }
+const skip = url ? false : "set TEST_DATABASE_URL to run";
 
 const { getPool, closePool } = await import("../lib/db.ts");
-const { ensureStore } = await import("../lib/sync/store.ts");
-const { mapProduct, mapCollection } = await import("../lib/shopify/map.ts");
-const { upsertProduct, deleteProduct } = await import("../lib/sync/products.ts");
-const { upsertCollection } = await import("../lib/sync/collections.ts");
-const { handleWebhook } = await import("../lib/sync/webhooks.ts");
+const { ensureStore } = await import("../lib/store.ts");
+const { importProductsCsv, importCollectionsJson, importRedirectsCsv } = await import("../lib/import/run.ts");
+const { applyStockUpdates } = await import("../lib/channel/inventory.ts");
+const { createApiClient, authenticate, revokeApiClient } = await import("../lib/channel/keys.ts");
+const { listChannelVariants } = await import("../lib/channel/products.ts");
 
-const fixture = JSON.parse(readFileSync(new URL("./fixtures/product.json", import.meta.url), "utf8")) as ShopifyProduct;
-const skip = url ? false : "set TEST_DATABASE_URL to run";
+const fixture = (name: string) => readFileSync(new URL(`./fixtures/${name}`, import.meta.url), "utf8");
+const productsCsv = fixture("products_export.csv");
 
 after(async () => {
   if (!url) return;
@@ -30,154 +28,150 @@ after(async () => {
   await closePool();
 });
 
-const collection = (id: string, handle: string) =>
-  mapCollection({
-    id: `gid://shopify/Collection/${id}`, handle, title: handle, descriptionHtml: "", updatedAt: "2026-10-22T15:41:39Z",
-    sortOrder: "MANUAL", templateSuffix: null, seo: { title: null, description: null }, image: null, metafields: { nodes: [] },
-  });
+const stock = async (sku: string) =>
+  (await getPool().query(`select inventory_quantity as q, inventory_source as s from product_variants where sku = $1 and store_id = $2`, [sku, await ensureStore()])).rows[0];
 
-test("product upsert, update, membership and delete", { skip }, async () => {
+test("product CSV import, re-import and full-mode archiving", { skip }, async () => {
   const storeId = await ensureStore();
   const db = getPool();
-  const [c1, c2] = fixture.collections.nodes.map((c) => c.id.split("/").pop()!);
+  const first = await importProductsCsv(productsCsv, { mode: "partial", fileName: "products_export.csv" });
+  assert.ok(first.ok, first.ok ? "" : first.error);
+  assert.equal(first.stats.productsCreated, 3);
+  assert.equal(first.stats.variantsCreated, 8);
+  assert.equal(first.stats.stockFromCsv, 7, "draft has no qty column value");
 
-  await upsertCollection(storeId, collection(c1, "one-piece"), []);
-  const tags = await upsertProduct(storeId, mapProduct(fixture));
-  assert.ok(tags.includes(`product:${fixture.handle}`));
-  assert.ok(tags.includes("collection:one-piece"));
+  const p = (await db.query(
+    `select title, status, published, min_price::text, options, metafields,
+            (select count(*)::int from product_media m where m.product_id = products.id) as media
+     from products where store_id = $1 and handle = 'black'`, [storeId])).rows[0];
+  assert.equal(p.min_price, "995.00");
+  assert.equal(p.media, 5);
+  assert.equal(p.options.length, 3);
+  assert.equal(p.metafields["gst_pro.hsn"], "61124990");
+  assert.deepEqual(await stock("MBPS07-Wine-L"), { q: 0, s: "csv" });
 
-  const counts = await db.query(
-    `select (select count(*) from product_variants v join products p on p.id = v.product_id where p.store_id = $1)::int as variants,
-            (select count(*) from product_media m join products p on p.id = m.product_id where p.store_id = $1)::int as media,
-            (select count(*) from collection_products cp join collections c on c.id = cp.collection_id where c.store_id = $1)::int as members`,
-    [storeId],
-  );
-  assert.deepEqual(counts.rows[0], { variants: 5, media: 5, members: 1 });
+  // Re-import with a changed price, a removed variant, and a new one.
+  const edited = productsCsv
+    .replace(/995\.00/g, "899.00")
+    .replace(/\r\nblack,[^\r\n]*MBPS07-Wine-L[^\r\n]*/, "")
+    .replace("MBPS07-Wine-M", "MBPS07-Wine-M2");
+  const second = await importProductsCsv(edited, { mode: "partial" });
+  assert.ok(second.ok, second.ok ? "" : second.error);
+  assert.equal(second.stats.productsCreated, 0);
+  // A new SKU is a new item to Browntape, even with the same options: Wine-M is replaced, not renamed.
+  assert.equal(second.stats.variantsRemoved, 2, "Wine-L and Wine-M gone");
+  assert.equal(second.stats.variantsCreated, 1, "Wine-M2 is new");
+  assert.equal(second.stats.variantsUpdated, 6);
+  assert.equal((await db.query(`select count(*)::int as n from product_variants where store_id = $1`, [storeId])).rows[0].n, 7);
+  assert.equal((await db.query(`select min_price::text as m from products where store_id = $1 and handle = 'black'`, [storeId])).rows[0].m, "899.00");
 
-  const search = await db.query(
-    `select handle from products where store_id = $1 and search @@ plainto_tsquery('simple', 'thoughtfully')`,
-    [storeId],
-  );
-  assert.equal(search.rows.length, 0, "description is not indexed");
-  const byTitle = await db.query(
-    `select handle from products where store_id = $1 and search @@ plainto_tsquery('simple', 'cutout monokini')`,
-    [storeId],
-  );
-  assert.equal(byTitle.rows[0]?.handle, fixture.handle);
-
-  // Newer version: one variant and one image removed, renamed handle, price change.
-  const v2 = structuredClone(fixture);
-  v2.updatedAt = "2030-01-01T00:00:00Z";
-  v2.handle = "renamed-handle";
-  v2.variants.nodes.pop();
-  v2.media.nodes.pop();
-  v2.variants.nodes[0].price = "899.00";
-  const tags2 = await upsertProduct(storeId, mapProduct(v2));
-  assert.ok(tags2.includes("product:renamed-handle"));
-  assert.ok(tags2.includes(`product:${fixture.handle}`), "old handle is invalidated too");
-  const row = await db.query(
-    `select p.handle, p.min_price::text, (select count(*)::int from product_variants where product_id = p.id) as variants,
-            (select count(*)::int from product_media where product_id = p.id) as media
-     from products p where p.store_id = $1`,
-    [storeId],
-  );
-  assert.deepEqual(row.rows[0], { handle: "renamed-handle", min_price: "899.00", variants: 4, media: 4 });
-
-  // An older version arriving late must not overwrite the newer one.
-  const stale = await upsertProduct(storeId, mapProduct(fixture));
-  assert.deepEqual(stale, []);
-  const still = await db.query(`select handle from products where store_id = $1`, [storeId]);
-  assert.equal(still.rows[0].handle, "renamed-handle");
-
-  // Collection sync sets order; a second collection joins.
-  await upsertCollection(storeId, collection(c2, "bestsellers"), [legacy(fixture.id)]);
-  const members = await db.query(
-    `select c.handle, cp.position from collection_products cp join collections c on c.id = cp.collection_id
-     where c.store_id = $1 order by c.handle`,
-    [storeId],
-  );
-  assert.deepEqual(members.rows, [{ handle: "bestsellers", position: 1 }, { handle: "one-piece", position: 1 }]);
-
-  // Removing the product from a collection on the collection side.
-  const ctags = await upsertCollection(storeId, collection(c2, "bestsellers"), []);
-  assert.ok(ctags.includes("product:renamed-handle"));
-
-  const deleted = await deleteProduct(storeId, legacy(fixture.id));
-  assert.ok(deleted.includes("product:renamed-handle"));
-  assert.ok(deleted.includes("collection:one-piece"));
-  const left = await db.query(`select count(*)::int as n from product_variants where store_id = $1`, [storeId]);
-  assert.equal(left.rows[0].n, 0, "variants cascade");
+  // Full mode: a file with only the cap archives the rest.
+  const capOnly = productsCsv.split("\r\n").filter((l, i) => i === 0 || l.startsWith("classic-unisex")).join("\r\n");
+  const third = await importProductsCsv(capOnly, { mode: "full" });
+  assert.ok(third.ok);
+  assert.equal(third.stats.productsArchived, 2);
+  const statuses = (await db.query(`select handle, status from products where store_id = $1 order by handle`, [storeId])).rows;
+  assert.deepEqual(statuses.map((r) => r.status), ["archived", "active", "archived"]);
+  await importProductsCsv(productsCsv, { mode: "partial" }); // restore
 });
 
-test("handle collision parks the previous owner's handle", { skip }, async () => {
+test("a bad file changes nothing and is recorded as failed", { skip }, async () => {
   const storeId = await ensureStore();
-  const a = structuredClone(fixture);
-  a.id = "gid://shopify/Product/111"; a.handle = "shared"; a.collections.nodes = [];
-  a.variants.nodes = a.variants.nodes.map((v, i) => ({ ...v, id: `gid://shopify/ProductVariant/1110${i}` }));
-  a.media.nodes = a.media.nodes.map((m, i) => ({ ...m, id: `gid://shopify/MediaImage/1110${i}` }));
-  const b = structuredClone(a);
-  b.id = "gid://shopify/Product/222";
-  b.variants.nodes = b.variants.nodes.map((v, i) => ({ ...v, id: `gid://shopify/ProductVariant/2220${i}` }));
-  b.media.nodes = b.media.nodes.map((m, i) => ({ ...m, id: `gid://shopify/MediaImage/2220${i}` }));
-  await upsertProduct(storeId, mapProduct(a));
-  await upsertProduct(storeId, mapProduct(b));
-  const rows = await getPool().query(
-    `select shopify_id, handle from products where store_id = $1 and shopify_id in (111, 222) order by shopify_id`,
-    [storeId],
+  const before = (await getPool().query(`select count(*)::int as n from products where store_id = $1`, [storeId])).rows[0].n;
+  const bad = await importProductsCsv("Name,Email\nx,y", { mode: "full", fileName: "wrong.csv" });
+  assert.equal(bad.ok, false);
+  const after = (await getPool().query(`select count(*)::int as n from products where store_id = $1`, [storeId])).rows[0].n;
+  assert.equal(after, before);
+  const run = (await getPool().query(`select status, file_name from import_runs where store_id = $1 order by started_at desc limit 1`, [storeId])).rows[0];
+  assert.deepEqual(run, { status: "failed", file_name: "wrong.csv" });
+});
+
+test("collections import builds rule and manual memberships in order", { skip }, async () => {
+  const storeId = await ensureStore();
+  const result = await importCollectionsJson(JSON.parse(readFileSync(new URL("../data/megaska-collections.json", import.meta.url), "utf8")));
+  assert.ok(result.ok, result.ok ? "" : result.error);
+  assert.equal(result.stats.collections, 31);
+  const members = async (handle: string) =>
+    (await getPool().query(
+      `select p.handle from collection_products cp join collections c on c.id = cp.collection_id
+       join products p on p.id = cp.product_id where c.store_id = $1 and c.handle = $2 order by cp.position`,
+      [storeId, handle],
+    )).rows.map((r) => r.handle);
+  assert.deepEqual(await members("best-sellers"), ["black"]);
+  assert.deepEqual(await members("swim-caps"), ["classic-unisex-soft-silicone"], "manual list");
+  // Membership includes drafts, as in Shopify; the storefront hides them when listing.
+  assert.deepEqual(await members("under-499-store"), ["classic-unisex-soft-silicone", "draft-thing"]);
+  assert.deepEqual(await members("all"), ["classic-unisex-soft-silicone", "black", "draft-thing"], "best-seller order, unranked last");
+  // Rules keep working after a product import (cap retagged as swimwear).
+  await importProductsCsv(productsCsv.replace('"swim cap"', '"swim cap, swimwear"').replace(",swim cap,", ',"swim cap, swimwear",'), { mode: "partial" });
+  assert.ok((await members("swimwears")).includes("classic-unisex-soft-silicone"));
+});
+
+test("redirects import", { skip }, async () => {
+  const r = await importRedirectsCsv(fixture("url_redirects.csv"));
+  assert.ok(r.ok);
+  assert.equal(r.stats.redirects, 3);
+});
+
+test("Browntape stock: first reading replaces CSV stock, newer wins, retries are harmless", { skip }, async () => {
+  const storeId = await ensureStore();
+  const push = (items: Array<{ sku: string; quantity: number; updatedAt?: string }>, requestId = "r") =>
+    applyStockUpdates(storeId, items, { clientName: "Browntape", requestId });
+
+  const first = await push([{ sku: "mbps07-black-s", quantity: 7 }, { sku: "NOPE", quantity: 1 }]);
+  assert.deepEqual(first.results.map((r) => r.outcome), ["updated", "unknown_sku"], "SKU match ignores case");
+  assert.deepEqual(first.tags, ["product:black"]);
+  assert.deepEqual(await stock("MBPS07-Black-S"), { q: 7, s: "api:Browntape" });
+
+  const same = await push([{ sku: "MBPS07-Black-S", quantity: 7 }]);
+  assert.equal(same.results[0].outcome, "unchanged");
+  assert.deepEqual(same.tags, []);
+
+  const t = (m: number) => new Date(Date.now() + m * 60_000).toISOString();
+  assert.equal((await push([{ sku: "MBPS07-Black-S", quantity: 3, updatedAt: t(10) }])).results[0].outcome, "updated");
+  const late = await push([{ sku: "MBPS07-Black-S", quantity: 9, updatedAt: t(5) }]);
+  assert.deepEqual(late.results[0], { sku: "MBPS07-Black-S", outcome: "stale", quantity: 3 });
+  assert.equal((await stock("MBPS07-Black-S")).q, 3);
+
+  // A later CSV import must not overwrite Browntape's stock, but still sets CSV-only SKUs.
+  await importProductsCsv(productsCsv, { mode: "partial" });
+  assert.equal((await stock("MBPS07-Black-S")).q, 3);
+  assert.deepEqual(await stock("MBPS07-Black-M"), { q: 10, s: "csv" });
+
+  const log = (await getPool().query(`select outcome from inventory_log where store_id = $1 order by id`, [storeId])).rows.map((r) => r.outcome);
+  assert.deepEqual(log, ["updated", "unknown_sku", "unchanged", "updated", "stale"]);
+});
+
+test("concurrent pushes for one SKU: the newest reading wins", { skip }, async () => {
+  const storeId = await ensureStore();
+  const base = Date.now() + 3_600_000;
+  const pushes = Array.from({ length: 12 }, (_, i) =>
+    applyStockUpdates(storeId, [{ sku: "MSC01-Black", quantity: i, updatedAt: new Date(base + i * 1000).toISOString() }], { clientName: "Browntape", requestId: `c${i}` }),
   );
-  assert.deepEqual(rows.rows, [{ shopify_id: "111", handle: "shared--111" }, { shopify_id: "222", handle: "shared" }]);
+  await Promise.all(pushes);
+  assert.equal((await stock("MSC01-Black")).q, 11);
 });
 
-test("webhook deliveries are idempotent", { skip }, async () => {
+test("API keys and the product feed", { skip }, async () => {
   const storeId = await ensureStore();
-  const first = await handleWebhook(storeId, { webhookId: "wh-1", topic: "products/delete", payload: { id: 222 } });
-  assert.equal(first.status, "processed");
-  assert.ok(first.tags.includes("product:shared"));
-  const again = await handleWebhook(storeId, { webhookId: "wh-1", topic: "products/delete", payload: { id: 222 } });
-  assert.equal(again.status, "duplicate");
-  const other = await handleWebhook(storeId, { webhookId: "wh-2", topic: "orders/create", payload: { id: 5 } });
-  assert.equal(other.status, "ignored");
-});
+  const { key } = await createApiClient(storeId, "Browntape", ["inventory:write", "products:read"]);
+  const client = await authenticate(`Bearer ${key}`);
+  assert.equal(client?.name, "Browntape");
+  assert.deepEqual(client?.scopes, ["inventory:write", "products:read"]);
+  const tampered = key.slice(0, -1) + (key.endsWith("x") ? "y" : "x");
+  assert.equal(await authenticate(`Bearer ${tampered}`), null);
+  assert.equal(await authenticate(null), null);
+  await revokeApiClient(storeId, client!.id);
+  assert.equal(await authenticate(`Bearer ${key}`), null);
 
-function legacy(gid: string) {
-  return gid.split("/").pop()!;
-}
-
-test("inventory webhooks apply from the payload, newest reading wins", { skip }, async () => {
-  const storeId = await ensureStore();
-  const db = getPool();
-  const p = structuredClone(fixture);
-  p.id = "gid://shopify/Product/333"; p.handle = "stock-test"; p.collections.nodes = [];
-  p.variants.nodes = p.variants.nodes.map((v, i) => ({
-    ...v, id: `gid://shopify/ProductVariant/3330${i}`,
-    inventoryItem: { id: `gid://shopify/InventoryItem/3339${i}`, tracked: true, harmonizedSystemCode: null },
-  }));
-  p.media.nodes = p.media.nodes.map((m, i) => ({ ...m, id: `gid://shopify/MediaImage/3330${i}` }));
-  const syncedAt = new Date("2030-01-01T10:00:00Z");
-  await upsertProduct(storeId, mapProduct(p), syncedAt);
-  const qty = async () =>
-    (await db.query(`select inventory_quantity from product_variants where store_id = $1 and inventory_item_id = 33390`, [storeId])).rows[0].inventory_quantity;
-  const before = await qty();
-
-  const deliver = (id: string, available: number, at: string) =>
-    handleWebhook(storeId, { webhookId: id, topic: "inventory_levels/update",
-      payload: { inventory_item_id: 33390, location_id: 1, available, updated_at: at } });
-
-  const older = await deliver("inv-1", 7, "2030-01-01T09:00:00Z"); // older than the catalog sync
-  assert.deepEqual(older.tags, []);
-  assert.equal(await qty(), before);
-
-  const newer = await deliver("inv-2", 3, "2030-01-01T11:00:00Z");
-  assert.deepEqual(newer.tags, ["product:stock-test"]);
-  assert.equal(await qty(), 3);
-
-  await deliver("inv-3", 9, "2030-01-01T10:30:00Z"); // arrives late
-  assert.equal(await qty(), 3);
-
-  // A catalog sync that read Shopify before the last stock push keeps the pushed stock.
-  await upsertProduct(storeId, mapProduct({ ...p, updatedAt: "2031-01-01T00:00:00Z" }), new Date("2030-01-01T10:59:00Z"));
-  assert.equal(await qty(), 3);
-  // One that read it afterwards takes Shopify's number.
-  await upsertProduct(storeId, mapProduct({ ...p, updatedAt: "2031-01-02T00:00:00Z" }), new Date("2030-01-01T12:00:00Z"));
-  assert.equal(await qty(), before);
+  const page1 = await listChannelVariants(storeId, { limit: 3 });
+  assert.equal(page1.length, 3);
+  const page2 = await listChannelVariants(storeId, { limit: 50, after: page1[2].sku });
+  assert.equal(page1.length + page2.length, 8);
+  const v = [...page1, ...page2].find((x) => x.sku === "MBPS07-Black-S")!;
+  assert.deepEqual(v.options, { Color: "Black", Size: "S", Fabric: "Polyester-Spandex" });
+  assert.equal(v.variant_title, "Black / S / Polyester-Spandex");
+  assert.equal(v.mrp, "1899.00");
+  assert.equal(v.hsn_code, "61124990");
+  assert.equal(v.quantity, 3);
 });

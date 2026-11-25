@@ -1,92 +1,82 @@
-# Megaska storefront (Phase 1)
+# Megaska storefront
 
 A storefront for megaska.com built on Next.js 16, Supabase Postgres and Vercel.
 It lives in this repo but is a **separate app**, deployed as its own Vercel
 project with Root Directory `storefront`.
 
-**Phase 1 scope:** a read-only copy of the Shopify catalog, plus product and
-collection pages to check it against the live store. Shopify stays the
-source of truth, and checkout still happens on megaska.com: the buy button
-opens a Shopify cart permalink.
-
-## How the sync works
+There is **no Shopify app**. The storefront owns its catalog:
 
 ```
-Shopify ──webhooks──▶ /api/webhooks/shopify ──▶ refetch that product/collection ──▶ Postgres ──▶ revalidateTag
-        ◀─Admin GraphQL─ /api/cron/full-sync (nightly 03:10 IST) ──▶ full reconciliation, deletes what Shopify removed
+Shopify product CSV export ──upload in /admin──▶ products, variants, images ─┐
+data/megaska-collections.json ──────────────────▶ 31 collections (rules) ────┼─▶ Postgres ─▶ cached pages
+Shopify redirects CSV export ──upload in /admin──▶ old URL → new URL ────────┘
+Browntape (Ginesys OMS) ──POST /api/channel/v1/inventory──▶ stock by SKU
 ```
 
-- **Webhooks** (product/collection create, update and delete, plus
-  inventory level updates). Each delivery is HMAC-verified and recorded in
-  `webhook_events`; retried deliveries do nothing. The handler always
-  refetches the resource from the Admin API rather than trusting the
-  payload, so deliveries that arrive out of order still end in the latest
-  state. An older write never overwrites a newer one (`shopify_updated_at`
-  guard).
-- **Stock (Browntape).** Megaska's stock is managed in Genesys Browntape,
-  which pushes it into Shopify. Every push fires `inventory_levels/update`.
-  We apply the payload's `available` number directly, with no Admin API
-  call, so a bulk push of hundreds of SKUs can't hit Shopify's rate limit or
-  its 5-second webhook timeout. A per-variant `inventory_updated_at` keeps
-  the newest reading when pushes and syncs race. This relies on there being
-  one stock location (Jaipur-1). If you add a second one, set
-  `SHOPIFY_MULTI_LOCATION=true` and totals are reread from Shopify instead.
-- **Full sync** fixes anything a webhook missed, and also copies Shopify's
-  URL redirects (156 today) so old links keep working after the cutover.
-- **Pages** are cached with `'use cache'` plus `cacheTag`. Postgres is hit
-  only after a webhook or the nightly sync invalidates a tag.
-- **Images** are served straight from Shopify's CDN using its `width`
-  parameter, so there are no Vercel Image Optimization charges. Phase 3
-  moves them to Supabase Storage.
+Checkout still happens on megaska.com in this phase.
 
-## Schema (`supabase/migrations`)
+## Pieces
 
-| Table | Holds |
-|---|---|
-| `stores` | One row per brand. Every table carries `store_id`, ready for SaaS. |
-| `products`, `product_variants`, `product_media` | Catalog, prices, stock, HSN, full-text search column |
-| `collections`, `collection_products` | Collections and their product order |
-| `url_redirects` | Shopify redirects, used for 308s on old URLs |
-| `sync_runs`, `webhook_events` | Audit trail and idempotency for the sync |
+| Piece | Where | Notes |
+|---|---|---|
+| Product import | `lib/import/` | Reads Shopify's standard export. Products are matched by handle and variants by SKU. One import is one transaction: a bad file changes nothing. "Whole catalog" mode archives products missing from the file. |
+| Collections | `lib/collections/`, `data/megaska-collections.json` | Megaska's 31 collections as taken from Shopify: 20 rule-based (tag, type, title, price) and 11 hand-picked, plus the best-seller order. Rebuilt after every import, so a newly tagged product shows up by itself. |
+| Redirects | `lib/import/redirects.ts` | Shopify's redirect export. Targets with `?variant=<Shopify id>` go to the product page. |
+| Channel API | `lib/channel/`, `app/api/channel/v1/` | For Browntape. Spec to share: [`docs/channel-api.md`](docs/channel-api.md). |
+| Admin | `/admin` | Password-protected (user `admin`, password from `ADMIN_PASSWORD`). Imports, API keys, import history and recent stock updates. |
+| Pages | `app/` | Home, collections and products, cached with `'use cache'`. Imports and stock pushes refresh them. Images come from Shopify's CDN. |
 
-RLS is on for every table with no policies, so Supabase's public API keys
-can't read anything. The app connects with the database role.
+### Stock rules (Browntape)
 
-## One-time setup
+- Quantities are absolute, per SKU, so retries are harmless.
+- The newest reading wins (by `updated_at`, or arrival time when none is sent).
+  This is checked on the locked row, so concurrent pushes can't let an older
+  reading win.
+- The product CSV sets stock only for SKUs that no API client has set yet.
+  Once Browntape has sent a SKU's stock, re-importing the CSV never overwrites it.
+- Every change is recorded in `inventory_log`, and the last 30 show on the admin page.
 
-1. **Supabase.** Done: project `megaska-storefront` (ref
-   `ltzgsesozhwakdundnsi`, ap-south-1 Mumbai), with the schema applied. For
-   future migrations run `MIGRATION_DATABASE_URL=... npm run db:migrate`
-   (applied migrations are tracked in `storefront_migrations`).
-2. **Shopify app** (read-only). In the Shopify Dev Dashboard, create an app
-   with scopes `read_products`, `read_inventory` and
-   `read_online_store_navigation`, and install it on the Megaska store. Put
-   its client ID and secret in the environment.
-3. **Vercel.** Create a new project from this repo:
+## Setup
+
+1. **Supabase.** Done: project `megaska-storefront` (`ltzgsesozhwakdundnsi`,
+   Mumbai), with the schema applied. Future migrations:
+   `MIGRATION_DATABASE_URL=... npm run db:migrate`.
+2. **Vercel.** Create a new project from this repo:
    - Root Directory: `storefront`
-   - Add the variables from `.env.example`
+   - Add the variables in `.env.example`
    - Leave `SITE_INDEXABLE` unset
 
    Deploy. You get `https://<name>.vercel.app`.
-4. **First import:**
-   `node --env-file=.env.local --experimental-strip-types scripts/full-sync.ts`,
-   or call the cron route with the secret:
-   `curl -H "Authorization: Bearer $CRON_SECRET" https://<name>.vercel.app/api/cron/full-sync`
-5. **Webhooks:**
-   `node --env-file=.env.local --experimental-strip-types scripts/register-webhooks.ts https://<name>.vercel.app`
+3. **Fill the catalog** at `https://<name>.vercel.app/admin`, in this order:
+   1. Products. In Shopify: Products → Export → All products → "CSV for Excel,
+      Numbers, or other spreadsheet programs". Upload the file and tick
+      "whole catalog".
+   2. Collections. Click Import with no file to load Megaska's 31 collections.
+   3. Redirects. In Shopify: Content → Menus → View URL redirects → Export.
+4. **Browntape.** Create an API key on the admin page and share it with
+   Ginesys together with `docs/channel-api.md`.
+
+CLI alternatives (need `.env.local` with `DATABASE_URL`):
+
+```
+npm run import -- products products_export.csv --full
+npm run import -- collections
+npm run import -- redirects url_redirects.csv
+npm run api-key:create -- Browntape
+```
 
 ## Checks
 
 ```
-npm test                                     # unit tests (mappers, HMAC, formatting)
-TEST_DATABASE_URL=... npm run test:db        # sync writes against a real Postgres
+npm test                                     # unit tests: CSV, Shopify mapping, rules, API validation
+TEST_DATABASE_URL=... npm run test:db        # imports and stock rules against a real Postgres
 npm run typecheck && npm run lint && npm run build
 ```
 
-## Before the domain cutover (not Phase 1)
+## Before the domain cutover
 
 - Set `SITE_INDEXABLE=true`. Until then every response carries
   `X-Robots-Tag: noindex` and robots.txt disallows everything, so the
   vercel.app copy can't compete with megaska.com in Google.
-- Add a sitemap, catch-all redirects for non-product paths, the Meta and
-  Google product feeds, and analytics.
+- Still to do: sitemap, redirects for non-product paths, Meta and Google
+  product feeds, analytics, and pages (`/pages/...`).

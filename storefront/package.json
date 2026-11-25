@@ -11,9 +11,9 @@
     "typecheck": "next typegen && tsc --noEmit",
     "test": "node --test --experimental-strip-types \"lib/**/*.test.ts\"",
     "db:migrate": "node scripts/migrate.mjs",
-    "sync:full": "node --experimental-strip-types scripts/full-sync.ts",
-    "webhooks:register": "node --experimental-strip-types scripts/register-webhooks.ts",
-    "test:db": "node --test --experimental-strip-types test/db.integration.test.ts"
+    "test:db": "node --test --experimental-strip-types test/db.integration.test.ts",
+    "import": "node --experimental-strip-types scripts/import.ts",
+    "api-key:create": "node --experimental-strip-types scripts/create-api-key.ts"
   },
   "dependencies": {
     "next": "16.2.2",

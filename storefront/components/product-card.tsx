@@ -16,8 +16,8 @@ export function ProductCard({ product, eager = false }: { product: Card; eager?:
             srcSet={shopifySrcSet(first.url)}
             sizes={SIZES}
             alt={first.alt ?? product.title}
-            width={first.width ?? undefined}
-            height={first.height ?? undefined}
+            width={1080}
+            height={1440}
             loading={eager ? "eager" : "lazy"}
           />
         )}

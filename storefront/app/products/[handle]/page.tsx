@@ -36,20 +36,20 @@ export default async function ProductPage({ params }: PageProps<"/products/[hand
     "@context": "https://schema.org",
     "@type": "ProductGroup",
     name: product.title,
-    productGroupID: product.shopifyId,
+    productGroupID: product.handle,
     brand: { "@type": "Brand", name: product.vendor || "Megaska" },
     description: product.seoDescription ?? undefined,
     image: product.media.slice(0, 5).map((m) => shopifyImageUrl(m.url, 1080)),
     hasVariant: product.variants.map((v) => ({
       "@type": "Product",
       sku: v.sku ?? undefined,
-      name: `${product.title} - ${v.title}`,
+      name: [product.title, ...v.optionValues].join(" - "),
       offers: {
         "@type": "Offer",
         price: v.price,
         priceCurrency: "INR",
         availability: v.available ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
-        url: `/products/${product.handle}?variant=${v.id}`,
+        url: `/products/${product.handle}${v.sku ? `?variant=${encodeURIComponent(v.sku)}` : ""}`,
       },
     })),
   };

@@ -61,3 +61,22 @@ h1 { font-size: 26px; line-height: 1.25; margin: 24px 0 8px; }
 .collections { display: grid; gap: 14px; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 20px; }
 @media (min-width: 760px) { .collections { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 .collection-tile .card-img { aspect-ratio: 1; }
+
+/* Admin */
+.admin h2 { margin-top: 32px; font-size: 18px; }
+.panels { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); margin-top: 16px; }
+.panel { border: 1px solid var(--line); border-radius: 8px; padding: 16px; display: grid; gap: 10px; align-content: start; }
+.panel h3 { margin: 0; font-size: 15px; }
+.panel p { margin: 0; font-size: 13px; }
+.panel input:not([type="checkbox"]) { font: inherit; padding: 8px; border: 1px solid var(--line); border-radius: 6px; width: 100%; }
+.panel .row { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; }
+.panel .buy:disabled { opacity: .6; }
+.ok { background: #eaf6ec; border-radius: 6px; padding: 8px; font-size: 13px; overflow-wrap: anywhere; }
+.bad { background: #fdecea; color: #8a1c13; border-radius: 6px; padding: 8px; font-size: 13px; overflow-wrap: anywhere; }
+.secret { display: block; margin: 6px 0; padding: 6px; background: #fff; user-select: all; }
+.table { width: 100%; border-collapse: collapse; font-size: 13px; display: block; overflow-x: auto; }
+.table th, .table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.table code { font-size: 11px; color: var(--muted); }
+.revoked { color: var(--muted); text-decoration: line-through; }
+.link { background: none; border: 0; color: var(--sale); cursor: pointer; font: inherit; padding: 0; }
+.stats { margin: 6px 0 0; padding-left: 18px; }

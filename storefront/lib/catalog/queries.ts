@@ -1,37 +1,35 @@
 import { cacheLife, cacheTag } from "next/cache";
 import { getPool } from "../db.ts";
-import { getStoreId } from "../sync/store.ts";
+import { getStoreId } from "../store.ts";
 import { CATALOG_TAG, REDIRECTS_TAG, collectionTag, productTag } from "./tags.ts";
 
 // Cached reads for the storefront. Pages are served from Vercel's cache and
 // only hit Postgres when a webhook or the nightly sync invalidates a tag.
 
-/** What a shopper may see: active and published to the Online Store. */
-const VISIBLE = `p.status = 'ACTIVE' and p.published_at is not null`;
+/** What a shopper may see: active and published. */
+const VISIBLE = `p.status = 'active' and p.published`;
 
 export type Variant = {
   id: string;
-  title: string;
   sku: string | null;
   price: string;
   compareAtPrice: string | null;
-  selectedOptions: Array<{ name: string; value: string }>;
+  optionValues: string[];
   available: boolean;
-  imageId: string | null;
+  imageUrl: string | null;
 };
 
-export type Media = { id: string; url: string; alt: string | null; width: number | null; height: number | null };
+export type Media = { url: string; alt: string | null };
 
 export type Product = {
-  shopifyId: string;
   handle: string;
   title: string;
   descriptionHtml: string;
   productType: string;
   vendor: string;
   tags: string[];
-  options: Array<{ name: string; position: number; values: string[] }>;
-  metafields: Record<string, { type: string; value: string }>;
+  options: Array<{ name: string; values: string[] }>;
+  metafields: Record<string, string>;
   seoTitle: string | null;
   seoDescription: string | null;
   variants: Variant[];
@@ -57,7 +55,7 @@ export type Collection = {
   products: ProductCard[];
 };
 
-const AVAILABLE_SQL = `(not v.inventory_tracked or v.inventory_policy = 'CONTINUE' or v.inventory_quantity > 0)`;
+const AVAILABLE_SQL = `(not v.inventory_tracked or v.inventory_policy = 'continue' or v.inventory_quantity > 0)`;
 
 export async function getProduct(handle: string): Promise<Product | null> {
   "use cache";
@@ -67,16 +65,14 @@ export async function getProduct(handle: string): Promise<Product | null> {
   const storeId = await getStoreId();
   if (!storeId) return null;
   const { rows } = await getPool().query(
-    `select p.shopify_id, p.handle, p.title, p.description_html, p.product_type, p.vendor, p.tags,
+    `select p.handle, p.title, p.description_html, p.product_type, p.vendor, p.tags,
             p.options, p.metafields, p.seo_title, p.seo_description,
             coalesce((select json_agg(json_build_object(
-                'id', v.shopify_id::text, 'title', v.title, 'sku', v.sku, 'price', v.price::text,
-                'compareAtPrice', v.compare_at_price::text, 'selectedOptions', v.selected_options,
-                'available', ${AVAILABLE_SQL}, 'imageId', v.image_shopify_id::text) order by v.position)
+                'id', v.id, 'sku', v.sku, 'price', v.price::text, 'compareAtPrice', v.compare_at_price::text,
+                'optionValues', v.option_values, 'available', ${AVAILABLE_SQL}, 'imageUrl', v.image_url)
+                order by v.position)
               from product_variants v where v.product_id = p.id), '[]') as variants,
-            coalesce((select json_agg(json_build_object(
-                'id', m.shopify_id::text, 'url', m.url, 'alt', m.alt, 'width', m.width, 'height', m.height)
-                order by m.position)
+            coalesce((select json_agg(json_build_object('url', m.url, 'alt', m.alt) order by m.position)
               from product_media m where m.product_id = p.id), '[]') as media
      from products p
      where p.store_id = $1 and p.handle = $2 and ${VISIBLE}`,
@@ -85,7 +81,6 @@ export async function getProduct(handle: string): Promise<Product | null> {
   const r = rows[0];
   if (!r) return null;
   return {
-    shopifyId: r.shopify_id,
     handle: r.handle,
     title: r.title,
     descriptionHtml: r.description_html,
@@ -106,9 +101,7 @@ const CARD_SELECT = `
   (select min(v.compare_at_price)::text from product_variants v
      where v.product_id = p.id and v.price = p.min_price) as compare_at_price,
   exists (select 1 from product_variants v where v.product_id = p.id and ${AVAILABLE_SQL}) as available,
-  coalesce((select json_agg(json_build_object(
-      'id', m.shopify_id::text, 'url', m.url, 'alt', m.alt, 'width', m.width, 'height', m.height)
-      order by m.position)
+  coalesce((select json_agg(json_build_object('url', m.url, 'alt', m.alt) order by m.position)
     from (select * from product_media m where m.product_id = p.id order by m.position limit 2) m), '[]') as images`;
 
 function toCard(r: Record<string, unknown>): ProductCard {
@@ -132,7 +125,7 @@ export async function getCollection(handle: string): Promise<Collection | null> 
   const pool = getPool();
   const { rows } = await pool.query(
     `select id, handle, title, description_html, seo_title, seo_description, image_url
-     from collections where store_id = $1 and handle = $2`,
+     from collections where store_id = $1 and handle = $2 and published`,
     [storeId, handle],
   );
   const c = rows[0];
@@ -168,20 +161,17 @@ export async function listCollections(): Promise<CollectionSummary[]> {
   const { rows } = await getPool().query(
     `select c.handle, c.title, count(p.id)::int as product_count,
             coalesce(
-              (select json_build_object('id', 'c' || c.shopify_id, 'url', c.image_url, 'alt', c.image_alt,
-                                        'width', c.image_width, 'height', c.image_height)
-               where c.image_url is not null),
-              (select json_build_object('id', m.shopify_id::text, 'url', m.url, 'alt', m.alt,
-                                        'width', m.width, 'height', m.height)
+              (select json_build_object('url', c.image_url, 'alt', c.title) where c.image_url is not null),
+              (select json_build_object('url', m.url, 'alt', m.alt)
                from collection_products cp2
                join products p2 on p2.id = cp2.product_id
                join product_media m on m.product_id = p2.id
-               where cp2.collection_id = c.id and p2.status = 'ACTIVE' and p2.published_at is not null
+               where cp2.collection_id = c.id and p2.status = 'active' and p2.published
                order by cp2.position, m.position limit 1)) as image
      from collections c
      join collection_products cp on cp.collection_id = c.id
      join products p on p.id = cp.product_id and ${VISIBLE}
-     where c.store_id = $1
+     where c.store_id = $1 and c.published
      group by c.id
      order by c.title`,
     [storeId],
@@ -211,7 +201,7 @@ export async function listCollectionHandles(): Promise<string[]> {
   const storeId = await getStoreId();
   if (!storeId) return [];
   const { rows } = await getPool().query<{ handle: string }>(
-    `select handle from collections where store_id = $1 order by handle`,
+    `select handle from collections where store_id = $1 and published order by handle`,
     [storeId],
   );
   return rows.map((r) => r.handle);
