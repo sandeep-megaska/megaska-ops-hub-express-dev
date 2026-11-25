@@ -12,6 +12,7 @@ test("which steps message the customer", () => {
   assert.equal(requestUpdateKey("ISSUE", "RETURN_RECEIVED"), null);
   assert.equal(requestUpdateKey("EXCHANGE", "APPROVED"), null, "exchanges have their own milestones");
   assert.equal(requestUpdateKey("REFUND", "PAID"), null, "refunds go through notifyRefundPaid");
+  assert.equal(requestUpdateKey("ISSUE", "PICKUP_SCHEDULED"), null, "issue pickups go through notifyIssuePickupScheduled, with the AWB");
 });
 
 test("variables: first name and order number without #; refund amount from paise", () => {

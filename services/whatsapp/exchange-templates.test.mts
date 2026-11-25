@@ -4,10 +4,10 @@ import { exchangeTemplateDrafts, exchangeTemplateName, submitExchangeTemplates, 
 
 test("utility drafts whose {{n}} match what each step sends", () => {
   const drafts = exchangeTemplateDrafts({});
-  assert.equal(drafts.length, 17);
+  assert.equal(drafts.length, 18);
   const params = Object.fromEntries(drafts.map((draft) => [draft.key, new Set(draft.body.match(/\{\{\d+\}\}/g)).size]));
   // exchange-milestones.ts sends [name, order] everywhere and an AWB third for pickup and replacement shipped.
-  assert.deepEqual(params, { APPROVED: 2, PAYMENT_RECEIVED: 2, PICKUP_SCHEDULED: 3, PICKUP_COMPLETED: 2, ITEM_RECEIVED: 2, REPLACEMENT_PROCESSING: 2, REPLACEMENT_SHIPPED: 3, CLOSED: 2, REJECTED: 2, CANCELLATION_APPROVED: 2, CANCELLATION_REJECTED: 2, CANCELLATION_CLOSED: 2, ISSUE_OPEN: 2, ISSUE_APPROVED: 2, ISSUE_REJECTED: 2, ISSUE_CLOSED: 2, REFUND_PAID: 3 });
+  assert.deepEqual(params, { APPROVED: 2, PAYMENT_RECEIVED: 2, PICKUP_SCHEDULED: 3, PICKUP_COMPLETED: 2, ITEM_RECEIVED: 2, REPLACEMENT_PROCESSING: 2, REPLACEMENT_SHIPPED: 3, CLOSED: 2, REJECTED: 2, CANCELLATION_APPROVED: 2, CANCELLATION_REJECTED: 2, CANCELLATION_CLOSED: 2, ISSUE_OPEN: 2, ISSUE_APPROVED: 2, ISSUE_REJECTED: 2, ISSUE_CLOSED: 2, ISSUE_PICKUP_SCHEDULED: 3, REFUND_PAID: 3 });
   for (const draft of drafts) {
     assert.equal(draft.examples.length, params[draft.key]);
     assert.match(draft.name, /^[a-z0-9_]+$/);
@@ -15,7 +15,7 @@ test("utility drafts whose {{n}} match what each step sends", () => {
   }
   assert.equal(drafts.find((draft) => draft.key === "CLOSED")!.name, "exchange_completed");
   assert.equal(drafts.find((draft) => draft.key === "CANCELLATION_CLOSED")!.name, "order_cancelled");
-  assert.equal(new Set(drafts.map((draft) => draft.name)).size, 17, "names are unique");
+  assert.equal(new Set(drafts.map((draft) => draft.name)).size, 18, "names are unique");
 });
 
 test("a template name can be overridden the same way the sender reads it", () => {
@@ -42,17 +42,17 @@ function fakeMeta(existing: Array<{ name: string; status: string; language: stri
 test("only missing templates are submitted, as utility with examples, in the account's language", async () => {
   const meta = fakeMeta([{ name: "exchange_approved", status: "APPROVED", language: "en" }, { name: "exchange_completed", status: "PENDING", language: "en" }, { name: "exchange_rejected", status: "APPROVED", language: "hi" }]);
   const result = await submitExchangeTemplates({ wabaId: "WABA1", accessToken: "TOKEN", language: "en", graphVersion: "v20.0", env: {} }, meta.fetcher);
-  assert.equal(meta.posted.length, 15);
+  assert.equal(meta.posted.length, 16);
   assert.ok(meta.posted.some((body) => body.name === "exchange_rejected"), "a template in another language doesn't count");
   const pickup = meta.posted.find((body) => body.name === "exchange_pickup_scheduled")!;
   assert.equal(pickup.category, "UTILITY");
   assert.equal(pickup.language, "en");
   assert.deepEqual((pickup.components as Array<{ example: { body_text: string[][] } }>)[0].example.body_text, [["Asha", "1042", "ABC123456789"]]);
   assert.deepEqual(result.existing, [{ name: "exchange_approved", status: "APPROVED" }, { name: "exchange_completed", status: "PENDING" }]);
-  assert.equal(result.created.length, 15);
+  assert.equal(result.created.length, 16);
   const summary = templateSetupSummary(result);
   assert.match(summary, /^Exchange templates: 7 submitted to Meta for review, 1 already approved, 1 already submitted \(pending\)\. Tick Exchange updates once they're approved\./);
-  assert.match(summary, /Cancellation, issue and refund templates: 8 submitted to Meta for review\. Tick Cancellation, issue and refund updates once they're approved\. Meta usually reviews/);
+  assert.match(summary, /Cancellation, issue and refund templates: 9 submitted to Meta for review\. Tick Cancellation, issue and refund updates once they're approved\. Meta usually reviews/);
 });
 
 test("Meta's reasons are reported, and 'already exists' isn't a failure", async () => {
