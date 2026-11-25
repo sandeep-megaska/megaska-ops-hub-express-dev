@@ -14,8 +14,6 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Minified build output; lint the sources in extensions/megaska-otp-src instead.
     "extensions/megaska-otp/assets/**",
-    // Separate Next.js app with its own lint/typecheck (deployed as its own Vercel project).
-    "storefront/**",
   ]),
 ]);
 
