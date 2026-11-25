@@ -1,0 +1,33 @@
+{
+  "name": "megaska-storefront",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test --experimental-strip-types \"lib/**/*.test.ts\"",
+    "db:migrate": "node scripts/migrate.mjs",
+    "sync:full": "node --experimental-strip-types scripts/full-sync.ts",
+    "webhooks:register": "node --experimental-strip-types scripts/register-webhooks.ts",
+    "test:db": "node --test --experimental-strip-types test/db.integration.test.ts"
+  },
+  "dependencies": {
+    "next": "16.2.2",
+    "pg": "^8.20.0",
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "@types/pg": "^8.15.0",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.2",
+    "typescript": "^5"
+  }
+}
