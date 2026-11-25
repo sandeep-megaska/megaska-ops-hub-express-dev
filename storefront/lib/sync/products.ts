@@ -29,7 +29,12 @@ export async function fetchProduct(shopifyId: string): Promise<ShopifyProduct | 
  * Write a product, its variants, media and collection memberships in one
  * transaction. Returns the cache tags that now hold stale data.
  */
-export async function upsertProduct(storeId: string, mapped: MappedProduct): Promise<string[]> {
+export async function upsertProduct(
+  storeId: string,
+  mapped: MappedProduct,
+  /** When the data was read from Shopify. Stock newer than this is kept. */
+  fetchedAt: Date = new Date(),
+): Promise<string[]> {
   const p = mapped.product;
   return withTransaction(async (db) => {
     const previous = await db.query<{ handle: string }>(
@@ -76,10 +81,10 @@ export async function upsertProduct(storeId: string, mapped: MappedProduct): Pro
       `insert into product_variants (
          store_id, product_id, shopify_id, inventory_item_id, title, sku, position, price, compare_at_price,
          selected_options, taxable, inventory_tracked, inventory_policy, inventory_quantity, hsn_code,
-         image_shopify_id, synced_at)
+         image_shopify_id, inventory_updated_at, synced_at)
        select $1, $2, v.shopify_id, v.inventory_item_id, v.title, v.sku, v.position, v.price, v.compare_at_price,
               v.selected_options, v.taxable, v.inventory_tracked, v.inventory_policy, v.inventory_quantity,
-              v.hsn_code, v.image_shopify_id, now()
+              v.hsn_code, v.image_shopify_id, $4, now()
        from jsonb_to_recordset($3::jsonb) as v(
          shopify_id bigint, inventory_item_id bigint, title text, sku text, position int, price numeric,
          compare_at_price numeric, selected_options jsonb, taxable boolean, inventory_tracked boolean,
@@ -89,9 +94,12 @@ export async function upsertProduct(storeId: string, mapped: MappedProduct): Pro
          title = excluded.title, sku = excluded.sku, position = excluded.position, price = excluded.price,
          compare_at_price = excluded.compare_at_price, selected_options = excluded.selected_options,
          taxable = excluded.taxable, inventory_tracked = excluded.inventory_tracked,
-         inventory_policy = excluded.inventory_policy, inventory_quantity = excluded.inventory_quantity,
+         inventory_policy = excluded.inventory_policy,
+         inventory_quantity = case when product_variants.inventory_updated_at > excluded.inventory_updated_at
+                                   then product_variants.inventory_quantity else excluded.inventory_quantity end,
+         inventory_updated_at = greatest(product_variants.inventory_updated_at, excluded.inventory_updated_at),
          hsn_code = excluded.hsn_code, image_shopify_id = excluded.image_shopify_id, synced_at = now()`,
-      [storeId, productId, JSON.stringify(mapped.variants)],
+      [storeId, productId, JSON.stringify(mapped.variants), fetchedAt],
     );
     await db.query(
       `delete from product_variants where product_id = $1 and not (shopify_id = any($2::bigint[]))`,
@@ -171,7 +179,8 @@ export async function deleteProduct(storeId: string, shopifyId: string): Promise
 /** Bring one product in line with Shopify. */
 export async function syncProduct(storeId: string, shopifyIdOrGid: string): Promise<string[]> {
   const shopifyId = shopifyIdOrGid.startsWith("gid://") ? legacyId(shopifyIdOrGid) : shopifyIdOrGid;
+  const fetchedAt = new Date();
   const product = await fetchProduct(shopifyId);
   if (!product) return deleteProduct(storeId, shopifyId);
-  return upsertProduct(storeId, mapProduct(product));
+  return upsertProduct(storeId, mapProduct(product), fetchedAt);
 }

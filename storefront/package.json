@@ -8,7 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "next typegen && tsc --noEmit",
     "test": "node --test --experimental-strip-types \"lib/**/*.test.ts\"",
     "db:migrate": "node scripts/migrate.mjs",
     "sync:full": "node --experimental-strip-types scripts/full-sync.ts",

@@ -9,12 +9,15 @@
 -- RLS is enabled with no policies, so the public anon/authenticated keys of
 -- this Supabase project can read nothing from these tables.
 
-create extension if not exists pg_trgm;
+-- Supabase keeps extensions out of the public schema.
+create schema if not exists extensions;
+create extension if not exists pg_trgm with schema extensions;
 
 -- array_to_string is only STABLE, so generated columns cannot call it directly.
 create function storefront_tags_text(tags text[]) returns text
   language sql immutable parallel safe
-  as $$ select array_to_string(tags, ' ') $$;
+  set search_path = ''
+  as $$ select pg_catalog.array_to_string(tags, ' ') $$;
 
 -- ---------------------------------------------------------------------------
 -- Tenants
@@ -64,7 +67,7 @@ create table products (
 );
 create index products_store_visible_idx on products (store_id, status, published_at);
 create index products_search_idx on products using gin (search);
-create index products_title_trgm_idx on products using gin (title gin_trgm_ops);
+create index products_title_trgm_idx on products using gin (title extensions.gin_trgm_ops);
 
 create table product_variants (
   id                    uuid primary key default gen_random_uuid(),
@@ -82,6 +85,9 @@ create table product_variants (
   inventory_tracked     boolean not null default true,
   inventory_policy      text not null default 'DENY' check (inventory_policy in ('DENY', 'CONTINUE')),
   inventory_quantity    integer not null default 0,  -- sum across locations
+  -- When inventory_quantity was last known true. Stock pushes (Browntape ->
+  -- Shopify -> webhook) and catalog syncs race; the newer reading wins.
+  inventory_updated_at  timestamptz not null default '-infinity',
   hsn_code              text,
   image_shopify_id      bigint,
   synced_at             timestamptz not null default now(),

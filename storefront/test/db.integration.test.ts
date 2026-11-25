@@ -142,3 +142,42 @@ test("webhook deliveries are idempotent", { skip }, async () => {
 function legacy(gid: string) {
   return gid.split("/").pop()!;
 }
+
+test("inventory webhooks apply from the payload, newest reading wins", { skip }, async () => {
+  const storeId = await ensureStore();
+  const db = getPool();
+  const p = structuredClone(fixture);
+  p.id = "gid://shopify/Product/333"; p.handle = "stock-test"; p.collections.nodes = [];
+  p.variants.nodes = p.variants.nodes.map((v, i) => ({
+    ...v, id: `gid://shopify/ProductVariant/3330${i}`,
+    inventoryItem: { id: `gid://shopify/InventoryItem/3339${i}`, tracked: true, harmonizedSystemCode: null },
+  }));
+  p.media.nodes = p.media.nodes.map((m, i) => ({ ...m, id: `gid://shopify/MediaImage/3330${i}` }));
+  const syncedAt = new Date("2030-01-01T10:00:00Z");
+  await upsertProduct(storeId, mapProduct(p), syncedAt);
+  const qty = async () =>
+    (await db.query(`select inventory_quantity from product_variants where store_id = $1 and inventory_item_id = 33390`, [storeId])).rows[0].inventory_quantity;
+  const before = await qty();
+
+  const deliver = (id: string, available: number, at: string) =>
+    handleWebhook(storeId, { webhookId: id, topic: "inventory_levels/update",
+      payload: { inventory_item_id: 33390, location_id: 1, available, updated_at: at } });
+
+  const older = await deliver("inv-1", 7, "2030-01-01T09:00:00Z"); // older than the catalog sync
+  assert.deepEqual(older.tags, []);
+  assert.equal(await qty(), before);
+
+  const newer = await deliver("inv-2", 3, "2030-01-01T11:00:00Z");
+  assert.deepEqual(newer.tags, ["product:stock-test"]);
+  assert.equal(await qty(), 3);
+
+  await deliver("inv-3", 9, "2030-01-01T10:30:00Z"); // arrives late
+  assert.equal(await qty(), 3);
+
+  // A catalog sync that read Shopify before the last stock push keeps the pushed stock.
+  await upsertProduct(storeId, mapProduct({ ...p, updatedAt: "2031-01-01T00:00:00Z" }), new Date("2030-01-01T10:59:00Z"));
+  assert.equal(await qty(), 3);
+  // One that read it afterwards takes Shopify's number.
+  await upsertProduct(storeId, mapProduct({ ...p, updatedAt: "2031-01-02T00:00:00Z" }), new Date("2030-01-01T12:00:00Z"));
+  assert.equal(await qty(), before);
+});

@@ -19,6 +19,7 @@ await client.connect();
 try {
   await client.query(`create table if not exists storefront_migrations (
     name text primary key, applied_at timestamptz not null default now())`);
+  await client.query("alter table storefront_migrations enable row level security");
   const applied = new Set((await client.query("select name from storefront_migrations")).rows.map((r) => r.name));
   const files = readdirSync(dir).filter((f) => f.endsWith(".sql")).sort();
   for (const file of files) {

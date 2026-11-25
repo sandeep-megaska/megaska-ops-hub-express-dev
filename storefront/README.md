@@ -23,6 +23,14 @@ Shopify ──webhooks──▶ /api/webhooks/shopify ──▶ refetch that pro
   payload, so deliveries that arrive out of order still end in the latest
   state. An older write never overwrites a newer one (`shopify_updated_at`
   guard).
+- **Stock (Browntape).** Megaska's stock is managed in Genesys Browntape,
+  which pushes it into Shopify. Every push fires `inventory_levels/update`.
+  We apply the payload's `available` number directly, with no Admin API
+  call, so a bulk push of hundreds of SKUs can't hit Shopify's rate limit or
+  its 5-second webhook timeout. A per-variant `inventory_updated_at` keeps
+  the newest reading when pushes and syncs race. This relies on there being
+  one stock location (Jaipur-1). If you add a second one, set
+  `SHOPIFY_MULTI_LOCATION=true` and totals are reread from Shopify instead.
 - **Full sync** fixes anything a webhook missed, and also copies Shopify's
   URL redirects (156 today) so old links keep working after the cutover.
 - **Pages** are cached with `'use cache'` plus `cacheTag`. Postgres is hit
@@ -46,9 +54,10 @@ can't read anything. The app connects with the database role.
 
 ## One-time setup
 
-1. **Supabase.** Create a project in `ap-south-1` (Mumbai), separate from
-   the ops hub. Then run:
-   `MIGRATION_DATABASE_URL=... npm run db:migrate`
+1. **Supabase.** Done: project `megaska-storefront` (ref
+   `ltzgsesozhwakdundnsi`, ap-south-1 Mumbai), with the schema applied. For
+   future migrations run `MIGRATION_DATABASE_URL=... npm run db:migrate`
+   (applied migrations are tracked in `storefront_migrations`).
 2. **Shopify app** (read-only). In the Shopify Dev Dashboard, create an app
    with scopes `read_products`, `read_inventory` and
    `read_online_store_navigation`, and install it on the Megaska store. Put

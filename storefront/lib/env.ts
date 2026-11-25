@@ -24,6 +24,8 @@ export const env = {
   /** Secret Shopify signs webhooks with: the app's client secret. */
   shopifyWebhookSecret: () =>
     optional("SHOPIFY_WEBHOOK_SECRET") ?? required("SHOPIFY_CLIENT_SECRET"),
+  /** Set "true" once Shopify has more than one stock location (see lib/sync/inventory.ts). */
+  multiLocation: () => optional("SHOPIFY_MULTI_LOCATION") === "true",
   storeSlug: () => optional("STORE_SLUG") ?? "megaska",
   storeName: () => optional("STORE_NAME") ?? "Megaska",
   cronSecret: () => required("CRON_SECRET"),

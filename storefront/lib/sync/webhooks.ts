@@ -1,11 +1,17 @@
 import { getPool } from "../db.ts";
 import { syncProduct, deleteProduct } from "./products.ts";
 import { syncCollection, deleteCollection } from "./collections.ts";
-import { syncInventoryItem } from "./inventory.ts";
+import { applyInventoryLevel } from "./inventory.ts";
 
 export type WebhookOutcome = { status: "processed" | "ignored" | "duplicate"; tags: string[]; resourceId?: string };
 
-type Payload = { id?: number | string; inventory_item_id?: number | string };
+type Payload = {
+  id?: number | string;
+  inventory_item_id?: number | string;
+  location_id?: number | string;
+  available?: number | null;
+  updated_at?: string;
+};
 
 /** The resource a webhook is about, as a numeric Shopify ID string. */
 export function webhookResourceId(topic: string, payload: Payload): string | undefined {
@@ -59,7 +65,11 @@ export async function handleWebhook(
           tags = await deleteCollection(storeId, resourceId);
           break;
         case "inventory_levels/update":
-          tags = await syncInventoryItem(storeId, resourceId);
+          tags = await applyInventoryLevel(storeId, {
+            inventory_item_id: resourceId,
+            available: payload.available,
+            updated_at: payload.updated_at,
+          });
           break;
       }
     }

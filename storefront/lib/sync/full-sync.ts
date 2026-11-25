@@ -43,9 +43,10 @@ export async function runFullSync(options: { concurrency?: number; log?: (msg: s
     let done = 0;
     const seenProducts: string[] = [];
     await runPool(productIds, concurrency, async (id) => {
+      const fetchedAt = new Date();
       const product = await fetchProduct(id);
       if (product) {
-        await upsertProduct(storeId, mapProduct(product));
+        await upsertProduct(storeId, mapProduct(product), fetchedAt);
         seenProducts.push(id);
       }
       done++;
