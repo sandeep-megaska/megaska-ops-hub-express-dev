@@ -35,6 +35,20 @@ export function normalizeOrderNumber(value: unknown): string {
   return String(value ?? "").trim().replace(/^#/, "").trim();
 }
 
+/**
+ * Shopify search for an order by its number. Megaska's order names have no "#" ("522574"),
+ * the default Shopify format does ("#1001"), so ask for both and pick the exact one.
+ */
+export function shopifyOrderNameQuery(orderNumber: string) {
+  const digits = normalizeOrderNumber(orderNumber);
+  return `name:${digits} OR name:#${digits}`;
+}
+
+export function pickShopifyOrderByName(nodes: Array<{ id?: string | null; name?: string | null }> | null | undefined, orderNumber: string) {
+  const wanted = normalizeOrderNumber(orderNumber);
+  return (nodes ?? []).find((node) => node?.id && normalizeOrderNumber(node.name) === wanted) ?? null;
+}
+
 export const RAZORPAY_PAYMENT_ID = /^pay_[A-Za-z0-9]{8,40}$/;
 
 export type RazorpayPaymentFacts = { id?: unknown; status?: unknown; amount?: unknown; currency?: unknown; created_at?: unknown };
