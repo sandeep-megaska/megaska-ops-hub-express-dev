@@ -9,6 +9,8 @@ import {
   mergePickupAddress,
   normalizeOrderNumber,
   statusAfterPickupBooked,
+  pickShopifyOrderByName,
+  shopifyOrderNameQuery,
 } from "./manual-reverse-pickup-rules.ts";
 
 test("booking a pickup moves exchanges to pickup scheduled and issues to approved", () => {
@@ -84,4 +86,14 @@ test("order numbers and reasons", () => {
   assert.equal(normalizeOrderNumber(null), "");
   assert.ok(isManualPickupReason("LATE_DELIVERY"));
   assert.ok(!isManualPickupReason("REFUND"));
+});
+
+test("an order missing from LoopD2C is found in Shopify by its exact number", () => {
+  // Exchange replacement 522574 (for 522488) was never copied into LoopD2C's order list.
+  assert.equal(shopifyOrderNameQuery("#522574"), "name:522574 OR name:#522574");
+  const nodes = [{ id: "gid://shopify/Order/2", name: "5225740" }, { id: "gid://shopify/Order/1", name: "522574" }];
+  assert.equal(pickShopifyOrderByName(nodes, "522574")?.id, "gid://shopify/Order/1");
+  assert.equal(pickShopifyOrderByName([{ id: "gid://shopify/Order/3", name: "#1001" }], "1001")?.id, "gid://shopify/Order/3");
+  assert.equal(pickShopifyOrderByName([{ id: "gid://shopify/Order/2", name: "5225740" }], "522574"), null);
+  assert.equal(pickShopifyOrderByName(null, "522574"), null);
 });

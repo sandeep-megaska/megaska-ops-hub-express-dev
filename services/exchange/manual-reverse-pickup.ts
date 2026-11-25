@@ -31,6 +31,8 @@ import {
   checkFeePayment,
   mergePickupAddress,
   normalizeOrderNumber,
+  pickShopifyOrderByName,
+  shopifyOrderNameQuery,
   statusAfterPickupBooked,
   type ManualPickupReason,
   type PickupAddress,
@@ -257,12 +259,43 @@ function linesFrom(value: unknown): OrderLine[] {
     .filter((line) => line.shopifyLineItemId && line.quantity > 0);
 }
 
+// Copies one Shopify order into LoopD2C's order list (no delivery event, review schedule or
+// message: see syncCanonicalShopifyOrder). Returns false when Shopify has no such order.
+async function importOrderFromShopify(shopId: string, orderNumber: string) {
+  const shop = await prisma.shop.findUnique({ where: { id: shopId }, select: { shopDomain: true } });
+  if (!shop?.shopDomain) return false;
+  const { adminGraphql } = await import("../shopify/admin");
+  const data = await adminGraphql<{ orders?: { nodes?: Array<{ id?: string | null; name?: string | null }> } }>(
+    `query LoopD2CReversePickupOrder($query: String!) { orders(first: 5, query: $query) { nodes { id name } } }`,
+    { query: shopifyOrderNameQuery(orderNumber) },
+    { shopDomain: shop.shopDomain, preferStoredToken: true },
+  ).catch(() => null);
+  const match = pickShopifyOrderByName(data?.orders?.nodes, orderNumber);
+  if (!match?.id) return false;
+  const { syncCanonicalShopifyOrder, CanonicalShopifyOrderSyncError } = await import("../orders/shopify-order-sync");
+  try {
+    await syncCanonicalShopifyOrder({ shopId, shopDomain: shop.shopDomain, orderIdentifier: match.id });
+    return true;
+  } catch (error) {
+    if (error instanceof CanonicalShopifyOrderSyncError && error.code === "SHOPIFY_CUSTOMER_REQUIRED") {
+      throw new ManualPickupError(`Order ${orderNumber} has no customer in Shopify, so a pickup can't be arranged from it. Add the customer to the order in Shopify, then try again.`, 422, "ORDER_WITHOUT_CUSTOMER");
+    }
+    if (error instanceof CanonicalShopifyOrderSyncError && error.code === "IDENTITY_CONFLICT") {
+      throw new ManualPickupError(`Order ${orderNumber}'s customer matches more than one customer in LoopD2C. Check the customer's phone and email in Shopify, then try again.`, 409, "ORDER_IDENTITY_CONFLICT");
+    }
+    throw error;
+  }
+}
+
 /** Everything the "Arrange reverse pickup" form needs for one order. */
 export async function lookupOrderForReversePickup(shopId: string, orderNumberRaw: string) {
   const orderNumber = normalizeOrderNumber(orderNumberRaw);
   if (!orderNumber) throw new ManualPickupError("Enter an order number.", 400);
-  const order = await prisma.megaskaOrder.findFirst({ where: { shopId, shopifyOrderName: orderNumber }, include: { customerProfile: true, shop: { select: { shopDomain: true } } } });
-  if (!order) throw new ManualPickupError(`No order ${orderNumber} found in loopd2c.`, 404, "ORDER_NOT_FOUND");
+  const findOrder = () => prisma.megaskaOrder.findFirst({ where: { shopId, shopifyOrderName: orderNumber }, include: { customerProfile: true, shop: { select: { shopDomain: true } } } });
+  // LoopD2C only keeps a copy of orders it has worked with (delivered orders for reviews,
+  // exchanges): anything else, such as an exchange replacement order, is fetched from Shopify once.
+  const order = (await findOrder()) ?? ((await importOrderFromShopify(shopId, orderNumber)) ? await findOrder() : null);
+  if (!order) throw new ManualPickupError(`No order ${orderNumber} found in Shopify.`, 404, "ORDER_NOT_FOUND");
 
   let lines: OrderLine[] = [];
   let paymentGateway: string | null = null;
