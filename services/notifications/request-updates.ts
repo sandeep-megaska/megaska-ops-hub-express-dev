@@ -10,7 +10,8 @@ export type RequestUpdateKey = keyof typeof REQUEST_TEMPLATE_NAMES;
 // Which step of which request type sends which template.
 export function requestUpdateKey(requestType: string, status: string): RequestUpdateKey | null {
   const key = `${requestType}_${status}`;
-  return key in REQUEST_TEMPLATE_NAMES && !key.startsWith("REFUND_") ? (key as RequestUpdateKey) : null;
+  // Refunds and pickups are sent by their own steps, with their own details (amount, AWB).
+  return key in REQUEST_TEMPLATE_NAMES && !key.startsWith("REFUND_") && !key.endsWith("_PICKUP_SCHEDULED") ? (key as RequestUpdateKey) : null;
 }
 
 const orderLabel = (orderNumber: string) => orderNumber.replace(/^#/, "");
@@ -68,6 +69,24 @@ export async function notifyRequestUpdate(requestId: string) {
     return result;
   } catch (error) {
     console.error("[REQUEST UPDATE] failed", { requestId, error: error instanceof Error ? error.message : String(error) });
+    return { sent: false, reason: "error" };
+  }
+}
+
+// After the team books a reverse pickup for an issue report: "pickup scheduled", with the AWB.
+// Never throws: the booking stands whatever happens to the message.
+export async function notifyIssuePickupScheduled(requestId: string, awb: string | null) {
+  if (!awb) return { sent: false, reason: "no-awb" };
+  try {
+    const { prisma } = await import("../db/prisma.ts");
+    const request = await prisma.orderActionRequest.findUnique({ where: { id: requestId }, select: { id: true, shopId: true, requestType: true, orderNumber: true, customerNameSnapshot: true, customerPhoneSnapshot: true, customerProfile: { select: { phoneE164: true, fullName: true } } } });
+    if (!request || String(request.requestType) !== "ISSUE") return { sent: false, reason: "not-an-issue" };
+    const variables = [...requestUpdateVariables({ customerName: request.customerNameSnapshot ?? request.customerProfile?.fullName ?? null, orderNumber: request.orderNumber }), awb];
+    const result = await sendRequestUpdate({ entityType: "OrderActionRequest", entityId: request.id, shopId: request.shopId, key: "ISSUE_PICKUP_SCHEDULED", toPhone: request.customerPhoneSnapshot ?? request.customerProfile?.phoneE164 ?? null, variables });
+    console.info("[REQUEST UPDATE] issue pickup", { requestId, ...result });
+    return result;
+  } catch (error) {
+    console.error("[REQUEST UPDATE] issue pickup failed", { requestId, error: error instanceof Error ? error.message : String(error) });
     return { sent: false, reason: "error" };
   }
 }

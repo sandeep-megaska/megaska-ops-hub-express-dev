@@ -43,6 +43,8 @@ export const REQUEST_TEMPLATE_NAMES = {
   ISSUE_APPROVED: "issue_approved",
   ISSUE_REJECTED: "issue_rejected",
   ISSUE_CLOSED: "issue_resolved",
+  // Sent when the team books a pickup for an issue (or a team-created return), with the AWB.
+  ISSUE_PICKUP_SCHEDULED: "issue_pickup_scheduled",
   REFUND_PAID: "refund_paid",
 } as const;
 
@@ -54,6 +56,7 @@ const REQUEST_BODIES: Record<keyof typeof REQUEST_TEMPLATE_NAMES, { body: string
   ISSUE_APPROVED: { body: "Hi {{1}}, we've reviewed your report about order #{{2}} and approved it. We'll message you here with the next steps.", examples: ["Asha", "1042"] },
   ISSUE_REJECTED: { body: "Hi {{1}}, we've reviewed your report about order #{{2}}, but we couldn't approve it. Reply here if you'd like to know more.", examples: ["Asha", "1042"] },
   ISSUE_CLOSED: { body: "Hi {{1}}, your report about order #{{2}} has been resolved. Thank you for your patience.", examples: ["Asha", "1042"] },
+  ISSUE_PICKUP_SCHEDULED: { body: "Hi {{1}}, a pickup of the item from your order #{{2}} is scheduled. Pickup tracking number (AWB): {{3}}. Please keep the item packed and ready.", examples: ["Asha", "1042", "ABC123456789"] },
   REFUND_PAID: { body: "Hi {{1}}, we've sent your refund of {{2}} for order #{{3}}. Depending on your bank or payment method, it can take a few working days to show.", examples: ["Asha", "₹1,195", "1042"] },
 };
 
