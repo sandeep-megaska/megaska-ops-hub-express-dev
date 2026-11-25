@@ -148,11 +148,15 @@ export async function bookReversePickup(input: BookInput) {
     return upserted;
   });
 
-  // Exchange customers get the usual "pickup scheduled" message. Issues have no
-  // customer template; Delhivery's own pickup SMS reaches the customer.
+  // Exchange customers get the usual "pickup scheduled" message; issues (and team-created
+  // returns) get the issue pickup message with the AWB (request updates switch).
   if (requestType === "EXCHANGE" && nextStatus !== request.status) {
     await notifyExchangeMilestone(request.id, nextStatus).catch((error) =>
       console.error("[MANUAL REVERSE PICKUP] milestone_notify_failed", { requestId: request.id, error: error instanceof Error ? error.message : String(error) }));
+  }
+  if (requestType === "ISSUE") {
+    const { notifyIssuePickupScheduled } = await import("../notifications/request-updates");
+    await notifyIssuePickupScheduled(request.id, shipment.awb ?? null);
   }
 
   return { idempotent: false, shipment, status: nextStatus, requestId: request.id };
